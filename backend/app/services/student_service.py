@@ -4,6 +4,7 @@ from datetime import date
 from postgrest.exceptions import APIError
 from app.utils.responses import ServiceResponse, ErrorCode
 from app.utils.logger import get_logger
+from app.utils.hooks import trigger_hook
 from app.schamas.student_schema import StudentStatus, VALID_STATUS_TRANSITIONS
 from decimal import Decimal
 
@@ -90,6 +91,9 @@ def create_student(
         # Return with profile info
         student_data = result.data[0]
         student_data['profile'] = profile
+        
+        # Trigger hooks
+        trigger_hook("student_enrolled", student_id=student_data["id"], user_id=created_by)
         
         return ServiceResponse.success(student_data, "Student enrolled successfully")
         
@@ -318,10 +322,8 @@ def update_student(
             
             # CRITICAL: If changing to LEFT, must end active room allocation
             if new_status == StudentStatus.LEFT.value:
-                logger.info(f"Student {student_id} status changing to LEFT - should end room allocation")
-                # TODO: Implement room allocation closure
-                # For now, just log the requirement
-                logger.warning("BUSINESS RULE: Active room allocation should be ended (not yet implemented)")
+                logger.info(f"Student {student_id} status changing to LEFT - triggering auto-deallocation hook")
+                trigger_hook("student_left", student_id=student_id, user_id=updated_by)
         
         # Perform update
         result = supabase.table("students")\
@@ -377,7 +379,7 @@ def delete_student(
             return ServiceResponse.not_found("Student")
         
         logger.info(f"Student soft deleted successfully: {student_id}")
-        logger.warning("BUSINESS RULE: Active room allocation should be ended (not yet implemented)")
+        trigger_hook("student_left", student_id=student_id, user_id=deleted_by)
         
         return ServiceResponse.success(result.data[0], "Student marked as LEFT")
         
@@ -446,6 +448,7 @@ def reactivate_student(
             return ServiceResponse.not_found("Student")
         
         logger.info(f"Student reactivated successfully: {student_id}")
+        trigger_hook("student_reactivated", student_id=student_id, user_id=reactivated_by)
         return ServiceResponse.success(result.data[0], "Student reactivated successfully")
         
     except Exception as e:

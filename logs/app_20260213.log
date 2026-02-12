@@ -1,2 +1,27 @@
 2026-02-13 01:41:27 - app.services.profile_service - INFO - Creating profile for email: user@example.com
 2026-02-13 01:41:42 - app.services.profile_service - INFO - Profile created successfully: a3c8fb17-9796-4dcc-b931-e6dead158c68
+2026-02-13 02:21:38 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-02-13 02:22:39 - app.utils.auth - DEBUG - Authenticated user: d8e2d7e2-1234-5678-abcd-1234567890ab with role: admin
+2026-02-13 02:22:46 - app.utils.auth - DEBUG - Authenticated user: d8e2d7e2-1234-5678-abcd-1234567890ab with role: admin
+2026-02-13 02:23:15 - app.utils.auth - DEBUG - Authenticated user: d8e2d7e2-1234-5678-abcd-1234567890ab with role: admin
+2026-02-13 02:23:29 - app.utils.auth - DEBUG - Authenticated user: d8e2d7e2-1234-5678-abcd-1234567890ab with role: admin
+2026-02-13 02:23:47 - app.utils.auth - DEBUG - Authenticated user: d8e2d7e2-1234-5678-abcd-1234567890ab with role: admin
+2026-02-13 02:23:47 - app.services.room_allocation_service - INFO - Attempting to allocate room d8e2d7e2-1234-5678-abcd-1234567890dd to student d8e2d7e2-1234-5678-abcd-1234567890cc
+2026-02-13 02:24:00 - app.utils.auth - DEBUG - Authenticated user: d8e2d7e2-1234-5678-abcd-1234567890ab with role: admin
+2026-02-13 02:24:00 - app.services.room_allocation_service - INFO - Attempting to allocate room d8e2d7e2-1234-5678-abcd-1234567890dd to student d8e2d7e2-1234-5678-abcd-1234567890cc
+2026-02-13 02:24:27 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-02-13 02:24:27 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-02-13 02:24:27 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-02-13 02:24:39 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-02-13 02:24:39 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-02-13 02:24:40 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-02-13 02:24:52 - app.utils.auth - DEBUG - Authenticated user: d8e2d7e2-1234-5678-abcd-1234567890ab with role: admin
+2026-02-13 02:24:52 - app.services.room_allocation_service - INFO - Attempting to allocate room d8e2d7e2-1234-5678-abcd-1234567890dd to student d8e2d7e2-1234-5678-abcd-1234567890cc
+2026-02-13 02:25:07 - app.utils.auth - DEBUG - Authenticated user: d8e2d7e2-1234-5678-abcd-1234567890ab with role: admin
+2026-02-13 02:25:07 - app.services.room_allocation_service - INFO - Attempting to allocate room d8e2d7e2-1234-5678-abcd-1234567890dd to student d8e2d7e2-1234-5678-abcd-1234567890cc
+2026-02-13 02:28:36 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-02-13 02:28:36 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-02-13 02:28:36 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-02-13 02:29:01 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-02-13 02:29:01 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-02-13 02:29:01 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
