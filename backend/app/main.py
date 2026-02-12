@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from app.api.routes.student_router import router as student_router
 from app.api.routes.profile_router import router as profile_router
 from app.api.routes.room_allocation_router import router as room_allocation_router
+from app.api.routes.payment_router import router as payment_router
 import uvicorn
 
 from app.utils.hooks import register_hook
@@ -18,6 +19,7 @@ def startup_event():
 app.include_router(student_router)
 app.include_router(profile_router)
 app.include_router(room_allocation_router)
+app.include_router(payment_router)
 
 @app.get("/")
 def read_root():
