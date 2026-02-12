@@ -1,12 +1,13 @@
-from fastapi import APIRouter, HTTPException, Query, status, Header
+from fastapi import APIRouter, HTTPException, Query, status, Depends
+from typing import List, Optional
 from app.schamas.profile_schema import (
     ProfileCreate, ProfileUpdate, ProfileAdminUpdate,
     ProfileResponse, RoleEnum
 )
 from app.services import profile_service
+from app.utils.auth import get_current_user, UserContext, require_admin, require_admin_or_warden
 from app.utils.responses import ErrorCode
 from app.utils.logger import get_logger
-from typing import List, Optional
 
 router = APIRouter(prefix="/profiles", tags=["Profiles"])
 logger = get_logger(__name__)
@@ -59,13 +60,15 @@ def create_new_profile(profile: ProfileCreate):
     "/",
     response_model=dict,
     summary="Get all profiles",
-    description="Retrieve all active profiles with optional filtering and pagination"
+    description="Retrieve all active profiles with optional filtering and pagination",
+    dependencies=[Depends(require_admin_or_warden)]
 )
 def read_all_profiles(
     role: Optional[RoleEnum] = Query(None, description="Filter by role"),
     limit: Optional[int] = Query(None, ge=1, le=100, description="Maximum number of results"),
     offset: Optional[int] = Query(0, ge=0, description="Number of results to skip"),
-    include_inactive: bool = Query(False, description="Include soft-deleted profiles (admin only)")
+    include_inactive: bool = Query(False, description="Include soft-deleted profiles (admin only)"),
+    user: UserContext = Depends(get_current_user)
 ):
     """
     Get all profiles with optional filters:
@@ -87,7 +90,8 @@ def read_all_profiles(
     "/by-role/{role}",
     response_model=List[ProfileResponse],
     summary="Get profiles by role",
-    description="Retrieve all active profiles with a specific role"
+    description="Retrieve all active profiles with a specific role",
+    dependencies=[Depends(require_admin_or_warden)]
 )
 def read_profiles_by_role(role: RoleEnum):
     """Get all active profiles with a specific role (student, admin, or warden)."""
@@ -102,8 +106,20 @@ def read_profiles_by_role(role: RoleEnum):
     summary="Get profile by email",
     description="Retrieve an active profile by email address"
 )
-def read_profile_by_email(email: str):
-    """Get an active profile by email address."""
+def read_profile_by_email(
+    email: str,
+    user: UserContext = Depends(get_current_user)
+):
+    """
+    Get an active profile by email address.
+    
+    **Authorization**: Admin/Warden can view any; Student can only view own if it matches.
+    """
+    if user.is_student() and user.email != email:
+         raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only view your own profile."
+        )
     result = profile_service.get_profile_by_email(email)
     return _handle_service_response(result)
 
@@ -114,8 +130,20 @@ def read_profile_by_email(email: str):
     summary="Get profile by ID",
     description="Retrieve a specific active profile by its ID"
 )
-def read_profile(profile_id: str):
-    """Get a single active profile by its unique ID."""
+def read_profile(
+    profile_id: str,
+    user: UserContext = Depends(get_current_user)
+):
+    """
+    Get a single active profile by its unique ID.
+    
+    **Authorization**: Admin/Warden can view any; Student can only view own.
+    """
+    if user.is_student() and str(user.user_id) != str(profile_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only view your own profile."
+        )
     result = profile_service.get_profile(profile_id)
     return _handle_service_response(result)
 
@@ -129,19 +157,19 @@ def read_profile(profile_id: str):
 def modify_profile(
     profile_id: str,
     profile: ProfileUpdate,
-    x_user_role: Optional[str] = Header(None, description="User role for authorization")
+    user: UserContext = Depends(get_current_user)
 ):
     """
     Update a profile. Only provided fields will be updated.
+     Regular users can only update their own profile.
     Regular users cannot change roles - use the admin endpoint for that.
-    
-    - **name**: Full name
-    - **email**: Email address
-    - **phone**: Phone number
-    - **address**: Residential address
-    - **emergency_contact**: Emergency contact number
     """
-    is_admin = x_user_role == "admin" if x_user_role else False
+    if user.is_student() and str(user.user_id) != str(profile_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only update your own profile."
+        )
+    is_admin = user.is_admin()
     
     result = profile_service.update_profile(
         profile_id,
@@ -155,12 +183,13 @@ def modify_profile(
     "/{profile_id}/admin",
     response_model=ProfileResponse,
     summary="Admin: Update profile with role change",
-    description="Admin-only endpoint to update profile including role changes"
+    description="Admin-only endpoint to update profile including role changes",
+    dependencies=[Depends(require_admin)]
 )
 def admin_modify_profile(
     profile_id: str,
     profile: ProfileAdminUpdate,
-    x_user_role: Optional[str] = Header(None, description="User role (must be admin)")
+    user: UserContext = Depends(get_current_user)
 ):
     """
     Admin-only profile update that allows role changes.
@@ -168,12 +197,7 @@ def admin_modify_profile(
     All fields from regular update plus:
     - **role**: User role (student, admin, warden) - admin only
     """
-    # Check if user is admin
-    if x_user_role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": ErrorCode.FORBIDDEN.value, "message": "Admin access required"}
-        )
+    # Authorization is handled by require_admin dependency
     
     result = profile_service.update_profile(
         profile_id,
@@ -187,9 +211,13 @@ def admin_modify_profile(
     "/{profile_id}",
     status_code=status.HTTP_200_OK,
     summary="Soft delete profile",
-    description="Soft delete a profile by ID (sets is_active=false, data is preserved)"
+    description="Soft delete a profile by ID (sets is_active=false, data is preserved)",
+    dependencies=[Depends(require_admin)]
 )
-def remove_profile(profile_id: str):
+def remove_profile(
+    profile_id: str,
+    user: UserContext = Depends(get_current_user)
+):
     """
     Soft delete a profile by its ID.
     The profile is marked as inactive but data is preserved and can be restored.
@@ -203,11 +231,12 @@ def remove_profile(profile_id: str):
     response_model=ProfileResponse,
     status_code=status.HTTP_200_OK,
     summary="Restore deleted profile",
-    description="Restore a soft-deleted profile"
+    description="Restore a soft-deleted profile",
+    dependencies=[Depends(require_admin)]
 )
 def restore_deleted_profile(
     profile_id: str,
-    x_user_role: Optional[str] = Header(None, description="User role (admin recommended)")
+    user: UserContext = Depends(get_current_user)
 ):
     """
     Restore a soft-deleted profile.

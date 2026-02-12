@@ -1,13 +1,14 @@
-from fastapi import APIRouter, HTTPException, Query, status, Header
+from fastapi import APIRouter, HTTPException, Query, status, Depends
+from typing import Optional, List
+from datetime import date
 from app.schamas.student_schema import (
     StudentCreate, StudentUpdate, StudentResponse,
     StudentListResponse, StudentStatus, StudentReactivate
 )
 from app.services import student_service
+from app.utils.auth import get_current_user, UserContext, require_admin, require_admin_or_warden
 from app.utils.responses import ErrorCode
 from app.utils.logger import get_logger
-from typing import Optional
-from datetime import date
 
 router = APIRouter(prefix="/students", tags=["Students"])
 logger = get_logger(__name__)
@@ -41,12 +42,12 @@ def _handle_service_response(result: dict, success_status: int = status.HTTP_200
     response_model=StudentResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create student enrollment",
-    description="Enroll a profile into the hostel system as a student"
+    description="Enroll a profile into the hostel system as a student",
+    dependencies=[Depends(require_admin_or_warden)]
 )
 def create_new_student(
     student: StudentCreate,
-    x_user_id: Optional[str] = Header(None, description="ID of user creating the student"),
-    x_user_role: Optional[str] = Header(None, description="Role of user (admin/warden)")
+    user: UserContext = Depends(get_current_user)
 ):
     """
     Create a new student enrollment.
@@ -69,16 +70,9 @@ def create_new_student(
     - **joined_on**: Date student joined (cannot be future)
     - **status**: Initial status (default: ACTIVE)
     """
-    # Authorization check
-    if x_user_role == 'student':
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": ErrorCode.FORBIDDEN.value, "message": "Students cannot create student enrollments"}
-        )
-    
     result = student_service.create_student(
         student.model_dump(),
-        created_by=x_user_id
+        created_by=user.user_id
     )
     return _handle_service_response(result, status.HTTP_201_CREATED)
 
@@ -87,7 +81,8 @@ def create_new_student(
     "/",
     response_model=StudentListResponse,
     summary="Get all students",
-    description="Retrieve all students with filtering and pagination (Admin/Warden only)"
+    description="Retrieve all students with filtering and pagination (Admin/Warden only)",
+    dependencies=[Depends(require_admin_or_warden)]
 )
 def read_all_students(
     status: Optional[StudentStatus] = Query(None, description="Filter by status"),
@@ -96,7 +91,7 @@ def read_all_students(
     search: Optional[str] = Query(None, description="Search by name or email"),
     limit: int = Query(50, ge=1, le=100, description="Maximum number of results"),
     offset: int = Query(0, ge=0, description="Number of results to skip"),
-    x_user_role: Optional[str] = Header(None, description="User role for authorization")
+    user: UserContext = Depends(get_current_user)
 ):
     """
     Get all students with optional filters.
@@ -123,7 +118,7 @@ def read_all_students(
         search=search,
         limit=limit,
         offset=offset,
-        requesting_user_role=x_user_role
+        requesting_user_role=user.role
     )
     return _handle_service_response(result)
 
@@ -136,8 +131,7 @@ def read_all_students(
 )
 def read_student_by_profile(
     profile_id: str,
-    x_user_id: Optional[str] = Header(None, description="Requesting user's profile ID"),
-    x_user_role: Optional[str] = Header(None, description="User role for authorization")
+    user: UserContext = Depends(get_current_user)
 ):
     """
     Get student by profile ID - very useful endpoint.
@@ -148,8 +142,8 @@ def read_student_by_profile(
     """
     result = student_service.get_student_by_profile(
         profile_id,
-        requesting_user_id=x_user_id,
-        requesting_user_role=x_user_role
+        requesting_user_id=user.user_id,
+        requesting_user_role=user.role
     )
     return _handle_service_response(result)
 
@@ -162,8 +156,7 @@ def read_student_by_profile(
 )
 def read_student(
     student_id: str,
-    x_user_id: Optional[str] = Header(None, description="Requesting user's profile ID"),
-    x_user_role: Optional[str] = Header(None, description="User role for authorization")
+    user: UserContext = Depends(get_current_user)
 ):
     """
     Get student by ID with joined profile information.
@@ -180,8 +173,8 @@ def read_student(
     """
     result = student_service.get_student(
         student_id,
-        requesting_user_id=x_user_id,
-        requesting_user_role=x_user_role
+        requesting_user_id=user.user_id,
+        requesting_user_role=user.role
     )
     return _handle_service_response(result)
 
@@ -190,13 +183,13 @@ def read_student(
     "/{student_id}",
     response_model=StudentResponse,
     summary="Update student",
-    description="Update student information (Admin/Warden only)"
+    description="Update student information (Admin/Warden only)",
+    dependencies=[Depends(require_admin_or_warden)]
 )
 def modify_student(
     student_id: str,
     student: StudentUpdate,
-    x_user_id: Optional[str] = Header(None, description="ID of user updating the student"),
-    x_user_role: Optional[str] = Header(None, description="User role (admin/warden)")
+    user: UserContext = Depends(get_current_user)
 ):
     """
     Update student information.
@@ -224,8 +217,8 @@ def modify_student(
     result = student_service.update_student(
         student_id,
         student.model_dump(exclude_unset=True),
-        updated_by=x_user_id,
-        requesting_user_role=x_user_role
+        updated_by=user.user_id,
+        requesting_user_role=user.role
     )
     return _handle_service_response(result)
 
@@ -234,12 +227,12 @@ def modify_student(
     "/{student_id}",
     status_code=status.HTTP_200_OK,
     summary="Soft delete student",
-    description="Mark student as LEFT (Admin only - never removes data)"
+    description="Mark student as LEFT (Admin only - never removes data)",
+    dependencies=[Depends(require_admin)]
 )
 def remove_student(
     student_id: str,
-    x_user_id: Optional[str] = Header(None, description="ID of user deleting the student"),
-    x_user_role: Optional[str] = Header(None, description="User role (must be admin)")
+    user: UserContext = Depends(get_current_user)
 ):
     """
     Soft delete student by setting status to LEFT.
@@ -258,8 +251,8 @@ def remove_student(
     """
     result = student_service.delete_student(
         student_id,
-        deleted_by=x_user_id,
-        requesting_user_role=x_user_role
+        deleted_by=user.user_id,
+        requesting_user_role=user.role
     )
     return _handle_service_response(result)
 
@@ -269,13 +262,13 @@ def remove_student(
     response_model=StudentResponse,
     status_code=status.HTTP_200_OK,
     summary="Reactivate student",
-    description="Reactivate a student who has LEFT status"
+    description="Reactivate a student who has LEFT status",
+    dependencies=[Depends(require_admin_or_warden)]
 )
 def reactivate_student_endpoint(
     student_id: str,
     reactivation: StudentReactivate,
-    x_user_id: Optional[str] = Header(None, description="ID of user reactivating the student"),
-    x_user_role: Optional[str] = Header(None, description="User role (admin/warden)")
+    user: UserContext = Depends(get_current_user)
 ):
     """
     Reactivate a student who has LEFT status.
@@ -296,7 +289,7 @@ def reactivate_student_endpoint(
         student_id,
         monthly_rent=reactivation.monthly_rent,
         joined_on=reactivation.joined_on,
-        reactivated_by=x_user_id,
-        requesting_user_role=x_user_role
+        reactivated_by=user.user_id,
+        requesting_user_role=user.role
     )
     return _handle_service_response(result)
