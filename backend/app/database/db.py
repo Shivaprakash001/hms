@@ -8,7 +8,7 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-print("Supabase connected successfully")
-
-data = supabase.table("students").select("*").execute()
-print(data)
+if __name__ == "__main__":
+    print("Supabase connected successfully")
+    data = supabase.table("students").select("*").execute()
+    print(data)

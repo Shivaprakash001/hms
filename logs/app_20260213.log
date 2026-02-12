@@ -1,0 +1,2 @@
+2026-02-13 01:41:27 - app.services.profile_service - INFO - Creating profile for email: user@example.com
+2026-02-13 01:41:42 - app.services.profile_service - INFO - Profile created successfully: a3c8fb17-9796-4dcc-b931-e6dead158c68
