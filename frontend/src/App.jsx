@@ -1,0 +1,62 @@
+import { StrictMode } from 'react'
+import { Routes, Route, Navigate } from 'react-router-dom';
+import Login from './pages/auth/Login.jsx';
+import OwnerLayout from './layouts/OwnerLayout.jsx';
+import OwnerDashboard from './pages/owner/OwnerDashboard.jsx';
+import ManageStudents from './pages/owner/ManageStudents.jsx';
+import ManageRooms from './pages/owner/ManageRooms.jsx';
+import Payments from './pages/owner/Payments.jsx';
+import Complaints from './pages/owner/Complaints.jsx';
+import Expenses from './pages/owner/Expenses.jsx';
+
+// Student Imports
+
+import StudentLayout from './layouts/StudentLayout.jsx';
+import StudentDashboard from './pages/student/StudentDashboard.jsx';
+import StudentPayments from './pages/student/StudentPayments.jsx';
+import StudentComplaints from './pages/student/StudentComplaints.jsx';
+import StudentProfile from './pages/student/StudentProfile.jsx';
+import StudentSettings from './pages/student/StudentSettings.jsx';
+import { AuthProvider } from './context/AuthContext';
+import ProtectedStudentRoute from './components/ProtectedStudentRoute';
+import ProtectedOwnerRoute from './components/ProtectedOwnerRoute';
+
+function App() {
+  return (
+    <AuthProvider>
+      <Routes>
+        <Route path="/" element={<Login />} />
+
+        {/* Student Routes */}
+
+        <Route element={<ProtectedStudentRoute />}>
+          <Route path="/student" element={<StudentLayout />}>
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<StudentDashboard />} />
+            <Route path="payments" element={<StudentPayments />} />
+            <Route path="complaints" element={<StudentComplaints />} />
+            <Route path="profile" element={<StudentProfile />} />
+            <Route path="settings" element={<StudentSettings />} />
+          </Route>
+        </Route>
+
+        {/* Owner Routes */}
+        <Route element={<ProtectedOwnerRoute />}>
+          <Route path="/owner" element={<OwnerLayout />}>
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<OwnerDashboard />} />
+            <Route path="students" element={<ManageStudents />} />
+            <Route path="rooms" element={<ManageRooms />} />
+            <Route path="payments" element={<Payments />} />
+            <Route path="complaints" element={<Complaints />} />
+            <Route path="expenses" element={<Expenses />} />
+          </Route>
+        </Route>
+        {/* Global Redirects */}
+        <Route path="/dashboard" element={<Navigate to="/owner/dashboard" replace />} />
+      </Routes>
+    </AuthProvider>
+  );
+}
+
+export default App
