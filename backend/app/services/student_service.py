@@ -135,7 +135,7 @@ def get_student(
         
         # Fetch student with profile join and active allocations
         result = supabase.table("students")\
-            .select("*, profiles(*), room_allocations(*, rooms(*))")\
+            .select("*, profiles!students_profile_id_fkey(*), room_allocations(*, rooms(*))")\
             .eq("id", student_id)\
             .execute()
         
@@ -181,7 +181,7 @@ def get_student_by_profile(
         logger.debug(f"Fetching student by profile: {profile_id}")
         
         result = supabase.table("students")\
-            .select("*, profiles(*), room_allocations(*, rooms(*))")\
+            .select("*, profiles!students_profile_id_fkey(*), room_allocations(*, rooms(*))")\
             .eq("profile_id", profile_id)\
             .execute()
         
@@ -220,7 +220,8 @@ def get_all_students(
     search: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
-    requesting_user_role: Optional[str] = None
+    requesting_user_role: Optional[str] = None,
+    owner_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Get all students with filtering and pagination.
@@ -242,7 +243,11 @@ def get_all_students(
         
         # Build query with profile join and allocations
         query = supabase.table("students")\
-            .select("*, profiles(*), room_allocations(*, rooms(*))", count="exact")
+            .select("*, profiles!students_profile_id_fkey(*), room_allocations(*, rooms(*))", count="exact")
+        
+        # Filter by owner if provided (for owner-isolation)
+        if owner_id:
+            query = query.eq("owner_id", owner_id)
         
         # Apply filters
         if status:
@@ -254,10 +259,8 @@ def get_all_students(
         if joined_before:
             query = query.lte("joined_on", joined_before.isoformat())
         
-        # Search by name or email (requires profile join)
-        if search:
-            # Note: This is a simplified search. For production, use full-text search
-            query = query.or_(f"profiles.name.ilike.%{search}%,profiles.email.ilike.%{search}%")
+        # Note: searching by profile name/email requires fetching all and filtering
+        # in Python, since PostgREST .or_() on joined columns is not supported this way
         
         # Pagination
         query = query.limit(limit).offset(offset)
@@ -281,11 +284,20 @@ def get_all_students(
                     student["current_room"] = active_allocation.get("rooms")
                 else:
                     student["current_room"] = None
+            
+            # Apply in-memory search filter if provided
+            if search:
+                profile = student.get("profile") or {}
+                name = (profile.get("name") or "").lower()
+                email = (profile.get("email") or "").lower()
+                if search.lower() not in name and search.lower() not in email:
+                    continue
+            
             students_data.append(student)
         
         return ServiceResponse.success({
             "students": students_data,
-            "total": result.count if hasattr(result, 'count') else len(result.data),
+            "total": len(students_data),
             "limit": limit,
             "offset": offset
         })

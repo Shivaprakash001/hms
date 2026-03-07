@@ -5,76 +5,69 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-def get_floors_with_rooms() -> Dict[str, Any]:
+def get_floors_with_rooms(owner_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Get all rooms grouped by floor.
     Structure: [ { id: 'f1', number: 1, rooms: [ ... ] } ]
+    Uses two separate queries to avoid deep-nested join timeouts.
     """
     try:
-        # Fetch all rooms with active allocations and tenant profiles
-        # We need to join: rooms -> room_allocations -> students -> profiles
-        # Supabase-py might not support deep nested select easily in one go with standard postgrest if relationships aren't perfect.
-        # Let's try: select *, room_allocations(*, students(*, profiles(*)))
-        
-        response = supabase.table("rooms")\
-            .select("*, room_allocations(id, start_date, end_date, students(id, profiles(id, name, email, phone)))")\
-            .order("room_no")\
-            .execute()
-        
-        if not response.data:
+        # Query 1: Fetch rooms (flat, fast)
+        rooms_query = supabase.table("rooms").select("*").order("room_no")
+        if owner_id:
+            rooms_query = rooms_query.eq("owner_id", owner_id)
+        rooms_res = rooms_query.execute()
+
+        if not rooms_res.data:
             return ServiceResponse.success([])
 
-        rooms_data = response.data
-        floors_map = {}
+        rooms_data = rooms_res.data
+        room_ids = [r["id"] for r in rooms_data]
 
+        # Query 2: Fetch active allocations with student + profile for all rooms at once
+        allocs_res = supabase.table("room_allocations")\
+            .select("id, room_id, start_date, students!inner(id, status, profiles!students_profile_id_fkey(id, name, email, phone))")\
+            .in_("room_id", room_ids)\
+            .is_("end_date", "null")\
+            .execute()
+
+        # Build a lookup: room_id -> list of tenant dicts
+        tenants_by_room: Dict[str, list] = {r["id"]: [] for r in rooms_data}
+        for alloc in (allocs_res.data or []):
+            room_id = alloc.get("room_id")
+            student = alloc.get("students") or {}
+            profile = student.get("profiles") or {}
+            if room_id and profile:
+                tenants_by_room.setdefault(room_id, []).append({
+                    "id": student.get("id"),
+                    "name": profile.get("name"),
+                    "email": profile.get("email"),
+                    "phone": profile.get("phone"),
+                    "joinDate": alloc.get("start_date"),
+                    "status": student.get("status", "ACTIVE")
+                })
+
+        floors_map = {}
         for room in rooms_data:
-            # Determine floor from room_no (e.g. 101 -> 1, 205 -> 2, G1 -> 0?)
-            # Assuming standard numeric 3-digit: 1xx, 2xx
             try:
                 floor_num = int(room["room_no"][:-2]) if len(room["room_no"]) >= 3 and room["room_no"][:-2].isdigit() else 0
             except:
                 floor_num = 0
 
             floor_key = f"f{floor_num}"
-
             if floor_key not in floors_map:
-                floors_map[floor_key] = {
-                    "id": floor_key,
-                    "number": floor_num,
-                    "rooms": []
-                }
+                floors_map[floor_key] = {"id": floor_key, "number": floor_num, "rooms": []}
 
-            # Process tenants
-            tenants = []
-            allocations = room.get("room_allocations", [])
-            # Filter active allocations
-            active_allocs = [a for a in allocations if a.get("end_date") is None]
-            
-            for alloc in active_allocs:
-                student = alloc.get("students")
-                if student:
-                    profile = student.get("profiles")
-                    if profile:
-                        tenants.append({
-                            "id": student["id"], # Use student ID or profile ID? mock uses t1.
-                            "name": profile.get("name"),
-                            "email": profile.get("email"),
-                            "phone": profile.get("phone"),
-                            "joinDate": alloc.get("start_date"),
-                            "status": student.get("status", "ACTIVE")
-                        })
-
-            # Add room to floor
+            tenants = tenants_by_room.get(room["id"], [])
             floors_map[floor_key]["rooms"].append({
                 "id": room["id"],
                 "number": room["room_no"],
                 "capacity": room["capacity"],
-                "occupied": len(tenants), # Calculate specifically from active tenants
+                "occupied": len(tenants),
                 "floor": floor_num,
                 "tenants": tenants
             })
 
-        # Convert map to sorted list
         floors_list = sorted(list(floors_map.values()), key=lambda x: x["number"])
         return ServiceResponse.success(floors_list)
 
@@ -83,18 +76,21 @@ def get_floors_with_rooms() -> Dict[str, Any]:
         return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, str(e))
 
 
-def get_all_rooms(limit: int = 50, offset: int = 0) -> Dict[str, Any]:
+def get_all_rooms(limit: int = 50, offset: int = 0, owner_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Get all rooms with pagination.
     """
     try:
-        # Fetch rooms sorted by room_no
-        result = supabase.table("rooms")\
+        query = supabase.table("rooms")\
             .select("*", count="exact")\
             .order("room_no")\
             .limit(limit)\
-            .offset(offset)\
-            .execute()
+            .offset(offset)
+        
+        if owner_id:
+            query = query.eq("owner_id", owner_id)
+        
+        result = query.execute()
 
         return ServiceResponse.success({
             "rooms": result.data,

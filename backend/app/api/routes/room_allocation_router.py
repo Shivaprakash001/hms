@@ -32,6 +32,24 @@ def _handle_service_response(result: dict, success_status: int = status.HTTP_200
     return result.get("data")
 
 
+@router.get(
+    "/active",
+    response_model=List[RoomAllocationResponse],
+    summary="Get all active allocations with student and room info",
+    dependencies=[Depends(require_admin_or_owner)]
+)
+def get_active_allocations(
+    user: UserContext = Depends(get_current_user)
+):
+    """
+    Get list of all currently active room assignments.
+
+    **Authorization:** Admin or Warden only.
+    """
+    result = room_allocation_service.get_active_allocations(user.user_id)
+    return _handle_service_response(result)
+
+
 @router.post(
     "/",
     response_model=dict, # Returns detailed success summary
@@ -153,19 +171,4 @@ def get_occupants(
     """
     result = room_allocation_service.get_room_occupants(room_id)
     return _handle_service_response(result)
-@router.get(
-    "/active",
-    response_model=List[RoomAllocationResponse],
-    summary="Get all active allocations with student and room info",
-    dependencies=[Depends(require_admin_or_owner)]
-)
-def get_active_allocations(
-    user: UserContext = Depends(require_admin_or_owner)
-):
-    """
-    Get list of all currently active room assignments.
-    
-    **Authorization:** Admin or Warden only.
-    """
-    result = room_allocation_service.get_active_allocations(user.user_id)
-    return _handle_service_response(result)
+

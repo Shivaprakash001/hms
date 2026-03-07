@@ -225,7 +225,7 @@ def get_room_occupants(room_id: str) -> Dict[str, Any]:
         # But Supabase select syntax needs to be correct for joins.
         # Assuming RLS/foreign keys allow:
         res = supabase.table("room_allocations")\
-            .select("*, students(profile_id, profiles(*))")\
+            .select("*, students(profile_id, profiles!students_profile_id_fkey(*))")\
             .eq("room_id", room_id)\
             .is_("end_date", "null")\
             .execute()
@@ -283,24 +283,27 @@ def handle_student_left(student_id: str, **kwargs):
 def get_active_allocations(user_id: str) -> Dict[str, Any]:
     """Get all active room allocations with student and room details."""
     try:
-        # Join room_allocations with students -> profiles AND rooms
-        # Supabase syntax for nested joins: students(id, profiles(name)), rooms(room_no)
+        # Fetch all active allocations with student profile and room info
+        # Filter by owner in Python since PostgREST nested filtering (students.owner_id)
+        # is not reliably supported in supabase-py
         res = supabase.table("room_allocations")\
-            .select("*, students(id, profiles(name)), rooms(room_no, capacity, id)")\
-            .eq("owner_id", user_id)\
+            .select("*, students(id, owner_id, profiles!students_profile_id_fkey(name)), rooms(id, room_no, capacity)")\
             .is_("end_date", "null")\
             .execute()
-        
+
         data = []
-        for item in res.data:
-            # Map Supabase structure to Schema structure
-            if "students" in item:
-                item["student"] = item.pop("students")
-            if "rooms" in item:
-                item["room"] = item.pop("rooms")
+        for item in (res.data or []):
+            student = item.get("students") or {}
+            # Filter by owner_id
+            if str(student.get("owner_id", "")) != str(user_id):
+                continue
+            # Rename keys to match schema
+            item["student"] = item.pop("students")
+            item["room"] = item.pop("rooms", None)
             data.append(item)
-            
+
         return ServiceResponse.success(data)
     except Exception as e:
         logger.exception(f"Error fetching active allocations: {e}")
         return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, str(e))
+

@@ -30,18 +30,14 @@ def list_rooms(
 ):
     """
     List all rooms.
-    If grouped=true, returns floors with nested rooms (mock data structure).
+    If grouped=true, returns floors with nested rooms.
     """
+    owner_id = user.user_id if user.role in ("admin", "owner") else None
     if grouped:
-        result = room_service.get_floors_with_rooms()
+        result = room_service.get_floors_with_rooms(owner_id=owner_id)
         return _handle_service_response(result)
     
-    result = room_service.get_all_rooms(limit=limit, offset=offset)
-    return result.get("data", {}).get("rooms", [])
-    """
-    List all rooms.
-    """
-    result = room_service.get_all_rooms(limit=limit, offset=offset)
+    result = room_service.get_all_rooms(limit=limit, offset=offset, owner_id=owner_id)
     return result.get("data", {}).get("rooms", [])
 
 @router.post("/", response_model=RoomResponse, status_code=status.HTTP_201_CREATED)

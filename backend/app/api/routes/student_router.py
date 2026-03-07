@@ -119,7 +119,8 @@ def read_all_students(
         search=search,
         limit=limit,
         offset=offset,
-        requesting_user_role=user.role
+        requesting_user_role=user.role,
+        owner_id=user.user_id if user.role == "owner" else None
     )
     return result.get("data", {}).get("students", [])
 

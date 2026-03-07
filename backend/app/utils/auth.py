@@ -40,14 +40,17 @@ class UserContext(BaseModel):
     def is_student(self) -> bool:
         return self.role == "student"
     
+    def is_owner(self) -> bool:
+        return self.role == "owner"
+    
     def can_manage_students(self) -> bool:
-        return self.role == "admin"
+        return self.role in ("admin", "owner")
     
     def can_delete_students(self) -> bool:
         return self.role == "admin"
     
     def can_view_all_students(self) -> bool:
-        return self.role == "admin"
+        return self.role in ("admin", "owner")
 
 # Password Hashing
 # pwd_context removed
@@ -131,9 +134,9 @@ def require_admin(user: UserContext = Depends(get_current_user)) -> UserContext:
 
 def require_admin_or_owner(user: UserContext = Depends(get_current_user)) -> UserContext:
     if not user.can_manage_students():
-        logger.warning(f"User {user.user_id} with role {user.role} attempted admin-only action")
+        logger.warning(f"User {user.user_id} with role {user.role} attempted admin/owner-only action")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin privileges required"
+            detail="Admin or Owner privileges required"
         )
     return user

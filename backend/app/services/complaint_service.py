@@ -38,7 +38,7 @@ def get_complaint(complaint_id: str, user_id: str, role: str) -> Dict[str, Any]:
     Fetch a single complaint with authorization check.
     """
     try:
-        query = supabase.table("complaints").select("*, students(*, profiles(name, email))").eq("id", complaint_id)
+        query = supabase.table("complaints").select("*, students(*, profiles!students_profile_id_fkey(name, email))").eq("id", complaint_id)
         
         result = query.execute()
         if not result.data:
@@ -76,7 +76,7 @@ def get_all_complaints(
         # MOCK_COMPLAINTS: { id, tenantName, room, title, description, date, status, priority }
         # Backend: { id, student_id, category(title?), description, created_at(date), status, priority }
         
-        query = supabase.table("complaints").select("*, students(profiles(name), room_allocations(rooms(room_no)))", count="exact")
+        query = supabase.table("complaints").select("*, students(profiles!students_profile_id_fkey(name), room_allocations(rooms(room_no)))", count="exact")
         
         if student_id:
             query = query.eq("student_id", student_id)

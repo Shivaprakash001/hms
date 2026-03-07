@@ -288,7 +288,7 @@ def get_dues_report(user_id: str, rent_month: Optional[date] = None, status: Opt
     """
     try:
         query = supabase.table("rent_obligations")\
-            .select("*, students(profiles(name), room_number)", count="exact")\
+            .select("*, students(profiles!students_profile_id_fkey(name), room_number)", count="exact")\
             .eq("owner_id", user_id)
 
         if rent_month:
@@ -328,7 +328,7 @@ def get_all_payments(user_id: str, limit: int = 50, offset: int = 0) -> Dict[str
     try:
         # Join with student names for UI
         query = supabase.table("payments")\
-            .select("*, students(profiles(name)), rent_obligations(rent_month)", count="exact")\
+            .select("*, students(profiles!students_profile_id_fkey(name)), rent_obligations(rent_month)", count="exact")\
             .eq("owner_id", user_id)\
             .order("payment_date", desc=True)\
             .limit(limit)\
