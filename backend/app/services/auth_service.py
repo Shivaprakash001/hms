@@ -68,8 +68,8 @@ def login(email: str, password: str) -> Dict[str, Any]:
             "token_type": "bearer",
             "role": profile["role"],
             "name": profile["name"],
-            "user_id": profile["id"],
-            "student_id": profile.get("student_id")
+            "user_id": str(profile["id"]),
+            "student_id": str(profile.get("student_id")) if profile.get("student_id") else None
         })
         
     except Exception as e:

@@ -261,3 +261,48 @@ when serializing dict item 'student_id'
 2026-03-08 01:08:03 - app.services.complaint_service - INFO - Complaint created successfully: 62c57315-1e79-4488-8b83-34180ea75e6c
 2026-03-08 01:08:03 - app.services.complaint_service - INFO - Found owner_id 063a2d95-4ad6-47d9-b7b7-5735cceea448 for student cc0f49a5-42ee-4f82-9f22-4fa4233e9e3a
 2026-03-08 01:08:04 - app.services.complaint_service - INFO - Complaint created successfully: 72160069-9b21-4e2b-aefa-ccddadfbca72
+2026-03-08 01:13:15 - app.services.auth_service - INFO - Login attempt for: spchirdri2006@gmail.com
+2026-03-08 01:13:16 - app.services.auth_service - INFO - Login successful: spchirdri2006@gmail.com
+2026-03-08 01:13:25 - app.services.auth_service - INFO - Login attempt for: spchirdri2006@gmail.com
+2026-03-08 01:13:26 - app.services.auth_service - INFO - Login successful: spchirdri2006@gmail.com
+2026-03-08 01:14:54 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 01:14:56 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 01:15:03 - app.services.auth_service - INFO - Login attempt for: spchirdri2006@gmail.com
+2026-03-08 01:15:04 - app.services.auth_service - INFO - Login successful: spchirdri2006@gmail.com
+2026-03-08 01:15:36 - app.services.auth_service - INFO - Login attempt for: spchirdri2006@gmail.com
+2026-03-08 01:15:36 - app.services.auth_service - INFO - Login successful: spchirdri2006@gmail.com
+2026-03-08 01:16:33 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 01:17:41 - app.services.auth_service - INFO - Login attempt for: spchirdri2006@gmail.com
+2026-03-08 01:17:41 - app.services.auth_service - INFO - Login successful: spchirdri2006@gmail.com
+2026-03-08 01:17:42 - app.services.payment_service - ERROR - Error fetching payments: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+2026-03-08 01:17:42 - app.services.payment_service - ERROR - Error fetching payments: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+2026-03-08 01:17:43 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+2026-03-08 01:17:44 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+2026-03-08 01:17:55 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 01:17:55 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0

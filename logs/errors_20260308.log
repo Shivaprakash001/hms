@@ -205,3 +205,33 @@ Traceback (most recent call last):
                     f'is not JSON serializable')
 TypeError: Object of type UUID is not JSON serializable
 when serializing dict item 'student_id'
+2026-03-08 01:17:42 - app.services.payment_service - ERROR - Error fetching payments: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+2026-03-08 01:17:42 - app.services.payment_service - ERROR - Error fetching payments: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+2026-03-08 01:17:43 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+2026-03-08 01:17:44 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
