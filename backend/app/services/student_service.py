@@ -371,9 +371,21 @@ def update_student(
                 logger.info(f"Student {student_id} status changing to LEFT - triggering auto-deallocation hook")
                 trigger_hook("student_left", student_id=student_id, user_id=updated_by)
         
+        # Sanitize types for Supabase JSON serialization (Decimal, date -> str)
+        import datetime as _dt
+        from decimal import Decimal as _Dec
+        sanitized = {}
+        for k, v in update_data.items():
+            if isinstance(v, _Dec):
+                sanitized[k] = str(v)
+            elif isinstance(v, (_dt.datetime, _dt.date)):
+                sanitized[k] = v.isoformat()
+            else:
+                sanitized[k] = v
+
         # Perform update
         result = supabase.table("students")\
-            .update(update_data)\
+            .update(sanitized)\
             .eq("id", student_id)\
             .execute()
         
