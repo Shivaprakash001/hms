@@ -8,7 +8,7 @@ from decimal import Decimal
 
 class StudentStatus(str, Enum):
     """Student lifecycle status - finite state machine"""
-    APPLIED = "APPLIED"
+    INVITED = "INVITED"
     ACTIVE = "ACTIVE"
     LEFT = "LEFT"
     BLACKLISTED = "BLACKLISTED"
@@ -17,7 +17,7 @@ class StudentStatus(str, Enum):
 
 # Valid status transitions
 VALID_STATUS_TRANSITIONS = {
-    StudentStatus.APPLIED: [StudentStatus.ACTIVE, StudentStatus.LEFT],
+    StudentStatus.INVITED: [StudentStatus.ACTIVE],
     StudentStatus.ACTIVE: [StudentStatus.LEFT, StudentStatus.BLACKLISTED],
     StudentStatus.LEFT: [StudentStatus.ARCHIVED],  # Cannot go back to ACTIVE without re-admission
     StudentStatus.BLACKLISTED: [StudentStatus.ARCHIVED],
@@ -30,7 +30,8 @@ class StudentCreate(BaseModel):
     profile_id: UUID = Field(..., description="Profile ID to enroll as student")
     monthly_rent: Decimal = Field(..., gt=0, description="Monthly rent amount (must be > 0)")
     joined_on: date = Field(..., description="Date student joined hostel")
-    status: StudentStatus = Field(default=StudentStatus.ACTIVE, description="Initial student status")
+    status: StudentStatus = Field(default=StudentStatus.INVITED, description="Initial student status")
+    owner_id: Optional[UUID] = Field(None, description="Owner ID who invited")
     
     @field_validator('joined_on')
     @classmethod
@@ -72,6 +73,7 @@ class StudentResponse(BaseModel):
     monthly_rent: Decimal
     joined_on: date
     status: StudentStatus
+    owner_id: Optional[UUID] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
     

@@ -4,7 +4,7 @@ from datetime import datetime
 from app.utils.responses import ServiceResponse, ErrorCode
 from app.utils.logger import get_logger
 from app.utils.hooks import trigger_hook
-from app.schamas.complaint_schema import ComplaintStatus
+from app.schemas.complaint_schema import ComplaintStatus
 
 logger = get_logger(__name__)
 
@@ -38,7 +38,7 @@ def get_complaint(complaint_id: str, user_id: str, role: str) -> Dict[str, Any]:
     Fetch a single complaint with authorization check.
     """
     try:
-        query = supabase.table("complaints").select("*, students(*, profiles(name, email))").eq("id", complaint_id)
+        query = supabase.table("complaints").select("*, students(*, profiles!students_profile_id_fkey(name, email))").eq("id", complaint_id)
         
         result = query.execute()
         if not result.data:
@@ -72,7 +72,11 @@ def get_all_complaints(
     List complaints with filtering.
     """
     try:
-        query = supabase.table("complaints").select("*, students(profiles(name))", count="exact")
+        # Custom query to match mock data
+        # MOCK_COMPLAINTS: { id, tenantName, room, title, description, date, status, priority }
+        # Backend: { id, student_id, category(title?), description, created_at(date), status, priority }
+        
+        query = supabase.table("complaints").select("*, students(profiles!students_profile_id_fkey(name), room_allocations(rooms(room_no)))", count="exact")
         
         if student_id:
             query = query.eq("student_id", student_id)
@@ -85,8 +89,29 @@ def get_all_complaints(
         
         result = query.execute()
         
+        complaints_list = []
+        for c in result.data:
+            student = c.get("students", {})
+            profile = student.get("profiles", {})
+            allocations = student.get("room_allocations", [])
+            room_no = "N/A"
+            if allocations:
+                if allocations[0].get("rooms"):
+                    room_no = allocations[0]["rooms"]["room_no"]
+
+            complaints_list.append({
+                "id": c["id"],
+                "tenantName": profile.get("name", "Unknown"),
+                "room": room_no,
+                "title": c["category"] or "Complaint", # Use category as title if title missing
+                "description": c["description"],
+                "date": c["created_at"].split("T")[0],
+                "status": c["status"],
+                "priority": c.get("priority", "medium") # Ensure priority exists in DB or default
+            })
+
         return ServiceResponse.success({
-            "complaints": result.data,
+            "complaints": complaints_list,
             "total": result.count if hasattr(result, 'count') else len(result.data),
             "limit": limit,
             "offset": offset

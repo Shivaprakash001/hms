@@ -1,12 +1,13 @@
 from fastapi import APIRouter, HTTPException, Query, status, Depends
 from typing import Optional, List
 from datetime import date
-from app.schamas.student_schema import (
+from app.schemas.student_schema import (
     StudentCreate, StudentUpdate, StudentResponse,
     StudentListResponse, StudentStatus, StudentReactivate
 )
-from app.services import student_service
-from app.utils.auth import get_current_user, UserContext, require_admin, require_admin_or_warden
+from app.schemas.invitation_schema import TenantInviteRequest, TenantActivateRequest
+from app.services import student_service, auth_service
+from app.utils.auth import get_current_user, UserContext, require_admin, require_admin_or_owner
 from app.utils.responses import ErrorCode
 from app.utils.logger import get_logger
 
@@ -43,7 +44,7 @@ def _handle_service_response(result: dict, success_status: int = status.HTTP_200
     status_code=status.HTTP_201_CREATED,
     summary="Create student enrollment",
     description="Enroll a profile into the hostel system as a student",
-    dependencies=[Depends(require_admin_or_warden)]
+    dependencies=[Depends(require_admin_or_owner)]
 )
 def create_new_student(
     student: StudentCreate,
@@ -79,10 +80,10 @@ def create_new_student(
 
 @router.get(
     "/",
-    response_model=StudentListResponse,
+    response_model=List[StudentResponse],
     summary="Get all students",
     description="Retrieve all students with filtering and pagination (Admin/Warden only)",
-    dependencies=[Depends(require_admin_or_warden)]
+    dependencies=[Depends(require_admin_or_owner)]
 )
 def read_all_students(
     status: Optional[StudentStatus] = Query(None, description="Filter by status"),
@@ -118,9 +119,10 @@ def read_all_students(
         search=search,
         limit=limit,
         offset=offset,
-        requesting_user_role=user.role
+        requesting_user_role=user.role,
+        owner_id=user.user_id if user.role == "owner" else None
     )
-    return _handle_service_response(result)
+    return result.get("data", {}).get("students", [])
 
 
 @router.get(
@@ -184,7 +186,7 @@ def read_student(
     response_model=StudentResponse,
     summary="Update student",
     description="Update student information (Admin/Warden only)",
-    dependencies=[Depends(require_admin_or_warden)]
+    dependencies=[Depends(require_admin_or_owner)]
 )
 def modify_student(
     student_id: str,
@@ -263,7 +265,7 @@ def remove_student(
     status_code=status.HTTP_200_OK,
     summary="Reactivate student",
     description="Reactivate a student who has LEFT status",
-    dependencies=[Depends(require_admin_or_warden)]
+    dependencies=[Depends(require_admin_or_owner)]
 )
 def reactivate_student_endpoint(
     student_id: str,
@@ -292,4 +294,25 @@ def reactivate_student_endpoint(
         reactivated_by=user.user_id,
         requesting_user_role=user.role
     )
+    return _handle_service_response(result)
+
+
+@router.post("/invite", summary="Invite a tenant", description="Owner invites a new tenant by email")
+def invite_tenant(
+    data: TenantInviteRequest,
+    user: UserContext = Depends(require_admin_or_owner)
+):
+    """
+    Invite a new tenant. Creates a profile and enrollment with INVITED status.
+    """
+    result = auth_service.invite_tenant(data.model_dump(), str(user.user_id))
+    return _handle_service_response(result)
+
+
+@router.post("/activate", summary="Activate tenant account", description="Public endpoint for invited tenants to set password")
+def activate_tenant(data: TenantActivateRequest):
+    """
+    Activate an invited tenant account using the secure token and setting a password.
+    """
+    result = auth_service.activate_tenant(data.token, data.password)
     return _handle_service_response(result)

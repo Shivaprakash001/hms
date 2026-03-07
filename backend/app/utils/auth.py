@@ -9,8 +9,8 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional, Dict, Any
 from jose import JWTError, jwt
 from pydantic import BaseModel
-from passlib.context import CryptContext
 import os
+import bcrypt
 from datetime import datetime, timedelta
 from app.utils.logger import get_logger
 
@@ -21,9 +21,6 @@ SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 # 24 hours
 
-# Password Hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 # Security scheme
 security = HTTPBearer()
 
@@ -32,7 +29,7 @@ class UserContext(BaseModel):
     """User context extracted from JWT token"""
     user_id: str  # Profile ID from token
     email: str
-    role: str  # student, admin, warden
+    role: str  # student, admin
     
     def is_admin(self) -> bool:
         return self.role == "admin"
@@ -43,22 +40,29 @@ class UserContext(BaseModel):
     def is_student(self) -> bool:
         return self.role == "student"
     
+    def is_owner(self) -> bool:
+        return self.role == "owner"
+    
     def can_manage_students(self) -> bool:
-        return self.role in ["admin", "warden"]
+        return self.role in ("admin", "owner")
     
     def can_delete_students(self) -> bool:
         return self.role == "admin"
     
     def can_view_all_students(self) -> bool:
-        return self.role in ["admin", "warden"]
+        return self.role in ("admin", "owner")
 
+# Password Hashing
+# pwd_context removed
+
+# ...
 
 def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
+    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
 
 
 def get_password_hash(password):
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
@@ -128,11 +132,11 @@ def require_admin(user: UserContext = Depends(get_current_user)) -> UserContext:
     return user
 
 
-def require_admin_or_warden(user: UserContext = Depends(get_current_user)) -> UserContext:
+def require_admin_or_owner(user: UserContext = Depends(get_current_user)) -> UserContext:
     if not user.can_manage_students():
-        logger.warning(f"User {user.user_id} with role {user.role} attempted admin/warden-only action")
+        logger.warning(f"User {user.user_id} with role {user.role} attempted admin/owner-only action")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin or warden privileges required"
+            detail="Admin or Owner privileges required"
         )
     return user

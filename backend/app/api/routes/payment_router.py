@@ -1,10 +1,8 @@
 from fastapi import APIRouter, HTTPException, Depends, status
-from app.schamas.payment_schema import (
-    RentGenerationRequest, PaymentCreate, PaymentResponse,
-    ObligationResponse, StudentPaymentHistory, DuesReportItem, WaiveRequest
-)
+from app.schemas.payment_schema import PaymentCreate, PaymentResponse, \
+    ObligationResponse, StudentPaymentHistory, DuesReportItem, WaiveRequest, RentGenerationRequest
 from app.services import payment_service
-from app.utils.auth import get_current_user, UserContext, require_admin, require_admin_or_warden
+from app.utils.auth import get_current_user, UserContext, require_admin, require_admin_or_owner
 from app.utils.responses import ErrorCode
 from typing import List, Optional
 from datetime import date
@@ -59,7 +57,7 @@ def generate_rent(
     response_model=dict,
     status_code=status.HTTP_201_CREATED,
     summary="Record a student payment",
-    dependencies=[Depends(require_admin_or_warden)]
+    dependencies=[Depends(require_admin_or_owner)]
 )
 def record_payment(
     data: PaymentCreate,
@@ -80,6 +78,24 @@ def record_payment(
         user_id=user.user_id
     )
     return _handle_service_response(result, status.HTTP_201_CREATED)
+
+
+@router.get(
+    "/",
+    response_model=dict,
+    summary="Get all payments",
+    dependencies=[Depends(require_admin_or_owner)]
+)
+def get_all_payments(
+    limit: int = 50,
+    offset: int = 0,
+    user: UserContext = Depends(get_current_user)
+):
+    """
+    Get recent payments.
+    """
+    result = payment_service.get_all_payments(user.user_id, limit, offset)
+    return _handle_service_response(result)
 
 
 @router.get(
@@ -112,11 +128,12 @@ def get_student_history(
     "/dues",
     response_model=List[DuesReportItem],
     summary="Get dues report",
-    dependencies=[Depends(require_admin_or_warden)]
+    dependencies=[Depends(require_admin_or_owner)]
 )
 def get_dues_report(
     rent_month: Optional[date] = None,
-    status: Optional[str] = None
+    status: Optional[str] = None,
+    user: UserContext = Depends(get_current_user)
 ):
     """
     Filterable report of all student dues.
@@ -124,7 +141,7 @@ def get_dues_report(
     - Default: Shows all non-PAID obligations.
     - Can filter by specific month (YYYY-MM-01).
     """
-    result = payment_service.get_dues_report(rent_month, status)
+    result = payment_service.get_dues_report(user.user_id, rent_month, status)
     return _handle_service_response(result)
 
 
