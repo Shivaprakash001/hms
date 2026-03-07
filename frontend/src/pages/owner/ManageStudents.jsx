@@ -14,6 +14,7 @@ export default function ManageStudents() {
     const [studentToEdit, setStudentToEdit] = useState(null);
     const [historyTenant, setHistoryTenant] = useState(null);
     const [error, setError] = useState(null);
+    const [showLeftTenants, setShowLeftTenants] = useState(false);
 
     const fetchStudents = async () => {
         try {
@@ -78,11 +79,14 @@ export default function ManageStudents() {
     }
 
     // Filter Logic
-    const filteredStudents = students.filter(student =>
-        student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        student.room.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (student.phone && student.phone.includes(searchTerm))
-    );
+    const filteredStudents = students.filter(student => {
+        const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            student.room.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (student.phone && student.phone.includes(searchTerm));
+
+        if (showLeftTenants) return matchesSearch;
+        return matchesSearch && student.status !== 'LEFT';
+    });
 
     // Stats Calculation
     const stats = {
@@ -168,16 +172,28 @@ export default function ManageStudents() {
                     />
                 </div>
 
-                {/* Search Bar */}
-                <div className="relative max-w-2xl group">
-                    <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={20} />
-                    <input
-                        type="text"
-                        placeholder="Search by name, room number, or phone..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-14 pr-6 py-4 bg-white border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-50 focus:border-indigo-200 outline-none transition-all text-slate-700 font-medium shadow-sm placeholder:text-slate-400"
-                    />
+                {/* Search & Toggle */}
+                <div className="flex flex-col md:flex-row gap-4 items-center">
+                    <div className="relative flex-1 group w-full">
+                        <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={20} />
+                        <input
+                            type="text"
+                            placeholder="Search by name, room number, or phone..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full pl-14 pr-6 py-4 bg-white border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-50 focus:border-indigo-200 outline-none transition-all text-slate-700 font-medium shadow-sm placeholder:text-slate-400"
+                        />
+                    </div>
+                    <button
+                        onClick={() => setShowLeftTenants(!showLeftTenants)}
+                        className={`px-6 py-4 rounded-2xl font-bold border transition-all flex items-center gap-2 whitespace-nowrap ${showLeftTenants
+                                ? 'bg-amber-50 border-amber-200 text-amber-700'
+                                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                            }`}
+                    >
+                        <History size={18} />
+                        {showLeftTenants ? 'Hide Former Tenants' : 'Show Former Tenants'}
+                    </button>
                 </div>
 
                 {/* Table */}

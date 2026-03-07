@@ -306,3 +306,7 @@ Traceback (most recent call last):
 postgrest.exceptions.APIError: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
 2026-03-08 01:17:55 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
 2026-03-08 01:17:55 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 01:22:24 - app.services.student_service - INFO - Soft deleting student cc0f49a5-42ee-4f82-9f22-4fa4233e9e3a by user: 063a2d95-4ad6-47d9-b7b7-5735cceea448
+2026-03-08 01:22:25 - app.services.student_service - INFO - Student soft deleted successfully: cc0f49a5-42ee-4f82-9f22-4fa4233e9e3a
+2026-03-08 01:22:25 - app.utils.hooks - DEBUG - [Hook] No hooks registered for event: student_left
+2026-03-08 01:25:17 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
