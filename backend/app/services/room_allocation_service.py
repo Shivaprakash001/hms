@@ -266,8 +266,20 @@ def handle_student_left(student_id: str, **kwargs):
             .execute()
         
         if active_res.data:
-            allocation_id = active_res.data[0]["id"]
-            end_date = date.today()
+            allocation = active_res.data[0]
+            allocation_id = allocation["id"]
+            
+            # To allow same-day re-allocation, we end the old one "yesterday" if it started before today.
+            # If it started today, we must end it today (and re-allocation will need to wait for tomorrow or use shift_room).
+            try:
+                from datetime import timedelta
+                start_date = datetime.strptime(allocation.get("start_date"), "%Y-%m-%d").date()
+                if start_date < date.today():
+                    end_date = date.today() - timedelta(days=1)
+                else:
+                    end_date = date.today()
+            except:
+                end_date = date.today()
             
             res = end_allocation(allocation_id, end_date, user_id=kwargs.get("user_id"))
             if res.get("success"):

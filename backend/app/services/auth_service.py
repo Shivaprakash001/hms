@@ -137,7 +137,9 @@ def invite_tenant(data: dict, owner_id: str) -> Dict[str, Any]:
     try:
         email = data.get("email")
         name = data.get("name")
-        room_id = str(data.get("room_id"))  # Ensure UUID is a string
+        room_id = str(data.get("room_id"))
+        phone = data.get("phone")
+        monthly_rent = data.get("monthly_rent", 0)
 
         # 0. Check if profile already exists
         existing = supabase.table("profiles").select("id").eq("email", email).execute()
@@ -169,7 +171,8 @@ def invite_tenant(data: dict, owner_id: str) -> Dict[str, Any]:
             "role": "student",
             "is_active": True,
             "owner_id": owner_id,
-            "password_hash": hashed_temp
+            "password_hash": hashed_temp,
+            "phone": phone
         }
         prof_res = supabase.table("profiles").insert(new_profile).execute()
         if not prof_res.data:
@@ -189,7 +192,7 @@ def invite_tenant(data: dict, owner_id: str) -> Dict[str, Any]:
             "room_id": room_id,
             "status": "INVITED",
             "joined_on": datetime.now().date().isoformat(),
-            "monthly_rent": 0
+            "monthly_rent": monthly_rent
         }
         stu_res = supabase.table("students").insert(new_student).execute()
         if not stu_res.data:
@@ -200,6 +203,19 @@ def invite_tenant(data: dict, owner_id: str) -> Dict[str, Any]:
             except Exception:
                 pass
             return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to create student enrollment")
+
+        student_id = str(stu_res.data[0]["id"])
+
+        # 3.1 Create Room Allocation (Crucial for UI to show the room)
+        allocation_data = {
+            "student_id": student_id,
+            "room_id": room_id,
+            "start_date": datetime.now().date().isoformat()
+        }
+        alloc_res = supabase.table("room_allocations").insert(allocation_data).execute()
+        if not alloc_res.data:
+            logger.warning(f"Failed to create room allocation for invited student {student_id}")
+            # We don't necessarily abort here as the student is created, but it's a failure
 
         # 4. Generate Invitation Token
         token = secrets.token_urlsafe(32)

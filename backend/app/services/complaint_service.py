@@ -90,7 +90,8 @@ def get_all_complaints(
     status: Optional[str] = None,
     category: Optional[str] = None,
     limit: int = 50,
-    offset: int = 0
+    offset: int = 0,
+    owner_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     List complaints with filtering.
@@ -104,6 +105,8 @@ def get_all_complaints(
         
         if student_id:
             query = query.eq("student_id", student_id)
+        if owner_id:
+            query = query.eq("owner_id", owner_id)
         if status:
             query = query.eq("status", status)
         if category:
@@ -161,23 +164,47 @@ def update_complaint_status(
     complaint_id: str, 
     status: str, 
     remarks: Optional[str] = None,
-    updated_by: Optional[str] = None
+    updated_by: Optional[str] = None,
+    requesting_user_role: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Admin/Warden updates status of a complaint.
+    Admin/Warden/Owner updates status of a complaint.
     """
     try:
+        # Authorization for owners: Must own the complaint link
+        if requesting_user_role == 'owner':
+            check_res = supabase.table("complaints").select("owner_id").eq("id", complaint_id).execute()
+            if not check_res.data:
+                return ServiceResponse.not_found("Complaint")
+            if str(check_res.data[0].get("owner_id")) != str(updated_by):
+                return ServiceResponse.forbidden("You can only resolve complaints from your own tenants")
+
+        # Start with minimal update data (legacy compatible)
         update_data = {
             "status": status,
-            "staff_remarks": remarks,
-            "updated_by": updated_by,
             "updated_at": datetime.now().isoformat()
         }
         
+        # Try to include full resolution data if columns exist
+        # We use a nested try-except or check columns first. 
+        # For simplicity and robustness, we try full update first.
+        full_update = update_data.copy()
+        full_update.update({
+            "staff_remarks": remarks,
+            "updated_by": updated_by
+        })
         if status == ComplaintStatus.RESOLVED.value:
-            update_data["resolved_at"] = datetime.now().isoformat()
+            full_update["resolved_at"] = datetime.now().isoformat()
             
-        result = supabase.table("complaints").update(update_data).eq("id", complaint_id).execute()
+        try:
+            result = supabase.table("complaints").update(full_update).eq("id", complaint_id).execute()
+        except Exception as e:
+            if "column" in str(e).lower():
+                logger.warning(f"Database schema is outdated (missing resolution columns). Falling back to minimal update. Error: {e}")
+                # Fallback to minimal update (only status and updated_at)
+                result = supabase.table("complaints").update(update_data).eq("id", complaint_id).execute()
+            else:
+                raise e
         
         if not result.data:
             return ServiceResponse.not_found("Complaint")

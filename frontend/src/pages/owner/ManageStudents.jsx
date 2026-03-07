@@ -69,7 +69,7 @@ export default function ManageStudents() {
     };
 
     const handleDeleteStudent = async (id) => {
-        if (!window.confirm("Are you sure you want to remove this tenant? They will be marked as LEFT.")) return;
+        if (!window.confirm("Are you sure you want to mark this tenant as LEFT? \n\nTheir payment history will be preserved, but their room allocation will be ended immediately, making the room available for new tenants.")) return;
         try {
             await studentService.delete(id);
             fetchStudents();
@@ -187,8 +187,8 @@ export default function ManageStudents() {
                     <button
                         onClick={() => setShowLeftTenants(!showLeftTenants)}
                         className={`px-6 py-4 rounded-2xl font-bold border transition-all flex items-center gap-2 whitespace-nowrap ${showLeftTenants
-                                ? 'bg-amber-50 border-amber-200 text-amber-700'
-                                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                            ? 'bg-amber-50 border-amber-200 text-amber-700'
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                             }`}
                     >
                         <History size={18} />
@@ -268,8 +268,8 @@ export default function ManageStudents() {
                                                         e.stopPropagation();
                                                         handleDeleteStudent(student.id);
                                                     }}
-                                                    className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                    title="Remove Tenant"
+                                                    className="p-2 text-slate-300 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                                                    title="Mark as Left"
                                                 >
                                                     <Trash2 size={16} />
                                                 </button>
@@ -324,7 +324,7 @@ export default function ManageStudents() {
                 tenantId={historyTenant?.tenantId}
                 tenantName={historyTenant?.tenantName}
             />
-        </div>
+        </div >
     );
 }
 
