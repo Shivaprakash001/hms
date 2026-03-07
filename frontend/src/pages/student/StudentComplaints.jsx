@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { MessageSquare, Plus, Clock, CheckCircle } from 'lucide-react';
 
@@ -7,17 +7,17 @@ import { complaintService } from '../../api/services';
 
 const StudentComplaints = () => {
     const { user } = useAuth();
-    const [complaints, setComplaints] = React.useState([]);
-    const [isModalOpen, setIsModalOpen] = React.useState(false);
-    const [isLoading, setIsLoading] = React.useState(false);
-    const [newComplaint, setNewComplaint] = React.useState({
+    const [complaints, setComplaints] = useState([]);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+    const [newComplaint, setNewComplaint] = useState({
         title: '',
         category: 'Maintenance',
         description: '',
         priority: 'Medium'
     });
 
-    React.useEffect(() => {
+    useEffect(() => {
         if (user) {
             loadComplaints();
         }
@@ -66,9 +66,11 @@ const StudentComplaints = () => {
             student_id: user.student_id,
             title: newComplaint.title,
             description: newComplaint.description,
-            category: newComplaint.category.toUpperCase(), // Backend expects uppercase Enum
+            category: newComplaint.category.toUpperCase(),
             priority: newComplaint.priority.toUpperCase()
         };
+
+        console.log("Submitting complaint data:", complaintData);
 
         try {
             await complaintService.create(complaintData);
@@ -193,6 +195,7 @@ const StudentComplaints = () => {
                                         <option value="Plumbing">Plumbing</option>
                                         <option value="Electrical">Electrical</option>
                                         <option value="WiFi">WiFi</option>
+                                        <option value="Internet">Internet</option>
                                         <option value="Noise">Noise</option>
                                         <option value="Cleaning">Cleaning</option>
                                         <option value="Other">Other</option>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { CreditCard, Calendar, Download, AlertCircle, CheckCircle2, Clock, Smartphone, ChevronRight } from 'lucide-react';
 
@@ -33,7 +33,7 @@ const StudentPayments = () => {
     };
 
     // Merge obligations and payments for the list
-    const localPayments = React.useMemo(() => {
+    const localPayments = useMemo(() => {
         const obs = (history.obligations || []).map(o => ({
             id: o.id,
             date: o.rent_month, // or due_date

@@ -1,5 +1,4 @@
 from fastapi import APIRouter, HTTPException, Depends, status, Query
-from app.schemas.complaint_schema import ComplaintCreate, ComplaintResponse, ComplaintListResponse, ComplaintStatusUpdate, ComplaintStatus, ComplaintCategory
 from app.services import complaint_service
 from app.utils.auth import get_current_user, UserContext, require_admin_or_owner
 from app.utils.responses import ErrorCode
@@ -22,25 +21,22 @@ def _handle_service_response(result: dict, success_status: int = status.HTTP_200
     return result.get("data")
 
 
-@router.post("/", response_model=ComplaintResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED)
 def create_new_complaint(
-    data: ComplaintCreate,
+    data: dict,
     user: UserContext = Depends(get_current_user)
 ):
     """
     Submit a new maintenance request or complaint.
-    Students can only submit for themselves.
     """
-    # Security: If student, they can only submit for their own student_id
-    # (In a real app, we'd lookup their student_id from their profile_id)
-    result = complaint_service.create_complaint(data.model_dump(), created_by=user.user_id)
+    result = complaint_service.create_complaint(data, created_by=user.user_id)
     return _handle_service_response(result, status.HTTP_201_CREATED)
 
 
-@router.get("/", response_model=ComplaintListResponse)
+@router.get("/")
 def list_complaints(
-    status: Optional[ComplaintStatus] = Query(None),
-    category: Optional[ComplaintCategory] = Query(None),
+    status: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
     student_id: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
@@ -48,24 +44,18 @@ def list_complaints(
 ):
     """
     List complaints. 
-    Warden/Admin see all. Students see only their own (enforced in service or here).
     """
-    if user.is_student():
-        # Force filter by student_id if we have it, or enforce in service
-        # For now, we'll assume the client sends the correct student_id and service validates it.
-        pass
-        
     result = complaint_service.get_all_complaints(
         student_id=student_id,
-        status=status.value if status else None,
-        category=category.value if category else None,
+        status=status,
+        category=category,
         limit=limit,
         offset=offset
     )
     return _handle_service_response(result)
 
 
-@router.get("/{complaint_id}", response_model=ComplaintResponse)
+@router.get("/{complaint_id}")
 def get_complaint_details(
     complaint_id: str,
     user: UserContext = Depends(get_current_user)
@@ -75,10 +65,10 @@ def get_complaint_details(
     return _handle_service_response(result)
 
 
-@router.patch("/{complaint_id}/status", response_model=ComplaintResponse)
+@router.patch("/{complaint_id}/status")
 def update_complaint_status(
     complaint_id: str,
-    data: ComplaintStatusUpdate,
+    data: dict,
     user: UserContext = Depends(require_admin_or_owner)
 ):
     """
@@ -86,8 +76,8 @@ def update_complaint_status(
     """
     result = complaint_service.update_complaint_status(
         complaint_id,
-        data.status.value,
-        remarks=data.staff_remarks,
+        data.get("status"),
+        remarks=data.get("staff_remarks"),
         updated_by=user.user_id
     )
     return _handle_service_response(result)

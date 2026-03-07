@@ -72,7 +72,7 @@ def create_new_student(
     - **status**: Initial status (default: ACTIVE)
     """
     result = student_service.create_student(
-        student.model_dump(),
+        student.model_dump(mode='json'),
         created_by=user.user_id
     )
     return _handle_service_response(result, status.HTTP_201_CREATED)
@@ -218,7 +218,7 @@ def modify_student(
     """
     result = student_service.update_student(
         student_id,
-        student.model_dump(exclude_unset=True),
+        student.model_dump(exclude_unset=True, mode='json'),
         updated_by=user.user_id,
         requesting_user_role=user.role
     )
@@ -229,8 +229,9 @@ def modify_student(
     "/{student_id}",
     status_code=status.HTTP_200_OK,
     summary="Soft delete student",
-    description="Mark student as LEFT (Admin only - never removes data)",
-    dependencies=[Depends(require_admin)]
+    description="Mark student as LEFT (Admin/Owner only - never removes data)",
+    dependencies=[Depends(require_admin_or_owner)],
+    response_model=StudentResponse
 )
 def remove_student(
     student_id: str,
@@ -297,7 +298,7 @@ def reactivate_student_endpoint(
     return _handle_service_response(result)
 
 
-@router.post("/invite", summary="Invite a tenant", description="Owner invites a new tenant by email")
+@router.post("/invite", summary="Invite a tenant", description="Owner invites a new tenant by email", response_model=dict)
 def invite_tenant(
     data: TenantInviteRequest,
     user: UserContext = Depends(require_admin_or_owner)
@@ -305,7 +306,7 @@ def invite_tenant(
     """
     Invite a new tenant. Creates a profile and enrollment with INVITED status.
     """
-    result = auth_service.invite_tenant(data.model_dump(), str(user.user_id))
+    result = auth_service.invite_tenant(data.model_dump(mode='json'), str(user.user_id))
     return _handle_service_response(result)
 
 

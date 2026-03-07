@@ -25,6 +25,9 @@ class ComplaintCategory(str, Enum):
     CLEANING = "CLEANING"
     CARPENTRY = "CARPENTRY"
     INTERNET = "INTERNET"
+    MAINTENANCE = "MAINTENANCE"
+    WIFI = "WIFI"
+    NOISE = "NOISE"
     OTHER = "OTHER"
 
 

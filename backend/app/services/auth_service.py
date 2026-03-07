@@ -3,12 +3,13 @@ from app.utils.auth import verify_password, create_access_token, get_password_ha
 from app.utils.responses import ServiceResponse, ErrorCode
 from app.utils.logger import get_logger
 from typing import Dict, Any
+from app.services.email_service import EmailService
 
 logger = get_logger(__name__)
 
 
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 def login(email: str, password: str) -> Dict[str, Any]:
     """
@@ -36,12 +37,14 @@ def login(email: str, password: str) -> Dict[str, Any]:
         role = profile.get("role")
         if role == "student":
             enrollment = supabase.table("students")\
-                .select("status")\
+                .select("id, status")\
                 .eq("profile_id", profile["id"])\
                 .execute()
             
-            if enrollment.data and enrollment.data[0]["status"] == "INVITED":
-                return ServiceResponse.error(ErrorCode.FORBIDDEN, "Account not activated. Please check your email.")
+            if enrollment.data:
+                profile["student_id"] = enrollment.data[0]["id"]
+                if enrollment.data[0]["status"] == "INVITED":
+                    return ServiceResponse.error(ErrorCode.FORBIDDEN, "Account not activated. Please check your email.")
 
         # 2. Verify password
         hashed_password = profile.get("password_hash")
@@ -53,7 +56,8 @@ def login(email: str, password: str) -> Dict[str, Any]:
         token_data = {
             "sub": str(profile["id"]),
             "role": profile["role"],
-            "email": profile["email"]
+            "email": profile["email"],
+            "student_id": str(profile.get("student_id")) if profile.get("student_id") else None
         }
         
         token = create_access_token(token_data)
@@ -63,7 +67,9 @@ def login(email: str, password: str) -> Dict[str, Any]:
             "access_token": token,
             "token_type": "bearer",
             "role": profile["role"],
-            "name": profile["name"]
+            "name": profile["name"],
+            "user_id": profile["id"],
+            "student_id": profile.get("student_id")
         })
         
     except Exception as e:
@@ -131,7 +137,7 @@ def invite_tenant(data: dict, owner_id: str) -> Dict[str, Any]:
     try:
         email = data.get("email")
         name = data.get("name")
-        room_id = data.get("room_id")
+        room_id = str(data.get("room_id"))  # Ensure UUID is a string
 
         # 0. Check if profile already exists
         existing = supabase.table("profiles").select("id").eq("email", email).execute()
@@ -149,7 +155,7 @@ def invite_tenant(data: dict, owner_id: str) -> Dict[str, Any]:
             })
             if not auth_response.user:
                 return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Failed to create auth user")
-            auth_user_id = auth_response.user.id
+            auth_user_id = str(auth_response.user.id)
         except Exception as auth_err:
             logger.error(f"Failed to create auth user for {email}: {auth_err}")
             return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, f"Auth user creation failed: {str(auth_err)}")
@@ -174,7 +180,7 @@ def invite_tenant(data: dict, owner_id: str) -> Dict[str, Any]:
                 pass
             return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to create profile")
 
-        profile_id = prof_res.data[0]["id"]
+        profile_id = str(prof_res.data[0]["id"])
 
         # 3. Create Student enrollment
         new_student = {
@@ -197,7 +203,7 @@ def invite_tenant(data: dict, owner_id: str) -> Dict[str, Any]:
 
         # 4. Generate Invitation Token
         token = secrets.token_urlsafe(32)
-        expires_at = (datetime.now() + timedelta(hours=24)).isoformat()
+        expires_at = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
 
         inv_res = supabase.table("invitation_tokens").insert({
             "profile_id": profile_id,
@@ -210,6 +216,9 @@ def invite_tenant(data: dict, owner_id: str) -> Dict[str, Any]:
 
         activation_link = f"http://localhost:5173/activate?token={token}"
         logger.info(f"INVITATION CREATED for {email}: {activation_link}")
+
+        # 5. Send Email (non-blocking simulation)
+        EmailService.send_invitation_email(email, name, activation_link)
 
         return ServiceResponse.success({
             "profile_id": profile_id,
@@ -251,7 +260,7 @@ def activate_tenant(token: str, password: str) -> Dict[str, Any]:
         invitation = res.data[0]
         profile_id = invitation["profile_id"]
         
-        if datetime.fromisoformat(invitation["expires_at"]) < datetime.now():
+        if datetime.fromisoformat(invitation["expires_at"]) < datetime.now(timezone.utc):
             return ServiceResponse.error(ErrorCode.FORBIDDEN, "Token has expired")
 
         # 2. Update Profile Password

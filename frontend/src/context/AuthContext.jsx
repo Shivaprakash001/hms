@@ -28,24 +28,48 @@ export const AuthProvider = ({ children }) => {
     }, [user, location.pathname, navigate]);
 
     useEffect(() => {
-        // Check for stored user on mount
-        const storedStudent = localStorage.getItem('studentUser');
-        const storedOwner = localStorage.getItem('ownerUser');
+        const initAuth = async () => {
+            const storedStudent = localStorage.getItem('studentUser');
+            const storedOwner = localStorage.getItem('ownerUser');
+            const storedData = storedOwner ? JSON.parse(storedOwner) : (storedStudent ? JSON.parse(storedStudent) : null);
 
-        if (storedOwner) {
-            setUser(JSON.parse(storedOwner));
-        } else if (storedStudent) {
-            setUser(JSON.parse(storedStudent));
-        }
-        setLoading(false);
+            if (storedData?.token) {
+                try {
+                    // Force refresh user info from backend to ensure student_id and other fields are present
+                    const response = await api.get('/auth/me');
+                    const updatedUser = {
+                        ...storedData,
+                        ...response.data,
+                        id: response.data.user_id,
+                        student_id: response.data.student_id
+                    };
+                    setUser(updatedUser);
+
+                    if (updatedUser.role?.toLowerCase() === 'owner' || updatedUser.role?.toLowerCase() === 'admin') {
+                        localStorage.setItem('ownerUser', JSON.stringify(updatedUser));
+                    } else {
+                        localStorage.setItem('studentUser', JSON.stringify(updatedUser));
+                    }
+                } catch (error) {
+                    console.error("Session verification failed:", error);
+                    // Only logout if it's a 401/403 (handled by interceptor usually, but here for safety)
+                    if (error.response?.status === 401) {
+                        logout();
+                    } else {
+                        setUser(storedData);
+                    }
+                }
+            }
+            setLoading(false);
+        };
+        initAuth();
     }, []);
 
     const login = async (email, password) => {
         try {
             const response = await api.post('/auth/login', { email, password });
-            const { access_token, role, name, user_id } = response.data;
-
-            const userData = { email, role, name, id: user_id, token: access_token };
+            const { access_token, role, name, user_id, student_id } = response.data;
+            const userData = { email, role, name, id: user_id, student_id, token: access_token };
             setUser(userData);
 
             if (role === 'owner' || role === 'admin') {

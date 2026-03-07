@@ -12,6 +12,8 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     role: str
     name: str
+    user_id: UUID
+    student_id: Optional[UUID] = None
 
 
 class PasswordChangeRequest(BaseModel):

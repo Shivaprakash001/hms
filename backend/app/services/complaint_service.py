@@ -12,15 +12,38 @@ logger = get_logger(__name__)
 def create_complaint(data: dict, created_by: Optional[str] = None) -> Dict[str, Any]:
     """
     Create a new complaint/maintenance request.
+    Handles legacy schema and links to owner.
     """
     try:
-        logger.info(f"Creating complaint for student: {data.get('student_id')}")
+        student_id = data.get('student_id')
+        logger.info(f"Creating complaint for student: {student_id}")
         
-        # Add metadata
-        data['created_by'] = created_by
-        data['status'] = ComplaintStatus.PENDING.value
+        # Fetch owner_id for this student
+        student_res = supabase.table("students").select("owner_id").eq("id", student_id).execute()
+        owner_id = None
+        if student_res.data:
+            owner_id = student_res.data[0].get("owner_id")
+            logger.info(f"Found owner_id {owner_id} for student {student_id}")
         
-        result = supabase.table("complaints").insert(data).execute()
+        # Prepare legacy-compatible data
+        description = data.get('description', '')
+        category = data.get('category', 'OTHER')
+        priority = data.get('priority', 'MEDIUM')
+        
+        # Append extra info to description since columns are missing in legacy DB
+        enhanced_description = f"{description}\n\n[Category: {category}] [Priority: {priority}]"
+        
+        insert_data = {
+            "student_id": student_id,
+            "owner_id": owner_id, # Link to owner
+            "title": data.get("title", "Complaint"),
+            "description": enhanced_description,
+            "status": "OPEN" # Legacy status
+        }
+        
+        print(f"DEBUG: Inserting legacy complaint data: {insert_data}")
+        result = supabase.table("complaints").insert(insert_data).execute()
+        print(f"DEBUG: Insert result: {result}")
         
         if not result.data:
             return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to create complaint")
@@ -29,6 +52,7 @@ def create_complaint(data: dict, created_by: Optional[str] = None) -> Dict[str, 
         return ServiceResponse.success(result.data[0], "Complaint submitted successfully")
         
     except Exception as e:
+        print(f"DEBUG: Error creating complaint: {str(e)}")
         logger.exception(f"Error creating complaint: {e}")
         return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, str(e))
 
@@ -99,15 +123,26 @@ def get_all_complaints(
                 if allocations[0].get("rooms"):
                     room_no = allocations[0]["rooms"]["room_no"]
 
+            # Map legacy status to frontend friendly status
+            status_map = {
+                "OPEN": "Pending",
+                "PENDING": "Pending",
+                "CLOSED": "resolved",
+                "RESOLVED": "resolved"
+            }
+            db_status = c.get("status", "OPEN")
+            display_status = status_map.get(db_status.upper(), db_status)
+
             complaints_list.append({
                 "id": c["id"],
                 "tenantName": profile.get("name", "Unknown"),
                 "room": room_no,
-                "title": c["category"] or "Complaint", # Use category as title if title missing
-                "description": c["description"],
-                "date": c["created_at"].split("T")[0],
-                "status": c["status"],
-                "priority": c.get("priority", "medium") # Ensure priority exists in DB or default
+                "title": c.get("title") or c.get("category") or "Complaint",
+                "description": c.get("description", ""),
+                "category": c.get("category") or "General",
+                "date": c.get("created_at", datetime.now().isoformat()).split("T")[0],
+                "status": display_status,
+                "priority": c.get("priority", "Medium")
             })
 
         return ServiceResponse.success({
