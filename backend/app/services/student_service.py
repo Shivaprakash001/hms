@@ -403,18 +403,27 @@ def delete_student(
     NEVER removes the row - this is critical for audit trail.
     
     Authorization:
-    - Admin only
+    - Admin or Owner
     """
     try:
-        # Authorization check - only admin can delete
-        if requesting_user_role != 'admin':
+        # Authorization check - only admin or owner can delete
+        if requesting_user_role not in ('admin', 'owner'):
             return ServiceResponse.forbidden(
-                "Only administrators can delete student records",
-                "Deletion requires admin privileges"
+                "Only administrators or owners can delete student records",
+                "Deletion requires elevated privileges"
             )
         
         logger.info(f"Soft deleting student {student_id} by user: {deleted_by}")
         
+        # Ownership check for owners
+        if requesting_user_role == 'owner':
+            check_res = supabase.table("students").select("owner_id").eq("id", student_id).execute()
+            if not check_res.data:
+                return ServiceResponse.not_found("Student")
+            if str(check_res.data[0].get("owner_id")) != str(deleted_by):
+                logger.warning(f"Owner {deleted_by} attempted to delete student {student_id} belonging to {check_res.data[0].get('owner_id')}")
+                return ServiceResponse.forbidden("You can only delete your own tenants")
+
         # Soft delete: set status to LEFT
         result = supabase.table("students")\
             .update({"status": StudentStatus.LEFT.value})\

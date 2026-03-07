@@ -1,5 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, status, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from app.api.routes.student_router import router as student_router
 from app.api.routes.profile_router import router as profile_router
 from app.api.routes.room_allocation_router import router as room_allocation_router
@@ -19,7 +21,10 @@ from app.services.room_allocation_service import handle_student_left
 app = FastAPI(title="Hostel Management System API", version="1.0.0")
 
 # CORS Configuration
-origins = ["*"]  # Allow all origins for development (Vite usually runs on 5173)
+origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
 
 app.add_middleware(
     CORSMiddleware,
@@ -45,6 +50,20 @@ app.include_router(room_router)
 app.include_router(expense_router)
 app.include_router(dashboard_router)
 app.include_router(notification_router)
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    import json
+    from app.utils.logger import get_logger
+    logger = get_logger("validation_error")
+    
+    error_details = exc.errors()
+    logger.error(f"Validation error for {request.method} {request.url}: {json.dumps(error_details, indent=2)}")
+    
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": error_details, "body": exc.body},
+    )
 
 @app.get("/")
 def read_root():

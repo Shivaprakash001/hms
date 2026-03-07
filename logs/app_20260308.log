@@ -1,0 +1,560 @@
+2026-03-08 00:00:29 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 00:10:46 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 00:10:46 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 00:12:45 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 00:12:47 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 00:12:49 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 00:13:00 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 00:14:24 - app.services.auth_service - INFO - Login attempt for: spchirdri2006@gmail.com
+2026-03-08 00:14:25 - app.services.auth_service - INFO - Login successful: spchirdri2006@gmail.com
+2026-03-08 00:14:26 - app.services.payment_service - ERROR - Error fetching payments: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+2026-03-08 00:14:26 - app.services.payment_service - ERROR - Error fetching payments: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+2026-03-08 00:14:26 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+2026-03-08 00:14:28 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+2026-03-08 00:14:36 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 00:14:36 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 00:16:55 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 00:16:56 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 00:17:23 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 00:17:37 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 00:23:47 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 00:26:47 - app.services.payment_service - ERROR - Error fetching payments: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+2026-03-08 00:26:47 - app.services.payment_service - ERROR - Error fetching payments: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+2026-03-08 00:26:48 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+2026-03-08 00:26:49 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 00:26:49 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 00:26:49 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+2026-03-08 00:27:35 - app.services.auth_service - ERROR - Failed to create auth user for 24311a05f6@cse.sreenidhi.edu.in: A user with this email address has already been registered
+2026-03-08 00:27:52 - app.services.auth_service - INFO - INVITATION CREATED for 24311a05g9@cse.sreenidhi.edu.in: http://localhost:5173/activate?token=0j7j-FirZwsbAfXiWQvXYA0nRvPfVTIljHaZUd03TLw
+2026-03-08 00:28:01 - app.services.email_service - INFO - Invitation email sent to 24311a05g9@cse.sreenidhi.edu.in
+2026-03-08 00:28:01 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 00:29:17 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 00:29:17 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 00:31:20 - app.services.auth_service - ERROR - Error activating account: can't compare offset-naive and offset-aware datetimes
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/auth_service.py", line 258, in activate_tenant
+    if datetime.fromisoformat(invitation["expires_at"]) < datetime.now():
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: can't compare offset-naive and offset-aware datetimes
+2026-03-08 00:32:14 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 00:32:48 - app.services.payment_service - ERROR - Error fetching payments: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+2026-03-08 00:32:49 - app.services.payment_service - ERROR - Error fetching payments: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+2026-03-08 00:32:49 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+2026-03-08 00:32:51 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+2026-03-08 00:33:03 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 00:33:03 - app.services.payment_service - ERROR - Error fetching payments: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+2026-03-08 00:33:04 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 00:33:04 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+2026-03-08 00:34:00 - app.services.auth_service - INFO - Login attempt for: 24311a05g9@cse.sreenidhi.edu.in
+2026-03-08 00:34:01 - app.services.auth_service - INFO - Login successful: 24311a05g9@cse.sreenidhi.edu.in
+2026-03-08 00:39:01 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 00:39:03 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 00:39:05 - app.utils.auth - WARNING - User 9fcaea14-bddc-4470-8275-564e6b33b03b with role student attempted admin/owner-only action
+2026-03-08 00:39:06 - app.utils.auth - WARNING - User 9fcaea14-bddc-4470-8275-564e6b33b03b with role student attempted admin/owner-only action
+2026-03-08 00:39:55 - app.utils.auth - WARNING - User 9fcaea14-bddc-4470-8275-564e6b33b03b with role student attempted admin/owner-only action
+2026-03-08 00:39:55 - app.utils.auth - WARNING - User 9fcaea14-bddc-4470-8275-564e6b33b03b with role student attempted admin/owner-only action
+2026-03-08 00:41:29 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 00:41:32 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 00:41:36 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 00:45:37 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 00:45:39 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 00:50:10 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 00:59:35 - validation_error - ERROR - Validation error for POST http://localhost:8000/complaints/: [
+  {
+    "type": "string_too_short",
+    "loc": [
+      "body",
+      "description"
+    ],
+    "msg": "String should have at least 10 characters",
+    "input": "AC NEEDED",
+    "ctx": {
+      "min_length": 10
+    }
+  }
+]
+2026-03-08 00:59:36 - validation_error - ERROR - Validation error for POST http://localhost:8000/complaints/: [
+  {
+    "type": "string_too_short",
+    "loc": [
+      "body",
+      "description"
+    ],
+    "msg": "String should have at least 10 characters",
+    "input": "AC NEEDED",
+    "ctx": {
+      "min_length": 10
+    }
+  }
+]
+2026-03-08 00:59:42 - validation_error - ERROR - Validation error for POST http://localhost:8000/complaints/: [
+  {
+    "type": "string_too_short",
+    "loc": [
+      "body",
+      "description"
+    ],
+    "msg": "String should have at least 10 characters",
+    "input": "AC NEEDED",
+    "ctx": {
+      "min_length": 10
+    }
+  }
+]
+2026-03-08 01:00:22 - app.services.complaint_service - INFO - Creating complaint for student: cc0f49a5-42ee-4f82-9f22-4fa4233e9e3a
+2026-03-08 01:00:22 - app.services.complaint_service - ERROR - Error creating complaint: Object of type UUID is not JSON serializable
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/complaint_service.py", line 23, in create_complaint
+    result = supabase.table("complaints").insert(data).execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 57, in execute
+    r = self.session.request(
+        self.http_method,
+    ...<3 lines>...
+        headers=self.headers,
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 812, in request
+    request = self.build_request(
+        method=method,
+    ...<9 lines>...
+        extensions=extensions,
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 378, in build_request
+    return Request(
+        method,
+    ...<8 lines>...
+        extensions=extensions,
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_models.py", line 408, in __init__
+    headers, stream = encode_request(
+                      ~~~~~~~~~~~~~~^
+        content=content,
+        ^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+        ),
+        ^^
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_content.py", line 216, in encode_request
+    return encode_json(json)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_content.py", line 177, in encode_json
+    body = json_dumps(
+           ~~~~~~~~~~^
+        json, ensure_ascii=False, separators=(",", ":"), allow_nan=False
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ).encode("utf-8")
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/__init__.py", line 242, in dumps
+    **kw).encode(obj)
+          ~~~~~~^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/encoder.py", line 202, in encode
+    chunks = self.iterencode(o, _one_shot=True)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/encoder.py", line 263, in iterencode
+    return _iterencode(o, 0)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/encoder.py", line 182, in default
+    raise TypeError(f'Object of type {o.__class__.__name__} '
+                    f'is not JSON serializable')
+TypeError: Object of type UUID is not JSON serializable
+when serializing dict item 'student_id'
+2026-03-08 01:01:31 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 01:04:42 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 01:04:43 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 01:04:52 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 01:05:33 - app.services.complaint_service - INFO - Creating complaint for student: cc0f49a5-42ee-4f82-9f22-4fa4233e9e3a
+2026-03-08 01:05:33 - app.services.complaint_service - INFO - Complaint created successfully: d9aee5a9-0fc7-4b86-bebb-8787a39e947f
+2026-03-08 01:05:50 - app.services.complaint_service - INFO - Creating complaint for student: cc0f49a5-42ee-4f82-9f22-4fa4233e9e3a
+2026-03-08 01:05:50 - app.services.complaint_service - INFO - Complaint created successfully: a5836a04-8cda-4c02-bca2-caf397e7cadc
+2026-03-08 01:07:22 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 01:08:02 - app.services.complaint_service - INFO - Creating complaint for student: cc0f49a5-42ee-4f82-9f22-4fa4233e9e3a
+2026-03-08 01:08:03 - app.services.complaint_service - INFO - Creating complaint for student: cc0f49a5-42ee-4f82-9f22-4fa4233e9e3a
+2026-03-08 01:08:03 - app.services.complaint_service - INFO - Found owner_id 063a2d95-4ad6-47d9-b7b7-5735cceea448 for student cc0f49a5-42ee-4f82-9f22-4fa4233e9e3a
+2026-03-08 01:08:03 - app.services.complaint_service - INFO - Complaint created successfully: 62c57315-1e79-4488-8b83-34180ea75e6c
+2026-03-08 01:08:03 - app.services.complaint_service - INFO - Found owner_id 063a2d95-4ad6-47d9-b7b7-5735cceea448 for student cc0f49a5-42ee-4f82-9f22-4fa4233e9e3a
+2026-03-08 01:08:04 - app.services.complaint_service - INFO - Complaint created successfully: 72160069-9b21-4e2b-aefa-ccddadfbca72
+2026-03-08 01:13:15 - app.services.auth_service - INFO - Login attempt for: spchirdri2006@gmail.com
+2026-03-08 01:13:16 - app.services.auth_service - INFO - Login successful: spchirdri2006@gmail.com
+2026-03-08 01:13:25 - app.services.auth_service - INFO - Login attempt for: spchirdri2006@gmail.com
+2026-03-08 01:13:26 - app.services.auth_service - INFO - Login successful: spchirdri2006@gmail.com
+2026-03-08 01:14:54 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 01:14:56 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 01:15:03 - app.services.auth_service - INFO - Login attempt for: spchirdri2006@gmail.com
+2026-03-08 01:15:04 - app.services.auth_service - INFO - Login successful: spchirdri2006@gmail.com
+2026-03-08 01:15:36 - app.services.auth_service - INFO - Login attempt for: spchirdri2006@gmail.com
+2026-03-08 01:15:36 - app.services.auth_service - INFO - Login successful: spchirdri2006@gmail.com
+2026-03-08 01:16:33 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 01:17:41 - app.services.auth_service - INFO - Login attempt for: spchirdri2006@gmail.com
+2026-03-08 01:17:41 - app.services.auth_service - INFO - Login successful: spchirdri2006@gmail.com
+2026-03-08 01:17:42 - app.services.payment_service - ERROR - Error fetching payments: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+2026-03-08 01:17:42 - app.services.payment_service - ERROR - Error fetching payments: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+2026-03-08 01:17:43 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+2026-03-08 01:17:44 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+2026-03-08 01:17:55 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 01:17:55 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 01:22:24 - app.services.student_service - INFO - Soft deleting student cc0f49a5-42ee-4f82-9f22-4fa4233e9e3a by user: 063a2d95-4ad6-47d9-b7b7-5735cceea448
+2026-03-08 01:22:25 - app.services.student_service - INFO - Student soft deleted successfully: cc0f49a5-42ee-4f82-9f22-4fa4233e9e3a
+2026-03-08 01:22:25 - app.utils.hooks - DEBUG - [Hook] No hooks registered for event: student_left
+2026-03-08 01:25:17 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 01:28:45 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 01:28:46 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 01:29:06 - app.services.payment_service - ERROR - Error fetching dues report: {'code': '42703', 'details': None, 'hint': None, 'message': 'column students_1.room_number does not exist'}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/payment_service.py", line 306, in get_dues_report
+    result = query.execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': '42703', 'details': None, 'hint': None, 'message': 'column students_1.room_number does not exist'}
+2026-03-08 01:29:07 - app.services.payment_service - ERROR - Error fetching dues report: {'code': '42703', 'details': None, 'hint': None, 'message': 'column students_1.room_number does not exist'}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/payment_service.py", line 306, in get_dues_report
+    result = query.execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': '42703', 'details': None, 'hint': None, 'message': 'column students_1.room_number does not exist'}
+2026-03-08 01:29:14 - app.services.complaint_service - ERROR - Error updating complaint status: {'code': 'PGRST204', 'details': None, 'hint': None, 'message': "Could not find the 'resolved_at' column of 'complaints' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/complaint_service.py", line 180, in update_complaint_status
+    result = supabase.table("complaints").update(update_data).eq("id", complaint_id).execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST204', 'details': None, 'hint': None, 'message': "Could not find the 'resolved_at' column of 'complaints' in the schema cache"}
+2026-03-08 01:29:15 - app.services.complaint_service - ERROR - Error updating complaint status: {'code': 'PGRST204', 'details': None, 'hint': None, 'message': "Could not find the 'resolved_at' column of 'complaints' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/complaint_service.py", line 180, in update_complaint_status
+    result = supabase.table("complaints").update(update_data).eq("id", complaint_id).execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST204', 'details': None, 'hint': None, 'message': "Could not find the 'resolved_at' column of 'complaints' in the schema cache"}
+2026-03-08 01:29:16 - app.services.complaint_service - ERROR - Error updating complaint status: {'code': 'PGRST204', 'details': None, 'hint': None, 'message': "Could not find the 'resolved_at' column of 'complaints' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/complaint_service.py", line 180, in update_complaint_status
+    result = supabase.table("complaints").update(update_data).eq("id", complaint_id).execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST204', 'details': None, 'hint': None, 'message': "Could not find the 'resolved_at' column of 'complaints' in the schema cache"}
+2026-03-08 01:29:16 - app.services.complaint_service - ERROR - Error updating complaint status: {'code': 'PGRST204', 'details': None, 'hint': None, 'message': "Could not find the 'resolved_at' column of 'complaints' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/complaint_service.py", line 180, in update_complaint_status
+    result = supabase.table("complaints").update(update_data).eq("id", complaint_id).execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST204', 'details': None, 'hint': None, 'message': "Could not find the 'resolved_at' column of 'complaints' in the schema cache"}
+2026-03-08 01:29:17 - app.services.complaint_service - ERROR - Error updating complaint status: {'code': 'PGRST204', 'details': None, 'hint': None, 'message': "Could not find the 'resolved_at' column of 'complaints' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/complaint_service.py", line 180, in update_complaint_status
+    result = supabase.table("complaints").update(update_data).eq("id", complaint_id).execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST204', 'details': None, 'hint': None, 'message': "Could not find the 'resolved_at' column of 'complaints' in the schema cache"}
+2026-03-08 01:33:44 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 01:33:56 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 01:33:57 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 01:35:32 - app.services.complaint_service - ERROR - Error updating complaint status: {'code': 'PGRST204', 'details': None, 'hint': None, 'message': "Could not find the 'resolved_at' column of 'complaints' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/complaint_service.py", line 192, in update_complaint_status
+    result = supabase.table("complaints").update(update_data).eq("id", complaint_id).execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST204', 'details': None, 'hint': None, 'message': "Could not find the 'resolved_at' column of 'complaints' in the schema cache"}
+2026-03-08 01:35:33 - app.services.complaint_service - ERROR - Error updating complaint status: {'code': 'PGRST204', 'details': None, 'hint': None, 'message': "Could not find the 'resolved_at' column of 'complaints' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/complaint_service.py", line 192, in update_complaint_status
+    result = supabase.table("complaints").update(update_data).eq("id", complaint_id).execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST204', 'details': None, 'hint': None, 'message': "Could not find the 'resolved_at' column of 'complaints' in the schema cache"}
+2026-03-08 01:42:15 - app.services.complaint_service - ERROR - Error updating complaint status: {'code': 'PGRST204', 'details': None, 'hint': None, 'message': "Could not find the 'resolved_at' column of 'complaints' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/complaint_service.py", line 192, in update_complaint_status
+    result = supabase.table("complaints").update(update_data).eq("id", complaint_id).execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST204', 'details': None, 'hint': None, 'message': "Could not find the 'resolved_at' column of 'complaints' in the schema cache"}
+2026-03-08 01:43:27 - app.services.complaint_service - ERROR - Error updating complaint status: {'code': 'PGRST204', 'details': None, 'hint': None, 'message': "Could not find the 'resolved_at' column of 'complaints' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/complaint_service.py", line 192, in update_complaint_status
+    result = supabase.table("complaints").update(update_data).eq("id", complaint_id).execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST204', 'details': None, 'hint': None, 'message': "Could not find the 'resolved_at' column of 'complaints' in the schema cache"}
+2026-03-08 01:44:22 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 01:47:07 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 01:47:08 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 01:52:11 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 01:52:11 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 01:53:46 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 01:53:46 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 01:54:44 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 01:56:31 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 01:56:32 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 01:58:25 - app.services.auth_service - INFO - INVITATION CREATED for cherryyy019@gmail.com: http://localhost:5173/activate?token=IJbBqn0LUbxmL4O0UtYn1MIoP65ZV6RzQVNBTasanME
+2026-03-08 01:58:29 - app.services.email_service - INFO - Invitation email sent to cherryyy019@gmail.com
+2026-03-08 01:58:29 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 01:58:53 - app.services.payment_service - ERROR - Error fetching payments: {'code': '42703', 'details': None, 'hint': None, 'message': 'column payments.owner_id does not exist'}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': '42703', 'details': None, 'hint': None, 'message': 'column payments.owner_id does not exist'}
+2026-03-08 01:58:53 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'code': '42703', 'details': None, 'hint': None, 'message': 'column payments.owner_id does not exist'}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/dashboard_service.py", line 53, in get_dashboard_stats
+    .execute()
+     ~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': '42703', 'details': None, 'hint': None, 'message': 'column payments.owner_id does not exist'}
+2026-03-08 01:58:53 - app.services.payment_service - ERROR - Error fetching payments: {'code': '42703', 'details': None, 'hint': None, 'message': 'column payments.owner_id does not exist'}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': '42703', 'details': None, 'hint': None, 'message': 'column payments.owner_id does not exist'}
+2026-03-08 01:58:54 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'code': '42703', 'details': None, 'hint': None, 'message': 'column payments.owner_id does not exist'}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/dashboard_service.py", line 53, in get_dashboard_stats
+    .execute()
+     ~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': '42703', 'details': None, 'hint': None, 'message': 'column payments.owner_id does not exist'}
+2026-03-08 01:58:56 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 01:58:56 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 02:00:18 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 02:00:18 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 02:00:52 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 02:01:24 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 02:01:51 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 02:01:51 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 02:01:51 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 02:01:52 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 02:04:24 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 02:04:24 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 02:04:43 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 02:04:43 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 02:10:17 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 02:10:25 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 02:11:31 - app.services.profile_service - DEBUG - Fetching unassigned student profiles
+2026-03-08 02:12:15 - app.services.profile_service - DEBUG - Fetching unassigned student profiles
+2026-03-08 02:13:14 - app.services.student_service - DEBUG - Fetching student by profile: cdafc83e-14c2-4208-8a96-fe36ad20d340
+2026-03-08 02:13:14 - app.services.room_allocation_service - INFO - Attempting atomic allocation: Room 0a71cc88-c38f-42a4-85a2-50b49ede6d2a -> Student 0b30cb1a-28a5-4c8c-b127-44c5fb59c832
+2026-03-08 02:13:15 - app.services.room_allocation_service - ERROR - Error calling allocation RPC: {'code': 'PGRST202', 'details': 'Searched for the function public.allocate_room_safely with parameters p_room_id, p_start_date, p_student_id or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache.', 'hint': None, 'message': 'Could not find the function public.allocate_room_safely(p_room_id, p_start_date, p_student_id) in the schema cache'}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/room_allocation_service.py", line 36, in allocate_room
+    rpc_res = supabase.rpc("allocate_room_safely", rpc_params).execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 119, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST202', 'details': 'Searched for the function public.allocate_room_safely with parameters p_room_id, p_start_date, p_student_id or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache.', 'hint': None, 'message': 'Could not find the function public.allocate_room_safely(p_room_id, p_start_date, p_student_id) in the schema cache'}
+2026-03-08 02:13:21 - app.services.profile_service - DEBUG - Fetching unassigned student profiles
+2026-03-08 02:13:22 - app.services.profile_service - DEBUG - Fetching unassigned student profiles
+2026-03-08 02:13:27 - app.services.student_service - DEBUG - Fetching student by profile: cdafc83e-14c2-4208-8a96-fe36ad20d340
+2026-03-08 02:13:27 - app.services.room_allocation_service - INFO - Attempting atomic allocation: Room 0a71cc88-c38f-42a4-85a2-50b49ede6d2a -> Student 0b30cb1a-28a5-4c8c-b127-44c5fb59c832
+2026-03-08 02:13:27 - app.services.room_allocation_service - ERROR - Error calling allocation RPC: {'code': 'PGRST202', 'details': 'Searched for the function public.allocate_room_safely with parameters p_room_id, p_start_date, p_student_id or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache.', 'hint': None, 'message': 'Could not find the function public.allocate_room_safely(p_room_id, p_start_date, p_student_id) in the schema cache'}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/room_allocation_service.py", line 36, in allocate_room
+    rpc_res = supabase.rpc("allocate_room_safely", rpc_params).execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 119, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST202', 'details': 'Searched for the function public.allocate_room_safely with parameters p_room_id, p_start_date, p_student_id or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache.', 'hint': None, 'message': 'Could not find the function public.allocate_room_safely(p_room_id, p_start_date, p_student_id) in the schema cache'}
+2026-03-08 02:17:14 - app.services.profile_service - DEBUG - Fetching unassigned student profiles
+2026-03-08 02:17:14 - app.services.profile_service - DEBUG - Fetching unassigned student profiles
+2026-03-08 02:17:23 - app.services.student_service - DEBUG - Fetching student by profile: cdafc83e-14c2-4208-8a96-fe36ad20d340
+2026-03-08 02:17:23 - app.services.room_allocation_service - INFO - Attempting atomic allocation: Room 0a71cc88-c38f-42a4-85a2-50b49ede6d2a -> Student 0b30cb1a-28a5-4c8c-b127-44c5fb59c832
+2026-03-08 02:17:24 - app.services.room_allocation_service - ERROR - Error calling allocation RPC: {'code': 'PGRST202', 'details': 'Searched for the function public.allocate_room_safely with parameters p_room_id, p_start_date, p_student_id or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache.', 'hint': None, 'message': 'Could not find the function public.allocate_room_safely(p_room_id, p_start_date, p_student_id) in the schema cache'}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/room_allocation_service.py", line 36, in allocate_room
+    rpc_res = supabase.rpc("allocate_room_safely", rpc_params).execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 119, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST202', 'details': 'Searched for the function public.allocate_room_safely with parameters p_room_id, p_start_date, p_student_id or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache.', 'hint': None, 'message': 'Could not find the function public.allocate_room_safely(p_room_id, p_start_date, p_student_id) in the schema cache'}
+2026-03-08 02:17:39 - app.services.profile_service - DEBUG - Fetching unassigned student profiles
+2026-03-08 02:17:40 - app.services.profile_service - DEBUG - Fetching unassigned student profiles
+2026-03-08 02:17:44 - app.services.student_service - DEBUG - Fetching student by profile: cdafc83e-14c2-4208-8a96-fe36ad20d340
+2026-03-08 02:17:44 - app.services.room_allocation_service - INFO - Attempting atomic allocation: Room 0a71cc88-c38f-42a4-85a2-50b49ede6d2a -> Student 0b30cb1a-28a5-4c8c-b127-44c5fb59c832
+2026-03-08 02:17:44 - app.services.room_allocation_service - ERROR - Error calling allocation RPC: {'code': 'PGRST202', 'details': 'Searched for the function public.allocate_room_safely with parameters p_room_id, p_start_date, p_student_id or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache.', 'hint': None, 'message': 'Could not find the function public.allocate_room_safely(p_room_id, p_start_date, p_student_id) in the schema cache'}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/room_allocation_service.py", line 36, in allocate_room
+    rpc_res = supabase.rpc("allocate_room_safely", rpc_params).execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 119, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST202', 'details': 'Searched for the function public.allocate_room_safely with parameters p_room_id, p_start_date, p_student_id or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache.', 'hint': None, 'message': 'Could not find the function public.allocate_room_safely(p_room_id, p_start_date, p_student_id) in the schema cache'}
+2026-03-08 02:21:16 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 02:21:40 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-08 02:22:17 - app.services.profile_service - DEBUG - Fetching unassigned student profiles
+2026-03-08 02:22:17 - app.services.profile_service - DEBUG - Fetching unassigned student profiles
+2026-03-08 02:22:21 - app.services.student_service - DEBUG - Fetching student by profile: cdafc83e-14c2-4208-8a96-fe36ad20d340
+2026-03-08 02:22:22 - app.services.room_allocation_service - INFO - Attempting atomic allocation: Room 0a71cc88-c38f-42a4-85a2-50b49ede6d2a -> Student 0b30cb1a-28a5-4c8c-b127-44c5fb59c832
+2026-03-08 02:22:22 - app.services.room_allocation_service - ERROR - Error calling allocation RPC: {'code': 'PGRST202', 'details': 'Searched for the function public.allocate_room_safely with parameters p_room_id, p_start_date, p_student_id or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache.', 'hint': None, 'message': 'Could not find the function public.allocate_room_safely(p_room_id, p_start_date, p_student_id) in the schema cache'}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/room_allocation_service.py", line 36, in allocate_room
+    rpc_res = supabase.rpc("allocate_room_safely", rpc_params).execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 119, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST202', 'details': 'Searched for the function public.allocate_room_safely with parameters p_room_id, p_start_date, p_student_id or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache.', 'hint': None, 'message': 'Could not find the function public.allocate_room_safely(p_room_id, p_start_date, p_student_id) in the schema cache'}
+2026-03-08 02:22:35 - app.services.profile_service - DEBUG - Fetching unassigned student profiles
+2026-03-08 02:22:36 - app.services.profile_service - DEBUG - Fetching unassigned student profiles
+2026-03-08 02:22:39 - app.services.student_service - DEBUG - Fetching student by profile: cdafc83e-14c2-4208-8a96-fe36ad20d340
+2026-03-08 02:22:39 - app.services.room_allocation_service - INFO - Attempting atomic allocation: Room 0a71cc88-c38f-42a4-85a2-50b49ede6d2a -> Student 0b30cb1a-28a5-4c8c-b127-44c5fb59c832
+2026-03-08 02:22:39 - app.services.room_allocation_service - ERROR - Error calling allocation RPC: {'code': 'PGRST202', 'details': 'Searched for the function public.allocate_room_safely with parameters p_room_id, p_start_date, p_student_id or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache.', 'hint': None, 'message': 'Could not find the function public.allocate_room_safely(p_room_id, p_start_date, p_student_id) in the schema cache'}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/room_allocation_service.py", line 36, in allocate_room
+    rpc_res = supabase.rpc("allocate_room_safely", rpc_params).execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 119, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST202', 'details': 'Searched for the function public.allocate_room_safely with parameters p_room_id, p_start_date, p_student_id or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache.', 'hint': None, 'message': 'Could not find the function public.allocate_room_safely(p_room_id, p_start_date, p_student_id) in the schema cache'}
+2026-03-08 02:23:31 - app.services.profile_service - DEBUG - Fetching unassigned student profiles
+2026-03-08 02:23:32 - app.services.profile_service - DEBUG - Fetching unassigned student profiles
+2026-03-08 02:23:41 - app.services.profile_service - DEBUG - Fetching unassigned student profiles
+2026-03-08 02:23:42 - app.services.profile_service - DEBUG - Fetching unassigned student profiles
+2026-03-08 02:23:45 - app.services.student_service - DEBUG - Fetching student by profile: cdafc83e-14c2-4208-8a96-fe36ad20d340
+2026-03-08 02:23:46 - app.services.room_allocation_service - INFO - Attempting atomic allocation: Room 0a71cc88-c38f-42a4-85a2-50b49ede6d2a -> Student 0b30cb1a-28a5-4c8c-b127-44c5fb59c832
+2026-03-08 02:23:46 - app.services.room_allocation_service - ERROR - Error calling allocation RPC: {'message': 'null value in column "owner_id" of relation "room_allocations" violates not-null constraint', 'success': False, 'error_code': 'SYS_001'}
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 117, in execute
+    return SingleAPIResponse[_ReturnT].from_http_request_response(r)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/base_request_builder.py", line 208, in from_http_request_response
+    return cls[_ReturnT](data=data, count=count)  # type: ignore
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/pydantic/main.py", line 250, in __init__
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+pydantic_core._pydantic_core.ValidationError: 1 validation error for SingleAPIResponse[TypeVar]
+data
+  Value error, You are passing an API error to the data field. [type=value_error, input_value={'message': 'null value i...'error_code': 'SYS_001'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/value_error
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/room_allocation_service.py", line 36, in allocate_room
+    rpc_res = supabase.rpc("allocate_room_safely", rpc_params).execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 121, in execute
+    raise APIError(r.json()) from e
+postgrest.exceptions.APIError: {'message': 'null value in column "owner_id" of relation "room_allocations" violates not-null constraint', 'success': False, 'error_code': 'SYS_001'}
+2026-03-08 02:24:38 - app.services.student_service - INFO - Reactivating student b7696aad-e4c7-40a1-ac01-ea0de273c171 by user: 00000000-0000-0000-0000-000000000000
+2026-03-08 02:24:38 - app.services.student_service - INFO - Student reactivated successfully: b7696aad-e4c7-40a1-ac01-ea0de273c171
+2026-03-08 02:24:38 - app.utils.hooks - DEBUG - [Hook] No hooks registered for event: student_reactivated
+2026-03-08 02:24:50 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 02:24:51 - app.services.student_service - DEBUG - Fetching students - status: None, limit: 50, offset: 0
+2026-03-08 02:28:57 - app.services.profile_service - DEBUG - Fetching unassigned student profiles
+2026-03-08 02:28:58 - app.services.profile_service - DEBUG - Fetching unassigned student profiles
+2026-03-08 02:29:02 - app.services.student_service - DEBUG - Fetching student by profile: cdafc83e-14c2-4208-8a96-fe36ad20d340
+2026-03-08 02:29:02 - app.services.room_allocation_service - INFO - Attempting atomic allocation: Room 0a71cc88-c38f-42a4-85a2-50b49ede6d2a -> Student 0b30cb1a-28a5-4c8c-b127-44c5fb59c832
+2026-03-08 02:29:02 - app.utils.hooks - DEBUG - [Hook] No hooks registered for event: student_allocated_room

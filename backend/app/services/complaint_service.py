@@ -12,15 +12,38 @@ logger = get_logger(__name__)
 def create_complaint(data: dict, created_by: Optional[str] = None) -> Dict[str, Any]:
     """
     Create a new complaint/maintenance request.
+    Handles legacy schema and links to owner.
     """
     try:
-        logger.info(f"Creating complaint for student: {data.get('student_id')}")
+        student_id = data.get('student_id')
+        logger.info(f"Creating complaint for student: {student_id}")
         
-        # Add metadata
-        data['created_by'] = created_by
-        data['status'] = ComplaintStatus.PENDING.value
+        # Fetch owner_id for this student
+        student_res = supabase.table("students").select("owner_id").eq("id", student_id).execute()
+        owner_id = None
+        if student_res.data:
+            owner_id = student_res.data[0].get("owner_id")
+            logger.info(f"Found owner_id {owner_id} for student {student_id}")
         
-        result = supabase.table("complaints").insert(data).execute()
+        # Prepare legacy-compatible data
+        description = data.get('description', '')
+        category = data.get('category', 'OTHER')
+        priority = data.get('priority', 'MEDIUM')
+        
+        # Append extra info to description since columns are missing in legacy DB
+        enhanced_description = f"{description}\n\n[Category: {category}] [Priority: {priority}]"
+        
+        insert_data = {
+            "student_id": student_id,
+            "owner_id": owner_id, # Link to owner
+            "title": data.get("title", "Complaint"),
+            "description": enhanced_description,
+            "status": "OPEN" # Legacy status
+        }
+        
+        print(f"DEBUG: Inserting legacy complaint data: {insert_data}")
+        result = supabase.table("complaints").insert(insert_data).execute()
+        print(f"DEBUG: Insert result: {result}")
         
         if not result.data:
             return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to create complaint")
@@ -29,6 +52,7 @@ def create_complaint(data: dict, created_by: Optional[str] = None) -> Dict[str, 
         return ServiceResponse.success(result.data[0], "Complaint submitted successfully")
         
     except Exception as e:
+        print(f"DEBUG: Error creating complaint: {str(e)}")
         logger.exception(f"Error creating complaint: {e}")
         return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, str(e))
 
@@ -66,7 +90,8 @@ def get_all_complaints(
     status: Optional[str] = None,
     category: Optional[str] = None,
     limit: int = 50,
-    offset: int = 0
+    offset: int = 0,
+    owner_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     List complaints with filtering.
@@ -80,6 +105,8 @@ def get_all_complaints(
         
         if student_id:
             query = query.eq("student_id", student_id)
+        if owner_id:
+            query = query.eq("owner_id", owner_id)
         if status:
             query = query.eq("status", status)
         if category:
@@ -99,15 +126,26 @@ def get_all_complaints(
                 if allocations[0].get("rooms"):
                     room_no = allocations[0]["rooms"]["room_no"]
 
+            # Map legacy status to frontend friendly status
+            status_map = {
+                "OPEN": "Pending",
+                "PENDING": "Pending",
+                "CLOSED": "resolved",
+                "RESOLVED": "resolved"
+            }
+            db_status = c.get("status", "OPEN")
+            display_status = status_map.get(db_status.upper(), db_status)
+
             complaints_list.append({
                 "id": c["id"],
                 "tenantName": profile.get("name", "Unknown"),
                 "room": room_no,
-                "title": c["category"] or "Complaint", # Use category as title if title missing
-                "description": c["description"],
-                "date": c["created_at"].split("T")[0],
-                "status": c["status"],
-                "priority": c.get("priority", "medium") # Ensure priority exists in DB or default
+                "title": c.get("title") or c.get("category") or "Complaint",
+                "description": c.get("description", ""),
+                "category": c.get("category") or "General",
+                "date": c.get("created_at", datetime.now().isoformat()).split("T")[0],
+                "status": display_status,
+                "priority": c.get("priority", "Medium")
             })
 
         return ServiceResponse.success({
@@ -126,23 +164,47 @@ def update_complaint_status(
     complaint_id: str, 
     status: str, 
     remarks: Optional[str] = None,
-    updated_by: Optional[str] = None
+    updated_by: Optional[str] = None,
+    requesting_user_role: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Admin/Warden updates status of a complaint.
+    Admin/Warden/Owner updates status of a complaint.
     """
     try:
+        # Authorization for owners: Must own the complaint link
+        if requesting_user_role == 'owner':
+            check_res = supabase.table("complaints").select("owner_id").eq("id", complaint_id).execute()
+            if not check_res.data:
+                return ServiceResponse.not_found("Complaint")
+            if str(check_res.data[0].get("owner_id")) != str(updated_by):
+                return ServiceResponse.forbidden("You can only resolve complaints from your own tenants")
+
+        # Start with minimal update data (legacy compatible)
         update_data = {
             "status": status,
-            "staff_remarks": remarks,
-            "updated_by": updated_by,
             "updated_at": datetime.now().isoformat()
         }
         
+        # Try to include full resolution data if columns exist
+        # We use a nested try-except or check columns first. 
+        # For simplicity and robustness, we try full update first.
+        full_update = update_data.copy()
+        full_update.update({
+            "staff_remarks": remarks,
+            "updated_by": updated_by
+        })
         if status == ComplaintStatus.RESOLVED.value:
-            update_data["resolved_at"] = datetime.now().isoformat()
+            full_update["resolved_at"] = datetime.now().isoformat()
             
-        result = supabase.table("complaints").update(update_data).eq("id", complaint_id).execute()
+        try:
+            result = supabase.table("complaints").update(full_update).eq("id", complaint_id).execute()
+        except Exception as e:
+            if "column" in str(e).lower():
+                logger.warning(f"Database schema is outdated (missing resolution columns). Falling back to minimal update. Error: {e}")
+                # Fallback to minimal update (only status and updated_at)
+                result = supabase.table("complaints").update(update_data).eq("id", complaint_id).execute()
+            else:
+                raise e
         
         if not result.data:
             return ServiceResponse.not_found("Complaint")

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Home, CreditCard, Clock, Bell, ArrowUpRight, BedDouble, Calendar, AlertCircle, User } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -7,10 +7,10 @@ import { paymentService } from '../../api/services';
 const StudentDashboard = () => {
     const { user } = useAuth();
 
-    const [dues, setDues] = React.useState([]);
-    const [isLoading, setIsLoading] = React.useState(true);
+    const [dues, setDues] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
 
-    React.useEffect(() => {
+    useEffect(() => {
         const fetchDues = async () => {
             if (!user?.student_id) return;
             try {

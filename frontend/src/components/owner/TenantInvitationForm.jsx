@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Mail, Home, Loader2, Send, X, CheckCircle2, AlertCircle } from 'lucide-react';
+import { User, Mail, Home, Loader2, Send, X, CheckCircle2, AlertCircle, Phone, CreditCard } from 'lucide-react';
 import api from '../../api/axios';
 
 const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
+    const [phone, setPhone] = useState('');
+    const [monthlyRent, setMonthlyRent] = useState('');
     const [roomId, setRoomId] = useState('');
     const [rooms, setRooms] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -40,6 +42,8 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
             const response = await api.post('/students/invite', {
                 name,
                 email,
+                phone,
+                monthly_rent: parseFloat(monthlyRent) || 0,
                 room_id: roomId
             });
             setSuccessData(response.data);
@@ -110,20 +114,38 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                     </div>
                                 )}
 
-                                <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-500 ml-1 uppercase tracking-wider">Full Name</label>
-                                    <div className="relative group">
-                                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                            <User className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold text-slate-500 ml-1 uppercase tracking-wider">Full Name</label>
+                                        <div className="relative group">
+                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                                <User className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+                                            </div>
+                                            <input
+                                                type="text"
+                                                value={name}
+                                                onChange={(e) => setName(e.target.value)}
+                                                className="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-medium"
+                                                placeholder="John Doe"
+                                                required
+                                            />
                                         </div>
-                                        <input
-                                            type="text"
-                                            value={name}
-                                            onChange={(e) => setName(e.target.value)}
-                                            className="block w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-medium"
-                                            placeholder="John Doe"
-                                            required
-                                        />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold text-slate-500 ml-1 uppercase tracking-wider">Phone Number</label>
+                                        <div className="relative group">
+                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                                <Phone className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+                                            </div>
+                                            <input
+                                                type="tel"
+                                                value={phone}
+                                                onChange={(e) => setPhone(e.target.value)}
+                                                className="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-medium"
+                                                placeholder="9876543210"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
 
@@ -137,32 +159,51 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                             type="email"
                                             value={email}
                                             onChange={(e) => setEmail(e.target.value)}
-                                            className="block w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-medium"
+                                            className="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-medium"
                                             placeholder="john@example.com"
                                             required
                                         />
                                     </div>
                                 </div>
 
-                                <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-500 ml-1 uppercase tracking-wider">Assign Room</label>
-                                    <div className="relative group">
-                                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                            <Home className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold text-slate-500 ml-1 uppercase tracking-wider">Monthly Rent (₹)</label>
+                                        <div className="relative group">
+                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                                <CreditCard className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+                                            </div>
+                                            <input
+                                                type="number"
+                                                value={monthlyRent}
+                                                onChange={(e) => setMonthlyRent(e.target.value)}
+                                                className="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-medium"
+                                                placeholder="8000"
+                                                required
+                                            />
                                         </div>
-                                        <select
-                                            value={roomId}
-                                            onChange={(e) => setRoomId(e.target.value)}
-                                            className="block w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-medium appearance-none"
-                                            required
-                                        >
-                                            <option value="">Select a room</option>
-                                            {rooms.map(room => (
-                                                <option key={room.id} value={room.id}>
-                                                    Room {room.room_number} ({room.type || 'Standard'}) - {room.status}
-                                                </option>
-                                            ))}
-                                        </select>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold text-slate-500 ml-1 uppercase tracking-wider">Assign Room</label>
+                                        <div className="relative group">
+                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                                <Home className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+                                            </div>
+                                            <select
+                                                value={roomId}
+                                                onChange={(e) => setRoomId(e.target.value)}
+                                                className="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-medium appearance-none"
+                                                required
+                                            >
+                                                <option value="">Select a room</option>
+                                                {rooms.map(room => (
+                                                    <option key={room.id} value={room.id}>
+                                                        Room {room.room_no} ({room.capacity})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
                                     </div>
                                 </div>
 

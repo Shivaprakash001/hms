@@ -4,7 +4,7 @@ import { Plus, Search, Filter, Layers, LayoutGrid, Users, MoreVertical, DoorOpen
 import AddRoomModal from '../../components/owner/rooms/AddRoomModal';
 import AddTenantModal from '../../components/owner/rooms/AddTenantModal';
 import ShiftTenantModal from '../../components/owner/rooms/ShiftTenantModal';
-import { roomService, studentService, authService } from '../../api/services';
+import { roomService, allocationService, studentService, authService } from '../../api/services';
 
 const ManageRooms = () => {
     // State
@@ -82,30 +82,38 @@ const ManageRooms = () => {
 
     const handleAddTenant = async (room, tenantData) => {
         try {
-            // 1. Register User (create profile)
-            const registerData = {
-                email: tenantData.email,
-                password: tenantData.password || 'welcome123',
-                name: tenantData.name,
-                role: 'student',
-                // phone: tenantData.phone // Backend cannot save this yet
-            };
+            let studentId;
 
-            const userResponse = await authService.register(registerData);
-            const user = userResponse; // data object
+            // 1. Get or Create Student Record
+            try {
+                // Check if student already has a record by profile_id
+                const existingStudent = await studentService.getByProfileId(tenantData.profile_id);
+                studentId = existingStudent.id;
 
-            // 2. Create Student Record
-            const studentData = {
-                profile_id: user.id,
-                monthly_rent: tenantData.rent || 0,
-                joined_on: tenantData.joinDate || new Date().toISOString().split('T')[0],
-                status: 'ACTIVE'
-            };
+                // If student exists but is LEFT, we must reactivate them
+                if (existingStudent.status === 'LEFT') {
+                    await studentService.reactivate(studentId, {
+                        monthly_rent: parseFloat(tenantData.rent) || 0,
+                        joined_on: tenantData.joinDate || new Date().toISOString().split('T')[0]
+                    });
+                }
+            } catch (err) {
+                // If 404, student doesn't exist, create it
+                if (err.response?.status === 404) {
+                    const studentData = {
+                        profile_id: tenantData.profile_id,
+                        monthly_rent: tenantData.rent || 0,
+                        joined_on: tenantData.joinDate || new Date().toISOString().split('T')[0],
+                        status: 'ACTIVE'
+                    };
+                    const studentResponse = await studentService.create(studentData);
+                    studentId = studentResponse.id;
+                } else {
+                    throw err;
+                }
+            }
 
-            const studentResponse = await studentService.create(studentData);
-            const studentId = studentResponse.id;
-
-            // 3. Allocate Room
+            // 2. Allocate Room
             await allocationService.allocate({
                 student_id: studentId,
                 room_id: room.id,
@@ -116,7 +124,9 @@ const ManageRooms = () => {
             setShowAddTenantModal(false);
         } catch (err) {
             console.error(err);
-            alert("Failed to add tenant: " + (err.response?.data?.detail || err.response?.data?.error?.message || err.message));
+            const detail = err.response?.data?.detail;
+            const msg = detail?.message || detail || err.message || 'Unknown error';
+            alert("Failed to add resident: " + msg);
         }
     };
 
@@ -147,7 +157,9 @@ const ManageRooms = () => {
             alert("Tenant relocated successfully!");
         } catch (err) {
             console.error(err);
-            alert("Failed to shift tenant: " + (err.response?.data?.detail || err.message));
+            const detail = err.response?.data?.detail;
+            const msg = detail?.message || detail || err.message || 'Unknown error';
+            alert("Failed to shift tenant: " + msg);
         }
     };
 

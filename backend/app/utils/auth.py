@@ -30,6 +30,7 @@ class UserContext(BaseModel):
     user_id: str  # Profile ID from token
     email: str
     role: str  # student, admin
+    student_id: Optional[str] = None
     
     def is_admin(self) -> bool:
         return self.role == "admin"
@@ -47,7 +48,7 @@ class UserContext(BaseModel):
         return self.role in ("admin", "owner")
     
     def can_delete_students(self) -> bool:
-        return self.role == "admin"
+        return self.role in ("admin", "owner")
     
     def can_view_all_students(self) -> bool:
         return self.role in ("admin", "owner")
@@ -106,6 +107,7 @@ def get_current_user(
     user_id = payload.get("sub")  # Standard JWT claim for user ID
     email = payload.get("email")
     role = payload.get("role")
+    student_id = payload.get("student_id")
     
     if not user_id or not role:
         logger.error("JWT token missing required claims")
@@ -118,7 +120,8 @@ def get_current_user(
     return UserContext(
         user_id=user_id,
         email=email or "",
-        role=role
+        role=role,
+        student_id=student_id
     )
 
 

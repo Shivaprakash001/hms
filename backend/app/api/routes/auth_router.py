@@ -33,10 +33,20 @@ def get_me(user: UserContext = Depends(get_current_user)):
     """
     Returns information about the user currently authenticated by the token.
     """
+    from app.db import supabase
+    
+    student_id = user.student_id
+    if user.is_student() and not student_id:
+        # Fallback for old tokens: fetch from DB
+        res = supabase.table("students").select("id").eq("profile_id", user.user_id).execute()
+        if res.data:
+            student_id = res.data[0]["id"]
+            
     return {
-        "user_id": user.user_id,
+        "user_id": str(user.user_id),
         "email": user.email,
         "role": user.role,
+        "student_id": str(student_id) if student_id else None,
         "is_admin": user.is_admin(),
         "is_warden": user.is_warden(),
         "is_student": user.is_student()

@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, Mail, Phone, MapPin, Camera, Save, Edit2, Shield, Key, Building2, Calendar, CheckCircle2, GraduationCap, Download, AlertTriangle, PhoneCall } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../../context/AuthContext';
+import { profileService, studentService } from '../../api/services';
 
 const StudentProfile = () => {
     const { user } = useAuth();
@@ -24,7 +25,7 @@ const StudentProfile = () => {
         address: ''
     });
 
-    React.useEffect(() => {
+    useEffect(() => {
         const fetchData = async () => {
             if (!user?.id) return;
             try {

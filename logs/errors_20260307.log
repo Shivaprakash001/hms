@@ -18897,6 +18897,7 @@ Traceback (most recent call last):
   File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
     raise APIError(r.json())
 postgrest.exceptions.APIError: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+<<<<<<< Updated upstream
 2026-03-07 17:45:53 - app.services.payment_service - ERROR - Error fetching payments: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
 Traceback (most recent call last):
   File "/home/sp/Desktop/project-hms/backend/app/services/payment_service.py", line 337, in get_all_payments
@@ -18937,3 +18938,826 @@ Traceback (most recent call last):
   File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
     raise APIError(dict(json_obj))
 postgrest.exceptions.APIError: {'message': 'duplicate key value violates unique constraint "rooms_room_no_key"', 'code': '23505', 'hint': None, 'details': 'Key (room_no)=(101) already exists.'}
+2026-03-07 23:16:31 - app.services.payment_service - ERROR - Error fetching payments: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+             ^^^^^^^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+2026-03-07 23:16:31 - app.services.payment_service - ERROR - Error fetching payments: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+             ^^^^^^^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+2026-03-07 23:16:32 - app.services.payment_service - ERROR - Error fetching payments: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+             ^^^^^^^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+2026-03-07 23:16:32 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+2026-03-07 23:16:33 - app.services.payment_service - ERROR - Error fetching payments: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+             ^^^^^^^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+2026-03-07 23:16:33 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+2026-03-07 23:16:33 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+2026-03-07 23:16:33 - app.services.payment_service - ERROR - Error fetching payments: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+             ^^^^^^^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+2026-03-07 23:16:33 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+2026-03-07 23:16:34 - app.services.payment_service - ERROR - Error fetching payments: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+             ^^^^^^^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+2026-03-07 23:16:34 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+2026-03-07 23:16:34 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+2026-03-07 23:19:43 - app.services.auth_service - ERROR - Error inviting tenant: {'message': 'insert or update on table "profiles" violates foreign key constraint "profiles_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (id)=(45c714a2-59bd-49a5-b858-cd36a6fe09df) is not present in table "users".'}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/auth_service.py", line 142, in invite_tenant
+    prof_res = supabase.table("profiles").insert(new_profile).execute()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "profiles" violates foreign key constraint "profiles_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (id)=(45c714a2-59bd-49a5-b858-cd36a6fe09df) is not present in table "users".'}
+=======
+2026-03-07 16:53:27 - app.services.notification_service - ERROR - Error fetching notifications for user af70704d-cd7c-4ae4-bd85-6d2f4aad3f61: timed out
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_transports/default.py", line 250, in handle_request
+    resp = self._pool.handle_request(req)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection_pool.py", line 256, in handle_request
+    raise exc from None
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection_pool.py", line 236, in handle_request
+    response = connection.handle_request(
+        pool_request.request
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection.py", line 101, in handle_request
+    raise exc
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection.py", line 78, in handle_request
+    stream = self._connect(request)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection.py", line 124, in _connect
+    stream = self._network_backend.connect_tcp(**kwargs)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_backends/sync.py", line 207, in connect_tcp
+    with map_exceptions(exc_map):
+         ~~~~~~~~~~~~~~^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.ConnectTimeout: timed out
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/notification_service.py", line 15, in get_user_notifications
+    .execute()
+     ~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 57, in execute
+    r = self.session.request(
+        self.http_method,
+    ...<3 lines>...
+        headers=self.headers,
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 825, in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 914, in send
+    response = self._send_handling_auth(
+        request,
+    ...<2 lines>...
+        history=[],
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 942, in _send_handling_auth
+    response = self._send_handling_redirects(
+        request,
+        follow_redirects=follow_redirects,
+        history=history,
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 979, in _send_handling_redirects
+    response = self._send_single_request(request)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 1014, in _send_single_request
+    response = transport.handle_request(request)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_transports/default.py", line 249, in handle_request
+    with map_httpcore_exceptions():
+         ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.ConnectTimeout: timed out
+2026-03-07 16:53:55 - app.services.payment_service - ERROR - Error fetching payments: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+2026-03-07 16:53:56 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+2026-03-07 16:54:55 - app.services.payment_service - ERROR - Error fetching payments: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+2026-03-07 16:54:57 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+2026-03-07 16:55:55 - app.services.room_allocation_service - ERROR - Error fetching active allocations: The read operation timed out
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_transports/default.py", line 250, in handle_request
+    resp = self._pool.handle_request(req)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection_pool.py", line 256, in handle_request
+    raise exc from None
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection_pool.py", line 236, in handle_request
+    response = connection.handle_request(
+        pool_request.request
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection.py", line 103, in handle_request
+    return self._connection.handle_request(request)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/http11.py", line 136, in handle_request
+    raise exc
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/http11.py", line 106, in handle_request
+    ) = self._receive_response_headers(**kwargs)
+        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/http11.py", line 177, in _receive_response_headers
+    event = self._receive_event(timeout=timeout)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/http11.py", line 217, in _receive_event
+    data = self._network_stream.read(
+        self.READ_NUM_BYTES, timeout=timeout
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_backends/sync.py", line 126, in read
+    with map_exceptions(exc_map):
+         ~~~~~~~~~~~~~~^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.ReadTimeout: The read operation timed out
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/room_allocation_service.py", line 292, in get_active_allocations
+    .execute()
+     ~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 57, in execute
+    r = self.session.request(
+        self.http_method,
+    ...<3 lines>...
+        headers=self.headers,
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 825, in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 914, in send
+    response = self._send_handling_auth(
+        request,
+    ...<2 lines>...
+        history=[],
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 942, in _send_handling_auth
+    response = self._send_handling_redirects(
+        request,
+        follow_redirects=follow_redirects,
+        history=history,
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 979, in _send_handling_redirects
+    response = self._send_single_request(request)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 1014, in _send_single_request
+    response = transport.handle_request(request)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_transports/default.py", line 249, in handle_request
+    with map_httpcore_exceptions():
+         ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.ReadTimeout: The read operation timed out
+2026-03-07 16:55:55 - app.services.notification_service - ERROR - Error fetching notifications for user af70704d-cd7c-4ae4-bd85-6d2f4aad3f61: The read operation timed out
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_transports/default.py", line 250, in handle_request
+    resp = self._pool.handle_request(req)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection_pool.py", line 256, in handle_request
+    raise exc from None
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection_pool.py", line 236, in handle_request
+    response = connection.handle_request(
+        pool_request.request
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection.py", line 103, in handle_request
+    return self._connection.handle_request(request)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/http11.py", line 136, in handle_request
+    raise exc
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/http11.py", line 106, in handle_request
+    ) = self._receive_response_headers(**kwargs)
+        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/http11.py", line 177, in _receive_response_headers
+    event = self._receive_event(timeout=timeout)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/http11.py", line 217, in _receive_event
+    data = self._network_stream.read(
+        self.READ_NUM_BYTES, timeout=timeout
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_backends/sync.py", line 126, in read
+    with map_exceptions(exc_map):
+         ~~~~~~~~~~~~~~^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.ReadTimeout: The read operation timed out
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/notification_service.py", line 15, in get_user_notifications
+    .execute()
+     ~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 57, in execute
+    r = self.session.request(
+        self.http_method,
+    ...<3 lines>...
+        headers=self.headers,
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 825, in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 914, in send
+    response = self._send_handling_auth(
+        request,
+    ...<2 lines>...
+        history=[],
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 942, in _send_handling_auth
+    response = self._send_handling_redirects(
+        request,
+        follow_redirects=follow_redirects,
+        history=history,
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 979, in _send_handling_redirects
+    response = self._send_single_request(request)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 1014, in _send_single_request
+    response = transport.handle_request(request)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_transports/default.py", line 249, in handle_request
+    with map_httpcore_exceptions():
+         ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.ReadTimeout: The read operation timed out
+2026-03-07 17:13:52 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: [Errno 8] nodename nor servname provided, or not known
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_transports/default.py", line 250, in handle_request
+    resp = self._pool.handle_request(req)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection_pool.py", line 256, in handle_request
+    raise exc from None
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection_pool.py", line 236, in handle_request
+    response = connection.handle_request(
+        pool_request.request
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection.py", line 101, in handle_request
+    raise exc
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection.py", line 78, in handle_request
+    stream = self._connect(request)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection.py", line 124, in _connect
+    stream = self._network_backend.connect_tcp(**kwargs)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_backends/sync.py", line 207, in connect_tcp
+    with map_exceptions(exc_map):
+         ~~~~~~~~~~~~~~^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.ConnectError: [Errno 8] nodename nor servname provided, or not known
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/dashboard_service.py", line 20, in get_dashboard_stats
+    students_res = supabase.table("students").select("id", count="exact").eq("status", "ACTIVE").eq("owner_id", user_id).execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 57, in execute
+    r = self.session.request(
+        self.http_method,
+    ...<3 lines>...
+        headers=self.headers,
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 825, in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 914, in send
+    response = self._send_handling_auth(
+        request,
+    ...<2 lines>...
+        history=[],
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 942, in _send_handling_auth
+    response = self._send_handling_redirects(
+        request,
+        follow_redirects=follow_redirects,
+        history=history,
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 979, in _send_handling_redirects
+    response = self._send_single_request(request)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 1014, in _send_single_request
+    response = transport.handle_request(request)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_transports/default.py", line 249, in handle_request
+    with map_httpcore_exceptions():
+         ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.ConnectError: [Errno 8] nodename nor servname provided, or not known
+2026-03-07 17:13:52 - app.services.room_allocation_service - ERROR - Error fetching active allocations: [Errno 8] nodename nor servname provided, or not known
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_transports/default.py", line 250, in handle_request
+    resp = self._pool.handle_request(req)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection_pool.py", line 256, in handle_request
+    raise exc from None
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection_pool.py", line 236, in handle_request
+    response = connection.handle_request(
+        pool_request.request
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection.py", line 101, in handle_request
+    raise exc
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection.py", line 78, in handle_request
+    stream = self._connect(request)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection.py", line 124, in _connect
+    stream = self._network_backend.connect_tcp(**kwargs)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_backends/sync.py", line 207, in connect_tcp
+    with map_exceptions(exc_map):
+         ~~~~~~~~~~~~~~^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.ConnectError: [Errno 8] nodename nor servname provided, or not known
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/room_allocation_service.py", line 292, in get_active_allocations
+    .execute()
+     ~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 57, in execute
+    r = self.session.request(
+        self.http_method,
+    ...<3 lines>...
+        headers=self.headers,
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 825, in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 914, in send
+    response = self._send_handling_auth(
+        request,
+    ...<2 lines>...
+        history=[],
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 942, in _send_handling_auth
+    response = self._send_handling_redirects(
+        request,
+        follow_redirects=follow_redirects,
+        history=history,
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 979, in _send_handling_redirects
+    response = self._send_single_request(request)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 1014, in _send_single_request
+    response = transport.handle_request(request)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_transports/default.py", line 249, in handle_request
+    with map_httpcore_exceptions():
+         ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.ConnectError: [Errno 8] nodename nor servname provided, or not known
+2026-03-07 17:13:52 - app.services.notification_service - ERROR - Error fetching notifications for user af70704d-cd7c-4ae4-bd85-6d2f4aad3f61: [Errno 8] nodename nor servname provided, or not known
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_transports/default.py", line 250, in handle_request
+    resp = self._pool.handle_request(req)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection_pool.py", line 256, in handle_request
+    raise exc from None
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection_pool.py", line 236, in handle_request
+    response = connection.handle_request(
+        pool_request.request
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection.py", line 101, in handle_request
+    raise exc
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection.py", line 78, in handle_request
+    stream = self._connect(request)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection.py", line 124, in _connect
+    stream = self._network_backend.connect_tcp(**kwargs)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_backends/sync.py", line 207, in connect_tcp
+    with map_exceptions(exc_map):
+         ~~~~~~~~~~~~~~^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.ConnectError: [Errno 8] nodename nor servname provided, or not known
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/notification_service.py", line 15, in get_user_notifications
+    .execute()
+     ~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 57, in execute
+    r = self.session.request(
+        self.http_method,
+    ...<3 lines>...
+        headers=self.headers,
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 825, in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 914, in send
+    response = self._send_handling_auth(
+        request,
+    ...<2 lines>...
+        history=[],
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 942, in _send_handling_auth
+    response = self._send_handling_redirects(
+        request,
+        follow_redirects=follow_redirects,
+        history=history,
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 979, in _send_handling_redirects
+    response = self._send_single_request(request)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 1014, in _send_single_request
+    response = transport.handle_request(request)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_transports/default.py", line 249, in handle_request
+    with map_httpcore_exceptions():
+         ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.ConnectError: [Errno 8] nodename nor servname provided, or not known
+2026-03-07 17:13:52 - app.services.payment_service - ERROR - Error fetching payments: [Errno 8] nodename nor servname provided, or not known
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_transports/default.py", line 250, in handle_request
+    resp = self._pool.handle_request(req)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection_pool.py", line 256, in handle_request
+    raise exc from None
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection_pool.py", line 236, in handle_request
+    response = connection.handle_request(
+        pool_request.request
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection.py", line 101, in handle_request
+    raise exc
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection.py", line 78, in handle_request
+    stream = self._connect(request)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_sync/connection.py", line 124, in _connect
+    stream = self._network_backend.connect_tcp(**kwargs)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_backends/sync.py", line 207, in connect_tcp
+    with map_exceptions(exc_map):
+         ~~~~~~~~~~~~~~^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.ConnectError: [Errno 8] nodename nor servname provided, or not known
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 57, in execute
+    r = self.session.request(
+        self.http_method,
+    ...<3 lines>...
+        headers=self.headers,
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 825, in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 914, in send
+    response = self._send_handling_auth(
+        request,
+    ...<2 lines>...
+        history=[],
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 942, in _send_handling_auth
+    response = self._send_handling_redirects(
+        request,
+        follow_redirects=follow_redirects,
+        history=history,
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 979, in _send_handling_redirects
+    response = self._send_single_request(request)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 1014, in _send_single_request
+    response = transport.handle_request(request)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_transports/default.py", line 249, in handle_request
+    with map_httpcore_exceptions():
+         ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.ConnectError: [Errno 8] nodename nor servname provided, or not known
+2026-03-07 17:13:52 - app.services.expense_service - ERROR - Error fetching expenses: [Errno 8] nodename nor servname provided, or not known
+2026-03-07 18:21:59 - app.services.payment_service - ERROR - Error fetching payments: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+2026-03-07 18:21:59 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+2026-03-07 18:38:23 - app.services.payment_service - ERROR - Error fetching payments: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+2026-03-07 18:38:24 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+2026-03-07 18:54:48 - app.services.payment_service - ERROR - Error fetching payments: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+2026-03-07 18:54:48 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+2026-03-07 19:12:28 - app.services.payment_service - ERROR - Error fetching payments: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+2026-03-07 19:12:28 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+>>>>>>> Stashed changes
+2026-03-07 23:49:25 - app.services.payment_service - ERROR - Error fetching payments: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+2026-03-07 23:49:25 - app.services.payment_service - ERROR - Error fetching payments: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST200', 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found.", 'hint': None, 'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache"}
+2026-03-07 23:49:26 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+2026-03-07 23:49:27 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
+    raise APIError(r.json())
+postgrest.exceptions.APIError: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+2026-03-07 23:50:14 - app.services.auth_service - ERROR - Error inviting tenant: Object of type UUID is not JSON serializable
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/auth_service.py", line 188, in invite_tenant
+    stu_res = supabase.table("students").insert(new_student).execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 57, in execute
+    r = self.session.request(
+        self.http_method,
+    ...<3 lines>...
+        headers=self.headers,
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 812, in request
+    request = self.build_request(
+        method=method,
+    ...<9 lines>...
+        extensions=extensions,
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 378, in build_request
+    return Request(
+        method,
+    ...<8 lines>...
+        extensions=extensions,
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_models.py", line 408, in __init__
+    headers, stream = encode_request(
+                      ~~~~~~~~~~~~~~^
+        content=content,
+        ^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+        ),
+        ^^
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_content.py", line 216, in encode_request
+    return encode_json(json)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_content.py", line 177, in encode_json
+    body = json_dumps(
+           ~~~~~~~~~~^
+        json, ensure_ascii=False, separators=(",", ":"), allow_nan=False
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ).encode("utf-8")
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/__init__.py", line 242, in dumps
+    **kw).encode(obj)
+          ~~~~~~^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/encoder.py", line 202, in encode
+    chunks = self.iterencode(o, _one_shot=True)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/encoder.py", line 263, in iterencode
+    return _iterencode(o, 0)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/encoder.py", line 182, in default
+    raise TypeError(f'Object of type {o.__class__.__name__} '
+                    f'is not JSON serializable')
+TypeError: Object of type UUID is not JSON serializable
+when serializing dict item 'room_id'
+2026-03-07 23:52:34 - app.services.auth_service - ERROR - Error inviting tenant: Object of type UUID is not JSON serializable
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/auth_service.py", line 188, in invite_tenant
+    stu_res = supabase.table("students").insert(new_student).execute()
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 57, in execute
+    r = self.session.request(
+        self.http_method,
+    ...<3 lines>...
+        headers=self.headers,
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 812, in request
+    request = self.build_request(
+        method=method,
+    ...<9 lines>...
+        extensions=extensions,
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_client.py", line 378, in build_request
+    return Request(
+        method,
+    ...<8 lines>...
+        extensions=extensions,
+    )
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_models.py", line 408, in __init__
+    headers, stream = encode_request(
+                      ~~~~~~~~~~~~~~^
+        content=content,
+        ^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+        ),
+        ^^
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_content.py", line 216, in encode_request
+    return encode_json(json)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/httpx/_content.py", line 177, in encode_json
+    body = json_dumps(
+           ~~~~~~~~~~^
+        json, ensure_ascii=False, separators=(",", ":"), allow_nan=False
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ).encode("utf-8")
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/__init__.py", line 242, in dumps
+    **kw).encode(obj)
+          ~~~~~~^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/encoder.py", line 202, in encode
+    chunks = self.iterencode(o, _one_shot=True)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/encoder.py", line 263, in iterencode
+    return _iterencode(o, 0)
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/encoder.py", line 182, in default
+    raise TypeError(f'Object of type {o.__class__.__name__} '
+                    f'is not JSON serializable')
+TypeError: Object of type UUID is not JSON serializable
+when serializing dict item 'room_id'
