@@ -7,3 +7,4 @@
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: use --host to expose
+11:55:28 PM [vite] (client) hmr update /src/index.css, /src/components/owner/TenantInvitationForm.jsx

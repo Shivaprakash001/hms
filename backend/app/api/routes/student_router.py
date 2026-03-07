@@ -218,7 +218,7 @@ def modify_student(
     """
     result = student_service.update_student(
         student_id,
-        student.model_dump(exclude_unset=True),
+        student.model_dump(mode='json', exclude_unset=True),
         updated_by=user.user_id,
         requesting_user_role=user.role
     )
@@ -305,7 +305,7 @@ def invite_tenant(
     """
     Invite a new tenant. Creates a profile and enrollment with INVITED status.
     """
-    result = auth_service.invite_tenant(data.model_dump(), str(user.user_id))
+    result = auth_service.invite_tenant(data.model_dump(mode='json'), str(user.user_id))
     return _handle_service_response(result)
 
 
