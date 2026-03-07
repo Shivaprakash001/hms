@@ -5,7 +5,7 @@ from postgrest.exceptions import APIError
 from app.utils.responses import ServiceResponse, ErrorCode
 from app.utils.logger import get_logger
 from app.utils.hooks import trigger_hook
-from app.schamas.student_schema import StudentStatus, VALID_STATUS_TRANSITIONS
+from app.schemas.student_schema import StudentCreate, StudentStatus, VALID_STATUS_TRANSITIONS
 from decimal import Decimal
 
 logger = get_logger(__name__)
@@ -133,9 +133,9 @@ def get_student(
     try:
         logger.debug(f"Fetching student: {student_id}")
         
-        # Fetch student with profile join
+        # Fetch student with profile join and active allocations
         result = supabase.table("students")\
-            .select("*, profiles(*)")\
+            .select("*, profiles(*), room_allocations(*, rooms(*))")\
             .eq("id", student_id)\
             .execute()
         
@@ -144,6 +144,15 @@ def get_student(
             return ServiceResponse.not_found("Student")
         
         student = result.data[0]
+        
+        # Process room allocations to find active one
+        if "room_allocations" in student:
+            allocations = student.pop("room_allocations")
+            active_allocation = next((a for a in allocations if a.get("end_date") is None), None)
+            if active_allocation:
+                student["current_room"] = active_allocation.get("rooms")
+            else:
+                student["current_room"] = None
         
         # Authorization check
         if requesting_user_role == 'student':
@@ -172,7 +181,7 @@ def get_student_by_profile(
         logger.debug(f"Fetching student by profile: {profile_id}")
         
         result = supabase.table("students")\
-            .select("*, profiles(*)")\
+            .select("*, profiles(*), room_allocations(*, rooms(*))")\
             .eq("profile_id", profile_id)\
             .execute()
         
@@ -180,6 +189,15 @@ def get_student_by_profile(
             return ServiceResponse.not_found("Student")
         
         student = result.data[0]
+        
+        # Process room allocations to find active one
+        if "room_allocations" in student:
+            allocations = student.pop("room_allocations")
+            active_allocation = next((a for a in allocations if a.get("end_date") is None), None)
+            if active_allocation:
+                student["current_room"] = active_allocation.get("rooms")
+            else:
+                student["current_room"] = None
         
         # Authorization check
         if requesting_user_role == 'student':
@@ -222,9 +240,9 @@ def get_all_students(
         
         logger.debug(f"Fetching students - status: {status}, limit: {limit}, offset: {offset}")
         
-        # Build query with profile join
+        # Build query with profile join and allocations
         query = supabase.table("students")\
-            .select("*, profiles(*)", count="exact")
+            .select("*, profiles(*), room_allocations(*, rooms(*))", count="exact")
         
         # Apply filters
         if status:
@@ -249,8 +267,24 @@ def get_all_students(
         
         result = query.execute()
         
+        # Process active room for each student
+        students_data = []
+        for student in result.data:
+            # Normalize profile
+            if "profiles" in student:
+                student["profile"] = student.pop("profiles")
+            
+            if "room_allocations" in student:
+                allocations = student.pop("room_allocations")
+                active_allocation = next((a for a in allocations if a.get("end_date") is None), None)
+                if active_allocation:
+                    student["current_room"] = active_allocation.get("rooms")
+                else:
+                    student["current_room"] = None
+            students_data.append(student)
+        
         return ServiceResponse.success({
-            "students": result.data,
+            "students": students_data,
             "total": result.count if hasattr(result, 'count') else len(result.data),
             "limit": limit,
             "offset": offset

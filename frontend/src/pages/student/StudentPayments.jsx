@@ -3,52 +3,112 @@ import { motion } from 'framer-motion';
 import { CreditCard, Calendar, Download, AlertCircle, CheckCircle2, Clock, Smartphone, ChevronRight } from 'lucide-react';
 
 import { useAuth } from '../../context/AuthContext';
-import { MOCK_PAYMENTS } from '../../utils/mockData';
+import { paymentService } from '../../api/services';
 import PaymentModal from '../../components/student/payment/PaymentModal';
 
 const StudentPayments = () => {
     const { user } = useAuth();
     const [showPaymentModal, setShowPaymentModal] = useState(false);
 
-    // Simulate local state for payments to show instant updates
-    const [localPayments, setLocalPayments] = useState(
-        MOCK_PAYMENTS
-            .filter(p => p.tenantId === user?.id)
-            .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
-    );
+    const [history, setHistory] = useState({ payments: [], obligations: [] });
+    const [loading, setLoading] = useState(true);
 
-    const pendingAmount = localPayments
-        .filter(p => p.status === 'pending' || p.status === 'overdue')
-        .reduce((sum, p) => sum + p.amount, 0);
+    // Fetch data
+    useEffect(() => {
+        if (user?.id) {
+            loadHistory();
+        }
+    }, [user]);
+
+    const loadHistory = async () => {
+        setLoading(true);
+        try {
+            const data = await paymentService.getStudentHistory(user.id);
+            setHistory(data);
+        } catch (error) {
+            console.error("Failed to load payment history:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Merge obligations and payments for the list
+    const localPayments = React.useMemo(() => {
+        const obs = (history.obligations || []).map(o => ({
+            id: o.id,
+            date: o.rent_month, // or due_date
+            amount: o.amount,
+            status: o.status.toLowerCase(), // pending, paid, partial
+            type: 'Rent Due',
+            method: '---'
+        }));
+
+        const pays = (history.payments || []).map(p => ({
+            id: p.id,
+            date: p.payment_date,
+            amount: p.amount_paid,
+            status: 'paid', // payments are always successful if recorded
+            type: 'Payment',
+            method: p.payment_method
+        }));
+
+        // Filter out paid obligations from visual list if you only want to show history of "Events"
+        // But usually students want to see "Rent for Feb" (Paid).
+        // If an obligation is PAID, it duplicates information with the Payment?
+        // Let's show Payments as the "History" of transactions.
+        // And Obligations as "Dues".
+        // The table columns are: Date, Txn ID, Amount, Method, Status.
+        // This looks like a transaction ledger. 
+        // So we should primarily show PAYMENTS.
+        // But if we want to show "Pending", we must include unpaid obligations.
+
+        const unpaidObs = obs.filter(o => o.status !== 'paid');
+        return [...unpaidObs, ...pays].sort((a, b) => new Date(b.date) - new Date(a.date));
+    }, [history]);
+
+    const pendingAmount = history.outstanding_balance || 0;
 
     const isOverdue = localPayments.some(p => p.status === 'overdue');
-    const nextDueDate = "5th " + new Date().toLocaleString('default', { month: 'long' }); // Mock logic
+    // Mock logic for next due date
+    const nextDueDate = "5th " + new Date().toLocaleString('default', { month: 'long' });
 
     // Countdown logic (Mock)
     const daysLeft = 4; // Mock countdown
 
-    const handlePaymentSuccess = (newPayment) => {
-        // Add new payment to top of list
-        const paymentEntry = {
-            ...newPayment,
-            tenantId: user.id,
-            tenantName: user.name,
-            room: user.roomId,
-            month: new Date().toLocaleString('default', { month: 'long', year: 'numeric' })
-        };
+    const handlePaymentSuccess = async (paymentData) => {
+        // PaymentModal returns data, we need to send to API
+        try {
+            // Find the pending obligation to pay against
+            // For simplicity, pay against the oldest pending obligation
+            // OR PaymentModal should handle the API call? 
+            // If PaymentModal just returns card details, we call API here.
+            // Let's assume PaymentModal handles the UI and returns "success".
+            // User likely wants to pay the TOTAL pending amount.
+            // We need to know WHICH obligation.
+            // Auto-pay logic: Distribute amount across pending obligations?
+            // Backend `record_payment` takes `obligation_id`.
+            // So the modal or this handler needs to select the obligation.
 
-        // Update local state: Add new payment and mark pending as paid (mock logic)
-        // In real app, we'd fetch updated data
-        const updatedPendingRaw = localPayments.map(p => {
-            if (p.status === 'pending' || p.status === 'overdue') {
-                return { ...p, status: 'paid', date: paymentEntry.date, method: paymentEntry.method };
+            // For this iteration, let's assume we find the first pending obligation
+            const pendingOb = history.obligations.find(o => o.status === 'pending' || o.status === 'partial');
+            if (!pendingOb) {
+                alert("No pending dues to pay!");
+                return;
             }
-            return p;
-        });
 
-        // For demo, just prepend the success entry if we want to show strict history
-        // Or better, update the existing pending mock entry if it exists
-        setLocalPayments([paymentEntry, ...updatedPendingRaw.filter(p => p.status !== 'pending' && p.status !== 'overdue')]);
+            await paymentService.recordPayment({
+                obligation_id: pendingOb.id,
+                amount_paid: paymentData.amount || pendingAmount, // Assume full pay
+                payment_method: "UPI", // Mock method from modal?
+                payment_date: new Date().toISOString().split('T')[0]
+            });
+
+            loadHistory();
+            setShowPaymentModal(false);
+        } catch (error) {
+            console.error("Payment failed", error);
+            alert("Payment failed");
+        }
     };
 
     return (
@@ -77,8 +137,8 @@ const StudentPayments = () => {
 
                 {/* Due Amount Card - Dynamic Styling */}
                 <div className={`p-6 rounded-2xl border shadow-sm relative overflow-hidden transition-all ${pendingAmount > 0
-                        ? 'bg-rose-50 border-rose-100'
-                        : 'bg-emerald-50 border-emerald-100'
+                    ? 'bg-rose-50 border-rose-100'
+                    : 'bg-emerald-50 border-emerald-100'
                     }`}>
                     <p className={`text-xs font-bold uppercase tracking-wider mb-2 ${pendingAmount > 0 ? 'text-rose-600' : 'text-emerald-600'
                         }`}>
@@ -115,8 +175,8 @@ const StudentPayments = () => {
                         onClick={() => setShowPaymentModal(true)}
                         disabled={pendingAmount <= 0}
                         className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95 ${pendingAmount > 0
-                                ? 'bg-indigo-500 hover:bg-indigo-400 text-white shadow-indigo-500/30'
-                                : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                            ? 'bg-indigo-500 hover:bg-indigo-400 text-white shadow-indigo-500/30'
+                            : 'bg-slate-800 text-slate-500 cursor-not-allowed'
                             }`}
                     >
                         {pendingAmount > 0 ? (
@@ -187,8 +247,8 @@ const StudentPayments = () => {
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${txn.status === 'paid' || txn.status === 'success' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                                                    txn.status === 'overdue' ? 'bg-rose-50 text-rose-600 border-rose-100' :
-                                                        'bg-amber-50 text-amber-600 border-amber-100'
+                                                txn.status === 'overdue' ? 'bg-rose-50 text-rose-600 border-rose-100' :
+                                                    'bg-amber-50 text-amber-600 border-amber-100'
                                                 }`}>
                                                 {txn.status === 'paid' || txn.status === 'success' ? <CheckCircle2 size={12} /> : <Clock size={12} />}
                                                 {txn.status}

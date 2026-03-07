@@ -1,11 +1,11 @@
 from fastapi import APIRouter, HTTPException, Query, status, Depends
 from typing import List, Optional
-from app.schamas.profile_schema import (
+from app.schemas.profile_schema import (
     ProfileCreate, ProfileUpdate, ProfileAdminUpdate,
     ProfileResponse, RoleEnum
 )
 from app.services import profile_service
-from app.utils.auth import get_current_user, UserContext, require_admin, require_admin_or_warden
+from app.utils.auth import get_current_user, UserContext, require_admin, require_admin_or_owner
 from app.utils.responses import ErrorCode
 from app.utils.logger import get_logger
 
@@ -61,7 +61,7 @@ def create_new_profile(profile: ProfileCreate):
     response_model=dict,
     summary="Get all profiles",
     description="Retrieve all active profiles with optional filtering and pagination",
-    dependencies=[Depends(require_admin_or_warden)]
+    dependencies=[Depends(require_admin_or_owner)]
 )
 def read_all_profiles(
     role: Optional[RoleEnum] = Query(None, description="Filter by role"),
@@ -91,7 +91,7 @@ def read_all_profiles(
     response_model=List[ProfileResponse],
     summary="Get profiles by role",
     description="Retrieve all active profiles with a specific role",
-    dependencies=[Depends(require_admin_or_warden)]
+    dependencies=[Depends(require_admin_or_owner)]
 )
 def read_profiles_by_role(role: RoleEnum):
     """Get all active profiles with a specific role (student, admin, or warden)."""

@@ -1,183 +1,152 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Bed, Users, Clock, TrendingUp, TrendingDown, AlertCircle, ArrowUpRight, ArrowDownRight, Activity } from 'lucide-react';
-import { MOCK_FLOORS } from '../../utils/mockData';
-import { getComplaints, getFloors, getExpenses } from '../../utils/storageUtils';
+import { allocationService, paymentService, expenseService, dashboardService } from '../../api/services';
 
 const OwnerDashboard = () => {
     // State
     const [monthlyData, setMonthlyData] = useState([]);
     const [expenses, setExpenses] = useState([]);
-    const [isMockMode, setIsMockMode] = useState(false);
-    const [recentActivity, setRecentActivity] = useState([
-        { id: 1, action: 'Payment Received', detail: 'John Doe paid ₹8,000 via UPI', time: '2 hours ago', icon: TrendingUp, color: 'text-green-600', bg: 'bg-green-50' },
-        { id: 2, action: 'New Tenant', detail: 'Alice Brown joined Room 201', time: '5 hours ago', icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-        { id: 3, action: 'Maintenance Request', detail: 'Room 102 Fan Repair', time: '1 day ago', icon: AlertCircle, color: 'text-amber-600', bg: 'bg-amber-50' },
-    ]);
+    const [recentActivity, setRecentActivity] = useState([]);
     const [allActivities, setAllActivities] = useState([]);
     const [showFinancialModal, setShowFinancialModal] = useState(false);
     const [showHistoryModal, setShowHistoryModal] = useState(false);
+    const [loading, setLoading] = useState(true);
 
     const [stats, setStats] = useState([
-        { title: 'Total Revenue', value: '₹0', trend: '+12.5%', trendUp: true, icon: TrendingUp },
-        { title: 'Occupancy Rate', value: '0%', trend: '+4.2%', trendUp: true, icon: Users },
-        { title: 'Pending Dues', value: '₹0', trend: '-2.1%', trendUp: false, icon: Clock },
-        { title: 'Total Expenses', value: '₹0', trend: '+1.2%', trendUp: false, icon: TrendingDown },
+        { title: 'Total Revenue', value: '₹0', trend: '0%', trendUp: true, icon: TrendingUp },
+        { title: 'Occupancy Rate', value: '0%', trend: '0%', trendUp: true, icon: Users },
+        { title: 'Pending Dues', value: '₹0', trend: '0%', trendUp: false, icon: Clock },
+        { title: 'Total Expenses', value: '₹0', trend: '0%', trendUp: false, icon: TrendingDown },
     ]);
 
-    // Calculation Logic
-    const calculateStats = (floorsData, currentExpenses) => {
-        let totalRooms = 0, filledRooms = 0, totalIncome = 0, pendingAmount = 0;
+    const updateDashboard = async () => {
+        try {
+            // Fetch real data in parallel
+            const [statsRes, activeAllocations, paymentsRes, expensesRes] = await Promise.all([
+                dashboardService.getStats(),
+                allocationService.getAllActive(), // For activity feed
+                paymentService.getAll({ limit: 10 }), // For activity feed
+                expenseService.getAll() // For charts/modals
+            ]);
 
-        floorsData.forEach(floor => {
-            floor.rooms.forEach(room => {
-                totalRooms++;
-                if (room.tenants.length > 0) {
-                    filledRooms++;
-                    room.tenants.forEach(tenant => {
-                        if (tenant.status === 'Paid') totalIncome += (tenant.rent || 0);
-                        else if (tenant.status === 'Pending') pendingAmount += (tenant.rent || 0);
-                    });
-                }
-            });
-        });
+            const dashboardStats = statsRes.data || {};
+            const payments = paymentsRes.payments || [];
 
-        // Use real expenses or default to empty array
-        const validExpenses = currentExpenses || [];
+            // 4. Process Expenses for Modal/Chart
+            const expenseList = expensesRes.data || [];
+            setExpenses(expenseList);
 
-        // Filter expenses for current month to match Income (which is monthly based on active tenants)
-        const currentMonth = new Date().getMonth();
-        const currentYear = new Date().getFullYear();
+            // Updated Stats from Backend
+            setStats([
+                {
+                    title: 'Total Revenue',
+                    value: `₹${(dashboardStats.revenue || 0).toLocaleString()}`,
+                    trend: '+0%', // Backend doesn't provide trend yet
+                    trendUp: true,
+                    icon: TrendingUp,
+                    color: 'text-emerald-600',
+                    bg: 'bg-emerald-50'
+                },
+                {
+                    title: 'Occupancy Rate',
+                    value: `${dashboardStats.occupancy_rate || 0}%`,
+                    trend: `${dashboardStats.active_tenants || 0} active`,
+                    trendUp: true,
+                    icon: Users,
+                    color: 'text-indigo-600',
+                    bg: 'bg-indigo-50'
+                },
+                {
+                    title: 'Pending Dues',
+                    value: `₹${(dashboardStats.pending_dues || 0).toLocaleString()}`,
+                    trend: '0%',
+                    trendUp: false,
+                    icon: Clock,
+                    color: 'text-rose-600',
+                    bg: 'bg-rose-50'
+                },
+                {
+                    title: 'Net Profit',
+                    value: `₹${(dashboardStats.net_profit || 0).toLocaleString()}`,
+                    trend: '0%',
+                    trendUp: true,
+                    icon: Activity,
+                    color: 'text-violet-600',
+                    bg: 'bg-violet-50',
+                    onClick: () => setShowFinancialModal(true),
+                    cursor: 'cursor-pointer'
+                },
+            ]);
 
-        const monthlyExpenses = validExpenses.filter(exp => {
-            const expDate = new Date(exp.date);
-            const isCurrentMonth = expDate.getMonth() === currentMonth && expDate.getFullYear() === currentYear;
-            const isPaid = exp.status?.toLowerCase() === 'paid';
-            return isCurrentMonth && isPaid;
-        });
+            // 6. Recent Activity
+            const activities = [];
+            const now = new Date();
 
-        const totalExpenses = monthlyExpenses.reduce((sum, exp) => sum + exp.amount, 0);
-        const occupancyRate = totalRooms ? Math.round((filledRooms / totalRooms) * 100) : 0;
-        const netProfit = totalIncome - totalExpenses;
-
-        setStats([
-            { title: 'Total Revenue', value: `₹${totalIncome.toLocaleString()}`, trend: '+12.5%', trendUp: true, icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-            { title: 'Occupancy Rate', value: `${occupancyRate}%`, trend: '+4.2%', trendUp: true, icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-            { title: 'Pending Dues', value: `₹${pendingAmount.toLocaleString()}`, trend: '-2.1%', trendUp: false, icon: Clock, color: 'text-rose-600', bg: 'bg-rose-50' },
-            {
-                title: 'Net Profit',
-                value: `₹${netProfit.toLocaleString()}`,
-                trend: '+8.4%',
-                trendUp: true,
-                icon: Activity,
-                color: 'text-violet-600',
-                bg: 'bg-violet-50',
-                onClick: () => setShowFinancialModal(true),
-                cursor: 'cursor-pointer'
-            },
-        ]);
-
-        // Mock Graph Data Generation (keeps the visual graph working for now)
-        const last6Months = [];
-        for (let i = 5; i >= 0; i--) {
-            const date = new Date();
-            date.setMonth(date.getMonth() - i);
-            const variation = Math.random() * 0.2 + 0.9;
-            const monthIncome = i === 0 ? totalIncome : Math.floor(totalIncome * variation);
-            const monthExpenses = Math.floor(totalExpenses * variation * 0.9);
-
-            last6Months.push({
-                month: date.toLocaleString('default', { month: 'short' }),
-                income: monthIncome,
-                expenses: monthExpenses
-            });
-        }
-        setMonthlyData(last6Months);
-    };
-
-    const fetchRecentActivity = () => {
-        const activities = [];
-
-        // 1. Complaints
-        const complaints = getComplaints();
-        complaints.forEach(c => {
-            if (c.status === 'Pending' || c.status === 'pending') {
+            // Payments
+            payments.slice(0, 5).forEach(p => {
                 activities.push({
-                    id: `comp_${c.id}`,
-                    action: 'Maintenance Request',
-                    detail: `${c.title} - ${c.room}`,
-                    date: new Date(c.date),
-                    type: 'complaint',
-                    icon: AlertCircle,
-                    color: 'text-amber-600',
-                    bg: 'bg-amber-50'
+                    id: `pay_${p.id}`,
+                    action: 'Payment Received',
+                    detail: `${p.student_name} paid ₹${p.amount_paid}`,
+                    date: new Date(p.payment_date),
+                    icon: TrendingUp,
+                    color: 'text-green-600',
+                    bg: 'bg-green-50'
                 });
-            }
-        });
-
-        // 2. Tenants (New Joins)
-        const floors = getFloors();
-        floors.forEach(f => {
-            f.rooms.forEach(r => {
-                r.tenants?.forEach(t => {
+            });
+            // New Tenants (Allocations)
+            (activeAllocations || []).slice(0, 5).forEach(a => {
+                // Check if recent
+                const start = new Date(a.start_date);
+                if ((now - start) < 7 * 24 * 60 * 60 * 1000) { // last 7 days
                     activities.push({
-                        id: `tenant_${t.id}`,
+                        id: `alloc_${a.id}`,
                         action: 'New Tenant',
-                        detail: `${t.name} joined Room ${r.number}`,
-                        date: new Date(t.joinDate),
-                        type: 'tenant',
+                        detail: `New tenant in Room ${a.room?.room_no}`,
+                        date: start,
                         icon: Users,
                         color: 'text-indigo-600',
                         bg: 'bg-indigo-50'
                     });
+                }
+            });
+
+            activities.sort((a, b) => b.date - a.date);
+
+            const formattedActivities = activities.map(act => {
+                const diffTime = Math.abs(new Date() - act.date);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                let timeStr = diffDays <= 1 ? 'Today' : `${diffDays} days ago`;
+                return { ...act, time: timeStr };
+            });
+
+            setRecentActivity(formattedActivities.slice(0, 5));
+            setAllActivities(formattedActivities);
+
+            // Mock Chart Data for now (until we have historical aggregations)
+            const last6Months = [];
+            for (let i = 5; i >= 0; i--) {
+                const date = new Date();
+                date.setMonth(date.getMonth() - i);
+                last6Months.push({
+                    month: date.toLocaleString('default', { month: 'short' }),
+                    income: i === 0 ? (dashboardStats.revenue || 0) : Math.floor(Math.random() * 50000 + 50000),
+                    expenses: i === 0 ? (dashboardStats.expenses || 0) : Math.floor(Math.random() * 20000 + 10000)
                 });
-            });
-        });
+            }
+            setMonthlyData(last6Months);
 
-        // 3. Expenses
-        const expenses = getExpenses();
-        expenses.forEach(e => {
-            activities.push({
-                id: `exp_${e.id}`,
-                action: 'Expense Added',
-                detail: `${e.title} (₹${e.amount})`,
-                date: new Date(e.date),
-                type: 'expense',
-                icon: TrendingDown,
-                color: 'text-rose-600',
-                bg: 'bg-rose-50'
-            });
-        });
-
-        // Sort by date desc
-        activities.sort((a, b) => b.date - a.date);
-
-        // Format for display
-        const formattedActivities = activities.map(act => {
-            const diffTime = Math.abs(new Date() - act.date);
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            let timeStr = diffDays <= 1 ? 'Today' : `${diffDays} days ago`;
-            return { ...act, time: timeStr };
-        });
-
-        setAllActivities(formattedActivities);
-        setRecentActivity(formattedActivities.slice(0, 5));
+        } catch (e) {
+            console.error("Dashboard update failed:", e);
+        } finally {
+            setLoading(false);
+        }
     };
 
     useEffect(() => {
-        const updateDashboard = () => {
-            const realFloors = getFloors();
-            const realExpenses = getExpenses();
-            setExpenses(realExpenses);
-            calculateStats(realFloors, realExpenses);
-            fetchRecentActivity();
-        };
-
         updateDashboard();
-        setIsMockMode(false);
-
-        // Poll for updates every 5 seconds
-        const interval = setInterval(updateDashboard, 5000);
+        const interval = setInterval(updateDashboard, 15000); // Poll every 15s
         return () => clearInterval(interval);
     }, []);
 
@@ -201,6 +170,8 @@ const OwnerDashboard = () => {
         );
     };
 
+    if (loading) return <div className="p-8 text-center text-slate-400">Loading dashboard...</div>;
+
     return (
         <div className="space-y-6 relative">
             <div className="flex items-center justify-between">
@@ -208,11 +179,6 @@ const OwnerDashboard = () => {
                     <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Dashboard Overview</h2>
                     <p className="text-sm text-slate-500">Real-time property insights and performance.</p>
                 </div>
-                {isMockMode && (
-                    <span className="flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-bold border border-slate-200">
-                        <AlertCircle size={14} /> Offline Mode
-                    </span>
-                )}
             </div>
 
             {/* KPI Cards */}
@@ -292,20 +258,24 @@ const OwnerDashboard = () => {
                     <h3 className="font-bold text-slate-900 text-lg mb-1">Recent Activity</h3>
                     <p className="text-sm text-slate-500 mb-6">Latest updates from your property.</p>
                     <div className="flex-1 space-y-6">
-                        {recentActivity.map((activity) => (
-                            <div key={activity.id} className="flex gap-4 group cursor-pointer">
-                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${activity.bg} ${activity.color} group-hover:scale-105 transition-transform`}>
-                                    <activity.icon size={20} className="stroke-[2.5]" />
-                                </div>
-                                <div className="flex-1 pt-1">
-                                    <div className="flex justify-between items-start">
-                                        <p className="text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">{activity.action}</p>
-                                        <span className="text-[10px] text-slate-400 font-medium bg-slate-50 px-2 py-0.5 rounded-full">{activity.time}</span>
+                        {recentActivity.length === 0 ? (
+                            <div className="text-center text-slate-400 text-sm py-4">No recent activity</div>
+                        ) : (
+                            recentActivity.map((activity) => (
+                                <div key={activity.id} className="flex gap-4 group cursor-pointer">
+                                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${activity.bg} ${activity.color} group-hover:scale-105 transition-transform`}>
+                                        <activity.icon size={20} className="stroke-[2.5]" />
                                     </div>
-                                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">{activity.detail}</p>
+                                    <div className="flex-1 pt-1">
+                                        <div className="flex justify-between items-start">
+                                            <p className="text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">{activity.action}</p>
+                                            <span className="text-[10px] text-slate-400 font-medium bg-slate-50 px-2 py-0.5 rounded-full">{activity.time}</span>
+                                        </div>
+                                        <p className="text-xs text-slate-500 mt-1 line-clamp-2">{activity.detail}</p>
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            ))
+                        )}
                     </div>
                     <button
                         onClick={() => setShowHistoryModal(true)}
@@ -325,58 +295,22 @@ const OwnerDashboard = () => {
                             <p className="text-2xl font-bold text-emerald-700 mt-1">
                                 {stats.find(s => s.title === 'Total Revenue')?.value}
                             </p>
-                            <p className="text-xs text-emerald-600 mt-1">Rent Collected</p>
+                            <p className="text-xs text-emerald-600 mt-1">Rent Collected (This Month)</p>
                         </div>
                         <div className="bg-rose-50 p-4 rounded-xl border border-rose-100">
                             <p className="text-rose-600 text-xs font-bold uppercase">Total Expenses</p>
                             <p className="text-2xl font-bold text-rose-700 mt-1">
                                 {`₹${(expenses || [])
-                                    .filter(e => {
-                                        const d = new Date(e.date);
-                                        const now = new Date();
-                                        const isCurrentMonth = d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-                                        const isPaid = e.status?.toLowerCase() === 'paid';
-                                        return isCurrentMonth && isPaid;
-                                    })
                                     .reduce((sum, e) => sum + e.amount, 0).toLocaleString()}`}
                             </p>
-                            <p className="text-xs text-rose-600 mt-1">Paid • Maintenance & Utilities (This Month)</p>
+                            <p className="text-xs text-rose-600 mt-1">Maintenance & Utilities</p>
                         </div>
                         <div className="bg-violet-50 p-4 rounded-xl border border-violet-100">
                             <p className="text-violet-600 text-xs font-bold uppercase">Net Profit</p>
                             <p className="text-2xl font-bold text-violet-700 mt-1">
                                 {stats.find(s => s.title === 'Net Profit')?.value}
                             </p>
-                            <p className="text-xs text-violet-600 mt-1">Income - Expenses (Paid)</p>
-                        </div>
-                    </div>
-
-                    <div>
-                        <h4 className="font-bold text-slate-800 mb-3">Expense Breakdown (Paid)</h4>
-                        <div className="space-y-3">
-                            {(expenses || [])
-                                .filter(e => {
-                                    const d = new Date(e.date);
-                                    const now = new Date();
-                                    const isCurrentMonth = d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-                                    const isPaid = e.status?.toLowerCase() === 'paid';
-                                    return isCurrentMonth && isPaid;
-                                })
-                                .slice(0, 5)
-                                .map(exp => (
-                                    <div key={exp.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                                        <div className="flex items-center gap-3">
-                                            <div className="p-2 bg-white rounded-lg border border-slate-100">
-                                                <TrendingDown size={16} className="text-rose-500" />
-                                            </div>
-                                            <div>
-                                                <p className="font-bold text-sm text-slate-800">{exp.title}</p>
-                                                <p className="text-xs text-slate-500">{exp.category}</p>
-                                            </div>
-                                        </div>
-                                        <span className="font-bold text-rose-600">-₹{exp.amount}</span>
-                                    </div>
-                                ))}
+                            <p className="text-xs text-violet-600 mt-1">Income - Expenses</p>
                         </div>
                     </div>
                 </div>

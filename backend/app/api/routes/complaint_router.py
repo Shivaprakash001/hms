@@ -1,10 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, status, Query
-from app.schamas.complaint_schema import (
-    ComplaintCreate, ComplaintStatusUpdate, ComplaintResponse,
-    ComplaintListResponse, ComplaintStatus, ComplaintCategory
-)
+from app.schemas.complaint_schema import ComplaintCreate, ComplaintResponse, ComplaintListResponse, ComplaintStatusUpdate, ComplaintStatus, ComplaintCategory
 from app.services import complaint_service
-from app.utils.auth import get_current_user, UserContext, require_admin_or_warden
+from app.utils.auth import get_current_user, UserContext, require_admin_or_owner
 from app.utils.responses import ErrorCode
 from typing import List, Optional
 
@@ -82,7 +79,7 @@ def get_complaint_details(
 def update_complaint_status(
     complaint_id: str,
     data: ComplaintStatusUpdate,
-    user: UserContext = Depends(require_admin_or_warden)
+    user: UserContext = Depends(require_admin_or_owner)
 ):
     """
     **Admin/Warden only**: Update status and add remarks to a complaint.

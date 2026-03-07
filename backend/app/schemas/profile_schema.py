@@ -67,6 +67,7 @@ class ProfileResponse(BaseModel):
     address: Optional[str] = None
     emergency_contact: Optional[str] = None
     is_active: bool = True
+    owner_id: Optional[UUID] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
     

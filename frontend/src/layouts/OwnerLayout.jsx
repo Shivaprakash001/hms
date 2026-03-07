@@ -8,26 +8,40 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
-import { getNotifications, markAllNotificationsAsRead } from '../utils/storageUtils';
+import { notificationService } from '../api/services';
 
 
 const OwnerLayout = () => {
-    const { logout } = useAuth();
+    const { user, logout } = useAuth();
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [notifications, setNotifications] = useState([]);
 
     // Poll for notifications
+    const fetchNotifications = async () => {
+        try {
+            const response = await notificationService.getAll();
+            setNotifications(response);
+        } catch (error) {
+            console.error("Failed to fetch notifications:", error);
+        }
+    };
+
     useEffect(() => {
-        const fetchNotifications = () => {
-            setNotifications(getNotifications());
-        };
-
-        fetchNotifications(); // Initial fetch
-        const interval = setInterval(fetchNotifications, 5000); // Poll every 5s
-
+        fetchNotifications();
+        const interval = setInterval(fetchNotifications, 30000); // Poll every 30s
         return () => clearInterval(interval);
     }, []);
+
+    const handleMarkAllRead = async () => {
+        try {
+            const unread = notifications.filter(n => !n.is_read);
+            await Promise.all(unread.map(n => notificationService.markAsRead(n.id)));
+            fetchNotifications();
+        } catch (error) {
+            console.error("Failed to mark all read:", error);
+        }
+    };
 
     // Dropdown States
     const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -66,7 +80,7 @@ const OwnerLayout = () => {
         { name: 'Expenses', icon: Receipt, path: '/owner/expenses' },
     ];
 
-    const unreadCount = notifications.filter(n => !n.read).length;
+    const unreadCount = notifications.filter(n => !n.is_read).length;
 
     const getNotificationIcon = (type) => {
         switch (type) {
@@ -146,8 +160,8 @@ const OwnerLayout = () => {
                             </div>
                             {sidebarOpen && (
                                 <div className="text-left overflow-hidden flex-1">
-                                    <p className="text-sm font-bold text-white truncate">Valurothu</p>
-                                    <p className="text-xs font-medium text-slate-400 truncate">Owner</p>
+                                    <p className="text-sm font-bold text-white truncate">{user?.name || 'User'}</p>
+                                    <p className="text-xs font-medium text-slate-400 truncate capitalize">{user?.role || 'Staff'}</p>
                                 </div>
                             )}
                             {sidebarOpen && <ChevronDown size={14} className={`text-slate-500 transition-transform ${sidebarAccountOpen ? 'rotate-180' : ''}`} />}
@@ -324,11 +338,11 @@ const OwnerLayout = () => {
                                 className="hidden sm:flex items-center gap-3 p-1.5 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-200 transition-all group"
                             >
                                 <div className="text-end leading-tight">
-                                    <p className="text-xs font-medium text-slate-500">Owner</p>
-                                    <p className="text-sm font-bold text-slate-900 group-hover:text-indigo-700 transition-colors">Valurothu</p>
+                                    <p className="text-xs font-medium text-slate-500 capitalize">{user?.role || 'Staff'}</p>
+                                    <p className="text-sm font-bold text-slate-900 group-hover:text-indigo-700 transition-colors">{user?.name?.split(' ')[0] || 'User'}</p>
                                 </div>
                                 <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-sm shadow-sm ring-2 ring-white">
-                                    V
+                                    {user?.name?.[0] || <User size={18} />}
                                 </div>
                                 <ChevronDown size={14} className={`text-slate-400 transition-transform ${profileMenuOpen ? 'rotate-180' : ''}`} />
                             </button>
@@ -343,8 +357,8 @@ const OwnerLayout = () => {
                                         className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden z-50 origin-top-right"
                                     >
                                         <div className="p-4 border-b border-slate-100 bg-slate-50/50">
-                                            <p className="text-sm font-bold text-slate-900">Valurothu Properties</p>
-                                            <p className="text-xs text-slate-500">owner@valurothu.com</p>
+                                            <p className="text-sm font-bold text-slate-900">{user?.name || 'Account'}</p>
+                                            <p className="text-xs text-slate-500">{user?.email || ''}</p>
                                         </div>
                                         <div className="p-1.5">
                                             <button className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-lg transition-colors">

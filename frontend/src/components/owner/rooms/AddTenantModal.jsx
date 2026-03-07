@@ -1,9 +1,4 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, User, Phone, CreditCard, Calendar, CheckCircle2 } from 'lucide-react';
-import { addTenantToRoom } from '../../../utils/storageUtils';
-
-const AddTenantModal = ({ selectedRoom, onClose, onSuccess, isMockMode, API_BASE_URL, floors, setFloors, setSelectedRoom }) => {
+const AddTenantModal = ({ selectedRoom, onClose, onAdd }) => {
     const [formData, setFormData] = useState({
         name: '',
         phone: '',
@@ -28,12 +23,7 @@ const AddTenantModal = ({ selectedRoom, onClose, onSuccess, isMockMode, API_BASE
                 status: 'Paid'
             };
 
-            addTenantToRoom(selectedRoom.id, newTenant);
-
-            // Wait a bit for effect
-            await new Promise(resolve => setTimeout(resolve, 500));
-
-            await onSuccess(); // Trigger parent refresh
+            await onAdd(selectedRoom, newTenant);
 
             onClose();
         } catch (err) {

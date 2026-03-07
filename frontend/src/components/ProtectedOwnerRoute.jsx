@@ -9,7 +9,7 @@ const ProtectedOwnerRoute = () => {
         return <div>Loading...</div>; // Or a proper loading spinner
     }
 
-    if (!user || user.role !== 'owner') {
+    if (!user || !['owner', 'admin'].includes(user.role?.toLowerCase())) {
         return <Navigate to="/" replace />;
     }
 

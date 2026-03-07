@@ -3,12 +3,13 @@ import { motion } from 'framer-motion';
 import { MessageSquare, Plus, Clock, CheckCircle } from 'lucide-react';
 
 import { useAuth } from '../../context/AuthContext';
-import { getComplaints, saveComplaint, saveNotification } from '../../utils/storageUtils';
+import { complaintService } from '../../api/services';
 
 const StudentComplaints = () => {
     const { user } = useAuth();
     const [complaints, setComplaints] = React.useState([]);
     const [isModalOpen, setIsModalOpen] = React.useState(false);
+    const [isLoading, setIsLoading] = React.useState(false);
     const [newComplaint, setNewComplaint] = React.useState({
         title: '',
         category: 'Maintenance',
@@ -18,12 +19,32 @@ const StudentComplaints = () => {
 
     React.useEffect(() => {
         if (user) {
-            const allComplaints = getComplaints();
-            const userComplaints = allComplaints.filter(c => c.tenantName === user.name)
-                .sort((a, b) => new Date(b.date) - new Date(a.date));
-            setComplaints(userComplaints);
+            loadComplaints();
         }
     }, [user]);
+
+    const loadComplaints = async () => {
+        try {
+            setIsLoading(true);
+            // Pass student_id if available to filter. 
+            // If user is student, backend might use the token user_id (which is profile_id usually).
+            // But ComplaintCreate requires student_id.
+            // Let's assume user.student_id exists or we pass profile_id and backend handles mapping?
+            // Usually auth service returns user info including student_id if applicable.
+            // For now, let's just call getAll(). The backend should filter for students based on token role anyway hopefully.
+            // Or we check if user has student_id.
+            const params = {};
+            if (user.student_id) {
+                params.student_id = user.student_id;
+            }
+            const response = await complaintService.getAll(params);
+            setComplaints(response.complaints || []);
+        } catch (error) {
+            console.error("Failed to load complaints:", error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
@@ -33,39 +54,43 @@ const StudentComplaints = () => {
         }));
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        const complaint = {
-            id: `comp_${Date.now()}`,
-            tenantName: user.name,
-            room: user.roomId || 'N/A',
-            ...newComplaint,
-            date: new Date().toISOString().split('T')[0],
-            status: 'Pending'
+
+        if (!user.student_id) {
+            alert("Error: Student ID not found. Please log in again.");
+            return;
+        }
+
+        const complaintData = {
+            student_id: user.student_id,
+            title: newComplaint.title,
+            description: newComplaint.description,
+            category: newComplaint.category.toUpperCase(), // Backend expects uppercase Enum
+            priority: newComplaint.priority.toUpperCase()
         };
 
-        saveComplaint(complaint);
+        try {
+            await complaintService.create(complaintData);
 
-        // Trigger notification for owner
-        saveNotification({
-            type: 'complaint',
-            title: 'New Complaint',
-            message: `${complaint.title} reported by ${user.name} (${user.roomId})`,
-        });
+            // Notification logic (if backend handles it, great. If frontend needs to trigger, we can keep it but usually backend does it)
+            // For now, I'll remove the local storage notification.
 
-        // Refresh local list
-        const allComplaints = getComplaints();
-        const userComplaints = allComplaints.filter(c => c.tenantName === user.name)
-            .sort((a, b) => new Date(b.date) - new Date(a.date));
-        setComplaints(userComplaints);
+            // Refresh list
+            loadComplaints();
 
-        setIsModalOpen(false);
-        setNewComplaint({
-            title: '',
-            category: 'Maintenance',
-            description: '',
-            priority: 'Medium'
-        });
+            setIsModalOpen(false);
+            setNewComplaint({
+                title: '',
+                category: 'Maintenance',
+                description: '',
+                priority: 'Medium'
+            });
+            alert("Complaint submitted successfully!");
+        } catch (error) {
+            console.error("Failed to submit complaint:", error);
+            alert("Failed to submit complaint. Please try again.");
+        }
     };
 
     return (

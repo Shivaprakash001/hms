@@ -1,10 +1,10 @@
 from fastapi import APIRouter, HTTPException, Depends, status, Header
-from app.schamas.room_allocation_schema import (
+from app.schemas.room_allocation_schema import (
     RoomAllocationCreate, RoomAllocationEnd, RoomAllocationResponse,
     RoomAllocationShift, RoomOccupantsResponse
 )
 from app.services import room_allocation_service
-from app.utils.auth import get_current_user, UserContext, require_admin_or_warden
+from app.utils.auth import get_current_user, UserContext, require_admin_or_owner
 from app.utils.responses import ErrorCode
 from typing import List, Optional
 
@@ -37,7 +37,7 @@ def _handle_service_response(result: dict, success_status: int = status.HTTP_200
     response_model=dict, # Returns detailed success summary
     status_code=status.HTTP_201_CREATED,
     summary="Allocate a room to a student",
-    dependencies=[Depends(require_admin_or_warden)]
+    dependencies=[Depends(require_admin_or_owner)]
 )
 def create_allocation(
     data: RoomAllocationCreate,
@@ -66,7 +66,7 @@ def create_allocation(
     "/{allocation_id}/end",
     response_model=RoomAllocationResponse,
     summary="End an active room allocation",
-    dependencies=[Depends(require_admin_or_warden)]
+    dependencies=[Depends(require_admin_or_owner)]
 )
 def end_allocation(
     allocation_id: str,
@@ -90,7 +90,7 @@ def end_allocation(
     "/shift",
     response_model=dict, # Returns new allocation info
     summary="Shift a student to a new room",
-    dependencies=[Depends(require_admin_or_warden)]
+    dependencies=[Depends(require_admin_or_owner)]
 )
 def shift_student(
     data: RoomAllocationShift,
@@ -144,7 +144,7 @@ def get_student_history(
 )
 def get_occupants(
     room_id: str,
-    user: UserContext = Depends(require_admin_or_warden)
+    user: UserContext = Depends(require_admin_or_owner)
 ):
     """
     Get detailed occupancy info for a room.
@@ -152,4 +152,20 @@ def get_occupants(
     **Authorization:** Admin or Warden only.
     """
     result = room_allocation_service.get_room_occupants(room_id)
+    return _handle_service_response(result)
+@router.get(
+    "/active",
+    response_model=List[RoomAllocationResponse],
+    summary="Get all active allocations with student and room info",
+    dependencies=[Depends(require_admin_or_owner)]
+)
+def get_active_allocations(
+    user: UserContext = Depends(require_admin_or_owner)
+):
+    """
+    Get list of all currently active room assignments.
+    
+    **Authorization:** Admin or Warden only.
+    """
+    result = room_allocation_service.get_active_allocations(user.user_id)
     return _handle_service_response(result)

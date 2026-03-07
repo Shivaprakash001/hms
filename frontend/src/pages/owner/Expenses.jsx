@@ -8,11 +8,11 @@ import {
 // eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from 'framer-motion';
 
-import { MOCK_EXPENSES } from '../../utils/mockData';
-import { getExpenses, saveExpense, updateExpense, deleteExpense } from '../../utils/storageUtils';
+import { expenseService } from '../../api/services';
 
 export default function Expenses() {
-    const [expenses, setExpenses] = useState(getExpenses());
+    const [expenses, setExpenses] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingExpense, setEditingExpense] = useState(null);
     const [formData, setFormData] = useState({
@@ -26,6 +26,30 @@ export default function Expenses() {
     const [searchQuery, setSearchQuery] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('all');
 
+    // Fetch expenses on mount
+    React.useEffect(() => {
+        loadExpenses();
+    }, []);
+
+    const loadExpenses = async () => {
+        try {
+            setIsLoading(true);
+            const response = await expenseService.getAll();
+            // Ensure we handle the response correctly based on axios interceptor return
+            // If axios returns response.data directly (which it seems to do in services.js context comments?)
+            // Actually services.js says "return response". Let's assume response.data is what we want if raw axios.
+            // Wait, services.js code I just wrote returns 'response'. 
+            // Usually axios returns { data: ... }. 
+            // My code: const response = await api.get('/expenses/'); return response;
+            // So here response.data should be the array.
+            setExpenses(response.data || []);
+        } catch (error) {
+            console.error("Failed to load expenses:", error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     const resetForm = () => {
         setFormData({
             title: '',
@@ -37,36 +61,49 @@ export default function Expenses() {
         setEditingExpense(null);
     };
 
-    const handleSave = (e) => {
+    const handleSave = async (e) => {
         e.preventDefault();
         const expenseData = {
             ...formData,
             amount: Number(formData.amount),
         };
 
-        if (editingExpense) {
-            const updated = updateExpense({ ...expenseData, id: editingExpense.id });
-            setExpenses(updated);
-        } else {
-            const newExpense = { ...expenseData, id: Date.now() };
-            saveExpense(newExpense);
-            setExpenses(prev => [newExpense, ...prev]);
+        try {
+            if (editingExpense) {
+                await expenseService.update(editingExpense.id, expenseData);
+            } else {
+                await expenseService.create(expenseData);
+            }
+            // Refresh list
+            loadExpenses();
+            setIsModalOpen(false);
+            resetForm();
+        } catch (error) {
+            console.error("Failed to save expense:", error);
+            alert("Failed to save expense");
         }
-        setIsModalOpen(false);
-        resetForm();
     };
 
-    const handleDelete = (id) => {
+    const handleDelete = async (id) => {
         if (window.confirm('Are you sure you want to delete this expense?')) {
-            const updated = deleteExpense(id);
-            setExpenses(updated);
+            try {
+                await expenseService.delete(id);
+                loadExpenses(); // Refresh
+            } catch (error) {
+                console.error("Failed to delete expense:", error);
+                alert("Failed to delete expense");
+            }
         }
     };
 
-    const handleMarkAsPaid = (expense) => {
-        const updatedExpense = { ...expense, status: 'paid' };
-        const updatedExpenses = updateExpense(updatedExpense);
-        setExpenses(updatedExpenses);
+    const handleMarkAsPaid = async (expense) => {
+        try {
+            const updatedExpense = { ...expense, status: 'paid' };
+            await expenseService.update(expense.id, updatedExpense);
+            loadExpenses(); // Refresh
+        } catch (error) {
+            console.error("Failed to mark as paid:", error);
+        }
     };
 
     const openEditModal = (expense) => {

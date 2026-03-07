@@ -3,14 +3,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Filter, Calendar, Download, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-// Mock Data
-import { MOCK_PAYMENTS } from '../../utils/mockData';
 
 // Components
 import PaymentStatsCard from '../../components/owner/payments/PaymentStatsCard';
 import PaymentTable from '../../components/owner/payments/PaymentTable';
 import PaymentDetailsDrawer from '../../components/owner/payments/PaymentDetailsDrawer';
 import TenantHistoryModal from '../../components/owner/payments/TenantHistoryModal';
+import { paymentService } from '../../api/services';
 
 const Payments = () => {
     const [payments, setPayments] = useState([]);
@@ -23,12 +22,33 @@ const Payments = () => {
 
     // Initial Data Load
     useEffect(() => {
-        // Simulate API call
-        setTimeout(() => {
-            setPayments(MOCK_PAYMENTS);
-            setIsLoading(false);
-        }, 800);
+        loadPayments();
     }, []);
+
+    const loadPayments = async () => {
+        setIsLoading(true);
+        try {
+            // Using getAllDues to show all obligations (paid and pending) which acts as the ledger
+            const data = await paymentService.getAllDues();
+            // Map backend data to frontend model
+            // Backend: obligation_id, student_name, room_no, rent_month, amount, status, outstanding
+            const formatted = data.map(item => ({
+                id: item.obligation_id,
+                tenantName: item.student_name,
+                room: item.room_no,
+                type: 'Rent', // Defaulting to Rent as it's rent obligations
+                amount: item.amount,
+                status: item.status.toLowerCase(), // Backend is uppercase
+                date: item.rent_month,
+                method: 'Online' // defaulting, dues report implies obligation
+            }));
+            setPayments(formatted);
+        } catch (error) {
+            console.error("Failed to load payments:", error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     // Derived State: filtered payments
     const filteredPayments = useMemo(() => {
@@ -36,7 +56,9 @@ const Payments = () => {
             const matchesSearch = payment.tenantName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 payment.room.toString().includes(searchTerm);
             const matchesStatus = statusFilter === 'all' || payment.status === statusFilter;
-            const matchesMonth = monthFilter === 'all' || payment.month === monthFilter;
+            // Month filter logic needs to be robust for date strings
+            // payment.date is YYYY-MM-DD
+            const matchesMonth = monthFilter === 'all' || payment.date.includes(monthFilter);
 
             return matchesSearch && matchesStatus && matchesMonth;
         });
@@ -49,7 +71,7 @@ const Payments = () => {
             .reduce((acc, curr) => acc + curr.amount, 0);
 
         const totalPending = payments
-            .filter(p => p.status === 'pending' || p.status === 'overdue')
+            .filter(p => p.status === 'pending' || p.status === 'partial')
             .reduce((acc, curr) => acc + curr.amount, 0);
 
         const uniqueTenants = new Set(payments.map(p => p.tenantName)).size;
@@ -58,15 +80,29 @@ const Payments = () => {
     }, [payments]);
 
     // Handlers
-    const handleMarkAsPaid = (paymentId) => {
-        const updatedPayments = payments.map(p =>
-            p.id === paymentId ? { ...p, status: 'paid', date: new Date().toISOString().split('T')[0], method: 'Manual' } : p
-        );
-        setPayments(updatedPayments);
+    const handleMarkAsPaid = async (paymentId) => {
+        try {
+            // Check if it's already paid
+            const payment = payments.find(p => p.id === paymentId);
+            if (payment && payment.status === 'paid') return;
 
-        // Update selected payment if open
-        if (selectedPayment && selectedPayment.id === paymentId) {
-            setSelectedPayment({ ...selectedPayment, status: 'paid', date: new Date().toISOString().split('T')[0], method: 'Manual' });
+            // In a real scenario, we'd open a modal to enter amount and method
+            // For now, let's auto-record full amount as CASH
+            await paymentService.recordPayment({
+                obligation_id: paymentId,
+                amount_paid: payment.amount,
+                payment_method: "CASH",
+                payment_date: new Date().toISOString().split('T')[0]
+            });
+
+            loadPayments();
+            if (selectedPayment) {
+                // Close or update
+                setSelectedPayment(null);
+            }
+        } catch (error) {
+            console.error("Failed to mark as paid:", error);
+            alert("Failed to record payment");
         }
     };
 

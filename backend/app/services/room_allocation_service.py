@@ -279,3 +279,28 @@ def handle_student_left(student_id: str, **kwargs):
             
     except Exception as e:
         logger.error(f"Error in handle_student_left hook: {e}")
+
+def get_active_allocations(user_id: str) -> Dict[str, Any]:
+    """Get all active room allocations with student and room details."""
+    try:
+        # Join room_allocations with students -> profiles AND rooms
+        # Supabase syntax for nested joins: students(id, profiles(name)), rooms(room_no)
+        res = supabase.table("room_allocations")\
+            .select("*, students(id, profiles(name)), rooms(room_no, capacity, id)")\
+            .eq("owner_id", user_id)\
+            .is_("end_date", "null")\
+            .execute()
+        
+        data = []
+        for item in res.data:
+            # Map Supabase structure to Schema structure
+            if "students" in item:
+                item["student"] = item.pop("students")
+            if "rooms" in item:
+                item["room"] = item.pop("rooms")
+            data.append(item)
+            
+        return ServiceResponse.success(data)
+    except Exception as e:
+        logger.exception(f"Error fetching active allocations: {e}")
+        return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, str(e))

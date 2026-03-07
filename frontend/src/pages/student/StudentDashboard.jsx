@@ -2,26 +2,44 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Home, CreditCard, Clock, Bell, ArrowUpRight, BedDouble, Calendar, AlertCircle, User } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { MOCK_PAYMENTS } from '../../utils/mockData';
+import { paymentService } from '../../api/services';
 
 const StudentDashboard = () => {
     const { user } = useAuth();
 
+    const [dues, setDues] = React.useState([]);
+    const [isLoading, setIsLoading] = React.useState(true);
+
+    React.useEffect(() => {
+        const fetchDues = async () => {
+            if (!user?.student_id) return;
+            try {
+                const response = await paymentService.getStudentHistory(user.student_id);
+                setDues(response || []);
+            } catch (error) {
+                console.error("Failed to fetch dues:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchDues();
+    }, [user]);
+
     // Calculate dues
-    const pendingDues = MOCK_PAYMENTS
-        .filter(p => p.tenantId === user?.id && (p.status === 'pending' || p.status === 'overdue'))
+    const pendingDues = dues
+        .filter(p => p.status === 'pending' || p.status === 'overdue')
         .reduce((sum, p) => sum + p.amount, 0);
 
     // Get last payment date
-    const lastPayment = MOCK_PAYMENTS
-        .filter(p => p.tenantId === user?.id && p.status === 'paid')
+    const lastPayment = dues
+        .filter(p => p.status === 'paid')
         .sort((a, b) => new Date(b.date) - new Date(a.date))[0]?.date || 'N/A';
 
     const student = {
         name: user?.name,
         room: user?.roomId,
-        floor: `Floor ${user?.floorId}`,
-        rent: user?.rent,
+        floor: user?.floorId ? `Floor ${user.floorId}` : 'Unassigned',
+        rent: user?.rent || 0,
         due: pendingDues,
         lastPayment: lastPayment
     };

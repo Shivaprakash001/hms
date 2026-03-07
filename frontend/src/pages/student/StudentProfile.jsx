@@ -8,55 +8,67 @@ import { useAuth } from '../../context/AuthContext';
 const StudentProfile = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
+    const [profile, setProfile] = useState(null);
+    const [studentInfo, setStudentInfo] = useState(null);
     const [isEditing, setIsEditing] = useState(false);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [saveLoading, setSaveLoading] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
 
     // Local State for Form Data
     const [formData, setFormData] = useState({
-        name: user?.name || 'Student Name',
-        email: user?.email || 'student@example.com',
-        phone: user?.phone || '+91 98765 43210',
-        dob: '2002-05-15',
-        address: '123, Main Street, CityName, State - 500001'
+        name: '',
+        email: '',
+        phone: '',
+        dob: '',
+        address: ''
     });
 
+    React.useEffect(() => {
+        const fetchData = async () => {
+            if (!user?.id) return;
+            try {
+                const [profData, studData] = await Promise.all([
+                    profileService.get(user.id),
+                    studentService.getByProfileId(user.id)
+                ]);
+                setProfile(profData);
+                setStudentInfo(studData);
+                setFormData({
+                    name: profData.name || '',
+                    email: profData.email || '',
+                    phone: profData.phone || '',
+                    dob: profData.dob || '',
+                    address: profData.address || ''
+                });
+            } catch (error) {
+                console.error("Failed to fetch profile data:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchData();
+    }, [user]);
+
     const handleSave = async () => {
-        setLoading(true);
-        // Simulate API call
-        setTimeout(() => {
-            setLoading(false);
+        setSaveLoading(true);
+        try {
+            const updated = await profileService.update(user.id, formData);
+            setProfile(updated);
             setIsEditing(false);
             setShowSuccess(true);
             setTimeout(() => setShowSuccess(false), 3000);
-        }, 1500);
+        } catch (error) {
+            console.error("Failed to update profile:", error);
+            alert("Failed to update profile");
+        } finally {
+            setSaveLoading(false);
+        }
     };
 
-    const InfoField = ({ label, value, icon: Icon, isEditable, onChange, type = "text" }) => (
-        <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide ml-1">{label}</label>
-            {isEditable ? (
-                <div className="relative flex items-center">
-                    <div className="absolute left-3 text-slate-400">
-                        <Icon size={16} />
-                    </div>
-                    <input
-                        type={type}
-                        value={value}
-                        onChange={onChange}
-                        className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all text-sm font-medium text-slate-900"
-                    />
-                </div>
-            ) : (
-                <div className="flex items-center gap-3 p-2 text-slate-700">
-                    <div className="text-slate-400">
-                        <Icon size={18} />
-                    </div>
-                    <span className="font-medium">{value}</span>
-                </div>
-            )}
-        </div>
-    );
+
+
+    if (loading) return <div className="flex items-center justify-center min-h-[400px]">Loading profile...</div>;
 
     return (
         <div className="max-w-6xl mx-auto pb-20 animate-fade-in-up">
@@ -130,8 +142,8 @@ const StudentProfile = () => {
                                         disabled={loading}
                                         className="px-4 py-1.5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 flex items-center gap-1.5 transition-colors shadow-sm"
                                     >
-                                        {loading ? 'Saving...' : 'Save'}
-                                        {!loading && <Save size={14} />}
+                                        {saveLoading ? 'Saving...' : 'Save'}
+                                        {!saveLoading && <Save size={14} />}
                                     </button>
                                 </div>
                             ) : (
@@ -230,15 +242,15 @@ const StudentProfile = () => {
                         <div className="space-y-4">
                             <div className="flex justify-between items-center bg-slate-50/50 p-3 rounded-lg border border-slate-100">
                                 <span className="text-slate-500 text-sm font-medium">Room No.</span>
-                                <span className="text-lg font-bold text-slate-800">{user?.roomId || '105'}</span>
+                                <span className="text-lg font-bold text-slate-800">{studentInfo?.room_no || 'Unassigned'}</span>
                             </div>
                             <div className="flex justify-between items-center bg-slate-50/50 p-3 rounded-lg border border-slate-100">
                                 <span className="text-slate-500 text-sm font-medium">Floor</span>
-                                <span className="text-slate-800 font-semibold">{user?.floorId || '1'}st Floor</span>
+                                <span className="text-slate-800 font-semibold">{studentInfo?.floor_id ? `Floor ${studentInfo.floor_id}` : 'N/A'}</span>
                             </div>
                             <div className="flex justify-between items-center bg-slate-50/50 p-3 rounded-lg border border-slate-100">
                                 <span className="text-slate-500 text-sm font-medium">Joined</span>
-                                <span className="text-slate-800 font-semibold">{user?.joinDate || 'Jan 15, 2024'}</span>
+                                <span className="text-slate-800 font-semibold">{studentInfo?.joined_on || 'N/A'}</span>
                             </div>
                         </div>
                     </div>
@@ -281,7 +293,7 @@ const StudentProfile = () => {
                             <button className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-indigo-50 hover:text-indigo-600 text-slate-700 transition-colors group border border-slate-100 hover:border-indigo-100">
                                 <div className="flex items-center gap-3">
                                     <PhoneCall size={18} className="text-slate-400 group-hover:text-indigo-500" />
-                                    <span className="font-semibold text-sm">Contact Warden</span>
+                                    <span className="font-semibold text-sm">Contact Owner</span>
                                 </div>
                                 <div className="text-slate-300 group-hover:text-indigo-400">→</div>
                             </button>
@@ -293,5 +305,31 @@ const StudentProfile = () => {
         </div>
     );
 };
+
+const InfoField = ({ label, value, icon: Icon, isEditable, onChange, type = "text" }) => (
+    <div className="space-y-1.5">
+        <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide ml-1">{label}</label>
+        {isEditable ? (
+            <div className="relative flex items-center">
+                <div className="absolute left-3 text-slate-400">
+                    <Icon size={16} />
+                </div>
+                <input
+                    type={type}
+                    value={value}
+                    onChange={onChange}
+                    className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all text-sm font-medium text-slate-900"
+                />
+            </div>
+        ) : (
+            <div className="flex items-center gap-3 p-2 text-slate-700">
+                <div className="text-slate-400">
+                    <Icon size={18} />
+                </div>
+                <span className="font-medium">{value}</span>
+            </div>
+        )}
+    </div>
+);
 
 export default StudentProfile;

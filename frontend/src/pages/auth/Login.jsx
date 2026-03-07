@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { User, Lock, Eye, EyeOff, Loader2, KeyRound, Mail, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
 const GoogleIcon = () => (
@@ -57,13 +57,14 @@ const Login = () => {
         setError('');
         try {
             const user = await login(email, password);
-            if (user.role === 'owner') {
+            if (user.role === 'owner' || user.role === 'admin') {
                 navigate('/owner/dashboard');
             } else if (user.role === 'student') {
                 navigate('/student/dashboard');
             }
         } catch (err) {
-            setError('Invalid credentials');
+            console.error("Login error:", err);
+            setError(err.message || 'Login failed');
         } finally {
             setIsLoading(false);
         }
@@ -224,9 +225,17 @@ const Login = () => {
                     </motion.button>
 
                     {/* Footer Links */}
-                    <div className="mt-8 pt-6 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400 font-bold">
-                        <span>&copy; 2026 Trishul</span>
-                        <a href="#" className="hover:text-indigo-600 transition-colors">Privacy</a>
+                    <div className="mt-8 pt-6 border-t border-slate-100 flex flex-col gap-4">
+                        <div className="flex items-center justify-center text-sm text-slate-500 font-medium">
+                            Don't have an account?{' '}
+                            <Link to="/register" className="ml-1 text-indigo-600 hover:text-indigo-700 font-bold transition-colors">
+                                Create Account
+                            </Link>
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-slate-400 font-bold">
+                            <span>&copy; 2026 Trishul</span>
+                            <a href="#" className="hover:text-indigo-600 transition-colors">Privacy</a>
+                        </div>
                     </div>
                 </div>
             </motion.div>

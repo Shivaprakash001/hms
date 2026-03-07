@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, status
-from app.schamas.auth_schema import LoginRequest, TokenResponse
+from app.schemas.auth_schema import LoginRequest, TokenResponse, RegisterRequest
 from app.services import auth_service
 from app.utils.auth import get_current_user, UserContext
 from app.utils.responses import ErrorCode
@@ -41,3 +41,44 @@ def get_me(user: UserContext = Depends(get_current_user)):
         "is_warden": user.is_warden(),
         "is_student": user.is_student()
     }
+@router.post("/register", response_model=dict, summary="Register a new Property Owner")
+def register(data: RegisterRequest):
+    """
+    Register a new property owner (Admin).
+    Students/Tenants must be invited by an owner and cannot register themselves publicly.
+    """
+    # Force role to admin regardless of input
+    reg_data = data.model_dump()
+    reg_data["role"] = "admin" 
+    
+    result = auth_service.register_user(reg_data)
+    
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.get("error")
+        )
+        
+    return result.get("data")
+
+@router.post("/change-password", summary="Change user password")
+def change_password(
+    data: PasswordChangeRequest,
+    user: UserContext = Depends(get_current_user)
+):
+    """
+    Update password for the currently authenticated user.
+    """
+    result = auth_service.change_password(
+        str(user.user_id),
+        data.old_password,
+        data.new_password
+    )
+    
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.get("error")
+        )
+        
+    return result.get("data")

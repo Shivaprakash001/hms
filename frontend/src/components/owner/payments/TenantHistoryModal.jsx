@@ -1,15 +1,29 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Calendar, CheckCircle, Clock, AlertCircle, Download } from 'lucide-react';
-import { MOCK_PAYMENTS } from '../../../utils/mockData';
+import { paymentService } from '../../../api/services';
 
 const TenantHistoryModal = ({ isOpen, onClose, tenantId, tenantName }) => {
-    if (!isOpen) return null;
+    const [history, setHistory] = React.useState([]);
+    const [isLoading, setIsLoading] = React.useState(true);
 
-    // Filter payments for this tenant
-    const history = MOCK_PAYMENTS
-        .filter(p => p.tenantName === tenantName || p.tenantId === tenantId)
-        .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+    React.useEffect(() => {
+        const fetchHistory = async () => {
+            if (!isOpen || !tenantId) return;
+            setIsLoading(true);
+            try {
+                const data = await paymentService.getStudentHistory(tenantId);
+                setHistory(data || []);
+            } catch (error) {
+                console.error("Failed to fetch tenant history:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchHistory();
+    }, [isOpen, tenantId]);
+
+    if (!isOpen) return null;
 
     return (
         <AnimatePresence>
@@ -61,7 +75,7 @@ const TenantHistoryModal = ({ isOpen, onClose, tenantId, tenantName }) => {
                                             >
                                                 <div className="flex items-start gap-4">
                                                     <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${payment.status === 'paid' ? 'bg-emerald-100 text-emerald-600' :
-                                                            payment.status === 'overdue' ? 'bg-rose-100 text-rose-600' : 'bg-amber-100 text-amber-600'
+                                                        payment.status === 'overdue' ? 'bg-rose-100 text-rose-600' : 'bg-amber-100 text-amber-600'
                                                         }`}>
                                                         <DollarSignIcon status={payment.status} />
                                                     </div>

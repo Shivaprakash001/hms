@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ArrowRightLeft, Home, Users, CheckCircle2, Building2 } from 'lucide-react';
-import { removeTenant, addTenantToRoom } from '../../../utils/storageUtils';
 
-const ShiftTenantModal = ({ selectedTenant, selectedRoom, floors, onClose, onSuccess, isMockMode, API_BASE_URL, setFloors, setSelectedRoom }) => {
+const ShiftTenantModal = ({ selectedTenant, selectedRoom, floors, onClose, onShift }) => {
     const [targetRoomNum, setTargetRoomNum] = useState('');
     const [shifting, setShifting] = useState(false);
 
+    // Filter available rooms (must have capacity > occupied)
     const availableRooms = floors.flatMap(floor =>
-        floor.rooms.filter(r => r.occupied < r.capacity && r.id !== selectedRoom?.id)
+        floor.rooms.filter(r => r.currentOccupancy < r.capacity && r.id !== selectedRoom?.id)
     );
 
     const handleShift = async () => {
@@ -16,30 +16,16 @@ const ShiftTenantModal = ({ selectedTenant, selectedRoom, floors, onClose, onSuc
 
         setShifting(true);
         try {
-            const targetRoomObj = availableRooms.find(r => r.number === targetRoomNum);
+            // Find target room object
+            // Note: ManageRooms passes 'floors' where rooms have 'room_no'
+            const targetRoomObj = availableRooms.find(r => r.room_no === targetRoomNum);
+
             if (!targetRoomObj) {
                 throw new Error('Selected target room not found');
             }
 
-            // Simulate shifting tenant (Mock) -> Real implementation
-
-            // 1. Remove from current room
-            removeTenant(selectedTenant.id);
-
-            // 2. Add to new room
-            // We need to fetch the target room ID more reliably if we only have number
-            // But since 'availableRooms' contains the full room object with ID, we can use it.
-            if (!targetRoomObj.id) throw new Error("Target room ID missing");
-
-            const movedTenant = { ...selectedTenant, status: 'Paid' }; // Reset status or keep as is? Keeping 'Paid' for safety or maybe carry over.
-            // Let's carry over but default to current if missing
-
-            addTenantToRoom(targetRoomObj.id, movedTenant);
-
-            // Simulate API delay
-            await new Promise(resolve => setTimeout(resolve, 500));
-
-            await onSuccess();
+            // Call parent handler
+            await onShift(selectedTenant.id, targetRoomObj.id);
 
             onClose();
         } catch (err) {
@@ -86,16 +72,16 @@ const ShiftTenantModal = ({ selectedTenant, selectedRoom, floors, onClose, onSuc
                         <div className="bg-slate-50 flex items-center justify-between p-4 rounded-2xl mb-8 border border-slate-100">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center text-white font-black">
-                                    {selectedTenant?.name?.charAt(0)}
+                                    {(selectedTenant?.name || '?').charAt(0)}
                                 </div>
                                 <div>
                                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Resident</p>
-                                    <p className="text-sm font-black text-slate-900">{selectedTenant?.name}</p>
+                                    <p className="text-sm font-black text-slate-900">{selectedTenant?.name || 'Unknown'}</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2 text-slate-400">
                                 <Home size={16} />
-                                <span className="text-xs font-bold">From Room {selectedRoom?.number}</span>
+                                <span className="text-xs font-bold">From Room {selectedRoom?.room_no}</span>
                             </div>
                         </div>
 
@@ -109,30 +95,30 @@ const ShiftTenantModal = ({ selectedTenant, selectedRoom, floors, onClose, onSuc
                                     <motion.button
                                         key={room.id}
                                         whileHover={{ x: 4 }}
-                                        onClick={() => setTargetRoomNum(room.number)}
-                                        className={`w-full p-4 rounded-2xl border text-left transition-all ${targetRoomNum === room.number
+                                        onClick={() => setTargetRoomNum(room.room_no)}
+                                        className={`w-full p-4 rounded-2xl border text-left transition-all ${targetRoomNum === room.room_no
                                             ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-100'
                                             : 'border-slate-100 bg-white hover:border-slate-200 hover:bg-slate-50'
                                             }`}
                                     >
                                         <div className="flex items-center justify-between">
                                             <div className="flex items-center gap-3">
-                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold ${targetRoomNum === room.number ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
+                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold ${targetRoomNum === room.room_no ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
                                                     }`}>
-                                                    {room.number}
+                                                    {room.room_no}
                                                 </div>
                                                 <div>
-                                                    <p className="text-sm font-black text-slate-900">Room {room.number}</p>
-                                                    <p className="text-[10px] font-bold text-slate-400">Level {room.floor || 'N/A'}</p>
+                                                    <p className="text-sm font-black text-slate-900">Room {room.room_no}</p>
+                                                    <p className="text-[10px] font-bold text-slate-400">Level {room.room_no.length >= 3 ? room.room_no.substring(0, room.room_no.length - 2) : 'G'}</p>
                                                 </div>
                                             </div>
                                             <div className="text-right">
                                                 <div className="flex items-center gap-1.5 justify-end">
                                                     <Users size={12} className="text-slate-300" />
-                                                    <span className="text-xs font-black text-slate-900">{room.occupied}/{room.capacity}</span>
+                                                    <span className="text-xs font-black text-slate-900">{room.currentOccupancy || 0}/{room.capacity}</span>
                                                 </div>
                                                 <p className="text-[10px] font-bold text-green-600 uppercase tracking-tighter mt-0.5">
-                                                    {room.capacity - room.occupied} Available
+                                                    {room.capacity - (room.currentOccupancy || 0)} Available
                                                 </p>
                                             </div>
                                         </div>

@@ -29,7 +29,7 @@ class UserContext(BaseModel):
     """User context extracted from JWT token"""
     user_id: str  # Profile ID from token
     email: str
-    role: str  # student, admin, warden
+    role: str  # student, admin
     
     def is_admin(self) -> bool:
         return self.role == "admin"
@@ -41,13 +41,13 @@ class UserContext(BaseModel):
         return self.role == "student"
     
     def can_manage_students(self) -> bool:
-        return self.role in ["admin", "warden"]
+        return self.role == "admin"
     
     def can_delete_students(self) -> bool:
         return self.role == "admin"
     
     def can_view_all_students(self) -> bool:
-        return self.role in ["admin", "warden"]
+        return self.role == "admin"
 
 # Password Hashing
 # pwd_context removed
@@ -129,11 +129,11 @@ def require_admin(user: UserContext = Depends(get_current_user)) -> UserContext:
     return user
 
 
-def require_admin_or_warden(user: UserContext = Depends(get_current_user)) -> UserContext:
+def require_admin_or_owner(user: UserContext = Depends(get_current_user)) -> UserContext:
     if not user.can_manage_students():
-        logger.warning(f"User {user.user_id} with role {user.role} attempted admin/warden-only action")
+        logger.warning(f"User {user.user_id} with role {user.role} attempted admin-only action")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin or warden privileges required"
+            detail="Admin privileges required"
         )
     return user

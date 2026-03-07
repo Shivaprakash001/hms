@@ -1,69 +1,81 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, User, Phone, Home, CreditCard, Calendar, CheckCircle2, AlertCircle, X, Save, History } from 'lucide-react';
+import { Search, Plus, User, Phone, Home, CreditCard, Calendar, CheckCircle2, AlertCircle, X, Save, History, Trash2, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-
-import { getFloors, addTenantToRoom, updateTenant } from '../../utils/storageUtils';
+import { studentService, authService, allocationService, roomService } from '../../api/services';
 import TenantHistoryModal from '../../components/owner/payments/TenantHistoryModal';
-import { useAuth } from '../../context/AuthContext';
-import axios from 'axios';
+import TenantInvitationForm from '../../components/owner/TenantInvitationForm';
 
 export default function ManageStudents() {
-    const { user, loading: authLoading } = useAuth();
     const [students, setStudents] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [showAddModal, setShowAddModal] = useState(false);
+    const [showInviteModal, setShowInviteModal] = useState(false);
     const [studentToEdit, setStudentToEdit] = useState(null);
     const [historyTenant, setHistoryTenant] = useState(null);
-    const [isMockMode, setIsMockMode] = useState(false);
-    const API_BASE_URL = "/api";
-
-    useEffect(() => {
-        if (!authLoading) {
-            fetchStudents();
-        }
-    }, [authLoading, user]); // Refetch when user/auth state changes
+    const [error, setError] = useState(null);
 
     const fetchStudents = async () => {
         try {
             setLoading(true);
-            const token = user?.token || JSON.parse(localStorage.getItem('ownerUser'))?.token;
+            const response = await studentService.getAll();
+            const studentsList = Array.isArray(response) ? response : (response.students || []);
 
-            if (!token) {
-                // If no token, maybe we are just logged out or in a weird state
-                setLoading(false);
-                return;
-            }
-
-            const response = await axios.get('/api/students/', {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-
-            const data = response.data.students.map(s => ({
+            const data = studentsList.map(s => ({
                 id: s.id,
+                profileId: s.profile_id,
                 name: s.profile?.name || 'Unknown',
-                room: s.current_room?.room?.number || 'N/A', // Check nesting: current_room might be allocation obj
-                floor: 'N/A',
+                email: s.profile?.email,
                 phone: s.profile?.phone || 'N/A',
+                room: s.current_room ? s.current_room.room_no : 'N/A',
+                roomId: s.current_room?.id,
+                floor: s.current_room && s.current_room.room_no ? s.current_room.room_no.substring(0, s.current_room.room_no.length - 2) : 'N/A',
                 status: s.status,
                 rent: s.monthly_rent,
                 joinDate: s.joined_on
             }));
 
             setStudents(data);
-            setIsMockMode(false);
-        } catch (error) {
-            console.error("Failed to fetch students:", error);
-            // Fallback to local storage/mock if API fails? 
-            // For now, let's keep it clean or maybe show empty
-            if (process.env.NODE_ENV === 'development') {
-                // Option: fallback to mock if dev and api fails? 
-                // stick to error state for now to verify integration
-            }
+            setError(null);
+        } catch (err) {
+            console.error("Failed to fetch students:", err);
+            setError("Failed to load tenants. Please try again.");
         } finally {
             setLoading(false);
         }
     };
+
+    useEffect(() => {
+        fetchStudents();
+    }, []);
+
+    // Handlers
+    const handleSaveStudent = async (data) => {
+        try {
+            if (studentToEdit) {
+                await studentService.update(studentToEdit.id, {
+                    monthly_rent: parseFloat(data.rent),
+                    status: data.status,
+                    joined_on: data.joinDate
+                });
+                alert("Student updated successfully");
+            }
+            fetchStudents();
+            setShowAddModal(false);
+        } catch (err) {
+            alert("Error saving student: " + (err.response?.data?.detail || err.message));
+        }
+    };
+
+    const handleDeleteStudent = async (id) => {
+        if (!window.confirm("Are you sure you want to remove this tenant? They will be marked as LEFT.")) return;
+        try {
+            await studentService.delete(id);
+            fetchStudents();
+        } catch (err) {
+            alert("Error removing student: " + err.message);
+        }
+    }
 
     // Filter Logic
     const filteredStudents = students.filter(student =>
@@ -75,9 +87,15 @@ export default function ManageStudents() {
     // Stats Calculation
     const stats = {
         total: students.length,
-        occupiedRooms: new Set(students.map(s => s.room)).size,
-        paid: students.filter(s => s.status === 'Paid').length,
-        pending: students.filter(s => s.status === 'Pending').length
+        occupiedRooms: new Set(students.filter(s => s.room !== 'N/A').map(s => s.room)).size,
+        paid: students.filter(s => s.status === 'Paid').length, // 'Paid' status might need to come from payment history? Or student status? Student status is ACTIVE/LEFT. 
+        // Wait, existing UI uses 'Paid'/'Pending' as status. Backend uses ACTIVE/LEFT.
+        // Payment status should be separate.
+        // For now, let's map ACTIVE to 'Active' and handle Payment Status separately if we have it?
+        // Or assume student.status is overridden logic in frontend?
+        // Let's us ACTIVE for now.
+        active: students.filter(s => s.status === 'ACTIVE').length,
+        left: students.filter(s => s.status === 'LEFT').length
     };
 
     const formatDate = (dateString) => {
@@ -91,7 +109,7 @@ export default function ManageStudents() {
     };
 
     return (
-        <div className="font-sans">
+        <div className="font-sans pb-20">
             <div className="space-y-8">
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -99,25 +117,19 @@ export default function ManageStudents() {
                         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Tenant Management</h1>
                         <p className="text-slate-500 text-sm mt-1">Manage your property tenants and track payments</p>
                     </div>
-                    {isMockMode && (
-                        <div className="sm:hidden mb-2">
-                            <span className="flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-bold border border-slate-200">
-                                <AlertCircle size={14} /> Offline Mode
-                            </span>
-                        </div>
-                    )}
                     <div className="flex items-center gap-3">
-                        {isMockMode && (
-                            <span className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-bold border border-slate-200">
-                                <AlertCircle size={14} /> Offline Mode
-                            </span>
-                        )}
                         <button
-                            onClick={() => { setStudentToEdit(null); setShowAddModal(true); }}
+                            onClick={fetchStudents}
+                            className="p-2.5 text-slate-500 hover:bg-slate-100 rounded-xl transition-colors"
+                        >
+                            <RefreshCw size={20} />
+                        </button>
+                        <button
+                            onClick={() => setShowInviteModal(true)}
                             className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-semibold text-sm transition-all flex items-center gap-2 shadow-lg shadow-indigo-600/20 active:scale-95"
                         >
                             <Plus size={18} />
-                            Add Tenant
+                            Invite Tenant
                         </button>
                     </div>
                 </div>
@@ -139,16 +151,16 @@ export default function ManageStudents() {
                         iconColor="text-indigo-600"
                     />
                     <StatCard
-                        title="Paid This Month"
-                        value={stats.paid}
+                        title="Active Tenants"
+                        value={stats.active}
                         icon={CheckCircle2}
                         iconBg="bg-emerald-50"
                         iconColor="text-emerald-600"
                         isCurrency={false}
                     />
                     <StatCard
-                        title="Pending Payment"
-                        value={stats.pending}
+                        title="Left / Inactive"
+                        value={stats.left}
                         icon={AlertCircle}
                         iconBg="bg-amber-50"
                         iconColor="text-amber-600"
@@ -179,18 +191,21 @@ export default function ManageStudents() {
                                             {header}
                                         </th>
                                     ))}
+                                    <th className="px-8 py-5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-widest">
+                                        ACTIONS
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-50">
                                 {loading ? (
                                     <tr>
-                                        <td colSpan="6" className="px-8 py-12 text-center text-slate-400 font-medium animate-pulse">
+                                        <td colSpan="7" className="px-8 py-12 text-center text-slate-400 font-medium animate-pulse">
                                             Loading tenants...
                                         </td>
                                     </tr>
                                 ) : filteredStudents.length === 0 ? (
                                     <tr>
-                                        <td colSpan="6" className="px-8 py-16 text-center text-slate-400">
+                                        <td colSpan="7" className="px-8 py-16 text-center text-slate-400">
                                             <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
                                                 <User size={24} className="text-slate-300" />
                                             </div>
@@ -218,28 +233,30 @@ export default function ManageStudents() {
                                             <td className="px-8 py-5 text-slate-600 font-bold text-sm">{student.room}</td>
                                             <td className="px-8 py-5 text-slate-500 text-sm font-medium">{student.phone}</td>
                                             <td className="px-8 py-5">
-                                                <span className={`inline-flex items-center px-3 py-1 rounded-lg text-xs font-bold ${student.status === 'Paid'
+                                                <span className={`inline-flex items-center px-3 py-1 rounded-lg text-xs font-bold ${student.status === 'ACTIVE'
                                                     ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
-                                                    : 'bg-amber-50 text-amber-600 border border-amber-100'
+                                                    : student.status === 'INVITED'
+                                                        ? 'bg-indigo-50 text-indigo-600 border border-indigo-100'
+                                                        : 'bg-slate-50 text-slate-600 border border-slate-100'
                                                     }`}>
                                                     {student.status}
                                                 </span>
                                             </td>
                                             <td className="px-8 py-5 text-slate-900 font-black text-sm">₹{student.rent?.toLocaleString()}</td>
                                             <td className="px-8 py-5 text-slate-500 text-sm font-medium">
-                                                <div className="flex items-center gap-2">
-                                                    <span>{formatDate(student.joinDate)}</span>
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setHistoryTenant({ tenantId: student.id, tenantName: student.name });
-                                                        }}
-                                                        className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors ml-2"
-                                                        title="View Payment History"
-                                                    >
-                                                        <History size={16} />
-                                                    </button>
-                                                </div>
+                                                <span>{formatDate(student.joinDate)}</span>
+                                            </td>
+                                            <td className="px-8 py-5 text-right">
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleDeleteStudent(student.id);
+                                                    }}
+                                                    className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                    title="Remove Tenant"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
                                             </td>
                                         </motion.tr>
                                     ))
@@ -247,75 +264,31 @@ export default function ManageStudents() {
                             </tbody>
                         </table>
 
-                        {/* Mobile Card View */}
+                        {/* Mobile Card View (Simplified) */}
                         <div className="md:hidden space-y-4 p-4">
-                            {loading ? (
-                                <div className="text-center py-10 text-slate-400 font-medium animate-pulse">Loading tenants...</div>
-                            ) : filteredStudents.length === 0 ? (
-                                <div className="text-center py-10 text-slate-400">
-                                    <User size={32} className="mx-auto mb-2 opacity-20" />
-                                    <p className="text-sm font-medium">No tenants found</p>
+                            {filteredStudents.map(student => (
+                                <div key={student.id} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm" onClick={() => { setStudentToEdit(student); setShowAddModal(true); }}>
+                                    <div className="flex justify-between">
+                                        <div className="font-bold">{student.name}</div>
+                                        <div className="text-sm font-bold text-slate-500">{student.room}</div>
+                                    </div>
+                                    <div className="flex justify-between mt-2 text-sm text-slate-500">
+                                        <div>{student.status}</div>
+                                        <div>₹{student.rent}</div>
+                                    </div>
                                 </div>
-                            ) : (
-                                filteredStudents.map((student) => (
-                                    <motion.div
-                                        key={student.id}
-                                        initial={{ opacity: 0, y: 10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        onClick={() => { setStudentToEdit(student); setShowAddModal(true); }}
-                                        className="bg-white border border-slate-100 rounded-xl p-4 shadow-sm space-y-4 active:scale-[0.99] transition-transform"
-                                    >
-                                        <div className="flex justify-between items-start">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-sm shadow-sm">
-                                                    {getInitials(student.name)}
-                                                </div>
-                                                <div>
-                                                    <p className="font-bold text-slate-900 text-sm">{student.name}</p>
-                                                    <p className="text-xs text-slate-500 font-medium">Room {student.room}</p>
-                                                </div>
-                                            </div>
-                                            <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-bold ${student.status === 'Paid'
-                                                ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
-                                                : 'bg-amber-50 text-amber-600 border border-amber-100'
-                                                }`}>
-                                                {student.status}
-                                            </span>
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-50">
-                                            <div>
-                                                <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-1">Phone</p>
-                                                <p className="text-sm font-medium text-slate-700">{student.phone || 'N/A'}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-1">Rent</p>
-                                                <p className="text-sm font-black text-slate-900">₹{student.rent?.toLocaleString()}</p>
-                                            </div>
-                                            <div className="col-span-2 flex justify-between items-end">
-                                                <div>
-                                                    <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-1">Joined</p>
-                                                    <p className="text-sm font-medium text-slate-700">{formatDate(student.joinDate)}</p>
-                                                </div>
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setHistoryTenant({ tenantId: student.id, tenantName: student.name });
-                                                    }}
-                                                    className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-slate-100"
-                                                    title="View Payment History"
-                                                >
-                                                    <History size={16} />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </motion.div>
-                                ))
-                            )}
+                            ))}
                         </div>
                     </div>
                 </div>
             </div>
+
+            {/* Invitation Modal */}
+            <TenantInvitationForm
+                isOpen={showInviteModal}
+                onClose={() => setShowInviteModal(false)}
+                onInviteSuccess={() => fetchStudents()}
+            />
 
             {/* Add/Edit Modal */}
             <AnimatePresence>
@@ -323,8 +296,7 @@ export default function ManageStudents() {
                     <AddStudentModal
                         onClose={() => setShowAddModal(false)}
                         initialData={studentToEdit}
-                        refreshData={fetchStudents}
-                        API_BASE_URL={API_BASE_URL}
+                        onSave={handleSaveStudent}
                     />
                 )}
             </AnimatePresence>
@@ -352,75 +324,56 @@ const StatCard = ({ title, value, icon: Icon, iconBg, iconColor, isCurrency = fa
     </div>
 );
 
-const AddStudentModal = ({ onClose, initialData, refreshData, API_BASE_URL }) => {
+const AddStudentModal = ({ onClose, initialData, onSave }) => {
+    // We need list of vacant rooms to select from if adding new
+    const [rooms, setRooms] = useState([]);
     const [formData, setFormData] = useState({
         name: initialData?.name || '',
+        email: initialData?.email || '',
         phone: initialData?.phone || '',
-        room: initialData?.room || '',
+        roomId: initialData?.roomId || '',
         rent: initialData?.rent || '',
-        status: initialData?.status || 'Paid',
+        status: initialData?.status || 'ACTIVE',
         joinDate: initialData?.joinDate || new Date().toISOString().split('T')[0]
     });
+    const [loadingRooms, setLoadingRooms] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+
+    useEffect(() => {
+        if (!initialData) {
+            // Load vacant rooms
+            loadRooms();
+        }
+    }, [initialData]);
+
+    const loadRooms = async () => {
+        setLoadingRooms(true);
+        try {
+            const data = await roomService.getAll();
+            // Simple client-side filter for now. Ideally backend filter.
+            // We need to know which rooms are not full.
+            // But roomService.getAll returns raw rooms without occupancy info usually?
+            // Wait, ManageRooms calculated occupancy.
+            // Here we might just list all rooms and let backend error if full, or try to guess.
+            // For better UX, we should fetch allocations too.
+            // For now, listing all rooms.
+            setRooms(data);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoadingRooms(false);
+        }
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setSubmitting(true);
-
-        try {
-            // Find room ID based on room number (This is a bit tricky if room numbers aren't unique, but assuming they are for now)
-            // In a real app we'd probably select room from a dropdown which gives us the ID
-            // For now, let's look up the room ID from the floors
-            const floors = getFloors();
-            let roomId = null;
-            let currentTenantId = initialData?.id;
-
-            // Simple lookup
-            for (const f of floors) {
-                const r = f.rooms.find(r => r.number === formData.room);
-                if (r) {
-                    roomId = r.id;
-                    break;
-                }
-            }
-
-            if (!roomId) {
-                throw new Error("Room not found. Please verify room number.");
-            }
-
-            if (initialData) {
-                // Update existing
-                updateTenant(currentTenantId, {
-                    name: formData.name,
-                    phone: formData.phone,
-                    rent: Number(formData.rent),
-                    status: formData.status,
-                    joinDate: formData.joinDate
-                    // Note: Changing room is harder, not handling that simple update for now
-                });
-                alert("Tenant updated successfully!");
-            } else {
-                // Add new
-                const newTenant = {
-                    name: formData.name,
-                    phone: formData.phone,
-                    rent: Number(formData.rent),
-                    status: formData.status,
-                    joinDate: formData.joinDate,
-                    email: `${formData.name.toLowerCase().replace(/\s/g, '')}@example.com`, // Auto-generate email
-                    password: 'password' // Default password
-                };
-                addTenantToRoom(roomId, newTenant);
-                alert("Tenant added successfully!");
-            }
-
-            onClose();
-            refreshData();
-        } catch (error) {
-            alert(error.message);
-        } finally {
-            setSubmitting(false);
+        if (!formData.email && !initialData) {
+            // Generate email if not provided for new user
+            formData.email = `${formData.name.toLowerCase().replace(/\s/g, '')}.${Math.floor(Math.random() * 1000)}@example.com`;
         }
+        await onSave(formData);
+        setSubmitting(false);
     };
 
     return (
@@ -443,15 +396,9 @@ const AddStudentModal = ({ onClose, initialData, refreshData, API_BASE_URL }) =>
                         <h2 className="text-2xl font-black text-slate-900">
                             {initialData ? 'Edit Details' : 'New Tenant'}
                         </h2>
-                        <p className="text-slate-400 text-sm font-medium mt-1">
-                            {initialData ? 'Update tenant information' : 'Add a new resident to the property'}
-                        </p>
                     </div>
-                    <button
-                        onClick={onClose}
-                        className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-900 transition-colors shadow-sm"
-                    >
-                        <X size={20} className="stroke-[3]" />
+                    <button onClick={onClose} className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-900 transition-colors shadow-sm">
+                        <X size={20} />
                     </button>
                 </div>
 
@@ -459,99 +406,49 @@ const AddStudentModal = ({ onClose, initialData, refreshData, API_BASE_URL }) =>
                     <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">Full Name</label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={formData.name}
-                                    onChange={e => setFormData({ ...formData, name: e.target.value })}
-                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 outline-none font-bold text-slate-900 transition-all placeholder:text-slate-300"
-                                    placeholder="John Doe"
-                                />
+                                <label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">Name</label>
+                                <input type="text" required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold" />
                             </div>
                             <div className="space-y-2">
                                 <label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">Phone</label>
-                                <input
-                                    type="tel"
-                                    value={formData.phone}
-                                    onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 outline-none font-bold text-slate-900 transition-all placeholder:text-slate-300"
-                                    placeholder="+91 99999..."
-                                />
+                                <input type="tel" value={formData.phone} onChange={e => setFormData({ ...formData, phone: e.target.value })} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold" />
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        {!initialData && (
                             <div className="space-y-2">
-                                <label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">Room No</label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={formData.room}
-                                    onChange={e => setFormData({ ...formData, room: e.target.value })}
-                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 outline-none font-bold text-slate-900 transition-all placeholder:text-slate-300"
-                                    placeholder="101"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">Monthly Rent</label>
-                                <div className="relative">
-                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₹</span>
-                                    <input
-                                        type="number"
-                                        required
-                                        value={formData.rent}
-                                        onChange={e => setFormData({ ...formData, rent: e.target.value })}
-                                        className="w-full pl-8 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 outline-none font-bold text-slate-900 transition-all placeholder:text-slate-300"
-                                        placeholder="8000"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">Payment Status</label>
+                                <label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">Room</label>
                                 <select
-                                    value={formData.status}
-                                    onChange={e => setFormData({ ...formData, status: e.target.value })}
-                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 outline-none font-bold text-slate-900 transition-all appearance-none"
+                                    value={formData.roomId}
+                                    onChange={e => setFormData({ ...formData, roomId: e.target.value })}
+                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+                                    required
                                 >
-                                    <option value="Paid">Paid</option>
-                                    <option value="Pending">Pending</option>
+                                    <option value="">Select Room</option>
+                                    {rooms.map(r => (
+                                        <option key={r.id} value={r.id}>Room {r.room_no} ({r.capacity})</option>
+                                    ))}
                                 </select>
+                            </div>
+                        )}
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">Rent</label>
+                                <input type="number" required value={formData.rent} onChange={e => setFormData({ ...formData, rent: e.target.value })} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold" />
                             </div>
                             <div className="space-y-2">
                                 <label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">Join Date</label>
-                                <input
-                                    type="date"
-                                    required
-                                    value={formData.joinDate}
-                                    onChange={e => setFormData({ ...formData, joinDate: e.target.value })}
-                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 outline-none font-bold text-slate-900 transition-all"
-                                />
+                                <input type="date" required value={formData.joinDate} onChange={e => setFormData({ ...formData, joinDate: e.target.value })} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold" />
                             </div>
                         </div>
                     </div>
 
                     <div className="pt-4 flex gap-4">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="flex-1 py-4 rounded-xl bg-slate-100 text-slate-500 font-bold hover:bg-slate-200 transition-colors"
-                        >
-                            Cancel
-                        </button>
-                        <motion.button
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                            type="submit"
-                            disabled={submitting}
-                            className="flex-1 py-4 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 flex items-center justify-center gap-2"
-                        >
-                            <Save size={18} strokeWidth={2.5} />
+                        <button type="button" onClick={onClose} className="flex-1 py-4 rounded-xl bg-slate-100 text-slate-500 font-bold hover:bg-slate-200 transition-colors">Cancel</button>
+                        <button type="submit" disabled={submitting} className="flex-1 py-4 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-colors shadow-lg">
                             {submitting ? 'Saving...' : 'Save Details'}
-                        </motion.button>
+                        </button>
                     </div>
                 </form>
             </motion.div>

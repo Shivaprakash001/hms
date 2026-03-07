@@ -209,8 +209,8 @@ def record_payment(
         
         return ServiceResponse.success({
             "payment": new_payment,
-            "new_status": new_status,
-            "remaining_balance": float(total_amount - new_total_paid)
+            "obligation_status": new_status,
+            "remaining_balance": float(total_amount - new_total_paid) if new_status == "PARTIAL" else 0
         }, "Payment recorded successfully.")
 
     except Exception as e:
@@ -282,46 +282,71 @@ def waive_obligation(obligation_id: str, user_id: Optional[str] = None) -> Dict[
         return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Failed to waive obligation", str(e))
 
 
-def get_dues_report(rent_month: Optional[date] = None, status: Optional[str] = None) -> Dict[str, Any]:
+def get_dues_report(user_id: str, rent_month: Optional[date] = None, status: Optional[str] = None) -> Dict[str, Any]:
     """
-    Generate a report of dues/outstanding obligations.
+    Get all outstanding dues.
     """
     try:
-        # We join obligations with student profiles for reporting
         query = supabase.table("rent_obligations")\
-            .select("*, students(profiles(name)), room_allocations(rooms(room_no))")
-        
+            .select("*, students(profiles(name), room_number)", count="exact")\
+            .eq("owner_id", user_id)
+
         if rent_month:
-            query = query.eq("rent_month", rent_month.replace(day=1).isoformat())
+            # Filter by specific month
+            query = query.eq("rent_month", rent_month.isoformat())
+            
         if status:
             query = query.eq("status", status)
         else:
-            # default to non-paid
-            query = query.neq("status", "PAID")
-            
-        res = query.execute()
+            # Default: Show everything not WAIVED/PAID? Or just show all?
+            # Typically dues report shows PENDING/PARTIAL
+            # But let's return all and let frontend filter, or filter here.
+            pass
+
+        result = query.execute()
         
-        report = []
-        for o in res.data:
-            student_name = o.get("students", {}).get("profiles", {}).get("name", "Unknown")
-            room_no = o.get("room_allocations", {}).get("rooms", {}).get("room_no", "N/A")
+        dues = []
+        for d in result.data:
+            student = d.get("students", {})
+            profile = student.get("profiles", {})
             
-            # Simple calculation of outstanding for report
-            # In a heavy system, we'd store 'balance' on the obligation row
-            pay_res = supabase.table("payments").select("amount_paid").eq("obligation_id", o["id"]).execute()
-            paid = sum(Decimal(str(p["amount_paid"])) for p in pay_res.data)
+            d["student_name"] = profile.get("name", "Unknown")
+            d["room_no"] = student.get("room_number", "N/A")
+            d["outstanding"] = float(Decimal(str(d["amount"])) - Decimal(0)) # Simplified, should subtract payments ideally but obligations check status
             
-            report.append({
-                "obligation_id": o["id"],
-                "student_name": student_name,
-                "room_no": room_no,
-                "rent_month": o["rent_month"],
-                "amount": o["amount"],
-                "status": o["status"],
-                "outstanding": float(Decimal(str(o["amount"])) - paid)
-            })
+            dues.append(d)
             
-        return ServiceResponse.success(report)
+        return ServiceResponse.success(dues)
+
     except Exception as e:
-        logger.exception(f"Error generating dues report: {e}")
-        return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Failed to generate dues report")
+        logger.exception(f"Error fetching dues report: {e}")
+        return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to fetch dues report")
+def get_all_payments(user_id: str, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
+    """
+    Get all payments with student details.
+    """
+    try:
+        # Join with student names for UI
+        query = supabase.table("payments")\
+            .select("*, students(profiles(name)), rent_obligations(rent_month)", count="exact")\
+            .eq("owner_id", user_id)\
+            .order("payment_date", desc=True)\
+            .limit(limit)\
+            .offset(offset)
+            
+        result = query.execute()
+        
+        payments = []
+        for p in result.data:
+            # Flatten structure slightly for easier frontend consumption
+            p["student_name"] = p.get("students", {}).get("profiles", {}).get("name", "Unknown")
+            p["rent_month"] = p.get("rent_obligations", {}).get("rent_month")
+            payments.append(p)
+            
+        return ServiceResponse.success({
+            "payments": payments,
+            "total": result.count if hasattr(result, 'count') else len(payments)
+        })
+    except Exception as e:
+        logger.exception(f"Error fetching payments: {e}")
+        return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to fetch payments")

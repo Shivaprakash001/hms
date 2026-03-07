@@ -3,8 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Filter, Plus, AlertCircle, CheckCircle2, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// Mock Data
-import { getComplaints, updateComplaintStatus, deleteComplaint } from '../../utils/storageUtils';
+import { complaintService } from '../../api/services';
 
 // Components
 import ComplaintStatsCard from '../../components/owner/complaints/ComplaintStatsCard';
@@ -20,21 +19,40 @@ const Complaints = () => {
 
     // Initial Data Load
     useEffect(() => {
-        // Simulate API call
-        setTimeout(() => {
-            const data = getComplaints();
-            setComplaints(data);
-            setIsLoading(false);
-        }, 600);
+        loadComplaints();
     }, []);
+
+    const loadComplaints = async () => {
+        try {
+            setIsLoading(true);
+            const response = await complaintService.getAll();
+            // Backend returns { complaints: [], total: ... }
+            setComplaints(response.complaints || []);
+        } catch (error) {
+            console.error("Failed to load complaints:", error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     // Derived State: Filtered Complaints
     const filteredComplaints = useMemo(() => {
         return complaints.filter(complaint => {
-            const matchesSearch = complaint.tenantName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                complaint.room.includes(searchTerm) ||
+            // Backend student name might be nested in 'student' object or not present if my schema implies it
+            // ComplaintResponse has `student: Optional[dict]`.
+            // We need to map it if the table expects 'tenantName'. 
+            // Better to map it on load or adapt here.
+            // Let's adapt here.
+            const tenantName = complaint.student?.profiles?.name || complaint.student?.name || 'Unknown';
+            const roomNo = complaint.student?.current_room?.room_no || 'N/A';
+
+            const matchesSearch = tenantName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                roomNo.includes(searchTerm) ||
                 complaint.title.toLowerCase().includes(searchTerm.toLowerCase());
-            const matchesStatus = statusFilter === 'all' || complaint.status === statusFilter;
+
+            // Backend Status is UPPERCASE. Filter is usually lowercase usage in UI.
+            // Let's compare case-insensitively.
+            const matchesStatus = statusFilter === 'all' || complaint.status.toLowerCase() === statusFilter.toLowerCase();
             return matchesSearch && matchesStatus;
         });
     }, [complaints, searchTerm, statusFilter]);
@@ -42,31 +60,33 @@ const Complaints = () => {
     // Derived State: Stats
     const stats = useMemo(() => {
         const total = complaints.length;
-        const pending = complaints.filter(c => c.status === 'Pending').length;
-        const resolved = complaints.filter(c => c.status === 'resolved').length;
+        const pending = complaints.filter(c => c.status === 'PENDING').length;
+        const resolved = complaints.filter(c => c.status === 'RESOLVED').length;
         return { total, pending, resolved };
     }, [complaints]);
 
     // Handlers
-    const handleResolve = (id) => {
-        // Optimistic update
-        const updatedList = updateComplaintStatus(id, 'resolved');
-        setComplaints(updatedList);
+    const handleResolve = async (id) => {
+        try {
+            // Optimistic update or wait? Let's wait for simplicity
+            await complaintService.updateStatus(id, 'RESOLVED', 'Resolved by owner');
 
-        if (selectedComplaint && selectedComplaint.id === id) {
-            setSelectedComplaint({ ...selectedComplaint, status: 'resolved' });
+            // Update local state
+            setComplaints(prev => prev.map(c =>
+                c.id === id ? { ...c, status: 'RESOLVED' } : c
+            ));
+
+            if (selectedComplaint && selectedComplaint.id === id) {
+                setSelectedComplaint({ ...selectedComplaint, status: 'RESOLVED' });
+            }
+        } catch (error) {
+            console.error("Failed to resolve complaint:", error);
+            alert("Failed to update status");
         }
     };
 
-
     const handleDelete = (id) => {
-        if (window.confirm('Are you sure you want to delete this complaint?')) {
-            const updatedList = deleteComplaint(id);
-            setComplaints(updatedList);
-            if (selectedComplaint && selectedComplaint.id === id) {
-                setSelectedComplaint(null);
-            }
-        }
+        alert("Deletion is not supported for tracking purposes. Please mark as Resolved or Rejected.");
     };
 
     return (
