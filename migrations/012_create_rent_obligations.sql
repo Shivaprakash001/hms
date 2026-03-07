@@ -10,7 +10,8 @@ BEGIN
 END $$;
 
 -- 2. Create rent_obligations table
-CREATE TABLE IF NOT EXISTS rent_obligations (
+DROP TABLE IF EXISTS rent_obligations CASCADE;
+CREATE TABLE rent_obligations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
     allocation_id UUID NOT NULL REFERENCES room_allocations(id) ON DELETE CASCADE,
@@ -26,7 +27,8 @@ CREATE TABLE IF NOT EXISTS rent_obligations (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_student_month_unique ON rent_obligations(student_id, rent_month);
 
 -- 3. Create payments table
-CREATE TABLE IF NOT EXISTS payments (
+DROP TABLE IF EXISTS payments CASCADE;
+CREATE TABLE payments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     obligation_id UUID NOT NULL REFERENCES rent_obligations(id) ON DELETE CASCADE,
     student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
