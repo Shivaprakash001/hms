@@ -18937,3 +18937,107 @@ Traceback (most recent call last):
   File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
     raise APIError(dict(json_obj))
 postgrest.exceptions.APIError: {'message': 'duplicate key value violates unique constraint "rooms_room_no_key"', 'code': '23505', 'hint': None, 'details': 'Key (room_no)=(101) already exists.'}
+2026-03-07 23:16:31 - app.services.payment_service - ERROR - Error fetching payments: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+             ^^^^^^^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+2026-03-07 23:16:31 - app.services.payment_service - ERROR - Error fetching payments: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+             ^^^^^^^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+2026-03-07 23:16:32 - app.services.payment_service - ERROR - Error fetching payments: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+             ^^^^^^^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+2026-03-07 23:16:32 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+2026-03-07 23:16:33 - app.services.payment_service - ERROR - Error fetching payments: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+             ^^^^^^^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+2026-03-07 23:16:33 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+2026-03-07 23:16:33 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+2026-03-07 23:16:33 - app.services.payment_service - ERROR - Error fetching payments: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+             ^^^^^^^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+2026-03-07 23:16:33 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+2026-03-07 23:16:34 - app.services.payment_service - ERROR - Error fetching payments: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+             ^^^^^^^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+2026-03-07 23:16:34 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+2026-03-07 23:16:34 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+2026-03-07 23:19:43 - app.services.auth_service - ERROR - Error inviting tenant: {'message': 'insert or update on table "profiles" violates foreign key constraint "profiles_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (id)=(45c714a2-59bd-49a5-b858-cd36a6fe09df) is not present in table "users".'}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/auth_service.py", line 142, in invite_tenant
+    prof_res = supabase.table("profiles").insert(new_profile).execute()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'insert or update on table "profiles" violates foreign key constraint "profiles_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (id)=(45c714a2-59bd-49a5-b858-cd36a6fe09df) is not present in table "users".'}

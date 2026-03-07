@@ -4,7 +4,7 @@ import { Plus, Search, Filter, Layers, LayoutGrid, Users, MoreVertical, DoorOpen
 import AddRoomModal from '../../components/owner/rooms/AddRoomModal';
 import AddTenantModal from '../../components/owner/rooms/AddTenantModal';
 import ShiftTenantModal from '../../components/owner/rooms/ShiftTenantModal';
-import { roomService, studentService, authService } from '../../api/services';
+import { roomService, allocationService, studentService, authService } from '../../api/services';
 
 const ManageRooms = () => {
     // State
@@ -116,7 +116,9 @@ const ManageRooms = () => {
             setShowAddTenantModal(false);
         } catch (err) {
             console.error(err);
-            alert("Failed to add tenant: " + (err.response?.data?.detail || err.response?.data?.error?.message || err.message));
+            const detail = err.response?.data?.detail;
+            const msg = detail?.message || detail || err.message || 'Unknown error';
+            alert("Failed to add tenant: " + msg);
         }
     };
 
@@ -147,7 +149,9 @@ const ManageRooms = () => {
             alert("Tenant relocated successfully!");
         } catch (err) {
             console.error(err);
-            alert("Failed to shift tenant: " + (err.response?.data?.detail || err.message));
+            const detail = err.response?.data?.detail;
+            const msg = detail?.message || detail || err.message || 'Unknown error';
+            alert("Failed to shift tenant: " + msg);
         }
     };
 

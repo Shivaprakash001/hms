@@ -121,49 +121,84 @@ def register_user(data: dict) -> Dict[str, Any]:
 def invite_tenant(data: dict, owner_id: str) -> Dict[str, Any]:
     """
     Create a tenant invitation.
+    1. Create Supabase Auth user first (required for profiles FK)
+    2. Insert profile row using the auth user ID
+    3. Create student enrollment
+    4. Generate invitation token
     """
+    auth_user_id = None
+    profile_id = None
     try:
         email = data.get("email")
         name = data.get("name")
         room_id = data.get("room_id")
 
-        # 1. Create Profile first (without password)
+        # 0. Check if profile already exists
         existing = supabase.table("profiles").select("id").eq("email", email).execute()
         if existing.data:
             return ServiceResponse.already_exists("User", f"Email {email} is already registered")
 
+        # 1. Create Supabase Auth user first (needed to satisfy profiles_id_fkey)
+        #    Use admin.create_user so we bypass email confirmation
+        temp_password = secrets.token_urlsafe(16)
+        try:
+            auth_response = supabase.auth.admin.create_user({
+                "email": email,
+                "password": temp_password,
+                "email_confirm": True  # confirm immediately; real password set on activation
+            })
+            if not auth_response.user:
+                return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Failed to create auth user")
+            auth_user_id = auth_response.user.id
+        except Exception as auth_err:
+            logger.error(f"Failed to create auth user for {email}: {auth_err}")
+            return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, f"Auth user creation failed: {str(auth_err)}")
+
+        # 2. Create Profile using the Auth User ID
+        hashed_temp = get_password_hash(temp_password)
         new_profile = {
+            "id": auth_user_id,   # Must match auth.users.id
             "email": email,
             "name": name,
             "role": "student",
             "is_active": True,
-            "owner_id": owner_id
+            "owner_id": owner_id,
+            "password_hash": hashed_temp
         }
         prof_res = supabase.table("profiles").insert(new_profile).execute()
         if not prof_res.data:
+            # Cleanup auth user if profile creation fails
+            try:
+                supabase.auth.admin.delete_user(auth_user_id)
+            except Exception:
+                pass
             return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to create profile")
-        
+
         profile_id = prof_res.data[0]["id"]
 
-        # 2. Create Student enrollment
+        # 3. Create Student enrollment
         new_student = {
             "profile_id": profile_id,
             "owner_id": owner_id,
             "room_id": room_id,
             "status": "INVITED",
             "joined_on": datetime.now().date().isoformat(),
-            "monthly_rent": 0 # Default, can be updated later
+            "monthly_rent": 0
         }
         stu_res = supabase.table("students").insert(new_student).execute()
         if not stu_res.data:
-             # Cleanup profile if student creation fails
-             supabase.table("profiles").delete().eq("id", profile_id).execute()
-             return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to create student enrollment")
+            # Cleanup profile and auth user
+            supabase.table("profiles").delete().eq("id", profile_id).execute()
+            try:
+                supabase.auth.admin.delete_user(auth_user_id)
+            except Exception:
+                pass
+            return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to create student enrollment")
 
-        # 3. Generate Invitation Token
+        # 4. Generate Invitation Token
         token = secrets.token_urlsafe(32)
         expires_at = (datetime.now() + timedelta(hours=24)).isoformat()
-        
+
         inv_res = supabase.table("invitation_tokens").insert({
             "profile_id": profile_id,
             "token": token,
@@ -173,10 +208,8 @@ def invite_tenant(data: dict, owner_id: str) -> Dict[str, Any]:
         if not inv_res.data:
             return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to generate invitation token")
 
-        # 4. In a real app, send email here. 
-        # For now, we return the token/link so the user can see it in logs/UI
         activation_link = f"http://localhost:5173/activate?token={token}"
-        logger.info(f"INVITATION CREATED: {activation_link}")
+        logger.info(f"INVITATION CREATED for {email}: {activation_link}")
 
         return ServiceResponse.success({
             "profile_id": profile_id,
@@ -186,7 +219,20 @@ def invite_tenant(data: dict, owner_id: str) -> Dict[str, Any]:
 
     except Exception as e:
         logger.exception(f"Error inviting tenant: {e}")
+        # Best-effort cleanup
+        if profile_id:
+            try:
+                supabase.table("profiles").delete().eq("id", profile_id).execute()
+            except Exception:
+                pass
+        if auth_user_id:
+            try:
+                supabase.auth.admin.delete_user(auth_user_id)
+            except Exception:
+                pass
         return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, str(e))
+
+
 
 def activate_tenant(token: str, password: str) -> Dict[str, Any]:
     """
