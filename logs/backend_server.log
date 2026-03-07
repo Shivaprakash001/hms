@@ -1,0 +1,168 @@
+INFO:     Will watch for changes in these directories: ['/home/sp/Desktop/project-hms/backend']
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [10829] using StatReload
+INFO:     Started server process [10834]
+INFO:     Waiting for application startup.
+2026-03-07 17:42:24 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+INFO:     Application startup complete.
+INFO:     127.0.0.1:50674 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50690 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50692 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50692 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44166 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49958 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49958 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33380 - "OPTIONS /auth/register HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33380 - "POST /auth/register HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59450 - "OPTIONS /auth/login HTTP/1.1" 200 OK
+2026-03-07 17:45:51 - app.services.auth_service - INFO - Login attempt for: spchidiri2006@gmail.com
+2026-03-07 17:45:52 - app.services.auth_service - INFO - Login successful: spchidiri2006@gmail.com
+INFO:     127.0.0.1:59450 - "POST /auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59450 - "OPTIONS /dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59450 - "OPTIONS /allocations/active HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59460 - "OPTIONS /payments/?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59478 - "OPTIONS /expenses/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59460 - "OPTIONS /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59478 - "OPTIONS /payments/?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59494 - "OPTIONS /dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59500 - "OPTIONS /allocations/active HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59460 - "GET /allocations/active HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59500 - "GET /expenses/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59478 - "GET /allocations/active HTTP/1.1" 200 OK
+2026-03-07 17:45:53 - app.services.payment_service - ERROR - Error fetching payments: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+             ^^^^^^^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+INFO:     127.0.0.1:59494 - "GET /payments/?limit=10 HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:59460 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59478 - "OPTIONS /expenses/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59494 - "OPTIONS /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59460 - "GET /notifications/ HTTP/1.1" 200 OK
+2026-03-07 17:45:54 - app.services.payment_service - ERROR - Error fetching payments: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+             ^^^^^^^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+INFO:     127.0.0.1:59500 - "GET /payments/?limit=10 HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:59494 - "GET /expenses/ HTTP/1.1" 200 OK
+2026-03-07 17:45:55 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+INFO:     127.0.0.1:59450 - "GET /dashboard/stats HTTP/1.1" 400 Bad Request
+2026-03-07 17:45:55 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+INFO:     127.0.0.1:59464 - "GET /dashboard/stats HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:41598 - "OPTIONS /rooms/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41598 - "OPTIONS /rooms/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41610 - "GET /allocations/active HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41598 - "GET /rooms/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41612 - "GET /allocations/active HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41622 - "GET /rooms/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58608 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43798 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43798 - "OPTIONS /rooms/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43798 - "POST /rooms/ HTTP/1.1" 201 Created
+INFO:     127.0.0.1:43804 - "GET /allocations/active HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43798 - "GET /rooms/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53346 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46320 - "POST /rooms/ HTTP/1.1" 409 Conflict
+WARNING:  StatReload detected changes in 'app/schemas/room_schema.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [10834]
+INFO:     Started server process [11750]
+INFO:     Waiting for application startup.
+2026-03-07 17:49:53 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'app/api/routes/room_router.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [11750]
+INFO:     Started server process [11755]
+INFO:     Waiting for application startup.
+2026-03-07 17:50:03 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'app/services/room_service.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [11755]
+INFO:     Started server process [11763]
+INFO:     Waiting for application startup.
+2026-03-07 17:50:16 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+INFO:     Application startup complete.
+INFO:     127.0.0.1:38680 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38736 - "OPTIONS /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38736 - "OPTIONS /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38746 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38704 - "GET /allocations/active HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38718 - "GET /rooms/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38736 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38728 - "GET /allocations/active HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38694 - "GET /rooms/ HTTP/1.1" 200 OK
+2026-03-07 17:51:44 - app.services.room_service - ERROR - Error creating room: {'message': 'duplicate key value violates unique constraint "rooms_room_no_key"', 'code': '23505', 'hint': None, 'details': 'Key (room_no)=(101) already exists.'}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/room_service.py", line 116, in create_room
+    result = supabase.table("rooms").insert(data).execute()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'duplicate key value violates unique constraint "rooms_room_no_key"', 'code': '23505', 'hint': None, 'details': 'Key (room_no)=(101) already exists.'}
+INFO:     127.0.0.1:52562 - "POST /rooms/ HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:41378 - "POST /rooms/ HTTP/1.1" 201 Created
+INFO:     127.0.0.1:41380 - "GET /allocations/active HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41378 - "GET /rooms/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45472 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44948 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37438 - "GET /allocations/active HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37428 - "GET /rooms/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48406 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48960 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40398 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51116 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56336 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60738 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50702 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57308 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38424 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34510 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38002 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51830 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55064 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39294 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42530 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41972 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33522 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34900 - "OPTIONS /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34900 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40632 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53876 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42322 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53738 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60556 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37896 - "GET /notifications/ HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [11763]
+INFO:     Stopping reloader process [10829]

@@ -1,0 +1,63 @@
+2026-02-18 15:25:56 - app.services.auth_service - ERROR - Error during login: password cannot be longer than 72 bytes, truncate manually if necessary (e.g. my_password[:72])
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/auth_service.py", line 34, in login
+    if not hashed_password or not verify_password(password, hashed_password):
+                                  ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/utils/auth.py", line 57, in verify_password
+    return pwd_context.verify(plain_password, hashed_password)
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.13/site-packages/passlib/context.py", line 2347, in verify
+    return record.verify(secret, hash, **kwds)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.13/site-packages/passlib/utils/handlers.py", line 792, in verify
+    return consteq(self._calc_checksum(secret), chk)
+                   ~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/opt/anaconda3/lib/python3.13/site-packages/passlib/handlers/bcrypt.py", line 591, in _calc_checksum
+    self._stub_requires_backend()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/anaconda3/lib/python3.13/site-packages/passlib/utils/handlers.py", line 2254, in _stub_requires_backend
+    cls.set_backend()
+    ~~~~~~~~~~~~~~~^^
+  File "/opt/anaconda3/lib/python3.13/site-packages/passlib/utils/handlers.py", line 2156, in set_backend
+    return owner.set_backend(name, dryrun=dryrun)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.13/site-packages/passlib/utils/handlers.py", line 2163, in set_backend
+    return cls.set_backend(name, dryrun=dryrun)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.13/site-packages/passlib/utils/handlers.py", line 2188, in set_backend
+    cls._set_backend(name, dryrun)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.13/site-packages/passlib/utils/handlers.py", line 2311, in _set_backend
+    super(SubclassBackendMixin, cls)._set_backend(name, dryrun)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.13/site-packages/passlib/utils/handlers.py", line 2224, in _set_backend
+    ok = loader(**kwds)
+  File "/opt/anaconda3/lib/python3.13/site-packages/passlib/handlers/bcrypt.py", line 626, in _load_backend_mixin
+    return mixin_cls._finalize_backend_mixin(name, dryrun)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.13/site-packages/passlib/handlers/bcrypt.py", line 421, in _finalize_backend_mixin
+    if detect_wrap_bug(IDENT_2A):
+       ~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.13/site-packages/passlib/handlers/bcrypt.py", line 380, in detect_wrap_bug
+    if verify(secret, bug_hash):
+       ~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.13/site-packages/passlib/utils/handlers.py", line 792, in verify
+    return consteq(self._calc_checksum(secret), chk)
+                   ~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/opt/anaconda3/lib/python3.13/site-packages/passlib/handlers/bcrypt.py", line 655, in _calc_checksum
+    hash = _bcrypt.hashpw(secret, config)
+ValueError: password cannot be longer than 72 bytes, truncate manually if necessary (e.g. my_password[:72])
+2026-02-18 23:05:25 - app.services.auth_service - ERROR - Error registering user: {'message': 'null value in column "phone" of relation "profiles" violates not-null constraint', 'code': '23502', 'hint': None, 'details': 'Failing row contains (b5139be4-edd1-46d3-a424-2125ab1f79fe, 2026-02-18 17:35:25.352958+00, Test Student, null, student, 2026-02-18 17:35:25.352958+00, null, student@hms.com, null, t, $2b$12$U0F7Cwx4cm6rn7RN3Z9geuit07qsPbUSF58QnlN7L1tE07hdoMtY2).'}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/auth_service.py", line 88, in register_user
+    res = supabase.table("profiles").insert(new_profile).execute()
+  File "/opt/anaconda3/lib/python3.13/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'null value in column "phone" of relation "profiles" violates not-null constraint', 'code': '23502', 'hint': None, 'details': 'Failing row contains (b5139be4-edd1-46d3-a424-2125ab1f79fe, 2026-02-18 17:35:25.352958+00, Test Student, null, student, 2026-02-18 17:35:25.352958+00, null, student@hms.com, null, t, $2b$12$U0F7Cwx4cm6rn7RN3Z9geuit07qsPbUSF58QnlN7L1tE07hdoMtY2).'}
+2026-02-18 23:05:44 - app.services.auth_service - ERROR - Error registering user: {'message': 'null value in column "phone" of relation "profiles" violates not-null constraint', 'code': '23502', 'hint': None, 'details': 'Failing row contains (7fa14247-1885-425e-bf27-263083231426, 2026-02-18 17:35:44.26687+00, Test Student, null, student, 2026-02-18 17:35:44.26687+00, null, student@hms.com, null, t, $2b$12$dTOkox0NSJ6z6btOju3cb.d5MAPtrSS94OgUoPDU8uxtWiH5xa0vG).'}
+Traceback (most recent call last):
+  File "/Users/valurothusharan/Desktop/hms/hms/backend/app/services/auth_service.py", line 88, in register_user
+    res = supabase.table("profiles").insert(new_profile).execute()
+  File "/opt/anaconda3/lib/python3.13/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'null value in column "phone" of relation "profiles" violates not-null constraint', 'code': '23502', 'hint': None, 'details': 'Failing row contains (7fa14247-1885-425e-bf27-263083231426, 2026-02-18 17:35:44.26687+00, Test Student, null, student, 2026-02-18 17:35:44.26687+00, null, student@hms.com, null, t, $2b$12$dTOkox0NSJ6z6btOju3cb.d5MAPtrSS94OgUoPDU8uxtWiH5xa0vG).'}
