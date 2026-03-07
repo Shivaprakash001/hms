@@ -4,7 +4,7 @@ import { Plus, Search, Filter, Layers, LayoutGrid, Users, MoreVertical, DoorOpen
 import AddRoomModal from '../../components/owner/rooms/AddRoomModal';
 import AddTenantModal from '../../components/owner/rooms/AddTenantModal';
 import ShiftTenantModal from '../../components/owner/rooms/ShiftTenantModal';
-import { roomService, allocationService, studentService, authService } from '../../api/services';
+import { roomService, studentService, authService } from '../../api/services';
 
 const ManageRooms = () => {
     // State
@@ -20,68 +20,29 @@ const ManageRooms = () => {
     const [filterStatus, setFilterStatus] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
 
-    // Fetch Data
+    // Fetch Data — uses grouped endpoint: returns [{id, number, rooms:[{id, number, capacity, occupied, tenants:[...]}]}]
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [roomsData, allocationsData] = await Promise.all([
-                roomService.getAll(),
-                allocationService.getAllActive()
-            ]);
+            // GET /rooms/?grouped=true (default) — backend returns floors with nested rooms+tenants
+            const floorsData = await roomService.getAll({ grouped: true });
 
-            // Map allocations to rooms
-            const roomsWithTenants = roomsData.map(room => {
-                const roomAllocations = allocationsData.filter(a => a.room_id === room.id);
-                const tenants = roomAllocations.map(a => ({
-                    id: a.student.id, // Student ID
-                    profileId: a.student.profile_id,
-                    name: a.student.profiles && a.student.profiles.name ? a.student.profiles.name : 'Unknown',
-                    allocationId: a.id,
-                    joinedOn: a.student.joined_on,
-                    rent: a.student.monthly_rent,
-                    ...a.student
-                }));
-
-                return {
+            // Normalise: backend returns room.number but template uses room.room_no in some places
+            // Ensure both fields exist for compatibility
+            const normalised = (floorsData || []).map(floor => ({
+                ...floor,
+                rooms: (floor.rooms || []).map(room => ({
                     ...room,
-                    tenants: tenants,
-                    currentOccupancy: tenants.length,
-                    status: tenants.length === 0 ? 'Vacant' : (tenants.length >= room.capacity ? 'Full' : 'Occupied')
-                };
-            });
+                    room_no: room.room_no ?? room.number,   // backend uses 'number' in grouped response
+                    number: room.number ?? room.room_no,
+                    tenants: room.tenants || [],
+                    status: (room.tenants?.length ?? 0) === 0
+                        ? 'Vacant'
+                        : (room.tenants?.length >= room.capacity ? 'Full' : 'Occupied')
+                }))
+            }));
 
-            // Group by Floor (assuming room_no starts with floor number, e.g., 101 -> 1)
-            const floorMap = {};
-            roomsWithTenants.forEach(room => {
-                // Extract floor number. If standard 3 digit: 101->1. If 202->2.
-                // If non-numeric, fallback to 'G' or similar?
-                let floorId = 'G';
-                if (room.room_no.length >= 3) {
-                    floorId = room.room_no.substring(0, room.room_no.length - 2);
-                } else if (room.room_no.length === 2 && !isNaN(room.room_no)) {
-                    // e.g. "12", "01" -> "0"
-                    floorId = '0';
-                }
-
-                if (!floorMap[floorId]) {
-                    floorMap[floorId] = { id: floorId, number: floorId, rooms: [] };
-                }
-                floorMap[floorId].rooms.push(room);
-            });
-
-            // Convert to array and sort
-            const floorsArr = Object.values(floorMap).sort((a, b) => {
-                if (a.number === 'G' || a.number === '0') return -1;
-                if (b.number === 'G' || b.number === '0') return 1;
-                return parseInt(a.number) - parseInt(b.number);
-            });
-
-            // Sort rooms within floors
-            floorsArr.forEach(f => {
-                f.rooms.sort((a, b) => a.room_no.localeCompare(b.room_no, undefined, { numeric: true }));
-            });
-
-            setFloors(floorsArr);
+            setFloors(normalised);
             setError(null);
         } catch (err) {
             console.error("Error fetching room data:", err);
@@ -113,7 +74,9 @@ const ManageRooms = () => {
             setShowAddRoomModal(false);
             setShowAddFloorModal(false);
         } catch (err) {
-            alert("Failed to create room: " + (err.response?.data?.detail || err.message));
+            const detail = err.response?.data?.detail;
+            const msg = detail?.message || detail || err.message || 'Unknown error';
+            alert("Failed to create room: " + msg);
         }
     };
 

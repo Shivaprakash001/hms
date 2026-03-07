@@ -7,7 +7,7 @@ class RoomBase(BaseModel):
     capacity: int = 4
 
 class RoomCreate(RoomBase):
-    pass
+    owner_id: Optional[str] = None
 
 class RoomUpdate(BaseModel):
     room_no: Optional[str] = None

@@ -48,7 +48,9 @@ def create_room(
     """
     Create a new room.
     """
-    result = room_service.create_room(room.model_dump())
+    room_data = room.model_dump()
+    room_data["owner_id"] = user.user_id
+    result = room_service.create_room(room_data)
     return _handle_service_response(result, status.HTTP_201_CREATED)
 
 @router.get("/{room_id}", response_model=RoomResponse)

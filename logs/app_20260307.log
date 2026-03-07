@@ -18959,3 +18959,53 @@ Traceback (most recent call last):
   File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/postgrest/_sync/request_builder.py", line 70, in execute
     raise APIError(r.json())
 postgrest.exceptions.APIError: {'code': 'PGRST205', 'details': None, 'hint': "Perhaps you meant the table 'public.room_allocations'", 'message': "Could not find the table 'public.rent_obligations' in the schema cache"}
+2026-03-07 17:37:54 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-07 17:38:07 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-07 17:42:13 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-07 17:42:24 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-07 17:45:51 - app.services.auth_service - INFO - Login attempt for: spchidiri2006@gmail.com
+2026-03-07 17:45:52 - app.services.auth_service - INFO - Login successful: spchidiri2006@gmail.com
+2026-03-07 17:45:53 - app.services.payment_service - ERROR - Error fetching payments: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+             ^^^^^^^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+2026-03-07 17:45:54 - app.services.payment_service - ERROR - Error fetching payments: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/payment_service.py", line 337, in get_all_payments
+    result = query.execute()
+             ^^^^^^^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find a relationship between 'payments' and 'rent_obligations' in the schema cache", 'code': 'PGRST200', 'hint': None, 'details': "Searched for a foreign key relationship between 'payments' and 'rent_obligations' in the schema 'public', but no matches were found."}
+2026-03-07 17:45:55 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+2026-03-07 17:45:55 - app.services.dashboard_service - ERROR - Error fetching dashboard stats: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/dashboard_service.py", line 78, in get_dashboard_stats
+    .execute()
+     ^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': "Could not find the table 'public.rent_obligations' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.room_allocations'", 'details': None}
+2026-03-07 17:49:53 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-07 17:50:03 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-07 17:50:16 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
+2026-03-07 17:51:44 - app.services.room_service - ERROR - Error creating room: {'message': 'duplicate key value violates unique constraint "rooms_room_no_key"', 'code': '23505', 'hint': None, 'details': 'Key (room_no)=(101) already exists.'}
+Traceback (most recent call last):
+  File "/home/sp/Desktop/project-hms/backend/app/services/room_service.py", line 116, in create_room
+    result = supabase.table("rooms").insert(data).execute()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/sp/Desktop/project-hms/.venv/lib/python3.12/site-packages/postgrest/_sync/request_builder.py", line 53, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'duplicate key value violates unique constraint "rooms_room_no_key"', 'code': '23505', 'hint': None, 'details': 'Key (room_no)=(101) already exists.'}
+2026-03-07 22:04:55 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left

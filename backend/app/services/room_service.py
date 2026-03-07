@@ -105,8 +105,11 @@ def create_room(data: dict) -> Dict[str, Any]:
     Create a new room.
     """
     try:
-        # Check if room already exists
-        existing = supabase.table("rooms").select("id").eq("room_no", data["room_no"]).execute()
+        # Check if room already exists for this owner
+        existing_query = supabase.table("rooms").select("id").eq("room_no", data["room_no"])
+        if data.get("owner_id"):
+            existing_query = existing_query.eq("owner_id", data["owner_id"])
+        existing = existing_query.execute()
         if existing.data:
             return ServiceResponse.error(ErrorCode.RESOURCE_ALREADY_EXISTS, f"Room {data['room_no']} already exists")
 

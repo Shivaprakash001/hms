@@ -12,21 +12,18 @@ const AddRoomModal = ({ floor, onClose, onAdd }) => {
     });
     const [loading, setLoading] = useState(false);
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
-        setTimeout(() => {
-            try {
-                // Split amenities string into array
-                const amenitiesArray = formData.amenities.split(',').map(a => a.trim()).filter(a => a);
-                onAdd({ ...formData, amenities: amenitiesArray });
-                onClose();
-            } catch (error) {
-                alert(error.message);
-            } finally {
-                setLoading(false);
-            }
-        }, 300);
+        try {
+            const amenitiesArray = formData.amenities.split(',').map(a => a.trim()).filter(a => a);
+            await onAdd({ ...formData, amenities: amenitiesArray });
+            // Parent (handleAddRoom) closes the modal on success
+        } catch (error) {
+            // Error is already alerted by the parent handler
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
