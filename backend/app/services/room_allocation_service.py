@@ -205,11 +205,9 @@ def shift_room(
         from datetime import timedelta
 
         # Note: We simulate a transaction here by catching failures and log them.
-        # Ideally we'd use an RPC for this.
-        
         # End old
         end_res = supabase.table("room_allocations")\
-            .update({"end_date": prev_end_date.isoformat()})\
+            .update({"end_date": shift_date.isoformat()})\
             .eq("id", old_allocation["id"])\
             .execute()
             

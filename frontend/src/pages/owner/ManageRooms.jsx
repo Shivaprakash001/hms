@@ -115,10 +115,12 @@ const ManageRooms = () => {
 
             // 2. Allocate Room
             try {
+                const today = new Date();
+                const localDate = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
                 await allocationService.allocate({
                     student_id: studentId,
                     room_id: room.id,
-                    start_date: tenantData.joinDate || new Date().toISOString().split('T')[0]
+                    start_date: localDate
                 });
             } catch (allocErr) {
                 if (allocErr.response?.status === 409) {
@@ -126,10 +128,12 @@ const ManageRooms = () => {
                         `${tenantData.name} already has an active room allocation. Do you want to transfer them to Room ${room.room_no} instead?`
                     );
                     if (confirmShift) {
+                        const today = new Date();
+                        const localDate = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
                         await allocationService.shift({
                             student_id: studentId,
                             new_room_id: room.id,
-                            shift_date: tenantData.joinDate || new Date().toISOString().split('T')[0]
+                            shift_date: tenantData.joinDate || localDate
                         });
                     } else {
                         return;
@@ -164,10 +168,12 @@ const ManageRooms = () => {
 
     const handleShiftTenant = async (studentId, newRoomId) => {
         try {
+            const today = new Date();
+            const localDate = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
             await allocationService.shift({
                 student_id: studentId,
                 new_room_id: newRoomId,
-                shift_date: new Date().toISOString().split('T')[0]
+                shift_date: localDate
             });
             await fetchData();
             setShowShiftTenantModal(false);

@@ -1,6 +1,6 @@
 from app.db import supabase
 from typing import Optional, Dict, Any
-from datetime import date
+from datetime import date, datetime
 from postgrest.exceptions import APIError
 from app.utils.responses import ServiceResponse, ErrorCode
 from app.utils.logger import get_logger
@@ -279,7 +279,11 @@ def get_all_students(
             
             if "room_allocations" in student:
                 allocations = student.pop("room_allocations")
-                active_allocation = next((a for a in allocations if a.get("end_date") is None), None)
+                today_str = datetime.now().date().isoformat()
+                active_allocation = next((
+                    a for a in allocations 
+                    if a.get("end_date") is None or a.get("end_date") >= today_str
+                ), None)
                 if active_allocation:
                     student["current_room"] = active_allocation.get("rooms")
                 else:
