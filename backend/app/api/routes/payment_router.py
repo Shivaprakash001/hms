@@ -35,14 +35,14 @@ def _handle_service_response(result: dict, success_status: int = status.HTTP_200
     response_model=dict,
     status_code=status.HTTP_201_CREATED,
     summary="Generate rent obligations for the month",
-    dependencies=[Depends(require_admin)]
+    dependencies=[Depends(require_admin_or_owner)]
 )
 def generate_rent(
     data: RentGenerationRequest,
     user: UserContext = Depends(get_current_user)
 ):
     """
-    **Administrative Task**: Generate rent records for all active room stays.
+    **Owner/Admin Task**: Generate rent records for all active room stays.
     
     - Calculates prorated rent for mid-month entries/exits.
     - Skips records where obligation already exists.
@@ -50,6 +50,7 @@ def generate_rent(
     """
     result = payment_service.generate_monthly_rent(data.rent_month, user_id=user.user_id)
     return _handle_service_response(result, status.HTTP_201_CREATED)
+
 
 
 @router.post(
