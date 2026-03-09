@@ -19,7 +19,7 @@ class StudentStatus(str, Enum):
 VALID_STATUS_TRANSITIONS = {
     StudentStatus.INVITED: [StudentStatus.ACTIVE],
     StudentStatus.ACTIVE: [StudentStatus.LEFT, StudentStatus.BLACKLISTED],
-    StudentStatus.LEFT: [StudentStatus.ARCHIVED],  # Cannot go back to ACTIVE without re-admission
+    StudentStatus.LEFT: [StudentStatus.ACTIVE, StudentStatus.ARCHIVED],  # Can go back to ACTIVE (owner re-admits)
     StudentStatus.BLACKLISTED: [StudentStatus.ARCHIVED],
     StudentStatus.ARCHIVED: []  # Terminal state
 }
