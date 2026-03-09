@@ -8,7 +8,7 @@ import api from '../../api/axios';
 const StudentDashboard = () => {
     const { user } = useAuth();
 
-    const [dues, setDues] = useState([]);
+    const [dues, setDues] = useState({ obligations: [], outstanding_balance: 0 });
     const [roomData, setRoomData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -20,7 +20,7 @@ const StudentDashboard = () => {
                     paymentService.getStudentHistory(user.student_id),
                     api.get('/allocations/my-room')
                 ]);
-                if (payRes.status === 'fulfilled') setDues(payRes.value || []);
+                if (payRes.status === 'fulfilled') setDues(payRes.value || { obligations: [], outstanding_balance: 0 });
                 if (roomRes.status === 'fulfilled') setRoomData(roomRes.value?.data || null);
             } catch (error) {
                 console.error("Failed to fetch dashboard data:", error);
@@ -31,10 +31,8 @@ const StudentDashboard = () => {
         fetchData();
     }, [user]);
 
-    // Calculate pending dues
-    const pendingDues = dues
-        .filter(p => p.status === 'pending' || p.status === 'overdue')
-        .reduce((sum, p) => sum + p.amount, 0);
+    // Calculate pending dues from obligations
+    const pendingDues = dues.outstanding_balance || (dues.obligations || []).filter(o => o.status === 'pending' || o.status === 'partial' || o.status === 'overdue').reduce((sum, o) => sum + (o.amount || 0), 0);
 
     // Compute next payment from due_day
     const getNextPaymentDate = () => {
