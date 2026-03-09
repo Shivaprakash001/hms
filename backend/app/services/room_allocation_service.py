@@ -152,18 +152,43 @@ def shift_room(
         
         old_allocation = active_res.data[0]
         
-        # 2. End current allocation
-        from datetime import timedelta
-        prev_end_date = shift_date - timedelta(days=1)
-        
-        # Validate shift_date
         old_start_date = datetime.strptime(old_allocation.get("start_date"), "%Y-%m-%d").date()
-        if shift_date <= old_start_date:
+        
+        if shift_date < old_start_date:
              return ServiceResponse.error(
                 ErrorCode.INVALID_INPUT,
                 "Invalid shift date",
-                f"Shift date {shift_date} must be after current allocation start date {old_start_date}."
+                f"Shift date {shift_date} must be on or after current allocation start date {old_start_date}."
             )
+
+        # Handle same-day shift (CORRECTION)
+        if shift_date == old_start_date:
+            logger.info(f"Same-day shift detected for student {student_id}. Updating current allocation.")
+            # Check capacity manually as a correction flow
+            room_res = supabase.table("rooms").select("capacity").eq("id", new_room_id).execute()
+            if not room_res.data:
+                return ServiceResponse.not_found("Room")
+            
+            capacity = room_res.data[0]["capacity"]
+            occupants_res = supabase.table("room_allocations").select("id", count="exact").eq("room_id", new_room_id).is_("end_date", "null").execute()
+            active_occupants = occupants_res.count if hasattr(occupants_res, 'count') else len(occupants_res.data)
+            
+            if active_occupants >= capacity:
+                return ServiceResponse.error(ErrorCode.INVALID_INPUT, "Target room is at full capacity")
+            
+            # Update current allocation's room_id
+            update_res = supabase.table("room_allocations")\
+                .update({"room_id": new_room_id})\
+                .eq("id", old_allocation["id"])\
+                .execute()
+            
+            if not update_res.data:
+                return ServiceResponse.error(ErrorCode.DB_002, "Failed to update room assignment")
+                
+            return ServiceResponse.success(update_res.data[0], "Room assignment corrected successfully")
+
+        # Standard shift for future/later dates
+        from datetime import timedelta
 
         # Note: We simulate a transaction here by catching failures and log them.
         # Ideally we'd use an RPC for this.
@@ -299,7 +324,7 @@ def get_active_allocations(user_id: str) -> Dict[str, Any]:
         # Filter by owner in Python since PostgREST nested filtering (students.owner_id)
         # is not reliably supported in supabase-py
         res = supabase.table("room_allocations")\
-            .select("*, students(id, owner_id, profiles!students_profile_id_fkey(name)), rooms(id, room_no, capacity)")\
+            .select("*, students(id, owner_id, profiles!students_profile_id_fkey(name)), rooms(*)")\
             .is_("end_date", "null")\
             .execute()
 

@@ -16,9 +16,10 @@ def get_dashboard_stats(user_id: str):
         else:
             next_month = today.replace(month=today.month + 1, day=1)
         
-        # 1. Active Tenants
-        students_res = supabase.table("students").select("id", count="exact").eq("status", "ACTIVE").eq("owner_id", user_id).execute()
-        active_tenants = students_res.count if hasattr(students_res, 'count') else len(students_res.data)
+        # 1. Base query for owner's students
+        all_owner_students = supabase.table("students").select("id, status").eq("owner_id", user_id).execute()
+        all_student_ids = [s['id'] for s in all_owner_students.data]
+        active_tenants = len([s for s in all_owner_students.data if s['status'] == 'ACTIVE'])
 
         # 2. Total Capacity
         rooms_res = supabase.table("rooms").select("capacity").eq("owner_id", user_id).execute()
@@ -65,20 +66,20 @@ def get_dashboard_stats(user_id: str):
         current_expenses = sum(Decimal(str(e['amount'])) for e in expenses_res.data)
 
         # 5. Pending Dues
-        # This is complex. Sum of all non-WAIVED, non-PAID obligations REMAINING balance.
-        # For simplicity/speed, let's just fetch all PENDING/PARTIAL obligations and sum their amounts, 
-        # minus payments for them.
-        # For owner isolation, we must either join with students or assume rent_obligations has owner_id.
-        # Assuming rent_obligations has owner_id:
-        obligations_res = supabase.table("rent_obligations")\
-            .select("id, amount")\
-            .neq("status", "PAID")\
-            .neq("status", "WAIVED")\
-            .eq("owner_id", user_id)\
-            .execute()
+        if not all_student_ids:
+            pending_total = Decimal(0)
+            obligations_res_data = []
+        else:
+            obligations_res = supabase.table("rent_obligations")\
+                .select("id, amount")\
+                .neq("status", "PAID")\
+                .neq("status", "WAIVED")\
+                .in_("student_id", all_student_ids)\
+                .execute()
+            obligations_res_data = obligations_res.data
             
         pending_total = Decimal(0)
-        for ob in obligations_res.data:
+        for ob in obligations_res_data:
             amount = Decimal(str(ob['amount']))
             # Get payments for this ob
             p_res = supabase.table("payments").select("amount_paid").eq("obligation_id", ob['id']).execute()

@@ -7,13 +7,8 @@ wheels/
 *.egg-info
 
 # Virtual environments
-<<<<<<< HEAD
 .venv
 
-# Logs
-logs/
-*.log
-=======
 # Logs
 logs/
 *.log
@@ -22,4 +17,3 @@ logs/
 frontend/.vite/
 frontend/dist/
 frontend/node_modules/
->>>>>>> origin/dev
