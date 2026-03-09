@@ -39,8 +39,19 @@ def mark_as_read(notification_id: str, user_id: str) -> Dict[str, Any]:
 def create_notification(user_id: str, title: str, message: str, n_type: str) -> Dict[str, Any]:
     """Internal helper to create a notification."""
     try:
+        # Fetch the role and owner_id of the user
+        prof_res = supabase.table("profiles").select("role, owner_id").eq("id", user_id).execute()
+        owner_id = None
+        if prof_res.data:
+            profile = prof_res.data[0]
+            if profile.get("role") in ("admin", "owner"):
+                owner_id = user_id
+            else:
+                owner_id = profile.get("owner_id")
+
         data = {
             "user_id": user_id,
+            "owner_id": owner_id,
             "title": title,
             "message": message,
             "type": n_type

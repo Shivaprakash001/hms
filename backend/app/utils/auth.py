@@ -42,7 +42,7 @@ class UserContext(BaseModel):
         return self.role == "student"
     
     def is_owner(self) -> bool:
-        return self.role == "owner"
+        return self.role in ("admin", "owner")
     
     def can_manage_students(self) -> bool:
         return self.role in ("admin", "owner")

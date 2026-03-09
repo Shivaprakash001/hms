@@ -16,12 +16,15 @@ def _handle_response(result: dict):
 
 @router.get("/", response_model=List[ExpenseResponse])
 def get_expenses(user: UserContext = Depends(require_admin_or_owner)):
-    result = expense_service.get_all_expenses()
+    owner_id = user.user_id if user.is_owner() else None
+    result = expense_service.get_all_expenses(owner_id=owner_id)
     return _handle_response(result)
 
 @router.post("/", response_model=ExpenseResponse)
 def create_expense(expense: ExpenseCreate, user: UserContext = Depends(require_admin_or_owner)):
-    result = expense_service.create_expense(expense.model_dump(mode='json'))
+    data = expense.model_dump(mode='json')
+    data['owner_id'] = user.user_id
+    result = expense_service.create_expense(data)
     return _handle_response(result)
 
 @router.put("/{expense_id}", response_model=ExpenseResponse)

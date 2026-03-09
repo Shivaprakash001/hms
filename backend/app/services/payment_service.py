@@ -179,6 +179,7 @@ def record_payment(
         payment_data = {
             "obligation_id": obligation_id,
             "student_id": obligation["student_id"],
+            "owner_id": obligation.get("owner_id") or user_id,
             "amount_paid": float(amount_paid),
             "payment_method": payment_method,
             "reference_number": reference_number,

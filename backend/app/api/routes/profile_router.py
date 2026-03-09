@@ -257,5 +257,6 @@ def read_unassigned_students(
     user: UserContext = Depends(get_current_user)
 ):
     """Get all student profiles that are not currently assigned to any room."""
-    result = profile_service.get_unassigned_student_profiles()
+    owner_id = user.user_id if user.role in ("admin", "owner") else None
+    result = profile_service.get_unassigned_student_profiles(owner_id=owner_id)
     return _handle_service_response(result)

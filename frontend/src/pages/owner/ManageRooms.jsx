@@ -114,11 +114,30 @@ const ManageRooms = () => {
             }
 
             // 2. Allocate Room
-            await allocationService.allocate({
-                student_id: studentId,
-                room_id: room.id,
-                start_date: tenantData.joinDate || new Date().toISOString().split('T')[0]
-            });
+            try {
+                await allocationService.allocate({
+                    student_id: studentId,
+                    room_id: room.id,
+                    start_date: tenantData.joinDate || new Date().toISOString().split('T')[0]
+                });
+            } catch (allocErr) {
+                if (allocErr.response?.status === 409) {
+                    const confirmShift = window.confirm(
+                        `${tenantData.name} already has an active room allocation. Do you want to transfer them to Room ${room.room_no} instead?`
+                    );
+                    if (confirmShift) {
+                        await allocationService.shift({
+                            student_id: studentId,
+                            new_room_id: room.id,
+                            shift_date: tenantData.joinDate || new Date().toISOString().split('T')[0]
+                        });
+                    } else {
+                        return;
+                    }
+                } else {
+                    throw allocErr;
+                }
+            }
 
             await fetchData();
             setShowAddTenantModal(false);

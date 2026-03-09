@@ -4,9 +4,12 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-def get_all_expenses():
+def get_all_expenses(owner_id: str = None):
     try:
-        response = supabase.table("expenses").select("*").order("date", desc=True).execute()
+        query = supabase.table("expenses").select("*")
+        if owner_id:
+            query = query.eq("owner_id", owner_id)
+        response = query.order("date", desc=True).execute()
         
         # MOCK_EXPENSES: { id, title, amount, date, category, status }
         # Map DB fields to Mock fields if necessary

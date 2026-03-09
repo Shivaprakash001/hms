@@ -206,6 +206,7 @@ def invite_tenant(data: dict, owner_id: str) -> Dict[str, Any]:
         # 3.1 Create Room Allocation (Crucial for UI to show the room)
         allocation_data = {
             "student_id": student_id,
+            "owner_id": owner_id,
             "room_id": room_id,
             "start_date": datetime.now().date().isoformat()
         }

@@ -61,6 +61,20 @@ def allocate_room(
         return ServiceResponse.success(allocation_result, "Room allocated successfully")
 
     except Exception as e:
+        # postgrest-py often raises an APIError if the returned JSON contains keys like 'message'
+        # The raw JSON dict returned by the RPC is accessible via e.json()
+        if hasattr(e, "json"):
+            try:
+                result = e.json()
+                if isinstance(result, dict) and "success" in result and not result.get("success"):
+                    error_msg = result.get("message", "Allocation failed")
+                    error_code_val = result.get("error_code", "VAL_002")
+                    error_code = next((err for err in ErrorCode if err.value == error_code_val), ErrorCode.INVALID_INPUT)
+                    logger.warning(f"Allocation rejected by RPC: {error_msg}")
+                    return ServiceResponse.error(error_code, error_msg)
+            except Exception:
+                pass
+
         logger.exception(f"Error calling allocation RPC: {e}")
         return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "An unexpected error occurred", str(e))
 
