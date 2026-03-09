@@ -293,8 +293,8 @@ export default function ManageStudents() {
                                                         <button
                                                             onClick={(e) => handleToggleStatus(student, e)}
                                                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${student.status === 'ACTIVE'
-                                                                    ? 'text-amber-600 hover:bg-amber-50 border border-amber-200 bg-amber-50/50'
-                                                                    : 'text-emerald-600 hover:bg-emerald-50 border border-emerald-200 bg-emerald-50/50'
+                                                                ? 'text-amber-600 hover:bg-amber-50 border border-amber-200 bg-amber-50/50'
+                                                                : 'text-emerald-600 hover:bg-emerald-50 border border-emerald-200 bg-emerald-50/50'
                                                                 }`}
                                                             title={student.status === 'ACTIVE' ? 'Mark as Left' : 'Reactivate'}
                                                         >
@@ -330,8 +330,8 @@ export default function ManageStudents() {
                                                 <button
                                                     onClick={(e) => handleToggleStatus(student, e)}
                                                     className={`px-2 py-1 rounded text-xs font-bold ${student.status === 'ACTIVE'
-                                                            ? 'bg-amber-50 text-amber-600'
-                                                            : 'bg-emerald-50 text-emerald-600'
+                                                        ? 'bg-amber-50 text-amber-600'
+                                                        : 'bg-emerald-50 text-emerald-600'
                                                         }`}
                                                 >
                                                     {student.status === 'ACTIVE' ? 'Mark Left' : 'Activate'}
@@ -412,15 +412,22 @@ const AddStudentModal = ({ onClose, initialData, onSave }) => {
     const loadRooms = async () => {
         setLoadingRooms(true);
         try {
-            const data = await roomService.getAll();
-            // Simple client-side filter for now. Ideally backend filter.
-            // We need to know which rooms are not full.
-            // But roomService.getAll returns raw rooms without occupancy info usually?
-            // Wait, ManageRooms calculated occupancy.
-            // Here we might just list all rooms and let backend error if full, or try to guess.
-            // For better UX, we should fetch allocations too.
-            // For now, listing all rooms.
-            setRooms(data);
+            // grouped=true returns floors with nested rooms that include occupancy counts
+            const floors = await roomService.getAll();  // default grouped=true
+
+            // Flatten rooms from all floors
+            let allRooms = [];
+            if (Array.isArray(floors)) {
+                for (const floor of floors) {
+                    if (Array.isArray(floor.rooms)) {
+                        allRooms = allRooms.concat(floor.rooms);
+                    }
+                }
+            }
+
+            // Only show rooms that still have capacity (not fully occupied)
+            const available = allRooms.filter(r => (r.occupied ?? 0) < (r.capacity ?? Infinity));
+            setRooms(available);
         } catch (e) {
             console.error(e);
         } finally {
@@ -487,10 +494,15 @@ const AddStudentModal = ({ onClose, initialData, onSave }) => {
                                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold"
                                     required
                                 >
-                                    <option value="">Select Room</option>
-                                    {rooms.map(r => (
-                                        <option key={r.id} value={r.id}>Room {r.room_no} ({r.capacity})</option>
-                                    ))}
+                                    <option value="">Select a room</option>
+                                    {loadingRooms
+                                        ? <option disabled>Loading rooms...</option>
+                                        : rooms.map(r => (
+                                            <option key={r.id} value={r.id}>
+                                                Room {r.number ?? r.room_no} — {r.occupied ?? 0}/{r.capacity} occupied
+                                            </option>
+                                        ))
+                                    }
                                 </select>
                             </div>
                         )}
