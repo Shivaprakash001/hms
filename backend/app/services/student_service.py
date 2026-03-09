@@ -279,15 +279,17 @@ def get_all_students(
             
             if "room_allocations" in student:
                 allocations = student.pop("room_allocations")
-                today_str = datetime.now().date().isoformat()
-                active_allocation = next((
-                    a for a in allocations 
-                    if a.get("end_date") is None or a.get("end_date") >= today_str
-                ), None)
+                # IMPORTANT: only pick allocations with NO end_date (still active)
+                # Do NOT use end_date >= today — that shows closed allocations as active
+                active_allocation = next(
+                    (a for a in allocations if a.get("end_date") is None),
+                    None
+                )
                 if active_allocation:
                     student["current_room"] = active_allocation.get("rooms")
                 else:
                     student["current_room"] = None
+
             
             # Apply in-memory search filter if provided
             if search:
