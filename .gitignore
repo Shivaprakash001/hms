@@ -12,3 +12,8 @@ wheels/
 # Logs
 logs/
 *.log
+
+# Frontend build artifacts
+frontend/.vite/
+frontend/dist/
+frontend/node_modules/

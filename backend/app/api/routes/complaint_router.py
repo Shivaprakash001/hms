@@ -50,7 +50,8 @@ def list_complaints(
         status=status,
         category=category,
         limit=limit,
-        offset=offset
+        offset=offset,
+        owner_id=user.user_id if user.is_owner() else None
     )
     return _handle_service_response(result)
 
@@ -78,6 +79,7 @@ def update_complaint_status(
         complaint_id,
         data.get("status"),
         remarks=data.get("staff_remarks"),
-        updated_by=user.user_id
+        updated_by=user.user_id,
+        requesting_user_role=user.role
     )
     return _handle_service_response(result)

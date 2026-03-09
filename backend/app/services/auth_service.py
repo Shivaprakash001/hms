@@ -137,9 +137,9 @@ def invite_tenant(data: dict, owner_id: str) -> Dict[str, Any]:
     try:
         email = data.get("email")
         name = data.get("name")
-        phone = data.get("phone")          # NEW: phone number
+        phone = data.get("phone")
         room_id = str(data.get("room_id")) if data.get("room_id") else None
-        monthly_rent = data.get("monthly_rent") or 0  # NEW: rent at invite time
+        monthly_rent = data.get("monthly_rent") or 0
 
         # 0. Check if profile already exists
         existing = supabase.table("profiles").select("id").eq("email", email).execute()
@@ -161,13 +161,13 @@ def invite_tenant(data: dict, owner_id: str) -> Dict[str, Any]:
             logger.error(f"Failed to create auth user for {email}: {auth_err}")
             return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, f"Auth user creation failed: {str(auth_err)}")
 
-        # 2. Create Profile using the Auth User ID (include phone)
+        # 2. Create Profile using the Auth User ID
         hashed_temp = get_password_hash(temp_password)
         new_profile = {
             "id": auth_user_id,
             "email": email,
             "name": name,
-            "phone": phone,            # ← saved here
+            "phone": phone,
             "role": "student",
             "is_active": True,
             "owner_id": owner_id,
@@ -183,11 +183,11 @@ def invite_tenant(data: dict, owner_id: str) -> Dict[str, Any]:
 
         profile_id = str(prof_res.data[0]["id"])
 
-        # 3. Create Student enrollment (use provided monthly_rent)
+        # 3. Create Student enrollment
         new_student = {
             "profile_id": profile_id,
             "owner_id": owner_id,
-            "room_id": room_id if room_id else None,
+            "room_id": room_id,
             "status": "INVITED",
             "joined_on": datetime.now().date().isoformat(),
             "monthly_rent": str(monthly_rent)  # Decimal-safe as string
@@ -201,6 +201,18 @@ def invite_tenant(data: dict, owner_id: str) -> Dict[str, Any]:
                 pass
             return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to create student enrollment")
 
+        student_id = str(stu_res.data[0]["id"])
+
+        # 3.1 Create Room Allocation (Crucial for UI to show the room)
+        if room_id:
+            allocation_data = {
+                "student_id": student_id,
+                "room_id": room_id,
+                "start_date": datetime.now().date().isoformat()
+            }
+            alloc_res = supabase.table("room_allocations").insert(allocation_data).execute()
+            if not alloc_res.data:
+                logger.warning(f"Failed to create room allocation for invited student {student_id}")
 
         # 4. Generate Invitation Token
         token = secrets.token_urlsafe(32)

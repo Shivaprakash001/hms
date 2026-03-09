@@ -21,7 +21,10 @@ from app.services.room_allocation_service import handle_student_left
 app = FastAPI(title="Hostel Management System API", version="1.0.0")
 
 # CORS Configuration
-origins = ["*"]  # Allow all origins for development (Vite usually runs on 5173)
+origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
 
 app.add_middleware(
     CORSMiddleware,

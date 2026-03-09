@@ -73,11 +73,11 @@ const Complaints = () => {
 
             // Update local state
             setComplaints(prev => prev.map(c =>
-                c.id === id ? { ...c, status: 'RESOLVED' } : c
+                c.id === id ? { ...c, status: 'resolved' } : c
             ));
 
             if (selectedComplaint && selectedComplaint.id === id) {
-                setSelectedComplaint({ ...selectedComplaint, status: 'RESOLVED' });
+                setSelectedComplaint({ ...selectedComplaint, status: 'resolved' });
             }
         } catch (error) {
             console.error("Failed to resolve complaint:", error);

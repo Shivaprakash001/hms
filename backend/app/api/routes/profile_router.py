@@ -244,3 +244,18 @@ def restore_deleted_profile(
     """
     result = profile_service.restore_profile(profile_id)
     return _handle_service_response(result)
+
+
+@router.get(
+    "/unassigned/students",
+    response_model=dict,
+    summary="Get unassigned student profiles",
+    description="Retrieve all student profiles that are not currently assigned to any room",
+    dependencies=[Depends(require_admin_or_owner)]
+)
+def read_unassigned_students(
+    user: UserContext = Depends(get_current_user)
+):
+    """Get all student profiles that are not currently assigned to any room."""
+    result = profile_service.get_unassigned_student_profiles()
+    return _handle_service_response(result)

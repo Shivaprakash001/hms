@@ -8,7 +8,7 @@ const ShiftTenantModal = ({ selectedTenant, selectedRoom, floors, onClose, onShi
 
     // Filter available rooms (must have capacity > occupied)
     const availableRooms = floors.flatMap(floor =>
-        floor.rooms.filter(r => r.currentOccupancy < r.capacity && r.id !== selectedRoom?.id)
+        floor.rooms.filter(r => (r.tenants?.length || 0) < r.capacity && r.id !== selectedRoom?.id)
     );
 
     const handleShift = async () => {
@@ -115,10 +115,10 @@ const ShiftTenantModal = ({ selectedTenant, selectedRoom, floors, onClose, onShi
                                             <div className="text-right">
                                                 <div className="flex items-center gap-1.5 justify-end">
                                                     <Users size={12} className="text-slate-300" />
-                                                    <span className="text-xs font-black text-slate-900">{room.currentOccupancy || 0}/{room.capacity}</span>
+                                                    <span className="text-xs font-black text-slate-900">{(room.tenants?.length || 0)}/{room.capacity}</span>
                                                 </div>
                                                 <p className="text-[10px] font-bold text-green-600 uppercase tracking-tighter mt-0.5">
-                                                    {room.capacity - (room.currentOccupancy || 0)} Available
+                                                    {room.capacity - (room.tenants?.length || 0)} Available
                                                 </p>
                                             </div>
                                         </div>

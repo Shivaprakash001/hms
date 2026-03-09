@@ -266,3 +266,66 @@ def get_profiles_by_role(role: str) -> Dict[str, Any]:
     """Get all active profiles with a specific role."""
     return get_all_profiles(role=role)
 
+
+def get_unassigned_student_profiles() -> Dict[str, Any]:
+    """
+    Get all active student profiles that are not currently assigned to any room.
+    
+    This includes:
+    1. Profiles with role='student' that have no student record.
+    2. Profiles with role='student' that have a student record but no active room allocation.
+    """
+    try:
+        logger.debug("Fetching unassigned student profiles")
+        
+        # 1. Get all students with active allocations
+        active_allocations = supabase.table("room_allocations")\
+            .select("student_id")\
+            .is_("end_date", "null")\
+            .execute()
+        
+        assigned_student_ids = [a.get("student_id") for a in active_allocations.data]
+        
+        # 2. Get profiles to exclude: 
+        # - Those with active allocations
+        # - Those marked as BLACKLISTED or ARCHIVED (restricted)
+        exclude_profile_ids = []
+        
+        # Get profile_ids for assigned students
+        if assigned_student_ids:
+            assigned_students = supabase.table("students")\
+                .select("profile_id")\
+                .in_("id", assigned_student_ids)\
+                .execute()
+            exclude_profile_ids.extend([s.get("profile_id") for s in assigned_students.data])
+            
+        # Get profile_ids for restricted students
+        restricted_students = supabase.table("students")\
+            .select("profile_id")\
+            .in_("status", ["BLACKLISTED", "ARCHIVED"])\
+            .execute()
+        exclude_profile_ids.extend([s.get("profile_id") for s in restricted_students.data])
+        
+        # Remove duplicates
+        exclude_profile_ids = list(set(exclude_profile_ids))
+            
+        # 3. Get all active student profiles not in the exclude list
+        query = supabase.table("profiles")\
+            .select("*")\
+            .eq("role", "student")\
+            .eq("is_active", True)
+            
+        if exclude_profile_ids:
+            query = query.not_.in_("id", exclude_profile_ids)
+            
+        result = query.execute()
+        
+        return ServiceResponse.success({
+            "profiles": result.data,
+            "count": len(result.data)
+        })
+        
+    except Exception as e:
+        logger.exception(f"Error fetching unassigned profiles: {e}")
+        return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to fetch unassigned profiles", str(e))
+

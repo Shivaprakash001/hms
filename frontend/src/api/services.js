@@ -32,6 +32,10 @@ export const profileService = {
     update: async (profileId, data) => {
         const response = await api.put(`/profiles/${profileId}`, data);
         return response.data;
+    },
+    getUnassignedStudents: async () => {
+        const response = await api.get('/profiles/unassigned/students');
+        return response.data;
     }
 };
 

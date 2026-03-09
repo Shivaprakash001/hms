@@ -57,7 +57,7 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                 email: formData.email,
                 phone: formData.phone || null,
                 room_id: formData.room_id || null,
-                monthly_rent: formData.monthly_rent ? parseFloat(formData.monthly_rent) : null,
+                monthly_rent: formData.monthly_rent ? parseFloat(formData.monthly_rent) : 0,
             };
             const response = await api.post('/students/invite', payload);
             setSuccessData(response.data);

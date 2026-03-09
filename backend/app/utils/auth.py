@@ -117,6 +117,22 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
+    # Verify profile exists in DB to prevent stale session errors
+    from app.db import supabase
+    try:
+        profile_check = supabase.table("profiles").select("id").eq("id", user_id).execute()
+        if not profile_check.data:
+            logger.warning(f"Authenticated user {user_id} not found in profiles table. Session stale.")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User profile not found. Please log in again.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    except Exception as e:
+        logger.error(f"Error verifying profile existence: {e}")
+        # If DB is down, we still trust the JWT for now to avoid complete outage
+        pass
+
     return UserContext(
         user_id=user_id,
         email=email or "",
