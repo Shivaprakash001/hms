@@ -20,47 +20,50 @@ import StudentComplaints from './pages/student/StudentComplaints.jsx';
 import StudentProfile from './pages/student/StudentProfile.jsx';
 import StudentSettings from './pages/student/StudentSettings.jsx';
 import { AuthProvider } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
 import ProtectedStudentRoute from './components/ProtectedStudentRoute';
 import ProtectedOwnerRoute from './components/ProtectedOwnerRoute';
 
 function App() {
   return (
-    <AuthProvider>
-      <Routes>
-        <Route path="/" element={<Login />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/activate" element={<ActivateAccount />} />
+    <ThemeProvider>
+      <AuthProvider>
+        <Routes>
+          <Route path="/" element={<Login />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/activate" element={<ActivateAccount />} />
 
-        {/* Student Routes */}
+          {/* Student Routes */}
 
-        <Route element={<ProtectedStudentRoute />}>
-          <Route path="/student" element={<StudentLayout />}>
-            <Route index element={<Navigate to="dashboard" replace />} />
-            <Route path="dashboard" element={<StudentDashboard />} />
-            <Route path="payments" element={<StudentPayments />} />
-            <Route path="complaints" element={<StudentComplaints />} />
-            <Route path="profile" element={<StudentProfile />} />
-            <Route path="settings" element={<StudentSettings />} />
+          <Route element={<ProtectedStudentRoute />}>
+            <Route path="/student" element={<StudentLayout />}>
+              <Route index element={<Navigate to="dashboard" replace />} />
+              <Route path="dashboard" element={<StudentDashboard />} />
+              <Route path="payments" element={<StudentPayments />} />
+              <Route path="complaints" element={<StudentComplaints />} />
+              <Route path="profile" element={<StudentProfile />} />
+              <Route path="settings" element={<StudentSettings />} />
+            </Route>
           </Route>
-        </Route>
 
-        {/* Owner Routes */}
-        <Route element={<ProtectedOwnerRoute />}>
-          <Route path="/owner" element={<OwnerLayout />}>
-            <Route index element={<Navigate to="dashboard" replace />} />
-            <Route path="dashboard" element={<OwnerDashboard />} />
-            <Route path="students" element={<ManageStudents />} />
-            <Route path="rooms" element={<ManageRooms />} />
-            <Route path="payments" element={<Payments />} />
-            <Route path="complaints" element={<Complaints />} />
-            <Route path="expenses" element={<Expenses />} />
+          {/* Owner Routes */}
+          <Route element={<ProtectedOwnerRoute />}>
+            <Route path="/owner" element={<OwnerLayout />}>
+              <Route index element={<Navigate to="dashboard" replace />} />
+              <Route path="dashboard" element={<OwnerDashboard />} />
+              <Route path="students" element={<ManageStudents />} />
+              <Route path="rooms" element={<ManageRooms />} />
+              <Route path="payments" element={<Payments />} />
+              <Route path="complaints" element={<Complaints />} />
+              <Route path="expenses" element={<Expenses />} />
+            </Route>
           </Route>
-        </Route>
-        {/* Global Redirects */}
-        <Route path="/dashboard" element={<Navigate to="/owner/dashboard" replace />} />
-      </Routes>
-    </AuthProvider>
+          {/* Global Redirects */}
+          <Route path="/dashboard" element={<Navigate to="/owner/dashboard" replace />} />
+        </Routes>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 
