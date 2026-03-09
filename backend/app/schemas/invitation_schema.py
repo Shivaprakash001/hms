@@ -1,12 +1,13 @@
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
+from uuid import UUID
 
 class TenantInviteRequest(BaseModel):
     name: str = Field(..., min_length=2)
     email: EmailStr
+    room_id: UUID
     phone: Optional[str] = None
-    room_id: Optional[str] = None  # UUID as string to avoid JSON serialization issues
-    monthly_rent: Optional[float] = None  # Optional rent at invite time
+    monthly_rent: Optional[float] = 0.0
 
 class TenantActivateRequest(BaseModel):
     token: str

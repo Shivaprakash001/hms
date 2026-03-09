@@ -138,7 +138,7 @@ def invite_tenant(data: dict, owner_id: str) -> Dict[str, Any]:
         email = data.get("email")
         name = data.get("name")
         phone = data.get("phone")
-        room_id = str(data.get("room_id")) if data.get("room_id") else None
+        room_id = str(data.get("room_id"))
         monthly_rent = data.get("monthly_rent") or 0
 
         # 0. Check if profile already exists
@@ -190,7 +190,7 @@ def invite_tenant(data: dict, owner_id: str) -> Dict[str, Any]:
             "room_id": room_id,
             "status": "INVITED",
             "joined_on": datetime.now().date().isoformat(),
-            "monthly_rent": str(monthly_rent)  # Decimal-safe as string
+            "monthly_rent": monthly_rent
         }
         stu_res = supabase.table("students").insert(new_student).execute()
         if not stu_res.data:
@@ -204,15 +204,14 @@ def invite_tenant(data: dict, owner_id: str) -> Dict[str, Any]:
         student_id = str(stu_res.data[0]["id"])
 
         # 3.1 Create Room Allocation (Crucial for UI to show the room)
-        if room_id:
-            allocation_data = {
-                "student_id": student_id,
-                "room_id": room_id,
-                "start_date": datetime.now().date().isoformat()
-            }
-            alloc_res = supabase.table("room_allocations").insert(allocation_data).execute()
-            if not alloc_res.data:
-                logger.warning(f"Failed to create room allocation for invited student {student_id}")
+        allocation_data = {
+            "student_id": student_id,
+            "room_id": room_id,
+            "start_date": datetime.now().date().isoformat()
+        }
+        alloc_res = supabase.table("room_allocations").insert(allocation_data).execute()
+        if not alloc_res.data:
+            logger.warning(f"Failed to create room allocation for invited student {student_id}")
 
         # 4. Generate Invitation Token
         token = secrets.token_urlsafe(32)

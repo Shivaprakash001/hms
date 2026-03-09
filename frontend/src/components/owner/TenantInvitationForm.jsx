@@ -56,7 +56,7 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                 name: formData.name,
                 email: formData.email,
                 phone: formData.phone || null,
-                room_id: formData.room_id || null,
+                room_id: formData.room_id,
                 monthly_rent: formData.monthly_rent ? parseFloat(formData.monthly_rent) : 0,
             };
             const response = await api.post('/students/invite', payload);
@@ -190,7 +190,7 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
 
                                 {/* Assign Room */}
                                 <div className="space-y-2">
-                                    <label className={labelClass}>Assign Room</label>
+                                    <label className={labelClass}>Assign Room *</label>
                                     <div className="relative group">
                                         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                                             <Home className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
@@ -205,8 +205,9 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                                 value={formData.room_id}
                                                 onChange={handleChange}
                                                 className={inputClass + " appearance-none cursor-pointer"}
+                                                required
                                             >
-                                                <option value="">— Assign later —</option>
+                                                <option value="">Select a room</option>
                                                 {rooms.map(room => (
                                                     <option key={room.id} value={room.id}>
                                                         Room {room.room_no || room.number} — {room.occupied ?? 0}/{room.capacity} occupied
@@ -219,7 +220,7 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
 
                                 {/* Monthly Rent */}
                                 <div className="space-y-2">
-                                    <label className={labelClass}>Monthly Rent (₹)</label>
+                                    <label className={labelClass}>Monthly Rent (₹) *</label>
                                     <div className="relative group">
                                         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                                             <IndianRupee className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
@@ -232,6 +233,7 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                             className={inputClass}
                                             placeholder="5000"
                                             min="0"
+                                            required
                                         />
                                     </div>
                                 </div>
