@@ -1,7 +1,0 @@
-2026-02-19 00:04:21 - app.services.auth_service - INFO - Login attempt for: admin@hms.com
-2026-02-19 00:04:21 - app.services.auth_service - INFO - Login successful: admin@hms.com
-2026-02-19 00:04:55 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
-2026-02-19 00:04:56 - app.services.auth_service - INFO - Login attempt for: admin@hms.com
-2026-02-19 00:04:57 - app.services.auth_service - INFO - Login successful: admin@hms.com
-2026-02-19 01:05:23 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left
-2026-02-19 01:05:23 - app.utils.hooks - INFO - Registered hook for 'student_left': handle_student_left

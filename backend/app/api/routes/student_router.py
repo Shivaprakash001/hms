@@ -218,7 +218,7 @@ def modify_student(
     """
     result = student_service.update_student(
         student_id,
-        student.model_dump(exclude_unset=True, mode='json'),
+        student.model_dump(mode='json', exclude_unset=True),
         updated_by=user.user_id,
         requesting_user_role=user.role
     )

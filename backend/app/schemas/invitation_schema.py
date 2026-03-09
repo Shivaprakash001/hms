@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr, Field
-from uuid import UUID
 from typing import Optional
+from uuid import UUID
 
 class TenantInviteRequest(BaseModel):
     name: str = Field(..., min_length=2)
