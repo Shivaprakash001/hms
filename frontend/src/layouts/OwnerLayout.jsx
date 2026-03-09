@@ -4,17 +4,15 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
     Menu, X, Home, Bed, Users, CreditCard, MessageSquare, Receipt,
     Search, Bell, ChevronLeft, ChevronRight, LogOut, Settings, User,
-    ShieldCheck, AlertCircle, CheckCircle2, Clock, ChevronDown, Sun, Moon
+    ShieldCheck, AlertCircle, CheckCircle2, Clock, ChevronDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
-import { useTheme } from '../context/ThemeContext';
 import { notificationService } from '../api/services';
 
 
 const OwnerLayout = () => {
     const { user, logout } = useAuth();
-    const { isDark, toggle } = useTheme();
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [notifications, setNotifications] = useState([]);
@@ -94,7 +92,7 @@ const OwnerLayout = () => {
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100 flex">
+        <div className="min-h-screen bg-slate-50 font-sans text-slate-900 flex">
             {/* Sidebar (Desktop) */}
             <aside
                 className={`hidden lg:flex flex-col fixed inset-y-0 left-0 z-50 bg-slate-900 border-r border-slate-800 transition-all duration-300 ease-in-out shadow-xl ${sidebarOpen ? 'w-72' : 'w-20'}`}
@@ -238,7 +236,7 @@ const OwnerLayout = () => {
             <div className={`flex-1 flex flex-col min-h-screen transition-all duration-300 ${sidebarOpen ? 'lg:ml-72' : 'lg:ml-20'}`}>
 
                 {/* Top Header */}
-                <header className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-40 px-4 sm:px-8 flex items-center justify-between">
+                <header className="h-16 bg-white border-b border-slate-200 sticky top-0 z-40 px-4 sm:px-8 flex items-center justify-between">
                     <div className="flex items-center gap-4">
                         <button onClick={() => setMobileMenuOpen(true)} className="lg:hidden text-slate-500 hover:text-slate-900">
                             <Menu size={24} />
@@ -331,16 +329,7 @@ const OwnerLayout = () => {
                             </AnimatePresence>
                         </div>
 
-                        {/* Dark Mode Toggle */}
-                        <button
-                            onClick={toggle}
-                            className="p-2 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-                        >
-                            {isDark ? <Sun size={20} /> : <Moon size={20} />}
-                        </button>
-
-                        <div className="h-8 w-[1px] bg-slate-200 dark:bg-slate-700 hidden sm:block"></div>
+                        <div className="h-8 w-[1px] bg-slate-200 hidden sm:block"></div>
 
                         {/* User Profile Section */}
                         <div className="relative" ref={profileRef}>
@@ -397,7 +386,7 @@ const OwnerLayout = () => {
                 </header>
 
                 {/* Content Area */}
-                <main className="flex-1 p-3 sm:p-8 overflow-y-auto bg-slate-50 dark:bg-slate-950">
+                <main className="flex-1 p-3 sm:p-8 overflow-y-auto">
                     <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8 animate-fade-in-up">
                         <Outlet />
                     </div>

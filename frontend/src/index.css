@@ -1,9 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
-/* Enable class-based dark mode for Tailwind v4 */
-@custom-variant dark (&:where(.dark, .dark *));
-
 @theme {
     --font-sans: "Inter", sans-serif;
 }
@@ -11,8 +8,4 @@
 body {
     font-family: "Inter", sans-serif;
     @apply bg-slate-50 text-slate-900;
-}
-
-.dark body {
-    @apply bg-slate-950 text-slate-100;
 }
