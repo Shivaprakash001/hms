@@ -22,7 +22,7 @@ export default function Expenses() {
         date: new Date().toISOString().split('T')[0],
         status: 'pending'
     });
-    const [dateFilter, setDateFilter] = useState('month');
+    const [dateFilter, setDateFilter] = useState('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('all');
 
@@ -35,14 +35,16 @@ export default function Expenses() {
         try {
             setIsLoading(true);
             const response = await expenseService.getAll();
-            // Ensure we handle the response correctly based on axios interceptor return
-            // If axios returns response.data directly (which it seems to do in services.js context comments?)
-            // Actually services.js says "return response". Let's assume response.data is what we want if raw axios.
-            // Wait, services.js code I just wrote returns 'response'. 
-            // Usually axios returns { data: ... }. 
-            // My code: const response = await api.get('/expenses/'); return response;
-            // So here response.data should be the array.
-            setExpenses(response.data || []);
+            // response is already response.data from axios
+            // Backend wraps as { success: true, data: [...] }
+            // But the router returns the list directly via _handle_response
+            let list = [];
+            if (Array.isArray(response)) {
+                list = response;
+            } else if (Array.isArray(response?.data)) {
+                list = response.data;
+            }
+            setExpenses(list);
         } catch (error) {
             console.error("Failed to load expenses:", error);
         } finally {
@@ -98,11 +100,12 @@ export default function Expenses() {
 
     const handleMarkAsPaid = async (expense) => {
         try {
-            const updatedExpense = { ...expense, status: 'paid' };
-            await expenseService.update(expense.id, updatedExpense);
-            loadExpenses(); // Refresh
+            await expenseService.update(expense.id, { status: 'paid' });
+            // Optimistically update local state until reload
+            setExpenses(prev => prev.map(e => e.id === expense.id ? { ...e, status: 'paid' } : e));
         } catch (error) {
             console.error("Failed to mark as paid:", error);
+            alert("Failed to mark as paid: " + (error.response?.data?.detail || error.message));
         }
     };
 
@@ -308,6 +311,7 @@ export default function Expenses() {
                             onChange={(e) => setDateFilter(e.target.value)}
                             className="bg-white border border-slate-200 text-slate-600 text-xs font-semibold py-2 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-100 cursor-pointer hover:border-slate-300 transition-all"
                         >
+                            <option value="all">All Time</option>
                             <option value="today">Today</option>
                             <option value="week">This Week</option>
                             <option value="month">This Month</option>

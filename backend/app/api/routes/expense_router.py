@@ -28,11 +28,11 @@ def create_expense(expense: ExpenseCreate, user: UserContext = Depends(require_a
     return _handle_response(result)
 
 @router.put("/{expense_id}", response_model=ExpenseResponse)
-def update_expense(expense_id: int, expense: ExpenseUpdate, user: UserContext = Depends(require_admin_or_owner)):
-    result = expense_service.update_expense(expense_id, expense.model_dump(exclude_unset=True, mode='json'))
+def update_expense(expense_id: str, expense: ExpenseUpdate, user: UserContext = Depends(require_admin_or_owner)):
+    result = expense_service.update_expense(expense_id, expense.model_dump(exclude_unset=True))
     return _handle_response(result)
 
 @router.delete("/{expense_id}")
-def delete_expense(expense_id: int, user: UserContext = Depends(require_admin)):
+def delete_expense(expense_id: str, user: UserContext = Depends(require_admin)):
     result = expense_service.delete_expense(expense_id)
     return _handle_response(result)
