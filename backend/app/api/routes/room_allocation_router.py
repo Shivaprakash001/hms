@@ -172,3 +172,67 @@ def get_occupants(
     result = room_allocation_service.get_room_occupants(room_id)
     return _handle_service_response(result)
 
+
+@router.get(
+    "/my-room",
+    response_model=dict,
+    summary="Get current student's room details and roommates"
+)
+def get_my_room(user: UserContext = Depends(get_current_user)):
+    """
+    Get the current room details and roommates for the logged-in student.
+    **Authorization:** Students only.
+    """
+    if not user.is_student():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only students can access this endpoint."
+        )
+    from app.db import supabase
+
+    student_id = user.student_id
+    if not student_id:
+        res = supabase.table("students").select("id").eq("profile_id", user.user_id).execute()
+        if res.data:
+            student_id = res.data[0]["id"]
+
+    if not student_id:
+        raise HTTPException(status_code=404, detail="Student record not found")
+
+    # Get current allocation
+    alloc_res = supabase.table("room_allocations")\
+        .select("room_id, rooms(room_no, capacity)")\
+        .eq("student_id", student_id)\
+        .is_("end_date", "null")\
+        .execute()
+
+    if not alloc_res.data:
+        return {"room": None, "roommates": []}
+
+    alloc = alloc_res.data[0]
+    room = alloc.get("rooms") or {}
+    room_id = alloc.get("room_id")
+
+    # Get all occupants in this room (excluding self)
+    occupants_res = supabase.table("room_allocations")\
+        .select("student_id, students!room_allocations_student_id_fkey(profile_id, profiles!students_profile_id_fkey(name))")\
+        .eq("room_id", room_id)\
+        .is_("end_date", "null")\
+        .neq("student_id", student_id)\
+        .execute()
+
+    roommates = []
+    for occ in (occupants_res.data or []):
+        student_rec = occ.get("students") or {}
+        profile = student_rec.get("profiles!students_profile_id_fkey") or student_rec.get("profiles") or {}
+        name = profile.get("name")
+        if name:
+            roommates.append({"name": name})
+
+    return {
+        "room": {
+            "room_no": room.get("room_no"),
+            "capacity": room.get("capacity"),
+        },
+        "roommates": roommates
+    }

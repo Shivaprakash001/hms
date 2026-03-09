@@ -41,7 +41,12 @@ export const AuthProvider = ({ children }) => {
                         ...storedData,
                         ...response.data,
                         id: response.data.user_id,
-                        student_id: response.data.student_id
+                        student_id: response.data.student_id,
+                        due_day: response.data.due_day,
+                        room_no: response.data.room_no,
+                        monthly_rent: response.data.monthly_rent,
+                        room_capacity: response.data.room_capacity,
+                        room_id: response.data.room_id,
                     };
                     setUser(updatedUser);
 

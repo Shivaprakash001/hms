@@ -36,12 +36,39 @@ def get_me(user: UserContext = Depends(get_current_user)):
     from app.db import supabase
     
     student_id = user.student_id
-    if user.is_student() and not student_id:
-        # Fallback for old tokens: fetch from DB
-        res = supabase.table("students").select("id").eq("profile_id", user.user_id).execute()
-        if res.data:
-            student_id = res.data[0]["id"]
+    extra = {}
+
+    if user.is_student():
+        if not student_id:
+            # Fallback for old tokens: fetch from DB
+            res = supabase.table("students").select("id").eq("profile_id", user.user_id).execute()
+            if res.data:
+                student_id = res.data[0]["id"]
+        
+        # Fetch due_day from profile
+        prof_res = supabase.table("profiles").select("due_day").eq("id", user.user_id).execute()
+        if prof_res.data:
+            extra["due_day"] = prof_res.data[0].get("due_day")
+        
+        # Fetch active allocation → room info
+        if student_id:
+            alloc_res = supabase.table("room_allocations")\
+                .select("room_id, rooms(room_no, capacity)")\
+                .eq("student_id", student_id)\
+                .is_("end_date", "null")\
+                .execute()
+            if alloc_res.data:
+                alloc = alloc_res.data[0]
+                room = alloc.get("rooms") or {}
+                extra["room_no"] = room.get("room_no")
+                extra["room_capacity"] = room.get("capacity")
+                extra["room_id"] = alloc.get("room_id")
             
+            # Fetch monthly_rent from student record
+            stu_res = supabase.table("students").select("monthly_rent").eq("id", student_id).execute()
+            if stu_res.data:
+                extra["monthly_rent"] = stu_res.data[0].get("monthly_rent")
+        
     return {
         "user_id": str(user.user_id),
         "email": user.email,
@@ -49,8 +76,10 @@ def get_me(user: UserContext = Depends(get_current_user)):
         "student_id": str(student_id) if student_id else None,
         "is_admin": user.is_admin(),
         "is_warden": user.is_warden(),
-        "is_student": user.is_student()
+        "is_student": user.is_student(),
+        **extra
     }
+
 @router.post("/register", response_model=dict, summary="Register a new Property Owner")
 def register(data: RegisterRequest):
     """
