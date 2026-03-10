@@ -6,7 +6,7 @@ from typing import Optional
 class NotificationBase(BaseModel):
     title: str
     message: str
-    type: str
+    type: Optional[str] = None
     user_id: str
 
 class NotificationCreate(NotificationBase):

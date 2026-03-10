@@ -1,8 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Filter, Calendar, Download, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
-import { motion } from 'framer-motion';
-
+import { Search, Download, TrendingUp, TrendingDown, DollarSign, Zap, CheckCircle2, AlertCircle, X, Loader2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // Components
 import PaymentStatsCard from '../../components/owner/payments/PaymentStatsCard';
@@ -20,6 +19,15 @@ const Payments = () => {
     const [selectedPayment, setSelectedPayment] = useState(null);
     const [historyTenant, setHistoryTenant] = useState(null);
 
+    // Generate rent modal state
+    const [showGenModal, setShowGenModal] = useState(false);
+    const [genMonth, setGenMonth] = useState(() => {
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    });
+    const [genLoading, setGenLoading] = useState(false);
+    const [genResult, setGenResult] = useState(null); // { success, count, skipped }
+
     // Initial Data Load
     useEffect(() => {
         loadPayments();
@@ -28,19 +36,16 @@ const Payments = () => {
     const loadPayments = async () => {
         setIsLoading(true);
         try {
-            // Using getAllDues to show all obligations (paid and pending) which acts as the ledger
             const data = await paymentService.getAllDues();
-            // Map backend data to frontend model
-            // Backend: obligation_id, student_name, room_no, rent_month, amount, status, outstanding
             const formatted = data.map(item => ({
                 id: item.obligation_id,
                 tenantName: item.student_name,
                 room: item.room_no,
-                type: 'Rent', // Defaulting to Rent as it's rent obligations
+                type: 'Rent',
                 amount: item.amount,
-                status: item.status.toLowerCase(), // Backend is uppercase
+                status: item.status.toLowerCase(),
                 date: item.rent_month,
-                method: 'Online' // defaulting, dues report implies obligation
+                method: 'Online'
             }));
             setPayments(formatted);
         } catch (error) {
@@ -50,61 +55,67 @@ const Payments = () => {
         }
     };
 
-    // Derived State: filtered payments
+    // Filtered payments
     const filteredPayments = useMemo(() => {
         return payments.filter(payment => {
-            const matchesSearch = payment.tenantName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                payment.room.toString().includes(searchTerm);
+            const matchesSearch = payment.tenantName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                payment.room?.toString().includes(searchTerm);
             const matchesStatus = statusFilter === 'all' || payment.status === statusFilter;
-            // Month filter logic needs to be robust for date strings
-            // payment.date is YYYY-MM-DD
-            const matchesMonth = monthFilter === 'all' || payment.date.includes(monthFilter);
-
+            const matchesMonth = monthFilter === 'all' || payment.date?.includes(monthFilter);
             return matchesSearch && matchesStatus && matchesMonth;
         });
     }, [payments, searchTerm, statusFilter, monthFilter]);
 
-    // Derived State: stats
+    // Stats
     const stats = useMemo(() => {
-        const totalCollected = payments
-            .filter(p => p.status === 'paid')
-            .reduce((acc, curr) => acc + curr.amount, 0);
-
-        const totalPending = payments
-            .filter(p => p.status === 'pending' || p.status === 'partial')
-            .reduce((acc, curr) => acc + curr.amount, 0);
-
+        const totalCollected = payments.filter(p => p.status === 'paid').reduce((acc, curr) => acc + curr.amount, 0);
+        const totalPending = payments.filter(p => p.status === 'pending' || p.status === 'partial').reduce((acc, curr) => acc + curr.amount, 0);
         const uniqueTenants = new Set(payments.map(p => p.tenantName)).size;
-
         return { totalCollected, totalPending, uniqueTenants };
     }, [payments]);
 
-    // Handlers
+    // Mark as paid
     const handleMarkAsPaid = async (paymentId) => {
         try {
-            // Check if it's already paid
             const payment = payments.find(p => p.id === paymentId);
             if (payment && payment.status === 'paid') return;
-
-            // In a real scenario, we'd open a modal to enter amount and method
-            // For now, let's auto-record full amount as CASH
+            const today = new Date();
+            const localDate = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
             await paymentService.recordPayment({
                 obligation_id: paymentId,
                 amount_paid: payment.amount,
                 payment_method: "CASH",
-                payment_date: new Date().toISOString().split('T')[0]
+                payment_date: localDate
             });
-
             loadPayments();
-            if (selectedPayment) {
-                // Close or update
-                setSelectedPayment(null);
-            }
+            setSelectedPayment(null);
         } catch (error) {
             console.error("Failed to mark as paid:", error);
             alert("Failed to record payment");
         }
     };
+
+    // Generate monthly rent
+    const handleGenerateRent = async () => {
+        setGenLoading(true);
+        setGenResult(null);
+        try {
+            const result = await paymentService.generateRent(genMonth + '-01');
+            setGenResult({ success: true, data: result });
+            loadPayments(); // refresh list
+        } catch (error) {
+            console.error("Generate rent failed:", error);
+            setGenResult({ success: false, error: error.response?.data?.detail?.message || 'Generation failed. Please try again.' });
+        } finally {
+            setGenLoading(false);
+        }
+    };
+
+    // Unique months from existing payments for month filter
+    const availableMonths = useMemo(() => {
+        const months = new Set(payments.map(p => p.date?.slice(0, 7)).filter(Boolean));
+        return [...months].sort().reverse();
+    }, [payments]);
 
     return (
         <div className="space-y-8 animate-fade-in-up">
@@ -114,12 +125,15 @@ const Payments = () => {
                     <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Payments</h1>
                     <p className="text-slate-500 text-sm">Track and manage tenant payments</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                     <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-sm font-semibold text-sm">
                         <Download size={16} /> Export Report
                     </button>
-                    <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-600/20 transition-all font-semibold text-sm active:scale-95">
-                        <DollarSign size={16} /> Record Payment
+                    <button
+                        onClick={() => { setShowGenModal(true); setGenResult(null); }}
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-600/20 transition-all font-semibold text-sm active:scale-95"
+                    >
+                        <Zap size={16} /> Generate Monthly Rent
                     </button>
                 </div>
             </div>
@@ -131,14 +145,14 @@ const Payments = () => {
                     value={`₹${stats.totalCollected.toLocaleString()}`}
                     type="success"
                     icon={TrendingUp}
-                    subtext={<span className="text-emerald-600 flex items-center gap-1"><TrendingUp size={12} /> +12% from last month</span>}
+                    subtext={<span className="text-emerald-600 flex items-center gap-1"><TrendingUp size={12} /> This month</span>}
                 />
                 <PaymentStatsCard
                     title="Pending Dues"
                     value={`₹${stats.totalPending.toLocaleString()}`}
                     type="warning"
                     icon={TrendingDown}
-                    subtext={<span className="text-amber-600 flex items-center gap-1"> Action required for 3 tenants</span>}
+                    subtext={<span className="text-amber-600 flex items-center gap-1">{payments.filter(p => p.status === 'pending').length} pending</span>}
                 />
                 <PaymentStatsCard
                     title="Active Tenants"
@@ -182,8 +196,11 @@ const Payments = () => {
                             onChange={(e) => setMonthFilter(e.target.value)}
                         >
                             <option value="all">All Months</option>
-                            <option value="February 2024">February 2024</option>
-                            <option value="January 2024">January 2024</option>
+                            {availableMonths.map(m => (
+                                <option key={m} value={m}>
+                                    {new Date(m + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}
+                                </option>
+                            ))}
                         </select>
                     </div>
                 </div>
@@ -195,7 +212,7 @@ const Payments = () => {
                     onViewHistory={setHistoryTenant}
                 />
 
-                {/* Pagination (Simple) */}
+                {/* Pagination */}
                 <div className="p-4 border-t border-slate-100 flex items-center justify-between text-sm text-slate-500">
                     <span>Showing {filteredPayments.length} results</span>
                     <div className="flex gap-2">
@@ -204,6 +221,124 @@ const Payments = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Generate Monthly Rent Modal */}
+            <AnimatePresence>
+                {showGenModal && (
+                    <>
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => !genLoading && setShowGenModal(false)}
+                            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50"
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                            className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
+                        >
+                            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md pointer-events-auto overflow-hidden">
+                                {/* Header */}
+                                <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/80">
+                                    <div>
+                                        <h2 className="text-xl font-black text-slate-900">Generate Monthly Rent</h2>
+                                        <p className="text-sm text-slate-500 mt-0.5">Create rent obligations for all active tenants</p>
+                                    </div>
+                                    {!genLoading && (
+                                        <button onClick={() => setShowGenModal(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400">
+                                            <X size={20} />
+                                        </button>
+                                    )}
+                                </div>
+
+                                <div className="p-6 space-y-6">
+                                    {!genResult ? (
+                                        <>
+                                            <div>
+                                                <label className="block text-sm font-bold text-slate-700 mb-2">Select Month</label>
+                                                <input
+                                                    type="month"
+                                                    value={genMonth}
+                                                    onChange={(e) => setGenMonth(e.target.value)}
+                                                    max={`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`}
+                                                    className="w-full px-4 py-3 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all"
+                                                />
+                                                <p className="text-xs text-slate-400 mt-2">
+                                                    This will create pending rent obligations for all tenants who had an active allocation in {new Date(genMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}.
+                                                </p>
+                                            </div>
+
+                                            <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 text-sm text-amber-800">
+                                                <p className="font-bold mb-1">⚡ What happens next?</p>
+                                                <ul className="space-y-1 text-amber-700 list-disc ml-4">
+                                                    <li>Rent based on each student's assigned monthly rate</li>
+                                                    <li>Prorated for students who joined/left mid-month</li>
+                                                    <li>Student's "Pay Now" button becomes active</li>
+                                                    <li>Already-generated months are safely skipped</li>
+                                                </ul>
+                                            </div>
+
+                                            <button
+                                                onClick={handleGenerateRent}
+                                                disabled={genLoading}
+                                                className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20 active:scale-95 disabled:opacity-60"
+                                            >
+                                                {genLoading ? (
+                                                    <><Loader2 className="animate-spin" size={20} /> Generating...</>
+                                                ) : (
+                                                    <><Zap size={20} /> Generate for {new Date(genMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}</>
+                                                )}
+                                            </button>
+                                        </>
+                                    ) : genResult.success ? (
+                                        <div className="text-center py-4 space-y-4">
+                                            <motion.div
+                                                initial={{ scale: 0 }}
+                                                animate={{ scale: 1 }}
+                                                transition={{ type: "spring", stiffness: 200, damping: 10 }}
+                                                className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto"
+                                            >
+                                                <CheckCircle2 size={40} strokeWidth={2.5} />
+                                            </motion.div>
+                                            <div>
+                                                <h3 className="text-xl font-black text-slate-900">Rent Obligations Created!</h3>
+                                                <p className="text-slate-500 mt-1 text-sm">
+                                                    {genResult.data?.generated_count ?? 'Several'} obligations generated,&nbsp;
+                                                    {genResult.data?.skipped_count ?? 0} skipped (already existing).
+                                                </p>
+                                            </div>
+                                            <button
+                                                onClick={() => setShowGenModal(false)}
+                                                className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold transition-all hover:bg-slate-800"
+                                            >
+                                                Done
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-4 space-y-4">
+                                            <div className="w-20 h-20 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+                                                <AlertCircle size={40} />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-xl font-black text-slate-900">Generation Failed</h3>
+                                                <p className="text-slate-500 mt-1 text-sm">{genResult.error}</p>
+                                            </div>
+                                            <button
+                                                onClick={() => setGenResult(null)}
+                                                className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all"
+                                            >
+                                                Try Again
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
 
             {/* Details Drawer */}
             <PaymentDetailsDrawer

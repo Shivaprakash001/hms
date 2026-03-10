@@ -35,14 +35,14 @@ def _handle_service_response(result: dict, success_status: int = status.HTTP_200
     response_model=dict,
     status_code=status.HTTP_201_CREATED,
     summary="Generate rent obligations for the month",
-    dependencies=[Depends(require_admin)]
+    dependencies=[Depends(require_admin_or_owner)]
 )
 def generate_rent(
     data: RentGenerationRequest,
     user: UserContext = Depends(get_current_user)
 ):
     """
-    **Administrative Task**: Generate rent records for all active room stays.
+    **Owner/Admin Task**: Generate rent records for all active room stays.
     
     - Calculates prorated rent for mid-month entries/exits.
     - Skips records where obligation already exists.
@@ -52,12 +52,12 @@ def generate_rent(
     return _handle_service_response(result, status.HTTP_201_CREATED)
 
 
+
 @router.post(
     "/",
     response_model=dict,
     status_code=status.HTTP_201_CREATED,
     summary="Record a student payment",
-    dependencies=[Depends(require_admin_or_owner)]
 )
 def record_payment(
     data: PaymentCreate,
@@ -68,7 +68,18 @@ def record_payment(
     
     - Validates that payment doesn't exceed obligation balance.
     - Automatically updates obligation status to PARTIAL or PAID.
+    - Students can pay their own obligations; admin/owner can pay for anyone.
     """
+    # For students: validate that the obligation belongs to them
+    if user.is_student():
+        from app.db import supabase
+        ob_res = supabase.table("rent_obligations").select("student_id").eq("id", str(data.obligation_id)).execute()
+        if not ob_res.data:
+            raise HTTPException(status_code=404, detail={"message": "Obligation not found"})
+        ob_student_id = ob_res.data[0].get("student_id")
+        if str(ob_student_id) != str(user.student_id):
+            raise HTTPException(status_code=403, detail={"message": "You can only pay your own obligations."})
+
     result = payment_service.record_payment(
         str(data.obligation_id),
         data.amount_paid,
@@ -78,6 +89,7 @@ def record_payment(
         user_id=user.user_id
     )
     return _handle_service_response(result, status.HTTP_201_CREATED)
+
 
 
 @router.get(
@@ -114,7 +126,7 @@ def get_student_history(
     - Admin/Warden: Any student.
     - Student: Only their own record.
     """
-    if user.is_student() and str(user.user_id) != str(student_id):
+    if user.is_student() and str(user.student_id) != str(student_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only view your own payment history."

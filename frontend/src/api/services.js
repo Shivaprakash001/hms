@@ -188,6 +188,10 @@ export const dashboardService = {
     getStats: async () => {
         const response = await api.get('/dashboard/stats');
         return response.data;
+    },
+    getMonthlyStats: async (months = 6) => {
+        const response = await api.get(`/dashboard/monthly-stats?months=${months}`);
+        return response.data;
     }
 };
 

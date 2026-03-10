@@ -47,9 +47,7 @@ def generate_monthly_rent(rent_month: date, user_id: Optional[str] = None) -> Di
         
         logger.info(f"Generating monthly rent for {target_month.strftime('%Y-%m')}")
         
-        # 1. Fetch students with active or overlapping allocations in this month
-        # We need students(*) and room_allocations(*)
-        # Filter: overlap [start_date, month_end] AND (end_date IS NULL OR end_date >= month_start)
+        # 1. Fetch all allocations overlapping with this month
         alloc_res = supabase.table("room_allocations")\
             .select("*, students(id, monthly_rent, status)")\
             .lte("start_date", month_end_date.isoformat())\
@@ -60,46 +58,72 @@ def generate_monthly_rent(rent_month: date, user_id: Optional[str] = None) -> Di
         if not allocations:
             return ServiceResponse.success([], "No active allocations found for this month.")
             
+        # Group allocations by student
+        student_allocs = {}
+        for a in allocations:
+            if not a.get("students"): continue
+            s_id = a["students"]["id"]
+            if s_id not in student_allocs:
+                student_allocs[s_id] = []
+            student_allocs[s_id].append(a)
+
         generated_count = 0
+        updated_count = 0
         skipped_count = 0
         errors = []
-
-        for alloc in allocations:
-            student = alloc.get("students")
-            if not student: continue
-            
-            student_id = student["id"]
+        for student_id, alloc_list in student_allocs.items():
+            student = alloc_list[0]["students"]
             monthly_rent = Decimal(str(student.get("monthly_rent", 0)))
             
-            # 2. Check if obligation already exists for this student/month
-            existing = supabase.table("rent_obligations")\
-                .select("id")\
+            # 2. Calculate Total Days of occupancy in the month across all segments
+            total_days = 0
+            for alloc in alloc_list:
+                start = max(target_month, date.fromisoformat(alloc["start_date"]))
+                end = min(month_end_date, date.fromisoformat(alloc["end_date"])) if alloc.get("end_date") else month_end_date
+                
+                if start <= end:
+                    total_days += (end - start).days + 1
+            
+            if total_days <= 0:
+                continue
+            
+            # Since it's monthly based, we charge the full monthly_rent if any days were stayed
+            total_amount = monthly_rent
+            
+            # 3. Check for existing obligation
+            existing_res = supabase.table("rent_obligations")\
+                .select("*")\
                 .eq("student_id", student_id)\
                 .eq("rent_month", target_month.isoformat())\
                 .execute()
             
-            if existing.data:
-                skipped_count += 1
-                continue
+            if existing_res.data:
+                existing = existing_res.data[0]
+                # If it is already paid or waived, don't touch it
+                if existing["status"] != "PENDING":
+                    skipped_count += 1
+                    continue
                 
-            # 3. Calculate Prorated Amount
-            amount = _calculate_prorated_rent(
-                monthly_rent,
-                datetime.strptime(alloc["start_date"], "%Y-%m-%d").date(),
-                datetime.strptime(alloc["end_date"], "%Y-%m-%d").date() if alloc.get("end_date") else None,
-                target_month
-            )
-            
-            if amount <= 0:
+                # If amount is different, update it
+                if Decimal(str(existing["amount"])) != total_amount.quantize(Decimal('0.01')):
+                    supabase.table("rent_obligations")\
+                        .update({"amount": float(total_amount)})\
+                        .eq("id", existing["id"])\
+                        .execute()
+                    updated_count += 1
+                else:
+                    skipped_count += 1
                 continue
                 
             # 4. Create Obligation
+            # Use the latest allocation ID as reference
+            latest_alloc = sorted(alloc_list, key=lambda x: x["start_date"])[-1]
             obligation_data = {
                 "student_id": student_id,
-                "allocation_id": alloc["id"],
+                "allocation_id": latest_alloc["id"],
                 "rent_month": target_month.isoformat(),
-                "amount": float(amount),
-                "due_date": (target_month + timedelta(days=9)).isoformat(), # Default 10th of month
+                "amount": float(total_amount),
+                "due_date": (target_month + timedelta(days=9)).isoformat(),
                 "status": "PENDING"
             }
             
@@ -109,16 +133,17 @@ def generate_monthly_rent(rent_month: date, user_id: Optional[str] = None) -> Di
                 trigger_hook("rent_obligation_created", 
                              obligation_id=res.data[0]["id"], 
                              student_id=student_id, 
-                             amount=float(amount))
+                             amount=float(total_amount))
             else:
                 errors.append(f"Failed to create for student {student_id}")
 
         return ServiceResponse.success({
             "target_month": target_month.isoformat(),
             "generated": generated_count,
-            "skipped_already_exists": skipped_count,
+            "updated": updated_count,
+            "skipped": skipped_count,
             "errors": errors
-        }, f"Generated {generated_count} rent obligations.")
+        }, f"Processed rent obligations: {generated_count} new, {updated_count} updated.")
 
     except Exception as e:
         logger.exception(f"Error generating monthly rent: {e}")
@@ -179,6 +204,7 @@ def record_payment(
         payment_data = {
             "obligation_id": obligation_id,
             "student_id": obligation["student_id"],
+            "owner_id": obligation.get("owner_id") or user_id,
             "amount_paid": float(amount_paid),
             "payment_method": payment_method,
             "reference_number": reference_number,

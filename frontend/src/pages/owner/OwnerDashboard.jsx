@@ -23,18 +23,19 @@ const OwnerDashboard = () => {
     const updateDashboard = async () => {
         try {
             // Fetch real data in parallel
-            const [statsRes, activeAllocations, paymentsRes, expensesRes] = await Promise.all([
+            const [statsRes, activeAllocations, paymentsRes, expensesRes, monthlyRes] = await Promise.all([
                 dashboardService.getStats(),
                 allocationService.getAllActive(), // For activity feed
                 paymentService.getAll({ limit: 10 }), // For activity feed
-                expenseService.getAll() // For charts/modals
+                expenseService.getAll(), // For charts/modals
+                dashboardService.getMonthlyStats(6) // Real Chart data
             ]);
 
-            const dashboardStats = statsRes.data || {};
-            const payments = paymentsRes.payments || [];
+            const dashboardStats = statsRes || {};
+            const payments = Array.isArray(paymentsRes) ? paymentsRes : (paymentsRes?.payments || []);
 
             // 4. Process Expenses for Modal/Chart
-            const expenseList = expensesRes.data || [];
+            const expenseList = Array.isArray(expensesRes) ? expensesRes : [];
             setExpenses(expenseList);
 
             // Updated Stats from Backend
@@ -102,8 +103,8 @@ const OwnerDashboard = () => {
                 if ((now - start) < 7 * 24 * 60 * 60 * 1000) { // last 7 days
                     activities.push({
                         id: `alloc_${a.id}`,
-                        action: 'New Tenant',
-                        detail: `New tenant in Room ${a.room?.room_no}`,
+                        action: a.student?.profiles?.name || 'New Tenant',
+                        detail: `Joined Room ${a.room?.room_no}`,
                         date: start,
                         icon: Users,
                         color: 'text-indigo-600',
@@ -124,18 +125,27 @@ const OwnerDashboard = () => {
             setRecentActivity(formattedActivities.slice(0, 5));
             setAllActivities(formattedActivities);
 
-            // Mock Chart Data for now (until we have historical aggregations)
-            const last6Months = [];
-            for (let i = 5; i >= 0; i--) {
-                const date = new Date();
-                date.setMonth(date.getMonth() - i);
-                last6Months.push({
-                    month: date.toLocaleString('default', { month: 'short' }),
-                    income: i === 0 ? (dashboardStats.revenue || 0) : Math.floor(Math.random() * 50000 + 50000),
-                    expenses: i === 0 ? (dashboardStats.expenses || 0) : Math.floor(Math.random() * 20000 + 10000)
-                });
+            // 7. Chart Data
+            let monthData = [];
+            if (Array.isArray(monthlyRes)) {
+                monthData = monthlyRes;
+            } else if (monthlyRes?.data && Array.isArray(monthlyRes.data)) {
+                monthData = monthlyRes.data;
+            } else {
+                // Fallback to empty mock
+                const last6Months = [];
+                for (let i = 5; i >= 0; i--) {
+                    const date = new Date();
+                    date.setMonth(date.getMonth() - i);
+                    last6Months.push({
+                        month: date.toLocaleString('default', { month: 'short' }),
+                        income: 0,
+                        expenses: 0
+                    });
+                }
+                monthData = last6Months;
             }
-            setMonthlyData(last6Months);
+            setMonthlyData(monthData);
 
         } catch (e) {
             console.error("Dashboard update failed:", e);

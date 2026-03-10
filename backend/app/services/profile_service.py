@@ -267,7 +267,7 @@ def get_profiles_by_role(role: str) -> Dict[str, Any]:
     return get_all_profiles(role=role)
 
 
-def get_unassigned_student_profiles() -> Dict[str, Any]:
+def get_unassigned_student_profiles(owner_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Get all active student profiles that are not currently assigned to any room.
     
@@ -314,6 +314,9 @@ def get_unassigned_student_profiles() -> Dict[str, Any]:
             .select("*")\
             .eq("role", "student")\
             .eq("is_active", True)
+            
+        if owner_id:
+            query = query.eq("owner_id", owner_id)
             
         if exclude_profile_ids:
             query = query.not_.in_("id", exclude_profile_ids)

@@ -61,6 +61,20 @@ def allocate_room(
         return ServiceResponse.success(allocation_result, "Room allocated successfully")
 
     except Exception as e:
+        # postgrest-py often raises an APIError if the returned JSON contains keys like 'message'
+        # The raw JSON dict returned by the RPC is accessible via e.json()
+        if hasattr(e, "json"):
+            try:
+                result = e.json()
+                if isinstance(result, dict) and "success" in result and not result.get("success"):
+                    error_msg = result.get("message", "Allocation failed")
+                    error_code_val = result.get("error_code", "VAL_002")
+                    error_code = next((err for err in ErrorCode if err.value == error_code_val), ErrorCode.INVALID_INPUT)
+                    logger.warning(f"Allocation rejected by RPC: {error_msg}")
+                    return ServiceResponse.error(error_code, error_msg)
+            except Exception:
+                pass
+
         logger.exception(f"Error calling allocation RPC: {e}")
         return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "An unexpected error occurred", str(e))
 
@@ -152,25 +166,48 @@ def shift_room(
         
         old_allocation = active_res.data[0]
         
-        # 2. End current allocation
-        from datetime import timedelta
-        prev_end_date = shift_date - timedelta(days=1)
-        
-        # Validate shift_date
         old_start_date = datetime.strptime(old_allocation.get("start_date"), "%Y-%m-%d").date()
-        if shift_date <= old_start_date:
+        
+        if shift_date < old_start_date:
              return ServiceResponse.error(
                 ErrorCode.INVALID_INPUT,
                 "Invalid shift date",
-                f"Shift date {shift_date} must be after current allocation start date {old_start_date}."
+                f"Shift date {shift_date} must be on or after current allocation start date {old_start_date}."
             )
 
+        # Handle same-day shift (CORRECTION)
+        if shift_date == old_start_date:
+            logger.info(f"Same-day shift detected for student {student_id}. Updating current allocation.")
+            # Check capacity manually as a correction flow
+            room_res = supabase.table("rooms").select("capacity").eq("id", new_room_id).execute()
+            if not room_res.data:
+                return ServiceResponse.not_found("Room")
+            
+            capacity = room_res.data[0]["capacity"]
+            occupants_res = supabase.table("room_allocations").select("id", count="exact").eq("room_id", new_room_id).is_("end_date", "null").execute()
+            active_occupants = occupants_res.count if hasattr(occupants_res, 'count') else len(occupants_res.data)
+            
+            if active_occupants >= capacity:
+                return ServiceResponse.error(ErrorCode.INVALID_INPUT, "Target room is at full capacity")
+            
+            # Update current allocation's room_id
+            update_res = supabase.table("room_allocations")\
+                .update({"room_id": new_room_id})\
+                .eq("id", old_allocation["id"])\
+                .execute()
+            
+            if not update_res.data:
+                return ServiceResponse.error(ErrorCode.DB_002, "Failed to update room assignment")
+                
+            return ServiceResponse.success(update_res.data[0], "Room assignment corrected successfully")
+
+        # Standard shift for future/later dates
+        from datetime import timedelta
+
         # Note: We simulate a transaction here by catching failures and log them.
-        # Ideally we'd use an RPC for this.
-        
         # End old
         end_res = supabase.table("room_allocations")\
-            .update({"end_date": prev_end_date.isoformat()})\
+            .update({"end_date": shift_date.isoformat()})\
             .eq("id", old_allocation["id"])\
             .execute()
             
@@ -299,7 +336,7 @@ def get_active_allocations(user_id: str) -> Dict[str, Any]:
         # Filter by owner in Python since PostgREST nested filtering (students.owner_id)
         # is not reliably supported in supabase-py
         res = supabase.table("room_allocations")\
-            .select("*, students(id, owner_id, profiles!students_profile_id_fkey(name)), rooms(id, room_no, capacity)")\
+            .select("*, students(id, owner_id, profiles!students_profile_id_fkey(name)), rooms(*)")\
             .is_("end_date", "null")\
             .execute()
 

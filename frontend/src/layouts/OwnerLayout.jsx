@@ -83,12 +83,25 @@ const OwnerLayout = () => {
     const unreadCount = notifications.filter(n => !n.is_read).length;
 
     const getNotificationIcon = (type) => {
-        switch (type) {
+        const t = type?.toLowerCase();
+        switch (t) {
             case 'payment': return <CheckCircle2 size={16} className="text-emerald-500" />;
             case 'tenant': return <User size={16} className="text-indigo-500" />;
+            case 'room': return <Bed size={16} className="text-indigo-500" />;
             case 'complaint': return <AlertCircle size={16} className="text-amber-500" />;
             default: return <Clock size={16} className="text-slate-500" />;
         }
+    };
+
+    const formatTime = (dateStr) => {
+        const now = new Date();
+        const past = new Date(dateStr);
+        const diff = Math.floor((now - past) / 1000); // seconds
+
+        if (diff < 60) return 'Just now';
+        if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+        if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+        return past.toLocaleDateString();
     };
 
     return (
@@ -282,10 +295,7 @@ const OwnerLayout = () => {
                                         <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                                             <h3 className="font-semibold text-slate-900">Notifications</h3>
                                             <button
-                                                onClick={() => {
-                                                    markAllNotificationsAsRead();
-                                                    setNotifications(getNotifications());
-                                                }}
+                                                onClick={handleMarkAllRead}
                                                 className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
                                             >
                                                 Mark all read
@@ -299,20 +309,22 @@ const OwnerLayout = () => {
                                                 </div>
                                             ) : (
                                                 notifications.map(notification => (
-                                                    <div key={notification.id} className={`p-4 border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer flex gap-3 ${!notification.read ? 'bg-indigo-50/30' : ''}`}>
-                                                        <div className={`mt-0.5 p-1.5 rounded-full ${!notification.read ? 'bg-white shadow-sm' : 'bg-slate-100'}`}>
+                                                    <div key={notification.id} className={`p-4 border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer flex gap-3 ${!notification.is_read ? 'bg-indigo-50/30' : ''}`}>
+                                                        <div className={`mt-0.5 p-1.5 rounded-full ${!notification.is_read ? 'bg-white shadow-sm' : 'bg-slate-100'}`}>
                                                             {getNotificationIcon(notification.type)}
                                                         </div>
                                                         <div className="flex-1">
                                                             <div className="flex justify-between items-start mb-0.5">
-                                                                <p className={`text-sm ${!notification.read ? 'font-semibold text-slate-900' : 'font-medium text-slate-700'}`}>
+                                                                <p className={`text-sm ${!notification.is_read ? 'font-semibold text-slate-900' : 'font-medium text-slate-700'}`}>
                                                                     {notification.title}
                                                                 </p>
-                                                                <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap ml-2">{notification.time}</span>
+                                                                <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap ml-2">
+                                                                    {formatTime(notification.created_at)}
+                                                                </span>
                                                             </div>
                                                             <p className="text-xs text-slate-500 line-clamp-2">{notification.message}</p>
                                                         </div>
-                                                        {!notification.read && (
+                                                        {!notification.is_read && (
                                                             <div className="self-center w-2 h-2 bg-indigo-500 rounded-full shrink-0" />
                                                         )}
                                                     </div>

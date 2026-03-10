@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, User, Phone, Home, CreditCard, Calendar, CheckCircle2, AlertCircle, X, Save, History, Trash2, RefreshCw } from 'lucide-react';
+import { Search, Plus, User, Phone, Home, CreditCard, Calendar, CheckCircle2, AlertCircle, X, Save, History, Trash2, RefreshCw, ToggleLeft, ToggleRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { studentService, authService, allocationService, roomService } from '../../api/services';
 import TenantHistoryModal from '../../components/owner/payments/TenantHistoryModal';
@@ -77,6 +77,31 @@ export default function ManageStudents() {
             alert("Error removing student: " + err.message);
         }
     }
+
+    const handleToggleStatus = async (student, e) => {
+        e.stopPropagation();
+        const isActive = student.status === 'ACTIVE';
+        const nextStatus = isActive ? 'LEFT' : 'ACTIVE';
+        const confirmMsg = isActive
+            ? `Mark "${student.name}" as LEFT?\n\nThis will end their room allocation immediately.`
+            : `Reactivate "${student.name}" as ACTIVE?\n\nThis will allow them to be assigned to a room again.`;
+        if (!window.confirm(confirmMsg)) return;
+        try {
+            if (!isActive) {
+                // LEFT → ACTIVE: use the reactivate endpoint
+                await studentService.reactivate(student.id, {
+                    monthly_rent: parseFloat(student.rent),
+                    joined_on: new Date().toISOString().split('T')[0]
+                });
+            } else {
+                // ACTIVE → LEFT: use the update endpoint
+                await studentService.update(student.id, { status: 'LEFT' });
+            }
+            fetchStudents();
+        } catch (err) {
+            alert('Error toggling status: ' + (err.response?.data?.detail?.message || err.message));
+        }
+    };
 
     // Filter Logic
     const filteredStudents = students.filter(student => {
@@ -263,16 +288,22 @@ export default function ManageStudents() {
                                                 <span>{formatDate(student.joinDate)}</span>
                                             </td>
                                             <td className="px-8 py-5 text-right">
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleDeleteStudent(student.id);
-                                                    }}
-                                                    className="p-2 text-slate-300 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-                                                    title="Mark as Left"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
+                                                <div className="flex items-center justify-end gap-1">
+                                                    {(student.status === 'ACTIVE' || student.status === 'LEFT') && (
+                                                        <button
+                                                            onClick={(e) => handleToggleStatus(student, e)}
+                                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${student.status === 'ACTIVE'
+                                                                ? 'text-amber-600 hover:bg-amber-50 border border-amber-200 bg-amber-50/50'
+                                                                : 'text-emerald-600 hover:bg-emerald-50 border border-emerald-200 bg-emerald-50/50'
+                                                                }`}
+                                                            title={student.status === 'ACTIVE' ? 'Mark as Left' : 'Reactivate'}
+                                                        >
+                                                            {student.status === 'ACTIVE'
+                                                                ? <><ToggleLeft size={15} /> Mark Left</>
+                                                                : <><ToggleRight size={15} /> Activate</>}
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </td>
                                         </motion.tr>
                                     ))
@@ -283,14 +314,30 @@ export default function ManageStudents() {
                         {/* Mobile Card View (Simplified) */}
                         <div className="md:hidden space-y-4 p-4">
                             {filteredStudents.map(student => (
-                                <div key={student.id} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm" onClick={() => { setStudentToEdit(student); setShowAddModal(true); }}>
-                                    <div className="flex justify-between">
+                                <div key={student.id} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                                    <div className="flex justify-between" onClick={() => { setStudentToEdit(student); setShowAddModal(true); }}>
                                         <div className="font-bold">{student.name}</div>
                                         <div className="text-sm font-bold text-slate-500">{student.room}</div>
                                     </div>
-                                    <div className="flex justify-between mt-2 text-sm text-slate-500">
-                                        <div>{student.status}</div>
-                                        <div>₹{student.rent}</div>
+                                    <div className="flex justify-between mt-2 text-sm text-slate-500 items-center">
+                                        <div>
+                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${student.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-50 text-slate-500'
+                                                }`}>{student.status}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span>₹{student.rent}</span>
+                                            {(student.status === 'ACTIVE' || student.status === 'LEFT') && (
+                                                <button
+                                                    onClick={(e) => handleToggleStatus(student, e)}
+                                                    className={`px-2 py-1 rounded text-xs font-bold ${student.status === 'ACTIVE'
+                                                        ? 'bg-amber-50 text-amber-600'
+                                                        : 'bg-emerald-50 text-emerald-600'
+                                                        }`}
+                                                >
+                                                    {student.status === 'ACTIVE' ? 'Mark Left' : 'Activate'}
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             ))}
@@ -365,15 +412,22 @@ const AddStudentModal = ({ onClose, initialData, onSave }) => {
     const loadRooms = async () => {
         setLoadingRooms(true);
         try {
-            const data = await roomService.getAll();
-            // Simple client-side filter for now. Ideally backend filter.
-            // We need to know which rooms are not full.
-            // But roomService.getAll returns raw rooms without occupancy info usually?
-            // Wait, ManageRooms calculated occupancy.
-            // Here we might just list all rooms and let backend error if full, or try to guess.
-            // For better UX, we should fetch allocations too.
-            // For now, listing all rooms.
-            setRooms(data);
+            // grouped=true returns floors with nested rooms that include occupancy counts
+            const floors = await roomService.getAll();  // default grouped=true
+
+            // Flatten rooms from all floors
+            let allRooms = [];
+            if (Array.isArray(floors)) {
+                for (const floor of floors) {
+                    if (Array.isArray(floor.rooms)) {
+                        allRooms = allRooms.concat(floor.rooms);
+                    }
+                }
+            }
+
+            // Only show rooms that still have capacity (not fully occupied)
+            const available = allRooms.filter(r => (r.occupied ?? 0) < (r.capacity ?? Infinity));
+            setRooms(available);
         } catch (e) {
             console.error(e);
         } finally {
@@ -440,10 +494,15 @@ const AddStudentModal = ({ onClose, initialData, onSave }) => {
                                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold"
                                     required
                                 >
-                                    <option value="">Select Room</option>
-                                    {rooms.map(r => (
-                                        <option key={r.id} value={r.id}>Room {r.room_no} ({r.capacity})</option>
-                                    ))}
+                                    <option value="">Select a room</option>
+                                    {loadingRooms
+                                        ? <option disabled>Loading rooms...</option>
+                                        : rooms.map(r => (
+                                            <option key={r.id} value={r.id}>
+                                                Room {r.number ?? r.room_no} — {r.occupied ?? 0}/{r.capacity} occupied
+                                            </option>
+                                        ))
+                                    }
                                 </select>
                             </div>
                         )}
@@ -458,6 +517,20 @@ const AddStudentModal = ({ onClose, initialData, onSave }) => {
                                 <input type="date" required value={formData.joinDate} onChange={e => setFormData({ ...formData, joinDate: e.target.value })} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold" />
                             </div>
                         </div>
+
+                        {initialData && (initialData.status === 'ACTIVE' || initialData.status === 'LEFT') && (
+                            <div className="space-y-2">
+                                <label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">Status</label>
+                                <select
+                                    value={formData.status}
+                                    onChange={e => setFormData({ ...formData, status: e.target.value })}
+                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+                                >
+                                    <option value="ACTIVE">ACTIVE</option>
+                                    <option value="LEFT">LEFT</option>
+                                </select>
+                            </div>
+                        )}
                     </div>
 
                     <div className="pt-4 flex gap-4">

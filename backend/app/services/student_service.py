@@ -1,6 +1,6 @@
 from app.db import supabase
 from typing import Optional, Dict, Any
-from datetime import date
+from datetime import date, datetime
 from postgrest.exceptions import APIError
 from app.utils.responses import ServiceResponse, ErrorCode
 from app.utils.logger import get_logger
@@ -279,11 +279,17 @@ def get_all_students(
             
             if "room_allocations" in student:
                 allocations = student.pop("room_allocations")
-                active_allocation = next((a for a in allocations if a.get("end_date") is None), None)
+                # IMPORTANT: only pick allocations with NO end_date (still active)
+                # Do NOT use end_date >= today — that shows closed allocations as active
+                active_allocation = next(
+                    (a for a in allocations if a.get("end_date") is None),
+                    None
+                )
                 if active_allocation:
                     student["current_room"] = active_allocation.get("rooms")
                 else:
                     student["current_room"] = None
+
             
             # Apply in-memory search filter if provided
             if search:
@@ -371,9 +377,21 @@ def update_student(
                 logger.info(f"Student {student_id} status changing to LEFT - triggering auto-deallocation hook")
                 trigger_hook("student_left", student_id=student_id, user_id=updated_by)
         
+        # Sanitize types for Supabase JSON serialization (Decimal, date -> str)
+        import datetime as _dt
+        from decimal import Decimal as _Dec
+        sanitized = {}
+        for k, v in update_data.items():
+            if isinstance(v, _Dec):
+                sanitized[k] = str(v)
+            elif isinstance(v, (_dt.datetime, _dt.date)):
+                sanitized[k] = v.isoformat()
+            else:
+                sanitized[k] = v
+
         # Perform update
         result = supabase.table("students")\
-            .update(update_data)\
+            .update(sanitized)\
             .eq("id", student_id)\
             .execute()
         

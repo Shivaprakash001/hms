@@ -15,7 +15,7 @@ const StudentPayments = () => {
 
     // Fetch data
     useEffect(() => {
-        if (user?.id) {
+        if (user?.student_id) {
             loadHistory();
         }
     }, [user]);
@@ -23,7 +23,7 @@ const StudentPayments = () => {
     const loadHistory = async () => {
         setLoading(true);
         try {
-            const data = await paymentService.getStudentHistory(user.id);
+            const data = await paymentService.getStudentHistory(user.student_id);
             setHistory(data);
         } catch (error) {
             console.error("Failed to load payment history:", error);
@@ -69,45 +69,42 @@ const StudentPayments = () => {
     const pendingAmount = history.outstanding_balance || 0;
 
     const isOverdue = localPayments.some(p => p.status === 'overdue');
-    // Mock logic for next due date
-    const nextDueDate = "5th " + new Date().toLocaleString('default', { month: 'long' });
 
-    // Countdown logic (Mock)
-    const daysLeft = 4; // Mock countdown
+    // Compute real next due date from owner-configured due_day
+    const getNextDueInfo = () => {
+        const dueDay = user?.due_day;
+        if (!dueDay) return { label: 'N/A', daysLeft: null };
+        const now = new Date();
+        let next = new Date(now.getFullYear(), now.getMonth(), dueDay);
+        if (next <= now) {
+            next = new Date(now.getFullYear(), now.getMonth() + 1, dueDay);
+        }
+        const daysLeft = Math.ceil((next - now) / (1000 * 60 * 60 * 24));
+        const label = `${dueDay}th ${next.toLocaleString('default', { month: 'long' })}`;
+        return { label, daysLeft };
+    };
+    const { label: nextDueDate, daysLeft } = getNextDueInfo();
 
     const handlePaymentSuccess = async (paymentData) => {
-        // PaymentModal returns data, we need to send to API
         try {
-            // Find the pending obligation to pay against
-            // For simplicity, pay against the oldest pending obligation
-            // OR PaymentModal should handle the API call? 
-            // If PaymentModal just returns card details, we call API here.
-            // Let's assume PaymentModal handles the UI and returns "success".
-            // User likely wants to pay the TOTAL pending amount.
-            // We need to know WHICH obligation.
-            // Auto-pay logic: Distribute amount across pending obligations?
-            // Backend `record_payment` takes `obligation_id`.
-            // So the modal or this handler needs to select the obligation.
-
-            // For this iteration, let's assume we find the first pending obligation
-            const pendingOb = history.obligations.find(o => o.status === 'pending' || o.status === 'partial');
+            const pendingOb = history.obligations?.find(o => o.status === 'pending' || o.status === 'partial');
             if (!pendingOb) {
                 alert("No pending dues to pay!");
                 return;
             }
-
+            const today = new Date();
+            const localDate = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
             await paymentService.recordPayment({
                 obligation_id: pendingOb.id,
-                amount_paid: paymentData.amount || pendingAmount, // Assume full pay
-                payment_method: "UPI", // Mock method from modal?
-                payment_date: new Date().toISOString().split('T')[0]
+                amount_paid: paymentData.amount || pendingAmount,
+                payment_method: paymentData.method?.toUpperCase() || 'UPI',
+                payment_date: localDate
             });
-
             loadHistory();
             setShowPaymentModal(false);
         } catch (error) {
             console.error("Payment failed", error);
-            alert("Payment failed");
+            alert("Payment recording failed. Please contact support.");
         }
     };
 
@@ -128,10 +125,10 @@ const StudentPayments = () => {
                         <CreditCard size={100} />
                     </div>
                     <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Monthly Rent</p>
-                    <h3 className="text-3xl font-black text-slate-900">₹{user?.rent?.toLocaleString()}</h3>
+                    <h3 className="text-3xl font-black text-slate-900">₹{(user?.monthly_rent || 0).toLocaleString()}</h3>
                     <div className="mt-4 flex items-center gap-2 text-sm text-slate-500 font-medium">
                         <Calendar size={16} className="text-indigo-500" />
-                        <span>Due on 5th of every month</span>
+                        <span>Due on {user?.due_day ? `${user.due_day}th` : '---'} of every month</span>
                     </div>
                 </div>
 
@@ -169,6 +166,7 @@ const StudentPayments = () => {
                     <div>
                         <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Next Due Date</p>
                         <h3 className="text-2xl font-bold">{nextDueDate}</h3>
+                        {daysLeft !== null && <p className="text-slate-400 text-xs mt-1">{daysLeft} days remaining</p>}
                     </div>
 
                     <button

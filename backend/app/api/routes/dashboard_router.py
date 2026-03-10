@@ -19,3 +19,11 @@ def get_dashboard_stats(user: UserContext = Depends(require_admin_or_owner)):
     """
     result = dashboard_service.get_dashboard_stats(user_id=user.user_id)
     return _handle_response(result)
+
+@router.get("/monthly-stats")
+def get_monthly_dashboard_stats(months: int = 6, user: UserContext = Depends(require_admin_or_owner)):
+    """
+    Get aggregated monthly dashboard statistics for charts.
+    """
+    result = dashboard_service.get_monthly_stats(user_id=user.user_id, months=months)
+    return _handle_response(result)

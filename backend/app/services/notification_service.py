@@ -39,13 +39,34 @@ def mark_as_read(notification_id: str, user_id: str) -> Dict[str, Any]:
 def create_notification(user_id: str, title: str, message: str, n_type: str) -> Dict[str, Any]:
     """Internal helper to create a notification."""
     try:
+        # Fetch the role and owner_id of the user
+        prof_res = supabase.table("profiles").select("role, owner_id").eq("id", user_id).execute()
+        owner_id = None
+        if prof_res.data:
+            profile = prof_res.data[0]
+            if profile.get("role") in ("admin", "owner"):
+                owner_id = user_id
+            else:
+                owner_id = profile.get("owner_id")
+
         data = {
             "user_id": user_id,
+            "owner_id": owner_id,
             "title": title,
             "message": message,
-            "type": n_type
+            "type": n_type.lower()
         }
-        res = supabase.table("notifications").insert(data).execute()
+        
+        try:
+            res = supabase.table("notifications").insert(data).execute()
+        except Exception as e:
+            # Check for missing column error (PGRST204)
+            if "PGRST204" in str(e) or "column" in str(e).lower() and "type" in str(e).lower():
+                logger.warning(f"Database 'notifications' table is missing 'type' column. Retrying without it.")
+                data.pop("type")
+                res = supabase.table("notifications").insert(data).execute()
+            else:
+                raise e
         
         if not res.data:
             return ServiceResponse.error(ErrorCode.DB_INSERT_ERROR, "Failed to create notification")

@@ -71,8 +71,12 @@ def create_new_student(
     - **joined_on**: Date student joined (cannot be future)
     - **status**: Initial status (default: ACTIVE)
     """
+    student_data = student.model_dump(mode='json')
+    if user.role in ("admin", "owner"):
+        student_data['owner_id'] = user.user_id
+        
     result = student_service.create_student(
-        student.model_dump(mode='json'),
+        student_data,
         created_by=user.user_id
     )
     return _handle_service_response(result, status.HTTP_201_CREATED)
@@ -120,7 +124,7 @@ def read_all_students(
         limit=limit,
         offset=offset,
         requesting_user_role=user.role,
-        owner_id=user.user_id if user.role == "owner" else None
+        owner_id=user.user_id if user.role in ("admin", "owner") else None
     )
     return result.get("data", {}).get("students", [])
 
@@ -218,7 +222,7 @@ def modify_student(
     """
     result = student_service.update_student(
         student_id,
-        student.model_dump(exclude_unset=True, mode='json'),
+        student.model_dump(mode='json', exclude_unset=True),
         updated_by=user.user_id,
         requesting_user_role=user.role
     )
