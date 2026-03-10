@@ -99,3 +99,72 @@ def get_dashboard_stats(user_id: str):
     except Exception as e:
         logger.exception(f"Error fetching dashboard stats: {e}")
         return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, str(e))
+
+def get_monthly_stats(user_id: str, months: int = 6):
+    try:
+        from dateutil.relativedelta import relativedelta
+        import calendar
+        
+        today = date.today()
+        # Ensure we start exactly at the beginning of the month for the oldest month
+        start_date = (today - relativedelta(months=months-1)).replace(day=1)
+        end_date = (today + relativedelta(months=1)).replace(day=1) # up to start of next month
+
+        # 1. Fetch payments for those months
+        payments_res = supabase.table("payments")\
+            .select("amount_paid, payment_date")\
+            .gte("payment_date", start_date.isoformat())\
+            .lt("payment_date", end_date.isoformat())\
+            .execute()
+            
+        # 2. Fetch expenses for those months
+        expenses_res = supabase.table("expenses")\
+            .select("amount, date")\
+            .gte("date", start_date.isoformat())\
+            .lt("date", end_date.isoformat())\
+            .eq("owner_id", user_id)\
+            .execute()
+
+        # 3. Aggregate by month
+        monthly_data = {}
+        for i in range(months):
+            d = today - relativedelta(months=i)
+            # Short month name e.g. 'Oct'
+            month_key = f"{d.year}-{d.month:02d}"
+            month_name = calendar.month_abbr[d.month]
+            monthly_data[month_key] = {
+                "month": month_name,
+                "income": Decimal(0),
+                "expenses": Decimal(0),
+                "sort_key": month_key
+            }
+
+        # Process payments
+        for p in payments_res.data:
+            p_date = date.fromisoformat(p['payment_date'].split('T')[0])
+            month_key = f"{p_date.year}-{p_date.month:02d}"
+            if month_key in monthly_data:
+                monthly_data[month_key]['income'] += Decimal(str(p['amount_paid']))
+
+        # Process expenses
+        for e in expenses_res.data:
+            e_date = date.fromisoformat(e['date'].split('T')[0])
+            month_key = f"{e_date.year}-{e_date.month:02d}"
+            if month_key in monthly_data:
+                monthly_data[month_key]['expenses'] += Decimal(str(e['amount']))
+
+        # Convert to list and sort chronologically
+        result = list(monthly_data.values())
+        result.sort(key=lambda x: x['sort_key'])
+        
+        # Clean up Decimal to float and sort_key
+        for r in result:
+            r['income'] = float(r['income'])
+            r['expenses'] = float(r['expenses'])
+            del r['sort_key']
+
+        return ServiceResponse.success(result)
+
+    except Exception as e:
+        logger.exception(f"Error fetching monthly stats: {e}")
+        return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, str(e))
