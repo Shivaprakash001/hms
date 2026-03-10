@@ -34,11 +34,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register hooks on startup
 @app.on_event("startup")
 def startup_event():
-    # When student leaves hostel, auto-end room allocation
+    from app.services.notification_handler import (
+        handle_student_enrolled, handle_student_allocated,
+        handle_payment_recorded, handle_complaint_created,
+        handle_complaint_resolved, handle_rent_generated
+    )
+    
+    # Core logic hooks
     register_hook("student_left", handle_student_left)
+    
+    # Notification hooks
+    register_hook("student_enrolled", handle_student_enrolled)
+    register_hook("student_allocated_room", handle_student_allocated)
+    register_hook("payment_recorded", handle_payment_recorded)
+    register_hook("complaint_created", handle_complaint_created)
+    register_hook("complaint_updated", handle_complaint_resolved)
+    register_hook("rent_obligation_created", handle_rent_generated)
 
 app.include_router(student_router)
 app.include_router(profile_router)

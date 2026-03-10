@@ -48,8 +48,15 @@ def create_complaint(data: dict, created_by: Optional[str] = None) -> Dict[str, 
         if not result.data:
             return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to create complaint")
             
-        logger.info(f"Complaint created successfully: {result.data[0]['id']}")
-        return ServiceResponse.success(result.data[0], "Complaint submitted successfully")
+        complaint_data = result.data[0]
+        trigger_hook("complaint_created", 
+                     complaint_id=complaint_data["id"], 
+                     student_id=student_id, 
+                     owner_id=owner_id,
+                     title=insert_data["title"])
+
+        logger.info(f"Complaint created successfully: {complaint_data['id']}")
+        return ServiceResponse.success(complaint_data, "Complaint submitted successfully")
         
     except Exception as e:
         print(f"DEBUG: Error creating complaint: {str(e)}")

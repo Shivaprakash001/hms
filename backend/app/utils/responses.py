@@ -11,6 +11,7 @@ class ErrorCode(str, Enum):
     DB_CONNECTION_ERROR = "DB_001"
     DB_QUERY_ERROR = "DB_002"
     DB_CONSTRAINT_VIOLATION = "DB_003"
+    DB_INSERT_ERROR = "DB_004"
     
     # Resource errors
     RESOURCE_NOT_FOUND = "RES_001"

@@ -103,8 +103,8 @@ const OwnerDashboard = () => {
                 if ((now - start) < 7 * 24 * 60 * 60 * 1000) { // last 7 days
                     activities.push({
                         id: `alloc_${a.id}`,
-                        action: 'New Tenant',
-                        detail: `New tenant in Room ${a.room?.room_no}`,
+                        action: a.student?.profiles?.name || 'New Tenant',
+                        detail: `Joined Room ${a.room?.room_no}`,
                         date: start,
                         icon: Users,
                         color: 'text-indigo-600',

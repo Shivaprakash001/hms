@@ -54,9 +54,19 @@ def create_notification(user_id: str, title: str, message: str, n_type: str) -> 
             "owner_id": owner_id,
             "title": title,
             "message": message,
-            "type": n_type
+            "type": n_type.lower()
         }
-        res = supabase.table("notifications").insert(data).execute()
+        
+        try:
+            res = supabase.table("notifications").insert(data).execute()
+        except Exception as e:
+            # Check for missing column error (PGRST204)
+            if "PGRST204" in str(e) or "column" in str(e).lower() and "type" in str(e).lower():
+                logger.warning(f"Database 'notifications' table is missing 'type' column. Retrying without it.")
+                data.pop("type")
+                res = supabase.table("notifications").insert(data).execute()
+            else:
+                raise e
         
         if not res.data:
             return ServiceResponse.error(ErrorCode.DB_INSERT_ERROR, "Failed to create notification")
