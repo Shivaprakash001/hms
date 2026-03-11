@@ -15,6 +15,7 @@ class RoomUpdate(BaseModel):
     
 class RoomResponse(RoomBase):
     id: str
+    occupied: int = 0
     created_at: datetime
     updated_at: datetime
 

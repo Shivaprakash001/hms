@@ -42,7 +42,7 @@ const Payments = () => {
                 tenantName: item.student_name,
                 room: item.room_no,
                 type: 'Rent',
-                amount: item.amount,
+                amount: Number(item.amount),
                 status: item.status.toLowerCase(),
                 date: item.rent_month,
                 method: 'Online'

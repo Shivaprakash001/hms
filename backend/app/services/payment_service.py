@@ -121,6 +121,7 @@ def generate_monthly_rent(rent_month: date, user_id: Optional[str] = None) -> Di
             obligation_data = {
                 "student_id": student_id,
                 "allocation_id": latest_alloc["id"],
+                "owner_id": user_id,
                 "rent_month": target_month.isoformat(),
                 "amount": float(total_amount),
                 "due_date": (target_month + timedelta(days=9)).isoformat(),
@@ -133,6 +134,7 @@ def generate_monthly_rent(rent_month: date, user_id: Optional[str] = None) -> Di
                 trigger_hook("rent_obligation_created", 
                              obligation_id=res.data[0]["id"], 
                              student_id=student_id, 
+                             owner_id=user_id,
                              amount=float(total_amount))
             else:
                 errors.append(f"Failed to create for student {student_id}")
@@ -313,8 +315,10 @@ def get_dues_report(user_id: str, rent_month: Optional[date] = None, status: Opt
     Get all outstanding dues.
     """
     try:
+        # Fetch obligations with student profile and THEIR LATEST ROOM via allocations
+        # We need to reach rooms table: rent_obligations -> room_allocations -> rooms
         query = supabase.table("rent_obligations")\
-            .select("*, students(profiles!students_profile_id_fkey(name), room_number)", count="exact")\
+            .select("*, students(profiles!students_profile_id_fkey(name)), room_allocations(rooms(room_no))")\
             .eq("owner_id", user_id)
 
         if rent_month:
@@ -323,11 +327,6 @@ def get_dues_report(user_id: str, rent_month: Optional[date] = None, status: Opt
             
         if status:
             query = query.eq("status", status)
-        else:
-            # Default: Show everything not WAIVED/PAID? Or just show all?
-            # Typically dues report shows PENDING/PARTIAL
-            # But let's return all and let frontend filter, or filter here.
-            pass
 
         result = query.execute()
         
@@ -336,9 +335,14 @@ def get_dues_report(user_id: str, rent_month: Optional[date] = None, status: Opt
             student = d.get("students", {})
             profile = student.get("profiles", {})
             
+            # Extract room_no from the nested join
+            alloc = d.get("room_allocations", {})
+            room = alloc.get("rooms", {}) if alloc else {}
+            
             d["student_name"] = profile.get("name", "Unknown")
-            d["room_no"] = student.get("room_number", "N/A")
-            d["outstanding"] = float(Decimal(str(d["amount"])) - Decimal(0)) # Simplified, should subtract payments ideally but obligations check status
+            d["room_no"] = room.get("room_no", "N/A")
+            d["obligation_id"] = d["id"]
+            d["outstanding"] = float(Decimal(str(d["amount"])) - Decimal(0)) # Simplified
             
             dues.append(d)
             

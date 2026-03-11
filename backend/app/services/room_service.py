@@ -91,10 +91,29 @@ def get_all_rooms(limit: int = 50, offset: int = 0, owner_id: Optional[str] = No
             query = query.eq("owner_id", owner_id)
         
         result = query.execute()
+        rooms = result.data or []
+        
+        if rooms:
+            room_ids = [r["id"] for r in rooms]
+            # Fetch active allocations to calculate occupancy
+            allocs_res = supabase.table("room_allocations")\
+                .select("room_id")\
+                .in_("room_id", room_ids)\
+                .is_("end_date", "null")\
+                .execute()
+            
+            # Map occupancy count
+            occupancy_map = {}
+            for alloc in (allocs_res.data or []):
+                rid = alloc["room_id"]
+                occupancy_map[rid] = occupancy_map.get(rid, 0) + 1
+            
+            for room in rooms:
+                room["occupied"] = occupancy_map.get(room["id"], 0)
 
         return ServiceResponse.success({
-            "rooms": result.data,
-            "total": result.count if hasattr(result, "count") else len(result.data)
+            "rooms": rooms,
+            "total": result.count if hasattr(result, "count") else len(rooms)
         })
     except Exception as e:
         logger.exception(f"Error fetching rooms: {e}")
