@@ -273,7 +273,7 @@ def invite_tenant(data: dict, owner_id: str) -> Dict[str, Any]:
         if not inv_res.data:
             return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to generate invitation token")
 
-        activation_link = f"http://localhost:5173/activate?token={token}"
+        activation_link = f"https://hms-sand-five.vercel.app/activate?token={token}"
         logger.info(f"INVITATION CREATED for {email}: {activation_link}")
 
         # 5. Send Email (non-blocking simulation)
