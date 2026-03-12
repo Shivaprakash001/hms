@@ -13,7 +13,7 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api': {
-        target: 'https://trishul-solutions2.onrender.com',
+        target: 'https://trishul-solutions1.onrender.com',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
