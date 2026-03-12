@@ -28,14 +28,15 @@ app = FastAPI(title="Hostel Management System API", version="1.0.0")
 
 # CORS Configuration
 origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
+    "https://trishul-hms.vercel.app",
     "https://hms-sand-five.vercel.app",
+    "http://localhost:5173",
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -124,7 +124,7 @@ def register_user(data: dict) -> Dict[str, Any]:
         logger.exception(f"Error registering user: {e}")
         return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, str(e))
 
-def invite_tenant(data: dict, owner_id: str) -> Dict[str, Any]:
+def invite_tenant(data: dict, owner_id: str, background_tasks=None) -> Dict[str, Any]:
     """
     Create a tenant invitation.
     1. Create Supabase Auth user first (required for profiles FK)
@@ -142,77 +142,140 @@ def invite_tenant(data: dict, owner_id: str) -> Dict[str, Any]:
         monthly_rent = data.get("monthly_rent") or 0
 
         # 0. Check if profile already exists
-        existing = supabase.table("profiles").select("id").eq("email", email).execute()
-        if existing.data:
-            return ServiceResponse.already_exists("User", f"Email {email} is already registered")
+        existing_prof = supabase.table("profiles").select("*").eq("email", email).execute()
+        
+        if existing_prof.data:
+            existing_profile = existing_prof.data[0]
+            # If profile exists but is not a student, we might need to handle it differently, 
+            # but for now let's assume if it belongs to this owner or has no owner, we can invite.
+            if existing_profile.get("role") != "student" and existing_profile.get("role") is not None:
+                return ServiceResponse.already_exists("User", f"Email {email} is registered as {existing_profile.get('role')}")
 
-        # 1. Create Supabase Auth user first (needed to satisfy profiles_id_fkey)
-        temp_password = secrets.token_urlsafe(16)
-        try:
-            auth_response = supabase.auth.admin.create_user({
+            profile_id = existing_profile["id"]
+            auth_user_id = profile_id # It's already there
+
+            # Check if student enrollment already exists
+            existing_stu = supabase.table("students").select("*").eq("profile_id", profile_id).execute()
+            
+            if existing_stu.data:
+                student = existing_stu.data[0]
+                # If student belongs to another owner, we have a multi-tenancy conflict if we don't support multi-hostel students
+                if student.get("owner_id") and str(student.get("owner_id")) != owner_id:
+                     return ServiceResponse.error(ErrorCode.FORBIDDEN, f"Student is already enrolled in another hostel.")
+                
+                # If already active for this owner, just return success with info
+                if student["status"] == "ACTIVE":
+                    return ServiceResponse.success({"profile_id": profile_id, "student_id": student["id"]}, "Student is already active in your hostel.")
+                
+                # If INVITED or LEFT, we can "re-invite"
+                # Update student record with new room and rent
+                update_data = {
+                    "room_id": room_id,
+                    "monthly_rent": monthly_rent,
+                    "status": "INVITED", # Reset to invited for activation link
+                    "joined_on": datetime.now().date().isoformat()
+                }
+                supabase.table("students").update(update_data).eq("id", student["id"]).execute()
+                student_id = student["id"]
+            else:
+                # Profile exists but no student enrollment for this owner (or at all)
+                new_student = {
+                    "profile_id": profile_id,
+                    "owner_id": owner_id,
+                    "room_id": room_id,
+                    "status": "INVITED",
+                    "joined_on": datetime.now().date().isoformat(),
+                    "monthly_rent": monthly_rent
+                }
+                stu_res = supabase.table("students").insert(new_student).execute()
+                if not stu_res.data:
+                    return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to create student enrollment")
+                student_id = str(stu_res.data[0]["id"])
+        else:
+            # 1. Create Supabase Auth user first (needed to satisfy profiles_id_fkey)
+            temp_password = secrets.token_urlsafe(16)
+            try:
+                auth_response = supabase.auth.admin.create_user({
+                    "email": email,
+                    "password": temp_password,
+                    "email_confirm": True
+                })
+                if not auth_response.user:
+                    return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Failed to create auth user")
+                auth_user_id = str(auth_response.user.id)
+            except Exception as auth_err:
+                logger.error(f"Failed to create auth user for {email}: {auth_err}")
+                return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, f"Auth user creation failed: {str(auth_err)}")
+
+            # 2. Create Profile using the Auth User ID
+            hashed_temp = get_password_hash(temp_password)
+            new_profile = {
+                "id": auth_user_id,
                 "email": email,
-                "password": temp_password,
-                "email_confirm": True
-            })
-            if not auth_response.user:
-                return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Failed to create auth user")
-            auth_user_id = str(auth_response.user.id)
-        except Exception as auth_err:
-            logger.error(f"Failed to create auth user for {email}: {auth_err}")
-            return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, f"Auth user creation failed: {str(auth_err)}")
+                "name": name,
+                "phone": phone,
+                "role": "student",
+                "is_active": True,
+                "owner_id": owner_id,
+                "password_hash": hashed_temp
+            }
+            prof_res = supabase.table("profiles").insert(new_profile).execute()
+            if not prof_res.data:
+                try:
+                    supabase.auth.admin.delete_user(auth_user_id)
+                except Exception:
+                    pass
+                return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to create profile")
 
-        # 2. Create Profile using the Auth User ID
-        hashed_temp = get_password_hash(temp_password)
-        new_profile = {
-            "id": auth_user_id,
-            "email": email,
-            "name": name,
-            "phone": phone,
-            "role": "student",
-            "is_active": True,
-            "owner_id": owner_id,
-            "password_hash": hashed_temp
-        }
-        prof_res = supabase.table("profiles").insert(new_profile).execute()
-        if not prof_res.data:
-            try:
-                supabase.auth.admin.delete_user(auth_user_id)
-            except Exception:
-                pass
-            return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to create profile")
+            profile_id = str(prof_res.data[0]["id"])
 
-        profile_id = str(prof_res.data[0]["id"])
+            # 3. Create Student enrollment
+            new_student = {
+                "profile_id": profile_id,
+                "owner_id": owner_id,
+                "room_id": room_id,
+                "status": "INVITED",
+                "joined_on": datetime.now().date().isoformat(),
+                "monthly_rent": monthly_rent
+            }
+            stu_res = supabase.table("students").insert(new_student).execute()
+            if not stu_res.data:
+                supabase.table("profiles").delete().eq("id", profile_id).execute()
+                try:
+                    supabase.auth.admin.delete_user(auth_user_id)
+                except Exception:
+                    pass
+                return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to create student enrollment")
 
-        # 3. Create Student enrollment
-        new_student = {
-            "profile_id": profile_id,
-            "owner_id": owner_id,
-            "room_id": room_id,
-            "status": "INVITED",
-            "joined_on": datetime.now().date().isoformat(),
-            "monthly_rent": monthly_rent
-        }
-        stu_res = supabase.table("students").insert(new_student).execute()
-        if not stu_res.data:
-            supabase.table("profiles").delete().eq("id", profile_id).execute()
-            try:
-                supabase.auth.admin.delete_user(auth_user_id)
-            except Exception:
-                pass
-            return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to create student enrollment")
+            student_id = str(stu_res.data[0]["id"])
 
-        student_id = str(stu_res.data[0]["id"])
-
-        # 3.1 Create Room Allocation (Crucial for UI to show the room)
-        allocation_data = {
-            "student_id": student_id,
-            "owner_id": owner_id,
-            "room_id": room_id,
-            "start_date": datetime.now().date().isoformat()
-        }
-        alloc_res = supabase.table("room_allocations").insert(allocation_data).execute()
-        if not alloc_res.data:
-            logger.warning(f"Failed to create room allocation for invited student {student_id}")
+        # 3.1 Handle Room Allocation (Avoid duplicate active allocation)
+        existing_alloc = supabase.table("room_allocations")\
+            .select("id")\
+            .eq("student_id", student_id)\
+            .is_("end_date", "null")\
+            .execute()
+        
+        if existing_alloc.data:
+            # Update existing active allocation for the student
+            supabase.table("room_allocations")\
+                .update({
+                    "room_id": room_id,
+                    "start_date": datetime.now().date().isoformat()
+                })\
+                .eq("id", existing_alloc.data[0]["id"])\
+                .execute()
+        else:
+            # Create new allocation
+            allocation_data = {
+                "student_id": student_id,
+                "owner_id": owner_id,
+                "room_id": room_id,
+                "start_date": datetime.now().date().isoformat()
+            }
+            alloc_res = supabase.table("room_allocations").insert(allocation_data).execute()
+            if not alloc_res.data:
+                logger.warning(f"Failed to create room allocation for invited student {student_id}")
 
         # 4. Generate Invitation Token
         token = secrets.token_urlsafe(32)
@@ -227,11 +290,17 @@ def invite_tenant(data: dict, owner_id: str) -> Dict[str, Any]:
         if not inv_res.data:
             return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to generate invitation token")
 
-        activation_link = f"http://localhost:5173/activate?token={token}"
+        activation_link = f"https://trishul-hms.vercel.app/activate?token={token}"
         logger.info(f"INVITATION CREATED for {email}: {activation_link}")
 
-        # 5. Send Email (non-blocking simulation)
-        EmailService.send_invitation_email(email, name, activation_link)
+        # 5. Send Email (non-blocking using BackgroundTasks)
+        if background_tasks:
+            background_tasks.add_task(EmailService.send_invitation_email, email, name, activation_link)
+            logger.info(f"INVITATION BACKGROUND TASK QUEUED for {email}")
+        else:
+            # Fallback for direct calls
+            EmailService.send_invitation_email(email, name, activation_link)
+            logger.info(f"INVITATION EMAIL SENT SYNC (no background tasks) for {email}")
 
         return ServiceResponse.success({
             "profile_id": profile_id,

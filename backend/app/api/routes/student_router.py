@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query, status, Depends
+from fastapi import APIRouter, HTTPException, Query, status, Depends, BackgroundTasks
 from typing import Optional, List
 from datetime import date
 from app.schemas.student_schema import (
@@ -305,12 +305,17 @@ def reactivate_student_endpoint(
 @router.post("/invite", summary="Invite a tenant", description="Owner invites a new tenant by email", response_model=dict)
 def invite_tenant(
     data: TenantInviteRequest,
+    background_tasks: BackgroundTasks,
     user: UserContext = Depends(require_admin_or_owner)
 ):
     """
     Invite a new tenant. Creates a profile and enrollment with INVITED status.
     """
-    result = auth_service.invite_tenant(data.model_dump(mode='json'), str(user.user_id))
+    result = auth_service.invite_tenant(
+        data.model_dump(mode='json'), 
+        str(user.user_id),
+        background_tasks
+    )
     return _handle_service_response(result)
 
 
