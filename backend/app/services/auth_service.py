@@ -124,7 +124,7 @@ def register_user(data: dict) -> Dict[str, Any]:
         logger.exception(f"Error registering user: {e}")
         return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, str(e))
 
-def invite_tenant(data: dict, owner_id: str) -> Dict[str, Any]:
+def invite_tenant(data: dict, owner_id: str, background_tasks=None) -> Dict[str, Any]:
     """
     Create a tenant invitation.
     1. Create Supabase Auth user first (required for profiles FK)
@@ -293,8 +293,14 @@ def invite_tenant(data: dict, owner_id: str) -> Dict[str, Any]:
         activation_link = f"https://trishul-hms.vercel.app/activate?token={token}"
         logger.info(f"INVITATION CREATED for {email}: {activation_link}")
 
-        # 5. Send Email (non-blocking simulation)
-        EmailService.send_invitation_email(email, name, activation_link)
+        # 5. Send Email (non-blocking using BackgroundTasks)
+        if background_tasks:
+            background_tasks.add_task(EmailService.send_invitation_email, email, name, activation_link)
+            logger.info(f"INVITATION BACKGROUND TASK QUEUED for {email}")
+        else:
+            # Fallback for direct calls
+            EmailService.send_invitation_email(email, name, activation_link)
+            logger.info(f"INVITATION EMAIL SENT SYNC (no background tasks) for {email}")
 
         return ServiceResponse.success({
             "profile_id": profile_id,
