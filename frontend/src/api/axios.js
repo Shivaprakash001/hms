@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-    baseURL: 'https://trishul-solutions2.onrender.com', // Explicitly set Render backend
+    baseURL: import.meta.env.VITE_API_URL || 'https://trishul-solutions1.onrender.com', 
     headers: {
         'Content-Type': 'application/json',
     },
