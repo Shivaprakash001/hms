@@ -104,11 +104,12 @@ def get_all_complaints(
     List complaints with filtering.
     """
     try:
-        # Custom query to match mock data
-        # MOCK_COMPLAINTS: { id, tenantName, room, title, description, date, status, priority }
-        # Backend: { id, student_id, category(title?), description, created_at(date), status, priority }
-        
-        query = supabase.table("complaints").select("*, students(profiles!students_profile_id_fkey(name), room_allocations(rooms(room_no)))", count="exact")
+        # Simplified query: only join students -> profiles (name)
+        # Room allocation is fetched separately per student to avoid invalid nested joins
+        query = supabase.table("complaints").select(
+            "*, students(profiles!students_profile_id_fkey(name))",
+            count="exact"
+        )
         
         if student_id:
             query = query.eq("student_id", student_id)
@@ -122,16 +123,36 @@ def get_all_complaints(
         query = query.order("created_at", desc=True).limit(limit).offset(offset)
         
         result = query.execute()
+        logger.info(f"Complaints query returned {len(result.data)} rows")
+        
+        # Collect unique student IDs to batch-fetch their current room
+        student_ids = list({c["student_id"] for c in result.data if c.get("student_id")})
+        room_map = {}  # student_id -> room_no
+        if student_ids:
+            try:
+                alloc_res = supabase.table("room_allocations") \
+                    .select("student_id, rooms(room_no)") \
+                    .in_("student_id", student_ids) \
+                    .is_("end_date", "null") \
+                    .execute()
+                for alloc in alloc_res.data:
+                    sid = alloc.get("student_id")
+                    rooms = alloc.get("rooms")
+                    if sid and rooms and isinstance(rooms, dict):
+                        room_map[sid] = rooms.get("room_no", "N/A")
+            except Exception as alloc_err:
+                logger.warning(f"Could not fetch room allocations for complaints: {alloc_err}")
         
         complaints_list = []
         for c in result.data:
-            student = c.get("students", {})
-            profile = student.get("profiles", {})
-            allocations = student.get("room_allocations", [])
-            room_no = "N/A"
-            if allocations:
-                if allocations[0].get("rooms"):
-                    room_no = allocations[0]["rooms"]["room_no"]
+            student = c.get("students") or {}
+            # profiles can be a list or a dict depending on Supabase join type
+            profiles_data = student.get("profiles", {})
+            if isinstance(profiles_data, list):
+                profiles_data = profiles_data[0] if profiles_data else {}
+            
+            tenant_name = profiles_data.get("name", "Unknown") if profiles_data else "Unknown"
+            room_no = room_map.get(c.get("student_id"), "N/A")
 
             # Map legacy status to frontend friendly status
             status_map = {
@@ -141,11 +162,14 @@ def get_all_complaints(
                 "RESOLVED": "resolved"
             }
             db_status = c.get("status", "OPEN")
-            display_status = status_map.get(db_status.upper(), db_status)
+            if db_status:
+                display_status = status_map.get(db_status.upper(), db_status)
+            else:
+                display_status = "Pending"
 
             complaints_list.append({
                 "id": c["id"],
-                "tenantName": profile.get("name", "Unknown"),
+                "tenantName": tenant_name,
                 "room": room_no,
                 "title": c.get("title") or c.get("category") or "Complaint",
                 "description": c.get("description", ""),
@@ -157,14 +181,14 @@ def get_all_complaints(
 
         return ServiceResponse.success({
             "complaints": complaints_list,
-            "total": result.count if hasattr(result, 'count') else len(result.data),
+            "total": result.count if hasattr(result, 'count') and result.count is not None else len(result.data),
             "limit": limit,
             "offset": offset
         })
         
     except Exception as e:
         logger.exception(f"Error listing complaints: {e}")
-        return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, str(e))
+        return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, f"Failed to fetch complaints: {str(e)}")
 
 
 def update_complaint_status(

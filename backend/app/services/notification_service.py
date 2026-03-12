@@ -14,10 +14,11 @@ def get_user_notifications(user_id: str) -> Dict[str, Any]:
             .order("created_at", desc=True)\
             .execute()
         
+        logger.info(f"Fetched {len(res.data)} notifications for user {user_id}")
         return ServiceResponse.success(res.data)
     except Exception as e:
         logger.exception(f"Error fetching notifications for user {user_id}: {e}")
-        return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, str(e))
+        return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, f"Failed to fetch notifications: {str(e)}")
 
 def mark_as_read(notification_id: str, user_id: str) -> Dict[str, Any]:
     """Mark a notification as read."""
