@@ -249,16 +249,33 @@ def invite_tenant(data: dict, owner_id: str) -> Dict[str, Any]:
 
             student_id = str(stu_res.data[0]["id"])
 
-        # 3.1 Create Room Allocation (Crucial for UI to show the room)
-        allocation_data = {
-            "student_id": student_id,
-            "owner_id": owner_id,
-            "room_id": room_id,
-            "start_date": datetime.now().date().isoformat()
-        }
-        alloc_res = supabase.table("room_allocations").insert(allocation_data).execute()
-        if not alloc_res.data:
-            logger.warning(f"Failed to create room allocation for invited student {student_id}")
+        # 3.1 Handle Room Allocation (Avoid duplicate active allocation)
+        existing_alloc = supabase.table("room_allocations")\
+            .select("id")\
+            .eq("student_id", student_id)\
+            .is_("end_date", "null")\
+            .execute()
+        
+        if existing_alloc.data:
+            # Update existing active allocation for the student
+            supabase.table("room_allocations")\
+                .update({
+                    "room_id": room_id,
+                    "start_date": datetime.now().date().isoformat()
+                })\
+                .eq("id", existing_alloc.data[0]["id"])\
+                .execute()
+        else:
+            # Create new allocation
+            allocation_data = {
+                "student_id": student_id,
+                "owner_id": owner_id,
+                "room_id": room_id,
+                "start_date": datetime.now().date().isoformat()
+            }
+            alloc_res = supabase.table("room_allocations").insert(allocation_data).execute()
+            if not alloc_res.data:
+                logger.warning(f"Failed to create room allocation for invited student {student_id}")
 
         # 4. Generate Invitation Token
         token = secrets.token_urlsafe(32)
