@@ -88,3 +88,19 @@ class DuesReportItem(BaseModel):
     amount: Decimal
     status: ObligationStatus
     outstanding: Decimal
+
+
+class PaymentInitiate(BaseModel):
+    obligation_id: UUID
+    amount: Decimal = Field(..., gt=0)
+
+
+class RazorpayOrderResponse(BaseModel):
+    order_id: str
+    amount: int
+    currency: str
+    key_id: str
+    name: str
+    description: str
+    prefill: Optional[dict] = None
+    notes: Optional[dict] = None

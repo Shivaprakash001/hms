@@ -7,8 +7,22 @@ from app.utils.responses import ServiceResponse, ErrorCode
 from app.utils.logger import get_logger
 from app.utils.hooks import trigger_hook
 from uuid import UUID
+import razorpay
+import os
 
 logger = get_logger(__name__)
+
+# Razorpay Configuration
+RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID")
+RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET")
+RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET")
+
+razorpay_client = None
+if RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET:
+    try:
+        razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+    except Exception as e:
+        logger.error(f"Failed to initialize Razorpay client: {e}")
 
 
 def _calculate_prorated_rent(monthly_rent: Decimal, start_date: date, end_date: date, target_month: date) -> Decimal:
@@ -78,8 +92,13 @@ def generate_monthly_rent(rent_month: date, user_id: Optional[str] = None) -> Di
             # 2. Calculate Total Days of occupancy in the month across all segments
             total_days = 0
             for alloc in alloc_list:
-                start = max(target_month, date.fromisoformat(alloc["start_date"]))
-                end = min(month_end_date, date.fromisoformat(alloc["end_date"])) if alloc.get("end_date") else month_end_date
+                start_str = alloc["start_date"].split('T')[0] if alloc.get("start_date") else None
+                end_str = alloc["end_date"].split('T')[0] if alloc.get("end_date") else None
+                
+                if not start_str: continue
+
+                start = max(target_month, date.fromisoformat(start_str))
+                end = min(month_end_date, date.fromisoformat(end_str)) if end_str else month_end_date
                 
                 if start <= end:
                     total_days += (end - start).days + 1
@@ -380,3 +399,151 @@ def get_all_payments(user_id: str, limit: int = 50, offset: int = 0) -> Dict[str
     except Exception as e:
         logger.exception(f"Error fetching payments: {e}")
         return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to fetch payments")
+
+
+def create_razorpay_order(obligation_id: str, amount: Decimal, student_id: str) -> Dict[str, Any]:
+    """
+    Create a Razorpay order for a student obligation.
+    Optimized for UPI Intent by setting appropriate notes and gathering prefill info.
+    """
+    if not razorpay_client:
+        return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Razorpay client not configured")
+    
+    try:
+        # 1. Fetch Obligation to verify balance
+        ob_res = supabase.table("rent_obligations").select("*").eq("id", obligation_id).execute()
+        if not ob_res.data:
+            return ServiceResponse.not_found("Rent Obligation")
+        
+        obligation = ob_res.data[0]
+        
+        # 2. Fetch existing payments to verify amount doesn't exceed balance
+        p_res = supabase.table("payments").select("amount_paid").eq("obligation_id", obligation_id).execute()
+        existing_paid = sum(Decimal(str(p["amount_paid"])) for p in p_res.data)
+        remaining_balance = Decimal(str(obligation["amount"])) - existing_paid
+        
+        if amount > remaining_balance:
+            return ServiceResponse.error(
+                ErrorCode.INVALID_INPUT, 
+                f"Amount exceeds balance. Remaining: {remaining_balance}"
+            )
+
+        # 3. Create Razorpay Order
+        # amount is in paise (1 INR = 100 paise)
+        amount_paise = int(amount * 100)
+        
+        order_data = {
+            "amount": amount_paise,
+            "currency": "INR",
+            "payment_capture": 1, # Automatic capture
+            "notes": {
+                "obligation_id": str(obligation_id),
+                "student_id": str(student_id),
+                "type": "rent_payment"
+            }
+        }
+        
+        # Mobile UPI Optimization: Razorpay handles intent better if we specify the method in some frontend SDKs,
+        # but here we ensure notes are strictly typed for the webhook to recover context.
+        razorpay_order = razorpay_client.order.create(data=order_data)
+        
+        # 4. Get student profile for frontend prefill
+        student_res = supabase.table("students")\
+            .select("*, profiles!students_profile_id_fkey(*)")\
+            .eq("id", student_id)\
+            .execute()
+            
+        profile = {}
+        if student_res.data:
+            profile = student_res.data[0].get("profiles", {})
+
+        return ServiceResponse.success({
+            "order_id": razorpay_order["id"],
+            "amount": razorpay_order["amount"],
+            "currency": razorpay_order["currency"],
+            "key_id": RAZORPAY_KEY_ID,
+            "name": "Hostel Management System",
+            "description": f"Rent Payment - {obligation.get('rent_month')}",
+            "prefill": {
+                "name": profile.get("name", ""),
+                "email": profile.get("email", ""),
+                "contact": profile.get("phone", "")
+            },
+            "notes": order_data["notes"]
+        })
+
+    except Exception as e:
+        logger.exception(f"Error creating Razorpay order: {e}")
+        return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Failed to create Razorpay order", str(e))
+
+
+def verify_webhook_signature(payload: bytes, signature: str) -> bool:
+    """
+    Verify the authenticity of a Razorpay webhook request.
+    """
+    if not razorpay_client or not RAZORPAY_WEBHOOK_SECRET:
+        logger.error("Razorpay client or Webhook Secret not configured")
+        return False
+        
+    try:
+        razorpay_client.utility.verify_webhook_signature(
+            payload.decode("utf-8"),
+            signature,
+            RAZORPAY_WEBHOOK_SECRET
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Webhook signature verification failed: {e}")
+        return False
+
+
+def handle_razorpay_webhook(event: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Process Razorpay webhook events. 
+    Handles 'order.paid' to update the database atomically.
+    """
+    event_type = event.get("event")
+    if event_type != "order.paid":
+        logger.info(f"Webhook received, but even '{event_type}' is not handled.")
+        return ServiceResponse.success({}, f"Event {event_type} acknowledged")
+    
+    try:
+        payload = event.get("payload", {})
+        order = payload.get("order", {}).get("entity", {})
+        payment = payload.get("payment", {}).get("entity", {})
+        
+        notes = order.get("notes", {})
+        obligation_id = notes.get("obligation_id")
+        student_id = notes.get("student_id")
+        
+        razorpay_payment_id = payment.get("id")
+        amount_paid_paise = payment.get("amount")
+        amount_paid = Decimal(amount_paid_paise) / 100
+        
+        if not obligation_id or not student_id:
+            logger.error(f"Webhook payload missing student/obligation metadata: {notes}")
+            return ServiceResponse.error(ErrorCode.INVALID_INPUT, "Missing metadata in order notes")
+
+        # Atomic check: Ensure we haven't already processed this payment ID
+        existing_check = supabase.table("payments")\
+            .select("id")\
+            .eq("reference_number", razorpay_payment_id)\
+            .execute()
+            
+        if existing_check.data:
+            logger.info(f"Payment {razorpay_payment_id} already processed. Skipping.")
+            return ServiceResponse.success({}, "Payment already processed")
+
+        # Record the payment using the standard business logic
+        # This will update obligation status and trigger hooks
+        return record_payment(
+            obligation_id=obligation_id,
+            amount_paid=amount_paid,
+            payment_method="UPI", # Razorpay UPI
+            reference_number=razorpay_payment_id,
+            payment_date=date.today()
+        )
+
+    except Exception as e:
+        logger.exception(f"Error handling Razorpay webhook: {e}")
+        return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Failed to process webhook", str(e))
