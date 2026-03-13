@@ -76,11 +76,11 @@ def generate_monthly_rent(rent_month: date, user_id: Optional[str] = None) -> Di
             return ServiceResponse.success([], "No students found to process.")
 
         # 1. Fetch all allocations overlapping with this month for these specific students
-        # We filter by student_ids instead of owner_id to be more compatible with old schemas
+        # Using .filter("or", ...) for maximum compatibility across library versions
         query = supabase.table("room_allocations")\
             .select("*")\
             .lte("start_date", month_end_date.isoformat())\
-            .or_(f"end_date.is.null,end_date.gte.{target_month.isoformat()}")\
+            .filter("or", f"(end_date.is.null,end_date.gte.{target_month.isoformat()})")\
             .in_("student_id", owner_student_ids)
             
         alloc_res = query.execute()
