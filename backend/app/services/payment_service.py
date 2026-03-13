@@ -62,11 +62,15 @@ def generate_monthly_rent(rent_month: date, user_id: Optional[str] = None) -> Di
         logger.info(f"Generating monthly rent for {target_month.strftime('%Y-%m')}")
         
         # 1. Fetch all allocations overlapping with this month
-        alloc_res = supabase.table("room_allocations")\
+        query = supabase.table("room_allocations")\
             .select("*, students(id, monthly_rent, status)")\
             .lte("start_date", month_end_date.isoformat())\
-            .or_(f"end_date.is.null,end_date.gte.{target_month.isoformat()}")\
-            .execute()
+            .or_(f"end_date.is.null,end_date.gte.{target_month.isoformat()}")
+        
+        if user_id:
+            query = query.eq("owner_id", user_id)
+            
+        alloc_res = query.execute()
         
         allocations = alloc_res.data
         if not allocations:
@@ -75,10 +79,22 @@ def generate_monthly_rent(rent_month: date, user_id: Optional[str] = None) -> Di
         # Group allocations by student
         student_allocs = {}
         for a in allocations:
-            if not a.get("students"): continue
-            s_id = a["students"]["id"]
+            # Handle student join as dict or list
+            student_data = a.get("students")
+            if isinstance(student_data, list) and len(student_data) > 0:
+                student_data = student_data[0]
+                
+            if not student_data or not isinstance(student_data, dict): 
+                continue
+                
+            s_id = student_data.get("id")
+            if not s_id: continue
+
             if s_id not in student_allocs:
                 student_allocs[s_id] = []
+            
+            # Store student info on the first allocation for later
+            a["_student"] = student_data
             student_allocs[s_id].append(a)
 
         generated_count = 0
@@ -86,8 +102,9 @@ def generate_monthly_rent(rent_month: date, user_id: Optional[str] = None) -> Di
         skipped_count = 0
         errors = []
         for student_id, alloc_list in student_allocs.items():
-            student = alloc_list[0]["students"]
-            monthly_rent = Decimal(str(student.get("monthly_rent", 0)))
+            student = alloc_list[0].get("_student")
+            monthly_rent_val = student.get("monthly_rent", 0)
+            monthly_rent = Decimal(str(monthly_rent_val)) if monthly_rent_val is not None else Decimal(0)
             
             # 2. Calculate Total Days of occupancy in the month across all segments
             total_days = 0
@@ -168,7 +185,10 @@ def generate_monthly_rent(rent_month: date, user_id: Optional[str] = None) -> Di
 
     except Exception as e:
         logger.exception(f"Error generating monthly rent: {e}")
-        return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Failed to generate rent", str(e))
+        # Include exception details for cross-origin debugging if needed, 
+        # but keep it safe for production error messages.
+        error_msg = f"Failed to generate rent: {str(e)}"
+        return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, error_msg, str(e))
 
 
 def record_payment(
