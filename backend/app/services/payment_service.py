@@ -54,21 +54,34 @@ def generate_monthly_rent(rent_month: date, user_id: Optional[str] = None) -> Di
     Generate rent obligations for all active students in a given month.
     """
     try:
+        import traceback
         # Normalize to 1st of month
         target_month = rent_month.replace(day=1)
         _, last_day = calendar.monthrange(target_month.year, target_month.month)
         month_end_date = target_month.replace(day=last_day)
         
-        logger.info(f"Generating monthly rent for {target_month.strftime('%Y-%m')}")
+        logger.info(f"Generating monthly rent for {target_month.strftime('%Y-%m')} for owner {user_id}")
         
-        # 1. Fetch all allocations overlapping with this month
-        query = supabase.table("room_allocations")\
-            .select("*, students(id, monthly_rent, status)")\
-            .lte("start_date", month_end_date.isoformat())\
-            .or_(f"end_date.is.null,end_date.gte.{target_month.isoformat()}")
-        
+        # 0. Fetch all students belonging to this owner first
+        # This is a safer way to isolate than relying on owner_id on all tables
+        student_query = supabase.table("students").select("id, monthly_rent, status")
         if user_id:
-            query = query.eq("owner_id", user_id)
+            student_query = student_query.eq("owner_id", user_id)
+        
+        student_res = student_query.execute()
+        owner_student_map = {s["id"]: s for s in student_res.data}
+        owner_student_ids = list(owner_student_map.keys())
+
+        if not owner_student_ids:
+            return ServiceResponse.success([], "No students found to process.")
+
+        # 1. Fetch all allocations overlapping with this month for these specific students
+        # We filter by student_ids instead of owner_id to be more compatible with old schemas
+        query = supabase.table("room_allocations")\
+            .select("*")\
+            .lte("start_date", month_end_date.isoformat())\
+            .or_(f"end_date.is.null,end_date.gte.{target_month.isoformat()}")\
+            .in_("student_id", owner_student_ids)
             
         alloc_res = query.execute()
         
@@ -79,59 +92,64 @@ def generate_monthly_rent(rent_month: date, user_id: Optional[str] = None) -> Di
         # Group allocations by student
         student_allocs = {}
         for a in allocations:
-            # Handle student join as dict or list
-            student_data = a.get("students")
-            if isinstance(student_data, list) and len(student_data) > 0:
-                student_data = student_data[0]
-                
-            if not student_data or not isinstance(student_data, dict): 
-                continue
-                
-            s_id = student_data.get("id")
-            if not s_id: continue
-
+            s_id = a.get("student_id")
             if s_id not in student_allocs:
                 student_allocs[s_id] = []
             
-            # Store student info on the first allocation for later
-            a["_student"] = student_data
+            # Attach student info from our map
+            a["_student"] = owner_student_map.get(s_id)
             student_allocs[s_id].append(a)
 
         generated_count = 0
         updated_count = 0
         skipped_count = 0
         errors = []
+        
         for student_id, alloc_list in student_allocs.items():
             student = alloc_list[0].get("_student")
+            if not student: continue
+            
             monthly_rent_val = student.get("monthly_rent", 0)
             monthly_rent = Decimal(str(monthly_rent_val)) if monthly_rent_val is not None else Decimal(0)
             
             # 2. Calculate Total Days of occupancy in the month across all segments
             total_days = 0
             for alloc in alloc_list:
-                start_str = alloc["start_date"].split('T')[0] if alloc.get("start_date") else None
-                end_str = alloc["end_date"].split('T')[0] if alloc.get("end_date") else None
+                start_val = alloc.get("start_date")
+                end_val = alloc.get("end_date")
+                
+                # Robustly handle Supabase dates which might have timestamps
+                start_str = str(start_val).split('T')[0] if start_val else None
+                end_str = str(end_val).split('T')[0] if end_val else None
                 
                 if not start_str: continue
 
-                start = max(target_month, date.fromisoformat(start_str))
-                end = min(month_end_date, date.fromisoformat(end_str)) if end_str else month_end_date
-                
-                if start <= end:
-                    total_days += (end - start).days + 1
+                try:
+                    start = max(target_month, date.fromisoformat(start_str))
+                    end = min(month_end_date, date.fromisoformat(end_str)) if end_str else month_end_date
+                    
+                    if start <= end:
+                        total_days += (end - start).days + 1
+                except Exception as de:
+                    logger.error(f"Date parsing error for student {student_id}: {de}")
+                    continue
             
             if total_days <= 0:
                 continue
             
-            # Since it's monthly based, we charge the full monthly_rent if any days were stayed
+            # Monthly rent is currently fixed amount regardless of days stayed (simple model)
+            # You can easily change this to (monthly_rent * total_days / last_day) for prorated
             total_amount = monthly_rent
             
             # 3. Check for existing obligation
-            existing_res = supabase.table("rent_obligations")\
+            existing_res_query = supabase.table("rent_obligations")\
                 .select("*")\
                 .eq("student_id", student_id)\
-                .eq("rent_month", target_month.isoformat())\
-                .execute()
+                .eq("rent_month", target_month.isoformat())
+            
+            # Again, use owner_id IF it exists, but don't crash if it doesn't
+            # (Service role will find the record anyway)
+            existing_res = existing_res_query.execute()
             
             if existing_res.data:
                 existing = existing_res.data[0]
@@ -141,9 +159,13 @@ def generate_monthly_rent(rent_month: date, user_id: Optional[str] = None) -> Di
                     continue
                 
                 # If amount is different, update it
-                if Decimal(str(existing["amount"])) != total_amount.quantize(Decimal('0.01')):
+                # Convert both to float/decimal for comparison
+                current_amount = Decimal(str(existing["amount"]))
+                target_amount = total_amount.quantize(Decimal('0.01'))
+                
+                if current_amount != target_amount:
                     supabase.table("rent_obligations")\
-                        .update({"amount": float(total_amount)})\
+                        .update({"amount": float(target_amount)})\
                         .eq("id", existing["id"])\
                         .execute()
                     updated_count += 1
@@ -153,7 +175,7 @@ def generate_monthly_rent(rent_month: date, user_id: Optional[str] = None) -> Di
                 
             # 4. Create Obligation
             # Use the latest allocation ID as reference
-            latest_alloc = sorted(alloc_list, key=lambda x: x["start_date"])[-1]
+            latest_alloc = sorted(alloc_list, key=lambda x: str(x.get("start_date") or "0001-01-01"))[-1]
             obligation_data = {
                 "student_id": student_id,
                 "allocation_id": latest_alloc["id"],
@@ -184,11 +206,13 @@ def generate_monthly_rent(rent_month: date, user_id: Optional[str] = None) -> Di
         }, f"Processed rent obligations: {generated_count} new, {updated_count} updated.")
 
     except Exception as e:
-        logger.exception(f"Error generating monthly rent: {e}")
-        # Include exception details for cross-origin debugging if needed, 
-        # but keep it safe for production error messages.
-        error_msg = f"Failed to generate rent: {str(e)}"
-        return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, error_msg, str(e))
+        tb = traceback.format_exc()
+        logger.error(f"Error generating monthly rent: {e}\n{tb}")
+        return ServiceResponse.error(
+            ErrorCode.INTERNAL_ERROR, 
+            f"Failed to generate rent: {str(e)}", 
+            tb
+        )
 
 
 def record_payment(
