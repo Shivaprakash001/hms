@@ -456,7 +456,7 @@ def get_all_payments(user_id: str, limit: int = 50, offset: int = 0) -> Dict[str
         return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to fetch payments")
 
 
-def create_razorpay_order(obligation_id: str, amount: Decimal, student_id: str) -> Dict[str, Any]:
+def create_razorpay_order(obligation_id: Optional[str], amount: Decimal, student_id: str) -> Dict[str, Any]:
     """
     Create a Razorpay order for a student obligation.
     Optimized for UPI Intent by setting appropriate notes and gathering prefill info.
@@ -465,14 +465,32 @@ def create_razorpay_order(obligation_id: str, amount: Decimal, student_id: str) 
         return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Razorpay client not configured")
     
     try:
-        # 1. Fetch Obligation to verify balance
+        # 1. Handle Missing Obligation ID (Discovery mode)
+        if not obligation_id:
+            logger.info(f"Finding oldest pending obligation for student: {student_id}")
+            pending = supabase.table("rent_obligations")\
+                .select("id, amount, rent_month")\
+                .eq("student_id", student_id)\
+                .neq("status", "PAID")\
+                .neq("status", "WAIVED")\
+                .order("due_date", desc=False)\
+                .limit(1)\
+                .execute()
+            
+            if not pending.data:
+                 return ServiceResponse.error(ErrorCode.RESOURCE_NOT_FOUND, "No pending dues found to pay.")
+            
+            obligation_id = pending.data[0]["id"]
+            logger.info(f"Discovered obligation {obligation_id} for student {student_id}")
+
+        # 2. Fetch Obligation to verify balance
         ob_res = supabase.table("rent_obligations").select("*").eq("id", obligation_id).execute()
         if not ob_res.data:
             return ServiceResponse.not_found("Rent Obligation")
         
         obligation = ob_res.data[0]
         
-        # 2. Fetch existing payments to verify amount doesn't exceed balance
+        # 3. Fetch existing payments to verify amount doesn't exceed balance
         p_res = supabase.table("payments").select("amount_paid").eq("obligation_id", obligation_id).execute()
         existing_paid = sum(Decimal(str(p["amount_paid"])) for p in p_res.data)
         remaining_balance = Decimal(str(obligation["amount"])) - existing_paid

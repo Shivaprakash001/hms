@@ -27,3 +27,16 @@ def get_monthly_dashboard_stats(months: int = 6, user: UserContext = Depends(req
     """
     result = dashboard_service.get_monthly_stats(user_id=user.user_id, months=months)
     return _handle_response(result)
+
+@router.get("/student/stats")
+def get_student_dashboard_stats(user: UserContext = Depends(get_current_user)):
+    """
+    Get student-specific dashboard statistics.
+    """
+    if user.role != "student":
+         raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only students can access student dashboard stats"
+        )
+    result = dashboard_service.get_student_dashboard_stats(profile_id=user.user_id)
+    return _handle_response(result)

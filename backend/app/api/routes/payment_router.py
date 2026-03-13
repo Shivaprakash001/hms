@@ -200,7 +200,7 @@ def initiate_razorpay_payment(
         )
         
     result = payment_service.create_razorpay_order(
-        str(data.obligation_id),
+        str(data.obligation_id) if data.obligation_id else None,
         data.amount,
         str(user.student_id)
     )

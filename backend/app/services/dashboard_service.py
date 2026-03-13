@@ -155,3 +155,69 @@ def get_monthly_stats(user_id: str, months: int = 6):
     except Exception as e:
         logger.exception(f"Error fetching monthly stats: {e}")
         return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, str(e))
+
+def get_student_dashboard_stats(profile_id: str):
+    """
+    Fetch dashboard stats specifically for a student.
+    Includes: Room details, Monthly Rent, Pending Dues, Next Payment.
+    """
+    try:
+        # 1. Fetch Student record with Profile and Current Allocation
+        student_res = supabase.table("students")\
+            .select("*, profiles!students_profile_id_fkey(name, email, phone), room_allocations(*, rooms(*))")\
+            .eq("profile_id", profile_id)\
+            .execute()
+        
+        if not student_res.data:
+            return ServiceResponse.not_found("Student enrollment not found for this profile.")
+        
+        student = student_res.data[0]
+        student_id = student["id"]
+        monthly_rent = Decimal(str(student.get("monthly_rent") or 0))
+        
+        # 2. Extract Room Info
+        allocations = student.get("room_allocations", [])
+        active_alloc = next((a for a in allocations if a.get("end_date") is None), None)
+        room_info = active_alloc.get("rooms") if active_alloc else None
+        
+        # 3. Calculate Pending Dues
+        obligations_res = supabase.table("rent_obligations")\
+            .select("id, amount, due_date, status")\
+            .eq("student_id", student_id)\
+            .neq("status", "PAID")\
+            .neq("status", "WAIVED")\
+            .order("due_date", desc=False)\
+            .execute()
+            
+        pending_total = Decimal(0)
+        next_payment = None
+        oldest_obligation_id = None
+        
+        if obligations_res.data:
+            for ob in obligations_res.data:
+                amount = Decimal(str(ob['amount']))
+                # Get payments for this ob
+                p_res = supabase.table("payments").select("amount_paid").eq("obligation_id", ob['id']).execute()
+                paid = sum(Decimal(str(p['amount_paid'])) for p in p_res.data)
+                
+                due = amount - paid
+                if due > 0:
+                    pending_total += due
+                    if not next_payment:
+                        next_payment = ob['due_date']
+                        oldest_obligation_id = ob['id']
+
+        return ServiceResponse.success({
+            "student_id": student_id,
+            "room_no": room_info.get("room_no") if room_info else "Not Assigned",
+            "room_id": room_info.get("id") if room_info else None,
+            "monthly_rent": float(monthly_rent),
+            "pending_dues": float(pending_total),
+            "next_payment_date": next_payment or "N/A",
+            "oldest_obligation_id": oldest_obligation_id,
+            "status": student.get("status")
+        })
+
+    except Exception as e:
+        logger.exception(f"Error fetching student dashboard stats: {e}")
+        return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, str(e))

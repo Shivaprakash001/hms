@@ -91,7 +91,7 @@ class DuesReportItem(BaseModel):
 
 
 class PaymentInitiate(BaseModel):
-    obligation_id: UUID
+    obligation_id: Optional[UUID] = None
     amount: Decimal = Field(..., gt=0)
 
 
