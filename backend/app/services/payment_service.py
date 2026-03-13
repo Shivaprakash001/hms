@@ -72,33 +72,44 @@ def generate_monthly_rent(rent_month: date, user_id: Optional[str] = None) -> Di
         owner_student_map = {s["id"]: s for s in student_res.data}
         owner_student_ids = list(owner_student_map.keys())
 
-        if not owner_student_ids:
-            return ServiceResponse.success([], "No students found to process.")
-
-        # 1. Fetch all allocations overlapping with this month for these specific students
-        # Using .filter("or", ...) for maximum compatibility across library versions
+        # 1. Fetch ALL allocations for these specific students
+        # We perform the date filtering in Python to avoid Supabase library syntax issues (.or_ / .filter)
         query = supabase.table("room_allocations")\
             .select("*")\
-            .lte("start_date", month_end_date.isoformat())\
-            .filter("or", f"(end_date.is.null,end_date.gte.{target_month.isoformat()})")\
             .in_("student_id", owner_student_ids)
             
         alloc_res = query.execute()
-        
-        allocations = alloc_res.data
-        if not allocations:
-            return ServiceResponse.success([], "No active allocations found for this month.")
+        all_allocations = alloc_res.data
+        if not all_allocations:
+            return ServiceResponse.success([], "No allocations found for your students.")
             
-        # Group allocations by student
+        # Group allocations by student and filter for those overlapping this month
         student_allocs = {}
-        for a in allocations:
+        for a in all_allocations:
             s_id = a.get("student_id")
-            if s_id not in student_allocs:
-                student_allocs[s_id] = []
             
-            # Attach student info from our map
-            a["_student"] = owner_student_map.get(s_id)
-            student_allocs[s_id].append(a)
+            # Date filter in Python (Start <= MonthEnd) AND (End is NULL OR End >= MonthStart)
+            start_val = str(a.get("start_date") or "").split('T')[0]
+            end_val = str(a.get("end_date") or "").split('T')[0] if a.get("end_date") else None
+            
+            if not start_val: continue
+            
+            try:
+                alloc_start = date.fromisoformat(start_val)
+                # Overlap condition
+                is_after_start = end_val is None or date.fromisoformat(end_val) >= target_month
+                is_before_end = alloc_start <= month_end_date
+                
+                if is_after_start and is_before_end:
+                    if s_id not in student_allocs:
+                        student_allocs[s_id] = []
+                    
+                    # Attach student info from our map
+                    a["_student"] = owner_student_map.get(s_id)
+                    student_allocs[s_id].append(a)
+            except Exception as de:
+                logger.error(f"Error checking dates for allocation {a.get('id')}: {de}")
+                continue
 
         generated_count = 0
         updated_count = 0
