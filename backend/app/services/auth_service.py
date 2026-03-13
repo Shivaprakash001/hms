@@ -204,8 +204,30 @@ def invite_tenant(data: dict, owner_id: str, background_tasks=None) -> Dict[str,
                     return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Failed to create auth user")
                 auth_user_id = str(auth_response.user.id)
             except Exception as auth_err:
-                logger.error(f"Failed to create auth user for {email}: {auth_err}")
-                return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, f"Auth user creation failed: {str(auth_err)}")
+                # Handle case where user exists in Auth but not in Profiles (dangling user)
+                auth_err_str = str(auth_err)
+                if "already" in auth_err_str.lower() or "exists" in auth_err_str.lower():
+                    logger.info(f"User {email} already exists in Auth. Attempting to retrieve ID...")
+                    try:
+                        # List users and find the one with matching email
+                        users_res = supabase.auth.admin.list_users()
+                        # users_res could be a list or have a .users attribute depending on client version
+                        users = users_res if isinstance(users_res, list) else getattr(users_res, 'users', [])
+                        
+                        for u in users:
+                            if u.email == email:
+                                auth_user_id = str(u.id)
+                                break
+                        
+                        if not auth_user_id:
+                            logger.error(f"A user with email {email} exists in Auth but was not found in list_users.")
+                            return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, f"Auth conflict: User exists but lookup failed.")
+                    except Exception as look_err:
+                        logger.error(f"Error looking up existing auth user: {look_err}")
+                        return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, f"Failed to resolve Auth conflict: {str(look_err)}")
+                else:
+                    logger.error(f"Failed to create auth user for {email}: {auth_err}")
+                    return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, f"Auth user creation failed: {str(auth_err)}")
 
             # 2. Create Profile using the Auth User ID
             hashed_temp = get_password_hash(temp_password)
