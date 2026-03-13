@@ -37,19 +37,6 @@ def get_dashboard_stats(user_id: str):
             .select("amount_paid")\
             .gte("payment_date", month_start.isoformat())\
             .lt("payment_date", next_month.isoformat())\
-            .execute()
-        
-        current_revenue = sum(Decimal(str(p['amount_paid'])) for p in payments_res.data if p.get('student_id') in [s['id'] for s in students_res.data] or True) # simplified, we need to ensure payment is for owner. Or better if payment table has owner_id
-        # Let's assume all tables have owner_id as checked before.
-        # Wait, the verification script was run but produced NO output in the view_file logs? 
-        # Hmm, "owner_id" might only be in students? 
-        # I will assume it's in all of them based on Plan. To be safe, let's keep it simple for now or fetch students first.
-        # IF payment has owner_id:
-        
-        payments_res = supabase.table("payments")\
-            .select("amount_paid")\
-            .gte("payment_date", month_start.isoformat())\
-            .lt("payment_date", next_month.isoformat())\
             .eq("owner_id", user_id)\
             .execute()
 
