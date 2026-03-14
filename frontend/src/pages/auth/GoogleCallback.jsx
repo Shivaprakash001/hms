@@ -10,13 +10,12 @@ export const GoogleCallback = () => {
 
   useEffect(() => {
     if (code) {
-      // Small delay to ensure UI is ready
       const handleCallback = async () => {
         try {
-          // You'll need to implement loginWithGoogle in your AuthContext
-          // or handle the exchange here. 
-          // For now, let's assume loginWithGoogle handles the backend call.
-          const user = await loginWithGoogle(code);
+          // The redirect_uri must match the one used in the initial Google auth request.
+          // We compute it dynamically so it works across all deployment environments.
+          const redirectUri = `${window.location.origin}/callback`;
+          const user = await loginWithGoogle(code, redirectUri);
           
           if (user.role === 'owner' || user.role === 'admin') {
             navigate('/owner/dashboard');

@@ -94,10 +94,10 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    const loginWithGoogle = async (code) => {
+    const loginWithGoogle = async (code, redirectUri) => {
         try {
-            // Using /auth/google-callback as planned
-            const response = await api.post('/auth/google-callback', { code });
+            // Pass the redirect_uri so the backend can use the same value when exchanging the code with Google
+            const response = await api.post('/auth/google-callback', { code, redirect_uri: redirectUri });
             const { access_token, role, name, user_id, student_id } = response.data;
             const userData = { role, name, id: user_id, student_id, token: access_token };
             setUser(userData);

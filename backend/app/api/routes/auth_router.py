@@ -152,7 +152,7 @@ async def google_callback(data: GoogleLoginRequest):
     """
     Exchange Google OAuth code for local HMS token.
     """
-    result = await auth_service.google_login(data.code)
+    result = await auth_service.google_login(data.code, redirect_uri=data.redirect_uri)
     
     if not result.get("success"):
         raise HTTPException(
