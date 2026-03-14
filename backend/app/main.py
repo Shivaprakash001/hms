@@ -106,7 +106,7 @@ def startup_event():
     register_hook("complaint_updated", handle_complaint_resolved)
     register_hook("rent_obligation_created", handle_rent_generated)
 
-app.include_router(v1_router, prefix="/api/v1")
+app.include_router(v1_router)
 
 def custom_openapi():
     """

@@ -1,13 +1,12 @@
 import axios from 'axios';
 
 const api = axios.create({
-    baseURL: (import.meta.env.VITE_API_URL || 'https://trishul-solutions1.onrender.com') + '/api/v1', 
+    baseURL: import.meta.env.VITE_API_URL || 'https://trishul-solutions1.onrender.com', 
     headers: {
         'Content-Type': 'application/json',
     },
 });
 
-console.log('API Base URL:', api.defaults.baseURL);
 
 // Add a request interceptor to include the auth token
 api.interceptors.request.use(
