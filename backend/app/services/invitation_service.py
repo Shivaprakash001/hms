@@ -88,16 +88,17 @@ class InvitationService:
             stu_res = supabase.table("students").insert(new_student).execute()
             student_id = stu_res.data[0]["id"]
 
-            # 6. Create Room Allocation
+            # 6. Create Room Allocation with status="ACTIVE"
             allocation_data = {
                 "student_id": student_id,
                 "room_id": room_id,
                 "start_date": datetime.now().date().isoformat(),
+                "status": "ACTIVE",  # ← CRITICAL: Must have status
                 "owner_id": owner_id
             }
             supabase.table("room_allocations").insert(allocation_data).execute()
 
-            # 7. Generate Token
+            # 7. Generate secure invitation token (24h expiry)
             token = secrets.token_urlsafe(32)
             expires_at = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
 
@@ -112,11 +113,9 @@ class InvitationService:
             inv_res = supabase.table("invitations").insert(invitation_data).execute()
             invitation_id = inv_res.data[0]["id"]
 
-            # 8. Send Email
-            # Use frontend URL from env or fallback
-            base_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+            # 8. Send email asynchronously (non-blocking)
+            base_url = os.getenv("FRONTEND_URL", "https://hms-r1u7wmn18-shivaprakash001s-projects.vercel.app")
             activation_link = f"{base_url}/activate?token={token}&email={email}"
-            
             room_no = room.get("room_no", "N/A")
             
             if background_tasks:
@@ -124,13 +123,17 @@ class InvitationService:
             else:
                 EmailService.send_invitation_email(email, name, activation_link, room_no, float(monthly_rent))
 
-            return ServiceResponse.success({
+            # SUCCESS: Return response with activation_link
+            response_data = {
                 "success": True,
                 "invitation_id": invitation_id,
                 "email": email,
                 "student_id": student_id,
+                "activation_link": activation_link,  # ← CRITICAL
                 "expires_in_hours": 24
-            }, "Invitation sent successfully")
+            }
+            
+            return ServiceResponse.success(response_data, "Invitation sent successfully")
 
         except Exception as e:
             logger.exception(f"Error inviting tenant: {e}")
