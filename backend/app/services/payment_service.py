@@ -10,6 +10,9 @@ from uuid import UUID
 import razorpay
 import os
 import time
+import hmac
+import hashlib
+import threading
 
 logger = get_logger(__name__)
 
@@ -614,57 +617,105 @@ def verify_webhook_signature(payload: bytes, signature: str) -> bool:
         return False
 
 
+# ---------------------------------------------------------------------------
+# Webhook event deduplication – in-memory set guarded by a lock.
+# For multi-process deployments, replace with a DB/Redis-backed store.
+# ---------------------------------------------------------------------------
+_processed_event_ids: set = set()
+_event_id_lock = threading.Lock()
+
+# State-machine: valid forward transitions for obligation status
+_OBLIGATION_TRANSITIONS: Dict[str, set] = {
+    "PENDING":  {"PARTIAL", "PAID", "WAIVED"},
+    "PARTIAL":  {"PAID"},
+    "PAID":     set(),      # terminal – no further transitions
+    "WAIVED":   set(),      # terminal
+}
+
+
+def _is_valid_transition(current: str, target: str) -> bool:
+    """Return True only when the transition from current→target is permitted."""
+    return target in _OBLIGATION_TRANSITIONS.get(current, set())
+
+
 def handle_razorpay_webhook(event: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Process Razorpay webhook events. 
-    Handles 'order.paid' to update the database atomically.
+    Process Razorpay webhook events idempotently.
+    Handles 'order.paid' and 'payment.captured' to update the database atomically.
+    Duplicate event IDs are detected and safely skipped.
     """
     event_type = event.get("event")
-    if event_type != "order.paid":
-        logger.info(f"Webhook received, but even '{event_type}' is not handled.")
+    event_id = event.get("account_id", "") + ":" + str(event.get("created_at", "")) + ":" + event_type
+
+    # Use a stable unique identifier when Razorpay provides one
+    if event.get("payload"):
+        payment_entity = event.get("payload", {}).get("payment", {}).get("entity", {})
+        if payment_entity.get("id"):
+            event_id = payment_entity["id"] + ":" + event_type
+
+    # Deduplicate: skip already-processed events
+    with _event_id_lock:
+        if event_id in _processed_event_ids:
+            logger.info(f"[Webhook] Duplicate event skipped: {event_id}")
+            return ServiceResponse.success({}, "Duplicate event – already processed")
+        _processed_event_ids.add(event_id)
+
+    handled_events = {"order.paid", "payment.captured"}
+    if event_type not in handled_events:
+        logger.info(f"[Webhook] Event '{event_type}' acknowledged but not handled.")
         return ServiceResponse.success({}, f"Event {event_type} acknowledged")
-    
+
     try:
         payload = event.get("payload", {})
         order = payload.get("order", {}).get("entity", {})
         payment = payload.get("payment", {}).get("entity", {})
-        
-        notes = order.get("notes", {})
+
+        notes = order.get("notes") or payment.get("notes") or {}
         obligation_id = notes.get("obligation_id")
         student_id = notes.get("student_id")
-        
+
         razorpay_payment_id = payment.get("id")
         amount_paid_paise = payment.get("amount")
-        amount_paid = Decimal(amount_paid_paise) / 100
-        
+        if not amount_paid_paise:
+            return ServiceResponse.error(ErrorCode.INVALID_INPUT, "Missing payment amount in webhook")
+        amount_paid = Decimal(str(amount_paid_paise)) / 100
+
         if not obligation_id or not student_id:
-            logger.error(f"Webhook payload missing student/obligation metadata: {notes}")
+            logger.error(f"[Webhook] Missing metadata in order notes: {notes}")
             return ServiceResponse.error(ErrorCode.INVALID_INPUT, "Missing metadata in order notes")
 
-        # Verify that the obligation and student actually exist in our system
+        # Verify obligation ownership
         ob_check = supabase.table("rent_obligations")\
-            .select("id, student_id")\
+            .select("id, student_id, status")\
             .eq("id", obligation_id)\
             .execute()
         if not ob_check.data:
-            logger.error(f"Webhook references unknown obligation_id: {obligation_id}")
+            logger.error(f"[Webhook] Unknown obligation_id: {obligation_id}")
             return ServiceResponse.error(ErrorCode.INVALID_INPUT, "Obligation not found")
 
-        if str(ob_check.data[0].get("student_id")) != str(student_id):
+        obligation = ob_check.data[0]
+        if str(obligation.get("student_id")) != str(student_id):
             logger.error(
-                f"Webhook student_id mismatch: expected {ob_check.data[0].get('student_id')}, got {student_id}"
+                f"[Webhook] student_id mismatch: expected {obligation.get('student_id')}, got {student_id}"
             )
             return ServiceResponse.error(ErrorCode.FORBIDDEN, "Student does not own this obligation")
 
-        # Log webhook metric
-        logger.info("Processing Razorpay webhook", extra={
+        # State machine guard – don't process payment for a terminal obligation
+        current_status = obligation.get("status", "PENDING")
+        if current_status == "PAID":
+            logger.info(f"[Webhook] Obligation {obligation_id} already PAID – skipping.")
+            return ServiceResponse.success({}, "Obligation already fully paid")
+        if current_status == "WAIVED":
+            logger.warning(f"[Webhook] Obligation {obligation_id} is WAIVED – ignoring payment capture.")
+            return ServiceResponse.success({}, "Obligation is waived")
+
+        logger.info("[Webhook] Processing payment", extra={
             "metric_type": "razorpay_payment_processed",
             "amount": float(amount_paid),
-            "reference": razorpay_payment_id
+            "reference": razorpay_payment_id,
+            "obligation_id": obligation_id
         })
 
-        # record_payment uses upsert with on_conflict="reference_number" to atomically prevent
-        # duplicate inserts even when two webhook calls arrive simultaneously.
         result = record_payment(
             obligation_id=obligation_id,
             amount_paid=amount_paid,
@@ -673,15 +724,224 @@ def handle_razorpay_webhook(event: Dict[str, Any]) -> Dict[str, Any]:
             payment_date=date.today()
         )
 
-        # A duplicate reference means this webhook was already processed - treat as success
         if not result.get("success"):
             error_code = result.get("error", {}).get("code", "")
             if error_code == ErrorCode.RESOURCE_ALREADY_EXISTS.value:
-                logger.info(f"Payment {razorpay_payment_id} already processed (idempotent). Skipping.")
+                logger.info(f"[Webhook] Payment {razorpay_payment_id} already recorded – idempotent skip.")
                 return ServiceResponse.success({}, "Payment already processed")
 
         return result
 
     except Exception as e:
-        logger.exception(f"Error handling Razorpay webhook: {e}")
+        logger.exception(f"[Webhook] Error processing event: {e}")
         return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Failed to process webhook", str(e))
+
+
+def verify_razorpay_payment(
+    razorpay_order_id: str,
+    razorpay_payment_id: str,
+    razorpay_signature: str,
+    obligation_id: Optional[str],
+    student_id: str
+) -> Dict[str, Any]:
+    """
+    Verify a Razorpay payment from the frontend callback.
+
+    Steps:
+    1. Validate HMAC signature using Razorpay key secret.
+    2. Confirm the obligation belongs to the student.
+    3. Idempotently record the payment (skip if already recorded by webhook).
+    4. Return updated obligation + payment status.
+    """
+    if not razorpay_client or not RAZORPAY_KEY_SECRET:
+        return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Razorpay not configured")
+
+    # 1. Signature verification
+    try:
+        razorpay_client.utility.verify_payment_signature({
+            "razorpay_order_id": razorpay_order_id,
+            "razorpay_payment_id": razorpay_payment_id,
+            "razorpay_signature": razorpay_signature,
+        })
+    except Exception:
+        logger.warning(
+            f"[Verify] Invalid signature for order {razorpay_order_id} / payment {razorpay_payment_id}"
+        )
+        return ServiceResponse.error(ErrorCode.FORBIDDEN, "Payment signature verification failed")
+
+    try:
+        # 2. If obligation_id is provided, confirm ownership
+        if obligation_id:
+            ob_res = supabase.table("rent_obligations")\
+                .select("id, student_id, amount, status")\
+                .eq("id", obligation_id)\
+                .execute()
+            if not ob_res.data:
+                return ServiceResponse.not_found("Rent obligation")
+            ob = ob_res.data[0]
+            if str(ob.get("student_id")) != str(student_id):
+                return ServiceResponse.error(ErrorCode.FORBIDDEN, "Obligation does not belong to this student")
+
+            # State guard – nothing to do for terminal states
+            if ob.get("status") == "PAID":
+                return ServiceResponse.success(
+                    {"obligation_status": "PAID", "razorpay_payment_id": razorpay_payment_id},
+                    "Payment already recorded"
+                )
+        else:
+            # Discover obligation from Razorpay order notes
+            try:
+                order_data = razorpay_client.order.fetch(razorpay_order_id)
+                notes = order_data.get("notes", {})
+                obligation_id = notes.get("obligation_id")
+            except Exception as fetch_err:
+                logger.warning(f"[Verify] Could not fetch order notes: {fetch_err}")
+
+        # 3. Fetch payment amount from Razorpay
+        amount_paise = None
+        payment_method = "UPI"
+        try:
+            rp_payment = razorpay_client.payment.fetch(razorpay_payment_id)
+            amount_paise = rp_payment.get("amount")
+            payment_method = rp_payment.get("method", "UPI").upper()
+        except Exception as fetch_err:
+            logger.warning(f"[Verify] Could not fetch payment details: {fetch_err}")
+
+        if not amount_paise and obligation_id:
+            ob_res2 = supabase.table("rent_obligations").select("amount").eq("id", obligation_id).execute()
+            if ob_res2.data:
+                amount_paise = int(Decimal(str(ob_res2.data[0]["amount"])) * 100)
+
+        if not amount_paise:
+            return ServiceResponse.error(ErrorCode.INVALID_INPUT, "Could not determine payment amount")
+
+        amount = Decimal(str(amount_paise)) / 100
+
+        # 4. Idempotently record payment
+        if obligation_id:
+            result = record_payment(
+                obligation_id=obligation_id,
+                amount_paid=amount,
+                payment_method=payment_method,
+                reference_number=razorpay_payment_id,
+                payment_date=date.today()
+            )
+            if not result.get("success"):
+                err_code = result.get("error", {}).get("code", "")
+                if err_code == ErrorCode.RESOURCE_ALREADY_EXISTS.value:
+                    # Already recorded (e.g. by webhook) – fetch current state
+                    ob_final = supabase.table("rent_obligations").select("status").eq("id", obligation_id).execute()
+                    final_status = ob_final.data[0]["status"] if ob_final.data else "UNKNOWN"
+                    return ServiceResponse.success(
+                        {"obligation_status": final_status, "razorpay_payment_id": razorpay_payment_id},
+                        "Payment already recorded"
+                    )
+                return result
+            return ServiceResponse.success(
+                {
+                    "obligation_status": result["data"]["obligation_status"],
+                    "razorpay_payment_id": razorpay_payment_id,
+                    "amount": float(amount),
+                },
+                "Payment verified and recorded successfully"
+            )
+
+        return ServiceResponse.success(
+            {"razorpay_payment_id": razorpay_payment_id, "amount": float(amount)},
+            "Payment signature verified (no obligation linked)"
+        )
+
+    except Exception as e:
+        logger.exception(f"[Verify] Error verifying payment: {e}")
+        return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Payment verification failed", str(e))
+
+
+def reconcile_pending_payments(payment_ids: Optional[List[str]] = None) -> Dict[str, Any]:
+    """
+    Reconcile pending/initiated payments by querying Razorpay for their current status.
+    Resolves stale 'PENDING' obligations whose Razorpay payments were already captured.
+    """
+    if not razorpay_client:
+        return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Razorpay not configured")
+
+    reconciled = 0
+    already_captured = 0
+    failed = 0
+    errors: List[str] = []
+
+    try:
+        # Find payments that have a reference_number (Razorpay payment ID) but whose
+        # obligation is still PENDING or PARTIAL – these are candidates for reconciliation.
+        query = supabase.table("payments")\
+            .select("id, reference_number, obligation_id, amount_paid")\
+            .neq("reference_number", None)
+
+        if payment_ids:
+            query = query.in_("id", [str(pid) for pid in payment_ids])
+
+        pay_res = query.execute()
+        payments_to_check = pay_res.data or []
+
+        for p in payments_to_check:
+            ref = p.get("reference_number")
+            ob_id = p.get("obligation_id")
+            if not ref or not ob_id:
+                continue
+
+            # Check if obligation still needs reconciliation
+            ob_check = supabase.table("rent_obligations")\
+                .select("status, amount, student_id")\
+                .eq("id", ob_id)\
+                .execute()
+            if not ob_check.data:
+                continue
+
+            ob = ob_check.data[0]
+            if ob["status"] in ("PAID", "WAIVED"):
+                already_captured += 1
+                continue
+
+            # Query Razorpay for live payment status
+            try:
+                rp_payment = razorpay_client.payment.fetch(ref)
+                rp_status = rp_payment.get("status")  # e.g. 'captured', 'failed', 'refunded'
+            except Exception as rp_err:
+                logger.warning(f"[Reconcile] Razorpay fetch failed for {ref}: {rp_err}")
+                errors.append(f"Could not fetch {ref}: {rp_err}")
+                failed += 1
+                continue
+
+            if rp_status == "captured":
+                # Payment was captured – make sure our obligation reflects it
+                amount_paise = rp_payment.get("amount", 0)
+                amount = Decimal(str(amount_paise)) / 100
+                result = record_payment(
+                    obligation_id=ob_id,
+                    amount_paid=amount,
+                    payment_method=(rp_payment.get("method") or "UPI").upper(),
+                    reference_number=ref,
+                    payment_date=date.today()
+                )
+                if result.get("success") or result.get("error", {}).get("code") == ErrorCode.RESOURCE_ALREADY_EXISTS.value:
+                    reconciled += 1
+                    logger.info(f"[Reconcile] Obligation {ob_id} reconciled via payment {ref}")
+                else:
+                    failed += 1
+                    errors.append(f"record_payment failed for {ref}: {result.get('error')}")
+            elif rp_status in ("failed", "refunded"):
+                logger.info(f"[Reconcile] Payment {ref} is {rp_status} – no obligation update needed")
+                already_captured += 1
+            else:
+                logger.info(f"[Reconcile] Payment {ref} status={rp_status} – still pending")
+
+        return ServiceResponse.success({
+            "reconciled": reconciled,
+            "already_captured": already_captured,
+            "failed": failed,
+            "errors": errors,
+            "checked": len(payments_to_check)
+        }, f"Reconciliation complete: {reconciled} updated, {already_captured} already final, {failed} errors")
+
+    except Exception as e:
+        logger.exception(f"[Reconcile] Unexpected error: {e}")
+        return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Reconciliation failed", str(e))

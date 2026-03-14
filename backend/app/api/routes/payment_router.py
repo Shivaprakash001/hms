@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, status, Request
 from app.schemas.payment_schema import PaymentCreate, PaymentResponse, \
     ObligationResponse, StudentPaymentHistory, DuesReportItem, WaiveRequest, RentGenerationRequest, \
-    PaymentInitiate, RazorpayOrderResponse
+    PaymentInitiate, RazorpayOrderResponse, PaymentVerifyRequest, ReconcileRequest, ReconcileResult
 from app.services import payment_service
 from app.utils.auth import get_current_user, UserContext, require_admin, require_admin_or_owner
 from app.utils.responses import ErrorCode
@@ -231,6 +231,61 @@ def initiate_razorpay_payment(
         data.amount,
         str(user.student_id)
     )
+    return _handle_service_response(result)
+
+
+@router.post(
+    "/verify",
+    response_model=dict,
+    summary="Verify a Razorpay payment from the frontend callback"
+)
+def verify_razorpay_payment(
+    data: PaymentVerifyRequest,
+    user: UserContext = Depends(get_current_user)
+):
+    """
+    **Student Only**: Verify the HMAC signature of a completed Razorpay payment and
+    idempotently record/confirm the payment in the database.
+
+    - Call this immediately after the Razorpay checkout `handler` callback fires.
+    - Safe to call multiple times for the same payment (idempotent).
+    """
+    if not user.is_student():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only students can verify payments."
+        )
+
+    result = payment_service.verify_razorpay_payment(
+        razorpay_order_id=data.razorpay_order_id,
+        razorpay_payment_id=data.razorpay_payment_id,
+        razorpay_signature=data.razorpay_signature,
+        obligation_id=str(data.obligation_id) if data.obligation_id else None,
+        student_id=str(user.student_id)
+    )
+    return _handle_service_response(result)
+
+
+@router.post(
+    "/reconcile",
+    response_model=dict,
+    summary="Reconcile pending payments with Razorpay",
+    dependencies=[Depends(require_admin_or_owner)]
+)
+def reconcile_payments(
+    data: Optional[ReconcileRequest] = None,
+    user: UserContext = Depends(get_current_user)
+):
+    """
+    **Admin/Owner**: Query Razorpay for the current status of pending payments and
+    update local records accordingly. Resolves stale PENDING obligations whose
+    Razorpay payments were already captured.
+
+    - Omit `payment_ids` to reconcile **all** pending payments for your account.
+    - Provide specific `payment_ids` to reconcile only those payments.
+    """
+    payment_ids = [str(pid) for pid in data.payment_ids] if data and data.payment_ids else None
+    result = payment_service.reconcile_pending_payments(payment_ids)
     return _handle_service_response(result)
 
 
