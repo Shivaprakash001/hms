@@ -618,8 +618,9 @@ def verify_webhook_signature(payload: bytes, signature: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Webhook event deduplication – in-memory set guarded by a lock.
-# For multi-process deployments, replace with a DB/Redis-backed store.
+# Webhook event deduplication.
+# Primary store: payment_webhook_events DB table (cross-process safe).
+# Fast-path cache: in-memory set per process (avoids redundant DB round-trips).
 # ---------------------------------------------------------------------------
 _processed_event_ids: set = set()
 _event_id_lock = threading.Lock()
@@ -638,25 +639,70 @@ def _is_valid_transition(current: str, target: str) -> bool:
     return target in _OBLIGATION_TRANSITIONS.get(current, set())
 
 
+def _build_event_id(event: Dict[str, Any]) -> str:
+    """
+    Derive a stable, unique identifier for a Razorpay webhook event.
+    Prefers the Razorpay payment ID (most stable) and falls back to
+    account_id + created_at + event_type when the payment entity is absent.
+    """
+    event_type = event.get("event", "unknown")
+    payment_entity = (event.get("payload") or {}).get("payment", {}).get("entity", {})
+    payment_id = (payment_entity or {}).get("id")
+
+    if payment_id:
+        return f"{payment_id}:{event_type}"
+
+    # Fallback: use account_id + created_at; warn if both are missing
+    account_id = event.get("account_id", "")
+    created_at = event.get("created_at", "")
+    if not account_id and not created_at:
+        logger.warning("[Webhook] Cannot derive stable event_id; deduplication may be incomplete.")
+    return f"{account_id}:{created_at}:{event_type}"
+
+
+def _record_webhook_event(event_id: str, event_type: str, payment_id: Optional[str],
+                          order_id: Optional[str], obligation_id: Optional[str]) -> bool:
+    """
+    Persist the webhook event in the DB for cross-process deduplication.
+    Returns True if the event is new (should be processed), False if duplicate.
+    """
+    try:
+        supabase.table("payment_webhook_events").insert({
+            "event_id": event_id,
+            "event_type": event_type,
+            "razorpay_payment_id": payment_id,
+            "razorpay_order_id": order_id,
+            "obligation_id": obligation_id,
+            "status": "processed",
+        }).execute()
+        return True
+    except Exception as e:
+        err_str = str(e)
+        # Unique constraint violation → duplicate event
+        if "duplicate" in err_str.lower() or "unique" in err_str.lower() or "23505" in err_str:
+            return False
+        # Table doesn't exist yet (migration pending) – fall through to in-memory check only
+        if "does not exist" in err_str or "42P01" in err_str:
+            logger.warning("[Webhook] payment_webhook_events table not found; using in-memory dedup only.")
+            return True  # allow processing; in-memory lock handles same-process dupes
+        logger.error(f"[Webhook] Unexpected error recording event: {e}")
+        return True  # allow processing on unknown error to avoid silently dropping events
+
+
 def handle_razorpay_webhook(event: Dict[str, Any]) -> Dict[str, Any]:
     """
     Process Razorpay webhook events idempotently.
     Handles 'order.paid' and 'payment.captured' to update the database atomically.
-    Duplicate event IDs are detected and safely skipped.
+    Duplicate event IDs are detected and safely skipped using both an in-memory
+    cache (fast, per-process) and a DB table (cross-process safe).
     """
     event_type = event.get("event")
-    event_id = event.get("account_id", "") + ":" + str(event.get("created_at", "")) + ":" + event_type
+    event_id = _build_event_id(event)
 
-    # Use a stable unique identifier when Razorpay provides one
-    if event.get("payload"):
-        payment_entity = event.get("payload", {}).get("payment", {}).get("entity", {})
-        if payment_entity.get("id"):
-            event_id = payment_entity["id"] + ":" + event_type
-
-    # Deduplicate: skip already-processed events
+    # Fast-path: in-memory dedup (avoids DB round-trip for same-process duplicates)
     with _event_id_lock:
         if event_id in _processed_event_ids:
-            logger.info(f"[Webhook] Duplicate event skipped: {event_id}")
+            logger.info(f"[Webhook] Duplicate event skipped (in-memory): {event_id}")
             return ServiceResponse.success({}, "Duplicate event – already processed")
         _processed_event_ids.add(event_id)
 
@@ -675,14 +721,31 @@ def handle_razorpay_webhook(event: Dict[str, Any]) -> Dict[str, Any]:
         student_id = notes.get("student_id")
 
         razorpay_payment_id = payment.get("id")
+        razorpay_order_id = order.get("id")
         amount_paid_paise = payment.get("amount")
-        if not amount_paid_paise:
+        if amount_paid_paise is None:
             return ServiceResponse.error(ErrorCode.INVALID_INPUT, "Missing payment amount in webhook")
-        amount_paid = Decimal(str(amount_paid_paise)) / 100
+        try:
+            amount_paid = Decimal(str(int(amount_paid_paise))) / 100
+        except (ValueError, TypeError) as conv_err:
+            logger.error(f"[Webhook] Invalid payment amount: {amount_paid_paise} – {conv_err}")
+            return ServiceResponse.error(ErrorCode.INVALID_INPUT, "Invalid payment amount in webhook")
 
         if not obligation_id or not student_id:
             logger.error(f"[Webhook] Missing metadata in order notes: {notes}")
             return ServiceResponse.error(ErrorCode.INVALID_INPUT, "Missing metadata in order notes")
+
+        # DB-level deduplication (cross-process safe)
+        is_new = _record_webhook_event(
+            event_id=event_id,
+            event_type=event_type,
+            payment_id=razorpay_payment_id,
+            order_id=razorpay_order_id,
+            obligation_id=obligation_id,
+        )
+        if not is_new:
+            logger.info(f"[Webhook] Duplicate event skipped (DB): {event_id}")
+            return ServiceResponse.success({}, "Duplicate event – already processed")
 
         # Verify obligation ownership
         ob_check = supabase.table("rent_obligations")\

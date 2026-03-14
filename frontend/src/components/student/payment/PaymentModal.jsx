@@ -98,8 +98,6 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
                 amount: amount
             });
 
-            setLoading(false);
-
             // 3. Configure and open Razorpay Checkout widget
             const options = {
                 key: orderData.key_id,
@@ -131,6 +129,7 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
                 setLoading(false);
             });
             rzp.open();
+            // Loading spinner stays visible until the checkout widget opens/closes
         } catch (err) {
             setError(err?.response?.data?.detail?.message || err?.response?.data?.detail || err.message || 'Failed to initiate payment.');
             setLoading(false);

@@ -79,7 +79,7 @@ class EmailService:
         Send a payment receipt email to the student.
         Falls back to logging when SMTP is not configured.
         """
-        subject = f"HMS – Rent Payment Receipt for {rent_month}"
+        subject = f"HMS - Rent Payment Receipt for {rent_month}"
 
         body_text = (
             f"Hi {name},\n\n"
