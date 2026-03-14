@@ -31,3 +31,8 @@ class RegisterRequest(BaseModel):
 
 class GoogleLoginRequest(BaseModel):
     code: str
+    redirect_uri: Optional[str] = Field(
+        default=None,
+        description="The redirect URI used in the initial Google OAuth request. "
+                    "Must match exactly so Google can validate the token exchange."
+    )

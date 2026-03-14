@@ -167,7 +167,7 @@ def change_password(user_id: str, current_password: str, new_password: str) -> D
 
 import httpx
 
-async def google_login(code: str) -> Dict[str, Any]:
+async def google_login(code: str, redirect_uri: str = None) -> Dict[str, Any]:
     """
     Exchange Google OAuth code for tokens and user information.
     """
@@ -176,7 +176,9 @@ async def google_login(code: str) -> Dict[str, Any]:
         # Note: You must ensure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are in .env
         client_id = os.getenv("GOOGLE_CLIENT_ID")
         client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
-        redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:3000/callback")
+        # Use the redirect_uri provided by the frontend (must match the one used in the initial auth request).
+        # Fall back to the env variable, then to Vite's default dev port (5173) for local development.
+        effective_redirect_uri = redirect_uri or os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:5173/callback")
         
         async with httpx.AsyncClient() as client:
             token_response = await client.post(
@@ -185,7 +187,7 @@ async def google_login(code: str) -> Dict[str, Any]:
                     "code": code,
                     "client_id": client_id,
                     "client_secret": client_secret,
-                    "redirect_uri": redirect_uri,
+                    "redirect_uri": effective_redirect_uri,
                     "grant_type": "authorization_code",
                 },
             )
