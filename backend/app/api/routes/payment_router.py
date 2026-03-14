@@ -308,6 +308,28 @@ def reconcile_payments(
     return _handle_service_response(result)
 
 
+@router.get(
+    "/{payment_id}/status",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    summary="Get payment status",
+    description="Poll current payment status from Razorpay"
+)
+def get_payment_status(
+    payment_id: str,
+    user: UserContext = Depends(get_current_user)
+):
+    """
+    Get current payment status.
+    - Verifies payment ownership
+    - Polls Razorpay for latest status
+    - Updates local database
+    - Returns time elapsed
+    """
+    result = payment_service.get_payment_status(payment_id, user.user_id)
+    return _handle_service_response(result)
+
+
 @router.post(
     "/webhook",
     status_code=status.HTTP_200_OK,

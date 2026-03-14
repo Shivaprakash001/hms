@@ -1,6 +1,6 @@
 from app.db import supabase
 from typing import Optional, Dict, Any, List
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 import calendar
 from decimal import Decimal
 from app.utils.responses import ServiceResponse, ErrorCode
@@ -1044,158 +1044,110 @@ def reconcile_pending_payments(payment_ids: Optional[List[str]] = None) -> Dict[
         return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Reconciliation failed", str(e))
 
 
-def initiate_razorpay_payment(obligation_id: str, user_id: str) -> Dict[str, Any]:
+def get_payment_status(payment_id: str, user_id: str) -> Dict[str, Any]:
     """
-    Initiate a Razorpay payment for a rent obligation (owner/admin flow).
+    Get current payment status with real-time Razorpay polling.
 
     Steps:
-    1. Get obligation and verify it exists
-    2. Verify ownership (obligation.owner_id == user_id)
-    3. Check if obligation already paid or has active payment
-    4. Create Razorpay order
-    5. Create payment record in database
-    6. Return order details for frontend checkout
-
-    Args:
-        obligation_id: Rent obligation ID
-        user_id: Current user ID (owner/admin)
-
-    Returns:
-        Service response with Razorpay order details
+    1. Get payment record from database
+    2. Verify ownership (user_id → owner_id)
+    3. If status not completed, poll Razorpay for latest
+    4. Update database with new status if changed
+    5. Calculate time elapsed
+    6. Return detailed status
     """
     try:
-        if not razorpay_client:
-            logger.error("Razorpay client not configured")
-            return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Payment processing not available")
-
-        # 1. Get obligation with student info
-        obligation_res = supabase.table("rent_obligations")\
-            .select("*, students(id, profile_id, owner_id, profiles!students_profile_id_fkey(name, email))")\
-            .eq("id", obligation_id)\
-            .execute()
-
-        if not obligation_res.data:
-            logger.warning(f"Obligation {obligation_id} not found")
-            return ServiceResponse.error(ErrorCode.RESOURCE_NOT_FOUND, "Obligation not found")
-
-        obligation = obligation_res.data[0]
-
-        # 2. Verify ownership
-        obligation_owner_id = obligation.get("owner_id")
-        if str(obligation_owner_id) != str(user_id):
-            logger.warning(
-                f"Unauthorized payment initiation for obligation {obligation_id} by user {user_id}"
-            )
-            return ServiceResponse.error(
-                ErrorCode.FORBIDDEN,
-                "Not authorized to create payment for this obligation"
-            )
-
-        # 3. Check obligation status
-        if obligation.get("status") == "PAID":
-            logger.info(f"Obligation {obligation_id} already paid")
-            return ServiceResponse.error(ErrorCode.VALIDATION_ERROR, "This obligation has already been paid")
-
-        if obligation.get("status") == "WAIVED":
-            logger.info(f"Obligation {obligation_id} is waived")
-            return ServiceResponse.error(ErrorCode.VALIDATION_ERROR, "This obligation has been waived")
-
-        # 4. Check for existing active payment
-        existing_payment_res = supabase.table("payments")\
-            .select("id, status")\
-            .eq("obligation_id", obligation_id)\
-            .neq("status", "FAILED")\
-            .execute()
-
-        if existing_payment_res.data:
-            existing = existing_payment_res.data[0]
-            logger.warning(
-                f"Active payment {existing['id']} already exists for obligation {obligation_id}"
-            )
-            return ServiceResponse.error(
-                ErrorCode.VALIDATION_ERROR,
-                f"Payment already in progress with status: {existing['status']}"
-            )
-
-        # 5. Create Razorpay order
-        amount_paise = int(float(obligation["amount"]) * 100)
-
-        order_data = {
-            "amount": amount_paise,
-            "currency": "INR",
-            "receipt": obligation_id,
-            "notes": {
-                "obligation_id": obligation_id,
-                "student_id": str(obligation.get("student_id", "")),
-            }
-        }
-
-        logger.info(
-            f"Creating Razorpay order for obligation {obligation_id}: ₹{obligation['amount']}"
-        )
-
-        razorpay_order = razorpay_client.order.create(data=order_data)
-        razorpay_order_id = razorpay_order.get("id")
-
-        if not razorpay_order_id:
-            logger.error("Failed to get order ID from Razorpay response")
-            return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Failed to create Razorpay order")
-
-        # 6. Create payment record in database
-        # payment_method is a placeholder; the actual method (UPI/card/netbanking)
-        # is set when the payment is verified via /payments/verify or the webhook.
-        payment_record = {
-            "student_id": str(obligation["student_id"]),
-            "obligation_id": obligation_id,
-            "amount_paid": float(obligation["amount"]),
-            "payment_method": "UPI",
-            "reference_number": razorpay_order_id,
-            "razorpay_order_id": razorpay_order_id,
-            "status": "PENDING",
-            "owner_id": user_id,
-            "payment_date": datetime.now().date().isoformat(),
-        }
-
+        # 1. Get payment record
         payment_res = supabase.table("payments")\
-            .insert(payment_record)\
+            .select("*")\
+            .eq("id", payment_id)\
             .execute()
 
         if not payment_res.data:
-            logger.error(f"Failed to create payment record for order {razorpay_order_id}")
-            return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Failed to create payment record")
+            logger.warning(f"Payment {payment_id} not found")
+            return ServiceResponse.error(ErrorCode.RESOURCE_NOT_FOUND, "Payment not found")
 
-        payment_id = payment_res.data[0]["id"]
+        payment = payment_res.data[0]
 
-        logger.info(
-            f"Payment initiated: {payment_id} | Order {razorpay_order_id} | Amount ₹{obligation['amount']}"
-        )
+        # 2. Verify ownership
+        if payment["owner_id"] != user_id:
+            logger.warning(f"Unauthorized access to payment {payment_id} by user {user_id}")
+            return ServiceResponse.error(ErrorCode.FORBIDDEN, "Not authorized to view this payment")
 
-        # 7. Build customer details from joined student/profile data
-        student_data = obligation.get("students") or {}
-        if isinstance(student_data, list):
-            student_data = student_data[0] if student_data else {}
-        profile_data = student_data.get("profiles") or {}
-        if isinstance(profile_data, list):
-            profile_data = profile_data[0] if profile_data else {}
+        # 3. Poll Razorpay if payment not yet completed
+        current_status = payment["status"]
 
+        if current_status != "COMPLETED" and razorpay_client:
+            try:
+                razorpay_payment_id = payment.get("razorpay_payment_id")
+                if razorpay_payment_id:
+                    razorpay_payment = razorpay_client.payment.fetch(razorpay_payment_id)
+                    razorpay_status = razorpay_payment.get("status")
+
+                    status_map = {
+                        "authorized": "COMPLETED",
+                        "captured": "COMPLETED",
+                        "failed": "FAILED",
+                        "rejected": "FAILED",
+                        "pending": "PENDING",
+                    }
+
+                    new_status = status_map.get(razorpay_status, "PENDING")
+
+                    if new_status != current_status:
+                        logger.info(f"Payment {payment_id} status updated: {current_status} → {new_status}")
+
+                        supabase.table("payments")\
+                            .update({
+                                "status": new_status,
+                                "updated_at": datetime.now(timezone.utc).isoformat()
+                            })\
+                            .eq("id", payment_id)\
+                            .execute()
+
+                        current_status = new_status
+
+                        if new_status == "COMPLETED":
+                            obligation_id = payment.get("obligation_id")
+                            supabase.table("rent_obligations")\
+                                .update({
+                                    "status": "PAID",
+                                    "updated_at": datetime.now(timezone.utc).isoformat()
+                                })\
+                                .eq("id", obligation_id)\
+                                .execute()
+
+                            logger.info(f"Obligation {obligation_id} marked as PAID")
+
+            except Exception as e:
+                logger.warning(f"Failed to poll Razorpay for payment {payment_id}: {e}")
+
+        # 4. Calculate time elapsed
+        created_at_str = payment.get("created_at")
+        time_elapsed_seconds = 0
+
+        if created_at_str:
+            try:
+                created_at = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
+                time_elapsed_seconds = int((datetime.now(timezone.utc) - created_at).total_seconds())
+            except Exception:
+                pass
+
+        # 5. Return detailed response
         return ServiceResponse.success({
-            "payment_id": payment_id,
-            "order_id": razorpay_order_id,
-            "amount": float(obligation["amount"]),
-            "amount_paise": amount_paise,
-            "currency": "INR",
-            "key_id": RAZORPAY_KEY_ID,
-            "name": "Hostel Management System",
-            "description": f"Rent payment for {obligation.get('rent_month', 'current month')}",
-            "student_id": str(obligation["student_id"]),
-            "obligation_id": obligation_id,
-            "prefill": {
-                "name": profile_data.get("name", ""),
-                "email": profile_data.get("email", ""),
-            },
-            "notes": order_data["notes"],
-        }, "Payment order created successfully")
+            "id": payment_id,
+            "status": current_status,
+            "amount": payment.get("amount"),
+            "reference_number": payment.get("reference_number"),
+            "razorpay_payment_id": payment.get("razorpay_payment_id"),
+            "method": payment.get("method"),
+            "created_at": payment.get("created_at"),
+            "updated_at": payment.get("updated_at"),
+            "time_elapsed_seconds": time_elapsed_seconds,
+            "student_id": payment.get("student_id"),
+            "obligation_id": payment.get("obligation_id")
+        }, f"Payment status: {current_status}")
 
     except Exception as e:
-        logger.exception(f"Error initiating payment: {e}")
+        logger.exception(f"Error getting payment status: {e}")
         return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, str(e))
