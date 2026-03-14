@@ -50,6 +50,7 @@ def _handle_service_response(result: dict, success_status: int = status.HTTP_200
             ErrorCode.RESOURCE_ALREADY_EXISTS.value: status.HTTP_409_CONFLICT,
             ErrorCode.FORBIDDEN.value: status.HTTP_403_FORBIDDEN,
             ErrorCode.INVALID_INPUT.value: status.HTTP_422_UNPROCESSABLE_ENTITY,
+            ErrorCode.VALIDATION_ERROR.value: status.HTTP_400_BAD_REQUEST,
             ErrorCode.UNAUTHORIZED.value: status.HTTP_401_UNAUTHORIZED,
             ErrorCode.INTERNAL_ERROR.value: status.HTTP_500_INTERNAL_SERVER_ERROR,
         }
@@ -209,29 +210,47 @@ def waive_obligation(
 
 @router.post(
     "/initiate",
-    response_model=RazorpayOrderResponse,
-    summary="Initiate a Razorpay payment order"
+    response_model=dict,
+    status_code=status.HTTP_201_CREATED,
+    summary="Initiate Razorpay payment",
+    description="Create Razorpay order and return checkout details"
 )
-def initiate_razorpay_payment(
+def initiate_payment(
     data: PaymentInitiate,
     user: UserContext = Depends(get_current_user)
 ):
     """
-    **Student Only**: Create a Razorpay order to pay for an obligation.
-    Used for mobile-first UPI intent flow.
+    Initiate a payment by creating a Razorpay order.
+
+    - **Owner/Admin**: Provide `obligation_id`; ownership is verified and a payment
+      record is created in the database before checkout begins.
+    - **Student**: Provide `obligation_id` (optional) and `amount`; uses the
+      student-centric order creation flow.
     """
-    if not user.is_student():
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only students can initiate payments."
+    if user.is_student():
+        # Student flow: amount is required
+        if not data.amount:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="amount is required for student payment initiation"
+            )
+        result = payment_service.create_razorpay_order(
+            str(data.obligation_id) if data.obligation_id else None,
+            data.amount,
+            str(user.student_id)
         )
-        
-    result = payment_service.create_razorpay_order(
-        str(data.obligation_id) if data.obligation_id else None,
-        data.amount,
-        str(user.student_id)
-    )
-    return _handle_service_response(result)
+    else:
+        # Owner/Admin flow: obligation_id is required, amount is taken from obligation
+        if not data.obligation_id:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="obligation_id is required for owner payment initiation"
+            )
+        result = payment_service.initiate_razorpay_payment(
+            str(data.obligation_id),
+            str(user.user_id)
+        )
+    return _handle_service_response(result, status.HTTP_201_CREATED)
 
 
 @router.post(
@@ -314,43 +333,65 @@ def get_payment_status(
 @router.post(
     "/webhook",
     status_code=status.HTTP_200_OK,
-    summary="Razorpay Webhook handler",
+    summary="Razorpay webhook receiver",
     include_in_schema=False
 )
 async def razorpay_webhook(request: Request):
     """
     **Public Endpoint**: Receives payment notifications from Razorpay.
-    Verifies HMAC signature, applies rate limiting, and updates database atomically.
+    - Verifies HMAC-SHA256 signature (primary security gate).
+    - Applies per-IP rate limiting to prevent DDoS.
+    - Delegates event processing (with ownership checks and idempotency) to the service layer.
     """
     # Rate limiting - protect against flood / DDoS
     client_ip = request.client.host if request.client else "unknown"
     if _is_rate_limited(client_ip):
         logger.warning(f"Webhook rate limit exceeded for IP: {client_ip}")
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Rate limit exceeded")
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={"code": "RATE_LIMITED", "message": "Too many requests"}
+        )
 
-    payload = await request.body()
+    body_bytes = await request.body()
     signature = request.headers.get("X-Razorpay-Signature")
-    
+
     if not signature:
-        logger.error("Webhook received without X-Razorpay-Signature")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing signature")
-        
-    # Verify authenticity - this is the primary security gate for the public endpoint
-    is_valid = payment_service.verify_webhook_signature(payload, signature)
+        logger.warning("Webhook received without X-Razorpay-Signature")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "UNAUTHORIZED", "message": "Missing signature"}
+        )
+
+    # Verify authenticity using pure HMAC-SHA256 (no Razorpay client dependency)
+    is_valid = payment_service.verify_razorpay_signature(
+        body_bytes.decode("utf-8") if isinstance(body_bytes, bytes) else body_bytes,
+        signature
+    )
     if not is_valid:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid signature")
-        
-    # Process event
+        logger.warning(f"Invalid Razorpay signature from IP: {client_ip}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "UNAUTHORIZED", "message": "Invalid signature"}
+        )
+
+    # Parse and process the verified event
     import json
     try:
-        event = json.loads(payload)
+        event = json.loads(body_bytes)
+        # Sanitize event type before logging to prevent log injection
+        raw_event_type = event.get("event", "")
+        safe_event_type = raw_event_type if isinstance(raw_event_type, str) and raw_event_type.replace(".", "").isalnum() else "unknown"
+        logger.info(f"Valid Razorpay webhook received. Event: {safe_event_type}")
         result = payment_service.handle_razorpay_webhook(event)
-        
-        # Always return 200 to Razorpay so it does not retry; log business-logic errors.
+
+        # Always return 200 so Razorpay does not retry; log any business-logic errors.
         if not result.get("success"):
-            webhook_logger = get_logger("payment_webhook")
-            webhook_logger.error(f"Webhook processing error: {result.get('error')}")
-            
+            logger.error(f"Webhook processing error: {result.get('error')}")
+
         return {"status": "ok"}
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        logger.exception(f"Unexpected error in webhook handler: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"code": "INTERNAL_ERROR", "message": "Webhook processing failed"}
+        )
