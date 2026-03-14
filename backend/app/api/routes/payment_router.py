@@ -50,6 +50,7 @@ def _handle_service_response(result: dict, success_status: int = status.HTTP_200
             ErrorCode.RESOURCE_ALREADY_EXISTS.value: status.HTTP_409_CONFLICT,
             ErrorCode.FORBIDDEN.value: status.HTTP_403_FORBIDDEN,
             ErrorCode.INVALID_INPUT.value: status.HTTP_422_UNPROCESSABLE_ENTITY,
+            ErrorCode.VALIDATION_ERROR.value: status.HTTP_400_BAD_REQUEST,
             ErrorCode.UNAUTHORIZED.value: status.HTTP_401_UNAUTHORIZED,
             ErrorCode.INTERNAL_ERROR.value: status.HTTP_500_INTERNAL_SERVER_ERROR,
         }
@@ -209,29 +210,47 @@ def waive_obligation(
 
 @router.post(
     "/initiate",
-    response_model=RazorpayOrderResponse,
-    summary="Initiate a Razorpay payment order"
+    response_model=dict,
+    status_code=status.HTTP_201_CREATED,
+    summary="Initiate Razorpay payment",
+    description="Create Razorpay order and return checkout details"
 )
-def initiate_razorpay_payment(
+def initiate_payment(
     data: PaymentInitiate,
     user: UserContext = Depends(get_current_user)
 ):
     """
-    **Student Only**: Create a Razorpay order to pay for an obligation.
-    Used for mobile-first UPI intent flow.
+    Initiate a payment by creating a Razorpay order.
+
+    - **Owner/Admin**: Provide `obligation_id`; ownership is verified and a payment
+      record is created in the database before checkout begins.
+    - **Student**: Provide `obligation_id` (optional) and `amount`; uses the
+      student-centric order creation flow.
     """
-    if not user.is_student():
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only students can initiate payments."
+    if user.is_student():
+        # Student flow: amount is required
+        if not data.amount:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="amount is required for student payment initiation"
+            )
+        result = payment_service.create_razorpay_order(
+            str(data.obligation_id) if data.obligation_id else None,
+            data.amount,
+            str(user.student_id)
         )
-        
-    result = payment_service.create_razorpay_order(
-        str(data.obligation_id) if data.obligation_id else None,
-        data.amount,
-        str(user.student_id)
-    )
-    return _handle_service_response(result)
+    else:
+        # Owner/Admin flow: obligation_id is required, amount is taken from obligation
+        if not data.obligation_id:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="obligation_id is required for owner payment initiation"
+            )
+        result = payment_service.initiate_razorpay_payment(
+            str(data.obligation_id),
+            str(user.user_id)
+        )
+    return _handle_service_response(result, status.HTTP_201_CREATED)
 
 
 @router.post(
