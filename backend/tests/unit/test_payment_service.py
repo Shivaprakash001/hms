@@ -125,11 +125,30 @@ class TestWebhookIdempotency:
     """
 
     def _mock_supabase_for_webhook(self, supabase_mock, obligation_status="PENDING"):
-        """Configure a supabase mock to satisfy the webhook checks."""
-        ob_mock = MagicMock()
-        ob_mock.data = [{"id": "ob-001", "student_id": "st-001", "status": obligation_status}]
-        supabase_mock.table.return_value.select.return_value\
-            .eq.return_value.execute.return_value = ob_mock
+        """Configure a supabase mock to satisfy the webhook checks.
+
+        The idempotency check queries the 'payments' table first (must return
+        empty so the event proceeds), then the 'rent_obligations' table for
+        the ownership/state-machine check.
+        """
+        empty_result = MagicMock()
+        empty_result.data = []
+
+        ob_result = MagicMock()
+        ob_result.data = [{"id": "ob-001", "student_id": "st-001", "status": obligation_status}]
+
+        def table_side_effect(table_name):
+            table_mock = MagicMock()
+            if table_name == "payments":
+                # Payments table idempotency check: no existing record
+                table_mock.select.return_value.eq.return_value.execute.return_value = empty_result
+            elif table_name == "rent_obligations":
+                # Obligation ownership / state-machine check
+                table_mock.select.return_value.eq.return_value.execute.return_value = ob_result
+            # payment_webhook_events INSERT uses auto-mock (no exception = new event)
+            return table_mock
+
+        supabase_mock.table.side_effect = table_side_effect
 
     def test_first_event_is_processed(self):
         from backend.app.services import payment_service as ps

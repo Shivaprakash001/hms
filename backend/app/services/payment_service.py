@@ -721,6 +721,9 @@ def handle_razorpay_webhook(event: Dict[str, Any]) -> Dict[str, Any]:
         student_id = notes.get("student_id")
 
         razorpay_payment_id = payment.get("id")
+        if not razorpay_payment_id:
+            logger.error("[Webhook] Missing Razorpay payment ID in payload")
+            return ServiceResponse.error(ErrorCode.INVALID_INPUT, "Missing payment ID")
         razorpay_order_id = order.get("id")
         amount_paid_paise = payment.get("amount")
         if amount_paid_paise is None:
@@ -734,6 +737,35 @@ def handle_razorpay_webhook(event: Dict[str, Any]) -> Dict[str, Any]:
         if not obligation_id or not student_id:
             logger.error(f"[Webhook] Missing metadata in order notes: {notes}")
             return ServiceResponse.error(ErrorCode.INVALID_INPUT, "Missing metadata in order notes")
+
+        # ============================================================
+        # CRITICAL: IDEMPOTENCY CHECK - PREVENT DUPLICATE PROCESSING
+        # Check the payments table directly for an existing record with
+        # this Razorpay payment ID (stored as reference_number).
+        # This is safe across processes and worker restarts.
+        #
+        # Required DB constraint:
+        #   ALTER TABLE payments
+        #     ADD CONSTRAINT unique_reference_number UNIQUE (reference_number);
+        #   CREATE INDEX IF NOT EXISTS idx_payments_reference_number
+        #     ON payments(reference_number);
+        # ============================================================
+        existing_payment = supabase.table("payments")\
+            .select("id")\
+            .eq("reference_number", razorpay_payment_id)\
+            .execute()
+
+        if existing_payment.data:
+            payment_record = existing_payment.data[0]
+            logger.info(
+                f"✅ IDEMPOTENT: Payment {razorpay_payment_id} already exists "
+                f"with id {payment_record['id']}"
+            )
+            return ServiceResponse.success({
+                "payment_id": payment_record["id"],
+                "razorpay_payment_id": razorpay_payment_id,
+                "duplicate_webhook": True,
+            }, "Webhook already processed")
 
         # DB-level deduplication (cross-process safe)
         is_new = _record_webhook_event(
