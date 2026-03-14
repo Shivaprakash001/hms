@@ -242,7 +242,7 @@ class InvitationService:
             }).eq("id", invitation["id"]).execute()
 
             # 4. Resend email
-            base_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+            base_url = os.getenv("FRONTEND_URL", "https://hms-r1u7wmn18-shivaprakash001s-projects.vercel.app")
             activation_link = f"{base_url}/activate?token={token}&email={email}"
             
             if background_tasks:
