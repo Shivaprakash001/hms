@@ -100,12 +100,16 @@ const Payments = () => {
         setGenLoading(true);
         setGenResult(null);
         try {
-            const result = await paymentService.generateRent(genMonth + '-01');
-            setGenResult({ success: true, data: result });
+            const data = await paymentService.generateRent(genMonth + '-01');
+            setGenResult({ success: true, data });
             loadPayments(); // refresh list
         } catch (error) {
             console.error("Generate rent failed:", error);
-            setGenResult({ success: false, error: error.response?.data?.detail?.message || 'Generation failed. Please try again.' });
+            const errorMessage = error.response?.data?.detail?.message 
+                || error.response?.data?.message 
+                || error.message 
+                || 'Generation failed. Please try again.';
+            setGenResult({ success: false, error: errorMessage });
         } finally {
             setGenLoading(false);
         }
@@ -305,7 +309,7 @@ const Payments = () => {
                                             <div>
                                                 <h3 className="text-xl font-black text-slate-900">Rent Obligations Created!</h3>
                                                 <p className="text-slate-500 mt-1 text-sm">
-                                                    {genResult.data?.generated_count ?? 'Several'} obligations generated,&nbsp;
+                                                    {genResult.data?.generated_count ?? 0} obligations generated,&nbsp;
                                                     {genResult.data?.skipped_count ?? 0} skipped (already existing).
                                                 </p>
                                             </div>

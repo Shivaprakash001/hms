@@ -25,6 +25,7 @@ def _handle_service_response(result: dict, success_status: int = status.HTTP_200
             ErrorCode.FORBIDDEN.value: status.HTTP_403_FORBIDDEN,
             ErrorCode.INVALID_INPUT.value: status.HTTP_422_UNPROCESSABLE_ENTITY,
             ErrorCode.UNAUTHORIZED.value: status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.INTERNAL_ERROR.value: status.HTTP_500_INTERNAL_SERVER_ERROR,
         }
         
         http_status = status_map.get(error_code, status.HTTP_400_BAD_REQUEST)

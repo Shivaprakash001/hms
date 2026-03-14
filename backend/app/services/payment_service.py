@@ -72,6 +72,15 @@ def generate_monthly_rent(rent_month: date, user_id: Optional[str] = None) -> Di
         student_res = student_query.execute()
         owner_student_map = {s["id"]: s for s in student_res.data}
         owner_student_ids = list(owner_student_map.keys())
+        
+        if not owner_student_ids:
+            return ServiceResponse.success({
+                "target_month": target_month.isoformat(),
+                "generated_count": 0,
+                "updated_count": 0,
+                "skipped_count": 0,
+                "errors": []
+            }, "No students found for this owner.")
 
         # 1. Fetch ALL allocations for these specific students
         # We perform the date filtering in Python to avoid Supabase library syntax issues (.or_ / .filter)
@@ -82,7 +91,13 @@ def generate_monthly_rent(rent_month: date, user_id: Optional[str] = None) -> Di
         alloc_res = query.execute()
         all_allocations = alloc_res.data
         if not all_allocations:
-            return ServiceResponse.success([], "No allocations found for your students.")
+            return ServiceResponse.success({
+                "target_month": target_month.isoformat(),
+                "generated_count": 0,
+                "updated_count": 0,
+                "skipped_count": 0,
+                "errors": []
+            }, "No allocations found for your students.")
             
         # Group allocations by student and filter for those overlapping this month
         student_allocs = {}
@@ -211,9 +226,9 @@ def generate_monthly_rent(rent_month: date, user_id: Optional[str] = None) -> Di
 
         return ServiceResponse.success({
             "target_month": target_month.isoformat(),
-            "generated": generated_count,
-            "updated": updated_count,
-            "skipped": skipped_count,
+            "generated_count": generated_count,
+            "updated_count": updated_count,
+            "skipped_count": skipped_count,
             "errors": errors
         }, f"Processed rent obligations: {generated_count} new, {updated_count} updated.")
 
