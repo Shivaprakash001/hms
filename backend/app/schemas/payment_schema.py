@@ -104,3 +104,21 @@ class RazorpayOrderResponse(BaseModel):
     description: str
     prefill: Optional[dict] = None
     notes: Optional[dict] = None
+
+
+class PaymentVerifyRequest(BaseModel):
+    razorpay_order_id: str = Field(..., description="Razorpay order ID returned after payment")
+    razorpay_payment_id: str = Field(..., description="Razorpay payment ID")
+    razorpay_signature: str = Field(..., description="HMAC signature from Razorpay callback")
+    obligation_id: Optional[UUID] = Field(None, description="Obligation being paid (for record linking)")
+
+
+class ReconcileRequest(BaseModel):
+    payment_ids: Optional[List[UUID]] = Field(None, description="Specific payment IDs to reconcile; omit to reconcile all pending")
+
+
+class ReconcileResult(BaseModel):
+    reconciled: int
+    already_captured: int
+    failed: int
+    errors: List[str]

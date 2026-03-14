@@ -1,5 +1,6 @@
 from app.db import supabase
 from app.services.notification_service import create_notification
+from app.services.email_service import EmailService
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -46,14 +47,23 @@ def handle_student_allocated(student_id: str, room_id: str, **kwargs):
         logger.error(f"Error in handle_student_allocated notification: {e}")
 
 def handle_payment_recorded(amount: float, obligation_id: str, **kwargs):
-    """Notify owner when a payment is received."""
+    """Notify owner and student when a payment is received."""
     try:
-        res = supabase.table("rent_obligations").select("owner_id, students(profiles(name))").eq("id", obligation_id).execute()
+        res = supabase.table("rent_obligations")\
+            .select("owner_id, rent_month, students(profile_id, profiles!students_profile_id_fkey(name, email))")\
+            .eq("id", obligation_id)\
+            .execute()
         if res.data:
             ob = res.data[0]
             owner_id = ob.get("owner_id")
-            student_name = ob.get("students", {}).get("profiles", {}).get("name", "A tenant")
-            
+            rent_month = ob.get("rent_month", "")
+            student_data = ob.get("students", {}) or {}
+            student_profile = (student_data.get("profiles") or {})
+            student_name = student_profile.get("name", "A tenant")
+            student_email = student_profile.get("email")
+            student_profile_id = student_data.get("profile_id")
+
+            # Notify owner
             if owner_id:
                 create_notification(
                     user_id=owner_id,
@@ -61,6 +71,30 @@ def handle_payment_recorded(amount: float, obligation_id: str, **kwargs):
                     message=f"Received ₹{amount} from {student_name}.",
                     n_type="PAYMENT"
                 )
+
+            # Notify student with receipt confirmation
+            if student_profile_id:
+                month_label = rent_month[:7] if rent_month else "this month"
+                create_notification(
+                    user_id=student_profile_id,
+                    title="Payment Confirmed",
+                    message=f"Your rent payment of ₹{amount} for {month_label} has been recorded successfully.",
+                    n_type="PAYMENT"
+                )
+
+            # Send email receipt to student
+            reference = kwargs.get("payment_id", obligation_id)
+            if student_email:
+                try:
+                    EmailService.send_payment_receipt_email(
+                        to_email=student_email,
+                        name=student_name,
+                        amount=amount,
+                        rent_month=rent_month[:7] if rent_month else "",
+                        payment_reference=str(reference),
+                    )
+                except Exception as mail_err:
+                    logger.error(f"Failed to send receipt email to {student_email}: {mail_err}")
     except Exception as e:
         logger.error(f"Error in handle_payment_recorded notification: {e}")
 

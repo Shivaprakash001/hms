@@ -165,6 +165,23 @@ export const paymentService = {
         const response = await api.post('/payments/initiate', data);
         return response.data;
     },
+    /**
+     * Verify a Razorpay payment server-side after the checkout callback fires.
+     * @param {Object} data - { razorpay_order_id, razorpay_payment_id, razorpay_signature, obligation_id? }
+     */
+    verifyPayment: async (data) => {
+        const response = await api.post('/payments/verify', data);
+        return response.data;
+    },
+    /**
+     * Reconcile pending payments with Razorpay (admin/owner).
+     * @param {string[]} [paymentIds] - Optional list of payment IDs; omit to reconcile all pending.
+     */
+    reconcilePayments: async (paymentIds) => {
+        const body = paymentIds ? { payment_ids: paymentIds } : {};
+        const response = await api.post('/payments/reconcile', body);
+        return response.data;
+    },
     generateRent: async (month) => {
         const response = await api.post('/payments/generate-monthly', { rent_month: month });
         return response.data;

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CheckCircle, CreditCard, Smartphone, Globe, Loader2, QrCode, ShieldCheck, AlertCircle } from 'lucide-react';
+import { X, CheckCircle, CreditCard, Smartphone, Globe, Loader2, QrCode, ShieldCheck, AlertCircle, RefreshCw } from 'lucide-react';
 import { paymentService } from '../../../api/services';
 
 const loadRazorpayScript = () =>
@@ -16,11 +16,23 @@ const loadRazorpayScript = () =>
         document.body.appendChild(script);
     });
 
+/**
+ * PaymentModal
+ * Wires the full Razorpay payment flow:
+ *   1. Create order via /payments/initiate
+ *   2. Open Razorpay checkout
+ *   3. Verify payment server-side via /payments/verify
+ *   4. Call onSuccess with verified result
+ *
+ * States: 'method' → 'processing' → 'verifying' → 'success' | 'failed'
+ */
 const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
-    const [step, setStep] = useState('method'); // method, processing, success
+    const [step, setStep] = useState('method'); // method, processing, verifying, success, failed
     const [method, setMethod] = useState('upi'); // upi, card, netbanking
     const [loading, setLoading] = useState(false);
+    const [verifying, setVerifying] = useState(false);
     const [error, setError] = useState(null);
+    const [verifiedData, setVerifiedData] = useState(null);
 
     // Reset state on open
     useEffect(() => {
@@ -28,9 +40,46 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
             setStep('method');
             setMethod('upi');
             setLoading(false);
+            setVerifying(false);
             setError(null);
+            setVerifiedData(null);
         }
     }, [isOpen]);
+
+    const handleVerify = async (razorpayResponse, orderData) => {
+        setVerifying(true);
+        setStep('verifying');
+        try {
+            const verifyPayload = {
+                razorpay_order_id: razorpayResponse.razorpay_order_id,
+                razorpay_payment_id: razorpayResponse.razorpay_payment_id,
+                razorpay_signature: razorpayResponse.razorpay_signature,
+            };
+            if (obligationId) {
+                verifyPayload.obligation_id = obligationId;
+            }
+
+            const result = await paymentService.verifyPayment(verifyPayload);
+            setVerifiedData(result);
+            setStep('success');
+            setTimeout(() => {
+                onSuccess({
+                    ...razorpayResponse,
+                    amount,
+                    obligation_status: result?.obligation_status,
+                });
+            }, 1800);
+        } catch (verifyErr) {
+            const msg = verifyErr?.response?.data?.detail?.message
+                || verifyErr?.response?.data?.detail
+                || verifyErr?.message
+                || 'Payment verification failed. Please contact support.';
+            setError(msg);
+            setStep('failed');
+        } finally {
+            setVerifying(false);
+        }
+    };
 
     const handlePayment = async () => {
         setLoading(true);
@@ -61,35 +110,35 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
                 notes: orderData.notes || {},
                 theme: { color: '#4F46E5' },
                 handler: (response) => {
-                    // Payment captured – webhook will record it in the database
-                    setLoading(false);
-                    setStep('success');
-                    setTimeout(() => {
-                        onSuccess({
-                            razorpay_payment_id: response.razorpay_payment_id,
-                            razorpay_order_id: response.razorpay_order_id,
-                            razorpay_signature: response.razorpay_signature,
-                            amount: amount
-                        });
-                    }, 1500);
+                    // Payment captured by Razorpay – now verify server-side
+                    handleVerify(response, orderData);
                 },
                 modal: {
                     ondismiss: () => {
                         setLoading(false);
+                        // Dismissed by user – remain on 'method' step so they can retry
+                        setStep('method');
                     }
                 }
             };
 
             const rzp = new window.Razorpay(options);
             rzp.on('payment.failed', (response) => {
-                setError(response.error.description || 'Payment failed. Please try again.');
+                setError(response.error?.description || 'Payment failed. Please try again.');
+                setStep('failed');
                 setLoading(false);
             });
             rzp.open();
+            // Loading spinner stays visible until the checkout widget opens/closes
         } catch (err) {
-            setError(err?.response?.data?.detail || err.message || 'Failed to initiate payment.');
+            setError(err?.response?.data?.detail?.message || err?.response?.data?.detail || err.message || 'Failed to initiate payment.');
             setLoading(false);
         }
+    };
+
+    const handleRetry = () => {
+        setStep('method');
+        setError(null);
     };
 
     if (!isOpen) return null;
@@ -103,7 +152,7 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        onClick={!loading ? onClose : undefined}
+                        onClick={!loading && !verifying && step !== 'verifying' ? onClose : undefined}
                         className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50"
                     />
 
@@ -121,7 +170,7 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
                                     <h2 className="text-xl font-black text-slate-900">Payment Gateway</h2>
                                     <p className="text-sm text-slate-500 font-medium">Secure Transaction</p>
                                 </div>
-                                {!loading && step !== 'success' && (
+                                {!loading && !verifying && step !== 'success' && step !== 'verifying' && (
                                     <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400 hover:text-slate-600">
                                         <X size={20} />
                                     </button>
@@ -130,7 +179,7 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
 
                             {/* Content */}
                             <div className="p-6">
-                                {step === 'method' && (
+                                {(step === 'method' || step === 'failed') && (
                                     <div className="space-y-6">
                                         <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 flex justify-between items-center">
                                             <span className="text-sm font-bold text-slate-600">Total Amount</span>
@@ -214,14 +263,35 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
                                             </div>
                                         )}
 
-                                        <button
-                                            onClick={handlePayment}
-                                            disabled={loading}
-                                            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
-                                        >
-                                            {loading ? <Loader2 className="animate-spin" /> : <ShieldCheck size={20} />}
-                                            {loading ? 'Opening Payment Gateway...' : `Pay ₹${amount.toLocaleString()}`}
-                                        </button>
+                                        <div className="flex gap-3">
+                                            {step === 'failed' && (
+                                                <button
+                                                    onClick={handleRetry}
+                                                    className="flex-1 py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-all flex items-center justify-center gap-2"
+                                                >
+                                                    <RefreshCw size={18} />
+                                                    Retry
+                                                </button>
+                                            )}
+                                            <button
+                                                onClick={handlePayment}
+                                                disabled={loading}
+                                                className="flex-1 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
+                                            >
+                                                {loading ? <Loader2 className="animate-spin" /> : <ShieldCheck size={20} />}
+                                                {loading ? 'Opening Payment Gateway...' : `Pay ₹${amount.toLocaleString()}`}
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {step === 'verifying' && (
+                                    <div className="flex flex-col items-center justify-center py-10 text-center space-y-4">
+                                        <Loader2 size={48} className="animate-spin text-indigo-600" />
+                                        <div>
+                                            <h3 className="text-lg font-black text-slate-900">Verifying Payment…</h3>
+                                            <p className="text-slate-500 text-sm mt-1">Confirming with our server. Please wait.</p>
+                                        </div>
                                     </div>
                                 )}
 
@@ -236,8 +306,8 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
                                             <CheckCircle size={40} strokeWidth={3} />
                                         </motion.div>
                                         <div>
-                                            <h3 className="text-xl font-black text-slate-900">Payment Successful!</h3>
-                                            <p className="text-slate-500 mt-1">Your payment is being processed.</p>
+                                            <h3 className="text-xl font-black text-slate-900">Payment Verified!</h3>
+                                            <p className="text-slate-500 mt-1">Your payment has been confirmed.</p>
                                         </div>
                                         <div className="bg-slate-50 px-6 py-3 rounded-xl border border-slate-100">
                                             <p className="text-sm font-medium text-slate-500">Amount Paid</p>
