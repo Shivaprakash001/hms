@@ -292,43 +292,65 @@ def reconcile_payments(
 @router.post(
     "/webhook",
     status_code=status.HTTP_200_OK,
-    summary="Razorpay Webhook handler",
+    summary="Razorpay webhook receiver",
     include_in_schema=False
 )
 async def razorpay_webhook(request: Request):
     """
     **Public Endpoint**: Receives payment notifications from Razorpay.
-    Verifies HMAC signature, applies rate limiting, and updates database atomically.
+    - Verifies HMAC-SHA256 signature (primary security gate).
+    - Applies per-IP rate limiting to prevent DDoS.
+    - Delegates event processing (with ownership checks and idempotency) to the service layer.
     """
     # Rate limiting - protect against flood / DDoS
     client_ip = request.client.host if request.client else "unknown"
     if _is_rate_limited(client_ip):
         logger.warning(f"Webhook rate limit exceeded for IP: {client_ip}")
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Rate limit exceeded")
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={"code": "RATE_LIMITED", "message": "Too many requests"}
+        )
 
-    payload = await request.body()
+    body_bytes = await request.body()
     signature = request.headers.get("X-Razorpay-Signature")
-    
+
     if not signature:
-        logger.error("Webhook received without X-Razorpay-Signature")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing signature")
-        
-    # Verify authenticity - this is the primary security gate for the public endpoint
-    is_valid = payment_service.verify_webhook_signature(payload, signature)
+        logger.warning("Webhook received without X-Razorpay-Signature")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "UNAUTHORIZED", "message": "Missing signature"}
+        )
+
+    # Verify authenticity using pure HMAC-SHA256 (no Razorpay client dependency)
+    is_valid = payment_service.verify_razorpay_signature(
+        body_bytes.decode("utf-8") if isinstance(body_bytes, bytes) else body_bytes,
+        signature
+    )
     if not is_valid:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid signature")
-        
-    # Process event
+        logger.warning(f"Invalid Razorpay signature from IP: {client_ip}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "UNAUTHORIZED", "message": "Invalid signature"}
+        )
+
+    # Parse and process the verified event
     import json
     try:
-        event = json.loads(payload)
+        event = json.loads(body_bytes)
+        # Sanitize event type before logging to prevent log injection
+        raw_event_type = event.get("event", "")
+        safe_event_type = raw_event_type if isinstance(raw_event_type, str) and raw_event_type.replace(".", "").isalnum() else "unknown"
+        logger.info(f"Valid Razorpay webhook received. Event: {safe_event_type}")
         result = payment_service.handle_razorpay_webhook(event)
-        
-        # Always return 200 to Razorpay so it does not retry; log business-logic errors.
+
+        # Always return 200 so Razorpay does not retry; log any business-logic errors.
         if not result.get("success"):
-            webhook_logger = get_logger("payment_webhook")
-            webhook_logger.error(f"Webhook processing error: {result.get('error')}")
-            
+            logger.error(f"Webhook processing error: {result.get('error')}")
+
         return {"status": "ok"}
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        logger.exception(f"Unexpected error in webhook handler: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"code": "INTERNAL_ERROR", "message": "Webhook processing failed"}
+        )

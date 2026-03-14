@@ -617,6 +617,40 @@ def verify_webhook_signature(payload: bytes, signature: str) -> bool:
         return False
 
 
+def verify_razorpay_signature(payload_str: str, signature: str) -> bool:
+    """
+    Verify Razorpay webhook signature using HMAC-SHA256.
+
+    Unlike verify_webhook_signature, this function only requires
+    RAZORPAY_WEBHOOK_SECRET and does not depend on the Razorpay client
+    being initialised (i.e. it works even when API keys are absent).
+
+    Args:
+        payload_str: Raw request body as a string.
+        signature: X-Razorpay-Signature header value.
+
+    Returns:
+        True if the signature is valid, False otherwise.
+    """
+    if not RAZORPAY_WEBHOOK_SECRET:
+        logger.error("RAZORPAY_WEBHOOK_SECRET not configured")
+        return False
+
+    try:
+        computed = hmac.new(
+            RAZORPAY_WEBHOOK_SECRET.encode(),
+            payload_str.encode(),
+            hashlib.sha256
+        ).hexdigest()
+        is_valid = hmac.compare_digest(computed, signature)
+        if not is_valid:
+            logger.warning("Razorpay webhook signature mismatch")
+        return is_valid
+    except Exception as e:
+        logger.exception(f"Error verifying Razorpay webhook signature: {e}")
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Webhook event deduplication.
 # Primary store: payment_webhook_events DB table (cross-process safe).
