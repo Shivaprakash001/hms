@@ -10,7 +10,7 @@ from app.api.routes.expense_router import router as expense_router
 from app.api.routes.dashboard_router import router as dashboard_router
 from app.api.routes.notification_router import router as notification_router
 
-router = APIRouter(prefix="/api/v1")
+router = APIRouter()
 
 # Include all module routers
 router.include_router(student_router)
