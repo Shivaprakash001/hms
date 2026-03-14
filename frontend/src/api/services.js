@@ -161,6 +161,10 @@ export const paymentService = {
         const response = await api.post('/payments/', data);
         return response.data;
     },
+    initiatePayment: async (data) => {
+        const response = await api.post('/payments/initiate', data);
+        return response.data;
+    },
     generateRent: async (month) => {
         const response = await api.post('/payments/generate-monthly', { rent_month: month });
         return response.data;

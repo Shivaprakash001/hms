@@ -302,10 +302,24 @@ def record_payment(
             "reference_number": reference_number,
             "payment_date": (payment_date or date.today()).isoformat()
         }
-        
-        res = supabase.table("payments").insert(payment_data).execute()
-        if not res.data:
-            return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to record payment.")
+
+        if reference_number:
+            # Use upsert with ignore_duplicates to atomically prevent duplicate payments
+            # for reference-backed payments (e.g. Razorpay). Requires a UNIQUE constraint
+            # on payments.reference_number in the database.
+            res = supabase.table("payments").upsert(
+                payment_data,
+                on_conflict="reference_number",
+                ignore_duplicates=True
+            ).execute()
+            if not res.data:
+                # No data returned means the row was silently ignored due to duplicate reference
+                logger.info(f"Duplicate payment reference detected: {reference_number}. Skipping insert.")
+                return ServiceResponse.already_exists("Payment", f"Reference {reference_number} already recorded")
+        else:
+            res = supabase.table("payments").insert(payment_data).execute()
+            if not res.data:
+                return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to record payment.")
         
         new_payment = res.data[0]
         
@@ -627,33 +641,46 @@ def handle_razorpay_webhook(event: Dict[str, Any]) -> Dict[str, Any]:
             logger.error(f"Webhook payload missing student/obligation metadata: {notes}")
             return ServiceResponse.error(ErrorCode.INVALID_INPUT, "Missing metadata in order notes")
 
-        # Atomic check: Ensure we haven't already processed this payment ID
-        existing_check = supabase.table("payments")\
-            .select("id")\
-            .eq("reference_number", razorpay_payment_id)\
+        # Verify that the obligation and student actually exist in our system
+        ob_check = supabase.table("rent_obligations")\
+            .select("id, student_id")\
+            .eq("id", obligation_id)\
             .execute()
-            
-        if existing_check.data:
-            logger.info(f"Payment {razorpay_payment_id} already processed. Skipping.")
-            return ServiceResponse.success({}, "Payment already processed")
+        if not ob_check.data:
+            logger.error(f"Webhook references unknown obligation_id: {obligation_id}")
+            return ServiceResponse.error(ErrorCode.INVALID_INPUT, "Obligation not found")
 
-        # Record the payment using the standard business logic
-        # This will update obligation status and trigger hooks
-        
+        if str(ob_check.data[0].get("student_id")) != str(student_id):
+            logger.error(
+                f"Webhook student_id mismatch: expected {ob_check.data[0].get('student_id')}, got {student_id}"
+            )
+            return ServiceResponse.error(ErrorCode.FORBIDDEN, "Student does not own this obligation")
+
         # Log webhook metric
-        logger.info("Processed Razorpay webhook", extra={
+        logger.info("Processing Razorpay webhook", extra={
             "metric_type": "razorpay_payment_processed",
             "amount": float(amount_paid),
             "reference": razorpay_payment_id
         })
-        
-        return record_payment(
+
+        # record_payment uses upsert with on_conflict="reference_number" to atomically prevent
+        # duplicate inserts even when two webhook calls arrive simultaneously.
+        result = record_payment(
             obligation_id=obligation_id,
             amount_paid=amount_paid,
-            payment_method="UPI", # Razorpay UPI
+            payment_method="UPI",
             reference_number=razorpay_payment_id,
             payment_date=date.today()
         )
+
+        # A duplicate reference means this webhook was already processed - treat as success
+        if not result.get("success"):
+            error_code = result.get("error", {}).get("code", "")
+            if error_code == ErrorCode.RESOURCE_ALREADY_EXISTS.value:
+                logger.info(f"Payment {razorpay_payment_id} already processed (idempotent). Skipping.")
+                return ServiceResponse.success({}, "Payment already processed")
+
+        return result
 
     except Exception as e:
         logger.exception(f"Error handling Razorpay webhook: {e}")

@@ -8,9 +8,35 @@ from app.utils.responses import ErrorCode
 from app.utils.logger import get_logger
 from typing import List, Optional
 from datetime import date
+from collections import defaultdict
+import time
+import threading
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/payments", tags=["Payments & Billing"])
+
+# ---------------------------------------------------------------------------
+# Webhook rate-limiter (in-memory, per IP, thread-safe)
+# ---------------------------------------------------------------------------
+_webhook_request_times: dict = defaultdict(list)
+_webhook_rate_lock = threading.Lock()
+_WEBHOOK_RATE_LIMIT = 60    # max requests per window
+_WEBHOOK_RATE_WINDOW = 60   # seconds
+
+
+def _is_rate_limited(client_ip: str) -> bool:
+    """Return True when the caller has exceeded the webhook rate limit."""
+    now = time.time()
+    window_start = now - _WEBHOOK_RATE_WINDOW
+    with _webhook_rate_lock:
+        # Discard timestamps outside the sliding window
+        _webhook_request_times[client_ip] = [
+            t for t in _webhook_request_times[client_ip] if t > window_start
+        ]
+        if len(_webhook_request_times[client_ip]) >= _WEBHOOK_RATE_LIMIT:
+            return True
+        _webhook_request_times[client_ip].append(now)
+    return False
 
 
 def _handle_service_response(result: dict, success_status: int = status.HTTP_200_OK):
@@ -217,8 +243,14 @@ def initiate_razorpay_payment(
 async def razorpay_webhook(request: Request):
     """
     **Public Endpoint**: Receives payment notifications from Razorpay.
-    Verifies signature and updates database atomically.
+    Verifies HMAC signature, applies rate limiting, and updates database atomically.
     """
+    # Rate limiting - protect against flood / DDoS
+    client_ip = request.client.host if request.client else "unknown"
+    if _is_rate_limited(client_ip):
+        logger.warning(f"Webhook rate limit exceeded for IP: {client_ip}")
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Rate limit exceeded")
+
     payload = await request.body()
     signature = request.headers.get("X-Razorpay-Signature")
     
@@ -226,7 +258,7 @@ async def razorpay_webhook(request: Request):
         logger.error("Webhook received without X-Razorpay-Signature")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing signature")
         
-    # Verify authenticity
+    # Verify authenticity - this is the primary security gate for the public endpoint
     is_valid = payment_service.verify_webhook_signature(payload, signature)
     if not is_valid:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid signature")
@@ -237,12 +269,8 @@ async def razorpay_webhook(request: Request):
         event = json.loads(payload)
         result = payment_service.handle_razorpay_webhook(event)
         
-        # We always return 200 to Razorpay as long as we received the payload,
-        # unless it's a critical system error.
+        # Always return 200 to Razorpay so it does not retry; log business-logic errors.
         if not result.get("success"):
-            # Log the error but don't necessarily fail the HTTP response 
-            # if it's a business logic error (like duplicate payment)
-            from app.utils.logger import get_logger
             webhook_logger = get_logger("payment_webhook")
             webhook_logger.error(f"Webhook processing error: {result.get('error')}")
             

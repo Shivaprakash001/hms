@@ -1,10 +1,13 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { CreditCard, Calendar, Download, AlertCircle, CheckCircle2, Clock, Smartphone, ChevronRight } from 'lucide-react';
+import { CreditCard, Calendar, Download, AlertCircle, CheckCircle2, Clock, Smartphone, ChevronRight, Loader2 } from 'lucide-react';
 
 import { useAuth } from '../../context/AuthContext';
 import { paymentService } from '../../api/services';
 import PaymentModal from '../../components/student/payment/PaymentModal';
+
+const POLL_INTERVAL_MS = 3000;  // check every 3 seconds
+const POLL_MAX_ATTEMPTS = 12;   // give up after ~36 seconds
 
 const StudentPayments = () => {
     const { user } = useAuth();
@@ -12,12 +15,19 @@ const StudentPayments = () => {
 
     const [history, setHistory] = useState({ payments: [], obligations: [] });
     const [loading, setLoading] = useState(true);
+    const [polling, setPolling] = useState(false);
+    const pollTimerRef = useRef(null);
+    const pollAttemptsRef = useRef(0);
 
-    // Fetch data
+    # Fetch data
     useEffect(() => {
         if (user?.student_id) {
             loadHistory();
         }
+        return () => {
+            if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+            setPolling(false);
+        };
     }, [user]);
 
     const loadHistory = async () => {
@@ -30,6 +40,42 @@ const StudentPayments = () => {
         } finally {
             setLoading(false);
         }
+    };
+
+    // Poll until a new payment with the given razorpay_payment_id appears in history
+    const startPolling = (razorpayPaymentId, previousBalance) => {
+        if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+        pollAttemptsRef.current = 0;
+        setPolling(true);
+
+        const check = async () => {
+            pollAttemptsRef.current += 1;
+            try {
+                const data = await paymentService.getStudentHistory(user.student_id);
+
+                const paymentRecorded = razorpayPaymentId
+                    ? data.payments?.some(p => p.reference_number === razorpayPaymentId)
+                    : Number(data.outstanding_balance) < Number(previousBalance);
+
+                if (paymentRecorded) {
+                    setHistory(data);
+                    setPolling(false);
+                    return;
+                }
+            } catch (err) {
+                console.error("Polling error:", err);
+            }
+
+            if (pollAttemptsRef.current < POLL_MAX_ATTEMPTS) {
+                pollTimerRef.current = setTimeout(check, POLL_INTERVAL_MS);
+            } else {
+                // Give up — refresh data once more and stop
+                loadHistory();
+                setPolling(false);
+            }
+        };
+
+        pollTimerRef.current = setTimeout(check, POLL_INTERVAL_MS);
     };
 
     // Merge obligations and payments for the list
@@ -49,24 +95,21 @@ const StudentPayments = () => {
             amount: p.amount_paid,
             status: 'paid', // payments are always successful if recorded
             type: 'Payment',
-            method: p.payment_method
+            method: p.payment_method,
+            reference_number: p.reference_number
         }));
-
-        // Filter out paid obligations from visual list if you only want to show history of "Events"
-        // But usually students want to see "Rent for Feb" (Paid).
-        // If an obligation is PAID, it duplicates information with the Payment?
-        // Let's show Payments as the "History" of transactions.
-        // And Obligations as "Dues".
-        // The table columns are: Date, Txn ID, Amount, Method, Status.
-        // This looks like a transaction ledger. 
-        // So we should primarily show PAYMENTS.
-        // But if we want to show "Pending", we must include unpaid obligations.
 
         const unpaidObs = obs.filter(o => o.status !== 'paid');
         return [...unpaidObs, ...pays].sort((a, b) => new Date(b.date) - new Date(a.date));
     }, [history]);
 
     const pendingAmount = history.outstanding_balance || 0;
+
+    // Derive the first pending obligation id to pass to PaymentModal
+    const pendingObligationId = useMemo(() => {
+        const ob = history.obligations?.find(o => o.status === 'PENDING' || o.status === 'PARTIAL');
+        return ob?.id || null;
+    }, [history]);
 
     const isOverdue = localPayments.some(p => p.status === 'overdue');
 
@@ -85,27 +128,10 @@ const StudentPayments = () => {
     };
     const { label: nextDueDate, daysLeft } = getNextDueInfo();
 
-    const handlePaymentSuccess = async (paymentData) => {
-        try {
-            const pendingOb = history.obligations?.find(o => o.status === 'pending' || o.status === 'partial');
-            if (!pendingOb) {
-                alert("No pending dues to pay!");
-                return;
-            }
-            const today = new Date();
-            const localDate = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
-            await paymentService.recordPayment({
-                obligation_id: pendingOb.id,
-                amount_paid: paymentData.amount || pendingAmount,
-                payment_method: paymentData.method?.toUpperCase() || 'UPI',
-                payment_date: localDate
-            });
-            loadHistory();
-            setShowPaymentModal(false);
-        } catch (error) {
-            console.error("Payment failed", error);
-            alert("Payment recording failed. Please contact support.");
-        }
+    const handlePaymentSuccess = (razorpayResponse) => {
+        setShowPaymentModal(false);
+        // Start polling so the UI refreshes as soon as the webhook records the payment
+        startPolling(razorpayResponse?.razorpay_payment_id, pendingAmount);
     };
 
     return (
@@ -116,6 +142,14 @@ const StudentPayments = () => {
                     <p className="text-slate-500 text-sm">Manage your rent and payment history</p>
                 </div>
             </div>
+
+            {/* Polling / verification indicator */}
+            {polling && (
+                <div className="flex items-center gap-3 p-4 bg-indigo-50 border border-indigo-100 rounded-2xl text-sm text-indigo-700 font-medium">
+                    <Loader2 size={18} className="animate-spin shrink-0" />
+                    <span>Verifying your payment — this usually takes a few seconds…</span>
+                </div>
+            )}
 
             {/* 1. Payment Summary Section */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -171,13 +205,18 @@ const StudentPayments = () => {
 
                     <button
                         onClick={() => setShowPaymentModal(true)}
-                        disabled={pendingAmount <= 0}
-                        className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95 ${pendingAmount > 0
+                        disabled={pendingAmount <= 0 || polling}
+                        className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95 ${pendingAmount > 0 && !polling
                             ? 'bg-indigo-500 hover:bg-indigo-400 text-white shadow-indigo-500/30'
                             : 'bg-slate-800 text-slate-500 cursor-not-allowed'
                             }`}
                     >
-                        {pendingAmount > 0 ? (
+                        {polling ? (
+                            <>
+                                <Loader2 size={16} className="animate-spin" />
+                                <span>Verifying…</span>
+                            </>
+                        ) : pendingAmount > 0 ? (
                             <>
                                 <span>Pay Now</span>
                                 <ChevronRight size={16} />
@@ -272,6 +311,7 @@ const StudentPayments = () => {
                 isOpen={showPaymentModal}
                 onClose={() => setShowPaymentModal(false)}
                 amount={pendingAmount > 0 ? pendingAmount : 0}
+                obligationId={pendingObligationId}
                 onSuccess={handlePaymentSuccess}
             />
         </div>
