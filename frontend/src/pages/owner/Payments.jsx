@@ -23,7 +23,7 @@ const Payments = () => {
     const [showGenModal, setShowGenModal] = useState(false);
     const [genMonth, setGenMonth] = useState(() => {
         const now = new Date();
-        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
     });
     const [genLoading, setGenLoading] = useState(false);
     const [genResult, setGenResult] = useState(null); // { success, count, skipped }
@@ -100,7 +100,7 @@ const Payments = () => {
         setGenLoading(true);
         setGenResult(null);
         try {
-            const data = await paymentService.generateRent(genMonth + '-01');
+            const data = await paymentService.generateRent(genMonth);
             setGenResult({ success: true, data });
             loadPayments(); // refresh list
         } catch (error) {
@@ -264,13 +264,13 @@ const Payments = () => {
                                                 <label className="block text-sm font-bold text-slate-700 mb-2">Select Month</label>
                                                 <input
                                                     type="month"
-                                                    value={genMonth}
-                                                    onChange={(e) => setGenMonth(e.target.value)}
+                                                    value={genMonth.slice(0, 7)}
+                                                    onChange={(e) => setGenMonth(e.target.value + '-01')}
                                                     max={`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`}
                                                     className="w-full px-4 py-3 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all"
                                                 />
                                                 <p className="text-xs text-slate-400 mt-2">
-                                                    This will create pending rent obligations for all tenants who had an active allocation in {new Date(genMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}.
+                                                    This will create pending rent obligations for all tenants who had an active allocation in {new Date(genMonth).toLocaleString('default', { month: 'long', year: 'numeric' })}.
                                                 </p>
                                             </div>
 
@@ -292,7 +292,7 @@ const Payments = () => {
                                                 {genLoading ? (
                                                     <><Loader2 className="animate-spin" size={20} /> Generating...</>
                                                 ) : (
-                                                    <><Zap size={20} /> Generate for {new Date(genMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}</>
+                                                    <><Zap size={20} /> Generate for {new Date(genMonth).toLocaleString('default', { month: 'long', year: 'numeric' })}</>
                                                 )}
                                             </button>
                                         </>
