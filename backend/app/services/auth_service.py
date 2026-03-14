@@ -177,8 +177,12 @@ async def google_login(code: str, redirect_uri: str = None) -> Dict[str, Any]:
         client_id = os.getenv("GOOGLE_CLIENT_ID")
         client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
         # Use the redirect_uri provided by the frontend (must match the one used in the initial auth request).
-        # Fall back to the env variable, then to Vite's default dev port (5173) for local development.
-        effective_redirect_uri = redirect_uri or os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:5173/callback")
+        # Fall back to the env variable. If neither is set, default to the primary production deployment URL.
+        # IMPORTANT: Set GOOGLE_REDIRECT_URI explicitly in all deployment environments.
+        effective_redirect_uri = redirect_uri or os.getenv("GOOGLE_REDIRECT_URI", "https://hms-sand-five.vercel.app/callback")
+        logger.debug(f"Google OAuth: using redirect_uri={effective_redirect_uri}")
+        if "localhost" in effective_redirect_uri:
+            logger.warning("Google OAuth redirect_uri is pointing to localhost. This will fail in production.")
         
         async with httpx.AsyncClient() as client:
             token_response = await client.post(
