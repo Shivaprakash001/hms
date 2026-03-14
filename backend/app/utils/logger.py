@@ -5,18 +5,24 @@ import logging
 import sys
 from pathlib import Path
 from datetime import datetime
-
+from pythonjsonlogger.json import JsonFormatter
 
 # Create logs directory if it doesn't exist
 LOGS_DIR = Path(__file__).parent.parent.parent.parent / "logs"
 LOGS_DIR.mkdir(exist_ok=True)
 
 # Configure logging format
-LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+# Include request attributes that might be set by the context or logger
+LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(module)s %(message)s %(request_id)s %(user_id)s %(latency)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 # Create formatters
-formatter = logging.Formatter(LOG_FORMAT, DATE_FORMAT)
+# Using JSON formatter
+formatter = JsonFormatter(
+    fmt=LOG_FORMAT,
+    datefmt=DATE_FORMAT,
+    rename_fields={"levelname": "level"}
+)
 
 # Console handler
 console_handler = logging.StreamHandler(sys.stdout)

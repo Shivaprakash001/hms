@@ -10,13 +10,29 @@ import App from './App.jsx'
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "YOUR_GOOGLE_CLIENT_ID_HERE";
 
 import { BrowserRouter } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
+import ErrorBoundary from './components/ErrorBoundary';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
-    </GoogleOAuthProvider>
+    <ErrorBoundary>
+      <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+        <BrowserRouter>
+          <App />
+          <Toaster 
+            position="top-right" 
+            toastOptions={{
+              className: 'bg-neutral-800 text-neutral-100 border border-neutral-700 shadow-xl',
+              style: {
+                background: '#262626',
+                color: '#f5f5f5',
+                border: '1px solid #404040',
+                borderRadius: '8px',
+              },
+            }}
+          />
+        </BrowserRouter>
+      </GoogleOAuthProvider>
+    </ErrorBoundary>
   </StrictMode>,
 )

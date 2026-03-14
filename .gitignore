@@ -8,6 +8,9 @@ wheels/
 
 # Virtual environments
 .venv
+.env
+.env.*
+!.env.example
 
 # Logs
 logs/
@@ -17,3 +20,10 @@ logs/
 frontend/.vite/
 frontend/dist/
 frontend/node_modules/
+node_modules/
+
+# Local scripts
+gen_token.*
+debug_user.py
+uv.lock
+.python-version

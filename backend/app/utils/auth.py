@@ -56,7 +56,39 @@ class UserContext(BaseModel):
 # Password Hashing
 # pwd_context removed
 
-# ...
+# Password Policy Settings
+import re
+
+def validate_password_strength(password: str):
+    if len(password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 8 characters long."
+        )
+    
+    if not re.search(r"[A-Z]", password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must contain at least one uppercase letter."
+        )
+        
+    if not re.search(r"[a-z]", password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must contain at least one lowercase letter."
+        )
+        
+    if not re.search(r"[0-9]", password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must contain at least one number."
+        )
+        
+    if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must contain at least one special character."
+        )
 
 def verify_password(plain_password, hashed_password):
     return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
@@ -120,6 +152,16 @@ def get_current_user(
     # Verify profile exists in DB to prevent stale session errors
     from app.db import supabase
     try:
+        # Check token blacklist
+        blacklist_check = supabase.table("token_blacklist").select("token").eq("token", token).execute()
+        if blacklist_check.data:
+            logger.warning("Token has been revoked/logged out.")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has been revoked. Please log in again.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+            
         profile_check = supabase.table("profiles").select("id").eq("id", user_id).execute()
         if not profile_check.data:
             logger.warning(f"Authenticated user {user_id} not found in profiles table. Session stale.")
@@ -128,8 +170,10 @@ def get_current_user(
                 detail="User profile not found. Please log in again.",
                 headers={"WWW-Authenticate": "Bearer"},
             )
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error verifying profile existence: {e}")
+        logger.error(f"Error verifying profile/token existence: {e}")
         # If DB is down, we still trust the JWT for now to avoid complete outage
         pass
 

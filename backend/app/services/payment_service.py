@@ -9,6 +9,7 @@ from app.utils.hooks import trigger_hook
 from uuid import UUID
 import razorpay
 import os
+import time
 
 logger = get_logger(__name__)
 
@@ -325,6 +326,7 @@ def get_student_payment_history(student_id: str) -> Dict[str, Any]:
     Get all obligations and payments for a student with balance summary.
     """
     try:
+        start_time = time.time()
         # Fetch Obligations
         ob_res = supabase.table("rent_obligations")\
             .select("*")\
@@ -342,6 +344,13 @@ def get_student_payment_history(student_id: str) -> Dict[str, Any]:
         obligations = ob_res.data
         payments = pay_res.data
         
+        query_duration = time.time() - start_time
+        logger.info("Fetched student history", extra={
+            "metric_type": "db_query_performance", 
+            "duration": query_duration,
+            "operation": "get_student_history"
+        })
+
         total_due = sum(Decimal(str(o["amount"])) for o in obligations if o["status"] != "WAIVED")
         total_paid = sum(Decimal(str(p["amount_paid"])) for p in payments)
         
@@ -520,6 +529,12 @@ def create_razorpay_order(obligation_id: Optional[str], amount: Decimal, student
         # but here we ensure notes are strictly typed for the webhook to recover context.
         razorpay_order = razorpay_client.order.create(data=order_data)
         
+        logger.info("Razorpay order created", extra={
+            "metric_type": "razorpay_order_created",
+            "amount": float(amount),
+            "order_id": razorpay_order["id"]
+        })
+        
         # 4. Get student profile for frontend prefill
         student_res = supabase.table("students")\
             .select("*, profiles!students_profile_id_fkey(*)")\
@@ -609,6 +624,14 @@ def handle_razorpay_webhook(event: Dict[str, Any]) -> Dict[str, Any]:
 
         # Record the payment using the standard business logic
         # This will update obligation status and trigger hooks
+        
+        # Log webhook metric
+        logger.info("Processed Razorpay webhook", extra={
+            "metric_type": "razorpay_payment_processed",
+            "amount": float(amount_paid),
+            "reference": razorpay_payment_id
+        })
+        
         return record_payment(
             obligation_id=obligation_id,
             amount_paid=amount_paid,
