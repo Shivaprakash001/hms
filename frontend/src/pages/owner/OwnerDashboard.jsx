@@ -232,8 +232,8 @@ const OwnerDashboard = () => {
                             <option>Last Year</option>
                         </select>
                     </div>
-                    <div className="h-80 w-full">
-                        <ResponsiveContainer width="100%" height="100%">
+                    <div className="h-80 w-full" style={{ minHeight: '320px' }}>
+                        <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={100}>
                             <BarChart data={monthlyData} barGap={8}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                 <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12, fontWeight: 500 }} dy={10} />
