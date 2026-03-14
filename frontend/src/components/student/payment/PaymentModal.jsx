@@ -1,11 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CheckCircle, CreditCard, Smartphone, Globe, Loader2, QrCode, Copy, ShieldCheck } from 'lucide-react';
+import { X, CheckCircle, CreditCard, Smartphone, Globe, Loader2, QrCode, ShieldCheck, AlertCircle } from 'lucide-react';
+import { paymentService } from '../../../api/services';
 
-const PaymentModal = ({ isOpen, onClose, amount, onSuccess }) => {
+const loadRazorpayScript = () =>
+    new Promise((resolve) => {
+        if (window.Razorpay) {
+            resolve(true);
+            return;
+        }
+        const script = document.createElement('script');
+        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+        script.onload = () => resolve(true);
+        script.onerror = () => resolve(false);
+        document.body.appendChild(script);
+    });
+
+const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
     const [step, setStep] = useState('method'); // method, processing, success
     const [method, setMethod] = useState('upi'); // upi, card, netbanking
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
 
     // Reset state on open
     useEffect(() => {
@@ -13,27 +28,68 @@ const PaymentModal = ({ isOpen, onClose, amount, onSuccess }) => {
             setStep('method');
             setMethod('upi');
             setLoading(false);
+            setError(null);
         }
     }, [isOpen]);
 
-    const handlePayment = () => {
+    const handlePayment = async () => {
         setLoading(true);
-        // Simulate processing delay
-        setTimeout(() => {
+        setError(null);
+
+        try {
+            // 1. Load Razorpay SDK dynamically
+            const scriptLoaded = await loadRazorpayScript();
+            if (!scriptLoaded) {
+                throw new Error('Failed to load payment gateway. Please check your internet connection.');
+            }
+
+            // 2. Create Razorpay order via backend
+            const orderData = await paymentService.initiatePayment({
+                ...(obligationId ? { obligation_id: obligationId } : {}),
+                amount: amount
+            });
+
+            // 3. Configure and open Razorpay Checkout widget
+            const options = {
+                key: orderData.key_id,
+                amount: orderData.amount,
+                currency: orderData.currency,
+                name: orderData.name,
+                description: orderData.description,
+                order_id: orderData.order_id,
+                prefill: orderData.prefill || {},
+                notes: orderData.notes || {},
+                theme: { color: '#4F46E5' },
+                handler: (response) => {
+                    // Payment captured – webhook will record it in the database
+                    setLoading(false);
+                    setStep('success');
+                    setTimeout(() => {
+                        onSuccess({
+                            razorpay_payment_id: response.razorpay_payment_id,
+                            razorpay_order_id: response.razorpay_order_id,
+                            razorpay_signature: response.razorpay_signature,
+                            amount: amount
+                        });
+                    }, 1500);
+                },
+                modal: {
+                    ondismiss: () => {
+                        setLoading(false);
+                    }
+                }
+            };
+
+            const rzp = new window.Razorpay(options);
+            rzp.on('payment.failed', (response) => {
+                setError(response.error.description || 'Payment failed. Please try again.');
+                setLoading(false);
+            });
+            rzp.open();
+        } catch (err) {
+            setError(err?.response?.data?.detail || err.message || 'Failed to initiate payment.');
             setLoading(false);
-            setStep('success');
-            // Auto close after success
-            setTimeout(() => {
-                onSuccess({
-                    id: 'txn_' + Date.now(),
-                    date: new Date().toISOString().split('T')[0],
-                    amount: amount,
-                    method: method.toUpperCase(),
-                    status: 'success'
-                });
-                onClose();
-            }, 2000);
-        }, 2000);
+        }
     };
 
     if (!isOpen) return null;
@@ -47,7 +103,7 @@ const PaymentModal = ({ isOpen, onClose, amount, onSuccess }) => {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        onClick={onClose}
+                        onClick={!loading ? onClose : undefined}
                         className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50"
                     />
 
@@ -150,13 +206,21 @@ const PaymentModal = ({ isOpen, onClose, amount, onSuccess }) => {
                                             </motion.div>
                                         )}
 
+                                        {/* Error message */}
+                                        {error && (
+                                            <div className="flex items-start gap-2 p-3 bg-rose-50 border border-rose-100 rounded-xl text-sm text-rose-700">
+                                                <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                                                <span>{error}</span>
+                                            </div>
+                                        )}
+
                                         <button
                                             onClick={handlePayment}
                                             disabled={loading}
-                                            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 active:scale-95"
+                                            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
                                         >
                                             {loading ? <Loader2 className="animate-spin" /> : <ShieldCheck size={20} />}
-                                            {loading ? 'Processing...' : `Pay ₹${amount.toLocaleString()}`}
+                                            {loading ? 'Opening Payment Gateway...' : `Pay ₹${amount.toLocaleString()}`}
                                         </button>
                                     </div>
                                 )}
@@ -173,7 +237,7 @@ const PaymentModal = ({ isOpen, onClose, amount, onSuccess }) => {
                                         </motion.div>
                                         <div>
                                             <h3 className="text-xl font-black text-slate-900">Payment Successful!</h3>
-                                            <p className="text-slate-500 mt-1">Transaction ID: txn_{Date.now().toString().slice(-6)}</p>
+                                            <p className="text-slate-500 mt-1">Your payment is being processed.</p>
                                         </div>
                                         <div className="bg-slate-50 px-6 py-3 rounded-xl border border-slate-100">
                                             <p className="text-sm font-medium text-slate-500">Amount Paid</p>
