@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, status, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from app.schemas.auth_schema import LoginRequest, TokenResponse, RegisterRequest, PasswordChangeRequest
+from app.schemas.auth_schema import LoginRequest, TokenResponse, RegisterRequest, PasswordChangeRequest, GoogleLoginRequest
 from app.services import auth_service
 from app.utils.auth import get_current_user, UserContext, validate_password_strength, decode_jwt_token
 from app.utils.responses import ErrorCode
@@ -143,6 +143,21 @@ def change_password(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=result.get("error")
+        )
+        
+    return result.get("data")
+    
+@router.post("/google-callback", response_model=TokenResponse, summary="Handle Google OAuth callback")
+async def google_callback(data: GoogleLoginRequest):
+    """
+    Exchange Google OAuth code for local HMS token.
+    """
+    result = await auth_service.google_login(data.code)
+    
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=result.get("error", "Google authentication failed")
         )
         
     return result.get("data")

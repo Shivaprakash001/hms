@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
-const GoogleCallback = () => {
+export const GoogleCallback = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const code = searchParams.get('code');
@@ -45,5 +45,3 @@ const GoogleCallback = () => {
     </div>
   );
 };
-
-export default GoogleCallback;

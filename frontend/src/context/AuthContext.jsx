@@ -94,6 +94,29 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    const loginWithGoogle = async (code) => {
+        try {
+            // Using /auth/google-callback as planned
+            const response = await api.post('/auth/google-callback', { code });
+            const { access_token, role, name, user_id, student_id } = response.data;
+            const userData = { role, name, id: user_id, student_id, token: access_token };
+            setUser(userData);
+
+            if (role === 'owner' || role === 'admin') {
+                localStorage.setItem('ownerUser', JSON.stringify(userData));
+                localStorage.removeItem('studentUser');
+            } else {
+                localStorage.setItem('studentUser', JSON.stringify(userData));
+                localStorage.removeItem('ownerUser');
+            }
+
+            return userData;
+        } catch (error) {
+            console.error("Google login failed:", error);
+            throw new Error(error.response?.data?.detail || 'Google authentication failed');
+        }
+    };
+
     const logout = () => {
         setUser(null);
         localStorage.removeItem('studentUser');
@@ -101,7 +124,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, logout, loading }}>
+        <AuthContext.Provider value={{ user, login, logout, loginWithGoogle, loading }}>
             {children}
         </AuthContext.Provider>
     );

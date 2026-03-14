@@ -28,3 +28,6 @@ class RegisterRequest(BaseModel):
     phone: Optional[str] = None
     role: str = "admin"  # Public registration is only for Owners
     is_active: bool = True
+
+class GoogleLoginRequest(BaseModel):
+    code: str

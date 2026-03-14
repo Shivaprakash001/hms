@@ -9,6 +9,7 @@ logger = get_logger(__name__)
 
 
 import secrets
+import os
 from datetime import datetime, timedelta, timezone
 
 def login(email: str, password: str) -> Dict[str, Any]:
@@ -162,3 +163,104 @@ def change_password(user_id: str, current_password: str, new_password: str) -> D
     except Exception as e:
         logger.exception(f"Error changing password: {e}")
         return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Failed to change password")
+
+
+import httpx
+
+async def google_login(code: str) -> Dict[str, Any]:
+    """
+    Exchange Google OAuth code for tokens and user information.
+    """
+    try:
+        # 1. Exchange code for tokens
+        # Note: You must ensure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are in .env
+        client_id = os.getenv("GOOGLE_CLIENT_ID")
+        client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+        redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:3000/callback")
+        
+        async with httpx.AsyncClient() as client:
+            token_response = await client.post(
+                "https://oauth2.googleapis.com/token",
+                data={
+                    "code": code,
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                    "redirect_uri": redirect_uri,
+                    "grant_type": "authorization_code",
+                },
+            )
+            
+            if token_response.status_code != 200:
+                logger.error(f"Google token exchange failed: {token_response.text}")
+                return ServiceResponse.error(ErrorCode.UNAUTHORIZED, "Failed to exchange Google code")
+            
+            tokens = token_response.json()
+            access_token = tokens.get("access_token")
+            
+            # 2. Get user info
+            user_info_response = await client.get(
+                "https://www.googleapis.com/oauth2/v3/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            
+            if user_info_response.status_code != 200:
+                return ServiceResponse.error(ErrorCode.UNAUTHORIZED, "Failed to get Google user info")
+            
+            user_info = user_info_response.json()
+            email = user_info.get("email")
+            name = user_info.get("name")
+            
+            if not email:
+                return ServiceResponse.error(ErrorCode.UNAUTHORIZED, "Google account missing email")
+
+            # 3. Find or Create Profile
+            # Note: For production, you may want to restrict registration if needed.
+            result = supabase.table("profiles").select("*").eq("email", email).execute()
+            
+            if result.data:
+                profile = result.data[0]
+            else:
+                # Create new profile if it doesn't exist
+                # generate a UUID for the user
+                import uuid
+                new_user_id = str(uuid.uuid4())
+                
+                new_profile = {
+                    "id": new_user_id,
+                    "email": email,
+                    "name": name,
+                    "role": "admin", # Defaulting to admin/owner for new registrations via Google
+                    "is_active": True
+                }
+                insert_res = supabase.table("profiles").insert(new_profile).execute()
+                if not insert_res.data:
+                    return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to create Google profile")
+                profile = insert_res.data[0]
+
+            # 4. Create local JWT
+            token_data = {
+                "sub": str(profile["id"]),
+                "role": profile["role"],
+                "email": profile["email"]
+            }
+            
+            # Check if they are a student to add student_id
+            if profile["role"] == "student":
+                stu_res = supabase.table("students").select("id").eq("profile_id", profile["id"]).execute()
+                if stu_res.data:
+                    token_data["student_id"] = str(stu_res.data[0]["id"])
+            
+            token = create_access_token(token_data)
+            
+            return ServiceResponse.success({
+                "access_token": token,
+                "token_type": "bearer",
+                "role": profile["role"],
+                "name": profile["name"],
+                "user_id": str(profile["id"]),
+                "student_id": token_data.get("student_id")
+            })
+
+    except Exception as e:
+        logger.exception(f"Error during Google login: {e}")
+        return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Google login failed")

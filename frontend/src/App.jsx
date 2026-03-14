@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/auth/Login.jsx';
 import Register from './pages/auth/Register.jsx';
 import ActivateAccount from './pages/auth/ActivateAccount.jsx';
+import { GoogleCallback } from './pages/auth/GoogleCallback.jsx';
 import OwnerLayout from './layouts/OwnerLayout.jsx';
 import OwnerDashboard from './pages/owner/OwnerDashboard.jsx';
 import ManageStudents from './pages/owner/ManageStudents.jsx';
@@ -31,6 +32,7 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/activate" element={<ActivateAccount />} />
+        <Route path="/callback" element={<GoogleCallback />} />
 
         {/* Student Routes */}
 
