@@ -5,7 +5,7 @@ from uuid import UUID
 class TenantInviteRequest(BaseModel):
     full_name: str = Field(..., min_length=2)
     email: EmailStr
-    phone: str = Field(..., min_length=10, max_length=15)
+    phone: Optional[str] = Field(default="", max_length=15)
     room_id: UUID
     monthly_rent: Optional[float] = None
 

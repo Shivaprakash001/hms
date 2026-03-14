@@ -70,7 +70,16 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
             if (onInviteSuccess) onInviteSuccess(response.data);
         } catch (err) {
             const detail = err.response?.data?.detail;
-            setError(detail?.message || detail || "Failed to send invitation.");
+            let message = "Failed to send invitation.";
+            if (typeof detail === 'string') {
+                message = detail;
+            } else if (detail?.message) {
+                message = detail.message;
+            } else if (Array.isArray(detail) && detail.length > 0) {
+                // FastAPI pydantic validation returns [{loc, msg, type}, ...]
+                message = detail.map(d => d.msg || d.message || JSON.stringify(d)).join(', ');
+            }
+            setError(message);
         } finally {
             setIsSubmitting(false);
         }
