@@ -19,7 +19,7 @@ const StudentPayments = () => {
     const pollTimerRef = useRef(null);
     const pollAttemptsRef = useRef(0);
 
-    # Fetch data
+    // Fetch data
     useEffect(() => {
         if (user?.student_id) {
             loadHistory();
