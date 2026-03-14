@@ -1,6 +1,6 @@
 from app.db import supabase
 from typing import Optional, Dict, Any, List
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 import calendar
 from decimal import Decimal
 from app.utils.responses import ServiceResponse, ErrorCode
@@ -1008,3 +1008,112 @@ def reconcile_pending_payments(payment_ids: Optional[List[str]] = None) -> Dict[
     except Exception as e:
         logger.exception(f"[Reconcile] Unexpected error: {e}")
         return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Reconciliation failed", str(e))
+
+
+def get_payment_status(payment_id: str, user_id: str) -> Dict[str, Any]:
+    """
+    Get current payment status with real-time Razorpay polling.
+
+    Steps:
+    1. Get payment record from database
+    2. Verify ownership (user_id → owner_id)
+    3. If status not completed, poll Razorpay for latest
+    4. Update database with new status if changed
+    5. Calculate time elapsed
+    6. Return detailed status
+    """
+    try:
+        # 1. Get payment record
+        payment_res = supabase.table("payments")\
+            .select("*")\
+            .eq("id", payment_id)\
+            .execute()
+
+        if not payment_res.data:
+            logger.warning(f"Payment {payment_id} not found")
+            return ServiceResponse.error(ErrorCode.RESOURCE_NOT_FOUND, "Payment not found")
+
+        payment = payment_res.data[0]
+
+        # 2. Verify ownership
+        if payment["owner_id"] != user_id:
+            logger.warning(f"Unauthorized access to payment {payment_id} by user {user_id}")
+            return ServiceResponse.error(ErrorCode.FORBIDDEN, "Not authorized to view this payment")
+
+        # 3. Poll Razorpay if payment not yet completed
+        current_status = payment["status"]
+
+        if current_status != "COMPLETED" and razorpay_client:
+            try:
+                razorpay_payment_id = payment.get("razorpay_payment_id")
+                if razorpay_payment_id:
+                    razorpay_payment = razorpay_client.payment.fetch(razorpay_payment_id)
+                    razorpay_status = razorpay_payment.get("status")
+
+                    status_map = {
+                        "authorized": "COMPLETED",
+                        "captured": "COMPLETED",
+                        "failed": "FAILED",
+                        "rejected": "FAILED",
+                        "pending": "PENDING",
+                    }
+
+                    new_status = status_map.get(razorpay_status, "PENDING")
+
+                    if new_status != current_status:
+                        logger.info(f"Payment {payment_id} status updated: {current_status} → {new_status}")
+
+                        supabase.table("payments")\
+                            .update({
+                                "status": new_status,
+                                "updated_at": datetime.now(timezone.utc).isoformat()
+                            })\
+                            .eq("id", payment_id)\
+                            .execute()
+
+                        current_status = new_status
+
+                        if new_status == "COMPLETED":
+                            obligation_id = payment.get("obligation_id")
+                            supabase.table("rent_obligations")\
+                                .update({
+                                    "status": "PAID",
+                                    "updated_at": datetime.now(timezone.utc).isoformat()
+                                })\
+                                .eq("id", obligation_id)\
+                                .execute()
+
+                            logger.info(f"Obligation {obligation_id} marked as PAID")
+
+            except Exception as e:
+                logger.warning(f"Failed to poll Razorpay for payment {payment_id}: {e}")
+
+        # 4. Calculate time elapsed
+        created_at_str = payment.get("created_at")
+        time_elapsed_seconds = 0
+
+        if created_at_str:
+            try:
+                created_at = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
+                time_elapsed_seconds = int((datetime.now(timezone.utc) - created_at).total_seconds())
+            except Exception:
+                pass
+
+        # 5. Return detailed response
+        return ServiceResponse.success({
+            "id": payment_id,
+            "status": current_status,
+            "amount": payment.get("amount"),
+            "reference_number": payment.get("reference_number"),
+            "razorpay_payment_id": payment.get("razorpay_payment_id"),
+            "method": payment.get("method"),
+            "created_at": payment.get("created_at"),
+            "updated_at": payment.get("updated_at"),
+            "time_elapsed_seconds": time_elapsed_seconds,
+            "student_id": payment.get("student_id"),
+            "obligation_id": payment.get("obligation_id")
+        }, f"Payment status: {current_status}")
+
+    except Exception as e:
+        logger.exception(f"Error getting payment status: {e}")
+        return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, str(e))
