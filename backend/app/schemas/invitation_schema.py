@@ -9,6 +9,14 @@ class TenantInviteRequest(BaseModel):
     room_id: UUID
     monthly_rent: Optional[float] = None
 
+class TenantInviteResponse(BaseModel):
+    success: bool
+    invitation_id: str
+    email: str
+    student_id: str
+    activation_link: str
+    expires_in_hours: int
+
 class TenantActivateRequest(BaseModel):
     token: str
     password: str = Field(..., min_length=8)

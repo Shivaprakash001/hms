@@ -5,7 +5,7 @@ from app.schemas.student_schema import (
     StudentCreate, StudentUpdate, StudentResponse,
     StudentListResponse, StudentStatus, StudentReactivate
 )
-from app.schemas.invitation_schema import TenantInviteRequest, TenantActivateRequest, TenantResendRequest
+from app.schemas.invitation_schema import TenantInviteRequest, TenantActivateRequest, TenantResendRequest, TenantInviteResponse
 from app.services import student_service, auth_service
 from app.services.invitation_service import InvitationService
 from app.utils.auth import get_current_user, UserContext, require_admin, require_admin_or_owner
@@ -157,7 +157,7 @@ def read_student_by_profile(
 
 @router.post(
     "/invite",
-    response_model=dict,
+    response_model=TenantInviteResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Invite a tenant",
     description="Owner invites a new tenant by email",

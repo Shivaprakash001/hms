@@ -93,7 +93,8 @@ class InvitationService:
                 "student_id": student_id,
                 "room_id": room_id,
                 "start_date": datetime.now().date().isoformat(),
-                "owner_id": owner_id
+                "owner_id": owner_id,
+                "status": "ACTIVE"
             }
             supabase.table("room_allocations").insert(allocation_data).execute()
 
@@ -129,6 +130,7 @@ class InvitationService:
                 "invitation_id": invitation_id,
                 "email": email,
                 "student_id": student_id,
+                "activation_link": activation_link,
                 "expires_in_hours": 24
             }, "Invitation sent successfully")
 
