@@ -115,6 +115,58 @@ class TestWebhookSignatureValidation:
 
 
 # ---------------------------------------------------------------------------
+# verify_razorpay_signature (pure HMAC) tests
+# ---------------------------------------------------------------------------
+
+class TestVerifyRazorpaySignature:
+    """
+    Tests for verify_razorpay_signature() – pure HMAC-SHA256, no Razorpay client dependency.
+    """
+
+    def test_valid_signature_returns_true(self):
+        from backend.app.services import payment_service as ps
+
+        secret = "webhook_secret_abc"
+        payload_str = '{"event":"payment.captured"}'
+        sig = _make_razorpay_signature(payload_str, secret)
+
+        with patch.object(ps, "RAZORPAY_WEBHOOK_SECRET", secret):
+            result = ps.verify_razorpay_signature(payload_str, sig)
+
+        assert result is True
+
+    def test_invalid_signature_returns_false(self):
+        from backend.app.services import payment_service as ps
+
+        with patch.object(ps, "RAZORPAY_WEBHOOK_SECRET", "correct_secret"):
+            result = ps.verify_razorpay_signature('{"event":"payment.captured"}', "wrong_sig")
+
+        assert result is False
+
+    def test_missing_secret_returns_false(self):
+        from backend.app.services import payment_service as ps
+
+        with patch.object(ps, "RAZORPAY_WEBHOOK_SECRET", None):
+            result = ps.verify_razorpay_signature('{"event":"payment.captured"}', "any_sig")
+
+        assert result is False
+
+    def test_works_without_razorpay_client(self):
+        """verify_razorpay_signature must succeed even when razorpay_client is None."""
+        from backend.app.services import payment_service as ps
+
+        secret = "standalone_secret"
+        payload_str = '{"event":"order.paid"}'
+        sig = _make_razorpay_signature(payload_str, secret)
+
+        with patch.object(ps, "razorpay_client", None), \
+             patch.object(ps, "RAZORPAY_WEBHOOK_SECRET", secret):
+            result = ps.verify_razorpay_signature(payload_str, sig)
+
+        assert result is True
+
+
+# ---------------------------------------------------------------------------
 # Webhook idempotency tests
 # ---------------------------------------------------------------------------
 
