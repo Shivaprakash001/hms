@@ -103,6 +103,17 @@ export default function ManageStudents() {
         }
     };
 
+    const handleResendInvitation = async (student, e) => {
+        e.stopPropagation();
+        if (!window.confirm(`Resend invitation to ${student.email}?`)) return;
+        try {
+            await studentService.resendInvitation(student.email);
+            alert("Invitation resent successfully");
+        } catch (err) {
+            alert("Error resending invitation: " + (err.response?.data?.detail?.message || err.message));
+        }
+    };
+
     // Filter Logic
     const filteredStudents = students.filter(student => {
         const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -289,6 +300,15 @@ export default function ManageStudents() {
                                             </td>
                                             <td className="px-8 py-5 text-right">
                                                 <div className="flex items-center justify-end gap-1">
+                                                    {student.status === 'INVITED' && (
+                                                        <button
+                                                            onClick={(e) => handleResendInvitation(student, e)}
+                                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-indigo-600 hover:bg-indigo-50 border border-indigo-200 bg-indigo-50/50"
+                                                            title="Resend Invitation"
+                                                        >
+                                                            <RefreshCw size={14} className="animate-spin-hover" /> Resend
+                                                        </button>
+                                                    )}
                                                     {(student.status === 'ACTIVE' || student.status === 'LEFT') && (
                                                         <button
                                                             onClick={(e) => handleToggleStatus(student, e)}

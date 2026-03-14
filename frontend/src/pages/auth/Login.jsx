@@ -49,6 +49,8 @@ const Login = () => {
             console.log('Login Failed');
             alert("Login Failed. Please check console.");
         },
+        flow: 'auth-code',
+        redirect_uri: import.meta.env.VITE_GOOGLE_REDIRECT_URI || `${window.location.origin}/callback`
     });
 
     const handleLogin = async (e) => {

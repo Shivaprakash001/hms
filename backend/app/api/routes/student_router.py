@@ -5,8 +5,9 @@ from app.schemas.student_schema import (
     StudentCreate, StudentUpdate, StudentResponse,
     StudentListResponse, StudentStatus, StudentReactivate
 )
-from app.schemas.invitation_schema import TenantInviteRequest, TenantActivateRequest
+from app.schemas.invitation_schema import TenantInviteRequest, TenantActivateRequest, TenantResendRequest
 from app.services import student_service, auth_service
+from app.services.invitation_service import InvitationService
 from app.utils.auth import get_current_user, UserContext, require_admin, require_admin_or_owner
 from app.utils.responses import ErrorCode
 from app.utils.logger import get_logger
@@ -311,7 +312,7 @@ def invite_tenant(
     """
     Invite a new tenant. Creates a profile and enrollment with INVITED status.
     """
-    result = auth_service.invite_tenant(
+    result = InvitationService.invite_tenant(
         data.model_dump(mode='json'), 
         str(user.user_id),
         background_tasks
@@ -324,5 +325,24 @@ def activate_tenant(data: TenantActivateRequest):
     """
     Activate an invited tenant account using the secure token and setting a password.
     """
-    result = auth_service.activate_tenant(data.token, data.password)
+    if data.password != data.confirm_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": ErrorCode.VALIDATION_ERROR.value, "message": "Passwords do not match"}
+        )
+        
+    result = InvitationService.activate_tenant(data.token, data.password)
+    return _handle_service_response(result)
+
+
+@router.post("/resend-invitation", summary="Resend tenant invitation", description="Resend a pending invitation with a new token")
+def resend_invitation(
+    data: TenantResendRequest,
+    background_tasks: BackgroundTasks,
+    user: UserContext = Depends(require_admin_or_owner)
+):
+    """
+    Resend a pending invitation to a tenant.
+    """
+    result = InvitationService.resend_invitation(data.email, background_tasks)
     return _handle_service_response(result)

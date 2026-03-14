@@ -8,24 +8,31 @@ logger = get_logger(__name__)
 
 class EmailService:
     @staticmethod
-    def send_invitation_email(to_email: str, name: str, activation_link: str):
+    def send_invitation_email(to_email: str, name: str, activation_link: str, room_no: str = "N/A", rent: float = 0.0):
         """
         Sends an invitation email to a new tenant.
         Falls back to logging if SMTP is not configured.
         """
         subject = "Welcome to HMS - Activate Your Account"
-        body = f"""
-        Hi {name},
-
-        You have been invited to join the Hostel Management System (HMS).
-        Please click the link below to set your password and activate your account:
-
-        {activation_link}
-
-        This link will expire in 24 hours.
-
-        Regards,
-        HMS Team
+        
+        body_text = f"Hi {name},\n\nYou have been invited to join HMS.\nRoom: {room_no}\nMonthly Rent: ₹{rent}\n\nActivate here: {activation_link}\n\nValid for 24 hours."
+        
+        body_html = f"""
+        <html>
+            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+                <h2>Welcome to HMS!</h2>
+                <p>Hi <strong>{name}</strong>,</p>
+                <p>You have been invited to join the Hostel Management System.</p>
+                <div style="background-color: #f4f4f4; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                    <p style="margin: 5px 0;"><strong>Room:</strong> {room_no}</p>
+                    <p style="margin: 5px 0;"><strong>Monthly Rent:</strong> ₹{rent}</p>
+                </div>
+                <p>Please click the button below to set your password and activate your account:</p>
+                <a href="{activation_link}" style="display: inline-block; background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; margin: 10px 0;">ACTIVATE ACCOUNT</a>
+                <p style="font-size: 0.8em; color: #666;">This link will expire in 24 hours.</p>
+                <p>Regards,<br>HMS Team</p>
+            </body>
+        </html>
         """
 
         smtp_host = os.getenv("SMTP_HOST")
@@ -38,7 +45,7 @@ class EmailService:
             logger.info(f"--- INVITATION EMAIL SIMULATION ---")
             logger.info(f"To: {to_email}")
             logger.info(f"Subject: {subject}")
-            logger.info(f"Body: {body}")
+            logger.info(f"Body: {body_text}")
             logger.info(f"------------------------------------")
             return
 
@@ -47,7 +54,8 @@ class EmailService:
             msg['From'] = smtp_user
             msg['To'] = to_email
             msg['Subject'] = subject
-            msg.attach(MIMEText(body, 'plain'))
+            msg.attach(MIMEText(body_text, 'plain'))
+            msg.attach(MIMEText(body_html, 'html'))
 
             server = smtplib.SMTP(smtp_host, int(smtp_port))
             server.starttls()

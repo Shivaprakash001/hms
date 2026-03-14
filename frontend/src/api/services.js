@@ -68,6 +68,14 @@ export const studentService = {
     reactivate: async (id, data) => {
         const response = await api.post(`/students/${id}/reactivate`, data);
         return response.data;
+    },
+    invite: async (data) => {
+        const response = await api.post('/students/invite', data);
+        return response.data;
+    },
+    resendInvitation: async (email) => {
+        const response = await api.post('/students/resend-invitation', { email });
+        return response.data;
     }
 };
 

@@ -44,6 +44,15 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
         }
     };
 
+    const handleRoomChange = (e) => {
+        const selectedId = e.target.value;
+        setRoomId(selectedId);
+        const selectedRoom = rooms.find(r => r.id === selectedId);
+        if (selectedRoom && selectedRoom.monthly_rent) {
+            setMonthlyRent(selectedRoom.monthly_rent);
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setIsSubmitting(true);
@@ -51,9 +60,9 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
 
         try {
             const response = await api.post('/students/invite', {
-                name,
+                full_name: name,
                 email,
-                phone: phone || null,
+                phone: phone || "",
                 monthly_rent: parseFloat(monthlyRent) || 0,
                 room_id: roomId
             });
@@ -196,6 +205,7 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                                 className="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-medium"
                                                 placeholder="8000"
                                                 required
+                                                disabled
                                             />
                                         </div>
                                     </div>
@@ -208,7 +218,7 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                             </div>
                                             <select
                                                 value={roomId}
-                                                onChange={(e) => setRoomId(e.target.value)}
+                                                onChange={handleRoomChange}
                                                 className="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-medium appearance-none"
                                                 required
                                             >
