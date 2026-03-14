@@ -155,6 +155,69 @@ def read_student_by_profile(
     return _handle_service_response(result)
 
 
+@router.post(
+    "/invite",
+    response_model=dict,
+    status_code=status.HTTP_201_CREATED,
+    summary="Invite a tenant",
+    description="Owner invites a new tenant by email",
+    dependencies=[Depends(require_admin_or_owner)]
+)
+def invite_tenant(
+    data: TenantInviteRequest,
+    background_tasks: BackgroundTasks,
+    user: UserContext = Depends(get_current_user)
+):
+    """
+    Invite a new tenant. Creates a profile and enrollment with INVITED status.
+    """
+    result = InvitationService.invite_tenant(
+        data.model_dump(mode='json'),
+        str(user.user_id),
+        background_tasks
+    )
+    return _handle_service_response(result, status.HTTP_201_CREATED)
+
+
+@router.post(
+    "/activate",
+    status_code=status.HTTP_200_OK,
+    summary="Activate tenant account",
+    description="Public endpoint for invited tenants to set password"
+)
+def activate_tenant(data: TenantActivateRequest):
+    """
+    Activate an invited tenant account using the secure token and setting a password.
+    """
+    if data.password != data.confirm_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": ErrorCode.VALIDATION_ERROR.value, "message": "Passwords do not match"}
+        )
+
+    result = InvitationService.activate_tenant(data.token, data.password)
+    return _handle_service_response(result)
+
+
+@router.post(
+    "/resend-invitation",
+    status_code=status.HTTP_200_OK,
+    summary="Resend tenant invitation",
+    description="Resend a pending invitation with a new token",
+    dependencies=[Depends(require_admin_or_owner)]
+)
+def resend_invitation(
+    data: TenantResendRequest,
+    background_tasks: BackgroundTasks,
+    user: UserContext = Depends(get_current_user)
+):
+    """
+    Resend a pending invitation to a tenant.
+    """
+    result = InvitationService.resend_invitation(data.email, background_tasks)
+    return _handle_service_response(result)
+
+
 @router.get(
     "/{student_id}",
     response_model=StudentResponse,
@@ -300,49 +363,4 @@ def reactivate_student_endpoint(
         reactivated_by=user.user_id,
         requesting_user_role=user.role
     )
-    return _handle_service_response(result)
-
-
-@router.post("/invite", summary="Invite a tenant", description="Owner invites a new tenant by email", response_model=dict)
-def invite_tenant(
-    data: TenantInviteRequest,
-    background_tasks: BackgroundTasks,
-    user: UserContext = Depends(require_admin_or_owner)
-):
-    """
-    Invite a new tenant. Creates a profile and enrollment with INVITED status.
-    """
-    result = InvitationService.invite_tenant(
-        data.model_dump(mode='json'), 
-        str(user.user_id),
-        background_tasks
-    )
-    return _handle_service_response(result)
-
-
-@router.post("/activate", summary="Activate tenant account", description="Public endpoint for invited tenants to set password")
-def activate_tenant(data: TenantActivateRequest):
-    """
-    Activate an invited tenant account using the secure token and setting a password.
-    """
-    if data.password != data.confirm_password:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"code": ErrorCode.VALIDATION_ERROR.value, "message": "Passwords do not match"}
-        )
-        
-    result = InvitationService.activate_tenant(data.token, data.password)
-    return _handle_service_response(result)
-
-
-@router.post("/resend-invitation", summary="Resend tenant invitation", description="Resend a pending invitation with a new token")
-def resend_invitation(
-    data: TenantResendRequest,
-    background_tasks: BackgroundTasks,
-    user: UserContext = Depends(require_admin_or_owner)
-):
-    """
-    Resend a pending invitation to a tenant.
-    """
-    result = InvitationService.resend_invitation(data.email, background_tasks)
     return _handle_service_response(result)
