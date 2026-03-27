@@ -29,12 +29,8 @@ app.add_middleware(LoggingMiddleware)
 # Explicitly allowed origins for CORS
 origins = [
     "https://trishul-hms.vercel.app",
-    "https://hms-sand-five.vercel.app",
-    "https://hms-4t6pktel6-shivaprakash001s-projects.vercel.app",
-    "https://hms-2jrv0duc-shivaprakash001s-projects.vercel.app",
-    "https://hms-jpbqhgk25-shivaprakash001s-projects.vercel.app",
-    "https://hms-gkwzs1tur-shivaprakash001s-projects.vercel.app",
-    "https://hms-3apamhgdb-shivaprakash001s-projects.vercel.app",
+    "http://localhost:5173",
+    "http://localhost:3000",
 ]
 
 from app.utils.middleware import QueryMonitorMiddleware
