@@ -3,8 +3,14 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Calendar, DollarSign, CreditCard, User, Home, Download, CheckCircle } from 'lucide-react';
 
-const PaymentDetailsDrawer = ({ isOpen, onClose, payment, onMarkPaid }) => {
+const PaymentDetailsDrawer = ({ isOpen, onClose, payment, onMarkPaid, onDownloadReceipt }) => {
     if (!payment) return null;
+
+    const handleDownload = () => {
+        if (onDownloadReceipt) {
+            onDownloadReceipt(payment.id);
+        }
+    };
 
     return (
         <AnimatePresence>
@@ -113,7 +119,10 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, onMarkPaid }) => {
                                             </div>
                                         </div>
 
-                                        <button className="flex items-center justify-center gap-2 w-full mt-4 py-2.5 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors font-medium text-sm">
+                                        <button 
+                                            onClick={handleDownload}
+                                            className="flex items-center justify-center gap-2 w-full mt-4 py-2.5 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors font-medium text-sm"
+                                        >
                                             <Download size={16} /> Download Receipt
                                         </button>
                                     </div>

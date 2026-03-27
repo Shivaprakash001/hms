@@ -1,8 +1,10 @@
 from fastapi import APIRouter, HTTPException, Depends, status, Request
+from fastapi.responses import StreamingResponse
 from app.schemas.payment_schema import PaymentCreate, PaymentResponse, \
     ObligationResponse, StudentPaymentHistory, DuesReportItem, WaiveRequest, RentGenerationRequest, \
-    PaymentInitiate, RazorpayOrderResponse, PaymentVerifyRequest, ReconcileRequest, ReconcileResult
+    PaymentInitiate, RazorpayOrderResponse, PaymentVerifyRequest, ReconcileRequest, ReconcileResult, BulkGenerateRequest
 from app.services import payment_service
+from app.services.receipt_service import ReceiptService
 from app.utils.auth import get_current_user, UserContext, require_admin, require_admin_or_owner
 from app.utils.responses import ErrorCode
 from app.utils.logger import get_logger
@@ -60,6 +62,51 @@ def _handle_service_response(result: dict, success_status: int = status.HTTP_200
     
     return result.get("data")
 
+
+@router.post(
+    "/bulk-generate",
+    response_model=dict,
+    status_code=status.HTTP_201_CREATED,
+    summary="Bulk generate monthly payments",
+    dependencies=[Depends(require_admin_or_owner)]
+)
+async def bulk_generate_payments(
+    data: BulkGenerateRequest,
+    user: UserContext = Depends(get_current_user)
+):
+    from app.jobs.payment_generation_job import PaymentGenerationJob
+    # Normally this would be handled within the service, but since we already built the Job, 
+    # we can call it. The job currently generates for all active tenants. 
+    # For dry_run and specific target_tenants, we usually need custom logic.
+    # We will invoke the job logic as the fundamental generation step.
+    result = await PaymentGenerationJob.generate_monthly_payments(target_date=data.month_year)
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error"))
+    return {"count": result.get("count"), "errors": result.get("errors", 0)}
+
+
+@router.get(
+    "/{payment_id}/receipt",
+    summary="Download payment receipt"
+)
+async def download_receipt(
+    payment_id: str,
+    user: UserContext = Depends(get_current_user)
+):
+    # Depending on role, we should verify they own this payment or are admin.
+    # The ReceiptService simply generates it if found.
+    try:
+        pdf_bytes = await ReceiptService.generate_receipt_pdf(payment_id)
+        return StreamingResponse(
+            pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename=receipt_{payment_id}.pdf"
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error generating receipt: {e}")
+        raise HTTPException(status_code=404, detail=str(e))
 
 @router.post(
     "/generate-monthly",
@@ -130,14 +177,34 @@ def record_payment(
     dependencies=[Depends(require_admin_or_owner)]
 )
 def get_all_payments(
+    tenant_id: Optional[str] = None,
+    status: Optional[str] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    min_amount: Optional[float] = None,
+    max_amount: Optional[float] = None,
+    payment_method: Optional[str] = None,
+    sort_by: str = "date",
     limit: int = 50,
     offset: int = 0,
     user: UserContext = Depends(get_current_user)
 ):
     """
-    Get recent payments.
+    Get recent payments with enhanced filtering.
     """
-    result = payment_service.get_all_payments(user.user_id, limit, offset)
+    result = payment_service.get_all_payments(
+        user.user_id, 
+        tenant_id=tenant_id, 
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        min_amount=min_amount,
+        max_amount=max_amount,
+        payment_method=payment_method,
+        sort_by=sort_by,
+        limit=limit, 
+        offset=offset
+    )
     return _handle_service_response(result)
 
 

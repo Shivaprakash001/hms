@@ -466,31 +466,79 @@ def get_dues_report(user_id: str, rent_month: Optional[date] = None, status: Opt
     except Exception as e:
         logger.exception(f"Error fetching dues report: {e}")
         return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to fetch dues report")
-def get_all_payments(user_id: str, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
+def get_all_payments(
+    user_id: str, 
+    tenant_id: Optional[str] = None,
+    status: Optional[str] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    min_amount: Optional[float] = None,
+    max_amount: Optional[float] = None,
+    payment_method: Optional[str] = None,
+    sort_by: str = "date",
+    limit: int = 50, 
+    offset: int = 0
+) -> Dict[str, Any]:
     """
-    Get all payments with student details.
+    Get all payments with student details and enhanced filtering.
     """
     try:
-        # Join with student names for UI
+        # Join with student names and rent_obligations status
         query = supabase.table("payments")\
-            .select("*, students(profiles!students_profile_id_fkey(name)), rent_obligations(rent_month)", count="exact")\
-            .eq("owner_id", user_id)\
-            .order("payment_date", desc=True)\
-            .limit(limit)\
-            .offset(offset)
+            .select("*, students(profiles!students_profile_id_fkey(name)), rent_obligations(rent_month, status)", count="exact")\
+            .eq("owner_id", user_id)
+
+        if tenant_id:
+            query = query.eq("student_id", tenant_id)
+        if date_from:
+            query = query.gte("payment_date", date_from.isoformat())
+        if date_to:
+            query = query.lte("payment_date", date_to.isoformat())
+        if min_amount is not None:
+            query = query.gte("amount_paid", min_amount)
+        if max_amount is not None:
+            query = query.lte("amount_paid", max_amount)
+        if payment_method:
+            query = query.eq("payment_method", payment_method)
+            
+        # Due to join limitations in basic supabase-py, filtering on joined table (rent_obligations.status)
+        # may require filtering in python or advanced syntax if supported. We'll filter in python if status is provided.
+            
+        if sort_by == "amount":
+            query = query.order("amount_paid", desc=True)
+        else:
+            query = query.order("payment_date", desc=True)
+            
+        # For python-side status filtering, we might need to fetch more records initially.
+        if status:
+            query = query.limit(1000) # Fetch more to filter in python
+        else:
+            query = query.limit(limit).offset(offset)
             
         result = query.execute()
         
         payments = []
         for p in result.data:
+            ob_status = p.get("rent_obligations", {}).get("status")
+            if status and ob_status != status:
+                continue
+                
             # Flatten structure slightly for easier frontend consumption
             p["student_name"] = p.get("students", {}).get("profiles", {}).get("name", "Unknown")
             p["rent_month"] = p.get("rent_obligations", {}).get("rent_month")
+            p["status"] = ob_status
             payments.append(p)
+            
+        # Apply pagination after in-memory filter if status was used
+        if status:
+            total = len(payments)
+            payments = payments[offset:offset+limit]
+        else:
+            total = result.count if hasattr(result, 'count') else len(payments)
             
         return ServiceResponse.success({
             "payments": payments,
-            "total": result.count if hasattr(result, 'count') else len(payments)
+            "total": total
         })
     except Exception as e:
         logger.exception(f"Error fetching payments: {e}")

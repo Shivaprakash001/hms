@@ -1,9 +1,9 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { MoreVertical, CheckCircle, Clock, AlertCircle, Eye, History } from 'lucide-react';
+import { MoreVertical, CheckCircle, Clock, AlertCircle, Eye, History, Download, FileText } from 'lucide-react';
 
-const PaymentTable = ({ payments, onSelectPayment, onViewHistory }) => {
+const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadReceipt }) => {
     return (
         <div className="overflow-x-auto">
             {/* Desktop Table View */}
@@ -60,6 +60,18 @@ const PaymentTable = ({ payments, onSelectPayment, onViewHistory }) => {
                                     <StatusBadge status={payment.status} />
                                 </td>
                                 <td className="py-4 px-6 text-right flex items-center justify-end gap-2">
+                                    {onDownloadReceipt && (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onDownloadReceipt(payment.id);
+                                            }}
+                                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                            title="Download Receipt"
+                                        >
+                                            <Download size={18} />
+                                        </button>
+                                    )}
                                     <button
                                         onClick={(e) => {
                                             e.stopPropagation();

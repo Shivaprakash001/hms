@@ -93,7 +93,7 @@ class InvitationService:
                 "student_id": student_id,
                 "room_id": room_id,
                 "start_date": datetime.now().date().isoformat(),
-                "owner_id": owner_id
+                "owner_id": owner_id,
             }
             supabase.table("room_allocations").insert(allocation_data).execute()
 

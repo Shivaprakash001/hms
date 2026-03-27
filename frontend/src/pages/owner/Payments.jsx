@@ -28,10 +28,17 @@ const Payments = () => {
     const [genLoading, setGenLoading] = useState(false);
     const [genResult, setGenResult] = useState(null); // { success, count, skipped }
 
+    const [activeTab, setActiveTab] = useState('dues'); // 'dues' or 'transactions'
+    const [transactions, setTransactions] = useState([]);
+    
     // Initial Data Load
     useEffect(() => {
-        loadPayments();
-    }, []);
+        if (activeTab === 'dues') {
+            loadPayments();
+        } else {
+            loadTransactions();
+        }
+    }, [activeTab]);
 
     const loadPayments = async () => {
         setIsLoading(true);
@@ -45,7 +52,7 @@ const Payments = () => {
                 amount: Number(item.amount),
                 status: item.status.toLowerCase(),
                 date: item.rent_month,
-                method: 'Online'
+                method: '---'
             }));
             setPayments(formatted);
         } catch (error) {
@@ -55,16 +62,40 @@ const Payments = () => {
         }
     };
 
-    // Filtered payments
-    const filteredPayments = useMemo(() => {
-        return payments.filter(payment => {
-            const matchesSearch = payment.tenantName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                payment.room?.toString().includes(searchTerm);
-            const matchesStatus = statusFilter === 'all' || payment.status === statusFilter;
-            const matchesMonth = monthFilter === 'all' || payment.date?.includes(monthFilter);
+    const loadTransactions = async () => {
+        setIsLoading(true);
+        try {
+            const result = await paymentService.getAll({ limit: 100 });
+            const data = result.payments || [];
+            const formatted = data.map(item => ({
+                id: item.id,
+                tenantName: item.student_name,
+                room: 'N/A', // We might need to fetch room from student profile join if needed
+                type: 'Payment',
+                amount: Number(item.amount_paid),
+                status: 'paid',
+                date: item.payment_date,
+                method: item.payment_method
+            }));
+            setTransactions(formatted);
+        } catch (error) {
+            console.error("Failed to load transactions:", error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // Filtered data depending on active tab
+    const filteredData = useMemo(() => {
+        const sourceData = activeTab === 'dues' ? payments : transactions;
+        return sourceData.filter(item => {
+            const matchesSearch = item.tenantName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                item.room?.toString().includes(searchTerm);
+            const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
+            const matchesMonth = monthFilter === 'all' || item.date?.includes(monthFilter);
             return matchesSearch && matchesStatus && matchesMonth;
         });
-    }, [payments, searchTerm, statusFilter, monthFilter]);
+    }, [payments, transactions, activeTab, searchTerm, statusFilter, monthFilter]);
 
     // Stats
     const stats = useMemo(() => {
@@ -95,12 +126,27 @@ const Payments = () => {
         }
     };
 
+    const handleDownloadReceipt = async (paymentId) => {
+        try {
+            const blob = await paymentService.downloadReceipt(paymentId);
+            const url = window.URL.createObjectURL(new Blob([blob]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `receipt_${paymentId}.pdf`);
+            document.body.appendChild(link);
+            link.click();
+            link.parentNode.removeChild(link);
+        } catch (error) {
+            console.error("Failed to download receipt:", error);
+        }
+    };
+
     // Generate monthly rent
     const handleGenerateRent = async () => {
         setGenLoading(true);
         setGenResult(null);
         try {
-            const data = await paymentService.generateRent(genMonth);
+            const data = await paymentService.bulkGenerate({ month_year: genMonth, dry_run: false });
             setGenResult({ success: true, data });
             loadPayments(); // refresh list
         } catch (error) {
@@ -115,11 +161,12 @@ const Payments = () => {
         }
     };
 
-    // Unique months from existing payments for month filter
+    // Unique months from existing payments/transactions for month filter
     const availableMonths = useMemo(() => {
-        const months = new Set(payments.map(p => p.date?.slice(0, 7)).filter(Boolean));
+        const source = activeTab === 'dues' ? payments : transactions;
+        const months = new Set(source.map(p => p.date?.slice(0, 7)).filter(Boolean));
         return [...months].sort().reverse();
-    }, [payments]);
+    }, [payments, transactions, activeTab]);
 
     return (
         <div className="space-y-8 animate-fade-in-up">
@@ -169,13 +216,30 @@ const Payments = () => {
 
             {/* Main Content Area */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                
+                {/* Tabs */}
+                <div className="p-4 border-b border-slate-100 flex gap-4">
+                    <button 
+                        onClick={() => setActiveTab('dues')}
+                        className={`pb-2 px-2 text-sm font-bold transition-all border-b-2 ${activeTab === 'dues' ? 'text-indigo-600 border-indigo-600' : 'text-slate-400 border-transparent hover:text-slate-600'}`}
+                    >
+                        Rent Dues
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('transactions')}
+                        className={`pb-2 px-2 text-sm font-bold transition-all border-b-2 ${activeTab === 'transactions' ? 'text-indigo-600 border-indigo-600' : 'text-slate-400 border-transparent hover:text-slate-600'}`}
+                    >
+                        Recent Transactions
+                    </button>
+                </div>
+
                 {/* Filters Bar */}
                 <div className="p-4 border-b border-slate-100 bg-white flex flex-col sm:flex-row gap-4 justify-between items-center sticky top-0 z-10">
                     <div className="relative w-full sm:w-72 group">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
                         <input
                             type="text"
-                            placeholder="Search tenant or room..."
+                            placeholder="Search tenant..."
                             className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all placeholder:text-slate-400"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
@@ -183,16 +247,18 @@ const Payments = () => {
                     </div>
 
                     <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
-                        <select
-                            className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100 hover:border-slate-300 transition-all cursor-pointer"
-                            value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value)}
-                        >
-                            <option value="all">All Status</option>
-                            <option value="paid">Paid</option>
-                            <option value="pending">Pending</option>
-                            <option value="overdue">Overdue</option>
-                        </select>
+                        {activeTab === 'dues' && (
+                            <select
+                                className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100 hover:border-slate-300 transition-all cursor-pointer"
+                                value={statusFilter}
+                                onChange={(e) => setStatusFilter(e.target.value)}
+                            >
+                                <option value="all">All Status</option>
+                                <option value="paid">Paid</option>
+                                <option value="pending">Pending</option>
+                                <option value="overdue">Overdue</option>
+                            </select>
+                        )}
 
                         <select
                             className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100 hover:border-slate-300 transition-all cursor-pointer"
@@ -211,14 +277,15 @@ const Payments = () => {
 
                 {/* Table */}
                 <PaymentTable
-                    payments={filteredPayments}
+                    payments={filteredData}
                     onSelectPayment={setSelectedPayment}
                     onViewHistory={setHistoryTenant}
+                    onDownloadReceipt={activeTab === 'transactions' ? handleDownloadReceipt : null}
                 />
 
                 {/* Pagination */}
                 <div className="p-4 border-t border-slate-100 flex items-center justify-between text-sm text-slate-500">
-                    <span>Showing {filteredPayments.length} results</span>
+                    <span>Showing {filteredData.length} results</span>
                     <div className="flex gap-2">
                         <button className="px-3 py-1 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50" disabled>Previous</button>
                         <button className="px-3 py-1 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50" disabled>Next</button>
@@ -350,6 +417,7 @@ const Payments = () => {
                 onClose={() => setSelectedPayment(null)}
                 payment={selectedPayment}
                 onMarkPaid={handleMarkAsPaid}
+                onDownloadReceipt={handleDownloadReceipt}
             />
 
             {/* Tenant History Modal */}

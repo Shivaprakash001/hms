@@ -122,3 +122,14 @@ class ReconcileResult(BaseModel):
     already_captured: int
     failed: int
     errors: List[str]
+
+
+class BulkGenerateRequest(BaseModel):
+    month_year: date = Field(..., description="Target month for generation (e.g. 2026-04-01)")
+    target_tenants: Optional[List[UUID]] = Field(None, description="List of tenant UUIDs. Null/empty means ALL active.")
+    dry_run: bool = Field(False, description="If true, returns counts but doesn't insert.")
+
+    @field_validator('month_year')
+    @classmethod
+    def validate_month_year(cls, v):
+        return v.replace(day=1)

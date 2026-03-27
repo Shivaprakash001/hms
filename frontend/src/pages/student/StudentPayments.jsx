@@ -134,6 +134,22 @@ const StudentPayments = () => {
         startPolling(razorpayResponse?.razorpay_payment_id, pendingAmount);
     };
 
+    const handleDownloadReceipt = async (paymentId) => {
+        try {
+            const blob = await paymentService.downloadReceipt(paymentId);
+            const url = window.URL.createObjectURL(new Blob([blob]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `receipt_${paymentId}.pdf`);
+            document.body.appendChild(link);
+            link.click();
+            link.parentNode.removeChild(link);
+        } catch (error) {
+            console.error("Failed to download receipt:", error);
+            // Optionally add a toast notification here
+        }
+    };
+
     return (
         <div className="space-y-8 animate-fade-in-up">
             <div className="flex justify-between items-center">
@@ -293,7 +309,9 @@ const StudentPayments = () => {
                                         </td>
                                         <td className="px-6 py-4">
                                             {(txn.status === 'paid' || txn.status === 'success') && (
-                                                <button className="text-slate-400 hover:text-indigo-600 transition-colors p-2 hover:bg-indigo-50 rounded-lg">
+                                                <button 
+                                                    onClick={() => handleDownloadReceipt(txn.id)}
+                                                    className="text-slate-400 hover:text-indigo-600 transition-colors p-2 hover:bg-indigo-50 rounded-lg">
                                                     <Download size={18} />
                                                 </button>
                                             )}

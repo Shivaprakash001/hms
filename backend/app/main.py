@@ -99,6 +99,24 @@ def startup_event():
     register_hook("payment_recorded", handle_payment_recorded)
     register_hook("rent_obligation_created", handle_rent_generated)
 
+    # Initialize APScheduler for automated jobs
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from app.jobs.payment_generation_job import PaymentGenerationJob
+    
+    scheduler = AsyncIOScheduler()
+    # Schedule to run on the 25th of every month at 00:00
+    scheduler.add_job(
+        PaymentGenerationJob.generate_monthly_payments, 
+        'cron', 
+        day=25, 
+        hour=0, 
+        minute=0, 
+        id='monthly_payment_generation', 
+        replace_existing=True
+    )
+    scheduler.start()
+    get_logger("scheduler").info("APScheduler initialized and jobs scheduled.")
+
 app.include_router(v1_router)
 
 def custom_openapi():

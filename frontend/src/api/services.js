@@ -174,6 +174,16 @@ export const paymentService = {
     waive: async (obligationId, reason) => {
         const response = await api.post(`/payments/obligations/${obligationId}/waive`, { reason });
         return response.data;
+    },
+    downloadReceipt: async (paymentId) => {
+        const response = await api.get(`/payments/${paymentId}/receipt`, {
+            responseType: 'blob'
+        });
+        return response.data;
+    },
+    bulkGenerate: async (data) => {
+        const response = await api.post('/payments/bulk-generate', data);
+        return response.data;
     }
 };
 
