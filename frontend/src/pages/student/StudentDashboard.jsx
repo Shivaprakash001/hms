@@ -94,10 +94,7 @@ const StudentDashboard = () => {
                         <CreditCard size={18} />
                         Pay Rent
                     </button>
-                    <button className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-5 py-2.5 rounded-xl font-medium transition-all flex items-center gap-2">
-                        <AlertCircle size={18} />
-                        Raise Complaint
-                    </button>
+
                 </div>
             </div>
 

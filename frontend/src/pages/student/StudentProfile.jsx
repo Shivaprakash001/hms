@@ -280,16 +280,7 @@ const StudentProfile = () => {
                                 <div className="text-slate-300 group-hover:text-indigo-400">→</div>
                             </button>
 
-                            <button
-                                onClick={() => navigate('/student/complaints')}
-                                className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-indigo-50 hover:text-indigo-600 text-slate-700 transition-colors group border border-slate-100 hover:border-indigo-100"
-                            >
-                                <div className="flex items-center gap-3">
-                                    <AlertTriangle size={18} className="text-slate-400 group-hover:text-indigo-500" />
-                                    <span className="font-semibold text-sm">Raise Complaint</span>
-                                </div>
-                                <div className="text-slate-300 group-hover:text-indigo-400">→</div>
-                            </button>
+
 
                             <button className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-indigo-50 hover:text-indigo-600 text-slate-700 transition-colors group border border-slate-100 hover:border-indigo-100">
                                 <div className="flex items-center gap-3">

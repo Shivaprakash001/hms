@@ -3,7 +3,6 @@ export { useStudents, useStudent, useCreateStudent, useUpdateStudent, useDeleteS
 export { useStudentPaymentHistory, useDuesReport, useRecordPayment, useGenerateMonthlyRent, useInitiatePayment } from './usePayments';
 export { useExpenses, useCreateExpense, useUpdateExpense, useDeleteExpense } from './useExpenses';
 export { useDashboard, useDashboardStats, useMonthlyStats, useStudentStats } from './useDashboard';
-export { useComplaints, useCreateComplaint, useUpdateComplaintStatus } from './useComplaints';
 export { useRooms, useRoom, useCreateRoom, useUpdateRoom, useDeleteRoom, useActiveAllocations, useAllocateRoom, useEndAllocation, useShiftTenant } from './useRooms';
 export { useDebounce } from './useDebounce';
 export { useLocalStorage } from './useLocalStorage';

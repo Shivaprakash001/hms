@@ -76,7 +76,6 @@ const OwnerLayout = () => {
         { name: 'Rooms', icon: Bed, path: '/owner/rooms' },
         { name: 'Tenants', icon: Users, path: '/owner/students' },
         { name: 'Payments', icon: CreditCard, path: '/owner/payments' },
-        { name: 'Complaints', icon: MessageSquare, path: '/owner/complaints' },
         { name: 'Expenses', icon: Receipt, path: '/owner/expenses' },
     ];
 

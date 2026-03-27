@@ -20,10 +20,6 @@ A professional, secure, and production-ready backend for a modern Hostel Managem
 - **Prorated Rent**: Automatic calculation of rent based on stay duration for mid-month entries or exits.
 - **Dues Reporting**: Real-time tracking of outstanding balances and payment statuses (Paid, Partial, Overdue).
 
-### 🛠️ Complaints & Maintenance
-- **Student Portal**: Students can report maintenance issues with categories (Electric, Plumbing, etc.) and priority levels.
-- **Resolution Tracking**: Wardens/Admins can track issues from `Pending` to `Resolved` with staff remarks.
-
 ### 📡 Core Infrastructure
 - **Lightweight Event Hooks**: A decoupled internal messaging system for side effects (e.g., student exit automatically ends room allocation).
 - **Standardized Responses**: Consistent API response structure for success and error handling.
@@ -96,7 +92,6 @@ The API documentation will be available at [http://127.0.0.1:8000/docs](http://1
 Detailed guides for specific modules:
 - [Room Allocation Guide](ROOM_ALLOCATION_GUIDE.md)
 - [Payments & Billing Guide](PAYMENTS_MODULE_GUIDE.md)
-- [Complaints & Maintenance Guide](COMPLAINTS_MODULE_GUIDE.md)
 
 ---
 

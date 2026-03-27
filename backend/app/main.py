@@ -34,8 +34,7 @@ origins = [
     "https://hms-2jrv0duc-shivaprakash001s-projects.vercel.app",
     "https://hms-jpbqhgk25-shivaprakash001s-projects.vercel.app",
     "https://hms-gkwzs1tur-shivaprakash001s-projects.vercel.app",
-    "http://localhost:5173",
-    "http://localhost:3000",
+    "https://hms-3apamhgdb-shivaprakash001s-projects.vercel.app",
 ]
 
 from app.utils.middleware import QueryMonitorMiddleware
@@ -91,8 +90,7 @@ def startup_event():
 
     from app.services.notification_handler import (
         handle_student_enrolled, handle_student_allocated,
-        handle_payment_recorded, handle_complaint_created,
-        handle_complaint_resolved, handle_rent_generated
+        handle_payment_recorded, handle_rent_generated
     )
     
     # Core logic hooks
@@ -102,8 +100,6 @@ def startup_event():
     register_hook("student_enrolled", handle_student_enrolled)
     register_hook("student_allocated_room", handle_student_allocated)
     register_hook("payment_recorded", handle_payment_recorded)
-    register_hook("complaint_created", handle_complaint_created)
-    register_hook("complaint_updated", handle_complaint_resolved)
     register_hook("rent_obligation_created", handle_rent_generated)
 
 app.include_router(v1_router)

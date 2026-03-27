@@ -23,7 +23,6 @@ Professional Hostel Management System API with JWT authentication, role-based ac
 - **Rooms**: Room tracking, statuses
 - **Room Allocations**: Managing tenant placements
 - **Payments**: Webhooks tracking & verifications
-- **Complaints**: Resolutions & ticketing
 - **Notifications**: Automated triggers
 - **Expenses**: Spending tracker
 - **Dashboard**: Analytic views

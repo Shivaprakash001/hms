@@ -9,7 +9,6 @@ import OwnerDashboard from './pages/owner/OwnerDashboard.jsx';
 import ManageStudents from './pages/owner/ManageStudents.jsx';
 import ManageRooms from './pages/owner/ManageRooms.jsx';
 import Payments from './pages/owner/Payments.jsx';
-import Complaints from './pages/owner/Complaints.jsx';
 import Expenses from './pages/owner/Expenses.jsx';
 
 // Student Imports
@@ -17,7 +16,6 @@ import Expenses from './pages/owner/Expenses.jsx';
 import StudentLayout from './layouts/StudentLayout.jsx';
 import StudentDashboard from './pages/student/StudentDashboard.jsx';
 import StudentPayments from './pages/student/StudentPayments.jsx';
-import StudentComplaints from './pages/student/StudentComplaints.jsx';
 import StudentProfile from './pages/student/StudentProfile.jsx';
 import StudentSettings from './pages/student/StudentSettings.jsx';
 import { AuthProvider } from './context/AuthContext';
@@ -41,7 +39,6 @@ function App() {
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<StudentDashboard />} />
             <Route path="payments" element={<StudentPayments />} />
-            <Route path="complaints" element={<StudentComplaints />} />
             <Route path="profile" element={<StudentProfile />} />
             <Route path="settings" element={<StudentSettings />} />
           </Route>
@@ -55,7 +52,6 @@ function App() {
             <Route path="students" element={<ManageStudents />} />
             <Route path="rooms" element={<ManageRooms />} />
             <Route path="payments" element={<Payments />} />
-            <Route path="complaints" element={<Complaints />} />
             <Route path="expenses" element={<Expenses />} />
           </Route>
         </Route>

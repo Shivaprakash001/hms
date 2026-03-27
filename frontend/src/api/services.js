@@ -127,21 +127,6 @@ export const allocationService = {
     }
 };
 
-// --- Complaint Services ---
-export const complaintService = {
-    getAll: async (params) => {
-        const response = await api.get('/complaints/', { params });
-        return response.data;
-    },
-    create: async (data) => {
-        const response = await api.post('/complaints/', data);
-        return response.data;
-    },
-    updateStatus: async (id, status, remarks) => {
-        const response = await api.patch(`/complaints/${id}/status`, { status, staff_remarks: remarks });
-        return response.data;
-    }
-};
 
 // --- Payment Services ---
 export const paymentService = {

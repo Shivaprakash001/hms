@@ -98,45 +98,6 @@ def handle_payment_recorded(amount: float, obligation_id: str, **kwargs):
     except Exception as e:
         logger.error(f"Error in handle_payment_recorded notification: {e}")
 
-def handle_complaint_created(owner_id: str, student_id: str, title: str, **kwargs):
-    """Notify owner when a new complaint is filed."""
-    try:
-        res = supabase.table("students").select("profiles(name)").eq("id", student_id).execute()
-        student_name = "A tenant"
-        if res.data:
-            student_name = res.data[0].get("profiles", {}).get("name", "A tenant")
-            
-        if owner_id:
-            create_notification(
-                user_id=owner_id,
-                title="New Complaint",
-                message=f"{student_name} filed a complaint: {title}",
-                n_type="COMPLAINT"
-            )
-    except Exception as e:
-        logger.error(f"Error in handle_complaint_created notification: {e}")
-
-def handle_complaint_resolved(complaint_id: str, status: str, **kwargs):
-    """Notify student when their complaint is resolved."""
-    if status.upper() not in ("RESOLVED", "CLOSED"):
-        return
-        
-    try:
-        res = supabase.table("complaints").select("title, students(profile_id)").eq("id", complaint_id).execute()
-        if res.data:
-            complaint = res.data[0]
-            profile_id = complaint.get("students", {}).get("profile_id")
-            title = complaint.get("title", "Your complaint")
-            
-            if profile_id:
-                create_notification(
-                    user_id=profile_id,
-                    title="Complaint Resolved",
-                    message=f"Your complaint '{title}' has been marked as resolved.",
-                    n_type="COMPLAINT"
-                )
-    except Exception as e:
-        logger.error(f"Error in handle_complaint_resolved notification: {e}")
 
 def handle_rent_generated(student_id: str, amount: float, **kwargs):
     """Notify student when a new rent bill is generated."""

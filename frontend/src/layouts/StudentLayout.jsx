@@ -14,7 +14,6 @@ const StudentLayout = () => {
     const menuItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/student/dashboard' },
         { icon: CreditCard, label: 'Payments', path: '/student/payments' },
-        { icon: MessageSquare, label: 'Complaints', path: '/student/complaints' },
         { icon: User, label: 'Profile', path: '/student/profile' },
         { icon: Settings, label: 'Settings', path: '/student/settings' },
     ];

@@ -61,9 +61,10 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
         try {
             const response = await api.post('/students/invite', {
                 full_name: name,
+                name: name,  // backward compat with deployed backend
                 email,
                 phone: phone || "",
-                monthly_rent: parseFloat(monthlyRent) || 0,
+                monthly_rent: monthlyRent ? parseFloat(monthlyRent) : null,
                 room_id: roomId
             });
             setSuccessData(response.data);
