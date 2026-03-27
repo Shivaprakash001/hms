@@ -118,7 +118,7 @@ const StudentPayments = () => {
                 paidSoFar,
                 remainingBalance: Number(o.amount) - paidSoFar
             };
-        });
+        }).filter(o => o.remainingBalance > 0);
     }, [history]);
 
     const pendingAmount = history.outstanding_balance || 0;
