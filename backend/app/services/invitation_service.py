@@ -88,13 +88,11 @@ class InvitationService:
             stu_res = supabase.table("students").insert(new_student).execute()
             student_id = stu_res.data[0]["id"]
 
-            # 6. Create Room Allocation with status="ACTIVE"
+            # 6. Create Room Allocation (end_date=null means ACTIVE)
             allocation_data = {
                 "student_id": student_id,
                 "room_id": room_id,
                 "start_date": datetime.now().date().isoformat(),
-                "status": "ACTIVE",  # ← CRITICAL: Must have status
-                "owner_id": owner_id
             }
             supabase.table("room_allocations").insert(allocation_data).execute()
 
