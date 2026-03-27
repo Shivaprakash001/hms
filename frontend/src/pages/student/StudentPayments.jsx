@@ -234,15 +234,19 @@ const StudentPayments = () => {
                     <button
                         onClick={() => {
                             if (unpaidObligations && unpaidObligations.length > 0) {
-                                setSelectedObligation(unpaidObligations[unpaidObligations.length - 1]); // the oldest one, but wait, sort order is desc, so the oldest is at the end? Let's just use first one which is most recent, or find oldest. Actually unpaidObligations map maintains the order from backend, which is DESC. oldest is length - 1. Let's just do unpaidObligations[unpaidObligations.length - 1]
-                                setShowPaymentModal(true);
+                                const validObs = unpaidObligations.filter(ob => ob.remainingBalance > 0);
+                                if (validObs.length > 0) {
+                                    setSelectedObligation(validObs[validObs.length - 1]);
+                                    setShowPaymentModal(true);
+                                }
                             }
                         }}
-                        disabled={pendingAmount <= 0 || polling || unpaidObligations.length === 0}
-                        className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95 ${pendingAmount > 0 && !polling && unpaidObligations.length > 0
-                            ? 'bg-indigo-500 hover:bg-indigo-400 text-white shadow-indigo-500/30'
-                            : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                            }`}
+                        disabled={pendingAmount <= 0 || polling || unpaidObligations.filter(ob => ob.remainingBalance > 0).length === 0}
+                        className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95 ${
+                            pendingAmount > 0 && !polling && unpaidObligations.filter(ob => ob.remainingBalance > 0).length > 0
+                                ? 'bg-indigo-500 hover:bg-indigo-400 text-white shadow-indigo-500/30'
+                                : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                        }`}
                     >
                         {polling ? (
                             <>
@@ -300,12 +304,23 @@ const StudentPayments = () => {
                                 </div>
                                 <button
                                     onClick={() => {
-                                        setSelectedObligation(ob);
-                                        setShowPaymentModal(true);
+                                        if (ob.remainingBalance > 0) {
+                                            setSelectedObligation(ob);
+                                            setShowPaymentModal(true);
+                                        }
                                     }}
-                                    className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-sm transition-all active:scale-95 flex items-center gap-2 shrink-0"
+                                    disabled={ob.remainingBalance <= 0}
+                                    className={`px-6 py-3 rounded-xl font-bold shadow-sm transition-all flex items-center gap-2 shrink-0 ${
+                                        ob.remainingBalance > 0 
+                                            ? 'bg-indigo-600 hover:bg-indigo-700 text-white active:scale-95' 
+                                            : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                    }`}
                                 >
-                                    Pay Now <ChevronRight size={16} />
+                                    {ob.remainingBalance > 0 ? (
+                                        <>Pay Now <ChevronRight size={16} /></>
+                                    ) : (
+                                        <>Processing...</>
+                                    )}
                                 </button>
                             </div>
                         ))}
