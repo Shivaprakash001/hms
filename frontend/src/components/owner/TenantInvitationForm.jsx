@@ -215,7 +215,6 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                                 className="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-medium"
                                                 placeholder="8000"
                                                 required
-                                                disabled
                                             />
                                         </div>
                                     </div>

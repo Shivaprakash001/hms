@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { Home, CreditCard, Clock, Bell, BedDouble, Calendar, AlertCircle, User } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { paymentService } from '../../api/services';
@@ -7,6 +8,7 @@ import api from '../../api/axios';
 
 const StudentDashboard = () => {
     const { user } = useAuth();
+    const navigate = useNavigate();
 
     const [dues, setDues] = useState({ obligations: [], outstanding_balance: 0 });
     const [roomData, setRoomData] = useState(null);
@@ -90,11 +92,13 @@ const StudentDashboard = () => {
                     )}
                 </div>
                 <div className="flex gap-3">
-                    <button className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-medium shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-2">
+                    <button 
+                        onClick={() => navigate('/student/payments')}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-medium shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-2"
+                    >
                         <CreditCard size={18} />
                         Pay Rent
                     </button>
-
                 </div>
             </div>
 
