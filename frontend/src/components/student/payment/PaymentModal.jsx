@@ -81,7 +81,8 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
         }
     };
 
-    const handlePayment = async () => {
+    const handlePayment = async (selectedMethod) => {
+        setMethod(selectedMethod);
         setLoading(true);
         setError(null);
 
@@ -92,10 +93,14 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
                 throw new Error('Failed to load payment gateway. Please check your internet connection.');
             }
 
+            // Save preference
+            localStorage.setItem('preferred_upi_app', selectedMethod);
+
             // 2. Create Razorpay order via backend
             const orderData = await paymentService.initiatePayment({
                 ...(obligationId ? { obligation_id: obligationId } : {}),
-                amount: amount
+                amount: amount,
+                notes: { preferred_upi_app: selectedMethod }
             });
 
             // 3. Configure and open Razorpay Checkout widget
@@ -181,79 +186,56 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
                             <div className="p-6">
                                 {(step === 'method' || step === 'failed') && (
                                     <div className="space-y-6">
-                                        <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 flex justify-between items-center">
-                                            <span className="text-sm font-bold text-slate-600">Total Amount</span>
-                                            <span className="text-2xl font-black text-indigo-700">₹{amount.toLocaleString()}</span>
+                                        <div className="text-center space-y-1 mb-4">
+                                            <h3 className="text-2xl font-black text-slate-900">₹{amount.toLocaleString()}</h3>
+                                            <p className="text-sm font-medium text-slate-500">Total Amount Due</p>
                                         </div>
 
                                         <div className="space-y-3">
-                                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Select Method</p>
+                                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest text-center mb-4">Select Payment App</p>
 
-                                            {/* UPI Option */}
+                                            {/* Google Pay */}
                                             <button
-                                                onClick={() => setMethod('upi')}
-                                                className={`w-full p-4 rounded-xl border-2 flex items-center gap-4 transition-all ${method === 'upi' ? 'border-indigo-600 bg-indigo-50/50' : 'border-slate-100 hover:border-slate-200'
-                                                    }`}
+                                                onClick={() => handlePayment('gpay')}
+                                                disabled={loading}
+                                                className="w-full p-4 rounded-xl border-2 border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-all flex items-center justify-center gap-3 active:scale-95"
                                             >
-                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${method === 'upi' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
-                                                    }`}>
-                                                    <Smartphone size={20} />
+                                                <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center text-slate-600">
+                                                    {/* Ideally GPay Icon, using fallback */}
+                                                    <span className="font-black text-lg text-blue-500">G</span>
                                                 </div>
-                                                <div className="text-left flex-1">
-                                                    <p className={`font-bold ${method === 'upi' ? 'text-indigo-900' : 'text-slate-700'}`}>UPI / QR</p>
-                                                    <p className="text-xs text-slate-500">Google Pay, PhonePe, Paytm</p>
-                                                </div>
-                                                {method === 'upi' && <div className="w-4 h-4 rounded-full bg-indigo-600" />}
+                                                <span className="font-bold text-slate-800">Pay with Google Pay</span>
                                             </button>
 
-                                            {/* Card Option */}
+                                            {/* PhonePe */}
                                             <button
-                                                onClick={() => setMethod('card')}
-                                                className={`w-full p-4 rounded-xl border-2 flex items-center gap-4 transition-all ${method === 'card' ? 'border-indigo-600 bg-indigo-50/50' : 'border-slate-100 hover:border-slate-200'
-                                                    }`}
+                                                onClick={() => handlePayment('phonepe')}
+                                                disabled={loading}
+                                                className="w-full p-4 rounded-xl border-2 border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-all flex items-center justify-center gap-3 active:scale-95"
                                             >
-                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${method === 'card' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
-                                                    }`}>
-                                                    <CreditCard size={20} />
+                                                <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center text-slate-600">
+                                                    {/* Ideally PhonePe Icon, using fallback */}
+                                                    <span className="font-black text-lg text-purple-600">पे</span>
                                                 </div>
-                                                <div className="text-left flex-1">
-                                                    <p className={`font-bold ${method === 'card' ? 'text-indigo-900' : 'text-slate-700'}`}>Cards</p>
-                                                    <p className="text-xs text-slate-500">Debit / Credit Card</p>
-                                                </div>
-                                                {method === 'card' && <div className="w-4 h-4 rounded-full bg-indigo-600" />}
+                                                <span className="font-bold text-slate-800">Pay with PhonePe</span>
                                             </button>
 
-                                            {/* Net Banking Option */}
+                                            {/* Other UPI */}
                                             <button
-                                                onClick={() => setMethod('netbanking')}
-                                                className={`w-full p-4 rounded-xl border-2 flex items-center gap-4 transition-all ${method === 'netbanking' ? 'border-indigo-600 bg-indigo-50/50' : 'border-slate-100 hover:border-slate-200'
-                                                    }`}
+                                                onClick={() => handlePayment('upi')}
+                                                disabled={loading}
+                                                className="w-full p-4 rounded-xl border-2 border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-all flex items-center justify-center gap-3 active:scale-95"
                                             >
-                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${method === 'netbanking' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
-                                                    }`}>
-                                                    <Globe size={20} />
+                                                <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center text-slate-600">
+                                                    <Smartphone size={18} />
                                                 </div>
-                                                <div className="text-left flex-1">
-                                                    <p className={`font-bold ${method === 'netbanking' ? 'text-indigo-900' : 'text-slate-700'}`}>Net Banking</p>
-                                                    <p className="text-xs text-slate-500">All Indian Banks</p>
-                                                </div>
-                                                {method === 'netbanking' && <div className="w-4 h-4 rounded-full bg-indigo-600" />}
+                                                <span className="font-bold text-slate-800">Other UPI Apps</span>
                                             </button>
                                         </div>
 
-                                        {/* Method Specific Content */}
-                                        {method === 'upi' && (
-                                            <motion.div
-                                                initial={{ opacity: 0, height: 0 }}
-                                                animate={{ opacity: 1, height: 'auto' }}
-                                                className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center space-y-3"
-                                            >
-                                                <div className="w-32 h-32 bg-white mx-auto rounded-lg border border-slate-200 flex items-center justify-center">
-                                                    <QrCode size={80} className="text-slate-800" />
-                                                </div>
-                                                <p className="text-xs text-slate-500 font-medium">Scan to Pay via any UPI App</p>
-                                            </motion.div>
-                                        )}
+                                        <p className="text-xs text-center text-slate-500 font-medium">
+                                            You'll be redirected to Razorpay secure checkout to complete your payment.
+                                        </p>
 
                                         {/* Error message */}
                                         {error && (
@@ -263,25 +245,22 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
                                             </div>
                                         )}
 
-                                        <div className="flex gap-3">
-                                            {step === 'failed' && (
-                                                <button
-                                                    onClick={handleRetry}
-                                                    className="flex-1 py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-all flex items-center justify-center gap-2"
-                                                >
-                                                    <RefreshCw size={18} />
-                                                    Retry
-                                                </button>
-                                            )}
+                                        {step === 'failed' && (
                                             <button
-                                                onClick={handlePayment}
-                                                disabled={loading}
-                                                className="flex-1 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
+                                                onClick={handleRetry}
+                                                className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-all flex items-center justify-center gap-2"
                                             >
-                                                {loading ? <Loader2 className="animate-spin" /> : <ShieldCheck size={20} />}
-                                                {loading ? 'Opening Payment Gateway...' : `Pay ₹${amount.toLocaleString()}`}
+                                                <RefreshCw size={18} />
+                                                Retry
                                             </button>
-                                        </div>
+                                        )}
+                                        
+                                        {loading && (
+                                            <div className="flex items-center justify-center gap-2 text-indigo-600 font-bold py-2">
+                                                <Loader2 size={20} className="animate-spin" />
+                                                Opening Payment Gateway...
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 

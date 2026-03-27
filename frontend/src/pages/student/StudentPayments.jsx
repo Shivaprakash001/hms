@@ -77,6 +77,7 @@ const StudentPayments = () => {
 
         pollTimerRef.current = setTimeout(check, POLL_INTERVAL_MS);
     };
+    const [selectedObligation, setSelectedObligation] = useState(null);
 
     // Merge obligations and payments for the list
     const localPayments = useMemo(() => {
@@ -103,13 +104,24 @@ const StudentPayments = () => {
         return [...unpaidObs, ...pays].sort((a, b) => new Date(b.date) - new Date(a.date));
     }, [history]);
 
-    const pendingAmount = history.outstanding_balance || 0;
+    const unpaidObligations = useMemo(() => {
+        const obs = history.obligations || [];
+        const pays = history.payments || [];
 
-    // Derive the first pending obligation id to pass to PaymentModal
-    const pendingObligationId = useMemo(() => {
-        const ob = history.obligations?.find(o => o.status === 'PENDING' || o.status === 'PARTIAL');
-        return ob?.id || null;
+        return obs.filter(o => o.status === 'PENDING' || o.status === 'PARTIAL').map(o => {
+            const paidSoFar = pays
+                .filter(p => p.obligation_id === o.id)
+                .reduce((sum, p) => sum + Number(p.amount_paid), 0);
+            
+            return {
+                ...o,
+                paidSoFar,
+                remainingBalance: Number(o.amount) - paidSoFar
+            };
+        });
     }, [history]);
+
+    const pendingAmount = history.outstanding_balance || 0;
 
     const isOverdue = localPayments.some(p => p.status === 'overdue');
 
@@ -220,9 +232,14 @@ const StudentPayments = () => {
                     </div>
 
                     <button
-                        onClick={() => setShowPaymentModal(true)}
-                        disabled={pendingAmount <= 0 || polling}
-                        className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95 ${pendingAmount > 0 && !polling
+                        onClick={() => {
+                            if (unpaidObligations && unpaidObligations.length > 0) {
+                                setSelectedObligation(unpaidObligations[unpaidObligations.length - 1]); // the oldest one, but wait, sort order is desc, so the oldest is at the end? Let's just use first one which is most recent, or find oldest. Actually unpaidObligations map maintains the order from backend, which is DESC. oldest is length - 1. Let's just do unpaidObligations[unpaidObligations.length - 1]
+                                setShowPaymentModal(true);
+                            }
+                        }}
+                        disabled={pendingAmount <= 0 || polling || unpaidObligations.length === 0}
+                        className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95 ${pendingAmount > 0 && !polling && unpaidObligations.length > 0
                             ? 'bg-indigo-500 hover:bg-indigo-400 text-white shadow-indigo-500/30'
                             : 'bg-slate-800 text-slate-500 cursor-not-allowed'
                             }`}
@@ -232,7 +249,7 @@ const StudentPayments = () => {
                                 <Loader2 size={16} className="animate-spin" />
                                 <span>Verifying…</span>
                             </>
-                        ) : pendingAmount > 0 ? (
+                        ) : pendingAmount > 0 && unpaidObligations.length > 0 ? (
                             <>
                                 <span>Pay Now</span>
                                 <ChevronRight size={16} />
@@ -246,6 +263,55 @@ const StudentPayments = () => {
                     </button>
                 </div>
             </div>
+
+            {/* 2. Pending Obligations List */}
+            {unpaidObligations.length > 0 && (
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mt-8">
+                    <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-rose-50/30">
+                        <div>
+                            <h3 className="font-bold text-slate-900 text-lg flex items-center gap-2">
+                                <AlertCircle size={20} className="text-rose-500" />
+                                Pending Dues ({unpaidObligations.length})
+                            </h3>
+                            <p className="text-slate-500 text-sm mt-1">Please clear these dues.</p>
+                        </div>
+                    </div>
+                    <div className="p-6 space-y-4">
+                        {unpaidObligations.map(ob => (
+                            <div key={ob.id} className="flex items-center justify-between p-4 border border-slate-200 rounded-xl hover:border-indigo-300 transition-colors bg-white shadow-sm">
+                                <div>
+                                    <h4 className="font-black text-slate-900 text-lg">
+                                        {new Date(ob.rent_month).toLocaleString('default', { month: 'long', year: 'numeric' })} Rent
+                                    </h4>
+                                    <div className="flex flex-wrap gap-4 mt-2 text-sm font-medium">
+                                        <div className="text-slate-500">
+                                            Total: <span className="text-slate-900">₹{Number(ob.amount).toLocaleString()}</span>
+                                        </div>
+                                        {ob.paidSoFar > 0 && (
+                                            <div className="text-emerald-600">
+                                                Paid: ₹{ob.paidSoFar.toLocaleString()}
+                                            </div>
+                                        )}
+                                        <div className="text-rose-600 font-bold bg-rose-50 px-2 py-0.5 rounded">
+                                            Remaining: ₹{ob.remainingBalance.toLocaleString()}
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-slate-400 mt-2">Due Date: {ob.due_date}</p>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        setSelectedObligation(ob);
+                                        setShowPaymentModal(true);
+                                    }}
+                                    className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-sm transition-all active:scale-95 flex items-center gap-2 shrink-0"
+                                >
+                                    Pay Now <ChevronRight size={16} />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* 3. Payment History Table */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -290,7 +356,7 @@ const StudentPayments = () => {
                                             {txn.id || '---'}
                                         </td>
                                         <td className="px-6 py-4 text-sm font-black text-slate-900">
-                                            ₹{txn.amount.toLocaleString()}
+                                            ₹{Number(txn.amount).toLocaleString()}
                                         </td>
                                         <td className="px-6 py-4 text-sm text-slate-600">
                                             <div className="flex items-center gap-2">
@@ -327,9 +393,9 @@ const StudentPayments = () => {
             {/* Payment Modal */}
             <PaymentModal
                 isOpen={showPaymentModal}
-                onClose={() => setShowPaymentModal(false)}
-                amount={pendingAmount > 0 ? pendingAmount : 0}
-                obligationId={pendingObligationId}
+                onClose={() => { setShowPaymentModal(false); setSelectedObligation(null); }}
+                amount={selectedObligation ? selectedObligation.remainingBalance : (pendingAmount > 0 ? pendingAmount : 0)}
+                obligationId={selectedObligation ? selectedObligation.id : null}
                 onSuccess={handlePaymentSuccess}
             />
         </div>

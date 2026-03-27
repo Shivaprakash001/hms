@@ -93,9 +93,21 @@ async def download_receipt(
     payment_id: str,
     user: UserContext = Depends(get_current_user)
 ):
-    # Depending on role, we should verify they own this payment or are admin.
-    # The ReceiptService simply generates it if found.
     try:
+        from app.db import supabase
+        res = supabase.table("payments").select("student_id, owner_id").eq("id", payment_id).execute()
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Payment not found")
+        payment = res.data[0]
+        
+        # Ownership check
+        if user.is_student():
+            if str(payment.get("student_id")) != str(user.student_id):
+                raise HTTPException(status_code=403, detail="Unauthorized to download this receipt")
+        elif user.is_owner():
+            if str(payment.get("owner_id")) != str(user.user_id):
+                raise HTTPException(status_code=403, detail="Unauthorized to download this receipt")
+
         pdf_bytes = await ReceiptService.generate_receipt_pdf(payment_id)
         return StreamingResponse(
             pdf_bytes,
@@ -104,9 +116,11 @@ async def download_receipt(
                 "Content-Disposition": f"attachment; filename=receipt_{payment_id}.pdf"
             }
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error generating receipt: {e}")
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post(
     "/generate-monthly",
@@ -295,16 +309,23 @@ def initiate_payment(
       student-centric order creation flow.
     """
     if user.is_student():
-        # Student flow: amount is required
+        # Student flow: requirement for obligation_id
+        if not data.obligation_id:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="obligation_id is required for student payment initiation"
+            )
         if not data.amount:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="amount is required for student payment initiation"
             )
+            
         result = payment_service.create_razorpay_order(
-            str(data.obligation_id) if data.obligation_id else None,
+            str(data.obligation_id),
             data.amount,
-            str(user.student_id)
+            str(user.student_id),
+            extra_notes=data.notes
         )
     else:
         # Owner/Admin flow: obligation_id is required, amount is taken from obligation

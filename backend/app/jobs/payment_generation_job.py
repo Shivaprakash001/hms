@@ -21,12 +21,14 @@ class PaymentGenerationJob:
             
         logger.info(f"Starting monthly payment generation for {target_date.strftime('%Y-%m')}")
         
+        from typing import cast
+        
         # Ensure we are working with a datetime or date that supports relativedelta
         # Next month for the rent obligation
-        next_month = target_date + relativedelta(months=1)
+        next_month = cast(datetime, target_date + relativedelta(months=1))
         # Store as YYYY-MM-01
         # If it's a datetime, use .date(), if it's already a date, just use it
-        next_month_date = next_month.date() if hasattr(next_month, 'date') else next_month
+        next_month_date = next_month.date() if hasattr(next_month, 'date') else next_month # type: ignore
         rent_month = next_month_date.replace(day=1).isoformat()
         
         try:
@@ -55,17 +57,18 @@ class PaymentGenerationJob:
                 
                 # Fetch Owner due_day (fallback to 5th if not set)
                 profiles_data = student.get("profiles", {}) or {}
-                due_day = profiles_data.get("due_day") or 5
+                due_day = int(profiles_data.get("due_day") or 5)
                 
                 # Calculate real due date
                 try:
-                    due_date = next_month.replace(day=due_day).date().isoformat()
+                    due_date = cast(datetime, next_month).replace(day=due_day).date().isoformat() # pyre-ignore
                 except ValueError: # handle 31st on month with 30 days
                     # if due_day is too big for the month, cap it
                     import calendar
-                    last_day = calendar.monthrange(next_month.year, next_month.month)[1]
+                    _next_dt = cast(datetime, next_month)
+                    last_day = calendar.monthrange(_next_dt.year, _next_dt.month)[1]
                     capped_day = min(due_day, last_day)
-                    due_date = next_month.replace(day=capped_day).date().isoformat()
+                    due_date = _next_dt.replace(day=capped_day).date().isoformat()
 
                 # See if already generated
                 existing = supabase.table("rent_obligations") \

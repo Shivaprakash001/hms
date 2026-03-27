@@ -1,9 +1,23 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Calendar, DollarSign, CreditCard, User, Home, Download, CheckCircle } from 'lucide-react';
 
 const PaymentDetailsDrawer = ({ isOpen, onClose, payment, onMarkPaid, onDownloadReceipt }) => {
+    const [showForm, setShowForm] = useState(false);
+    const [payAmount, setPayAmount] = useState('');
+    const [payMethod, setPayMethod] = useState('CASH');
+    const [payRef, setPayRef] = useState('');
+
+    useEffect(() => {
+        if (payment) {
+            setPayAmount(payment.amount || '');
+            setShowForm(false);
+            setPayMethod('CASH');
+            setPayRef('');
+        }
+    }, [payment, isOpen]);
+
     if (!payment) return null;
 
     const handleDownload = () => {
@@ -132,13 +146,70 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, onMarkPaid, onDownload
                             {/* Footer Actions */}
                             <div className="p-6 border-t border-slate-100 bg-slate-50/50">
                                 {payment.status !== 'paid' ? (
-                                    <button
-                                        onClick={() => onMarkPaid(payment.id)}
-                                        className="w-full py-3.5 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-2"
-                                    >
-                                        <CheckCircle size={18} />
-                                        Mark as Paid
-                                    </button>
+                                    showForm ? (
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Amount Paid (₹)</label>
+                                                <input 
+                                                    type="number"
+                                                    value={payAmount}
+                                                    onChange={e => setPayAmount(e.target.value)}
+                                                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Payment Method</label>
+                                                <select 
+                                                    value={payMethod}
+                                                    onChange={e => setPayMethod(e.target.value)}
+                                                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400"
+                                                >
+                                                    <option value="CASH">Cash</option>
+                                                    <option value="BANK_TRANSFER">Bank Transfer</option>
+                                                    <option value="UPI">UPI</option>
+                                                    <option value="OTHER">Other</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Reference / Notes (Optional)</label>
+                                                <input 
+                                                    type="text"
+                                                    value={payRef}
+                                                    onChange={e => setPayRef(e.target.value)}
+                                                    placeholder="Trans ID or notes"
+                                                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400"
+                                                />
+                                            </div>
+                                            <div className="flex gap-2 pt-2">
+                                                <button
+                                                    onClick={() => setShowForm(false)}
+                                                    className="flex-1 py-3 bg-white text-slate-600 border border-slate-200 rounded-xl font-bold hover:bg-slate-50 transition-colors"
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    onClick={() => onMarkPaid({
+                                                        paymentId: payment.id,
+                                                        amount: parseFloat(payAmount),
+                                                        method: payMethod,
+                                                        reference_number: payRef
+                                                    })}
+                                                    className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-2"
+                                                >
+                                                    <CheckCircle size={18} />
+                                                    Record Payment
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <button
+                                            onClick={() => setShowForm(true)}
+                                            className="w-full py-3.5 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-2"
+                                        >
+                                            <CheckCircle size={18} />
+                                            Record Offline Payment
+                                        </button>
+                                    )
                                 ) : (
                                     <div className="text-center p-3 bg-emerald-50 text-emerald-600 rounded-xl font-medium border border-emerald-100 flex items-center justify-center gap-2">
                                         <CheckCircle size={18} />

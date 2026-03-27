@@ -545,7 +545,7 @@ def get_all_payments(
         return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to fetch payments")
 
 
-def create_razorpay_order(obligation_id: Optional[str], amount: Decimal, student_id: str) -> Dict[str, Any]:
+def create_razorpay_order(obligation_id: str, amount: Decimal, student_id: str, extra_notes: Optional[Dict] = None) -> Dict[str, Any]:
     """
     Create a Razorpay order for a student obligation.
     Optimized for UPI Intent by setting appropriate notes and gathering prefill info.
@@ -554,23 +554,9 @@ def create_razorpay_order(obligation_id: Optional[str], amount: Decimal, student
         return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Razorpay client not configured")
     
     try:
-        # 1. Handle Missing Obligation ID (Discovery mode)
+        # 1. Handle Missing Obligation ID
         if not obligation_id:
-            logger.info(f"Finding oldest pending obligation for student: {student_id}")
-            pending = supabase.table("rent_obligations")\
-                .select("id, amount, rent_month")\
-                .eq("student_id", student_id)\
-                .neq("status", "PAID")\
-                .neq("status", "WAIVED")\
-                .order("due_date", desc=False)\
-                .limit(1)\
-                .execute()
-            
-            if not pending.data:
-                 return ServiceResponse.error(ErrorCode.RESOURCE_NOT_FOUND, "No pending dues found to pay.")
-            
-            obligation_id = pending.data[0]["id"]
-            logger.info(f"Discovered obligation {obligation_id} for student {student_id}")
+             return ServiceResponse.error(ErrorCode.INVALID_INPUT, "Obligation ID is required")
 
         # 2. Fetch Obligation to verify balance
         ob_res = supabase.table("rent_obligations").select("*").eq("id", obligation_id).execute()
@@ -594,15 +580,18 @@ def create_razorpay_order(obligation_id: Optional[str], amount: Decimal, student
         # amount is in paise (1 INR = 100 paise)
         amount_paise = int(amount * 100)
         
+        notes = extra_notes or {}
+        notes.update({
+            "obligation_id": str(obligation_id),
+            "student_id": str(student_id),
+            "type": "rent_payment"
+        })
+
         order_data = {
             "amount": amount_paise,
             "currency": "INR",
             "payment_capture": 1, # Automatic capture
-            "notes": {
-                "obligation_id": str(obligation_id),
-                "student_id": str(student_id),
-                "type": "rent_payment"
-            }
+            "notes": notes
         }
         
         # Mobile UPI Optimization: Razorpay handles intent better if we specify the method in some frontend SDKs,

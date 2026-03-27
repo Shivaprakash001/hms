@@ -106,23 +106,25 @@ const Payments = () => {
     }, [payments]);
 
     // Mark as paid
-    const handleMarkAsPaid = async (paymentId) => {
+    const handleMarkAsPaid = async (formData) => {
         try {
+            const { paymentId, amount, method, reference_number } = formData;
             const payment = payments.find(p => p.id === paymentId);
             if (payment && payment.status === 'paid') return;
             const today = new Date();
             const localDate = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
             await paymentService.recordPayment({
                 obligation_id: paymentId,
-                amount_paid: payment.amount,
-                payment_method: "CASH",
+                amount_paid: amount || payment.amount,
+                payment_method: method || "CASH",
+                reference_number: reference_number || "",
                 payment_date: localDate
             });
             loadPayments();
             setSelectedPayment(null);
         } catch (error) {
             console.error("Failed to mark as paid:", error);
-            alert("Failed to record payment");
+            alert(error.response?.data?.detail?.message || "Failed to record payment");
         }
     };
 

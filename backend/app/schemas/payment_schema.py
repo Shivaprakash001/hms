@@ -93,6 +93,7 @@ class DuesReportItem(BaseModel):
 class PaymentInitiate(BaseModel):
     obligation_id: Optional[UUID] = None
     amount: Optional[Decimal] = Field(None, gt=0)
+    notes: Optional[dict] = None
 
 
 class RazorpayOrderResponse(BaseModel):
