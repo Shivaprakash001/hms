@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { studentService, authService, allocationService, roomService } from '../../api/services';
 import TenantHistoryModal from '../../components/owner/payments/TenantHistoryModal';
 import TenantInvitationForm from '../../components/owner/TenantInvitationForm';
+import ExtendedProfileForm from '../../components/TenantManagement/ExtendedProfileForm';
 
 export default function ManageStudents() {
     const [students, setStudents] = useState([]);
@@ -15,6 +16,7 @@ export default function ManageStudents() {
     const [historyTenant, setHistoryTenant] = useState(null);
     const [error, setError] = useState(null);
     const [showLeftTenants, setShowLeftTenants] = useState(false);
+    const [extendedProfileStudent, setExtendedProfileStudent] = useState(null);
 
     const fetchStudents = async () => {
         try {
@@ -271,7 +273,7 @@ export default function ManageStudents() {
                                             initial={{ opacity: 0 }}
                                             animate={{ opacity: 1 }}
                                             key={student.id}
-                                            onClick={() => { setStudentToEdit(student); setShowAddModal(true); }}
+                                            onClick={() => setExtendedProfileStudent(student)}
                                             className="hover:bg-slate-50/80 transition-colors cursor-pointer group"
                                         >
                                             <td className="px-8 py-5 whitespace-nowrap">
@@ -335,7 +337,7 @@ export default function ManageStudents() {
                         <div className="md:hidden space-y-4 p-4">
                             {filteredStudents.map(student => (
                                 <div key={student.id} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-                                    <div className="flex justify-between" onClick={() => { setStudentToEdit(student); setShowAddModal(true); }}>
+                                    <div className="flex justify-between" onClick={() => setExtendedProfileStudent(student)}>
                                         <div className="font-bold">{student.name}</div>
                                         <div className="text-sm font-bold text-slate-500">{student.room}</div>
                                     </div>
@@ -383,6 +385,14 @@ export default function ManageStudents() {
                     />
                 )}
             </AnimatePresence>
+
+            {/* Extended Profile Modal */}
+            <ExtendedProfileForm
+                isOpen={!!extendedProfileStudent}
+                onClose={() => setExtendedProfileStudent(null)}
+                student={extendedProfileStudent}
+                onSave={() => { fetchStudents(); setExtendedProfileStudent(null); }}
+            />
 
             {/* Tenant History Modal */}
             <TenantHistoryModal

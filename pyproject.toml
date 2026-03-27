@@ -20,4 +20,5 @@ dependencies = [
     "python-json-logger>=4.0.0",
     "sentry-sdk>=2.54.0",
     "razorpay>=2.0.1",
+    "python-multipart>=0.0.6",
 ]

@@ -9,6 +9,7 @@ from app.api.routes.room_router import router as room_router
 from app.api.routes.expense_router import router as expense_router
 from app.api.routes.dashboard_router import router as dashboard_router
 from app.api.routes.notification_router import router as notification_router
+from app.api.routes.document_router import router as document_router
 
 router = APIRouter()
 
@@ -23,6 +24,7 @@ router.include_router(room_router)
 router.include_router(expense_router)
 router.include_router(dashboard_router)
 router.include_router(notification_router)
+router.include_router(document_router)
 
 @router.get("/health", tags=["API v1 system"])
 def health_check():

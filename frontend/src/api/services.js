@@ -235,3 +235,29 @@ export const notificationService = {
         return response.data;
     }
 };
+
+// --- Tenant Document Service ---
+export const tenantDocumentService = {
+    upload: async (tenantId, docType, documentNumber, file) => {
+        const formData = new FormData();
+        formData.append('doc_type', docType);
+        if (documentNumber) formData.append('document_number', documentNumber);
+        formData.append('file', file);
+        const response = await api.post(`/tenants/${tenantId}/documents`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        return response.data;
+    },
+    getAll: async (tenantId) => {
+        const response = await api.get(`/tenants/${tenantId}/documents`);
+        return response.data;
+    },
+    delete: async (tenantId, docId) => {
+        const response = await api.delete(`/tenants/${tenantId}/documents/${docId}`);
+        return response.data;
+    },
+    verify: async (tenantId, docId) => {
+        const response = await api.patch(`/tenants/${tenantId}/documents/${docId}/verify`);
+        return response.data;
+    }
+};
