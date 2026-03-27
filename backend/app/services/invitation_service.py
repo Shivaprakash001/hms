@@ -93,6 +93,7 @@ class InvitationService:
                 "student_id": student_id,
                 "room_id": room_id,
                 "start_date": datetime.now().date().isoformat(),
+                "owner_id": owner_id
             }
             supabase.table("room_allocations").insert(allocation_data).execute()
 
@@ -196,7 +197,7 @@ class InvitationService:
         try:
             # 1. Find pending invitation
             res = supabase.table("invitations")\
-                .select("*, profiles(id, name)")\
+                .select("*, profiles!invitations_profile_id_fkey(id, name)")\
                 .eq("email", email)\
                 .eq("status", "PENDING")\
                 .execute()
