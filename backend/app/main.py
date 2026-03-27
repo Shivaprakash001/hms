@@ -29,6 +29,7 @@ app.add_middleware(LoggingMiddleware)
 # Explicitly allowed origins for CORS
 origins = [
     "https://trishul-hms.vercel.app",
+    "https://hms-r1u7wmn18-shivaprakash001s-projects.vercel.app",
     "http://localhost:5173",
     "http://localhost:3000",
 ]

@@ -97,9 +97,9 @@ class InvitationService:
             }
             supabase.table("room_allocations").insert(allocation_data).execute()
 
-            # 7. Generate secure invitation token (24h expiry)
+            # 7. Generate secure invitation token (72h expiry)
             token = secrets.token_urlsafe(32)
-            expires_at = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+            expires_at = (datetime.now(timezone.utc) + timedelta(hours=72)).isoformat()
 
             invitation_data = {
                 "email": email,
@@ -113,14 +113,14 @@ class InvitationService:
             invitation_id = inv_res.data[0]["id"]
 
             # 8. Send email asynchronously (non-blocking)
-            base_url = os.getenv("FRONTEND_URL", "https://hms-r1u7wmn18-shivaprakash001s-projects.vercel.app")
+            base_url = os.getenv("FRONTEND_URL", "https://trishul-hms.vercel.app")
             activation_link = f"{base_url}/activate?token={token}&email={email}"
             room_no = room.get("room_no", "N/A")
             
             if background_tasks:
-                background_tasks.add_task(EmailService.send_invitation_email, email, name, activation_link, room_no, float(monthly_rent))
+                background_tasks.add_task(EmailService.send_invitation_email, email, name, activation_link, room_no, float(monthly_rent or 0))
             else:
-                EmailService.send_invitation_email(email, name, activation_link, room_no, float(monthly_rent))
+                EmailService.send_invitation_email(email, name, activation_link, room_no, float(monthly_rent or 0))
 
             # SUCCESS: Return response with activation_link
             response_data = {
@@ -129,7 +129,7 @@ class InvitationService:
                 "email": email,
                 "student_id": student_id,
                 "activation_link": activation_link,  # ← CRITICAL
-                "expires_in_hours": 24
+                "expires_in_hours": 72
             }
             
             return ServiceResponse.success(response_data, "Invitation sent successfully")
@@ -231,7 +231,7 @@ class InvitationService:
 
             # 2. Generate new token
             token = secrets.token_urlsafe(32)
-            expires_at = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+            expires_at = (datetime.now(timezone.utc) + timedelta(hours=72)).isoformat()
 
             # 3. Update invitation
             supabase.table("invitations").update({
@@ -241,7 +241,7 @@ class InvitationService:
             }).eq("id", invitation["id"]).execute()
 
             # 4. Resend email
-            base_url = os.getenv("FRONTEND_URL", "https://hms-r1u7wmn18-shivaprakash001s-projects.vercel.app")
+            base_url = os.getenv("FRONTEND_URL", "https://trishul-hms.vercel.app")
             activation_link = f"{base_url}/activate?token={token}&email={email}"
             
             if background_tasks:
