@@ -41,13 +41,13 @@ class InvitationService:
                 return ServiceResponse.already_exists("Profile", f"A user with email {email} already exists")
 
             # 2. Get room to extract rent if not provided
-            room_res = supabase.table("rooms").select("monthly_rent, room_no").eq("id", room_id).execute()
+            room_res = supabase.table("rooms").select("room_no").eq("id", room_id).execute()
             if not room_res.data:
                 return ServiceResponse.not_found("Room")
             
             room = room_res.data[0]
             if not monthly_rent:
-                monthly_rent = room.get("monthly_rent", 0)
+                monthly_rent = 0
 
             # 3. Create Supabase Auth user first
             temp_password = secrets.token_urlsafe(16)
