@@ -860,10 +860,12 @@ def handle_razorpay_webhook(event: Dict[str, Any]) -> Dict[str, Any]:
             "obligation_id": obligation_id
         })
 
+        actual_method = payment.get("method", "UPI").upper()
+
         result = record_payment(
             obligation_id=obligation_id,
             amount_paid=amount_paid,
-            payment_method="UPI",
+            payment_method=actual_method,
             reference_number=razorpay_payment_id,
             payment_date=date.today()
         )
