@@ -312,18 +312,15 @@ def record_payment(
         }
 
         if reference_number:
-            # Use upsert with ignore_duplicates to atomically prevent duplicate payments
-            # for reference-backed payments (e.g. Razorpay). Requires a UNIQUE constraint
-            # on payments.reference_number in the database.
-            res = supabase.table("payments").upsert(
-                payment_data,
-                on_conflict="reference_number",
-                ignore_duplicates=True
-            ).execute()
-            if not res.data:
-                # No data returned means the row was silently ignored due to duplicate reference
+            # Application-level duplicate check (since UNIQUE constraint might be missing in DB)
+            p_check = supabase.table("payments").select("id").eq("reference_number", reference_number).execute()
+            if p_check.data:
                 logger.info(f"Duplicate payment reference detected: {reference_number}. Skipping insert.")
                 return ServiceResponse.already_exists("Payment", f"Reference {reference_number} already recorded")
+            
+            res = supabase.table("payments").insert(payment_data).execute()
+            if not res.data:
+                return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to record payment (with reference).")
         else:
             res = supabase.table("payments").insert(payment_data).execute()
             if not res.data:
