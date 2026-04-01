@@ -351,6 +351,11 @@ def record_payment(
         }, "Payment recorded successfully.")
 
     except Exception as e:
+        err_str = str(e).lower()
+        if "duplicate" in err_str or "unique" in err_str or "23505" in err_str:
+            logger.info(f"Duplicate payment reference detected at insert level: {reference_number}. Skipping.")
+            return ServiceResponse.already_exists("Payment", f"Reference {reference_number} already recorded")
+            
         logger.exception(f"Error recording payment: {e}")
         return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Failed to record payment", str(e))
 
