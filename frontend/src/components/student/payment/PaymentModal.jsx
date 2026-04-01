@@ -70,6 +70,22 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
                 });
             }, 1800);
         } catch (verifyErr) {
+            // 409 = "already exists" — webhook recorded the payment first.
+            // Treat it as success because the money IS captured.
+            const httpStatus = verifyErr?.response?.status;
+            if (httpStatus === 409) {
+                setVerifiedData({ obligation_status: 'PAID' });
+                setStep('success');
+                setTimeout(() => {
+                    onSuccess({
+                        ...razorpayResponse,
+                        amount,
+                        obligation_status: 'PAID',
+                    });
+                }, 1800);
+                return;
+            }
+
             const msg = verifyErr?.response?.data?.detail?.message
                 || verifyErr?.response?.data?.detail
                 || verifyErr?.message

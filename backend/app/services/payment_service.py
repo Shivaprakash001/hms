@@ -1003,7 +1003,27 @@ def verify_razorpay_payment(
         )
 
     except Exception as e:
-        logger.exception(f"[Verify] Error verifying payment: {e}")
+        err_str = str(e).lower()
+        # Defence-in-depth: catch DB unique-constraint violations that
+        # slip past record_payment's own handler (e.g. webhook race).
+        if "duplicate" in err_str or "unique" in err_str or "23505" in err_str:
+            logger.info(f"[Verify] Duplicate detected at verify level for payment {razorpay_payment_id} – treating as success.")
+            if obligation_id:
+                try:
+                    ob_final = supabase.table("rent_obligations").select("status").eq("id", obligation_id).execute()
+                    final_status = ob_final.data[0]["status"] if ob_final.data else "PAID"
+                except Exception:
+                    final_status = "PAID"
+                return ServiceResponse.success(
+                    {"obligation_status": final_status, "razorpay_payment_id": razorpay_payment_id},
+                    "Payment already recorded"
+                )
+            return ServiceResponse.success(
+                {"razorpay_payment_id": razorpay_payment_id},
+                "Payment already recorded"
+            )
+
+        logger.exception(f"[Verify] Error verifying payment {razorpay_payment_id}: {e}")
         return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Payment verification failed", str(e))
 
 
