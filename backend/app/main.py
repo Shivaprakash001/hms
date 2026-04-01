@@ -68,7 +68,14 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    response.headers["Content-Security-Policy"] = "default-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss:;"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
+        "style-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com 'unsafe-inline'; "
+        "img-src 'self' https://fastapi.tiangolo.com data:; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "connect-src 'self' https: wss:;"
+    )
     
     return response
 
@@ -173,6 +180,7 @@ def custom_openapi():
             "url": "https://hms.example.com/license",
         },
         servers=[
+            {"url": "https://trishul-solutions1.onrender.com", "description": "Production server"},
             {"url": "http://localhost:8000", "description": "Development server"}
         ],
     )

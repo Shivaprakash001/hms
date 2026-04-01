@@ -81,24 +81,28 @@ const StudentPayments = () => {
 
     // Merge obligations and payments for the list
     const localPayments = useMemo(() => {
-        const obs = (history.obligations || []).map(o => ({
-            id: o.id,
-            date: o.rent_month, // or due_date
-            amount: o.amount,
-            status: o.status.toLowerCase(), // pending, paid, partial
-            type: 'Rent Due',
-            method: '---'
-        }));
+        const obs = (history.obligations || [])
+            .filter(o => Number(o.amount) > 0) // Filter out ₹0 obligations
+            .map(o => ({
+                id: o.id,
+                date: o.rent_month, // or due_date
+                amount: o.amount,
+                status: o.status.toLowerCase(), // pending, paid, partial
+                type: 'Rent Due',
+                method: '---'
+            }));
 
-        const pays = (history.payments || []).map(p => ({
-            id: p.id,
-            date: p.payment_date,
-            amount: p.amount_paid,
-            status: 'paid', // payments are always successful if recorded
-            type: 'Payment',
-            method: p.payment_method,
-            reference_number: p.reference_number
-        }));
+        const pays = (history.payments || [])
+            .filter(p => Number(p.amount_paid) > 0) // Filter out ₹0 payments
+            .map(p => ({
+                id: p.id,
+                date: p.payment_date,
+                amount: p.amount_paid,
+                status: 'paid', // payments are always successful if recorded
+                type: 'Payment',
+                method: p.payment_method,
+                reference_number: p.reference_number
+            }));
 
         const unpaidObs = obs.filter(o => o.status !== 'paid');
         return [...unpaidObs, ...pays].sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -122,6 +126,8 @@ const StudentPayments = () => {
     }, [history]);
 
     const pendingAmount = history.outstanding_balance || 0;
+    const monthlyRent = user?.monthly_rent || 0;
+    const rentAssigned = monthlyRent > 0;
 
     const isOverdue = localPayments.some(p => p.status === 'overdue');
 
@@ -195,20 +201,30 @@ const StudentPayments = () => {
                 </div>
 
                 {/* Due Amount Card - Dynamic Styling */}
-                <div className={`p-6 rounded-2xl border shadow-sm relative overflow-hidden transition-all ${pendingAmount > 0
-                    ? 'bg-rose-50 border-rose-100'
-                    : 'bg-emerald-50 border-emerald-100'
+                <div className={`p-6 rounded-2xl border shadow-sm relative overflow-hidden transition-all ${
+                    !rentAssigned
+                        ? 'bg-amber-50 border-amber-100'
+                        : pendingAmount > 0
+                            ? 'bg-rose-50 border-rose-100'
+                            : 'bg-emerald-50 border-emerald-100'
                     }`}>
-                    <p className={`text-xs font-bold uppercase tracking-wider mb-2 ${pendingAmount > 0 ? 'text-rose-600' : 'text-emerald-600'
+                    <p className={`text-xs font-bold uppercase tracking-wider mb-2 ${
+                        !rentAssigned ? 'text-amber-600' : pendingAmount > 0 ? 'text-rose-600' : 'text-emerald-600'
                         }`}>
-                        {pendingAmount > 0 ? 'Pending Dues' : 'Payment Status'}
+                        {!rentAssigned ? 'Rent Not Set' : pendingAmount > 0 ? 'Pending Dues' : 'Payment Status'}
                     </p>
-                    <h3 className={`text-3xl font-black ${pendingAmount > 0 ? 'text-rose-900' : 'text-emerald-900'
+                    <h3 className={`text-3xl font-black ${
+                        !rentAssigned ? 'text-amber-900' : pendingAmount > 0 ? 'text-rose-900' : 'text-emerald-900'
                         }`}>
-                        {pendingAmount > 0 ? `₹${pendingAmount.toLocaleString()}` : 'All Clear'}
+                        {!rentAssigned ? 'Not Assigned' : pendingAmount > 0 ? `₹${pendingAmount.toLocaleString()}` : 'All Clear'}
                     </h3>
 
-                    {pendingAmount > 0 ? (
+                    {!rentAssigned ? (
+                        <div className="mt-4 flex items-center gap-2 text-sm text-amber-700 font-bold bg-amber-100/50 px-3 py-1.5 rounded-lg w-fit">
+                            <AlertCircle size={16} />
+                            <span>Contact your owner</span>
+                        </div>
+                    ) : pendingAmount > 0 ? (
                         <div className="mt-4 flex items-center gap-2 text-sm text-rose-700 font-bold bg-rose-100/50 px-3 py-1.5 rounded-lg w-fit">
                             <Clock size={16} />
                             <span>{daysLeft} days left to pay</span>
@@ -227,44 +243,54 @@ const StudentPayments = () => {
 
                     <div>
                         <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Next Due Date</p>
-                        <h3 className="text-2xl font-bold">{nextDueDate}</h3>
-                        {daysLeft !== null && <p className="text-slate-400 text-xs mt-1">{daysLeft} days remaining</p>}
+                        <h3 className="text-2xl font-bold">{rentAssigned ? nextDueDate : 'N/A'}</h3>
+                        {rentAssigned && daysLeft !== null && <p className="text-slate-400 text-xs mt-1">{daysLeft} days remaining</p>}
                     </div>
 
-                    <button
-                        onClick={() => {
-                            if (unpaidObligations && unpaidObligations.length > 0) {
-                                const validObs = unpaidObligations.filter(ob => ob.remainingBalance > 0);
-                                if (validObs.length > 0) {
-                                    setSelectedObligation(validObs[validObs.length - 1]);
-                                    setShowPaymentModal(true);
+                    {!rentAssigned ? (
+                        <div className="w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 bg-amber-500/20 text-amber-400 mt-4">
+                            <AlertCircle size={16} />
+                            <span>No Rent Assigned</span>
+                        </div>
+                    ) : (
+                        <button
+                            onClick={() => {
+                                if (unpaidObligations && unpaidObligations.length > 0) {
+                                    const validObs = unpaidObligations.filter(ob => ob.remainingBalance > 0);
+                                    if (validObs.length > 0) {
+                                        setSelectedObligation(validObs[validObs.length - 1]);
+                                        setShowPaymentModal(true);
+                                    }
                                 }
-                            }
-                        }}
-                        disabled={pendingAmount <= 0 || polling || unpaidObligations.filter(ob => ob.remainingBalance > 0).length === 0}
-                        className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95 ${
-                            pendingAmount > 0 && !polling && unpaidObligations.filter(ob => ob.remainingBalance > 0).length > 0
-                                ? 'bg-indigo-500 hover:bg-indigo-400 text-white shadow-indigo-500/30'
-                                : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                        }`}
-                    >
-                        {polling ? (
-                            <>
-                                <Loader2 size={16} className="animate-spin" />
-                                <span>Verifying…</span>
-                            </>
-                        ) : pendingAmount > 0 && unpaidObligations.length > 0 ? (
-                            <>
-                                <span>Pay Now</span>
-                                <ChevronRight size={16} />
-                            </>
-                        ) : (
-                            <>
-                                <CheckCircle2 size={16} />
-                                <span>No Dues</span>
-                            </>
-                        )}
-                    </button>
+                            }}
+                            disabled={polling || (pendingAmount > 0 && unpaidObligations.filter(ob => ob.remainingBalance > 0).length === 0)}
+                            className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95 mt-4 ${
+                                polling
+                                    ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                                    : pendingAmount > 0 && unpaidObligations.filter(ob => ob.remainingBalance > 0).length > 0
+                                        ? 'bg-indigo-500 hover:bg-indigo-400 text-white shadow-indigo-500/30'
+                                        : 'bg-slate-700 hover:bg-slate-600 text-slate-200'
+                            }`}
+                        >
+                            {polling ? (
+                                <>
+                                    <Loader2 size={16} className="animate-spin" />
+                                    <span>Verifying…</span>
+                                </>
+                            ) : pendingAmount > 0 && unpaidObligations.length > 0 ? (
+                                <>
+                                    <CreditCard size={16} />
+                                    <span>Pay ₹{pendingAmount.toLocaleString()} Now</span>
+                                    <ChevronRight size={16} />
+                                </>
+                            ) : (
+                                <>
+                                    <CheckCircle2 size={16} />
+                                    <span>No Dues</span>
+                                </>
+                            )}
+                        </button>
+                    )}
                 </div>
             </div>
 

@@ -142,6 +142,11 @@ def generate_monthly_rent(rent_month: date, user_id: Optional[str] = None) -> Di
             monthly_rent_val = student.get("monthly_rent", 0)
             monthly_rent = Decimal(str(monthly_rent_val)) if monthly_rent_val is not None else Decimal(0)
             
+            # Skip students with no rent configured
+            if monthly_rent <= 0:
+                skipped_count += 1
+                continue
+            
             # 2. Calculate Total Days of occupancy in the month across all segments
             total_days = 0
             for alloc in alloc_list:

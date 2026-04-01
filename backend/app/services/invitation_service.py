@@ -46,8 +46,11 @@ class InvitationService:
                 return ServiceResponse.not_found("Room")
             
             room = room_res.data[0]
-            if not monthly_rent:
-                monthly_rent = 0
+            if not monthly_rent or float(monthly_rent) <= 0:
+                return ServiceResponse.error(
+                    ErrorCode.VALIDATION_ERROR,
+                    "Monthly rent is required and must be greater than 0"
+                )
 
             # 3. Create Supabase Auth user first
             temp_password = secrets.token_urlsafe(16)
