@@ -782,10 +782,18 @@ def handle_razorpay_webhook(event: Dict[str, Any]) -> Dict[str, Any]:
             return ServiceResponse.success({}, "Duplicate event – already processed")
         _processed_event_ids.add(event_id)
 
-    handled_events = {"order.paid", "payment.captured"}
+    handled_events = {"order.paid", "payment.captured", "payment.failed"}
     if event_type not in handled_events:
         logger.info(f"[Webhook] Event '{event_type}' acknowledged but not handled.")
         return ServiceResponse.success({}, f"Event {event_type} acknowledged")
+
+    # If it's a failure event, log it and return early (don't capture a payment)
+    if event_type == "payment.failed":
+        payload = event.get("payload", {})
+        payment = payload.get("payment", {}).get("entity", {})
+        fail_reason = payment.get("error_description", "Unknown error")
+        logger.warning(f"[Webhook] Payment failed: {payment.get('id')} - Reason: {fail_reason}")
+        return ServiceResponse.success({}, f"Logged failed payment: {fail_reason}")
 
     try:
         payload = event.get("payload", {})
