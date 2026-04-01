@@ -124,7 +124,7 @@ def startup_event():
     scheduler.start()
     get_logger("scheduler").info("APScheduler initialized and jobs scheduled.")
 
-app.include_router(v1_router, prefix="/api/v1")
+app.include_router(v1_router)
 
 def custom_openapi():
     """
