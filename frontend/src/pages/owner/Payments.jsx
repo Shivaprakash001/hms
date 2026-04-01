@@ -148,7 +148,7 @@ const Payments = () => {
         setGenLoading(true);
         setGenResult(null);
         try {
-            const data = await paymentService.bulkGenerate({ month_year: genMonth, dry_run: false });
+            const data = await paymentService.generateRent(genMonth);
             setGenResult({ success: true, data });
             loadPayments(); // refresh list
         } catch (error) {
