@@ -114,6 +114,13 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
                 prefill: orderData.prefill || {},
                 notes: orderData.notes || {},
                 theme: { color: '#4F46E5' },
+                method: {
+                    upi: true,
+                    card: true,
+                    netbanking: true,
+                    wallet: true,
+                    paylater: false
+                },
                 handler: (response) => {
                     // Payment captured by Razorpay – now verify server-side
                     handleVerify(response, orderData);
