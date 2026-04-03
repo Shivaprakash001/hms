@@ -185,7 +185,14 @@ const StudentPayments = () => {
             // Better error messages
             let errorMessage = 'Could not download receipt. Please try again.';
             if (error?.response?.status === 404) {
-                errorMessage = 'Receipt not found. The payment may not exist.';
+                const details = error?.response?.data?.detail;
+                if (typeof details === 'object' && details?.details) {
+                    errorMessage = `${details.message}\n\n${details.details}`;
+                } else if (typeof details === 'string') {
+                    errorMessage = details;
+                } else {
+                    errorMessage = 'Receipt not found. The payment may still be processing. Please wait a moment and try again.';
+                }
             } else if (error?.response?.status === 403) {
                 errorMessage = 'You are not authorized to download this receipt.';
             } else if (error?.response?.status === 500) {

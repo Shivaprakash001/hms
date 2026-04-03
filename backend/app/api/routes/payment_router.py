@@ -100,16 +100,41 @@ async def download_receipt(
         if not payment_id or len(payment_id) > 100:
             raise HTTPException(status_code=400, detail="Invalid payment ID format")
         
+        logger.info(f"Receipt download requested for payment_id: {payment_id} by user: {user.user_id}")
+        
         # Support both internal payment UUID and external reference number
-        res = supabase.table("payments").select("id, student_id, owner_id, amount_paid").eq("id", payment_id).execute()
+        res = supabase.table("payments").select("id, student_id, owner_id, amount_paid, reference_number").eq("id", payment_id).execute()
         if not res.data:
-            res = supabase.table("payments").select("id, student_id, owner_id, amount_paid").eq("reference_number", payment_id).execute()
+            logger.info(f"Payment not found by ID, trying reference_number: {payment_id}")
+            res = supabase.table("payments").select("id, student_id, owner_id, amount_paid, reference_number").eq("reference_number", payment_id).execute()
+        
+        # If still not found, try checking if this is an obligation_id
         if not res.data:
-            logger.warning(f"Receipt download failed: Payment {payment_id} not found")
-            raise HTTPException(status_code=404, detail="Payment not found. Please verify the payment ID.")
+            logger.info(f"Payment not found by reference_number, checking if this is an obligation_id: {payment_id}")
+            # Try to find payment by obligation_id
+            res = supabase.table("payments").select("id, student_id, owner_id, amount_paid, reference_number, obligation_id").eq("obligation_id", payment_id).execute()
+            if res.data:
+                # Found payment by obligation_id - use the most recent one if multiple exist
+                if len(res.data) > 1:
+                    logger.warning(f"Multiple payments found for obligation {payment_id}, using most recent")
+                    # Sort by created_at if available, otherwise use first
+                    res.data = [sorted(res.data, key=lambda x: x.get('created_at', ''), reverse=True)[0]]
+        
+        if not res.data:
+            logger.warning(f"Receipt download failed: Payment {payment_id} not found in database (tried id, reference_number, and obligation_id)")
+            raise HTTPException(
+                status_code=404, 
+                detail={
+                    "message": "Receipt not found",
+                    "details": "The payment may not exist yet. If you just made a payment, please wait a few seconds and try again.",
+                    "payment_id": payment_id
+                }
+            )
         
         payment = res.data[0]
         resolved_payment_id = payment.get("id")
+        
+        logger.info(f"Found payment: {resolved_payment_id} for requested ID: {payment_id}")
         
         # Ownership check
         if user.is_student():
