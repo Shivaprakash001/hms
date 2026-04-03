@@ -176,22 +176,32 @@ export const paymentService = {
         return response.data;
     },
     downloadReceipt: async (paymentId, fallbackReferenceNumber = null) => {
-        try {
-            const response = await api.get(`/payments/${paymentId}/receipt`, {
+        const attemptDownload = async (id) => {
+            const response = await api.get(`/payments/${id}/receipt`, {
                 responseType: 'blob'
             });
-            return response.data;
+            // Validate that we got a PDF, not a JSON error wrapped in a blob
+            const blob = response.data;
+            if (blob.type && blob.type.includes('application/json')) {
+                const text = await blob.text();
+                let detail = 'Unknown error';
+                try { detail = JSON.parse(text).detail || text; } catch { detail = text; }
+                const err = new Error(detail);
+                err.response = { status: 400, data: { detail } };
+                throw err;
+            }
+            return blob;
+        };
+
+        try {
+            return await attemptDownload(paymentId);
         } catch (error) {
             const isNotFound = error?.response?.status === 404;
             const hasFallback = !!fallbackReferenceNumber && fallbackReferenceNumber !== paymentId;
             if (!isNotFound || !hasFallback) {
                 throw error;
             }
-
-            const fallbackResponse = await api.get(`/payments/${fallbackReferenceNumber}/receipt`, {
-                responseType: 'blob'
-            });
-            return fallbackResponse.data;
+            return await attemptDownload(fallbackReferenceNumber);
         }
     },
     bulkGenerate: async (data) => {

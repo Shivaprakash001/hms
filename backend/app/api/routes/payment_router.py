@@ -93,6 +93,7 @@ async def download_receipt(
     payment_id: str,
     user: UserContext = Depends(get_current_user)
 ):
+    logger.info(f"Receipt download requested: payment_id={payment_id}, user={user.user_id}, role={'student' if user.is_student() else 'owner'}")
     try:
         from app.db import supabase
         
