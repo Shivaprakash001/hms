@@ -89,7 +89,9 @@ const StudentPayments = () => {
                 amount: o.amount,
                 status: o.status.toLowerCase(), // pending, paid, partial
                 type: 'Rent Due',
-                method: '---'
+                method: '---',
+                isReceiptAvailable: false,
+                entityType: 'obligation'
             }));
 
         const pays = (history.payments || [])
@@ -101,7 +103,9 @@ const StudentPayments = () => {
                 status: 'paid', // payments are always successful if recorded
                 type: 'Payment',
                 method: p.payment_method,
-                reference_number: p.reference_number
+                reference_number: p.reference_number,
+                isReceiptAvailable: true,
+                entityType: 'payment'
             }));
 
         const unpaidObs = obs.filter(o => o.status !== 'paid');
@@ -154,18 +158,31 @@ const StudentPayments = () => {
 
     const handleDownloadReceipt = async (paymentId) => {
         try {
+            if (!paymentId) {
+                alert('Invalid payment selected for receipt download.');
+                return;
+            }
             const blob = await paymentService.downloadReceipt(paymentId);
-            const url = window.URL.createObjectURL(new Blob([blob]));
+            const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
             link.setAttribute('download', `receipt_${paymentId}.pdf`);
             document.body.appendChild(link);
             link.click();
             link.parentNode.removeChild(link);
+            window.URL.revokeObjectURL(url);
         } catch (error) {
             console.error("Failed to download receipt:", error);
-            // Optionally add a toast notification here
+            alert('Could not download receipt. Please try again.');
         }
+    };
+
+    const handleDownloadFromRow = async (txn) => {
+        if (!txn?.isReceiptAvailable || txn?.entityType !== 'payment') {
+            alert('Receipt is only available for completed payment transactions.');
+            return;
+        }
+        await handleDownloadReceipt(txn.id);
     };
 
     return (
@@ -415,9 +432,9 @@ const StudentPayments = () => {
                                             </span>
                                         </td>
                                         <td className="px-6 py-4">
-                                            {(txn.status === 'paid' || txn.status === 'success') && (
+                                            {(txn.status === 'paid' || txn.status === 'success') && txn.isReceiptAvailable && (
                                                 <button 
-                                                    onClick={() => handleDownloadReceipt(txn.id)}
+                                                    onClick={() => handleDownloadFromRow(txn)}
                                                     className="text-slate-400 hover:text-indigo-600 transition-colors p-2 hover:bg-indigo-50 rounded-lg">
                                                     <Download size={18} />
                                                 </button>

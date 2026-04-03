@@ -22,7 +22,7 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, onMarkPaid, onDownload
 
     const handleDownload = () => {
         if (onDownloadReceipt) {
-            onDownloadReceipt(payment.id);
+            onDownloadReceipt(payment);
         }
     };
 
@@ -116,7 +116,7 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, onMarkPaid, onDownload
                                 </div>
 
                                 {/* Transaction Info */}
-                                {payment.status === 'paid' && (
+                                {payment.status === 'paid' && payment.isReceiptAvailable && (
                                     <div>
                                         <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4">Transaction Info</h3>
                                         <div className="p-4 rounded-xl border border-slate-100 bg-white space-y-3">

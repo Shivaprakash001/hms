@@ -26,6 +26,7 @@ The backend requires the following configuration variables:
 | `RAZORPAY_WEBHOOK_SECRET` | Secret used to verify incoming webhooks | `hms_webhook_secret` |
 | `RAZORPAY_KEY_ID` | Your Razorpay account Key ID | `rzp_test_...` |
 | `RAZORPAY_KEY_SECRET` | Your Razorpay account Key Secret | `your_secret_key` |
+| `RECEIPT_VERIFY_BASE_URL` | Public API base URL for receipt verification links/QR (`/{payment_id}` is appended automatically) | `https://trishul-solutions1.onrender.com/payments/verify/receipt` |
 
 > **Note:** For Gmail SMTP, it is highly recommended to use App Passwords.
 

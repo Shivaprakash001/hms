@@ -105,7 +105,16 @@ async def download_receipt(
             if str(payment.get("student_id")) != str(user.student_id):
                 raise HTTPException(status_code=403, detail="Unauthorized to download this receipt")
         elif user.is_owner():
-            if str(payment.get("owner_id")) != str(user.user_id):
+            payment_owner_id = payment.get("owner_id")
+            if payment_owner_id is None:
+                # Backward compatibility: older rows may not have payments.owner_id
+                student_id = payment.get("student_id")
+                s_res = supabase.table("students").select("owner_id").eq("id", student_id).execute()
+                if not s_res.data:
+                    raise HTTPException(status_code=403, detail="Unauthorized to download this receipt")
+                payment_owner_id = s_res.data[0].get("owner_id")
+
+            if str(payment_owner_id) != str(user.user_id):
                 raise HTTPException(status_code=403, detail="Unauthorized to download this receipt")
 
         pdf_bytes = await ReceiptService.generate_receipt_pdf(payment_id)
@@ -121,6 +130,22 @@ async def download_receipt(
     except Exception as e:
         logger.error(f"Error generating receipt: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get(
+    "/verify/receipt/{payment_id}",
+    summary="Verify receipt authenticity (public)"
+)
+async def verify_receipt(payment_id: str):
+    """
+    Public endpoint to verify whether a receipt is genuine.
+    Returns basic receipt metadata when valid.
+    """
+    try:
+        return await ReceiptService.verify_receipt(payment_id)
+    except Exception as e:
+        logger.error(f"Error verifying receipt: {e}")
+        raise HTTPException(status_code=500, detail="Failed to verify receipt")
 
 @router.post(
     "/generate-monthly",

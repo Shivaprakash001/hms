@@ -52,7 +52,9 @@ const Payments = () => {
                 amount: Number(item.amount),
                 status: item.status.toLowerCase(),
                 date: item.rent_month,
-                method: '---'
+                method: '---',
+                isReceiptAvailable: false,
+                entityType: 'obligation'
             }));
             setPayments(formatted);
         } catch (error) {
@@ -75,7 +77,9 @@ const Payments = () => {
                 amount: Number(item.amount_paid),
                 status: 'paid',
                 date: item.payment_date,
-                method: item.payment_method
+                method: item.payment_method,
+                isReceiptAvailable: true,
+                entityType: 'payment'
             }));
             setTransactions(formatted);
         } catch (error) {
@@ -141,6 +145,14 @@ const Payments = () => {
         } catch (error) {
             console.error("Failed to download receipt:", error);
         }
+    };
+
+    const handleDownloadFromSelection = async (payment) => {
+        if (!payment?.isReceiptAvailable || payment?.entityType !== 'payment') {
+            alert('Receipt is only available for recorded transactions.');
+            return;
+        }
+        await handleDownloadReceipt(payment.id);
     };
 
     // Generate monthly rent
@@ -419,7 +431,7 @@ const Payments = () => {
                 onClose={() => setSelectedPayment(null)}
                 payment={selectedPayment}
                 onMarkPaid={handleMarkAsPaid}
-                onDownloadReceipt={handleDownloadReceipt}
+                onDownloadReceipt={handleDownloadFromSelection}
             />
 
             {/* Tenant History Modal */}
