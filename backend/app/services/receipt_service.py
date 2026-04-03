@@ -135,7 +135,7 @@ class ReceiptService:
         res = supabase.table("payments").select(
             "id, created_at, amount_paid, payment_method, reference_number, "
             "rent_obligations(id, rent_month, status), "
-            "students(id, permanent_address, temporary_address, profiles(name, email, phone))"
+            "students(id, permanent_address, temporary_address, profiles!students_profile_id_fkey(name, email, phone))"
         ).eq("id", payment_id).execute()
         
         if not res.data:
@@ -222,7 +222,7 @@ class ReceiptService:
         res = supabase.table("payments").select(
             "id, created_at, amount_paid, payment_method, reference_number, "
             "rent_obligations(rent_month, status), "
-            "students(profiles(name))"
+            "students(profiles!students_profile_id_fkey(name))"
         ).eq("id", payment_id).execute()
 
         if not res.data:
