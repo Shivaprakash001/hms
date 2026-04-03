@@ -1,9 +1,10 @@
 import os
 from io import BytesIO
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from decimal import Decimal
 from jinja2 import Template
+from zoneinfo import ZoneInfo
 try:
     from weasyprint import HTML
     _WEASYPRINT_IMPORT_ERROR = None
@@ -35,6 +36,15 @@ class ReceiptService:
         if not method:
             return "N/A"
         return str(method).replace("_", " ").title()
+
+    @staticmethod
+    def _get_receipt_timezone() -> ZoneInfo:
+        tz_name = os.getenv("RECEIPT_TIMEZONE", "Asia/Kolkata")
+        try:
+            return ZoneInfo(tz_name)
+        except Exception:
+            logger.warning(f"Invalid RECEIPT_TIMEZONE '{tz_name}', falling back to Asia/Kolkata")
+            return ZoneInfo("Asia/Kolkata")
 
     @staticmethod
     def _build_description(obligation: dict) -> str:
@@ -147,14 +157,17 @@ class ReceiptService:
         obligation = payment.get("rent_obligations", {})
 
         created_at = payment.get("created_at")
+        receipt_tz = ReceiptService._get_receipt_timezone()
         try:
             if created_at:
                 created_dt = datetime.fromisoformat(str(created_at).replace("Z", "+00:00"))
-                formatted_date = created_dt.strftime("%d %b %Y, %I:%M %p")
+                if created_dt.tzinfo is None:
+                    created_dt = created_dt.replace(tzinfo=timezone.utc)
+                formatted_date = created_dt.astimezone(receipt_tz).strftime("%d %b %Y, %I:%M %p")
             else:
-                formatted_date = datetime.now().strftime("%d %b %Y, %I:%M %p")
+                formatted_date = datetime.now(receipt_tz).strftime("%d %b %Y, %I:%M %p")
         except Exception:
-            formatted_date = str(created_at or datetime.now().date())
+            formatted_date = str(created_at or datetime.now(receipt_tz).date())
 
         student_address = (
             student.get("temporary_address")
@@ -191,7 +204,7 @@ class ReceiptService:
             company_address=company_address,
             support_contact=support_contact,
             verification_url=verification_url,
-            generated_on=datetime.now().strftime("%d %b %Y, %I:%M %p"),
+            generated_on=datetime.now(receipt_tz).strftime("%d %b %Y, %I:%M %p"),
         )
 
         html_template = Template(template_path.read_text(encoding="utf-8"))
