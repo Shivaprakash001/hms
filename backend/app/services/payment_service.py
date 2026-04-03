@@ -266,6 +266,39 @@ def record_payment(
     - Default: Sum of payments updates status (PAID/PARTIAL)
     """
     try:
+        def _insert_payment_row(insert_data: Dict[str, Any], ref: Optional[str]) -> Dict[str, Any]:
+            """
+            Insert payment row with duplicate-check semantics.
+            Retries without `owner_id` if the target DB has not yet migrated that column.
+            """
+            if ref:
+                # Application-level duplicate check (since UNIQUE constraint might be missing in DB)
+                p_check = supabase.table("payments").select("id").eq("reference_number", ref).execute()
+                if p_check.data:
+                    logger.info(f"Duplicate payment reference detected: {ref}. Skipping insert.")
+                    return ServiceResponse.already_exists("Payment", f"Reference {ref} already recorded")
+
+            try:
+                res_insert = supabase.table("payments").insert(insert_data).execute()
+            except Exception as insert_err:
+                err_text = str(insert_err).lower()
+                # Backward-compatibility guard: production DB may not yet have payments.owner_id
+                if "owner_id" in err_text and "column" in err_text and "payments" in err_text:
+                    fallback_data = dict(insert_data)
+                    fallback_data.pop("owner_id", None)
+                    logger.warning("payments.owner_id column missing in DB; retrying insert without owner_id")
+                    res_insert = supabase.table("payments").insert(fallback_data).execute()
+                else:
+                    raise
+
+            if not res_insert.data:
+                return ServiceResponse.error(
+                    ErrorCode.DB_QUERY_ERROR,
+                    "Failed to record payment (insert returned no row)."
+                )
+
+            return ServiceResponse.success(res_insert.data[0], "Payment row inserted")
+
         # 1. Fetch Obligation
         ob_res = supabase.table("rent_obligations")\
             .select("*")\
@@ -287,7 +320,7 @@ def record_payment(
             .eq("obligation_id", obligation_id)\
             .execute()
         
-        existing_paid = sum(Decimal(str(p["amount_paid"])) for p in p_res.data)
+        existing_paid = sum(Decimal(str(p["amount_paid"])) for p in (p_res.data or []))
         remaining_balance = total_amount - existing_paid
         
         if remaining_balance <= 0 and amount_paid > 0:
@@ -301,32 +334,35 @@ def record_payment(
             )
 
         # 3. Insert Payment
+        owner_id = obligation.get("owner_id") or user_id
+        if not owner_id:
+            # Fallback for legacy obligations lacking owner_id
+            try:
+                student_owner_res = supabase.table("students")\
+                    .select("owner_id")\
+                    .eq("id", obligation["student_id"])\
+                    .execute()
+                if student_owner_res.data:
+                    owner_id = student_owner_res.data[0].get("owner_id")
+            except Exception as owner_fetch_err:
+                logger.warning(f"Could not resolve owner_id for payment fallback: {owner_fetch_err}")
+
         payment_data = {
             "obligation_id": obligation_id,
             "student_id": obligation["student_id"],
-            "owner_id": obligation.get("owner_id") or user_id,
             "amount_paid": float(amount_paid),
             "payment_method": payment_method,
             "reference_number": reference_number,
             "payment_date": (payment_date or date.today()).isoformat()
         }
+        if owner_id:
+            payment_data["owner_id"] = owner_id
 
-        if reference_number:
-            # Application-level duplicate check (since UNIQUE constraint might be missing in DB)
-            p_check = supabase.table("payments").select("id").eq("reference_number", reference_number).execute()
-            if p_check.data:
-                logger.info(f"Duplicate payment reference detected: {reference_number}. Skipping insert.")
-                return ServiceResponse.already_exists("Payment", f"Reference {reference_number} already recorded")
-            
-            res = supabase.table("payments").insert(payment_data).execute()
-            if not res.data:
-                return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to record payment (with reference).")
-        else:
-            res = supabase.table("payments").insert(payment_data).execute()
-            if not res.data:
-                return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to record payment.")
-        
-        new_payment = res.data[0]
+        insert_result = _insert_payment_row(payment_data, reference_number)
+        if not insert_result.get("success"):
+            return insert_result
+
+        new_payment = insert_result["data"]
         
         # 4. Update Obligation Status
         new_total_paid = existing_paid + amount_paid
@@ -954,7 +990,8 @@ def verify_razorpay_payment(
         try:
             rp_payment = razorpay_client.payment.fetch(razorpay_payment_id)
             amount_paise = rp_payment.get("amount")
-            payment_method = rp_payment.get("method", "UPI").upper()
+            method_value = rp_payment.get("method")
+            payment_method = str(method_value).upper() if method_value else "UPI"
         except Exception as fetch_err:
             logger.warning(f"[Verify] Could not fetch payment details: {fetch_err}")
 
