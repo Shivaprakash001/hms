@@ -68,30 +68,9 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    docs_paths = {"/docs", "/redoc", "/openapi.json", "/docs/oauth2-redirect"}
-    if request.url.path in docs_paths:
-        # Keep docs usable in testing/staging environments
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self' https: data: blob:; "
-            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-            "script-src-elem 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; "
-            "style-src-elem 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; "
-            "img-src 'self' https://fastapi.tiangolo.com data: https:; "
-            "font-src 'self' https://fonts.gstatic.com data:; "
-            "connect-src 'self' https: wss:;"
-        )
-    else:
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
-            "script-src-elem 'self'; "
-            "style-src 'self' 'unsafe-inline'; "
-            "style-src-elem 'self'; "
-            "img-src 'self' data:; "
-            "font-src 'self' https://fonts.gstatic.com; "
-            "connect-src 'self' https: wss:;"
-        )
+    # TEMP: CSP disabled to unblock Swagger UI during testing.
+    # Re-enable before production hardening.
+    # response.headers["Content-Security-Policy"] = "..."
     
     return response
 
