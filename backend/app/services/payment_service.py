@@ -265,6 +265,7 @@ def record_payment(
     - Total payments cannot exceed obligation amount? (Business choice: usually yes, or store as credit)
     - Default: Sum of payments updates status (PAID/PARTIAL)
     """
+    current_step = "init"
     try:
         def _insert_payment_row(insert_data: Dict[str, Any], ref: Optional[str]) -> Dict[str, Any]:
             """
@@ -300,6 +301,7 @@ def record_payment(
             return ServiceResponse.success(res_insert.data[0], "Payment row inserted")
 
         # 1. Fetch Obligation
+        current_step = "fetch_obligation"
         ob_res = supabase.table("rent_obligations")\
             .select("*")\
             .eq("id", obligation_id)\
@@ -315,6 +317,7 @@ def record_payment(
         total_amount = Decimal(str(obligation["amount"]))
         
         # 2. Fetch existing payments for this obligation
+        current_step = "fetch_existing_payments"
         p_res = supabase.table("payments")\
             .select("amount_paid")\
             .eq("obligation_id", obligation_id)\
@@ -358,6 +361,7 @@ def record_payment(
         if owner_id:
             payment_data["owner_id"] = owner_id
 
+        current_step = "insert_payment"
         insert_result = _insert_payment_row(payment_data, reference_number)
         if not insert_result.get("success"):
             return insert_result
@@ -368,12 +372,14 @@ def record_payment(
         new_total_paid = existing_paid + amount_paid
         new_status = "PAID" if new_total_paid >= total_amount else "PARTIAL"
         
+        current_step = "update_obligation_status"
         supabase.table("rent_obligations")\
             .update({"status": new_status})\
             .eq("id", obligation_id)\
             .execute()
             
         # Side Effects
+        current_step = "trigger_hooks"
         trigger_hook("payment_recorded", 
                      payment_id=new_payment["id"], 
                      obligation_id=obligation_id, 
@@ -392,8 +398,12 @@ def record_payment(
             logger.info(f"Duplicate payment reference detected at insert level: {reference_number}. Skipping.")
             return ServiceResponse.already_exists("Payment", f"Reference {reference_number} already recorded")
             
-        logger.exception(f"Error recording payment: {e}")
-        return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Failed to record payment", str(e))
+        logger.exception(f"Error recording payment at step '{current_step}': {e}")
+        return ServiceResponse.error(
+            ErrorCode.INTERNAL_ERROR,
+            f"Failed to record payment (step: {current_step})",
+            str(e)
+        )
 
 
 def get_student_payment_history(student_id: str) -> Dict[str, Any]:
