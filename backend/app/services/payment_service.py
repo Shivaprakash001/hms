@@ -327,13 +327,15 @@ def record_payment(
         remaining_balance = total_amount - existing_paid
         
         if remaining_balance <= 0 and amount_paid > 0:
-             return ServiceResponse.error(ErrorCode.INVALID_INPUT, "Obligation is already fully paid.")
+             return ServiceResponse.error(
+                 ErrorCode.INVALID_INPUT, 
+                 "Obligation is already fully paid. No additional payment is required."
+             )
 
         if amount_paid > remaining_balance:
-            # Note: In a smarter system, we'd take the excess and credit it to next month
             return ServiceResponse.error(
                 ErrorCode.INVALID_INPUT, 
-                f"Payment exceeds balance. Remaining balance: {remaining_balance}"
+                f"Payment amount ₹{amount_paid} exceeds remaining balance of ₹{remaining_balance}. Please adjust the amount."
             )
 
         # 3. Insert Payment

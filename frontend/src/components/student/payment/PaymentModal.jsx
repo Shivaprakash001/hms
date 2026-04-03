@@ -45,6 +45,19 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
             setVerifiedData(null);
         }
     }, [isOpen]);
+    
+    // Validate amount before proceeding
+    useEffect(() => {
+        if (isOpen && amount) {
+            if (amount <= 0) {
+                setError('Invalid amount: Payment amount must be greater than zero');
+                setStep('failed');
+            } else if (amount > 1000000) {
+                setError('Invalid amount: Payment amount cannot exceed ₹10,00,000');
+                setStep('failed');
+            }
+        }
+    }, [isOpen, amount]);
 
     const handleVerify = async (razorpayResponse, orderData) => {
         setVerifying(true);
@@ -98,6 +111,19 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
     };
 
     const handlePayment = async (selectedMethod) => {
+        // Validate amount first
+        if (!amount || amount <= 0) {
+            setError('Invalid payment amount. Please refresh and try again.');
+            setStep('failed');
+            return;
+        }
+        
+        if (amount > 1000000) {
+            setError('Payment amount exceeds maximum limit of ₹10,00,000');
+            setStep('failed');
+            return;
+        }
+        
         setMethod(selectedMethod);
         setLoading(true);
         setError(null);
@@ -106,7 +132,7 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
             // 1. Load Razorpay SDK dynamically
             const scriptLoaded = await loadRazorpayScript();
             if (!scriptLoaded) {
-                throw new Error('Failed to load payment gateway. Please check your internet connection.');
+                throw new Error('Failed to load payment gateway. Please check your internet connection and try again.');
             }
 
             // Save preference
@@ -152,15 +178,32 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
 
             const rzp = new window.Razorpay(options);
             rzp.on('payment.failed', (response) => {
-                setError(response.error?.description || 'Payment failed. Please try again.');
+                const failReason = response.error?.description || 'Payment failed';
+                setError(`${failReason}. Please try again or use a different payment method.`);
                 setStep('failed');
                 setLoading(false);
             });
             rzp.open();
             // Loading spinner stays visible until the checkout widget opens/closes
         } catch (err) {
-            setError(err?.response?.data?.detail?.message || err?.response?.data?.detail || err.message || 'Failed to initiate payment.');
+            const errorMsg = err?.response?.data?.detail?.message 
+                || err?.response?.data?.detail 
+                || err.message 
+                || 'Failed to initiate payment';
+            
+            // Enhanced error messages
+            if (err?.response?.status === 422) {
+                setError('Invalid payment details. Please refresh and try again.');
+            } else if (err?.response?.status === 404) {
+                setError('Payment obligation not found. Please refresh the page.');
+            } else if (!navigator.onLine) {
+                setError('No internet connection. Please check your network and try again.');
+            } else {
+                setError(errorMsg);
+            }
+            
             setLoading(false);
+            setStep('failed');
         }
     };
 

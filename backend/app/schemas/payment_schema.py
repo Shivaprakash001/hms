@@ -32,10 +32,26 @@ class RentGenerationRequest(BaseModel):
 
 class PaymentCreate(BaseModel):
     obligation_id: UUID
-    amount_paid: Decimal = Field(..., gt=0)
+    amount_paid: Decimal = Field(..., gt=0, le=1000000, description="Amount must be between 0 and 10,00,000")
     payment_method: PaymentMethod
-    reference_number: Optional[str] = None
+    reference_number: Optional[str] = Field(None, max_length=100)
     payment_date: date = Field(default_factory=date.today)
+    
+    @field_validator('amount_paid')
+    @classmethod
+    def validate_amount(cls, v):
+        if v <= 0:
+            raise ValueError('Amount must be greater than 0')
+        if v > Decimal('1000000'):
+            raise ValueError('Amount cannot exceed ₹10,00,000')
+        return v.quantize(Decimal('0.01'))
+    
+    @field_validator('payment_date')
+    @classmethod
+    def validate_payment_date(cls, v):
+        if v > date.today():
+            raise ValueError('Payment date cannot be in the future')
+        return v
 
 
 class WaiveRequest(BaseModel):

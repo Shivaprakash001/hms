@@ -135,7 +135,18 @@ const Payments = () => {
 
     const handleDownloadReceipt = async (paymentId, fallbackReferenceNumber = null) => {
         try {
+            if (!paymentId) {
+                alert('Invalid payment ID');
+                return;
+            }
+            
             const blob = await paymentService.downloadReceipt(paymentId, fallbackReferenceNumber);
+            
+            // Validate blob
+            if (!blob || blob.size === 0) {
+                throw new Error('Empty receipt file received');
+            }
+            
             const url = window.URL.createObjectURL(new Blob([blob]));
             const link = document.createElement('a');
             link.href = url;
@@ -146,6 +157,20 @@ const Payments = () => {
             window.URL.revokeObjectURL(url);
         } catch (error) {
             console.error("Failed to download receipt:", error?.response?.data || error);
+            
+            // Better error messages
+            let errorMessage = 'Failed to download receipt';
+            if (error?.response?.status === 404) {
+                errorMessage = 'Receipt not found';
+            } else if (error?.response?.status === 403) {
+                errorMessage = 'Unauthorized access';
+            } else if (error?.response?.status === 500) {
+                errorMessage = 'Server error - please try again';
+            } else if (error?.message?.includes('Empty')) {
+                errorMessage = 'Receipt file is empty';
+            }
+            
+            alert(errorMessage);
         }
     };
 

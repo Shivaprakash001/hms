@@ -162,7 +162,15 @@ const StudentPayments = () => {
                 alert('Invalid payment selected for receipt download.');
                 return;
             }
+            
+            // Show loading state (you can add a state variable for this)
             const blob = await paymentService.downloadReceipt(paymentId, fallbackReferenceNumber);
+            
+            // Validate blob
+            if (!blob || blob.size === 0) {
+                throw new Error('Empty receipt file received');
+            }
+            
             const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
@@ -173,7 +181,22 @@ const StudentPayments = () => {
             window.URL.revokeObjectURL(url);
         } catch (error) {
             console.error("Failed to download receipt:", error?.response?.data || error);
-            alert('Could not download receipt. Please try again.');
+            
+            // Better error messages
+            let errorMessage = 'Could not download receipt. Please try again.';
+            if (error?.response?.status === 404) {
+                errorMessage = 'Receipt not found. The payment may not exist.';
+            } else if (error?.response?.status === 403) {
+                errorMessage = 'You are not authorized to download this receipt.';
+            } else if (error?.response?.status === 500) {
+                errorMessage = 'Server error. Please try again in a few moments.';
+            } else if (error?.message?.includes('Empty')) {
+                errorMessage = 'Receipt file is empty. Please contact support.';
+            } else if (!navigator.onLine) {
+                errorMessage = 'No internet connection. Please check your network.';
+            }
+            
+            alert(errorMessage);
         }
     };
 

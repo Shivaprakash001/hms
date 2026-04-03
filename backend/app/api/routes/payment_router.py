@@ -95,19 +95,27 @@ async def download_receipt(
 ):
     try:
         from app.db import supabase
+        
+        # Input validation
+        if not payment_id or len(payment_id) > 100:
+            raise HTTPException(status_code=400, detail="Invalid payment ID format")
+        
         # Support both internal payment UUID and external reference number
-        res = supabase.table("payments").select("id, student_id, owner_id").eq("id", payment_id).execute()
+        res = supabase.table("payments").select("id, student_id, owner_id, amount_paid").eq("id", payment_id).execute()
         if not res.data:
-            res = supabase.table("payments").select("id, student_id, owner_id").eq("reference_number", payment_id).execute()
+            res = supabase.table("payments").select("id, student_id, owner_id, amount_paid").eq("reference_number", payment_id).execute()
         if not res.data:
-            raise HTTPException(status_code=404, detail="Payment not found")
+            logger.warning(f"Receipt download failed: Payment {payment_id} not found")
+            raise HTTPException(status_code=404, detail="Payment not found. Please verify the payment ID.")
+        
         payment = res.data[0]
         resolved_payment_id = payment.get("id")
         
         # Ownership check
         if user.is_student():
             if str(payment.get("student_id")) != str(user.student_id):
-                raise HTTPException(status_code=403, detail="Unauthorized to download this receipt")
+                logger.warning(f"Unauthorized receipt access attempt by student {user.student_id} for payment {payment_id}")
+                raise HTTPException(status_code=403, detail="You are not authorized to download this receipt")
         elif user.is_owner():
             payment_owner_id = payment.get("owner_id")
             if payment_owner_id is None:
@@ -115,25 +123,39 @@ async def download_receipt(
                 student_id = payment.get("student_id")
                 s_res = supabase.table("students").select("owner_id").eq("id", student_id).execute()
                 if not s_res.data:
-                    raise HTTPException(status_code=403, detail="Unauthorized to download this receipt")
+                    raise HTTPException(status_code=403, detail="Unable to verify ownership of this receipt")
                 payment_owner_id = s_res.data[0].get("owner_id")
 
             if str(payment_owner_id) != str(user.user_id):
-                raise HTTPException(status_code=403, detail="Unauthorized to download this receipt")
+                logger.warning(f"Unauthorized receipt access attempt by owner {user.user_id} for payment {payment_id}")
+                raise HTTPException(status_code=403, detail="You are not authorized to download this receipt")
+        
+        # Audit logging
+        logger.info(f"Receipt downloaded by user {user.user_id} (role: {user.role}) for payment {resolved_payment_id}, amount: ₹{payment.get('amount_paid', 0)}")
 
         pdf_bytes = await ReceiptService.generate_receipt_pdf(str(resolved_payment_id))
+        
+        # Verify PDF was generated
+        if not pdf_bytes or pdf_bytes.getbuffer().nbytes == 0:
+            logger.error(f"Empty PDF generated for payment {resolved_payment_id}")
+            raise HTTPException(status_code=500, detail="Failed to generate receipt PDF")
+        
         return StreamingResponse(
             pdf_bytes,
             media_type="application/pdf",
             headers={
-                "Content-Disposition": f"attachment; filename=receipt_{resolved_payment_id}.pdf"
+                "Content-Disposition": f"attachment; filename=receipt_{resolved_payment_id}.pdf",
+                "Content-Length": str(pdf_bytes.getbuffer().nbytes)
             }
         )
     except HTTPException:
         raise
+    except ValueError as ve:
+        logger.error(f"Validation error generating receipt for {payment_id}: {ve}")
+        raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
-        logger.error(f"Error generating receipt: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception(f"Unexpected error generating receipt for {payment_id}: {e}")
+        raise HTTPException(status_code=500, detail="An unexpected error occurred while generating the receipt. Please try again later.")
 
 
 @router.get(
