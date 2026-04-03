@@ -156,13 +156,13 @@ const StudentPayments = () => {
         startPolling(razorpayResponse?.razorpay_payment_id, pendingAmount);
     };
 
-    const handleDownloadReceipt = async (paymentId) => {
+    const handleDownloadReceipt = async (paymentId, fallbackReferenceNumber = null) => {
         try {
             if (!paymentId) {
                 alert('Invalid payment selected for receipt download.');
                 return;
             }
-            const blob = await paymentService.downloadReceipt(paymentId);
+            const blob = await paymentService.downloadReceipt(paymentId, fallbackReferenceNumber);
             const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
@@ -172,7 +172,7 @@ const StudentPayments = () => {
             link.parentNode.removeChild(link);
             window.URL.revokeObjectURL(url);
         } catch (error) {
-            console.error("Failed to download receipt:", error);
+            console.error("Failed to download receipt:", error?.response?.data || error);
             alert('Could not download receipt. Please try again.');
         }
     };
@@ -182,7 +182,7 @@ const StudentPayments = () => {
             alert('Receipt is only available for completed payment transactions.');
             return;
         }
-        await handleDownloadReceipt(txn.id);
+        await handleDownloadReceipt(txn.id, txn.reference_number);
     };
 
     return (

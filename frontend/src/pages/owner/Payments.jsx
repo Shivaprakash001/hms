@@ -78,6 +78,7 @@ const Payments = () => {
                 status: 'paid',
                 date: item.payment_date,
                 method: item.payment_method,
+                reference_number: item.reference_number,
                 isReceiptAvailable: true,
                 entityType: 'payment'
             }));
@@ -132,9 +133,9 @@ const Payments = () => {
         }
     };
 
-    const handleDownloadReceipt = async (paymentId) => {
+    const handleDownloadReceipt = async (paymentId, fallbackReferenceNumber = null) => {
         try {
-            const blob = await paymentService.downloadReceipt(paymentId);
+            const blob = await paymentService.downloadReceipt(paymentId, fallbackReferenceNumber);
             const url = window.URL.createObjectURL(new Blob([blob]));
             const link = document.createElement('a');
             link.href = url;
@@ -142,8 +143,9 @@ const Payments = () => {
             document.body.appendChild(link);
             link.click();
             link.parentNode.removeChild(link);
+            window.URL.revokeObjectURL(url);
         } catch (error) {
-            console.error("Failed to download receipt:", error);
+            console.error("Failed to download receipt:", error?.response?.data || error);
         }
     };
 
@@ -152,7 +154,7 @@ const Payments = () => {
             alert('Receipt is only available for recorded transactions.');
             return;
         }
-        await handleDownloadReceipt(payment.id);
+        await handleDownloadReceipt(payment.id, payment.reference_number);
     };
 
     // Generate monthly rent

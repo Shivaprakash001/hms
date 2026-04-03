@@ -175,11 +175,24 @@ export const paymentService = {
         const response = await api.post(`/payments/obligations/${obligationId}/waive`, { reason });
         return response.data;
     },
-    downloadReceipt: async (paymentId) => {
-        const response = await api.get(`/payments/${paymentId}/receipt`, {
-            responseType: 'blob'
-        });
-        return response.data;
+    downloadReceipt: async (paymentId, fallbackReferenceNumber = null) => {
+        try {
+            const response = await api.get(`/payments/${paymentId}/receipt`, {
+                responseType: 'blob'
+            });
+            return response.data;
+        } catch (error) {
+            const isNotFound = error?.response?.status === 404;
+            const hasFallback = !!fallbackReferenceNumber && fallbackReferenceNumber !== paymentId;
+            if (!isNotFound || !hasFallback) {
+                throw error;
+            }
+
+            const fallbackResponse = await api.get(`/payments/${fallbackReferenceNumber}/receipt`, {
+                responseType: 'blob'
+            });
+            return fallbackResponse.data;
+        }
     },
     bulkGenerate: async (data) => {
         const response = await api.post('/payments/bulk-generate', data);

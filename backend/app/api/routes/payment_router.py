@@ -95,10 +95,14 @@ async def download_receipt(
 ):
     try:
         from app.db import supabase
-        res = supabase.table("payments").select("student_id, owner_id").eq("id", payment_id).execute()
+        # Support both internal payment UUID and external reference number
+        res = supabase.table("payments").select("id, student_id, owner_id").eq("id", payment_id).execute()
+        if not res.data:
+            res = supabase.table("payments").select("id, student_id, owner_id").eq("reference_number", payment_id).execute()
         if not res.data:
             raise HTTPException(status_code=404, detail="Payment not found")
         payment = res.data[0]
+        resolved_payment_id = payment.get("id")
         
         # Ownership check
         if user.is_student():
@@ -117,12 +121,12 @@ async def download_receipt(
             if str(payment_owner_id) != str(user.user_id):
                 raise HTTPException(status_code=403, detail="Unauthorized to download this receipt")
 
-        pdf_bytes = await ReceiptService.generate_receipt_pdf(payment_id)
+        pdf_bytes = await ReceiptService.generate_receipt_pdf(str(resolved_payment_id))
         return StreamingResponse(
             pdf_bytes,
             media_type="application/pdf",
             headers={
-                "Content-Disposition": f"attachment; filename=receipt_{payment_id}.pdf"
+                "Content-Disposition": f"attachment; filename=receipt_{resolved_payment_id}.pdf"
             }
         )
     except HTTPException:
