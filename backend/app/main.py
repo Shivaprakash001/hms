@@ -84,7 +84,6 @@ def startup_event():
             traces_sample_rate=1.0,
             profiles_sample_rate=1.0,
         )
-        from app.utils.logger import get_logger
         get_logger("sentry").info("Sentry initialized")
 
     from app.services.notification_handler import (
