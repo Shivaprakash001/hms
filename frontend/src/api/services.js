@@ -176,7 +176,7 @@ export const paymentService = {
         return response.data;
     },
     downloadReceipt: async (paymentId) => {
-        const response = await api.get(`/api/v1/payments/${paymentId}/receipt`, {
+        const response = await api.get(`/payments/${paymentId}/receipt`, {
             responseType: 'blob'
         });
 
@@ -194,7 +194,7 @@ export const paymentService = {
         return blob;
     },
     exportReport: async (params = {}) => {
-        const response = await api.get('/api/v1/payments/export', {
+        const response = await api.get('/payments/export', {
             params,
             responseType: 'blob'
         });
