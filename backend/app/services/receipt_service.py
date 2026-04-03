@@ -135,7 +135,7 @@ class ReceiptService:
         res = supabase.table("payments").select(
             "id, created_at, amount_paid, payment_method, reference_number, "
             "rent_obligations(id, rent_month, status), "
-            "students(id, profiles(name, email, phone, permanent_address, temporary_address))"
+            "students(id, permanent_address, temporary_address, profiles(name, email, phone))"
         ).eq("id", payment_id).execute()
         
         if not res.data:
@@ -157,8 +157,8 @@ class ReceiptService:
             formatted_date = str(created_at or datetime.now().date())
 
         student_address = (
-            profile.get("temporary_address")
-            or profile.get("permanent_address")
+            student.get("temporary_address")
+            or student.get("permanent_address")
             or "N/A"
         )
 
