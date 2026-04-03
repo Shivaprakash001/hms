@@ -4,7 +4,14 @@ from datetime import datetime
 from pathlib import Path
 from decimal import Decimal
 from jinja2 import Template
-from weasyprint import HTML
+try:
+    from weasyprint import HTML
+    _WEASYPRINT_IMPORT_ERROR = None
+except Exception as import_error:
+    HTML = None
+    _WEASYPRINT_IMPORT_ERROR = import_error
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
 from app.db import supabase
 from app.utils.logger import get_logger
 
@@ -46,6 +53,77 @@ class ReceiptService:
             return f"Hostel Rent - {parsed.strftime('%B %Y')}"
         except Exception:
             return f"Hostel Rent - {rent_month}"
+
+    @staticmethod
+    def _generate_fallback_pdf(context: dict) -> BytesIO:
+        """
+        Generate a simple PDF receipt using ReportLab when WeasyPrint rendering fails.
+        """
+        buffer = BytesIO()
+        c = canvas.Canvas(buffer, pagesize=A4)
+        width, height = A4
+
+        y = height - 50
+        line_gap = 18
+
+        c.setFont("Helvetica-Bold", 16)
+        c.drawString(50, y, "PAYMENT RECEIPT")
+        y -= 30
+
+        c.setFont("Helvetica", 10)
+        c.drawString(50, y, f"Company: {context.get('company_name', 'N/A')}")
+        y -= line_gap
+        c.drawString(50, y, f"Address: {context.get('company_address', 'N/A')}")
+        y -= line_gap * 2
+
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(50, y, "Receipt Details")
+        y -= line_gap
+        c.setFont("Helvetica", 10)
+        c.drawString(50, y, f"Receipt No: {context.get('receipt_no', 'N/A')}")
+        y -= line_gap
+        c.drawString(50, y, f"Date: {context.get('date', 'N/A')}")
+        y -= line_gap
+        c.drawString(50, y, f"Received From: {context.get('student_name', 'N/A')}")
+        y -= line_gap
+        c.drawString(50, y, f"Email: {context.get('student_email', 'N/A')}")
+        y -= line_gap
+        c.drawString(50, y, f"Phone: {context.get('student_phone', 'N/A')}")
+        y -= line_gap
+
+        student_address = str(context.get('student_address', 'N/A'))
+        max_len = 95
+        address_chunks = [student_address[i:i + max_len] for i in range(0, len(student_address), max_len)] or ["N/A"]
+        c.drawString(50, y, f"Address: {address_chunks[0]}")
+        y -= line_gap
+        for chunk in address_chunks[1:]:
+            c.drawString(100, y, chunk)
+            y -= line_gap
+
+        c.drawString(50, y, f"Payment Method: {context.get('payment_method', 'N/A')}")
+        y -= line_gap
+        c.drawString(50, y, f"Transaction ID: {context.get('transaction_id', 'N/A')}")
+        y -= line_gap
+        c.drawString(50, y, f"Status: {context.get('payment_status', 'PAID')}")
+        y -= line_gap
+        c.drawString(50, y, f"Description: {context.get('description', 'Hostel Rent')}")
+        y -= line_gap
+        c.drawString(50, y, f"Amount Paid: ₹{context.get('amount', '0.00')}")
+        y -= line_gap * 2
+
+        c.drawString(50, y, f"Support: {context.get('support_contact', 'N/A')}")
+        y -= line_gap
+        c.drawString(50, y, f"Generated On: {context.get('generated_on', 'N/A')}")
+
+        verification_url = context.get('verification_url')
+        if verification_url:
+            y -= line_gap
+            c.drawString(50, y, f"Verify Receipt: {verification_url}")
+
+        c.showPage()
+        c.save()
+        buffer.seek(0)
+        return buffer
 
     @staticmethod
     async def generate_receipt_pdf(payment_id: str) -> BytesIO:
@@ -97,8 +175,7 @@ class ReceiptService:
         if not template_path.exists():
             raise FileNotFoundError(f"Receipt template not found: {template_path}")
 
-        html_template = Template(template_path.read_text(encoding="utf-8"))
-        rendered_html = html_template.render(
+        render_context = dict(
             receipt_no=payment.get("id"),
             date=formatted_date,
             student_name=profile.get("name", "N/A"),
@@ -117,10 +194,24 @@ class ReceiptService:
             generated_on=datetime.now().strftime("%d %b %Y, %I:%M %p"),
         )
 
-        pdf_bytes = HTML(string=rendered_html, base_url=str(template_path.parent)).write_pdf()
-        buffer = BytesIO(pdf_bytes)
-        buffer.seek(0)
-        return buffer
+        html_template = Template(template_path.read_text(encoding="utf-8"))
+        rendered_html = html_template.render(**render_context)
+
+        if HTML is None:
+            logger.warning(
+                "WeasyPrint unavailable, using fallback receipt renderer: %s",
+                _WEASYPRINT_IMPORT_ERROR
+            )
+            return ReceiptService._generate_fallback_pdf(render_context)
+
+        try:
+            pdf_bytes = HTML(string=rendered_html, base_url=str(template_path.parent)).write_pdf()
+            buffer = BytesIO(pdf_bytes)
+            buffer.seek(0)
+            return buffer
+        except Exception as e:
+            logger.exception(f"WeasyPrint receipt generation failed for payment {payment_id}: {e}. Falling back to ReportLab.")
+            return ReceiptService._generate_fallback_pdf(render_context)
 
     @staticmethod
     async def verify_receipt(payment_id: str) -> dict:
