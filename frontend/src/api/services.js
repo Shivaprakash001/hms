@@ -175,37 +175,26 @@ export const paymentService = {
         const response = await api.post(`/payments/obligations/${obligationId}/waive`, { reason });
         return response.data;
     },
-    downloadReceipt: async (paymentId, fallbackReferenceNumber = null) => {
-        const attemptDownload = async (id) => {
-            const response = await api.get(`/payments/${id}/receipt`, {
-                responseType: 'blob'
-            });
-            // Validate that we got a PDF, not a JSON error wrapped in a blob
-            const blob = response.data;
-            if (blob.type && blob.type.includes('application/json')) {
-                const text = await blob.text();
-                let detail = 'Unknown error';
-                try { detail = JSON.parse(text).detail || text; } catch { detail = text; }
-                const err = new Error(detail);
-                err.response = { status: 400, data: { detail } };
-                throw err;
-            }
-            return blob;
-        };
+    downloadReceipt: async (paymentId) => {
+        const response = await api.get(`/api/v1/payments/${paymentId}/receipt`, {
+            responseType: 'blob'
+        });
 
-        try {
-            return await attemptDownload(paymentId);
-        } catch (error) {
-            const isNotFound = error?.response?.status === 404;
-            const hasFallback = !!fallbackReferenceNumber && fallbackReferenceNumber !== paymentId;
-            if (!isNotFound || !hasFallback) {
-                throw error;
-            }
-            return await attemptDownload(fallbackReferenceNumber);
+        // Validate that we got a PDF, not a JSON error wrapped in a blob
+        const blob = response.data;
+        if (blob.type && blob.type.includes('application/json')) {
+            const text = await blob.text();
+            let detail = 'Unknown error';
+            try { detail = JSON.parse(text).detail || text; } catch { detail = text; }
+            const err = new Error(detail);
+            err.response = { status: 400, data: { detail } };
+            throw err;
         }
+
+        return blob;
     },
     exportReport: async (params = {}) => {
-        const response = await api.get('/payments/export', {
+        const response = await api.get('/api/v1/payments/export', {
             params,
             responseType: 'blob'
         });

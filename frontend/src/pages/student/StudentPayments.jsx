@@ -156,7 +156,7 @@ const StudentPayments = () => {
         startPolling(razorpayResponse?.razorpay_payment_id, pendingAmount);
     };
 
-    const handleDownloadReceipt = async (paymentId, fallbackReferenceNumber = null) => {
+    const handleDownloadReceipt = async (paymentId) => {
         try {
             if (!paymentId) {
                 alert('Invalid payment selected for receipt download.');
@@ -164,7 +164,7 @@ const StudentPayments = () => {
             }
             
             // Show loading state (you can add a state variable for this)
-            const blob = await paymentService.downloadReceipt(paymentId, fallbackReferenceNumber);
+            const blob = await paymentService.downloadReceipt(paymentId);
             
             // Validate blob
             if (!blob || blob.size === 0) {
@@ -212,7 +212,7 @@ const StudentPayments = () => {
             alert('Receipt is only available for completed payment transactions.');
             return;
         }
-        await handleDownloadReceipt(txn.id, txn.reference_number);
+        await handleDownloadReceipt(txn.id);
     };
 
     return (
