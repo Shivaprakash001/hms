@@ -9,10 +9,12 @@ from app.utils.auth import get_current_user, UserContext, require_admin, require
 from app.utils.responses import ErrorCode
 from app.utils.logger import get_logger
 from typing import List, Optional
-from datetime import date
+from datetime import date, datetime
 from collections import defaultdict
 import time
 import threading
+from io import BytesIO
+import openpyxl
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/payments", tags=["Payments & Billing"])
@@ -297,6 +299,93 @@ def get_all_payments(
         offset=offset
     )
     return _handle_service_response(result)
+
+
+@router.get(
+    "/export",
+    summary="Export payments report as Excel",
+    dependencies=[Depends(require_admin_or_owner)]
+)
+def export_payments(
+    tenant_id: Optional[str] = None,
+    payment_status: Optional[str] = None,
+    month: Optional[int] = None,
+    year: Optional[int] = None,
+    payment_method: Optional[str] = None,
+    user: UserContext = Depends(get_current_user)
+):
+    """
+    Export owner/admin payments to an Excel file.
+    Supports optional filters by tenant, status, month, year, and payment method.
+    """
+    if month is not None and (month < 1 or month > 12):
+        raise HTTPException(status_code=422, detail="month must be between 1 and 12")
+    if year is not None and (year < 2000 or year > 2100):
+        raise HTTPException(status_code=422, detail="year must be between 2000 and 2100")
+
+    result = payment_service.get_payments_export_data(
+        user_id=user.user_id,
+        tenant_id=tenant_id,
+        payment_status=payment_status,
+        month=month,
+        year=year,
+        payment_method=payment_method
+    )
+    rows = _handle_service_response(result)
+
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = "All Transactions"
+
+    headers = [
+        "Date",
+        "Tenant",
+        "Room",
+        "Month",
+        "Amount",
+        "Payment Method",
+        "Transaction ID",
+        "Status"
+    ]
+    sheet.append(headers)
+
+    for row in rows:
+        sheet.append([
+            row.get("date"),
+            row.get("tenant"),
+            row.get("room"),
+            row.get("month"),
+            row.get("amount"),
+            row.get("method"),
+            row.get("transaction_id"),
+            row.get("status")
+        ])
+
+    column_widths = {
+        "A": 14,
+        "B": 24,
+        "C": 12,
+        "D": 16,
+        "E": 12,
+        "F": 18,
+        "G": 28,
+        "H": 12
+    }
+    for col, width in column_widths.items():
+        sheet.column_dimensions[col].width = width
+
+    buffer = BytesIO()
+    workbook.save(buffer)
+    buffer.seek(0)
+
+    filename = f"payments_report_{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        }
+    )
 
 
 @router.get(

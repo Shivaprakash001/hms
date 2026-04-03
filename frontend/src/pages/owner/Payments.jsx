@@ -27,6 +27,7 @@ const Payments = () => {
     });
     const [genLoading, setGenLoading] = useState(false);
     const [genResult, setGenResult] = useState(null); // { success, count, skipped }
+    const [exportLoading, setExportLoading] = useState(false);
 
     const [activeTab, setActiveTab] = useState('dues'); // 'dues' or 'transactions'
     const [transactions, setTransactions] = useState([]);
@@ -182,6 +183,40 @@ const Payments = () => {
         await handleDownloadReceipt(payment.id, payment.reference_number);
     };
 
+    const handleExportReport = async () => {
+        setExportLoading(true);
+        try {
+            const params = {};
+            if (monthFilter !== 'all') {
+                const [year, month] = monthFilter.split('-');
+                params.year = Number(year);
+                params.month = Number(month);
+            }
+
+            const { blob, contentDisposition } = await paymentService.exportReport(params);
+            if (!blob || blob.size === 0) {
+                throw new Error('Empty file received');
+            }
+
+            const filenameMatch = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(contentDisposition || '');
+            const fileName = filenameMatch?.[1] ? decodeURIComponent(filenameMatch[1]) : 'payments_report.xlsx';
+
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', fileName);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Failed to export payments report:', error);
+            alert('Failed to export payments report. Please try again.');
+        } finally {
+            setExportLoading(false);
+        }
+    };
+
     // Generate monthly rent
     const handleGenerateRent = async () => {
         setGenLoading(true);
@@ -218,8 +253,13 @@ const Payments = () => {
                     <p className="text-slate-500 text-sm">Track and manage tenant payments</p>
                 </div>
                 <div className="flex gap-2 flex-wrap">
-                    <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-sm font-semibold text-sm">
-                        <Download size={16} /> Export Report
+                    <button
+                        onClick={handleExportReport}
+                        disabled={exportLoading}
+                        className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-sm font-semibold text-sm disabled:opacity-60"
+                    >
+                        {exportLoading ? <Loader2 className="animate-spin" size={16} /> : <Download size={16} />}
+                        {exportLoading ? 'Exporting...' : 'Export Report'}
                     </button>
                     <button
                         onClick={() => { setShowGenModal(true); setGenResult(null); }}

@@ -204,6 +204,16 @@ export const paymentService = {
             return await attemptDownload(fallbackReferenceNumber);
         }
     },
+    exportReport: async (params = {}) => {
+        const response = await api.get('/payments/export', {
+            params,
+            responseType: 'blob'
+        });
+        return {
+            blob: response.data,
+            contentDisposition: response.headers?.['content-disposition'] || ''
+        };
+    },
     bulkGenerate: async (data) => {
         const response = await api.post('/payments/bulk-generate', data);
         return response.data;

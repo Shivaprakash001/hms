@@ -521,6 +521,82 @@ def get_dues_report(user_id: str, rent_month: Optional[date] = None, status: Opt
     except Exception as e:
         logger.exception(f"Error fetching dues report: {e}")
         return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to fetch dues report")
+
+
+def get_payments_export_data(
+    user_id: str,
+    tenant_id: Optional[str] = None,
+    payment_status: Optional[str] = None,
+    month: Optional[int] = None,
+    year: Optional[int] = None,
+    payment_method: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Get payment data formatted for Excel export.
+    """
+    try:
+        query = supabase.table("payments")\
+            .select(
+                "id, payment_date, amount_paid, payment_method, reference_number, "
+                "students(profiles!students_profile_id_fkey(name)), "
+                "rent_obligations(rent_month, status, room_allocations(rooms(room_no)))"
+            )\
+            .eq("owner_id", user_id)\
+            .order("payment_date", desc=True)
+
+        if tenant_id:
+            query = query.eq("student_id", tenant_id)
+        if payment_method:
+            query = query.eq("payment_method", payment_method)
+
+        result = query.execute()
+        rows = []
+
+        for payment in (result.data or []):
+            obligation = payment.get("rent_obligations") or {}
+            status_val = (obligation.get("status") or "").upper()
+            if payment_status and status_val != payment_status.upper():
+                continue
+
+            rent_month_raw = obligation.get("rent_month")
+            rent_month_date = None
+            if rent_month_raw:
+                try:
+                    rent_month_date = date.fromisoformat(str(rent_month_raw).split("T")[0])
+                except Exception:
+                    rent_month_date = None
+
+            if month and (not rent_month_date or rent_month_date.month != month):
+                continue
+            if year and (not rent_month_date or rent_month_date.year != year):
+                continue
+
+            student = payment.get("students") or {}
+            profile = student.get("profiles") or {}
+
+            allocation = obligation.get("room_allocations") or {}
+            room = allocation.get("rooms") if isinstance(allocation, dict) else {}
+            room_no = room.get("room_no", "N/A") if isinstance(room, dict) else "N/A"
+
+            month_label = rent_month_date.strftime("%B %Y") if rent_month_date else "N/A"
+
+            rows.append({
+                "date": payment.get("payment_date") or "N/A",
+                "tenant": profile.get("name") or "Unknown",
+                "room": room_no,
+                "month": month_label,
+                "amount": float(payment.get("amount_paid") or 0),
+                "method": payment.get("payment_method") or "N/A",
+                "transaction_id": payment.get("reference_number") or payment.get("id") or "N/A",
+                "status": status_val or "PAID"
+            })
+
+        return ServiceResponse.success(rows)
+    except Exception as e:
+        logger.exception(f"Error preparing payments export data: {e}")
+        return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to prepare export data")
+
+
 def get_all_payments(
     user_id: str, 
     tenant_id: Optional[str] = None,
