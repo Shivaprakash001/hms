@@ -23,6 +23,7 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
     const [successMsg, setSuccessMsg] = useState('');
     const [error, setError] = useState('');
     const [photoPreview, setPhotoPreview] = useState(null);
+    const [showPhotoModal, setShowPhotoModal] = useState(false);
     const [fullStudent, setFullStudent] = useState(null);
 
     const [form, setForm] = useState({
@@ -241,7 +242,12 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
                             {/* Photo Upload */}
                             <div className="flex items-center gap-6">
                                 <div className="relative group">
-                                    <div className="w-20 h-20 rounded-2xl bg-slate-100 overflow-hidden border-2 border-white shadow-lg">
+                                    <button
+                                        onClick={() => photoPreview && setShowPhotoModal(true)}
+                                        className={`w-20 h-20 rounded-2xl bg-slate-100 overflow-hidden border-2 border-white shadow-lg transition-all ${
+                                            photoPreview && !isEditing ? 'cursor-pointer hover:shadow-xl hover:border-blue-300' : ''
+                                        }`}
+                                    >
                                         {photoPreview ? (
                                             <img src={photoPreview} alt="Photo" className="w-full h-full object-cover" />
                                         ) : (
@@ -249,7 +255,7 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
                                                 <Camera size={28} />
                                             </div>
                                         )}
-                                    </div>
+                                    </button>
                                     <label className={`absolute inset-0 flex items-center justify-center rounded-2xl transition-opacity ${isEditing ? 'bg-black/40 opacity-0 group-hover:opacity-100 cursor-pointer' : 'opacity-0 pointer-events-none'}`}>
                                         <Upload size={18} className="text-white" />
                                         <input type="file" accept="image/*" className="hidden" onChange={handlePhotoSelect} />
@@ -258,6 +264,7 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
                                 <div>
                                     <p className="text-sm font-bold text-slate-700">Profile Photo</p>
                                     <p className="text-xs text-slate-400">JPG, PNG or WebP. Max 5MB</p>
+                                    {photoPreview && !isEditing && <p className="text-xs text-blue-500 mt-1">Click to view full size</p>}
                                 </div>
                             </div>
 
@@ -374,6 +381,51 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
                     </div>
                 )}
             </motion.div>
+
+            {/* Photo Modal */}
+            <AnimatePresence>
+                {showPhotoModal && photoPreview && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
+                        onClick={() => setShowPhotoModal(false)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className="relative max-w-2xl w-full max-h-[90vh] bg-white rounded-2xl overflow-hidden shadow-2xl"
+                            onClick={e => e.stopPropagation()}
+                        >
+                            {/* Close Button */}
+                            <button
+                                onClick={() => setShowPhotoModal(false)}
+                                className="absolute top-4 right-4 z-10 p-2 bg-black/40 hover:bg-black/60 rounded-full text-white transition-colors"
+                            >
+                                <X size={24} />
+                            </button>
+
+                            {/* Photo Display */}
+                            <div className="w-full h-full flex items-center justify-center bg-slate-100">
+                                <img
+                                    src={photoPreview}
+                                    alt="Full size photo"
+                                    className="w-full h-full object-contain"
+                                />
+                            </div>
+
+                            {/* Info Footer */}
+                            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-4">
+                                <p className="text-white text-sm font-medium">
+                                    {fullStudent?.profile?.user_metadata?.full_name || 'Profile Photo'}
+                                </p>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }
