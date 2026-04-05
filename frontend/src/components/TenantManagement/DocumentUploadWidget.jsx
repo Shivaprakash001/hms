@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Upload, X, FileText, CheckCircle2, AlertCircle, Loader2,
-    Download, Trash2, Shield, Eye
+    Trash2, Shield, Eye
 } from 'lucide-react';
 import { tenantDocumentService } from '../../api/services';
 
@@ -112,6 +112,11 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true }) {
     };
 
     const currentDoc = documents.find(d => d.doc_type === activeDocType);
+    const isPdfDoc = Boolean(
+        (currentDoc?.document_image_url || currentDoc?.signed_url || '')
+            .toLowerCase()
+            .includes('.pdf')
+    );
 
     return (
         <div className="space-y-5">
@@ -179,14 +184,32 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true }) {
                 <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200">
                     <div className="flex items-start justify-between">
                         <div className="flex items-center gap-4">
-                            <button
-                                type="button"
-                                onClick={() => currentDoc.signed_url && window.open(currentDoc.signed_url, '_blank', 'noopener,noreferrer')}
-                                className="w-14 h-14 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm hover:border-indigo-300 transition-colors"
-                                title="View document"
-                            >
-                                <FileText size={24} className="text-indigo-500" />
-                            </button>
+                            {currentDoc.signed_url ? (
+                                <button
+                                    type="button"
+                                    onClick={() => window.open(currentDoc.signed_url, '_blank', 'noopener,noreferrer')}
+                                    className="w-32 h-24 rounded-xl bg-white border border-slate-200 overflow-hidden shadow-sm hover:border-indigo-300 transition-colors"
+                                    title="Open full document"
+                                >
+                                    {isPdfDoc ? (
+                                        <iframe
+                                            src={`${currentDoc.signed_url}#toolbar=0&navpanes=0&scrollbar=0`}
+                                            title="Document preview"
+                                            className="w-full h-full pointer-events-none"
+                                        />
+                                    ) : (
+                                        <img
+                                            src={currentDoc.signed_url}
+                                            alt="Document preview"
+                                            className="w-full h-full object-cover"
+                                        />
+                                    )}
+                                </button>
+                            ) : (
+                                <div className="w-32 h-24 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm">
+                                    <FileText size={24} className="text-indigo-500" />
+                                </div>
+                            )}
                             <div>
                                 <p className="font-bold text-slate-700 text-sm">
                                     {DOC_TYPES.find(d => d.key === activeDocType)?.label}
@@ -211,6 +234,15 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true }) {
                                         </span>
                                     )}
                                 </div>
+                                {currentDoc.signed_url && (
+                                    <button
+                                        type="button"
+                                        onClick={() => window.open(currentDoc.signed_url, '_blank', 'noopener,noreferrer')}
+                                        className="mt-2 text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+                                    >
+                                        View Full Document
+                                    </button>
+                                )}
                             </div>
                         </div>
 
@@ -255,6 +287,23 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true }) {
                             )}
                         </div>
                     </div>
+
+                    {isOwner && !currentDoc.verified && (
+                        <div className="mt-4 flex items-center gap-2">
+                            <button
+                                onClick={() => handleVerify(currentDoc.id)}
+                                className="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-bold border border-emerald-200"
+                            >
+                                Verify Document
+                            </button>
+                            <button
+                                onClick={() => handleReject(currentDoc.id)}
+                                className="px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 text-xs font-bold border border-rose-200"
+                            >
+                                Reject Document
+                            </button>
+                        </div>
+                    )}
 
                     {currentDoc.rejected && currentDoc.rejection_reason && (
                         <div className="mt-3 rounded-lg bg-rose-50 border border-rose-100 px-3 py-2 text-xs text-rose-700">
