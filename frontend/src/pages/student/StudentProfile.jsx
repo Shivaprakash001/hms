@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, Mail, Phone, MapPin, Camera, Save, Edit2, Key, Building2, CheckCircle2, GraduationCap, Briefcase, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../../context/AuthContext';
-import { studentService } from '../../api/services';
+import { studentService, tenantDocumentService } from '../../api/services';
 import DocumentUploadWidget from '../../components/TenantManagement/DocumentUploadWidget';
 
 const StudentProfile = () => {
@@ -15,6 +15,7 @@ const StudentProfile = () => {
     const [loading, setLoading] = useState(true);
     const [saveLoading, setSaveLoading] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
+    const [docCompletion, setDocCompletion] = useState({ uploaded: 0, total: 3 });
     const fileInputRef = useRef(null);
 
     // Local State for Form Data
@@ -82,6 +83,54 @@ const StudentProfile = () => {
         };
         fetchData();
     }, [user]);
+
+    useEffect(() => {
+        const fetchDocumentCompletion = async () => {
+            if (!studentInfo?.id) return;
+            try {
+                const docs = await tenantDocumentService.getAll(studentInfo.id);
+                const uploadedTypes = new Set((Array.isArray(docs) ? docs : []).map(d => d?.doc_type).filter(Boolean));
+                setDocCompletion({ uploaded: uploadedTypes.size, total: 3 });
+            } catch (err) {
+                console.error('Failed to load document completion:', err);
+                setDocCompletion({ uploaded: 0, total: 3 });
+            }
+        };
+
+        fetchDocumentCompletion();
+    }, [studentInfo?.id]);
+
+    const profileCompletion = useMemo(() => {
+        const isFilled = (val) => {
+            if (val === null || val === undefined) return false;
+            if (typeof val === 'string') return val.trim().length > 0;
+            return Boolean(val);
+        };
+
+        const baseChecks = [
+            isFilled(formData.name),
+            isFilled(formData.email),
+            isFilled(formData.phone),
+            isFilled(formData.emergency_contact),
+            isFilled(formData.personal_email),
+            isFilled(formData.permanent_address),
+            isFilled(formData.temporary_address),
+            isFilled(formData.photo_url),
+        ];
+
+        const profileTypeChecks = formData.profile_type === 'work'
+            ? [isFilled(formData.office_name), isFilled(formData.job_role), isFilled(formData.office_location)]
+            : [isFilled(formData.college_name), isFilled(formData.branch)];
+
+        const documentsChecks = Array.from({ length: docCompletion.total }, (_, i) => i < docCompletion.uploaded);
+
+        const allChecks = [...baseChecks, ...profileTypeChecks, ...documentsChecks];
+        const completed = allChecks.filter(Boolean).length;
+        const total = allChecks.length;
+        const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+        return { completed, total, percent };
+    }, [formData, docCompletion]);
 
     const handleSave = async () => {
         setSaveLoading(true);
@@ -237,6 +286,22 @@ const StudentProfile = () => {
                         <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 text-xs font-semibold">Room {roomNo}</span>
                         <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 text-xs font-semibold">{studentInfo?.status || 'Resident'}</span>
                     </div>
+
+                    <div className="mt-3">
+                        <div className="flex items-center justify-between mb-1">
+                            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Profile Completion</p>
+                            <p className="text-xs font-bold text-indigo-600">{profileCompletion.percent}%</p>
+                        </div>
+                        <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
+                            <div
+                                className="h-full bg-indigo-600 transition-all duration-500"
+                                style={{ width: `${profileCompletion.percent}%` }}
+                            />
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-1">
+                            {profileCompletion.completed} of {profileCompletion.total} profile sections completed
+                        </p>
+                    </div>
                 </div>
 
                 <div className="flex gap-2">
@@ -335,7 +400,14 @@ const StudentProfile = () => {
                         <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide">Documents</h3>
                     </div>
                     {studentInfo?.id ? (
-                        <DocumentUploadWidget tenantId={studentInfo.id} isOwner={false} />
+                        <DocumentUploadWidget
+                            tenantId={studentInfo.id}
+                            isOwner={false}
+                            onDocumentsChange={(docs) => {
+                                const uploadedTypes = new Set((Array.isArray(docs) ? docs : []).map(d => d?.doc_type).filter(Boolean));
+                                setDocCompletion({ uploaded: uploadedTypes.size, total: 3 });
+                            }}
+                        />
                     ) : (
                         <p className="text-sm text-slate-400">No tenant record found.</p>
                     )}

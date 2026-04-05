@@ -12,7 +12,7 @@ const DOC_TYPES = [
     { key: 'PASSPORT', label: 'Passport', color: 'purple' },
 ];
 
-export default function DocumentUploadWidget({ tenantId, isOwner = true }) {
+export default function DocumentUploadWidget({ tenantId, isOwner = true, onDocumentsChange }) {
     const [activeDocType, setActiveDocType] = useState('AADHAR');
     const [documents, setDocuments] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -30,11 +30,15 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true }) {
         try {
             setLoading(true);
             const data = await tenantDocumentService.getAll(tenantId);
-            setDocuments(Array.isArray(data) ? data : []);
+            const normalized = Array.isArray(data) ? data : [];
+            setDocuments(normalized);
+            if (typeof onDocumentsChange === 'function') {
+                onDocumentsChange(normalized);
+            }
 
             // Pre-fill document numbers
             const nums = { AADHAR: '', DRIVING_LICENSE: '', PASSPORT: '' };
-            (Array.isArray(data) ? data : []).forEach(doc => {
+            normalized.forEach(doc => {
                 if (doc.document_number) nums[doc.doc_type] = doc.document_number;
             });
             setDocNumbers(nums);
