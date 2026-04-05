@@ -175,6 +175,15 @@ export const studentService = {
         const response = await api.patch('/students/me/profile', data);
         return response.data;
     },
+    completeMyProfile: async (data, aadhaarFile) => {
+        const formData = new FormData();
+        formData.append('profile_data', JSON.stringify(data));
+        formData.append('aadhaar_file', aadhaarFile);
+        const response = await api.post('/students/me/complete-profile', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        return response.data;
+    },
     getMyDocuments: async () => {
         const response = await api.get('/students/me/documents');
         return response.data;

@@ -1,6 +1,8 @@
-from fastapi import APIRouter, HTTPException, Query, status, Depends, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Query, status, Depends, BackgroundTasks, Form, UploadFile, File
 from typing import Optional, List
 from datetime import date
+import json
+from pydantic import ValidationError
 from app.schemas.student_schema import (
     StudentCreate, StudentUpdate, StudentResponse,
     StudentListResponse, StudentStatus, StudentReactivate, StudentSelfProfileUpdate
@@ -263,6 +265,46 @@ def update_my_profile(
         profile_id=str(user.user_id),
         data=data.model_dump(exclude_unset=True),
         updated_by=user.user_id
+    )
+    return _handle_service_response(result)
+
+
+@router.post(
+    "/me/complete-profile",
+    response_model=StudentResponse,
+    summary="Complete current student profile",
+    description="Onboarding endpoint to update shared student profile fields and upload Aadhaar in one request"
+)
+async def complete_my_profile(
+    profile_data: str = Form(..., description="JSON string matching StudentSelfProfileUpdate"),
+    aadhaar_file: UploadFile = File(..., description="Aadhaar document image/PDF"),
+    user: UserContext = Depends(get_current_user)
+):
+    if not user.is_student():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only students can access this endpoint."
+        )
+
+    try:
+        payload = json.loads(profile_data)
+        data = StudentSelfProfileUpdate(**payload)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=422, detail="Invalid JSON in profile_data")
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=e.errors())
+
+    if not aadhaar_file.filename:
+        raise HTTPException(status_code=400, detail="Aadhaar file missing")
+
+    file_bytes = await aadhaar_file.read()
+
+    result = student_service.complete_student_self_profile(
+        profile_id=str(user.user_id),
+        data=data.model_dump(exclude_unset=True),
+        aadhaar_file_bytes=file_bytes,
+        aadhaar_filename=aadhaar_file.filename,
+        aadhaar_content_type=aadhaar_file.content_type
     )
     return _handle_service_response(result)
 

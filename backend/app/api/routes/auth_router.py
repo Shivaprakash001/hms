@@ -58,7 +58,7 @@ def get_me(user: UserContext = Depends(get_current_user)):
         if student_id:
             # Single join across students --> profiles and students --> room_allocations --> rooms
             res = supabase.table("students").select(
-                "monthly_rent, profiles:profile_id(due_day, is_profile_completed), room_allocations(room_id, end_date, rooms(room_no, capacity))"
+                "monthly_rent, profile_completed, profiles:profile_id(due_day, is_profile_completed), room_allocations(room_id, end_date, rooms(room_no, capacity))"
             ).eq("id", student_id).execute()
             
             if res.data and len(res.data) > 0:
@@ -69,7 +69,7 @@ def get_me(user: UserContext = Depends(get_current_user)):
                 if profile_rel:
                     p_dict = profile_rel[0] if isinstance(profile_rel, list) else profile_rel
                     extra["due_day"] = p_dict.get("due_day")
-                    extra["is_profile_completed"] = p_dict.get("is_profile_completed", False)
+                    extra["is_profile_completed"] = student_data.get("profile_completed") if student_data.get("profile_completed") is not None else p_dict.get("is_profile_completed", False)
                     
                 allocations = student_data.get("room_allocations", [])
                 if isinstance(allocations, list):

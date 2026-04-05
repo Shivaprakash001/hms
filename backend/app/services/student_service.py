@@ -767,11 +767,147 @@ def update_student_self_profile(
                 return ServiceResponse.not_found("Student")
 
         # Return fresh merged record
-        return get_student_by_profile(
+        fresh = get_student_by_profile(
             profile_id=profile_id,
             requesting_user_id=profile_id,
             requesting_user_role='student'
         )
+
+        if not fresh.get("success"):
+            return fresh
+
+        student = fresh.get("data") or {}
+        profile = student.get("profile") or {}
+
+        # Shared completion rule for onboarding + profile edit
+        # (single source of truth)
+        has_aadhaar = False
+        try:
+            doc_res = supabase.table("identification_documents") \
+                .select("id") \
+                .eq("tenant_id", student_id) \
+                .eq("doc_type", "AADHAR") \
+                .limit(1) \
+                .execute()
+            has_aadhaar = bool(doc_res.data)
+        except Exception as doc_err:
+            logger.warning(f"Failed Aadhaar completion check for student {student_id}: {doc_err}")
+
+        is_complete = all([
+            bool((profile.get("name") or "").strip()),
+            bool((profile.get("email") or "").strip()),
+            bool((profile.get("phone") or student.get("phone_1") or "").strip()),
+            bool((student.get("phone_2") or profile.get("emergency_contact") or "").strip()),
+            bool((student.get("college_name") or "").strip()),
+            bool((student.get("branch") or "").strip()),
+            bool((student.get("temporary_address") or student.get("permanent_address") or profile.get("address") or "").strip()),
+            has_aadhaar,
+        ])
+
+        if is_complete:
+            try:
+                supabase.table("profiles") \
+                    .update({"is_profile_completed": True}) \
+                    .eq("id", profile_id) \
+                    .execute()
+                if isinstance(student.get("profile"), dict):
+                    student["profile"]["is_profile_completed"] = True
+            except Exception as complete_err:
+                logger.warning(f"Failed to mark profile completed for {profile_id}: {complete_err}")
+
+            # Keep completion state in students table too (new canonical flag).
+            try:
+                supabase.table("students") \
+                    .update({"profile_completed": True}) \
+                    .eq("id", student_id) \
+                    .execute()
+                student["profile_completed"] = True
+            except Exception as stu_complete_err:
+                logger.warning(f"Failed to mark student.profile_completed for {student_id}: {stu_complete_err}")
+
+        return ServiceResponse.success(student)
     except Exception as e:
         logger.exception(f"Error updating self profile for {profile_id}: {e}")
         return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to update profile", str(e))
+
+
+def complete_student_self_profile(
+    profile_id: str,
+    data: dict,
+    aadhaar_file_bytes: bytes,
+    aadhaar_filename: str,
+    aadhaar_content_type: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Complete current student's onboarding profile using the same contract as /students/me/profile.
+    Updates profile+student fields and uploads Aadhaar in one flow.
+    """
+    try:
+        required_checks = {
+            "name": bool((data.get("name") or "").strip()),
+            "phone": bool((data.get("phone") or "").strip()),
+            "emergency_contact": bool((data.get("emergency_contact") or "").strip()),
+            "college_name": bool((data.get("college_name") or "").strip()),
+            "branch": bool((data.get("branch") or "").strip()),
+            "address": bool((data.get("temporary_address") or data.get("permanent_address") or data.get("address") or "").strip()),
+            "aadhaar_file": bool(aadhaar_file_bytes),
+        }
+
+        missing = [k for k, ok in required_checks.items() if not ok]
+        if missing:
+            return ServiceResponse.validation_error(
+                "Missing required onboarding fields",
+                f"Required: {', '.join(missing)}"
+            )
+
+        # Step 1: update profile + student fields via shared path
+        update_result = update_student_self_profile(
+            profile_id=profile_id,
+            data=data,
+            updated_by=profile_id
+        )
+        if not update_result.get("success"):
+            return update_result
+
+        student_payload = update_result.get("data") or {}
+        student_id = student_payload.get("id")
+        if not student_id:
+            student_res = supabase.table("students") \
+                .select("id") \
+                .eq("profile_id", profile_id) \
+                .limit(1) \
+                .execute()
+            if not student_res.data:
+                return ServiceResponse.not_found("Student")
+            student_id = student_res.data[0].get("id")
+
+        # Step 2: upload Aadhaar document in shared documents table
+        from app.services import document_service
+
+        doc_result = document_service.upload_document(
+            tenant_id=str(student_id),
+            doc_type="AADHAR",
+            document_number=None,
+            file_bytes=aadhaar_file_bytes,
+            filename=aadhaar_filename,
+            content_type=aadhaar_content_type,
+            uploaded_by=profile_id,
+            requesting_user_id=profile_id,
+            requesting_user_role="student"
+        )
+        if not doc_result.get("success"):
+            return doc_result
+
+        # Step 3: refresh/update once more so completion checks include Aadhaar presence.
+        final_result = update_student_self_profile(
+            profile_id=profile_id,
+            data=data,
+            updated_by=profile_id
+        )
+        if not final_result.get("success"):
+            return final_result
+
+        return ServiceResponse.success(final_result.get("data"), "Profile completed successfully")
+    except Exception as e:
+        logger.exception(f"Error completing self profile for {profile_id}: {e}")
+        return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Failed to complete profile", str(e))

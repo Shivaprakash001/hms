@@ -74,14 +74,16 @@ def login(email: str, password: str) -> Dict[str, Any]:
             
         # 1.1 Check Enrollment Status if student
         role = profile.get("role")
+        student_profile_completed = None
         if role == "student":
             enrollment = supabase.table("students")\
-                .select("id, status")\
+                .select("id, status, profile_completed")\
                 .eq("profile_id", profile["id"])\
                 .execute()
             
             if enrollment.data:
                 profile["student_id"] = enrollment.data[0]["id"]
+                student_profile_completed = enrollment.data[0].get("profile_completed")
                 if enrollment.data[0]["status"] == "INVITED":
                     return ServiceResponse.error(ErrorCode.FORBIDDEN, "Account not activated. Please check your email.")
 
@@ -108,7 +110,7 @@ def login(email: str, password: str) -> Dict[str, Any]:
             "name": profile["name"],
             "user_id": str(profile["id"]),
             "student_id": str(profile.get("student_id")) if profile.get("student_id") else None,
-            "is_profile_completed": profile.get("is_profile_completed", False)
+            "is_profile_completed": bool(student_profile_completed) if student_profile_completed is not None else profile.get("is_profile_completed", False)
         })
         
     except Exception as e:

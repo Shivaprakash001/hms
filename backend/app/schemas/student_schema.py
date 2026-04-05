@@ -150,6 +150,7 @@ class StudentResponse(BaseModel):
     permanent_address: Optional[str] = None
     temporary_address: Optional[str] = None
     document_verified: Optional[bool] = False
+    profile_completed: Optional[bool] = False
 
     # Joined profile information
     profile: Optional[dict] = None
