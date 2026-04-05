@@ -7,423 +7,103 @@
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
-            color: #1f2937;
-            background: #ffffff;
-            padding: 48px;
-            line-height: 1.6;
-            font-size: 13px;
-        }
-        @page {
-            margin: 0;
-            size: A4;
-        }
-        .container { max-width: 800px; margin: 0 auto; }
-        
-        /* Header */
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 32px;
-            border-bottom: 3px solid #4f46e5;
-            padding-bottom: 24px;
-        }
-        .header-left h1 {
-            font-size: 24px;
-            font-weight: 900;
-            color: #1f2937;
-            margin-bottom: 4px;
-            letter-spacing: -0.5px;
-        }
-        .logo {
-            width: 44px;
-            height: 44px;
-            object-fit: contain;
-            margin-bottom: 8px;
-        }
-        .header-left p {
-            font-size: 13px;
-            color: #6b7280;
-        }
-        .header-right {
-            text-align: right;
-        }
-        .receipt-title {
-            font-size: 14px;
-            font-weight: 700;
-            color: #4f46e5;
-            letter-spacing: 1px;
-            margin-bottom: 12px;
-        }
-        .receipt-meta {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 8px;
-        }
-        .receipt-meta-row {
-            display: flex;
-            justify-content: space-between;
+            font-family: Arial, sans-serif;
             font-size: 12px;
+            color: #333;
+            padding: 36px;
+            line-height: 1.5;
         }
-        .receipt-meta-label {
-            color: #6b7280;
-            font-weight: 600;
-        }
-        .receipt-meta-value {
-            color: #1f2937;
-            font-weight: 700;
-        }
-        
-        /* Info Blocks */
-        .info-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 24px;
-            margin-bottom: 32px;
-        }
-        .info-block {
-            padding: 16px;
-            background: #f9fafb;
-            border-left: 3px solid #4f46e5;
-            border-radius: 4px;
-        }
-        .info-block h3 {
-            font-size: 12px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: #4f46e5;
-            margin-bottom: 12px;
-            border-bottom: 1px solid #e5e7eb;
-            padding-bottom: 8px;
-        }
-        .info-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 10px;
-            font-size: 12px;
-        }
-        .info-row:last-child { margin-bottom: 0; }
-        .info-label {
-            color: #6b7280;
-            font-weight: 600;
-        }
-        .info-value {
-            color: #1f2937;
-            font-weight: 600;
-            text-align: right;
-            flex: 1;
-            margin-left: 16px;
-        }
-        
-        /* Tables */
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 24px;
-            background: #ffffff;
-            border: 1px solid #e5e7eb;
-            border-radius: 4px;
-            overflow: hidden;
-        }
-        th {
-            background: #f3f4f6;
-            padding: 12px 14px;
-            text-align: left;
-            font-weight: 700;
-            font-size: 12px;
-            color: #374151;
-            border-bottom: 2px solid #e5e7eb;
-            text-transform: uppercase;
-            letter-spacing: 0.3px;
-        }
-        td {
-            padding: 14px 14px;
-            border-bottom: 1px solid #e5e7eb;
-            font-size: 12px;
-        }
-        tr:last-child td { border-bottom: none; }
-        
-        /* Totals */
-        .totals-section {
-            display: flex;
-            justify-content: flex-end;
-            margin-bottom: 32px;
-        }
-        .totals-box {
-            width: 280px;
-            background: #f9fafb;
-            border: 1px solid #e5e7eb;
-            border-radius: 4px;
-            padding: 16px;
-        }
-        .total-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 8px;
-            font-size: 12px;
-        }
-        .total-row-label { color: #6b7280; font-weight: 600; }
-        .total-row-value { color: #1f2937; font-weight: 700; text-align: right; }
-        .total-row.grand { 
-            border-top: 2px solid #e5e7eb;
-            padding-top: 12px;
-            margin-top: 12px;
-            margin-bottom: 0;
-            font-weight: 900;
-            font-size: 14px;
-        }
-        .total-row.grand .total-row-value { color: #4f46e5; font-size: 16px; }
-        
-        /* Footer */
-        .footer-section {
-            margin-top: 40px;
-            padding-top: 24px;
-            border-top: 1px solid #e5e7eb;
-        }
-        .footer-separator {
-            border-top: 1px solid #e5e7eb;
-            margin: 16px 0 12px;
-        }
-        .footer-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 24px;
-            margin-bottom: 16px;
-        }
-        .footer-block {
-            font-size: 12px;
-        }
-        .footer-block-title {
-            font-weight: 700;
-            color: #374151;
-            margin-bottom: 6px;
-            text-transform: uppercase;
-            letter-spacing: 0.3px;
-            font-size: 11px;
-        }
-        .footer-block-content {
-            color: #6b7280;
-            line-height: 1.6;
-        }
-        .verify-link {
-            margin-top: 12px;
-            padding: 12px;
-            background: #eff6ff;
-            border: 1px solid #bfdbfe;
-            border-radius: 4px;
-            font-size: 11px;
-            color: #1e40af;
-            word-break: break-word;
-            font-weight: 600;
-        }
-        .bottom-note {
-            text-align: center;
-            font-size: 11px;
-            color: #9ca3af;
-            margin-top: 24px;
-            font-style: italic;
-        }
-        
-        /* Utilities */
-        .text-right { text-align: right; }
-        .text-center { text-align: center; }
-        .font-mono { font-family: 'Monaco', 'Courier New', monospace; }
-        .text-sm { font-size: 11px; }
-        .text-muted { color: #6b7280; }
+        @page { size: A4; margin: 0; }
+        .header { text-align: center; margin-bottom: 10px; }
+        .hostel-name { font-size: 18px; font-weight: 700; }
+        .muted { color: #666; }
+        .title { text-align: center; font-size: 16px; font-weight: 700; margin: 8px 0 14px; }
+        .divider { border-top: 1px solid #ccc; margin: 10px 0; }
+        .meta { margin: 8px 0 6px; }
+        .meta-row { display: flex; gap: 10px; }
+        .meta-label { width: 90px; color: #555; }
+        .section { margin-top: 10px; }
+        .section-title { font-weight: 700; margin-bottom: 6px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+        th { text-align: left; border-bottom: 2px solid #ccc; padding: 6px 0; }
+        td { padding: 6px 0; border-bottom: 1px solid #eee; }
+        .right { text-align: right; }
+        .summary { text-align: right; margin-top: 8px; }
+        .summary-row { display: flex; justify-content: flex-end; gap: 20px; }
+        .summary-label { min-width: 120px; color: #555; }
+        .total { font-weight: 700; }
+        .footer { margin-top: 10px; }
+        .verify { margin-top: 8px; word-break: break-all; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <!-- Header -->
-        <div class="header">
-            <div class="header-left">
-                {% if hostel_logo_url %}
-                <img class="logo" src="{{ hostel_logo_url }}" alt="{{ hostel_name }} Logo" />
-                {% endif %}
-                <h1>{{ hostel_name }}</h1>
-                <p>{{ hostel_address }}</p>
-            </div>
-            <div class="header-right">
-                <div class="receipt-title">PAYMENT RECEIPT</div>
-                <div class="receipt-meta">
-                    <div class="receipt-meta-row">
-                        <span class="receipt-meta-label">Receipt ID:</span>
-                        <span class="receipt-meta-value font-mono">{{ receipt_no }}</span>
-                    </div>
-                    <div class="receipt-meta-row">
-                        <span class="receipt-meta-label">Payment Date:</span>
-                        <span class="receipt-meta-value">{{ date }}</span>
-                    </div>
-                    <div class="receipt-meta-row">
-                        <span class="receipt-meta-label">Rent Month:</span>
-                        <span class="receipt-meta-value">{{ rent_month }}</span>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <div class="header">
+        <div class="hostel-name">{{ hostel_name }}</div>
+        <div class="muted">{{ hostel_address }}</div>
+        <div class="muted">Phone: {{ hostel_phone }} | Email: {{ hostel_email }}</div>
+    </div>
 
-        <!-- Hostel & Tenant Info -->
-        <div class="info-grid">
-            <!-- Hostel Information -->
-            <div class="info-block">
-                <h3>Hostel Details</h3>
-                <div class="info-row">
-                    <span class="info-label">Name:</span>
-                    <span class="info-value">{{ hostel_name }}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Address:</span>
-                    <span class="info-value">{{ hostel_address }}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Email:</span>
-                    <span class="info-value">{{ hostel_email }}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Phone:</span>
-                    <span class="info-value">{{ hostel_phone }}</span>
-                </div>
-            </div>
+    <div class="divider"></div>
+    <div class="title">PAYMENT RECEIPT</div>
 
-            <!-- Tenant Information -->
-            <div class="info-block">
-                <h3>Tenant Details</h3>
-                <div class="info-row">
-                    <span class="info-label">Name:</span>
-                    <span class="info-value">{{ student_name }}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Roll Number:</span>
-                    <span class="info-value font-mono">{{ student_roll_number }}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Course:</span>
-                    <span class="info-value">{{ student_course }}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Year / Section:</span>
-                    <span class="info-value">{{ student_year_section }}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Room Number:</span>
-                    <span class="info-value font-mono">{{ room_number }}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Phone:</span>
-                    <span class="info-value">{{ student_phone }}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Email:</span>
-                    <span class="info-value">{{ student_email }}</span>
-                </div>
-            </div>
-        </div>
+    <div class="meta">
+        <div class="meta-row"><div class="meta-label">Receipt No</div><div>: {{ receipt_no }}</div></div>
+        <div class="meta-row"><div class="meta-label">Date</div><div>: {{ date }}</div></div>
+        <div class="meta-row"><div class="meta-label">Rent Month</div><div>: {{ rent_month }}</div></div>
+    </div>
 
-        <!-- Payment Details -->
-        <div class="info-block" style="grid-column: 1 / -1;">
-            <h3>Payment Details</h3>
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px;">
-                <div class="info-row" style="display: block;">
-                    <span class="info-label">Payment Method:</span><br>
-                    <span class="info-value" style="display: block; text-align: left; margin-left: 0; margin-top: 6px;">{{ payment_method }}</span>
-                </div>
-                <div class="info-row" style="display: block;">
-                    <span class="info-label">Transaction ID:</span><br>
-                    <span class="info-value font-mono" style="display: block; text-align: left; margin-left: 0; margin-top: 6px; font-size: 11px;">{{ transaction_id }}</span>
-                </div>
-                <div class="info-row" style="display: block;">
-                    <span class="info-label">Status:</span><br>
-                    <span class="info-value" style="display: block; text-align: left; margin-left: 0; margin-top: 6px; color: #10b981;">{{ payment_status }}</span>
-                </div>
-            </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 14px;">
-                <div class="info-row" style="display: block;">
-                    <span class="info-label">Payment Gateway:</span><br>
-                    <span class="info-value" style="display: block; text-align: left; margin-left: 0; margin-top: 6px;">{{ payment_gateway }}</span>
-                </div>
-                <div class="info-row" style="display: block;">
-                    <span class="info-label">Issued By:</span><br>
-                    <span class="info-value" style="display: block; text-align: left; margin-left: 0; margin-top: 6px;">{{ issued_by }}</span>
-                </div>
-            </div>
-        </div>
+    <div class="divider"></div>
+    <div class="section">
+        <div class="section-title">RECEIVED FROM</div>
+        <div class="meta-row"><div class="meta-label">Name</div><div>: {{ student_name }}</div></div>
+        <div class="meta-row"><div class="meta-label">Roll No</div><div>: {{ student_roll_number }}</div></div>
+        <div class="meta-row"><div class="meta-label">Room</div><div>: {{ room_number }}</div></div>
+        <div class="meta-row"><div class="meta-label">Phone</div><div>: {{ student_phone }}</div></div>
+    </div>
 
-        <!-- Invoice Items Table -->
-        <table>
-            <thead>
-                <tr>
-                    <th>Description</th>
-                    <th style="text-align: center;">Qty</th>
-                    <th style="text-align: right;">Unit Price</th>
-                    <th style="text-align: right;">Amount</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>{{ description }}</td>
-                    <td style="text-align: center;">1</td>
-                    <td style="text-align: right;">₹{{ amount }}</td>
-                    <td style="text-align: right; font-weight: 700;">₹{{ amount }}</td>
-                </tr>
-            </tbody>
-        </table>
+    <div class="divider"></div>
+    <table>
+        <thead>
+            <tr>
+                <th>Description</th>
+                <th class="right">Qty</th>
+                <th class="right">Price</th>
+                <th class="right">Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>{{ description }}</td>
+                <td class="right">1</td>
+                <td class="right">₹{{ amount }}</td>
+                <td class="right">₹{{ amount }}</td>
+            </tr>
+        </tbody>
+    </table>
 
-        <!-- Totals -->
-        <div class="totals-section">
-            <div class="totals-box">
-                <div class="total-row">
-                    <span class="total-row-label">Subtotal:</span>
-                    <span class="total-row-value">₹{{ amount }}</span>
-                </div>
-                <div class="total-row">
-                    <span class="total-row-label">Discount:</span>
-                    <span class="total-row-value">₹0.00</span>
-                </div>
-                <div class="total-row">
-                    <span class="total-row-label">Tax:</span>
-                    <span class="total-row-value">₹0.00</span>
-                </div>
-                <div class="total-row grand">
-                    <span class="total-row-label">Total Paid:</span>
-                    <span class="total-row-value">₹{{ amount }}</span>
-                </div>
-            </div>
-        </div>
+    <div class="summary">
+        <div class="summary-row"><div class="summary-label">Subtotal</div><div>₹{{ amount }}</div></div>
+        <div class="summary-row"><div class="summary-label">Discount</div><div>₹0</div></div>
+        <div class="summary-row"><div class="summary-label">Tax</div><div>₹0</div></div>
+        <div class="divider"></div>
+        <div class="summary-row total"><div class="summary-label">TOTAL</div><div>₹{{ amount }}</div></div>
+    </div>
 
-        <!-- Footer -->
-        <div class="footer-section">
-            <div class="footer-separator"></div>
-            <div class="footer-grid">
-                <div class="footer-block">
-                    <div class="footer-block-title">Support & Contact</div>
-                    <div class="footer-block-content">
-                        {{ hostel_email }}<br>
-                        {{ hostel_phone }}<br>
-                        {{ hostel_address }}
-                    </div>
-                </div>
-                <div class="footer-block text-right">
-                    <div class="footer-block-title">Generated</div>
-                    <div class="footer-block-content">
-                        {{ generated_on }}<br>
-                        <span class="text-muted">(System Generated)</span>
-                    </div>
-                </div>
-            </div>
+    <div class="section">
+        <div class="meta-row"><div class="meta-label">Payment Method</div><div>: {{ payment_method }}</div></div>
+        <div class="meta-row"><div class="meta-label">Transaction ID</div><div>: {{ transaction_id }}</div></div>
+    </div>
 
-            {% if verification_url %}
-            <div class="verify-link">
-                🔗 Verify Receipt: {{ verification_url }}
-            </div>
-            {% endif %}
-        </div>
+    {% if verification_url %}
+    <div class="section verify">
+        <div class="section-title">Verify Receipt</div>
+        <div>{{ verification_url }}</div>
+    </div>
+    {% endif %}
 
-        <div class="bottom-note">
-            This is a computer-generated receipt and does not require a signature.<br>
-            For disputes or inquiries, please contact the hostel administration.
-        </div>
+    <div class="footer">
+        <div class="muted">Generated: {{ generated_on }}</div>
+        <div class="muted">This is a system generated receipt.</div>
     </div>
 </body>
 </html>
