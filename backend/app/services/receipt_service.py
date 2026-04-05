@@ -181,12 +181,10 @@ class ReceiptService:
         """
         # Fetch payment with all related data
         res = supabase.table("payments").select(
-            "id, created_at, amount_paid, payment_method, reference_number, receipt_number, "
+            "id, created_at, amount_paid, payment_method, reference_number, receipt_number, owner_id, obligation_id, "
             "rent_obligations(id, rent_month, status), "
-            "students(id, permanent_address, temporary_address, roll_number, course, year_of_study, section, branch, phone_1, "
-            "  profiles!students_profile_id_fkey(name, email, phone)), "
-            "room_allocations!payments_room_id_fkey(room_id, rooms!room_id(room_number)), "
-            "hostels!payments_hostel_id_fkey(id, hostel_name, address, email, phone)"
+            "students(id, room_id, permanent_address, temporary_address, roll_number, course, year_of_study, section, branch, phone_1, "
+            "  profiles!students_profile_id_fkey(name, email, phone))"
         ).eq("id", payment_id).single().execute()
         
         if not res.data:
@@ -196,9 +194,33 @@ class ReceiptService:
         student = payment.get("students") or {}
         profile = student.get("profiles") or {}
         obligation = payment.get("rent_obligations") or {}
-        room_allocation = payment.get("room_allocations") or {}
-        room = room_allocation.get("rooms") or {} if room_allocation else {}
-        hostel = payment.get("hostels") or {}
+
+        # Resolve room number from students.room_id
+        room_no = "N/A"
+        try:
+            room_id = student.get("room_id")
+            if room_id:
+                room_res = supabase.table("rooms").select("room_no").eq("id", room_id).single().execute()
+                if room_res.data:
+                    room_no = room_res.data.get("room_no") or "N/A"
+        except Exception:
+            room_no = "N/A"
+
+        # Resolve hostel details using owner_id (payments has owner_id)
+        hostel = {}
+        owner_profile = {}
+        try:
+            owner_id = payment.get("owner_id")
+            if owner_id:
+                hostel_res = supabase.table("hostels").select("name, address, city, state, pincode, phone").eq("owner_id", owner_id).single().execute()
+                if hostel_res.data:
+                    hostel = hostel_res.data
+                owner_res = supabase.table("profiles").select("email, phone").eq("id", owner_id).single().execute()
+                if owner_res.data:
+                    owner_profile = owner_res.data
+        except Exception:
+            hostel = {}
+            owner_profile = {}
 
         # Format dates
         created_at = payment.get("created_at")
@@ -246,10 +268,17 @@ class ReceiptService:
         amount_formatted = ReceiptService._format_currency(payment.get("amount_paid"))
 
         # Default hostel info from env if not in DB
-        hostel_name = hostel.get("hostel_name") or os.getenv("RECEIPT_COMPANY_NAME", "Trishul Hostel Management")
-        hostel_address = hostel.get("address") or os.getenv("RECEIPT_COMPANY_ADDRESS", "Hyderabad, India")
-        hostel_email = hostel.get("email") or os.getenv("RECEIPT_SUPPORT_EMAIL", "support@trishul.com")
-        hostel_phone = hostel.get("phone") or os.getenv("RECEIPT_SUPPORT_PHONE", "+91 9876543210")
+        hostel_name = hostel.get("name") or os.getenv("RECEIPT_COMPANY_NAME", "Trishul Hostel Management")
+        hostel_phone = hostel.get("phone") or owner_profile.get("phone") or os.getenv("RECEIPT_SUPPORT_PHONE", "+91 9876543210")
+        hostel_email = owner_profile.get("email") or os.getenv("RECEIPT_SUPPORT_EMAIL", "support@trishul.com")
+
+        hostel_address_parts = [
+            hostel.get("address"),
+            hostel.get("city"),
+            hostel.get("state"),
+            hostel.get("pincode"),
+        ]
+        hostel_address = ", ".join([part for part in hostel_address_parts if part]) or os.getenv("RECEIPT_COMPANY_ADDRESS", "Hyderabad, India")
 
         verify_base_url = os.getenv("RECEIPT_VERIFY_BASE_URL", "")
         verification_url = f"{verify_base_url.rstrip('/')}/{payment_id}" if verify_base_url else ""
@@ -259,8 +288,14 @@ class ReceiptService:
             raise FileNotFoundError(f"Receipt template not found: {template_path}")
 
         # Build professional receipt context
+        receipt_month = ""
+        try:
+            receipt_month = datetime.fromisoformat(str(created_at).replace("Z", "+00:00")).astimezone(receipt_tz).strftime("%Y-%m")
+        except Exception:
+            receipt_month = datetime.now(receipt_tz).strftime("%Y-%m")
+
         render_context = dict(
-            receipt_no=f"REC-{formatted_date.replace(' ', '-')}-{str(payment.get('receipt_number', 1)).zfill(5)}",  # e.g., REC-06-Apr-2026-00012
+            receipt_no=f"REC-{receipt_month}-{str(payment.get('receipt_number', 1)).zfill(5)}",  # e.g., REC-2026-04-00012
             date=formatted_date,
             rent_month=rent_month_str,
             
@@ -275,7 +310,7 @@ class ReceiptService:
             student_roll_number=student.get("roll_number") or "N/A",
             student_course=student.get("course") or "N/A",
             student_year_section=year_section,
-            room_number=room.get("room_number") or "N/A",
+            room_number=room_no or "N/A",
             student_phone=student_phone,
             student_address=student_address,
             student_email=profile.get("email") or "N/A",
@@ -318,11 +353,9 @@ class ReceiptService:
         Intended for public verification links/QR checks.
         """
         res = supabase.table("payments").select(
-            "id, created_at, amount_paid, payment_method, reference_number, receipt_number, "
+            "id, created_at, amount_paid, payment_method, reference_number, receipt_number, owner_id, "
             "rent_obligations(rent_month, status), "
-            "students(id, roll_number, course, year_of_study, section, profiles!students_profile_id_fkey(name)), "
-            "room_allocations!payments_room_id_fkey(rooms!room_id(room_number)), "
-            "hostels!payments_hostel_id_fkey(id, hostel_name)"
+            "students(id, room_id, roll_number, course, year_of_study, section, profiles!students_profile_id_fkey(name))"
         ).eq("id", payment_id).single().execute()
 
         if not res.data:
@@ -336,9 +369,27 @@ class ReceiptService:
         obligation = payment.get("rent_obligations") or {}
         student = payment.get("students") or {}
         profile = student.get("profiles") or {}
-        room_allocation = payment.get("room_allocations") or {}
-        room = room_allocation.get("rooms") or {} if room_allocation else {}
-        hostel = payment.get("hostels") or {}
+        # Resolve room number
+        room_no = "N/A"
+        try:
+            room_id = student.get("room_id")
+            if room_id:
+                room_res = supabase.table("rooms").select("room_no").eq("id", room_id).single().execute()
+                if room_res.data:
+                    room_no = room_res.data.get("room_no") or "N/A"
+        except Exception:
+            room_no = "N/A"
+
+        # Resolve hostel name from owner_id
+        hostel_name = "N/A"
+        try:
+            owner_id = payment.get("owner_id")
+            if owner_id:
+                hostel_res = supabase.table("hostels").select("name").eq("owner_id", owner_id).single().execute()
+                if hostel_res.data:
+                    hostel_name = hostel_res.data.get("name") or "N/A"
+        except Exception:
+            hostel_name = "N/A"
 
         created_at = payment.get("created_at")
         try:
@@ -363,10 +414,10 @@ class ReceiptService:
             "valid": True,
             "receipt_no": payment.get("id"),
             "issued_on": issued_on,
-            "hostel": hostel.get("hostel_name") or "N/A",
+            "hostel": hostel_name or "N/A",
             "tenant": profile.get("name") or "N/A",
             "roll_number": student.get("roll_number") or "N/A",
-            "room_number": room.get("room_number") or "N/A",
+            "room_number": room_no or "N/A",
             "amount": ReceiptService._format_currency(payment.get("amount_paid")),
             "currency": "INR",
             "rent_month": rent_month_str,
@@ -377,7 +428,7 @@ class ReceiptService:
         }
 
     @staticmethod
-    def _get_receipt_storage_path(payment_id: str, hostel_id: str, created_at: datetime) -> str:
+    def _get_receipt_storage_path(payment_id: str, owner_id: str, created_at: datetime) -> str:
         """
         Generate consistent storage path for receipt PDF.
         Format: receipts/YYYY-MM/hostel_id/payment_id.pdf
@@ -391,16 +442,16 @@ class ReceiptService:
         except Exception:
             month_str = datetime.now().strftime("%Y-%m")
         
-        return f"receipts/{month_str}/{hostel_id}/{payment_id}.pdf"
+        return f"receipts/{month_str}/{owner_id}/{payment_id}.pdf"
 
     @staticmethod
-    async def cache_receipt_pdf(payment_id: str, pdf_bytes: bytes, hostel_id: str, created_at: str) -> str:
+    async def cache_receipt_pdf(payment_id: str, pdf_bytes: bytes, owner_id: str, created_at: str) -> str:
         """
         Cache generated receipt PDF to Supabase storage.
         Returns the public URL or storage path.
         """
         try:
-            storage_path = ReceiptService._get_receipt_storage_path(payment_id, hostel_id, created_at)
+            storage_path = ReceiptService._get_receipt_storage_path(payment_id, owner_id, created_at)
             
             # Upload PDF to Supabase storage
             res = supabase.storage.from_("receipts").upload(
@@ -435,7 +486,7 @@ class ReceiptService:
         try:
             # Check if cached
             res = supabase.table("payments").select(
-                "id, receipt_pdf_url, receipt_pdf_generated_at, hostel_id, created_at"
+                "id, receipt_pdf_url, receipt_pdf_generated_at, owner_id, created_at"
             ).eq("id", payment_id).single().execute()
             
             if not res.data:
@@ -455,7 +506,7 @@ class ReceiptService:
                         # Download cached PDF
                         storage_path = ReceiptService._get_receipt_storage_path(
                             payment_id,
-                            payment.get("hostel_id"),
+                            payment.get("owner_id"),
                             payment.get("created_at")
                         )
                         
@@ -472,7 +523,7 @@ class ReceiptService:
             await ReceiptService.cache_receipt_pdf(
                 payment_id,
                 pdf_bytes,
-                payment.get("hostel_id"),
+                payment.get("owner_id"),
                 payment.get("created_at")
             )
             
