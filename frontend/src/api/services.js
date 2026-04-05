@@ -116,6 +116,28 @@ export const ownerService = {
     }
 };
 
+// --- Billing & Plans Service ---
+export const billingService = {
+    _requestWithFallback: async (method, path, data) => {
+        try {
+            const response = await api.request({ method, url: path, data });
+            return response.data;
+        } catch (error) {
+            if (error?.response?.status === 404 && !path.startsWith('/api/v1/')) {
+                const fallbackResponse = await api.request({ method, url: `/api/v1${path}`, data });
+                return fallbackResponse.data;
+            }
+            throw error;
+        }
+    },
+    getSubscription: async () => {
+        return billingService._requestWithFallback('get', '/owner/me/subscription');
+    },
+    getPlans: async () => {
+        return billingService._requestWithFallback('get', '/plans');
+    }
+};
+
 // --- Student Services ---
 export const studentService = {
     getAll: async (params) => {

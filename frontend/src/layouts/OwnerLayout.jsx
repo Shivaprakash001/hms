@@ -77,6 +77,7 @@ const OwnerLayout = () => {
         { name: 'Tenants', icon: Users, path: '/owner/students' },
         { name: 'Payments', icon: CreditCard, path: '/owner/payments' },
         { name: 'Expenses', icon: Receipt, path: '/owner/expenses' },
+        { name: 'Billing & Plans', icon: CreditCard, path: '/owner/billing' },
     ];
 
     const unreadCount = notifications.filter(n => !n.is_read).length;
@@ -401,7 +402,7 @@ const OwnerLayout = () => {
                                             <button
                                                 onClick={() => {
                                                     setProfileMenuOpen(false);
-                                                    navigate('/owner/profile?tab=hostel');
+                                                    navigate('/owner/billing');
                                                 }}
                                                 className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-lg transition-colors"
                                             >
