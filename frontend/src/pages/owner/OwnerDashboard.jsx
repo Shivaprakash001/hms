@@ -202,14 +202,14 @@ const OwnerDashboard = () => {
             </div>
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                 {stats.map((stat, idx) => {
                     const Icon = stat.icon;
                     return (
                         <div
                             key={idx}
                             onClick={stat.onClick}
-                            className={`bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-lg transition-all duration-300 ${stat.cursor || ''} ${stat.onClick ? 'active:scale-95' : ''}`}
+                            className={`bg-white p-4 sm:p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-lg transition-all duration-300 ${stat.cursor || ''} ${stat.onClick ? 'active:scale-95' : ''}`}
                         >
                             <div className="flex justify-between items-start mb-4">
                                 <div className={`p-3 rounded-xl ${stat.bg} ${stat.color}`}>
@@ -222,7 +222,7 @@ const OwnerDashboard = () => {
                             </div>
                             <div>
                                 <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">{stat.title}</p>
-                                <h3 className="text-3xl font-bold text-slate-900 mt-1 tracking-tight">{stat.value}</h3>
+                                <h3 className="text-2xl sm:text-3xl font-bold text-slate-900 mt-1 tracking-tight">{stat.value}</h3>
                             </div>
                         </div>
                     );
@@ -231,7 +231,7 @@ const OwnerDashboard = () => {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Main Chart */}
-                <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+                <div className="lg:col-span-2 bg-white p-4 sm:p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow min-w-0">
                     <div className="flex items-center justify-between mb-6">
                         <div>
                             <h3 className="font-bold text-slate-900 text-lg">Financial Performance</h3>
@@ -242,12 +242,12 @@ const OwnerDashboard = () => {
                             <option>Last Year</option>
                         </select>
                     </div>
-                    <div className="h-80 w-full" style={{ minHeight: '320px' }}>
-                        <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={100}>
+                    <div className="h-64 sm:h-80 w-full min-w-0" style={{ minHeight: '260px' }}>
+                        <ResponsiveContainer width="100%" height="100%" minWidth={280} minHeight={220}>
                             <BarChart data={monthlyData} barGap={8}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12, fontWeight: 500 }} dy={10} />
-                                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12, fontWeight: 500 }} tickFormatter={(value) => `₹${value / 1000}k`} dx={-10} />
+                                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }} dy={10} />
+                                <YAxis axisLine={false} tickLine={false} width={46} tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }} tickFormatter={(value) => `₹${value / 1000}k`} dx={-6} />
                                 <Tooltip cursor={{ fill: '#f8fafc' }} content={({ active, payload, label }) => {
                                     if (active && payload && payload.length) {
                                         return (
@@ -274,7 +274,7 @@ const OwnerDashboard = () => {
                 </div>
 
                 {/* Recent Activity */}
-                <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow flex flex-col">
+                <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow flex flex-col">
                     <h3 className="font-bold text-slate-900 text-lg mb-1">Recent Activity</h3>
                     <p className="text-sm text-slate-500 mb-6">Latest updates from your property.</p>
                     <div className="flex-1 space-y-6">

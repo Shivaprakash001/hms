@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, CreditCard, User, LogOut, Menu, Bell, Settings } from 'lucide-react';
+import { LayoutDashboard, CreditCard, User, LogOut, Menu, Bell, Settings, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { useAuth } from '../context/AuthContext';
@@ -9,6 +9,7 @@ import { notificationService } from '../api/services';
 const StudentLayout = () => {
     const { user, logout } = useAuth();
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
     const navigate = useNavigate();
     const location = useLocation();
@@ -112,11 +113,72 @@ const StudentLayout = () => {
                 </div>
             </motion.aside>
 
+            {/* Mobile Sidebar (Overlay) */}
+            <div
+                className={`md:hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm transition-opacity duration-300 ${mobileMenuOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                onClick={() => setMobileMenuOpen(false)}
+            />
+            <aside className={`md:hidden fixed inset-y-0 left-0 z-50 w-72 bg-slate-900 shadow-2xl transition-transform duration-300 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+                <div className="h-16 flex items-center justify-between px-6 border-b border-slate-800">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                            <span className="font-bold text-white text-lg">S</span>
+                        </div>
+                        <span className="font-bold text-lg tracking-tight text-white">Student Portal</span>
+                    </div>
+                    <button onClick={() => setMobileMenuOpen(false)} className="text-slate-400 hover:text-white">
+                        <X size={24} />
+                    </button>
+                </div>
+
+                <nav className="p-4 space-y-1">
+                    {menuItems.map((item) => {
+                        const isActive = location.pathname === item.path;
+                        return (
+                            <button
+                                key={item.path}
+                                onClick={() => {
+                                    navigate(item.path);
+                                    setMobileMenuOpen(false);
+                                }}
+                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${isActive
+                                    ? 'bg-indigo-600 text-white font-semibold'
+                                    : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                                    }`}
+                            >
+                                <item.icon size={20} />
+                                {item.label}
+                            </button>
+                        );
+                    })}
+                </nav>
+
+                <div className="mt-auto p-4 border-t border-slate-800">
+                    <div className="mb-3 px-2">
+                        <p className="text-sm font-semibold text-white truncate">{user?.name || 'Student'}</p>
+                        <p className="text-xs text-slate-400 truncate">{user?.email || ''}</p>
+                    </div>
+                    <button
+                        onClick={() => {
+                            setMobileMenuOpen(false);
+                            handleLogout();
+                        }}
+                        className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-red-500/10 hover:text-red-400 text-slate-400 transition-all"
+                    >
+                        <LogOut size={20} />
+                        <span className="font-medium">Sign Out</span>
+                    </button>
+                </div>
+            </aside>
+
             {/* Main Content */}
             <div className="flex-1 flex flex-col h-screen overflow-hidden relative">
                 {/* Header */}
-                <header className="h-16 bg-white/80 backdrop-blur-xl border-b border-slate-200 flex items-center justify-between px-6 z-10 sticky top-0">
+                <header className="h-16 bg-white/80 backdrop-blur-xl border-b border-slate-200 flex items-center justify-between px-4 md:px-6 z-10 sticky top-0">
                     <div className="flex items-center gap-4">
+                        <button onClick={() => setMobileMenuOpen(true)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors md:hidden">
+                            <Menu size={20} />
+                        </button>
                         <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors hidden md:block">
                             <Menu size={20} />
                         </button>
@@ -147,7 +209,7 @@ const StudentLayout = () => {
                 </header>
 
                 {/* Page Content */}
-                <main className="flex-1 overflow-y-auto p-6 scroll-smooth">
+                <main className="flex-1 overflow-y-auto p-4 md:p-6 scroll-smooth">
                     <div className="max-w-7xl mx-auto">
                         <Outlet />
                     </div>
