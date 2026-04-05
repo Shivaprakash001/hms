@@ -1,0 +1,72 @@
+-- Migration 039: Add professional receipt numbering to payments
+-- Adds receipt_number column to track sequential receipt numbers per hostel per month
+-- Enables REC-YYYY-MM-XXXXX format with proper sequencing
+
+-- Add receipt_number column if not exists
+ALTER TABLE payments
+ADD COLUMN IF NOT EXISTS receipt_number INTEGER;
+
+-- Add composite unique constraint on (hostel_id, created_at month, receipt_number)
+-- This ensures each hostel has unique receipt numbers per month
+ALTER TABLE payments
+ADD CONSTRAINT unique_receipt_per_hostel_month 
+UNIQUE (hostel_id, DATE_TRUNC('month', created_at AT TIME ZONE 'Asia/Kolkata'), receipt_number)
+DEFERRABLE INITIALLY DEFERRED;
+
+-- Create index for faster querying by hostel and month
+CREATE INDEX IF NOT EXISTS idx_payments_hostel_month_receipt
+ON payments (hostel_id, DATE_TRUNC('month', created_at AT TIME ZONE 'Asia/Kolkata'), receipt_number);
+
+-- Add sequence generator function to auto-assign receipt numbers
+CREATE OR REPLACE FUNCTION generate_receipt_number()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_month_start TIMESTAMP;
+    v_max_receipt INTEGER;
+BEGIN
+    -- Get the start of the month for the payment
+    v_month_start := DATE_TRUNC('month', NEW.created_at AT TIME ZONE 'Asia/Kolkata');
+    
+    -- Find the maximum receipt_number for this hostel in this month
+    SELECT COALESCE(MAX(receipt_number), 0) + 1
+    INTO v_max_receipt
+    FROM payments
+    WHERE hostel_id = NEW.hostel_id 
+      AND DATE_TRUNC('month', created_at AT TIME ZONE 'Asia/Kolkata') = v_month_start
+      AND id != NEW.id;  -- Exclude current row for updates
+    
+    -- Set the receipt_number
+    NEW.receipt_number := v_max_receipt;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Drop old trigger if exists
+DROP TRIGGER IF EXISTS trg_generate_receipt_number ON payments;
+
+-- Create trigger to auto-generate receipt numbers on insert/update
+CREATE TRIGGER trg_generate_receipt_number
+BEFORE INSERT OR UPDATE ON payments
+FOR EACH ROW
+EXECUTE FUNCTION generate_receipt_number();
+
+-- Backfill receipt_number for existing payments (group by hostel and month)
+WITH payment_ranking AS (
+    SELECT 
+        id,
+        ROW_NUMBER() OVER (
+            PARTITION BY hostel_id, DATE_TRUNC('month', created_at AT TIME ZONE 'Asia/Kolkata')
+            ORDER BY created_at ASC, id ASC
+        ) as new_receipt_number
+    FROM payments
+    WHERE receipt_number IS NULL
+)
+UPDATE payments p
+SET receipt_number = pr.new_receipt_number
+FROM payment_ranking pr
+WHERE p.id = pr.id;
+
+-- Add comment explaining the column
+COMMENT ON COLUMN payments.receipt_number IS 
+    'Sequential receipt number per hostel per month. Used for professional receipt numbering: REC-YYYY-MM-XXXXX';

@@ -181,7 +181,7 @@ class ReceiptService:
         """
         # Fetch payment with all related data
         res = supabase.table("payments").select(
-            "id, created_at, amount_paid, payment_method, reference_number, "
+            "id, created_at, amount_paid, payment_method, reference_number, receipt_number, "
             "rent_obligations(id, rent_month, status), "
             "students(id, permanent_address, temporary_address, roll_number, course, year_of_study, section, branch, phone_1, "
             "  profiles!students_profile_id_fkey(name, email, phone)), "
@@ -260,7 +260,7 @@ class ReceiptService:
 
         # Build professional receipt context
         render_context = dict(
-            receipt_no=f"REC-{formatted_date.replace(' ', '-')}-{payment.get('id')[-8:].upper()}",  # e.g., REC-06-Apr-2026-A1B2C3D4
+            receipt_no=f"REC-{formatted_date.replace(' ', '-')}-{str(payment.get('receipt_number', 1)).zfill(5)}",  # e.g., REC-06-Apr-2026-00012
             date=formatted_date,
             rent_month=rent_month_str,
             
@@ -318,7 +318,7 @@ class ReceiptService:
         Intended for public verification links/QR checks.
         """
         res = supabase.table("payments").select(
-            "id, created_at, amount_paid, payment_method, reference_number, "
+            "id, created_at, amount_paid, payment_method, reference_number, receipt_number, "
             "rent_obligations(rent_month, status), "
             "students(id, roll_number, course, year_of_study, section, profiles!students_profile_id_fkey(name)), "
             "room_allocations!payments_room_id_fkey(rooms!room_id(room_number)), "
