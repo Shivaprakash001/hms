@@ -286,6 +286,12 @@ def get_owner_tenant_overview(
             "phone": student.get("phone_1") or profile.get("phone"),
             "guardian_phone": student.get("phone_2") or profile.get("emergency_contact"),
             "email": profile.get("email"),
+            "roll_number": student.get("roll_number"),
+            "course": student.get("course"),
+            "year_of_study": student.get("year_of_study"),
+            "section": student.get("section"),
+            "branch": student.get("branch"),
+            "college_name": student.get("college_name"),
             "room_number": current_room.get("room_no") if current_room else None,
             "floor": current_room.get("room_no")[:-2] if current_room and current_room.get("room_no") and len(current_room.get("room_no")) >= 3 else "G",
             "joined_at": student.get("joined_on"),
@@ -467,9 +473,14 @@ def get_all_students(
             # Apply in-memory search filter if provided
             if search:
                 profile = student.get("profile") or {}
+                current_room = student.get("current_room") or {}
                 name = (profile.get("name") or "").lower()
                 email = (profile.get("email") or "").lower()
-                if search.lower() not in name and search.lower() not in email:
+                phone = (student.get("phone_1") or profile.get("phone") or "").lower()
+                room_no = (current_room.get("room_no") or "").lower()
+                roll_no = (student.get("roll_number") or "").lower()
+                q = search.lower()
+                if q not in name and q not in email and q not in phone and q not in room_no and q not in roll_no:
                     continue
 
             obligation = obligations_by_student.get(student.get("id"))
@@ -732,7 +743,7 @@ def update_student_self_profile(
         }
         student_fields = {
             "photo_url", "phone_1", "phone_2", "phone_3", "personal_email",
-            "college_name", "branch", "office_name", "office_location", "job_role",
+            "college_name", "roll_number", "course", "year_of_study", "section", "branch", "office_name", "office_location", "job_role",
             "permanent_address", "temporary_address"
         }
 
@@ -799,6 +810,8 @@ def update_student_self_profile(
             bool((profile.get("phone") or student.get("phone_1") or "").strip()),
             bool((student.get("phone_2") or profile.get("emergency_contact") or "").strip()),
             bool((student.get("college_name") or "").strip()),
+            bool((student.get("roll_number") or "").strip()),
+            bool(student.get("year_of_study")),
             bool((student.get("branch") or "").strip()),
             bool((student.get("temporary_address") or student.get("permanent_address") or profile.get("address") or "").strip()),
             has_aadhaar,
@@ -848,6 +861,8 @@ def complete_student_self_profile(
             "phone": bool((data.get("phone") or "").strip()),
             "emergency_contact": bool((data.get("emergency_contact") or "").strip()),
             "college_name": bool((data.get("college_name") or "").strip()),
+            "roll_number": bool((data.get("roll_number") or "").strip()),
+            "year_of_study": bool(data.get("year_of_study")),
             "branch": bool((data.get("branch") or "").strip()),
             "address": bool((data.get("temporary_address") or data.get("permanent_address") or data.get("address") or "").strip()),
             "aadhaar_file": bool(aadhaar_file_bytes),

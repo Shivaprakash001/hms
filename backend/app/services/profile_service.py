@@ -3,7 +3,6 @@ from typing import Optional, Dict, Any
 from postgrest.exceptions import APIError
 from app.utils.responses import ServiceResponse, ErrorCode
 from app.utils.logger import get_logger
-from app.services import document_service
 
 logger = get_logger(__name__)
 
@@ -342,56 +341,39 @@ def complete_profile(
     aadhaar_content_type: str
 ) -> Dict[str, Any]:
     """
-    Complete a user's profile with personal details and Aadhaar upload.
-    Will map to both profiles table and identification_documents table.
+    Legacy profile completion entrypoint.
+    Delegates to shared student completion flow to avoid data divergence.
     """
     try:
-        logger.info(f"Completing profile for user: {profile_id}")
-        
-        # 1. Look up student record to get tenant_id for document upload
-        stu_res = supabase.table("students").select("id").eq("profile_id", profile_id).execute()
-        if not stu_res.data:
-            return ServiceResponse.not_found("Student record for this profile")
-            
-        tenant_id = stu_res.data[0]["id"]
+        logger.info(f"Completing profile (legacy route) for user: {profile_id}")
 
-        # 2. Upload Aadhaar Document
-        doc_res = document_service.upload_document(
-            tenant_id=tenant_id,
-            doc_type="AADHAR",
-            document_number=None, # Not explicitly requested in form, can be added later
-            file_bytes=aadhaar_file_bytes,
-            filename=aadhaar_filename,
-            content_type=aadhaar_content_type,
-            uploaded_by=profile_id,
-            requesting_user_id=profile_id,
-            requesting_user_role="student"
-        )
-        
-        if not doc_res.get("success"):
-            return doc_res # Bubble up the error
-
-        # 3. Update Profiles Table
-        update_data = {
+        # Map old payload to shared StudentSelfProfileUpdate contract.
+        mapped = {
             "name": data.get("name"),
-            "college_roll_number": data.get("college_roll_number"),
+            "phone": data.get("phone") or data.get("parent_phone"),
+            "emergency_contact": data.get("emergency_contact") or data.get("parent_phone"),
+            "phone_1": data.get("phone") or data.get("parent_phone"),
+            "phone_2": data.get("parent_phone"),
+            "college_name": data.get("college_name") or data.get("college"),
+            "roll_number": data.get("roll_number") or data.get("college_roll_number"),
+            "course": data.get("course"),
+            "year_of_study": int(data.get("year_of_study")) if data.get("year_of_study") not in (None, "") else None,
             "section": data.get("section"),
             "branch": data.get("branch"),
-            "year_of_study": data.get("year_of_study"),
-            "address": data.get("address"),
-            "parent_phone": data.get("parent_phone"),
-            "is_profile_completed": True
+            "temporary_address": data.get("temporary_address") or data.get("address"),
+            "permanent_address": data.get("permanent_address")
         }
-        
-        # Remove any None values just in case
-        update_data = {k: v for k, v in update_data.items() if v is not None}
-        
-        result = supabase.table("profiles").update(update_data).eq("id", profile_id).execute()
-        
-        if not result.data:
-            return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to update profile details")
+        mapped = {k: v for k, v in mapped.items() if v is not None}
 
-        return ServiceResponse.success(result.data[0], "Profile completed successfully")
+        from app.services import student_service
+        result = student_service.complete_student_self_profile(
+            profile_id=profile_id,
+            data=mapped,
+            aadhaar_file_bytes=aadhaar_file_bytes,
+            aadhaar_filename=aadhaar_filename,
+            aadhaar_content_type=aadhaar_content_type
+        )
+        return result
 
     except APIError as e:
         error_msg = str(e)

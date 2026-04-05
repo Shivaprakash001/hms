@@ -32,6 +32,10 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
         phone_3: '',
         personal_email: '',
         college_name: '',
+        roll_number: '',
+        course: '',
+        year_of_study: '',
+        section: '',
         branch: '',
         office_name: '',
         office_location: '',
@@ -54,6 +58,10 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
             phone_3: data.phone_3 || '',
             personal_email: data.personal_email || '',
             college_name: data.college_name || '',
+            roll_number: data.roll_number || '',
+            course: data.course || '',
+            year_of_study: data.year_of_study || '',
+            section: data.section || '',
             branch: data.branch || '',
             office_name: data.office_name || '',
             office_location: data.office_location || '',
@@ -292,6 +300,10 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
                             {profileType === 'student' ? (
                                 <div className="space-y-5">
                                     <FormField label="College / University" value={form.college_name} onChange={v => handleChange('college_name', v)} icon={GraduationCap} placeholder="e.g. VTU, JNTU" disabled={!isEditing} />
+                                    <FormField label="Roll Number" value={form.roll_number} onChange={v => handleChange('roll_number', v)} icon={GraduationCap} placeholder="e.g. 21BCS001" disabled={!isEditing} />
+                                    <FormField label="Course" value={form.course} onChange={v => handleChange('course', v)} icon={GraduationCap} placeholder="e.g. B.Tech" disabled={!isEditing} />
+                                    <FormField label="Year of Study" value={form.year_of_study} onChange={v => handleChange('year_of_study', v)} type="number" icon={GraduationCap} placeholder="1-6" disabled={!isEditing} />
+                                    <FormField label="Section" value={form.section} onChange={v => handleChange('section', v)} icon={GraduationCap} placeholder="e.g. A" disabled={!isEditing} />
                                     <FormField label="Branch / Department" value={form.branch} onChange={v => handleChange('branch', v)} icon={GraduationCap} placeholder="e.g. Computer Science" disabled={!isEditing} />
                                 </div>
                             ) : (

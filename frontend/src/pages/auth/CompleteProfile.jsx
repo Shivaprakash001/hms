@@ -23,6 +23,10 @@ const CompleteProfile = () => {
         emergency_contact: '',
         personal_email: user?.email || '',
         college_name: '',
+        roll_number: '',
+        course: '',
+        year_of_study: '',
+        section: '',
         branch: '',
         permanent_address: '',
         temporary_address: ''
@@ -69,6 +73,8 @@ const CompleteProfile = () => {
         if (!formData.phone.trim()) return 'Phone is required';
         if (!formData.emergency_contact.trim()) return 'Parent/Emergency phone is required';
         if (!formData.college_name.trim()) return 'College is required';
+        if (!formData.roll_number.trim()) return 'Roll number is required';
+        if (!formData.year_of_study) return 'Year of study is required';
         if (!formData.branch.trim()) return 'Branch is required';
         if (!formData.temporary_address.trim() && !formData.permanent_address.trim()) {
             return 'At least one address is required';
@@ -97,6 +103,10 @@ const CompleteProfile = () => {
                 phone_2: formData.emergency_contact.trim(),
                 personal_email: formData.personal_email?.trim() || null,
                 college_name: formData.college_name.trim(),
+                roll_number: formData.roll_number.trim(),
+                course: formData.course?.trim() || null,
+                year_of_study: Number(formData.year_of_study),
+                section: formData.section?.trim() || null,
                 branch: formData.branch.trim(),
                 permanent_address: formData.permanent_address?.trim() || null,
                 temporary_address: formData.temporary_address?.trim() || null
@@ -159,6 +169,10 @@ const CompleteProfile = () => {
                                     <Field icon={Phone} label="Parent / Emergency Contact *" name="emergency_contact" value={formData.emergency_contact} onChange={handleInputChange} placeholder="10-15 digit number" />
                                     <Field icon={Mail} label="Personal Email" name="personal_email" value={formData.personal_email} onChange={handleInputChange} type="email" />
                                     <Field icon={GraduationCap} label="College *" name="college_name" value={formData.college_name} onChange={handleInputChange} />
+                                    <Field icon={GraduationCap} label="Roll Number *" name="roll_number" value={formData.roll_number} onChange={handleInputChange} />
+                                    <Field icon={GraduationCap} label="Course" name="course" value={formData.course} onChange={handleInputChange} />
+                                    <Field icon={GraduationCap} label="Year of Study *" name="year_of_study" value={formData.year_of_study} onChange={handleInputChange} type="number" placeholder="1-6" />
+                                    <Field icon={GraduationCap} label="Section" name="section" value={formData.section} onChange={handleInputChange} />
                                     <Field icon={GraduationCap} label="Branch *" name="branch" value={formData.branch} onChange={handleInputChange} />
                                     <Field icon={MapPin} label="Temporary Address *" name="temporary_address" value={formData.temporary_address} onChange={handleInputChange} />
                                     <Field icon={MapPin} label="Permanent Address" name="permanent_address" value={formData.permanent_address} onChange={handleInputChange} />

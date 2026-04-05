@@ -33,6 +33,8 @@ export default function ManageStudents() {
                 name: s.profile?.name || 'Unknown',
                 email: s.profile?.email,
                 phone: s.profile?.phone || 'N/A',
+                rollNumber: s.roll_number || 'N/A',
+                yearOfStudy: s.year_of_study || null,
                 room: s.current_room ? s.current_room.room_no : 'N/A',
                 roomId: s.current_room?.id,
                 floor: s.current_room && s.current_room.room_no ? s.current_room.room_no.substring(0, s.current_room.room_no.length - 2) : 'N/A',
@@ -135,7 +137,8 @@ export default function ManageStudents() {
     const filteredStudents = students.filter(student => {
         const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             student.room.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (student.phone && student.phone.includes(searchTerm));
+            (student.phone && student.phone.includes(searchTerm)) ||
+            (student.rollNumber && student.rollNumber.toLowerCase().includes(searchTerm.toLowerCase()));
 
         if (showLeftTenants) return matchesSearch;
         return matchesSearch && student.status !== 'LEFT';
@@ -245,7 +248,7 @@ export default function ManageStudents() {
                         <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={20} />
                         <input
                             type="text"
-                            placeholder="Search by name, room number, or phone..."
+                            placeholder="Search by name, room, roll no, or phone..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="w-full pl-14 pr-6 py-4 bg-white border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-50 focus:border-indigo-200 outline-none transition-all text-slate-700 font-medium shadow-sm placeholder:text-slate-400"
@@ -269,7 +272,7 @@ export default function ManageStudents() {
                         <table className="w-full hidden md:table">
                             <thead className="bg-slate-50 border-b border-slate-100">
                                 <tr>
-                                    {['NAME', 'ROOM', 'RENT', 'LAST PAID', 'PENDING', 'PAYMENT STATUS'].map((header) => (
+                                    {['NAME', 'ROOM', 'ROLL NO', 'YEAR', 'RENT', 'LAST PAID', 'PENDING', 'PAYMENT STATUS'].map((header) => (
                                         <th key={header} className="px-8 py-5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-widest">
                                             {header}
                                         </th>
@@ -282,13 +285,13 @@ export default function ManageStudents() {
                             <tbody className="divide-y divide-slate-50">
                                 {loading ? (
                                     <tr>
-                                        <td colSpan="7" className="px-8 py-12 text-center text-slate-400 font-medium animate-pulse">
+                                        <td colSpan="9" className="px-8 py-12 text-center text-slate-400 font-medium animate-pulse">
                                             Loading tenants...
                                         </td>
                                     </tr>
                                 ) : filteredStudents.length === 0 ? (
                                     <tr>
-                                        <td colSpan="7" className="px-8 py-16 text-center text-slate-400">
+                                        <td colSpan="9" className="px-8 py-16 text-center text-slate-400">
                                             <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
                                                 <User size={24} className="text-slate-300" />
                                             </div>
@@ -314,6 +317,8 @@ export default function ManageStudents() {
                                                 </div>
                                             </td>
                                             <td className="px-8 py-5 text-slate-600 font-bold text-sm">{student.room}</td>
+                                            <td className="px-8 py-5 text-slate-600 font-semibold text-sm">{student.rollNumber || '-'}</td>
+                                            <td className="px-8 py-5 text-slate-600 font-semibold text-sm">{student.yearOfStudy ? `${student.yearOfStudy} Year` : '-'}</td>
                                             <td className="px-8 py-5 text-slate-900 font-black text-sm">{formatCurrency(student.rent)}</td>
                                             <td className="px-8 py-5 text-slate-500 text-sm font-medium">
                                                 <span>{formatDate(student.paymentSummary?.last_paid_at)}</span>
@@ -375,6 +380,14 @@ export default function ManageStudents() {
                                         <div className="text-sm font-bold text-slate-500">{student.room}</div>
                                     </div>
                                     <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                                        <div>
+                                            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Roll No</p>
+                                            <p className="font-semibold text-slate-700">{student.rollNumber || '-'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Year</p>
+                                            <p className="font-semibold text-slate-700">{student.yearOfStudy ? `${student.yearOfStudy} Year` : '-'}</p>
+                                        </div>
                                         <div>
                                             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Rent</p>
                                             <p className="font-semibold text-slate-700">{formatCurrency(student.rent)}</p>

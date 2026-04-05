@@ -76,6 +76,10 @@ class StudentUpdate(BaseModel):
     phone_3: Optional[str] = Field(None, max_length=15, description="Optional additional phone")
     personal_email: Optional[EmailStr] = Field(None, description="Personal email address")
     college_name: Optional[str] = Field(None, max_length=200, description="College/university name")
+    roll_number: Optional[str] = Field(None, max_length=50, description="Academic roll number")
+    course: Optional[str] = Field(None, max_length=100, description="Course name")
+    year_of_study: Optional[int] = Field(None, ge=1, le=6, description="Year of study (1-6)")
+    section: Optional[str] = Field(None, max_length=20, description="Class section")
     branch: Optional[str] = Field(None, max_length=100, description="Branch/department")
     office_name: Optional[str] = Field(None, max_length=200, description="Office/company name")
     office_location: Optional[str] = Field(None, max_length=200, description="Office location")
@@ -112,6 +116,10 @@ class StudentSelfProfileUpdate(BaseModel):
     phone_3: Optional[str] = Field(None, max_length=15, description="Optional additional phone")
     personal_email: Optional[EmailStr] = Field(None, description="Personal email address")
     college_name: Optional[str] = Field(None, max_length=200, description="College/university name")
+    roll_number: Optional[str] = Field(None, max_length=50, description="Academic roll number")
+    course: Optional[str] = Field(None, max_length=100, description="Course name")
+    year_of_study: Optional[int] = Field(None, ge=1, le=6, description="Year of study (1-6)")
+    section: Optional[str] = Field(None, max_length=20, description="Class section")
     branch: Optional[str] = Field(None, max_length=100, description="Branch/department")
     office_name: Optional[str] = Field(None, max_length=200, description="Office/company name")
     office_location: Optional[str] = Field(None, max_length=200, description="Office location")
@@ -143,6 +151,10 @@ class StudentResponse(BaseModel):
     phone_3: Optional[str] = None
     personal_email: Optional[str] = None
     college_name: Optional[str] = None
+    roll_number: Optional[str] = None
+    course: Optional[str] = None
+    year_of_study: Optional[int] = None
+    section: Optional[str] = None
     branch: Optional[str] = None
     office_name: Optional[str] = None
     office_location: Optional[str] = None

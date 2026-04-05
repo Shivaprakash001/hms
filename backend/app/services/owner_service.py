@@ -238,7 +238,7 @@ def search_tenants(user_id: str, query: str, limit: int = 10) -> Dict[str, Any]:
 
         if profile_ids:
             student_result = supabase.table("students") \
-                .select("id, profile_id, owner_id, room_allocations(end_date, rooms(room_no))") \
+                .select("id, profile_id, owner_id, roll_number, year_of_study, room_allocations(end_date, rooms(room_no))") \
                 .eq("owner_id", user_id) \
                 .in_("profile_id", profile_ids) \
                 .limit(25) \
@@ -272,6 +272,8 @@ def search_tenants(user_id: str, query: str, limit: int = 10) -> Dict[str, Any]:
                 students.append({
                     "id": student_id,
                     "profile_id": student.get("profile_id"),
+                    "roll_number": student.get("roll_number"),
+                    "year_of_study": student.get("year_of_study"),
                     "room_allocations": [{
                         "end_date": allocation.get("end_date"),
                         "rooms": allocation.get("rooms")
@@ -306,6 +308,7 @@ def search_tenants(user_id: str, query: str, limit: int = 10) -> Dict[str, Any]:
             email = (profile.get("email") or "").lower()
             phone = str(profile.get("phone") or "").lower()
             room = str(room_no or "").lower()
+            roll_number = str(student.get("roll_number") or "").lower()
 
             if name.startswith(normalized_query):
                 score += 5
@@ -323,6 +326,10 @@ def search_tenants(user_id: str, query: str, limit: int = 10) -> Dict[str, Any]:
                 score += 2
             elif normalized_query in email:
                 score += 1
+            if roll_number.startswith(normalized_query):
+                score += 4
+            elif normalized_query in roll_number:
+                score += 2
 
             results.append({
                 "id": student.get("id"),
@@ -330,6 +337,8 @@ def search_tenants(user_id: str, query: str, limit: int = 10) -> Dict[str, Any]:
                 "phone": profile.get("phone"),
                 "email": profile.get("email"),
                 "room": room_no,
+                "roll_number": student.get("roll_number"),
+                "year_of_study": student.get("year_of_study"),
                 "_score": score
             })
 
@@ -350,7 +359,9 @@ def search_tenants(user_id: str, query: str, limit: int = 10) -> Dict[str, Any]:
                 "name": item["name"],
                 "phone": item["phone"],
                 "email": item["email"],
-                "room": item["room"]
+                "room": item["room"],
+                "roll_number": item.get("roll_number"),
+                "year_of_study": item.get("year_of_study")
             }
             for item in sorted_results
         ])

@@ -30,6 +30,10 @@ const StudentProfile = () => {
         phone_2: '',
         phone_3: '',
         college_name: '',
+        roll_number: '',
+        course: '',
+        year_of_study: '',
+        section: '',
         branch: '',
         office_name: '',
         office_location: '',
@@ -66,6 +70,10 @@ const StudentProfile = () => {
                     phone_2: meData.phone_2 || '',
                     phone_3: meData.phone_3 || '',
                     college_name: meData.college_name || '',
+                    roll_number: meData.roll_number || '',
+                    course: meData.course || '',
+                    year_of_study: meData.year_of_study || '',
+                    section: meData.section || '',
                     branch: meData.branch || '',
                     office_name: meData.office_name || '',
                     office_location: meData.office_location || '',
@@ -120,7 +128,7 @@ const StudentProfile = () => {
 
         const profileTypeChecks = formData.profile_type === 'work'
             ? [isFilled(formData.office_name), isFilled(formData.job_role), isFilled(formData.office_location)]
-            : [isFilled(formData.college_name), isFilled(formData.branch)];
+            : [isFilled(formData.college_name), isFilled(formData.roll_number), isFilled(formData.year_of_study), isFilled(formData.branch)];
 
         const documentsChecks = Array.from({ length: docCompletion.total }, (_, i) => i < docCompletion.uploaded);
 
@@ -155,6 +163,10 @@ const StudentProfile = () => {
                 phone_2: optional(formData.emergency_contact || formData.phone_2),
                 phone_3: null,
                 college_name: optional(formData.profile_type === 'student' ? formData.college_name : null),
+                roll_number: optional(formData.profile_type === 'student' ? formData.roll_number : null),
+                course: optional(formData.profile_type === 'student' ? formData.course : null),
+                year_of_study: formData.profile_type === 'student' && formData.year_of_study ? Number(formData.year_of_study) : null,
+                section: optional(formData.profile_type === 'student' ? formData.section : null),
                 branch: optional(formData.profile_type === 'student' ? formData.branch : null),
                 office_name: optional(formData.profile_type === 'work' ? formData.office_name : null),
                 office_location: optional(formData.profile_type === 'work' ? formData.office_location : null),
@@ -179,6 +191,10 @@ const StudentProfile = () => {
                 phone_2: updated.phone_2 || prev.phone_2,
                 phone_3: updated.phone_3 || prev.phone_3,
                 college_name: updated.college_name || prev.college_name,
+                roll_number: updated.roll_number || prev.roll_number,
+                course: updated.course || prev.course,
+                year_of_study: updated.year_of_study || prev.year_of_study,
+                section: updated.section || prev.section,
                 branch: updated.branch || prev.branch,
                 office_name: updated.office_name || prev.office_name,
                 office_location: updated.office_location || prev.office_location,
@@ -360,6 +376,10 @@ const StudentProfile = () => {
                 {formData.profile_type === 'student' ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <InfoField label="College" value={formData.college_name} icon={GraduationCap} isEditable={isEditing} onChange={(e) => setFormData({ ...formData, college_name: e.target.value })} />
+                        <InfoField label="Roll Number" value={formData.roll_number} icon={GraduationCap} isEditable={isEditing} onChange={(e) => setFormData({ ...formData, roll_number: e.target.value })} />
+                        <InfoField label="Course" value={formData.course} icon={GraduationCap} isEditable={isEditing} onChange={(e) => setFormData({ ...formData, course: e.target.value })} />
+                        <InfoField label="Year of Study" value={formData.year_of_study} icon={GraduationCap} isEditable={isEditing} type="number" onChange={(e) => setFormData({ ...formData, year_of_study: e.target.value })} />
+                        <InfoField label="Section" value={formData.section} icon={GraduationCap} isEditable={isEditing} onChange={(e) => setFormData({ ...formData, section: e.target.value })} />
                         <InfoField label="Branch" value={formData.branch} icon={GraduationCap} isEditable={isEditing} onChange={(e) => setFormData({ ...formData, branch: e.target.value })} />
                     </div>
                 ) : (

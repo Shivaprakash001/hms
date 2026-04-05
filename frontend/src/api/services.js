@@ -179,10 +179,21 @@ export const studentService = {
         const formData = new FormData();
         formData.append('profile_data', JSON.stringify(data));
         formData.append('aadhaar_file', aadhaarFile);
-        const response = await api.post('/students/me/complete-profile', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
-        });
-        return response.data;
+        try {
+            const response = await api.post('/students/me/complete-profile', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            return response.data;
+        } catch (error) {
+            // Backward compatibility for deployments still using old route.
+            if (error?.response?.status === 404) {
+                const fallback = await api.post('/profiles/complete', formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+                return fallback.data;
+            }
+            throw error;
+        }
     },
     getMyDocuments: async () => {
         const response = await api.get('/students/me/documents');
