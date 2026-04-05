@@ -119,8 +119,32 @@ def register_user(data: dict) -> Dict[str, Any]:
         
         if not res.data:
              return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to create profile")
-             
-        return ServiceResponse.success(res.data[0], "User registered successfully")
+
+        created_profile = res.data[0]
+
+        # 4. Create hostel record (non-blocking if migration not applied yet)
+        hostel_payload = {
+            "owner_id": user_id,
+            "name": data.get("hostel_name"),
+            "phone": data.get("hostel_phone"),
+            "address": data.get("hostel_address"),
+            "city": data.get("hostel_city"),
+            "state": data.get("hostel_state"),
+            "pincode": data.get("hostel_pincode"),
+            "upi_id": data.get("upi_id"),
+            "gst_number": data.get("gst_number"),
+            "is_active": True,
+        }
+
+        try:
+            if hostel_payload["name"] and hostel_payload["phone"] and hostel_payload["address"]:
+                hostel_res = supabase.table("hostels").insert(hostel_payload).execute()
+                if hostel_res.data:
+                    created_profile["hostel"] = hostel_res.data[0]
+        except Exception as hostel_err:
+            logger.warning(f"Hostel record creation skipped (table may be pending migration): {hostel_err}")
+
+        return ServiceResponse.success(created_profile, "User registered successfully")
     except Exception as e:
         logger.exception(f"Error registering user: {e}")
         return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, str(e))

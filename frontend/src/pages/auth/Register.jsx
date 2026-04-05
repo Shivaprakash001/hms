@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { User, Lock, Mail, Phone, ShieldCheck, ArrowRight, Loader2, KeyRound, CheckCircle2 } from 'lucide-react';
+import { User, Lock, Mail, Phone, ShieldCheck, ArrowRight, Loader2, KeyRound, CheckCircle2, Building2, MapPin } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useNavigate, Link } from 'react-router-dom';
 import { authService } from '../../api/services';
@@ -14,6 +14,14 @@ const Register = () => {
         name: '',
         email: '',
         phone: '',
+        hostel_name: '',
+        hostel_phone: '',
+        hostel_address: '',
+        hostel_city: '',
+        hostel_state: '',
+        hostel_pincode: '',
+        upi_id: '',
+        gst_number: '',
         password: '',
         confirmPassword: '',
         role: 'admin'
@@ -175,7 +183,8 @@ const Register = () => {
                         </motion.div>
                     )}
 
-                    <form onSubmit={handleRegister} className="space-y-4">
+                    <form onSubmit={handleRegister} className="space-y-5">
+                        <div className="text-[11px] font-black uppercase tracking-widest text-slate-400">Owner Details</div>
                         {/* Name Input */}
                         <div className="space-y-1">
                             <label className="text-[10px] font-black text-slate-400 ml-1 uppercase tracking-widest">Full Name</label>
@@ -191,6 +200,129 @@ const Register = () => {
                                     className="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all font-medium text-sm"
                                     placeholder="John Doe"
                                     required
+                                />
+                            </div>
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-100" />
+                        <div className="text-[11px] font-black uppercase tracking-widest text-slate-400">Hostel Details</div>
+
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-400 ml-1 uppercase tracking-widest">Hostel Name</label>
+                            <div className="relative group">
+                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <Building2 className="h-4 w-4 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+                                </div>
+                                <input
+                                    name="hostel_name"
+                                    type="text"
+                                    value={formData.hostel_name}
+                                    onChange={handleChange}
+                                    className="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all font-medium text-sm"
+                                    placeholder="Trishul Boys Hostel"
+                                    required
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-black text-slate-400 ml-1 uppercase tracking-widest">Hostel Phone</label>
+                                <div className="relative group">
+                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                        <Phone className="h-4 w-4 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+                                    </div>
+                                    <input
+                                        name="hostel_phone"
+                                        type="tel"
+                                        value={formData.hostel_phone}
+                                        onChange={handleChange}
+                                        className="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all font-medium text-sm"
+                                        placeholder="9876543210"
+                                        required
+                                    />
+                                </div>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-black text-slate-400 ml-1 uppercase tracking-widest">Pincode</label>
+                                <input
+                                    name="hostel_pincode"
+                                    type="text"
+                                    value={formData.hostel_pincode}
+                                    onChange={handleChange}
+                                    className="block w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all font-medium text-sm"
+                                    placeholder="500001"
+                                    required
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-400 ml-1 uppercase tracking-widest">Hostel Address</label>
+                            <div className="relative group">
+                                <div className="absolute left-4 top-3 pointer-events-none">
+                                    <MapPin className="h-4 w-4 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+                                </div>
+                                <textarea
+                                    name="hostel_address"
+                                    value={formData.hostel_address}
+                                    onChange={handleChange}
+                                    rows={2}
+                                    className="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all font-medium text-sm resize-none"
+                                    placeholder="Street, Area, Landmark"
+                                    required
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-black text-slate-400 ml-1 uppercase tracking-widest">City</label>
+                                <input
+                                    name="hostel_city"
+                                    type="text"
+                                    value={formData.hostel_city}
+                                    onChange={handleChange}
+                                    className="block w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all font-medium text-sm"
+                                    placeholder="Hyderabad"
+                                    required
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-black text-slate-400 ml-1 uppercase tracking-widest">State</label>
+                                <input
+                                    name="hostel_state"
+                                    type="text"
+                                    value={formData.hostel_state}
+                                    onChange={handleChange}
+                                    className="block w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all font-medium text-sm"
+                                    placeholder="Telangana"
+                                    required
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-black text-slate-400 ml-1 uppercase tracking-widest">UPI ID (Optional)</label>
+                                <input
+                                    name="upi_id"
+                                    type="text"
+                                    value={formData.upi_id}
+                                    onChange={handleChange}
+                                    className="block w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all font-medium text-sm"
+                                    placeholder="owner@upi"
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-black text-slate-400 ml-1 uppercase tracking-widest">GST Number (Optional)</label>
+                                <input
+                                    name="gst_number"
+                                    type="text"
+                                    value={formData.gst_number}
+                                    onChange={handleChange}
+                                    className="block w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all font-medium text-sm"
+                                    placeholder="29ABCDE1234F1Z5"
                                 />
                             </div>
                         </div>
