@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Layers, LayoutGrid, Users, DoorOpen, BedDouble, Trash2, ArrowRightLeft, X, Phone, Calendar, IndianRupee, CreditCard, Loader2 } from 'lucide-react';
+import { Plus, Layers, LayoutGrid, Users, DoorOpen, BedDouble, Trash2, ArrowRightLeft, X, Phone, Calendar, IndianRupee, CreditCard } from 'lucide-react';
 import AddRoomModal from '../../components/owner/rooms/AddRoomModal';
 import AddTenantModal from '../../components/owner/rooms/AddTenantModal';
 import ShiftTenantModal from '../../components/owner/rooms/ShiftTenantModal';
@@ -12,8 +12,6 @@ const ManageRooms = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [selectedRoom, setSelectedRoom] = useState(null);
-    const [selectedRoomDetails, setSelectedRoomDetails] = useState(null);
-    const [roomDetailsLoading, setRoomDetailsLoading] = useState(false);
     const [showAddRoomModal, setShowAddRoomModal] = useState(false);
     const [showAddFloorModal, setShowAddFloorModal] = useState(false); // We'll reuse AddRoomModal for this
     const [showAddTenantModal, setShowAddTenantModal] = useState(false);
@@ -24,33 +22,45 @@ const ManageRooms = () => {
     const [tenantProfileLoading, setTenantProfileLoading] = useState(false);
     const [filterStatus, setFilterStatus] = useState('All');
 
-    // Fetch Data — uses grouped endpoint: returns [{id, number, rooms:[{id, number, capacity, occupied, tenants:[...]}]}]
-    const fetchData = async () => {
+    const normalizeFloors = (floorsData) => (
+        (floorsData || []).map(floor => ({
+            ...floor,
+            rooms: (floor.rooms || []).map(room => ({
+                ...room,
+                room_no: room.room_no ?? room.number,
+                number: room.number ?? room.room_no,
+                tenants: room.tenants || [],
+                status: room.status || ((room.tenants?.length ?? 0) === 0
+                    ? 'Vacant'
+                    : (room.tenants?.length >= room.capacity ? 'Full' : 'Occupied'))
+            }))
+        }))
+    );
+
+    const findRoomById = (floorsList, roomId) => (
+        floorsList.flatMap((floor) => floor.rooms).find((room) => room.id === roomId) || null
+    );
+
+    // Fetch Data — grouped rooms is the single source of truth for cards and drawer
+    const fetchData = async (roomIdToKeepOpen = null) => {
         setLoading(true);
         try {
-            // GET /rooms/?grouped=true (default) — backend returns floors with nested rooms+tenants
             const floorsData = await roomService.getAll({ grouped: true });
-
-            // Normalise: backend returns room.number but template uses room.room_no in some places
-            // Ensure both fields exist for compatibility
-            const normalised = (floorsData || []).map(floor => ({
-                ...floor,
-                rooms: (floor.rooms || []).map(room => ({
-                    ...room,
-                    room_no: room.room_no ?? room.number,   // backend uses 'number' in grouped response
-                    number: room.number ?? room.room_no,
-                    tenants: room.tenants || [],
-                    status: (room.tenants?.length ?? 0) === 0
-                        ? 'Vacant'
-                        : (room.tenants?.length >= room.capacity ? 'Full' : 'Occupied')
-                }))
-            }));
+            const normalised = normalizeFloors(floorsData);
 
             setFloors(normalised);
             setError(null);
+
+            const targetRoomId = roomIdToKeepOpen || selectedRoom?.id;
+            if (targetRoomId) {
+                setSelectedRoom(findRoomById(normalised, targetRoomId));
+            }
+
+            return normalised;
         } catch (err) {
             console.error("Error fetching room data:", err);
             setError("Failed to load room data. Please try again.");
+            return [];
         } finally {
             setLoading(false);
         }
@@ -60,39 +70,8 @@ const ManageRooms = () => {
         fetchData();
     }, []);
 
-    const loadRoomDetails = async (room) => {
-        if (!room?.id) return;
-
-        setRoomDetailsLoading(true);
-        try {
-            const details = await roomService.getOverview(room.id);
-            setSelectedRoomDetails(details);
-        } catch (err) {
-            console.error('Failed to fetch room details:', err);
-            alert('Failed to load room details. Please try again.');
-            setSelectedRoom(null);
-            setSelectedRoomDetails(null);
-        } finally {
-            setRoomDetailsLoading(false);
-        }
-    };
-
     const openRoomDetails = async (room) => {
         setSelectedRoom(room);
-        setSelectedRoomDetails(null);
-        await loadRoomDetails(room);
-    };
-
-    const refreshSelectedRoomDetails = async (roomId) => {
-        const targetRoomId = roomId || selectedRoom?.id;
-        if (!targetRoomId) return;
-
-        try {
-            const details = await roomService.getOverview(targetRoomId);
-            setSelectedRoomDetails(details);
-        } catch (err) {
-            console.error('Failed to refresh room details:', err);
-        }
     };
 
     const openTenantProfile = async (tenant) => {
@@ -210,8 +189,7 @@ const ManageRooms = () => {
                 }
             }
 
-            await fetchData();
-            await refreshSelectedRoomDetails(room.id);
+            await fetchData(room.id);
             setShowAddTenantModal(false);
         } catch (err) {
             console.error(err);
@@ -227,8 +205,7 @@ const ManageRooms = () => {
         try {
             // Soft delete student -> triggers auto-end allocation
             await studentService.delete(tenantId);
-            await fetchData();
-            await refreshSelectedRoomDetails();
+            await fetchData(selectedRoom?.id);
         } catch (err) {
             alert("Failed to remove tenant: " + err.message);
         }
@@ -243,10 +220,9 @@ const ManageRooms = () => {
                 new_room_id: newRoomId,
                 shift_date: localDate
             });
-            await fetchData();
+            await fetchData(selectedRoom?.id);
             setShowShiftTenantModal(false);
             setSelectedTenantForShift(null);
-            await refreshSelectedRoomDetails();
             alert("Tenant relocated successfully!");
         } catch (err) {
             console.error(err);
@@ -392,12 +368,8 @@ const ManageRooms = () => {
             <AnimatePresence>
                 {selectedRoom && (
                     <RoomDetailSidebar
-                        room={selectedRoomDetails || selectedRoom}
-                        loading={roomDetailsLoading}
-                        onClose={() => {
-                            setSelectedRoom(null);
-                            setSelectedRoomDetails(null);
-                        }}
+                        room={selectedRoom}
+                        onClose={() => setSelectedRoom(null)}
                         onAddTenant={() => setShowAddTenantModal(true)}
                         onRemoveTenant={handleRemoveTenant}
                         onShiftTenant={(tenant) => {
@@ -517,7 +489,7 @@ const RoomCard = ({ room, onClick }) => {
     );
 }
 
-const RoomDetailSidebar = ({ room, loading, onClose, onAddTenant, onRemoveTenant, onShiftTenant, onOpenTenant }) => {
+const RoomDetailSidebar = ({ room, onClose, onAddTenant, onRemoveTenant, onShiftTenant, onOpenTenant }) => {
     const roomInfo = room?.room || room;
     const occupants = room?.tenants || room?.occupants || roomInfo?.tenants || [];
     const capacity = roomInfo?.capacity || 0;
@@ -565,23 +537,17 @@ const RoomDetailSidebar = ({ room, loading, onClose, onAddTenant, onRemoveTenant
                     </div>
 
                     <div className="space-y-8">
-                        {loading ? (
-                            <div className="py-16 text-center text-slate-400">
-                                <Loader2 size={28} className="animate-spin mx-auto mb-3" />
-                                <p className="text-sm font-medium">Loading room details...</p>
-                            </div>
-                        ) : (
-                            <>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                                        <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Capacity</p>
-                                        <p className="text-2xl font-black text-slate-900 mt-2">{capacity}</p>
-                                    </div>
-                                    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                                        <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Occupied</p>
-                                        <p className="text-2xl font-black text-slate-900 mt-2">{occupants.length}</p>
-                                    </div>
+                        <>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Capacity</p>
+                                    <p className="text-2xl font-black text-slate-900 mt-2">{capacity}</p>
                                 </div>
+                                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Occupied</p>
+                                    <p className="text-2xl font-black text-slate-900 mt-2">{occupants.length}</p>
+                                </div>
+                            </div>
 
                         {/* Occupants List */}
                         <div>
@@ -668,8 +634,7 @@ const RoomDetailSidebar = ({ room, loading, onClose, onAddTenant, onRemoveTenant
                                 )}
                             </div>
                         </div>
-                            </>
-                        )}
+                        </>
                     </div>
                 </div>
             </motion.div>
