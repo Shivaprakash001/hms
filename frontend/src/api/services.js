@@ -39,6 +39,22 @@ export const profileService = {
     }
 };
 
+// --- Owner Service ---
+export const ownerService = {
+    getProfile: async () => {
+        const response = await api.get('/owner/me/profile');
+        return response.data;
+    },
+    updateOwner: async (data) => {
+        const response = await api.patch('/owner/me/profile', data);
+        return response.data;
+    },
+    updateHostel: async (data) => {
+        const response = await api.patch('/owner/me/hostel', data);
+        return response.data;
+    }
+};
+
 // --- Student Services ---
 export const studentService = {
     getAll: async (params) => {

@@ -389,13 +389,31 @@ const OwnerLayout = () => {
                                             <p className="text-xs text-slate-500">{user?.email || ''}</p>
                                         </div>
                                         <div className="p-1.5">
-                                            <button className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-lg transition-colors">
+                                            <button
+                                                onClick={() => {
+                                                    setProfileMenuOpen(false);
+                                                    navigate('/owner/profile?tab=owner');
+                                                }}
+                                                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-lg transition-colors"
+                                            >
                                                 <User size={16} /> Profile Settings
                                             </button>
-                                            <button className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-lg transition-colors">
+                                            <button
+                                                onClick={() => {
+                                                    setProfileMenuOpen(false);
+                                                    navigate('/owner/profile?tab=hostel');
+                                                }}
+                                                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-lg transition-colors"
+                                            >
                                                 <CreditCard size={16} /> Billing & Plans
                                             </button>
-                                            <button className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-lg transition-colors">
+                                            <button
+                                                onClick={() => {
+                                                    setProfileMenuOpen(false);
+                                                    navigate('/owner/profile?tab=preferences');
+                                                }}
+                                                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-lg transition-colors"
+                                            >
                                                 <Settings size={16} /> Preferences
                                             </button>
                                             <div className="h-px bg-slate-100 my-1" />

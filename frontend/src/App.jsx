@@ -10,6 +10,7 @@ import ManageStudents from './pages/owner/ManageStudents.jsx';
 import ManageRooms from './pages/owner/ManageRooms.jsx';
 import Payments from './pages/owner/Payments.jsx';
 import Expenses from './pages/owner/Expenses.jsx';
+import OwnerProfile from './pages/owner/OwnerProfile.jsx';
 
 // Student Imports
 
@@ -53,6 +54,7 @@ function App() {
             <Route path="rooms" element={<ManageRooms />} />
             <Route path="payments" element={<Payments />} />
             <Route path="expenses" element={<Expenses />} />
+            <Route path="profile" element={<OwnerProfile />} />
           </Route>
         </Route>
         {/* Global Redirects */}
