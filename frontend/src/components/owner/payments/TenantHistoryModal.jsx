@@ -13,15 +13,56 @@ const TenantHistoryModal = ({ isOpen, onClose, tenantId, tenantName }) => {
             setIsLoading(true);
             try {
                 const data = await paymentService.getStudentHistory(tenantId);
-                setHistory(data || []);
+                const obligations = (data?.obligations || []).map(item => ({
+                    id: item.id,
+                    amount: Number(item.amount),
+                    month: item.rent_month,
+                    date: item.due_date,
+                    status: String(item.status || 'PENDING').toLowerCase(),
+                    entityType: 'obligation',
+                    isReceiptAvailable: false
+                }));
+
+                const payments = (data?.payments || []).map(item => ({
+                    id: item.id,
+                    amount: Number(item.amount_paid),
+                    month: item.payment_date,
+                    date: item.payment_date,
+                    status: 'paid',
+                    entityType: 'payment',
+                    isReceiptAvailable: true
+                }));
+
+                const merged = [...obligations.filter(item => item.status !== 'paid'), ...payments]
+                    .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+                setHistory(merged);
             } catch (error) {
                 console.error("Failed to fetch tenant history:", error);
+                setHistory([]);
             } finally {
                 setIsLoading(false);
             }
         };
         fetchHistory();
     }, [isOpen, tenantId]);
+
+    const handleDownloadReceipt = async (paymentId) => {
+        try {
+            const blob = await paymentService.downloadReceipt(paymentId);
+            const url = window.URL.createObjectURL(new Blob([blob]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `receipt_${paymentId}.pdf`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Failed to download receipt:', error);
+            alert('Failed to download receipt.');
+        }
+    };
 
     if (!isOpen) return null;
 
@@ -62,7 +103,11 @@ const TenantHistoryModal = ({ isOpen, onClose, tenantId, tenantName }) => {
 
                             {/* Content */}
                             <div className="overflow-y-auto p-6">
-                                {history.length === 0 ? (
+                                {isLoading ? (
+                                    <div className="text-center py-12 text-slate-400">
+                                        <p>Loading payment history...</p>
+                                    </div>
+                                ) : history.length === 0 ? (
                                     <div className="text-center py-12 text-slate-400">
                                         <p>No payment history found for this tenant.</p>
                                     </div>
@@ -82,11 +127,13 @@ const TenantHistoryModal = ({ isOpen, onClose, tenantId, tenantName }) => {
                                                     <div>
                                                         <p className="font-bold text-slate-900 text-lg">₹{payment.amount.toLocaleString()}</p>
                                                         <div className="flex items-center gap-2 text-sm text-slate-500 mt-1">
-                                                            <span className="bg-slate-100 px-2 py-0.5 rounded text-xs font-semibold uppercase">{payment.month}</span>
+                                                            <span className="bg-slate-100 px-2 py-0.5 rounded text-xs font-semibold uppercase">
+                                                                {new Date(payment.month).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
+                                                            </span>
                                                             <span>•</span>
                                                             <span className="flex items-center gap-1">
                                                                 <Calendar size={12} />
-                                                                {payment.date || 'Pending'}
+                                                                {new Date(payment.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                                                             </span>
                                                         </div>
                                                     </div>
@@ -95,7 +142,11 @@ const TenantHistoryModal = ({ isOpen, onClose, tenantId, tenantName }) => {
                                                 <div className="flex items-center gap-3">
                                                     <StatusBadge status={payment.status} />
                                                     {payment.status === 'paid' && (
-                                                        <button className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Download Receipt">
+                                                        <button
+                                                            onClick={() => handleDownloadReceipt(payment.id)}
+                                                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                                            title="Download Receipt"
+                                                        >
                                                             <Download size={18} />
                                                         </button>
                                                     )}

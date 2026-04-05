@@ -41,6 +41,7 @@ function App() {
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<StudentDashboard />} />
             <Route path="payments" element={<StudentPayments />} />
+            <Route path="payments/offline" element={<Navigate to="/student/payments" replace />} />
             <Route path="profile" element={<StudentProfile />} />
             <Route path="settings" element={<StudentSettings />} />
           </Route>

@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Download, TrendingUp, TrendingDown, DollarSign, Zap, CheckCircle2, AlertCircle, X, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 
 // Components
 import PaymentStatsCard from '../../components/owner/payments/PaymentStatsCard';
@@ -11,6 +12,7 @@ import TenantHistoryModal from '../../components/owner/payments/TenantHistoryMod
 import { paymentService } from '../../api/services';
 
 const Payments = () => {
+    const navigate = useNavigate();
     const [payments, setPayments] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -55,13 +57,19 @@ const Payments = () => {
             const data = await paymentService.getAllDues();
             const formatted = data.map(item => ({
                 id: item.obligation_id,
+                obligationId: item.obligation_id,
+                tenantId: item.student_id,
                 tenantName: item.student_name,
+                tenantPhone: item.student_phone || null,
+                tenantEmail: item.student_email || null,
                 room: item.room_no,
                 type: 'Rent',
                 amount: Number(item.amount),
                 status: item.status.toLowerCase(),
                 date: item.rent_month,
-                method: '---',
+                month: item.rent_month,
+                dueDate: item.due_date,
+                method: null,
                 isReceiptAvailable: false,
                 entityType: 'obligation'
             }));
@@ -96,15 +104,24 @@ const Payments = () => {
             const data = result.payments || [];
             const formatted = data.map(item => ({
                 id: item.id,
+                obligationId: item.obligation_id,
+                tenantId: item.student_id,
                 tenantName: item.student_name,
-                room: 'N/A', // We might need to fetch room from student profile join if needed
+                tenantPhone: item.student_phone || null,
+                tenantEmail: item.student_email || null,
+                room: item.room_no || 'N/A',
                 type: 'Payment',
                 amount: Number(item.amount_paid),
                 status: (item.status || 'PAID').toLowerCase(),
                 date: item.payment_date,
+                month: item.rent_month,
+                dueDate: item.due_date,
                 method: item.payment_method,
+                createdAt: item.created_at,
+                paymentDate: item.payment_date,
                 reference_number: item.reference_number,
                 preferred_app: item.preferred_app,
+                transactionId: item.reference_number || item.id,
                 isReceiptAvailable: true,
                 entityType: 'payment'
             }));
@@ -280,9 +297,38 @@ const Payments = () => {
     // Unique months from existing payments/transactions for month filter
     const availableMonths = useMemo(() => {
         const source = activeTab === 'dues' ? payments : transactions;
-        const months = new Set(source.map(p => p.date?.slice(0, 7)).filter(Boolean));
+        const months = new Set(source.map(p => p.month?.slice(0, 7) || p.date?.slice(0, 7)).filter(Boolean));
         return [...months].sort().reverse();
     }, [payments, transactions, activeTab]);
+
+    const tenantRecentPayments = useMemo(() => {
+        return transactions.reduce((acc, txn) => {
+            if (!txn.tenantId) return acc;
+            if (!acc[txn.tenantId]) {
+                acc[txn.tenantId] = [];
+            }
+            acc[txn.tenantId].push(txn);
+            acc[txn.tenantId].sort((a, b) => new Date(b.paymentDate || b.date) - new Date(a.paymentDate || a.date));
+            acc[txn.tenantId] = acc[txn.tenantId].slice(0, 5);
+            return acc;
+        }, {});
+    }, [transactions]);
+
+    const selectedPaymentWithContext = useMemo(() => {
+        if (!selectedPayment) return null;
+        return {
+            ...selectedPayment,
+            recentPayments: selectedPayment.tenantId ? (tenantRecentPayments[selectedPayment.tenantId] || []).filter(item => item.id !== selectedPayment.id).slice(0, 3) : []
+        };
+    }, [selectedPayment, tenantRecentPayments]);
+
+    const handleViewTenant = (payment) => {
+        if (!payment?.tenantId) {
+            alert('Tenant profile is not available for this entry.');
+            return;
+        }
+        navigate('/owner/students', { state: { selectedTenantId: payment.tenantId } });
+    };
 
     const availableTenants = useMemo(() => {
         const source = activeTab === 'dues' ? payments : transactions;
@@ -595,9 +641,11 @@ const Payments = () => {
             <PaymentDetailsDrawer
                 isOpen={!!selectedPayment}
                 onClose={() => setSelectedPayment(null)}
-                payment={selectedPayment}
+                payment={selectedPaymentWithContext}
                 onMarkPaid={handleMarkAsPaid}
                 onDownloadReceipt={handleDownloadFromSelection}
+                onViewTenant={handleViewTenant}
+                onViewHistory={setHistoryTenant}
             />
 
             {/* Tenant History Modal */}

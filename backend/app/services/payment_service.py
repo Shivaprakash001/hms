@@ -580,7 +580,7 @@ def get_dues_report(user_id: str, rent_month: Optional[date] = None, status: Opt
         # Fetch obligations with student profile and THEIR LATEST ROOM via allocations
         # We need to reach rooms table: rent_obligations -> room_allocations -> rooms
         query = supabase.table("rent_obligations")\
-            .select("*, students(profiles!students_profile_id_fkey(name)), room_allocations(rooms(room_no))")\
+            .select("*, students(id, profiles!students_profile_id_fkey(name, email, phone)), room_allocations(rooms(room_no))")\
             .eq("owner_id", user_id)
 
         if rent_month:
@@ -601,7 +601,10 @@ def get_dues_report(user_id: str, rent_month: Optional[date] = None, status: Opt
             alloc = d.get("room_allocations", {})
             room = alloc.get("rooms", {}) if alloc else {}
             
+            d["student_id"] = student.get("id")
             d["student_name"] = profile.get("name", "Unknown")
+            d["student_email"] = profile.get("email")
+            d["student_phone"] = profile.get("phone")
             d["room_no"] = room.get("room_no", "N/A")
             d["obligation_id"] = d["id"]
             d["outstanding"] = float(Decimal(str(d["amount"])) - Decimal(0)) # Simplified
@@ -706,9 +709,13 @@ def get_all_payments(
     Get all payments with student details and enhanced filtering.
     """
     try:
-        # Join with student names and rent_obligations status
         query = supabase.table("payments")\
-            .select("*, students(profiles!students_profile_id_fkey(name)), rent_obligations(rent_month, status)", count="exact")\
+            .select(
+                "*, "
+                "students(id, profiles!students_profile_id_fkey(name, email, phone)), "
+                "rent_obligations(id, rent_month, status, due_date, room_allocations(rooms(room_no)))",
+                count="exact"
+            )\
             .eq("owner_id", user_id)
 
         if tenant_id:
@@ -745,11 +752,22 @@ def get_all_payments(
             ob_status = p.get("rent_obligations", {}).get("status")
             if status and ob_status != status:
                 continue
-                
-            # Flatten structure slightly for easier frontend consumption
-            p["student_name"] = p.get("students", {}).get("profiles", {}).get("name", "Unknown")
-            p["rent_month"] = p.get("rent_obligations", {}).get("rent_month")
+
+            student = p.get("students") or {}
+            profile = student.get("profiles") or {}
+            obligation = p.get("rent_obligations") or {}
+            allocation = obligation.get("room_allocations") or {}
+            room = allocation.get("rooms") if isinstance(allocation, dict) else {}
+
+            p["student_id"] = student.get("id")
+            p["student_name"] = profile.get("name", "Unknown")
+            p["student_email"] = profile.get("email")
+            p["student_phone"] = profile.get("phone")
+            p["rent_month"] = obligation.get("rent_month")
             p["status"] = ob_status
+            p["due_date"] = obligation.get("due_date")
+            p["obligation_id"] = obligation.get("id") or p.get("obligation_id")
+            p["room_no"] = room.get("room_no", "N/A") if isinstance(room, dict) else "N/A"
             payments.append(p)
             
         # Apply pagination after in-memory filter if status was used

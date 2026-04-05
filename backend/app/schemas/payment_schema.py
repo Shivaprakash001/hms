@@ -98,9 +98,13 @@ class StudentPaymentHistory(BaseModel):
 
 class DuesReportItem(BaseModel):
     obligation_id: UUID
+    student_id: UUID
     student_name: str
+    student_email: Optional[str] = None
+    student_phone: Optional[str] = None
     room_no: str
     rent_month: date
+    due_date: date
     amount: Decimal
     status: ObligationStatus
     outstanding: Decimal

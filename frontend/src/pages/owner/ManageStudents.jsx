@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, User, Phone, Home, CreditCard, Calendar, CheckCircle2, AlertCircle, X, Save, History, Trash2, RefreshCw, ToggleLeft, ToggleRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { studentService, authService, allocationService, roomService } from '../../api/services';
 import TenantHistoryModal from '../../components/owner/payments/TenantHistoryModal';
 import TenantInvitationForm from '../../components/owner/TenantInvitationForm';
 import ExtendedProfileForm from '../../components/TenantManagement/ExtendedProfileForm';
 
 export default function ManageStudents() {
+    const location = useLocation();
+    const navigate = useNavigate();
     const [students, setStudents] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -51,6 +54,17 @@ export default function ManageStudents() {
     useEffect(() => {
         fetchStudents();
     }, []);
+
+    useEffect(() => {
+        const selectedTenantId = location.state?.selectedTenantId;
+        if (!selectedTenantId || students.length === 0) return;
+
+        const matchedStudent = students.find(student => student.id === selectedTenantId);
+        if (matchedStudent) {
+            setExtendedProfileStudent(matchedStudent);
+            navigate(location.pathname, { replace: true, state: {} });
+        }
+    }, [location.pathname, location.state, navigate, students]);
 
     // Handlers
     const handleSaveStudent = async (data) => {
