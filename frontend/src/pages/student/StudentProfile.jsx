@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Mail, Phone, MapPin, Camera, Save, Edit2, Key, Building2, Calendar, CheckCircle2, GraduationCap, Download, PhoneCall, Briefcase, FileText } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Camera, Save, Edit2, Key, Building2, CheckCircle2, GraduationCap, Briefcase, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../../context/AuthContext';
@@ -15,6 +15,7 @@ const StudentProfile = () => {
     const [loading, setLoading] = useState(true);
     const [saveLoading, setSaveLoading] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
+    const fileInputRef = useRef(null);
 
     // Local State for Form Data
     const [formData, setFormData] = useState({
@@ -34,7 +35,8 @@ const StudentProfile = () => {
         job_role: '',
         permanent_address: '',
         temporary_address: '',
-        photo_url: ''
+        photo_url: '',
+        profile_type: 'student'
     });
 
     useEffect(() => {
@@ -51,6 +53,7 @@ const StudentProfile = () => {
                 const profRel = meData?.profile || meData?.profiles;
                 const prof = Array.isArray(profRel) ? (profRel[0] || {}) : (profRel || {});
                 setStudentInfo(meData);
+                const inferredType = (meData.office_name || meData.job_role || meData.office_location) ? 'work' : 'student';
                 setFormData({
                     name: prof.name || user?.name || '',
                     email: prof.email || user?.email || '',
@@ -68,7 +71,8 @@ const StudentProfile = () => {
                     job_role: meData.job_role || '',
                     permanent_address: meData.permanent_address || '',
                     temporary_address: meData.temporary_address || '',
-                    photo_url: meData.photo_url || ''
+                    photo_url: meData.photo_url || '',
+                    profile_type: inferredType
                 });
             } catch (error) {
                 console.error("Failed to fetch profile data:", error);
@@ -89,14 +93,14 @@ const StudentProfile = () => {
                 emergency_contact: formData.emergency_contact,
                 address: formData.address,
                 personal_email: formData.personal_email,
-                phone_1: formData.phone_1,
-                phone_2: formData.phone_2,
-                phone_3: formData.phone_3,
-                college_name: formData.college_name,
-                branch: formData.branch,
-                office_name: formData.office_name,
-                office_location: formData.office_location,
-                job_role: formData.job_role,
+                phone_1: formData.phone || formData.phone_1,
+                phone_2: formData.emergency_contact || formData.phone_2,
+                phone_3: '',
+                college_name: formData.profile_type === 'student' ? formData.college_name : '',
+                branch: formData.profile_type === 'student' ? formData.branch : '',
+                office_name: formData.profile_type === 'work' ? formData.office_name : '',
+                office_location: formData.profile_type === 'work' ? formData.office_location : '',
+                job_role: formData.profile_type === 'work' ? formData.job_role : '',
                 permanent_address: formData.permanent_address,
                 temporary_address: formData.temporary_address,
                 photo_url: formData.photo_url
@@ -124,6 +128,7 @@ const StudentProfile = () => {
                 permanent_address: updated.permanent_address || prev.permanent_address,
                 temporary_address: updated.temporary_address || prev.temporary_address,
                 photo_url: updated.photo_url || prev.photo_url,
+                profile_type: (updated.office_name || updated.job_role || updated.office_location) ? 'work' : (updated.college_name || updated.branch ? 'student' : prev.profile_type),
             }));
             setIsEditing(false);
             setShowSuccess(true);
@@ -136,6 +141,31 @@ const StudentProfile = () => {
         }
     };
 
+    const handlePhotoPick = () => {
+        if (!isEditing) return;
+        fileInputRef.current?.click();
+    };
+
+    const handlePhotoChange = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        if (!file.type.startsWith('image/')) {
+            alert('Please select an image file (JPG/PNG/WebP).');
+            return;
+        }
+        if (file.size > 2 * 1024 * 1024) {
+            alert('Image size should be less than 2MB.');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = () => {
+            setFormData(prev => ({ ...prev, photo_url: reader.result }));
+        };
+        reader.readAsDataURL(file);
+    };
+
 
 
     if (loading) return <div className="flex items-center justify-center min-h-[400px]">Loading profile...</div>;
@@ -145,7 +175,7 @@ const StudentProfile = () => {
     const floorNo = currentRoom?.floor_id;
 
     return (
-        <div className="max-w-6xl mx-auto pb-20 animate-fade-in-up">
+        <div className="max-w-4xl mx-auto pb-16 animate-fade-in-up space-y-5">
 
             {/* Success Toast */}
             <AnimatePresence>
@@ -162,290 +192,141 @@ const StudentProfile = () => {
                 )}
             </AnimatePresence>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-
-                {/* LEFT COLUMN (70%) */}
-                <div className="lg:col-span-8 space-y-6">
-
-                    {/* 1. Profile Header Card */}
-                    <div className="bg-white rounded-2xl p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100 flex flex-col md:flex-row items-center md:items-start gap-6 relative overflow-hidden">
-                        <div className="relative group shrink-0">
-                            <div className="w-24 h-24 rounded-full border-4 border-white shadow-lg overflow-hidden bg-slate-100">
-                                <img
-                                    src={formData.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.name || 'User'}`}
-                                    alt="Profile"
-                                    className="w-full h-full object-cover"
-                                />
-                                {isEditing && (
-                                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center cursor-pointer transition-opacity">
-                                        <Camera size={20} className="text-white" />
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="flex-1 text-center md:text-left space-y-2">
-                            <h1 className="text-2xl font-bold text-slate-900">{formData.name || user?.name || 'Student'}</h1>
-                            <p className="text-slate-500 text-sm font-medium">{formData.email || user?.email || 'N/A'}</p>
-
-                            <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 pt-1">
-                                <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-bold border border-slate-200">
-                                    Student
-                                </span>
-                                <span className="px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-600 text-xs font-bold border border-indigo-100">
-                                    Room {roomNo}
-                                </span>
-                                <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-600 text-xs font-bold border border-emerald-100 flex items-center gap-1">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                    {studentInfo?.status === 'ACTIVE' ? 'Active Resident' : (studentInfo?.status || 'Resident')}
-                                </span>
-                            </div>
-                        </div>
-
-                        <div className="absolute top-6 right-6">
-                            {isEditing ? (
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={() => setIsEditing(false)}
-                                        className="px-4 py-1.5 rounded-lg text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-colors"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        onClick={handleSave}
-                                        disabled={loading}
-                                        className="px-4 py-1.5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 flex items-center gap-1.5 transition-colors shadow-sm"
-                                    >
-                                        {saveLoading ? 'Saving...' : 'Save'}
-                                        {!saveLoading && <Save size={14} />}
-                                    </button>
-                                </div>
-                            ) : (
-                                <button
-                                    onClick={() => setIsEditing(true)}
-                                    className="px-4 py-1.5 rounded-lg text-xs font-bold text-slate-600 bg-slate-50 border border-slate-200 hover:bg-slate-100 flex items-center gap-1.5 transition-colors"
-                                >
-                                    Edit Profile
-                                    <Edit2 size={14} />
-                                </button>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* 2. Personal Information Card */}
-                    <div className="bg-white rounded-2xl p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100">
-                        <div className="flex items-center gap-3 mb-6 border-b border-slate-50 pb-4">
-                            <div className="p-2 rounded-lg bg-blue-50 text-blue-600">
-                                <User size={18} />
-                            </div>
-                            <h3 className="text-lg font-bold text-slate-800">Personal Information</h3>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
-                            <InfoField
-                                label="Full Name"
-                                value={formData.name}
-                                icon={User}
-                                isEditable={isEditing}
-                                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                            />
-                            <InfoField
-                                label="Email Address"
-                                value={formData.email}
-                                icon={Mail}
-                                isEditable={isEditing}
-                                type="email"
-                                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                            />
-                            <InfoField
-                                label="Phone Number"
-                                value={formData.phone}
-                                icon={Phone}
-                                isEditable={isEditing}
-                                type="tel"
-                                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                            />
-                            <InfoField
-                                label="Guardian / Emergency Phone"
-                                value={formData.emergency_contact || formData.phone_2}
-                                icon={Phone}
-                                isEditable={isEditing}
-                                type="tel"
-                                onChange={(e) => setFormData({ ...formData, emergency_contact: e.target.value, phone_2: e.target.value })}
-                            />
-                            <InfoField
-                                label="Personal Email"
-                                value={formData.personal_email}
-                                icon={Mail}
-                                isEditable={isEditing}
-                                type="email"
-                                onChange={(e) => setFormData({ ...formData, personal_email: e.target.value })}
-                            />
-                            <div className="md:col-span-2">
-                                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide ml-1 mb-1.5 block">Address</label>
-                                {isEditing ? (
-                                    <div className="relative">
-                                        <div className="absolute left-3 top-3 text-slate-400">
-                                            <MapPin size={16} />
-                                        </div>
-                                        <textarea
-                                            value={formData.temporary_address || formData.address}
-                                            onChange={(e) => setFormData({ ...formData, temporary_address: e.target.value, address: e.target.value })}
-                                            rows={2}
-                                            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all text-sm font-medium text-slate-900 resize-none"
-                                        />
-                                    </div>
-                                ) : (
-                                    <div className="flex items-start gap-3 p-2 text-slate-700">
-                                        <div className="text-slate-400 mt-0.5">
-                                            <MapPin size={18} />
-                                        </div>
-                                        <span className="font-medium">{formData.temporary_address || formData.address || 'N/A'}</span>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="bg-white rounded-2xl p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100">
-                        <div className="flex items-center gap-3 mb-6 border-b border-slate-50 pb-4">
-                            <div className="p-2 rounded-lg bg-violet-50 text-violet-600">
-                                <GraduationCap size={18} />
-                            </div>
-                            <h3 className="text-lg font-bold text-slate-800">Education / Work</h3>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
-                            <InfoField
-                                label="College"
-                                value={formData.college_name}
-                                icon={GraduationCap}
-                                isEditable={isEditing}
-                                onChange={(e) => setFormData({ ...formData, college_name: e.target.value })}
-                            />
-                            <InfoField
-                                label="Branch"
-                                value={formData.branch}
-                                icon={GraduationCap}
-                                isEditable={isEditing}
-                                onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
-                            />
-                            <InfoField
-                                label="Company"
-                                value={formData.office_name}
-                                icon={Building2}
-                                isEditable={isEditing}
-                                onChange={(e) => setFormData({ ...formData, office_name: e.target.value })}
-                            />
-                            <InfoField
-                                label="Job Role"
-                                value={formData.job_role}
-                                icon={Briefcase}
-                                isEditable={isEditing}
-                                onChange={(e) => setFormData({ ...formData, job_role: e.target.value })}
-                            />
-                            <InfoField
-                                label="Office Location"
-                                value={formData.office_location}
-                                icon={MapPin}
-                                isEditable={isEditing}
-                                onChange={(e) => setFormData({ ...formData, office_location: e.target.value })}
-                            />
-                            <div className="md:col-span-2">
-                                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide ml-1 mb-1.5 block">Permanent Address</label>
-                                {isEditing ? (
-                                    <textarea
-                                        value={formData.permanent_address}
-                                        onChange={(e) => setFormData({ ...formData, permanent_address: e.target.value })}
-                                        rows={2}
-                                        className="w-full px-4 py-2 bg-slate-50 border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all text-sm font-medium text-slate-900 resize-none"
-                                    />
-                                ) : (
-                                    <p className="text-sm text-slate-700 p-2">{formData.permanent_address || 'N/A'}</p>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-
+            {/* Header */}
+            <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex flex-col sm:flex-row gap-4 items-center sm:items-start">
+                <div className="relative">
+                    <img
+                        src={formData.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.name || 'User'}`}
+                        alt="Profile"
+                        className="w-20 h-20 rounded-full object-cover border border-slate-200"
+                    />
+                    {isEditing && (
+                        <button
+                            onClick={handlePhotoPick}
+                            className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center shadow hover:bg-indigo-700"
+                        >
+                            <Camera size={14} />
+                        </button>
+                    )}
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handlePhotoChange}
+                    />
                 </div>
 
-                {/* RIGHT COLUMN (30%) */}
-                <div className="lg:col-span-4 space-y-6">
-
-                    {/* 3. Hostel Information Card (Read Only) */}
-                    <div className="bg-white rounded-2xl p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100">
-                        <div className="flex items-center gap-3 mb-6 border-b border-slate-50 pb-4">
-                            <div className="p-2 rounded-lg bg-teal-50 text-teal-600">
-                                <Building2 size={18} />
-                            </div>
-                            <h3 className="text-lg font-bold text-slate-800">Hostel Info</h3>
-                        </div>
-
-                        <div className="space-y-4">
-                            <div className="flex justify-between items-center bg-slate-50/50 p-3 rounded-lg border border-slate-100">
-                                <span className="text-slate-500 text-sm font-medium">Room No.</span>
-                                <span className="text-lg font-bold text-slate-800">{roomNo}</span>
-                            </div>
-                            <div className="flex justify-between items-center bg-slate-50/50 p-3 rounded-lg border border-slate-100">
-                                <span className="text-slate-500 text-sm font-medium">Floor</span>
-                                <span className="text-slate-800 font-semibold">{floorNo ? `Floor ${floorNo}` : 'N/A'}</span>
-                            </div>
-                            <div className="flex justify-between items-center bg-slate-50/50 p-3 rounded-lg border border-slate-100">
-                                <span className="text-slate-500 text-sm font-medium">Joined</span>
-                                <span className="text-slate-800 font-semibold">{studentInfo?.joined_on || 'N/A'}</span>
-                            </div>
-                        </div>
+                <div className="flex-1 text-center sm:text-left">
+                    <h1 className="text-xl font-bold text-slate-900">{formData.name || user?.name || 'Student'}</h1>
+                    <p className="text-sm text-slate-500">{formData.email || user?.email || 'N/A'}</p>
+                    <div className="flex flex-wrap gap-2 mt-2 justify-center sm:justify-start">
+                        <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 text-xs font-semibold">Room {roomNo}</span>
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 text-xs font-semibold">{studentInfo?.status || 'Resident'}</span>
                     </div>
-
-                    {/* 4. Quick Actions Card */}
-                    <div className="bg-white rounded-2xl p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100">
-                        <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wide mb-4">Quick Actions</h3>
-
-                        <div className="space-y-3">
-                            <button
-                                onClick={() => navigate('/student/settings')}
-                                className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-indigo-50 hover:text-indigo-600 text-slate-700 transition-colors group border border-slate-100 hover:border-indigo-100"
-                            >
-                                <div className="flex items-center gap-3">
-                                    <Key size={18} className="text-slate-400 group-hover:text-indigo-500" />
-                                    <span className="font-semibold text-sm">Change Password</span>
-                                </div>
-                                <div className="text-slate-300 group-hover:text-indigo-400">→</div>
-                            </button>
-
-                            <button className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-indigo-50 hover:text-indigo-600 text-slate-700 transition-colors group border border-slate-100 hover:border-indigo-100">
-                                <div className="flex items-center gap-3">
-                                    <Download size={18} className="text-slate-400 group-hover:text-indigo-500" />
-                                    <span className="font-semibold text-sm">Download ID</span>
-                                </div>
-                                <div className="text-slate-300 group-hover:text-indigo-400">→</div>
-                            </button>
-
-
-
-                            <button className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-indigo-50 hover:text-indigo-600 text-slate-700 transition-colors group border border-slate-100 hover:border-indigo-100">
-                                <div className="flex items-center gap-3">
-                                    <PhoneCall size={18} className="text-slate-400 group-hover:text-indigo-500" />
-                                    <span className="font-semibold text-sm">Contact Owner</span>
-                                </div>
-                                <div className="text-slate-300 group-hover:text-indigo-400">→</div>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="bg-white rounded-2xl p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100">
-                        <div className="flex items-center gap-2 mb-4">
-                            <FileText size={16} className="text-indigo-500" />
-                            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide">Documents</h3>
-                        </div>
-                        {studentInfo?.id ? (
-                            <DocumentUploadWidget tenantId={studentInfo.id} isOwner={false} />
-                        ) : (
-                            <p className="text-sm text-slate-400">No tenant record found.</p>
-                        )}
-                    </div>
-
                 </div>
+
+                <div className="flex gap-2">
+                    {isEditing ? (
+                        <>
+                            <button onClick={() => setIsEditing(false)} className="px-3 py-2 text-xs font-semibold border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50">Cancel</button>
+                            <button onClick={handleSave} className="px-3 py-2 text-xs font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 flex items-center gap-1.5" disabled={saveLoading}>
+                                {saveLoading ? 'Saving...' : 'Save'} {!saveLoading && <Save size={12} />}
+                            </button>
+                        </>
+                    ) : (
+                        <button onClick={() => setIsEditing(true)} className="px-3 py-2 text-xs font-semibold border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 flex items-center gap-1.5">
+                            Edit <Edit2 size={12} />
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {/* Basic details */}
+            <section className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
+                <h3 className="font-bold text-slate-800 mb-4">Basic Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <InfoField label="Full Name" value={formData.name} icon={User} isEditable={isEditing} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
+                    <InfoField label="Email" value={formData.email} icon={Mail} isEditable={isEditing} type="email" onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
+                    <InfoField label="Phone" value={formData.phone} icon={Phone} isEditable={isEditing} type="tel" onChange={(e) => setFormData({ ...formData, phone: e.target.value })} />
+                    <InfoField label="Emergency Contact" value={formData.emergency_contact} icon={Phone} isEditable={isEditing} type="tel" onChange={(e) => setFormData({ ...formData, emergency_contact: e.target.value })} />
+                    <InfoField label="Personal Email" value={formData.personal_email} icon={Mail} isEditable={isEditing} type="email" onChange={(e) => setFormData({ ...formData, personal_email: e.target.value })} />
+                    <InfoField label="Temporary Address" value={formData.temporary_address || formData.address} icon={MapPin} isEditable={isEditing} onChange={(e) => setFormData({ ...formData, temporary_address: e.target.value, address: e.target.value })} />
+                    <div className="md:col-span-2">
+                        <InfoField label="Permanent Address" value={formData.permanent_address} icon={MapPin} isEditable={isEditing} onChange={(e) => setFormData({ ...formData, permanent_address: e.target.value })} />
+                    </div>
+                </div>
+            </section>
+
+            {/* Student/Work slider */}
+            <section className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
+                <h3 className="font-bold text-slate-800 mb-4">Profile Type</h3>
+
+                <div className="inline-flex rounded-xl bg-slate-100 p-1 mb-4">
+                    <button
+                        disabled={!isEditing}
+                        onClick={() => setFormData(prev => ({ ...prev, profile_type: 'student' }))}
+                        className={`px-4 py-2 text-sm font-semibold rounded-lg transition ${formData.profile_type === 'student' ? 'bg-white text-indigo-600 shadow' : 'text-slate-600'}`}
+                    >
+                        <span className="inline-flex items-center gap-2"><GraduationCap size={14} /> Student</span>
+                    </button>
+                    <button
+                        disabled={!isEditing}
+                        onClick={() => setFormData(prev => ({ ...prev, profile_type: 'work' }))}
+                        className={`px-4 py-2 text-sm font-semibold rounded-lg transition ${formData.profile_type === 'work' ? 'bg-white text-indigo-600 shadow' : 'text-slate-600'}`}
+                    >
+                        <span className="inline-flex items-center gap-2"><Briefcase size={14} /> Work</span>
+                    </button>
+                </div>
+
+                {formData.profile_type === 'student' ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <InfoField label="College" value={formData.college_name} icon={GraduationCap} isEditable={isEditing} onChange={(e) => setFormData({ ...formData, college_name: e.target.value })} />
+                        <InfoField label="Branch" value={formData.branch} icon={GraduationCap} isEditable={isEditing} onChange={(e) => setFormData({ ...formData, branch: e.target.value })} />
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <InfoField label="Company" value={formData.office_name} icon={Building2} isEditable={isEditing} onChange={(e) => setFormData({ ...formData, office_name: e.target.value })} />
+                        <InfoField label="Job Role" value={formData.job_role} icon={Briefcase} isEditable={isEditing} onChange={(e) => setFormData({ ...formData, job_role: e.target.value })} />
+                        <div className="md:col-span-2">
+                            <InfoField label="Office Location" value={formData.office_location} icon={MapPin} isEditable={isEditing} onChange={(e) => setFormData({ ...formData, office_location: e.target.value })} />
+                        </div>
+                    </div>
+                )}
+            </section>
+
+            {/* Hostel summary */}
+            <section className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
+                <h3 className="font-bold text-slate-800 mb-3">Hostel Info</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                    <InfoBadge label="Room" value={roomNo} />
+                    <InfoBadge label="Floor" value={floorNo ? `Floor ${floorNo}` : 'N/A'} />
+                    <InfoBadge label="Joined" value={studentInfo?.joined_on || 'N/A'} />
+                </div>
+            </section>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <section className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
+                    <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">Quick Actions</h3>
+                    <button
+                        onClick={() => navigate('/student/settings')}
+                        className="w-full flex items-center gap-2 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 text-sm font-semibold text-slate-700"
+                    >
+                        <Key size={16} /> Change Password
+                    </button>
+                </section>
+
+                <section className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
+                    <div className="flex items-center gap-2 mb-3">
+                        <FileText size={16} className="text-indigo-500" />
+                        <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide">Documents</h3>
+                    </div>
+                    {studentInfo?.id ? (
+                        <DocumentUploadWidget tenantId={studentInfo.id} isOwner={false} />
+                    ) : (
+                        <p className="text-sm text-slate-400">No tenant record found.</p>
+                    )}
+                </section>
             </div>
         </div>
     );
@@ -461,9 +342,9 @@ const InfoField = ({ label, value, icon: Icon, isEditable, onChange, type = "tex
                 </div>
                 <input
                     type={type}
-                    value={value}
+                    value={value || ''}
                     onChange={onChange}
-                    className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all text-sm font-medium text-slate-900"
+                    className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all text-sm font-medium text-slate-900"
                 />
             </div>
         ) : (
@@ -474,6 +355,13 @@ const InfoField = ({ label, value, icon: Icon, isEditable, onChange, type = "tex
                 <span className="font-medium">{value || 'N/A'}</span>
             </div>
         )}
+    </div>
+);
+
+const InfoBadge = ({ label, value }) => (
+    <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+        <p className="text-[11px] uppercase tracking-wide text-slate-400 font-semibold">{label}</p>
+        <p className="text-slate-800 font-semibold mt-0.5">{value || 'N/A'}</p>
     </div>
 );
 
