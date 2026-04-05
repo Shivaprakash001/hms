@@ -9,7 +9,8 @@ DEFAULT_PREFERENCES = {
     "currency": "INR",
     "rent_cycle": "MONTHLY",
     "receipt_prefix": "HMS",
-    "timezone": "Asia/Kolkata"
+    "timezone": "Asia/Kolkata",
+    "auto_rent_day": 1,
 }
 
 
@@ -31,6 +32,7 @@ def _normalize_hostel_row(row: dict) -> dict:
         "rent_cycle": row.get("rent_cycle"),
         "receipt_prefix": row.get("receipt_prefix"),
         "timezone": row.get("timezone"),
+        "auto_rent_day": row.get("auto_rent_day"),
     }
 
 
@@ -60,6 +62,7 @@ def get_owner_profile(user_id: str) -> Dict[str, Any]:
             "rent_cycle": None,
             "receipt_prefix": None,
             "timezone": None,
+            "auto_rent_day": None,
         }
 
         try:
@@ -91,6 +94,7 @@ def get_owner_profile(user_id: str) -> Dict[str, Any]:
                 "rent_cycle": hostel.get("rent_cycle") or DEFAULT_PREFERENCES["rent_cycle"],
                 "receipt_prefix": hostel.get("receipt_prefix") or DEFAULT_PREFERENCES["receipt_prefix"],
                 "timezone": hostel.get("timezone") or DEFAULT_PREFERENCES["timezone"],
+                "auto_rent_day": hostel.get("auto_rent_day") or DEFAULT_PREFERENCES["auto_rent_day"],
             }
         })
     except Exception as e:
@@ -167,7 +171,7 @@ def update_owner_hostel(user_id: str, data: dict) -> Dict[str, Any]:
 
 def update_owner_preferences(user_id: str, data: dict) -> Dict[str, Any]:
     try:
-        allowed = {"currency", "rent_cycle", "receipt_prefix", "timezone"}
+        allowed = {"currency", "rent_cycle", "receipt_prefix", "timezone", "auto_rent_day"}
         update_data = {k: v for k, v in data.items() if k in allowed and v is not None}
         if not update_data:
             return ServiceResponse.validation_error("No valid preference fields to update")

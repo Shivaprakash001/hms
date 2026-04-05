@@ -23,7 +23,7 @@ export default function OwnerProfile() {
     const [hostelForm, setHostelForm] = useState({
         name: '', phone: '', address: '', city: '', state: '', pincode: '', upi_id: '', gst_number: ''
     });
-    const [preferences, setPreferences] = useState({ currency: 'INR', rent_cycle: 'MONTHLY', receipt_prefix: 'HMS', timezone: 'Asia/Kolkata' });
+    const [preferences, setPreferences] = useState({ currency: 'INR', rent_cycle: 'MONTHLY', receipt_prefix: 'HMS', timezone: 'Asia/Kolkata', auto_rent_day: 1 });
 
     useEffect(() => {
         const load = async () => {
@@ -53,7 +53,8 @@ export default function OwnerProfile() {
                     currency: prefs.currency || 'INR',
                     rent_cycle: prefs.rent_cycle || 'MONTHLY',
                     receipt_prefix: prefs.receipt_prefix || 'HMS',
-                    timezone: prefs.timezone || 'Asia/Kolkata'
+                    timezone: prefs.timezone || 'Asia/Kolkata',
+                    auto_rent_day: prefs.auto_rent_day || 1
                 });
             } catch (e) {
                 const detail = e?.response?.data?.detail;
@@ -133,6 +134,7 @@ export default function OwnerProfile() {
                 rent_cycle: prefs.rent_cycle || preferences.rent_cycle,
                 receipt_prefix: prefs.receipt_prefix || preferences.receipt_prefix,
                 timezone: prefs.timezone || preferences.timezone,
+                auto_rent_day: prefs.auto_rent_day || preferences.auto_rent_day,
             });
             showTempSuccess('Preferences updated');
         } catch (e) {
@@ -233,6 +235,15 @@ export default function OwnerProfile() {
                             required
                         />
                         <SelectField
+                            label="Auto Rent Generation Day"
+                            value={String(preferences.auto_rent_day)}
+                            options={Array.from({ length: 28 }, (_, index) => ({
+                                value: String(index + 1),
+                                label: `${index + 1}${getDaySuffix(index + 1)} of every month`
+                            }))}
+                            onChange={(v) => setPreferences(prev => ({ ...prev, auto_rent_day: Number(v) }))}
+                        />
+                        <SelectField
                             label="Timezone"
                             value={preferences.timezone}
                             options={[
@@ -244,11 +255,23 @@ export default function OwnerProfile() {
                             onChange={(v) => setPreferences(prev => ({ ...prev, timezone: v }))}
                         />
                     </div>
+                    <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-700">
+                        Auto rent generation assigns the month’s rent request on the selected day. Due date stays controlled separately by your owner due-day setting.
+                    </div>
                     <SaveButton saving={saving} />
                 </form>
             )}
         </div>
     );
+}
+
+function getDaySuffix(day) {
+    if (day >= 11 && day <= 13) return 'th';
+    const last = day % 10;
+    if (last === 1) return 'st';
+    if (last === 2) return 'nd';
+    if (last === 3) return 'rd';
+    return 'th';
 }
 
 function Field({ label, value, onChange, required = false, disabled = false }) {

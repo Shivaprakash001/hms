@@ -108,14 +108,14 @@ def startup_event():
     
     app_timezone = ZoneInfo(os.getenv("APP_TIMEZONE", "Asia/Kolkata"))
     scheduler = AsyncIOScheduler(timezone=app_timezone)
-    # Schedule to run on the 1st of every month at 00:00
+    # Schedule to run daily and let owner preferences decide who gets rent generated.
     scheduler.add_job(
-        PaymentGenerationJob.run_monthly_rent_cycle,
+        PaymentGenerationJob.run_scheduled_rent_generation,
         'cron', 
-        day=1,
+        day='*',
         hour=0, 
-        minute=0, 
-        id='monthly_payment_generation', 
+        minute=5,
+        id='scheduled_rent_generation',
         replace_existing=True
     )
     scheduler.start()
@@ -139,11 +139,11 @@ def run_internal_rent_generation(x_cron_secret: str | None = Header(default=None
     from app.jobs.payment_generation_job import PaymentGenerationJob
 
     app_timezone = ZoneInfo(os.getenv("APP_TIMEZONE", "Asia/Kolkata"))
-    target_month = datetime.now(app_timezone).date().replace(day=1)
-    result = PaymentGenerationJob.run_monthly_rent_cycle(target_month)
+    target_date = datetime.now(app_timezone).date()
+    result = PaymentGenerationJob.run_scheduled_rent_generation(target_date)
     return {
         "status": "ok",
-        "target_month": target_month.isoformat(),
+        "target_month": target_date.replace(day=1).isoformat(),
         "result": result.get("data", result)
     }
 

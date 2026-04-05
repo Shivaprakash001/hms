@@ -73,7 +73,8 @@ export const ownerService = {
                             currency: 'INR',
                             rent_cycle: 'MONTHLY',
                             receipt_prefix: 'HMS',
-                            timezone: 'Asia/Kolkata'
+                            timezone: 'Asia/Kolkata',
+                            auto_rent_day: 1
                         }
                     };
                 }
@@ -100,7 +101,8 @@ export const ownerService = {
                             currency: 'INR',
                             rent_cycle: 'MONTHLY',
                             receipt_prefix: 'HMS',
-                            timezone: 'Asia/Kolkata'
+                            timezone: 'Asia/Kolkata',
+                            auto_rent_day: 1
                         }
                     };
                 }

@@ -46,6 +46,7 @@ class OwnerPreferencesUpdate(BaseModel):
     rent_cycle: Optional[str] = Field(None, min_length=3, max_length=20)
     receipt_prefix: Optional[str] = Field(None, min_length=2, max_length=20)
     timezone: Optional[str] = Field(None, min_length=3, max_length=100)
+    auto_rent_day: Optional[int] = Field(None, ge=1, le=28)
 
     @field_validator('currency')
     @classmethod

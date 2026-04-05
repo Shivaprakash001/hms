@@ -8,6 +8,77 @@ logger = get_logger(__name__)
 
 class PaymentGenerationJob:
     @staticmethod
+    def run_scheduled_rent_generation(target_date=None):
+        """
+        Daily scheduler entrypoint.
+        Finds owners whose configured auto_rent_day matches the current day
+        and generates the current month's obligations for them.
+        """
+        if not target_date:
+            target_date = datetime.now().date()
+        elif isinstance(target_date, str):
+            target_date = datetime.strptime(target_date, "%Y-%m-%d").date()
+        elif hasattr(target_date, "date"):
+            target_date = target_date.date()  # type: ignore[attr-defined]
+
+        trigger_day = target_date.day
+        target_month = target_date.replace(day=1)
+
+        hostels_result = supabase.table("hostels") \
+            .select("owner_id, auto_rent_day, is_active") \
+            .eq("is_active", True) \
+            .eq("auto_rent_day", trigger_day) \
+            .execute()
+
+        hostels = hostels_result.data or []
+        if not hostels:
+            logger.info(f"No owners scheduled for automatic rent generation on day {trigger_day}")
+            return {
+                "success": True,
+                "data": {
+                    "target_month": target_month.isoformat(),
+                    "owners_processed": 0,
+                    "generated_count": 0,
+                    "updated_count": 0,
+                    "skipped_count": 0,
+                    "errors": []
+                }
+            }
+
+        generated_count = 0
+        updated_count = 0
+        skipped_count = 0
+        errors = []
+
+        for hostel in hostels:
+            owner_id = hostel.get("owner_id")
+            if not owner_id:
+                continue
+
+            result = payment_service.generate_monthly_rent(target_month, user_id=owner_id)
+            if not result.get("success"):
+                errors.append(f"Owner {owner_id}: {result.get('message') or 'generation failed'}")
+                continue
+
+            data = result.get("data") or {}
+            generated_count += int(data.get("generated_count") or 0)
+            updated_count += int(data.get("updated_count") or 0)
+            skipped_count += int(data.get("skipped_count") or 0)
+            errors.extend(data.get("errors") or [])
+
+        return {
+            "success": len(errors) == 0,
+            "data": {
+                "target_month": target_month.isoformat(),
+                "owners_processed": len(hostels),
+                "generated_count": generated_count,
+                "updated_count": updated_count,
+                "skipped_count": skipped_count,
+                "errors": errors
+            }
+        }
+
+    @staticmethod
     def run_monthly_rent_cycle(target_date=None, owner_id=None):
         """
         Use the main payment service to generate the month's rent obligations.
