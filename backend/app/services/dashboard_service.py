@@ -102,6 +102,7 @@ def get_monthly_stats(user_id: str, months: int = 6):
             .select("amount_paid, payment_date")\
             .gte("payment_date", start_date.isoformat())\
             .lt("payment_date", end_date.isoformat())\
+            .eq("owner_id", user_id)\
             .execute()
             
         # 2. Fetch expenses for those months

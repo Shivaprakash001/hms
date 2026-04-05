@@ -1,17 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Bed, Users, Clock, TrendingUp, TrendingDown, AlertCircle, ArrowUpRight, ArrowDownRight, Activity } from 'lucide-react';
-import { allocationService, paymentService, expenseService, dashboardService } from '../../api/services';
+import { allocationService, paymentService, dashboardService } from '../../api/services';
 
 const OwnerDashboard = () => {
     // State
     const [monthlyData, setMonthlyData] = useState([]);
-    const [expenses, setExpenses] = useState([]);
     const [recentActivity, setRecentActivity] = useState([]);
     const [allActivities, setAllActivities] = useState([]);
     const [showFinancialModal, setShowFinancialModal] = useState(false);
     const [showHistoryModal, setShowHistoryModal] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [dashboardStats, setDashboardStats] = useState({
+        revenue: 0,
+        expenses: 0,
+        net_profit: 0,
+        occupancy_rate: 0,
+        active_tenants: 0,
+        pending_dues: 0
+    });
 
     const [stats, setStats] = useState([
         { title: 'Total Revenue', value: '₹0', trend: '0%', trendUp: true, icon: TrendingUp },
@@ -23,20 +30,23 @@ const OwnerDashboard = () => {
     const updateDashboard = async () => {
         try {
             // Fetch real data in parallel
-            const [statsRes, activeAllocations, paymentsRes, expensesRes, monthlyRes] = await Promise.all([
+            const [statsRes, activeAllocations, paymentsRes, monthlyRes] = await Promise.all([
                 dashboardService.getStats(),
                 allocationService.getAllActive(), // For activity feed
                 paymentService.getAll({ limit: 10 }), // For activity feed
-                expenseService.getAll(), // For charts/modals
                 dashboardService.getMonthlyStats(6) // Real Chart data
             ]);
 
             const dashboardStats = statsRes || {};
+            setDashboardStats({
+                revenue: dashboardStats.revenue || 0,
+                expenses: dashboardStats.expenses || 0,
+                net_profit: dashboardStats.net_profit || 0,
+                occupancy_rate: dashboardStats.occupancy_rate || 0,
+                active_tenants: dashboardStats.active_tenants || 0,
+                pending_dues: dashboardStats.pending_dues || 0
+            });
             const payments = Array.isArray(paymentsRes) ? paymentsRes : (paymentsRes?.payments || []);
-
-            // 4. Process Expenses for Modal/Chart
-            const expenseList = Array.isArray(expensesRes) ? expensesRes : [];
-            setExpenses(expenseList);
 
             // Updated Stats from Backend
             setStats([
@@ -303,22 +313,21 @@ const OwnerDashboard = () => {
                         <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
                             <p className="text-emerald-600 text-xs font-bold uppercase">Total Income</p>
                             <p className="text-2xl font-bold text-emerald-700 mt-1">
-                                {stats.find(s => s.title === 'Total Revenue')?.value}
+                                {`₹${dashboardStats.revenue.toLocaleString()}`}
                             </p>
                             <p className="text-xs text-emerald-600 mt-1">Rent Collected (This Month)</p>
                         </div>
                         <div className="bg-rose-50 p-4 rounded-xl border border-rose-100">
                             <p className="text-rose-600 text-xs font-bold uppercase">Total Expenses</p>
                             <p className="text-2xl font-bold text-rose-700 mt-1">
-                                {`₹${(expenses || [])
-                                    .reduce((sum, e) => sum + e.amount, 0).toLocaleString()}`}
+                                {`₹${dashboardStats.expenses.toLocaleString()}`}
                             </p>
                             <p className="text-xs text-rose-600 mt-1">Maintenance & Utilities</p>
                         </div>
                         <div className="bg-violet-50 p-4 rounded-xl border border-violet-100">
                             <p className="text-violet-600 text-xs font-bold uppercase">Net Profit</p>
                             <p className="text-2xl font-bold text-violet-700 mt-1">
-                                {stats.find(s => s.title === 'Net Profit')?.value}
+                                {`₹${dashboardStats.net_profit.toLocaleString()}`}
                             </p>
                             <p className="text-xs text-violet-600 mt-1">Income - Expenses</p>
                         </div>
