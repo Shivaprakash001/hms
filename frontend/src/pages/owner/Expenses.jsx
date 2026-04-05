@@ -15,6 +15,7 @@ export default function Expenses() {
     const [isLoading, setIsLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingExpense, setEditingExpense] = useState(null);
+    const [isExporting, setIsExporting] = useState(false);
     const [formData, setFormData] = useState({
         title: '',
         amount: '',
@@ -174,6 +175,57 @@ export default function Expenses() {
         return styles[category] || styles['Other'];
     };
 
+    const handleDownloadExpenses = () => {
+        if (filteredExpenses.length === 0) {
+            alert('No expenses available to download for the current filters.');
+            return;
+        }
+
+        try {
+            setIsExporting(true);
+
+            const escapeCsvValue = (value) => {
+                const stringValue = String(value ?? '');
+                if (/[",\n]/.test(stringValue)) {
+                    return `"${stringValue.replace(/"/g, '""')}"`;
+                }
+                return stringValue;
+            };
+
+            const rows = [
+                ['Title', 'Category', 'Date', 'Amount', 'Status'],
+                ...filteredExpenses.map((expense) => [
+                    expense.title,
+                    expense.category,
+                    expense.date,
+                    expense.amount,
+                    expense.status || 'pending'
+                ])
+            ];
+
+            const csvContent = rows
+                .map((row) => row.map(escapeCsvValue).join(','))
+                .join('\n');
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            const today = new Date().toISOString().split('T')[0];
+
+            link.href = url;
+            link.setAttribute('download', `expenses_${dateFilter}_${today}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Failed to export expenses:', error);
+            alert('Failed to export expenses. Please try again.');
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
     return (
         <div className="space-y-6 animate-fade-in-up font-sans text-slate-900">
             {/* Header Section */}
@@ -317,7 +369,12 @@ export default function Expenses() {
                             <option value="month">This Month</option>
                             <option value="year">This Year</option>
                         </select>
-                        <button className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
+                        <button
+                            onClick={handleDownloadExpenses}
+                            disabled={isExporting}
+                            title="Download filtered expenses"
+                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
                             <Download size={16} />
                         </button>
                     </div>
