@@ -53,6 +53,34 @@ def _calculate_prorated_rent(monthly_rent: Decimal, start_date: date, end_date: 
     return (monthly_rent * Decimal(days_occupied) / Decimal(total_days_in_month)).quantize(Decimal('0.01'))
 
 
+def _record_rent_generation_log(
+    rent_month: date,
+    owner_id: Optional[str],
+    status: str,
+    generated_count: int = 0,
+    updated_count: int = 0,
+    skipped_count: int = 0,
+    error_count: int = 0,
+    message: Optional[str] = None,
+):
+    try:
+        source = "manual" if owner_id else "system"
+        payload = {
+            "rent_month": rent_month.isoformat(),
+            "owner_id": owner_id,
+            "source": source,
+            "status": status,
+            "generated_count": generated_count,
+            "updated_count": updated_count,
+            "skipped_count": skipped_count,
+            "error_count": error_count,
+            "message": message,
+        }
+        supabase.table("rent_generation_logs").insert(payload).execute()
+    except Exception as log_error:
+        logger.warning(f"Failed to write rent generation log: {log_error}")
+
+
 def generate_monthly_rent(rent_month: date, user_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Generate rent obligations for all active students in a given month.
@@ -68,7 +96,7 @@ def generate_monthly_rent(rent_month: date, user_id: Optional[str] = None) -> Di
         
         # 0. Fetch all students belonging to this owner first
         # This is a safer way to isolate than relying on owner_id on all tables
-        student_query = supabase.table("students").select("id, monthly_rent, status")
+        student_query = supabase.table("students").select("id, monthly_rent, status").eq("status", "ACTIVE")
         if user_id:
             student_query = student_query.eq("owner_id", user_id)
         
@@ -77,13 +105,20 @@ def generate_monthly_rent(rent_month: date, user_id: Optional[str] = None) -> Di
         owner_student_ids = list(owner_student_map.keys())
         
         if not owner_student_ids:
-            return ServiceResponse.success({
+            result = {
                 "target_month": target_month.isoformat(),
                 "generated_count": 0,
                 "updated_count": 0,
                 "skipped_count": 0,
                 "errors": []
-            }, "No students found for this owner.")
+            }
+            _record_rent_generation_log(
+                rent_month=target_month,
+                owner_id=user_id,
+                status="SUCCESS",
+                message="No active students found for rent generation."
+            )
+            return ServiceResponse.success(result, "No students found for this owner.")
 
         # 1. Fetch ALL allocations for these specific students
         # We perform the date filtering in Python to avoid Supabase library syntax issues (.or_ / .filter)
@@ -94,13 +129,20 @@ def generate_monthly_rent(rent_month: date, user_id: Optional[str] = None) -> Di
         alloc_res = query.execute()
         all_allocations = alloc_res.data
         if not all_allocations:
-            return ServiceResponse.success({
+            result = {
                 "target_month": target_month.isoformat(),
                 "generated_count": 0,
                 "updated_count": 0,
                 "skipped_count": 0,
                 "errors": []
-            }, "No allocations found for your students.")
+            }
+            _record_rent_generation_log(
+                rent_month=target_month,
+                owner_id=user_id,
+                status="SUCCESS",
+                message="No active allocations found for rent generation."
+            )
+            return ServiceResponse.success(result, "No allocations found for your students.")
             
         # Group allocations by student and filter for those overlapping this month
         student_allocs = {}
@@ -232,17 +274,35 @@ def generate_monthly_rent(rent_month: date, user_id: Optional[str] = None) -> Di
             else:
                 errors.append(f"Failed to create for student {student_id}")
 
-        return ServiceResponse.success({
+        result = {
             "target_month": target_month.isoformat(),
             "generated_count": generated_count,
             "updated_count": updated_count,
             "skipped_count": skipped_count,
             "errors": errors
-        }, f"Processed rent obligations: {generated_count} new, {updated_count} updated.")
+        }
+        _record_rent_generation_log(
+            rent_month=target_month,
+            owner_id=user_id,
+            status="SUCCESS" if not errors else "PARTIAL",
+            generated_count=generated_count,
+            updated_count=updated_count,
+            skipped_count=skipped_count,
+            error_count=len(errors),
+            message=f"Processed rent obligations: {generated_count} new, {updated_count} updated."
+        )
+        return ServiceResponse.success(result, f"Processed rent obligations: {generated_count} new, {updated_count} updated.")
 
     except Exception as e:
         tb = traceback.format_exc()
         logger.error(f"Error generating monthly rent: {e}\n{tb}")
+        _record_rent_generation_log(
+            rent_month=rent_month.replace(day=1),
+            owner_id=user_id,
+            status="FAILED",
+            error_count=1,
+            message=str(e)
+        )
         return ServiceResponse.error(
             ErrorCode.INTERNAL_ERROR, 
             f"Failed to generate rent: {str(e)}", 
