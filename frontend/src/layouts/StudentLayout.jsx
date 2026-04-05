@@ -1,15 +1,39 @@
 import React, { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, CreditCard, MessageSquare, User, LogOut, Menu, X, Bell, Settings } from 'lucide-react';
+import { LayoutDashboard, CreditCard, User, LogOut, Menu, Bell, Settings } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { useAuth } from '../context/AuthContext';
+import { notificationService } from '../api/services';
 
 const StudentLayout = () => {
     const { user, logout } = useAuth();
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+    const [unreadCount, setUnreadCount] = useState(0);
     const navigate = useNavigate();
     const location = useLocation();
+
+    React.useEffect(() => {
+        let mounted = true;
+
+        const fetchNotifications = async () => {
+            try {
+                const notifications = await notificationService.getAll();
+                if (!mounted) return;
+                const unread = (notifications || []).filter(n => !n.is_read).length;
+                setUnreadCount(unread);
+            } catch (error) {
+                if (mounted) setUnreadCount(0);
+            }
+        };
+
+        fetchNotifications();
+        const interval = setInterval(fetchNotifications, 30000);
+        return () => {
+            mounted = false;
+            clearInterval(interval);
+        };
+    }, []);
 
     const menuItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/student/dashboard' },
@@ -101,9 +125,20 @@ const StudentLayout = () => {
                         </h1>
                     </div>
                     <div className="flex items-center gap-4">
-                        <button className="p-2 relative hover:bg-slate-100 rounded-full text-slate-500 transition-colors">
+                        <button
+                            onClick={() => navigate('/student/dashboard#announcements')}
+                            className="p-2 relative hover:bg-slate-100 rounded-full text-slate-500 transition-colors"
+                            title="View announcements"
+                        >
                             <Bell size={20} />
-                            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+                            {unreadCount > 0 && (
+                                <>
+                                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+                                    <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none">
+                                        {unreadCount > 99 ? '99+' : unreadCount}
+                                    </span>
+                                </>
+                            )}
                         </button>
                         <div className="w-8 h-8 rounded-full bg-indigo-100 border border-indigo-200 text-indigo-700 flex items-center justify-center font-bold text-sm">
                             {user?.name?.split(' ').map(n => n[0]).join('').substring(0, 2) || 'ST'}

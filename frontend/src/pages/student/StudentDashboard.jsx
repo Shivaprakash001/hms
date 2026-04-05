@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { Home, CreditCard, Clock, Bell, BedDouble, Calendar, AlertCircle, User } from 'lucide-react';
+import { Home, CreditCard, Bell, BedDouble, Calendar, AlertCircle, User } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { paymentService } from '../../api/services';
+import { paymentService, notificationService } from '../../api/services';
 import api from '../../api/axios';
 
 const StudentDashboard = () => {
@@ -12,26 +12,50 @@ const StudentDashboard = () => {
 
     const [dues, setDues] = useState({ obligations: [], outstanding_balance: 0 });
     const [roomData, setRoomData] = useState(null);
+    const [announcements, setAnnouncements] = useState([]);
+    const [announcementsLoading, setAnnouncementsLoading] = useState(true);
+    const [announcementsError, setAnnouncementsError] = useState('');
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         const fetchData = async () => {
             if (!user?.student_id) return;
             try {
-                const [payRes, roomRes] = await Promise.allSettled([
+                const [payRes, roomRes, notifRes] = await Promise.allSettled([
                     paymentService.getStudentHistory(user.student_id),
-                    api.get('/allocations/my-room')
+                    api.get('/allocations/my-room'),
+                    notificationService.getAll()
                 ]);
                 if (payRes.status === 'fulfilled') setDues(payRes.value || { obligations: [], outstanding_balance: 0 });
                 if (roomRes.status === 'fulfilled') setRoomData(roomRes.value?.data || null);
+
+                if (notifRes.status === 'fulfilled') {
+                    setAnnouncements(notifRes.value || []);
+                    setAnnouncementsError('');
+                } else {
+                    setAnnouncementsError('Could not load announcements.');
+                }
             } catch (error) {
                 console.error("Failed to fetch dashboard data:", error);
             } finally {
+                setAnnouncementsLoading(false);
                 setIsLoading(false);
             }
         };
         fetchData();
     }, [user]);
+
+    const formatNotificationTime = (dateStr) => {
+        if (!dateStr) return 'Just now';
+        const now = new Date();
+        const past = new Date(dateStr);
+        const diff = Math.floor((now - past) / 1000);
+
+        if (diff < 60) return 'Just now';
+        if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+        if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+        return past.toLocaleDateString();
+    };
 
     // Calculate pending dues from obligations
     const pendingDues = dues.outstanding_balance || (dues.obligations || []).filter(o => o.status === 'pending' || o.status === 'partial' || o.status === 'overdue').reduce((sum, o) => sum + (o.amount || 0), 0);
@@ -72,6 +96,23 @@ const StudentDashboard = () => {
 
     // Room occupied/vacant status
     const isOccupied = !!roomNo;
+    const unreadAnnouncements = announcements.filter(a => !a.is_read).length;
+
+    if (isLoading) {
+        return (
+            <div className="space-y-6">
+                <div>
+                    <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
+                    <p className="text-slate-500">Loading your latest hostel details...</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="h-36 rounded-2xl border border-slate-100 bg-white animate-pulse" />
+                    ))}
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-8">
@@ -203,15 +244,45 @@ const StudentDashboard = () => {
                 </div>
 
                 {/* Announcements */}
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div id="announcements" className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                     <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                         <h3 className="font-bold text-slate-900">Announcements</h3>
-                        <Bell size={18} className="text-slate-400" />
+                        <div className="flex items-center gap-2">
+                            {unreadAnnouncements > 0 && (
+                                <span className="px-2 py-0.5 text-xs font-bold bg-indigo-100 text-indigo-700 rounded-full">
+                                    {unreadAnnouncements} new
+                                </span>
+                            )}
+                            <Bell size={18} className="text-slate-400" />
+                        </div>
                     </div>
-                    <div className="p-5 text-center text-slate-400">
-                        <Bell size={32} className="mx-auto mb-2 opacity-30" />
-                        <p className="text-sm">No announcements yet</p>
-                    </div>
+                    {announcementsLoading ? (
+                        <div className="p-5 text-sm text-slate-400">Loading announcements...</div>
+                    ) : announcementsError ? (
+                        <div className="p-5 text-sm text-rose-500">{announcementsError}</div>
+                    ) : announcements.length === 0 ? (
+                        <div className="p-5 text-center text-slate-400">
+                            <Bell size={32} className="mx-auto mb-2 opacity-30" />
+                            <p className="text-sm">No announcements yet</p>
+                        </div>
+                    ) : (
+                        <div className="p-3 divide-y divide-slate-100">
+                            {announcements.slice(0, 5).map((item) => (
+                                <div key={item.id} className="py-3 px-2">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                            <p className="text-sm font-semibold text-slate-800">{item.title}</p>
+                                            <p className="text-sm text-slate-500 mt-0.5">{item.message}</p>
+                                        </div>
+                                        <div className="text-right shrink-0">
+                                            {!item.is_read && <span className="inline-block w-2 h-2 rounded-full bg-indigo-500" />}
+                                            <p className="text-xs text-slate-400 mt-1">{formatNotificationTime(item.created_at)}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
