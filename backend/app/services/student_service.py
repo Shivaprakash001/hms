@@ -728,7 +728,7 @@ def update_student_self_profile(
         student_id = student_res.data[0].get("id")
 
         profile_fields = {
-            "name", "email", "phone", "address", "emergency_contact"
+            "name", "email", "phone", "address"
         }
         student_fields = {
             "photo_url", "phone_1", "phone_2", "phone_3", "personal_email",
@@ -738,6 +738,11 @@ def update_student_self_profile(
 
         profile_update = {k: v for k, v in data.items() if k in profile_fields and v is not None}
         student_update = {k: v for k, v in data.items() if k in student_fields and v is not None}
+
+        # Backward-compatible mapping: emergency_contact is stored on students.phone_2
+        # because many deployments do not have profiles.emergency_contact column.
+        if data.get("emergency_contact") is not None and "phone_2" not in student_update:
+            student_update["phone_2"] = data.get("emergency_contact")
 
         if not profile_update and not student_update:
             return ServiceResponse.validation_error("No valid fields to update")
