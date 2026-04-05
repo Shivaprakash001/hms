@@ -68,6 +68,19 @@ def patch_my_owner_preferences(
     return _handle_service_response(result)
 
 
+@router.get("/search", response_model=list[dict], summary="Search owner tenants")
+def search_owner_tenants(
+    q: str,
+    limit: int = 10,
+    user: UserContext = Depends(get_current_user)
+):
+    if not user.is_owner():
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner/admin can access this endpoint.")
+
+    result = owner_service.search_tenants(str(user.user_id), q, limit)
+    return _handle_service_response(result)
+
+
 @router.post("/payments/offline", response_model=dict, status_code=status.HTTP_201_CREATED, summary="Record offline payment")
 def record_owner_offline_payment(
     data: PaymentCreate,

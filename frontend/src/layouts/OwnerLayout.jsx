@@ -8,7 +8,8 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
-import { notificationService } from '../api/services';
+import { notificationService, ownerService } from '../api/services';
+import SearchResultsDropdown from '../components/owner/SearchResultsDropdown';
 
 
 const OwnerLayout = () => {
@@ -16,6 +17,11 @@ const OwnerLayout = () => {
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [notifications, setNotifications] = useState([]);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState([]);
+    const [searchLoading, setSearchLoading] = useState(false);
+    const [searchOpen, setSearchOpen] = useState(false);
+    const [activeSearchIndex, setActiveSearchIndex] = useState(-1);
 
     // Poll for notifications
     const fetchNotifications = async () => {
@@ -60,16 +66,99 @@ const OwnerLayout = () => {
     const notificationRef = useRef(null);
     const profileRef = useRef(null);
     const sidebarAccountRef = useRef(null);
+    const searchRef = useRef(null);
 
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (notificationRef.current && !notificationRef.current.contains(event.target)) setNotificationsOpen(false);
             if (profileRef.current && !profileRef.current.contains(event.target)) setProfileMenuOpen(false);
             if (sidebarAccountRef.current && !sidebarAccountRef.current.contains(event.target)) setSidebarAccountOpen(false);
+            if (searchRef.current && !searchRef.current.contains(event.target)) setSearchOpen(false);
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+    useEffect(() => {
+        const normalized = searchQuery.trim();
+        if (normalized.length < 2) {
+            setSearchResults([]);
+            setSearchLoading(false);
+            setSearchOpen(false);
+            setActiveSearchIndex(-1);
+            return undefined;
+        }
+
+        let cancelled = false;
+        setSearchLoading(true);
+
+        const timer = window.setTimeout(async () => {
+            try {
+                const results = await ownerService.searchTenants(normalized, 10);
+                const normalizedResults = Array.isArray(results) ? results : [];
+                if (!cancelled) {
+                    setSearchResults(normalizedResults);
+                    setSearchOpen(true);
+                    setActiveSearchIndex(normalizedResults.length ? 0 : -1);
+                }
+            } catch (error) {
+                if (!cancelled) {
+                    console.error('Failed to search tenants:', error);
+                    setSearchResults([]);
+                    setSearchOpen(true);
+                    setActiveSearchIndex(-1);
+                }
+            } finally {
+                if (!cancelled) {
+                    setSearchLoading(false);
+                }
+            }
+        }, 300);
+
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timer);
+        };
+    }, [searchQuery]);
+
+    const handleTenantSelect = (tenant) => {
+        setSearchQuery('');
+        setSearchResults([]);
+        setSearchOpen(false);
+        setActiveSearchIndex(-1);
+        navigate('/owner/students', { state: { selectedTenantId: tenant.id } });
+    };
+
+    const handleSearchKeyDown = (event) => {
+        if (!searchOpen || searchResults.length === 0) {
+            if (event.key === 'Escape') {
+                setSearchOpen(false);
+            }
+            return;
+        }
+
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            setActiveSearchIndex(prev => (prev + 1) % searchResults.length);
+            return;
+        }
+
+        if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            setActiveSearchIndex(prev => (prev <= 0 ? searchResults.length - 1 : prev - 1));
+            return;
+        }
+
+        if (event.key === 'Enter' && activeSearchIndex >= 0) {
+            event.preventDefault();
+            handleTenantSelect(searchResults[activeSearchIndex]);
+            return;
+        }
+
+        if (event.key === 'Escape') {
+            setSearchOpen(false);
+        }
+    };
 
     const menuItems = [
         { name: 'Dashboard', icon: Home, path: '/owner/dashboard' },
@@ -273,17 +362,35 @@ const OwnerLayout = () => {
                         </button>
 
                         {/* Search Bar */}
-                        <div className="hidden md:flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus-within:ring-2 focus-within:ring-indigo-100 focus-within:border-indigo-400 transition-all w-72 group">
-                            <Search size={16} className="text-slate-400 group-focus-within:text-indigo-500" />
-                            <input
-                                type="text"
-                                placeholder="Search everything..."
-                                className="bg-transparent border-none outline-none text-sm text-slate-700 placeholder:text-slate-400 w-full"
-                            />
-                            <div className="hidden lg:flex items-center gap-1">
-                                <span className="text-[10px] bg-white border border-slate-200 rounded px-1.5 py-0.5 text-slate-400 font-medium">⌘</span>
-                                <span className="text-[10px] bg-white border border-slate-200 rounded px-1.5 py-0.5 text-slate-400 font-medium">K</span>
+                        <div className="relative hidden md:block w-80" ref={searchRef}>
+                            <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus-within:ring-2 focus-within:ring-indigo-100 focus-within:border-indigo-400 transition-all group">
+                                <Search size={16} className="text-slate-400 group-focus-within:text-indigo-500" />
+                                <input
+                                    type="text"
+                                    value={searchQuery}
+                                    onChange={(event) => setSearchQuery(event.target.value)}
+                                    onFocus={() => {
+                                        if (searchResults.length > 0 || searchQuery.trim().length >= 2) {
+                                            setSearchOpen(true);
+                                        }
+                                    }}
+                                    onKeyDown={handleSearchKeyDown}
+                                    placeholder="Search tenants, phone, room..."
+                                    className="bg-transparent border-none outline-none text-sm text-slate-700 placeholder:text-slate-400 w-full"
+                                />
+                                <div className="hidden lg:flex items-center gap-1">
+                                    <span className="text-[10px] bg-white border border-slate-200 rounded px-1.5 py-0.5 text-slate-400 font-medium">⌘</span>
+                                    <span className="text-[10px] bg-white border border-slate-200 rounded px-1.5 py-0.5 text-slate-400 font-medium">K</span>
+                                </div>
                             </div>
+                            <SearchResultsDropdown
+                                isOpen={searchOpen}
+                                isLoading={searchLoading}
+                                query={searchQuery.trim()}
+                                results={searchResults}
+                                activeIndex={activeSearchIndex}
+                                onSelect={handleTenantSelect}
+                            />
                         </div>
                     </div>
 

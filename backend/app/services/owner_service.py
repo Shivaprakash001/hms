@@ -1,4 +1,4 @@
-from typing import Dict, Any
+from typing import Dict, Any, List
 from app.db import supabase
 from app.utils.responses import ServiceResponse, ErrorCode
 from app.utils.logger import get_logger
@@ -11,6 +11,10 @@ DEFAULT_PREFERENCES = {
     "receipt_prefix": "HMS",
     "timezone": "Asia/Kolkata"
 }
+
+
+def _escape_ilike(value: str) -> str:
+    return value.replace('%', '\\%').replace('_', '\\_')
 
 
 def _normalize_hostel_row(row: dict) -> dict:
@@ -196,3 +200,155 @@ def update_owner_preferences(user_id: str, data: dict) -> Dict[str, Any]:
     except Exception as e:
         logger.exception(f"Error updating owner preferences: {e}")
         return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to update owner preferences", str(e))
+
+
+def search_tenants(user_id: str, query: str, limit: int = 10) -> Dict[str, Any]:
+    try:
+        search_term = (query or "").strip()
+        if len(search_term) < 2:
+            return ServiceResponse.success([])
+
+        safe_limit = max(1, min(limit, 10))
+        like_term = f"%{_escape_ilike(search_term)}%"
+
+        profile_matches = supabase.table("profiles") \
+            .select("id, name, email, phone") \
+            .or_(f"name.ilike.{like_term},email.ilike.{like_term},phone.ilike.{like_term}") \
+            .limit(25) \
+            .execute()
+
+        profile_map = {
+            row["id"]: {
+                "id": row.get("id"),
+                "name": row.get("name") or "Unknown",
+                "email": row.get("email"),
+                "phone": row.get("phone")
+            }
+            for row in (profile_matches.data or [])
+        }
+        profile_ids = list(profile_map.keys())
+
+        students: List[dict] = []
+        seen_student_ids = set()
+
+        if profile_ids:
+            student_result = supabase.table("students") \
+                .select("id, profile_id, owner_id, room_allocations(end_date, rooms(room_no))") \
+                .eq("owner_id", user_id) \
+                .in_("profile_id", profile_ids) \
+                .limit(25) \
+                .execute()
+
+            for student in (student_result.data or []):
+                seen_student_ids.add(student.get("id"))
+                students.append(student)
+
+        room_matches = supabase.table("rooms") \
+            .select("id, room_no") \
+            .ilike("room_no", like_term) \
+            .limit(10) \
+            .execute()
+
+        room_ids = [room.get("id") for room in (room_matches.data or []) if room.get("id")]
+        if room_ids:
+            allocation_result = supabase.table("room_allocations") \
+                .select("student_id, room_id, end_date, students(id, profile_id, owner_id), rooms(room_no)") \
+                .in_("room_id", room_ids) \
+                .is_("end_date", "null") \
+                .limit(25) \
+                .execute()
+
+            for allocation in (allocation_result.data or []):
+                student = allocation.get("students") or {}
+                student_id = student.get("id")
+                if not student_id or student.get("owner_id") != user_id or student_id in seen_student_ids:
+                    continue
+
+                students.append({
+                    "id": student_id,
+                    "profile_id": student.get("profile_id"),
+                    "room_allocations": [{
+                        "end_date": allocation.get("end_date"),
+                        "rooms": allocation.get("rooms")
+                    }]
+                })
+                seen_student_ids.add(student_id)
+
+        normalized_query = search_term.lower()
+        results = []
+        for student in students:
+            profile = profile_map.get(student.get("profile_id"))
+            if not profile:
+                profile_result = supabase.table("profiles") \
+                    .select("id, name, email, phone") \
+                    .eq("id", student.get("profile_id")) \
+                    .limit(1) \
+                    .execute()
+                if profile_result.data:
+                    profile = profile_result.data[0]
+                    profile_map[student.get("profile_id")] = profile
+                else:
+                    profile = {"name": "Unknown", "email": None, "phone": None}
+
+            active_room = next(
+                (allocation.get("rooms") for allocation in (student.get("room_allocations") or []) if allocation.get("end_date") is None),
+                None
+            ) or {}
+            room_no = active_room.get("room_no")
+
+            score = 0
+            name = (profile.get("name") or "").lower()
+            email = (profile.get("email") or "").lower()
+            phone = str(profile.get("phone") or "").lower()
+            room = str(room_no or "").lower()
+
+            if name.startswith(normalized_query):
+                score += 5
+            elif normalized_query in name:
+                score += 3
+            if room.startswith(normalized_query):
+                score += 4
+            elif normalized_query in room:
+                score += 2
+            if phone.startswith(normalized_query):
+                score += 3
+            elif normalized_query in phone:
+                score += 1
+            if email.startswith(normalized_query):
+                score += 2
+            elif normalized_query in email:
+                score += 1
+
+            results.append({
+                "id": student.get("id"),
+                "name": profile.get("name") or "Unknown",
+                "phone": profile.get("phone"),
+                "email": profile.get("email"),
+                "room": room_no,
+                "_score": score
+            })
+
+        deduped = {}
+        for item in results:
+            existing = deduped.get(item["id"])
+            if not existing or item["_score"] > existing["_score"]:
+                deduped[item["id"]] = item
+
+        sorted_results = sorted(
+            deduped.values(),
+            key=lambda item: (-item["_score"], item["name"].lower(), str(item.get("room") or ""))
+        )[:safe_limit]
+
+        return ServiceResponse.success([
+            {
+                "id": item["id"],
+                "name": item["name"],
+                "phone": item["phone"],
+                "email": item["email"],
+                "room": item["room"]
+            }
+            for item in sorted_results
+        ])
+    except Exception as e:
+        logger.exception(f"Error searching owner tenants: {e}")
+        return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to search tenants", str(e))
