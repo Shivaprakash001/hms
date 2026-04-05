@@ -115,20 +115,10 @@ export const ownerService = {
         return ownerService._requestWithFallback('patch', '/owner/me/preferences', data);
     },
     searchTenants: async (query, limit = 10) => {
-        try {
-            const response = await api.get('/owner/search', {
-                params: { q: query, limit }
-            });
-            return response.data;
-        } catch (error) {
-            if (error?.response?.status === 404) {
-                const fallback = await api.get('/api/v1/owner/search', {
-                    params: { q: query, limit }
-                });
-                return fallback.data;
-            }
-            throw error;
-        }
+        const response = await api.get('/owner/search', {
+            params: { q: query, limit }
+        });
+        return response.data;
     }
 };
 

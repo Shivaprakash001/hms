@@ -4,6 +4,7 @@ import { Phone, Mail, Home, Search, Loader2 } from 'lucide-react';
 const SearchResultsDropdown = ({
     isOpen,
     isLoading,
+    hasError,
     query,
     results,
     activeIndex,
@@ -17,6 +18,14 @@ const SearchResultsDropdown = ({
                 <div className="flex items-center gap-3 px-4 py-5 text-sm text-slate-500">
                     <Loader2 size={16} className="animate-spin text-indigo-500" />
                     <span>Searching tenants...</span>
+                </div>
+            ) : hasError ? (
+                <div className="px-4 py-5 text-sm text-slate-500">
+                    <div className="flex items-center gap-2 font-medium text-rose-700">
+                        <Search size={16} className="text-rose-400" />
+                        <span>Search unavailable</span>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-400">The tenant search API could not be reached. Please try again in a moment.</p>
                 </div>
             ) : results.length === 0 ? (
                 <div className="px-4 py-5 text-sm text-slate-500">

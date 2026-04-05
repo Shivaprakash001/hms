@@ -22,6 +22,7 @@ const OwnerLayout = () => {
     const [searchLoading, setSearchLoading] = useState(false);
     const [searchOpen, setSearchOpen] = useState(false);
     const [activeSearchIndex, setActiveSearchIndex] = useState(-1);
+    const [searchError, setSearchError] = useState(false);
 
     // Poll for notifications
     const fetchNotifications = async () => {
@@ -86,6 +87,7 @@ const OwnerLayout = () => {
             setSearchLoading(false);
             setSearchOpen(false);
             setActiveSearchIndex(-1);
+            setSearchError(false);
             return undefined;
         }
 
@@ -97,6 +99,7 @@ const OwnerLayout = () => {
                 const results = await ownerService.searchTenants(normalized, 10);
                 const normalizedResults = Array.isArray(results) ? results : [];
                 if (!cancelled) {
+                    setSearchError(false);
                     setSearchResults(normalizedResults);
                     setSearchOpen(true);
                     setActiveSearchIndex(normalizedResults.length ? 0 : -1);
@@ -104,6 +107,7 @@ const OwnerLayout = () => {
             } catch (error) {
                 if (!cancelled) {
                     console.error('Failed to search tenants:', error);
+                    setSearchError(true);
                     setSearchResults([]);
                     setSearchOpen(true);
                     setActiveSearchIndex(-1);
@@ -126,6 +130,7 @@ const OwnerLayout = () => {
         setSearchResults([]);
         setSearchOpen(false);
         setActiveSearchIndex(-1);
+        setSearchError(false);
         navigate('/owner/students', { state: { selectedTenantId: tenant.id } });
     };
 
@@ -386,6 +391,7 @@ const OwnerLayout = () => {
                             <SearchResultsDropdown
                                 isOpen={searchOpen}
                                 isLoading={searchLoading}
+                                hasError={searchError}
                                 query={searchQuery.trim()}
                                 results={searchResults}
                                 activeIndex={activeSearchIndex}
