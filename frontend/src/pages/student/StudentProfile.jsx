@@ -86,24 +86,33 @@ const StudentProfile = () => {
     const handleSave = async () => {
         setSaveLoading(true);
         try {
+            const optional = (value) => {
+                if (value === undefined || value === null) return null;
+                if (typeof value === 'string') {
+                    const trimmed = value.trim();
+                    return trimmed === '' ? null : trimmed;
+                }
+                return value;
+            };
+
             const payload = {
                 name: formData.name,
                 email: formData.email,
-                phone: formData.phone,
-                emergency_contact: formData.emergency_contact,
-                address: formData.address,
-                personal_email: formData.personal_email,
-                phone_1: formData.phone || formData.phone_1,
-                phone_2: formData.emergency_contact || formData.phone_2,
-                phone_3: '',
-                college_name: formData.profile_type === 'student' ? formData.college_name : '',
-                branch: formData.profile_type === 'student' ? formData.branch : '',
-                office_name: formData.profile_type === 'work' ? formData.office_name : '',
-                office_location: formData.profile_type === 'work' ? formData.office_location : '',
-                job_role: formData.profile_type === 'work' ? formData.job_role : '',
-                permanent_address: formData.permanent_address,
-                temporary_address: formData.temporary_address,
-                photo_url: formData.photo_url
+                phone: optional(formData.phone),
+                emergency_contact: optional(formData.emergency_contact),
+                address: optional(formData.address),
+                personal_email: optional(formData.personal_email),
+                phone_1: optional(formData.phone || formData.phone_1),
+                phone_2: optional(formData.emergency_contact || formData.phone_2),
+                phone_3: null,
+                college_name: optional(formData.profile_type === 'student' ? formData.college_name : null),
+                branch: optional(formData.profile_type === 'student' ? formData.branch : null),
+                office_name: optional(formData.profile_type === 'work' ? formData.office_name : null),
+                office_location: optional(formData.profile_type === 'work' ? formData.office_location : null),
+                job_role: optional(formData.profile_type === 'work' ? formData.job_role : null),
+                permanent_address: optional(formData.permanent_address),
+                temporary_address: optional(formData.temporary_address),
+                photo_url: optional(formData.photo_url)
             };
             const updated = await studentService.updateMyProfile(payload);
             const profRel = updated?.profile || updated?.profiles;
@@ -135,7 +144,11 @@ const StudentProfile = () => {
             setTimeout(() => setShowSuccess(false), 3000);
         } catch (error) {
             console.error("Failed to update profile:", error);
-            alert("Failed to update profile");
+            const detail = error?.response?.data?.detail;
+            const message = Array.isArray(detail)
+                ? detail.map(d => d?.msg).filter(Boolean).join(', ')
+                : (typeof detail === 'string' ? detail : (detail?.message || 'Failed to update profile'));
+            alert(message);
         } finally {
             setSaveLoading(false);
         }
