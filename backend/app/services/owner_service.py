@@ -211,21 +211,22 @@ def search_tenants(user_id: str, query: str, limit: int = 10) -> Dict[str, Any]:
         safe_limit = max(1, min(limit, 10))
         like_term = f"%{_escape_ilike(search_term)}%"
 
-        profile_matches = supabase.table("profiles") \
-            .select("id, name, email, phone") \
-            .or_(f"name.ilike.{like_term},email.ilike.{like_term},phone.ilike.{like_term}") \
-            .limit(25) \
-            .execute()
+        profile_map = {}
+        for field in ("name", "email", "phone"):
+            profile_matches = supabase.table("profiles") \
+                .select("id, name, email, phone") \
+                .ilike(field, like_term) \
+                .limit(25) \
+                .execute()
 
-        profile_map = {
-            row["id"]: {
-                "id": row.get("id"),
-                "name": row.get("name") or "Unknown",
-                "email": row.get("email"),
-                "phone": row.get("phone")
-            }
-            for row in (profile_matches.data or [])
-        }
+            for row in (profile_matches.data or []):
+                profile_map[row["id"]] = {
+                    "id": row.get("id"),
+                    "name": row.get("name") or "Unknown",
+                    "email": row.get("email"),
+                    "phone": row.get("phone")
+                }
+
         profile_ids = list(profile_map.keys())
 
         students: List[dict] = []
