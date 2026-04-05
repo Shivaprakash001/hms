@@ -19,6 +19,7 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true, onDocum
     const [uploading, setUploading] = useState(false);
     const [blobUrls, setBlobUrls] = useState({});
     const [loadingBlobDocIds, setLoadingBlobDocIds] = useState(new Set());
+    const [failedBlobDocIds, setFailedBlobDocIds] = useState(new Set());
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [docNumbers, setDocNumbers] = useState({ AADHAR: '', DRIVING_LICENSE: '', PASSPORT: '' });
@@ -31,6 +32,8 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true, onDocum
         });
         blobUrlRegistryRef.current = {};
         setBlobUrls({});
+        setLoadingBlobDocIds(new Set());
+        setFailedBlobDocIds(new Set());
     };
 
     useEffect(() => {
@@ -128,8 +131,10 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true, onDocum
     };
 
     const currentDoc = documents.find(d => d.doc_type === activeDocType);
-    const previewSource = (currentDoc?.id && blobUrls[currentDoc.id]) || currentDoc?.signed_url || '';
+    const previewSource = (currentDoc?.id && blobUrls[currentDoc.id]) || '';
+    const viewSource = previewSource || currentDoc?.signed_url || '';
     const previewLoading = Boolean(currentDoc?.id && loadingBlobDocIds.has(currentDoc.id) && !blobUrls[currentDoc.id]);
+    const previewFailed = Boolean(currentDoc?.id && failedBlobDocIds.has(currentDoc.id));
     const isPdfDoc = Boolean(
         (currentDoc?.document_image_url || currentDoc?.signed_url || '')
             .toLowerCase()
@@ -148,6 +153,11 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true, onDocum
                     next.add(doc.id);
                     return next;
                 });
+                    setFailedBlobDocIds(prev => {
+                        const next = new Set(prev);
+                        next.delete(doc.id);
+                        return next;
+                    });
 
                 try {
                     const response = await fetch(doc.signed_url, { credentials: 'omit' });
@@ -165,6 +175,11 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true, onDocum
                     setBlobUrls(prev => ({ ...prev, [doc.id]: objectUrl }));
                 } catch (err) {
                     console.warn('Blob preview failed, falling back to signed URL:', err);
+                    setFailedBlobDocIds(prev => {
+                        const next = new Set(prev);
+                        next.add(doc.id);
+                        return next;
+                    });
                 } finally {
                     setLoadingBlobDocIds(prev => {
                         const next = new Set(prev);
@@ -257,13 +272,17 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true, onDocum
                             {currentDoc.signed_url ? (
                                 <button
                                     type="button"
-                                    onClick={() => window.open(previewSource, '_blank', 'noopener,noreferrer')}
+                                    onClick={() => window.open(viewSource, '_blank', 'noopener,noreferrer')}
                                     className="w-32 h-24 rounded-xl bg-white border border-slate-200 overflow-hidden shadow-sm hover:border-indigo-300 transition-colors"
                                     title="Open full document"
                                 >
                                     {previewLoading ? (
                                         <div className="w-full h-full flex items-center justify-center text-slate-400">
                                             <Loader2 size={16} className="animate-spin" />
+                                        </div>
+                                    ) : !previewSource ? (
+                                        <div className="w-full h-full flex items-center justify-center text-slate-300">
+                                            <FileText size={22} className={previewFailed ? 'text-amber-500' : 'text-indigo-500'} />
                                         </div>
                                     ) : (
                                         isPdfDoc ? (
@@ -313,7 +332,7 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true, onDocum
                                 {currentDoc.signed_url && (
                                     <button
                                         type="button"
-                                        onClick={() => window.open(previewSource, '_blank', 'noopener,noreferrer')}
+                                        onClick={() => window.open(viewSource, '_blank', 'noopener,noreferrer')}
                                         className="mt-2 text-xs font-semibold text-indigo-600 hover:text-indigo-700"
                                     >
                                         View Full Document
@@ -325,7 +344,7 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true, onDocum
                         <div className="flex items-center gap-1.5">
                             {currentDoc.signed_url && (
                                 <a
-                                    href={previewSource}
+                                    href={viewSource}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="p-2 rounded-lg hover:bg-white text-slate-400 hover:text-indigo-600 transition-colors"
