@@ -6,6 +6,16 @@ import { useAuth } from '../../context/AuthContext';
 import { paymentService, notificationService } from '../../api/services';
 import api from '../../api/axios';
 
+const getOrdinalDay = (day) => {
+    if (!day) return null;
+    if (day >= 11 && day <= 13) return `${day}th`;
+    const last = day % 10;
+    if (last === 1) return `${day}st`;
+    if (last === 2) return `${day}nd`;
+    if (last === 3) return `${day}rd`;
+    return `${day}th`;
+};
+
 const StudentDashboard = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
@@ -94,7 +104,7 @@ const StudentDashboard = () => {
     const roomNo = user?.room_no || roomData?.room?.room_no;
     const roomCapacity = user?.room_capacity || roomData?.room?.capacity;
     const monthlyRent = user?.monthly_rent ?? 0;
-    const dueDay = user?.due_day;
+    const autoRentDay = dues?.auto_rent_day;
 
     // Roommate names from API
     const roommates = roomData?.roommates || [];
@@ -169,7 +179,7 @@ const StudentDashboard = () => {
                     {
                         label: 'Monthly Rent',
                         val: `₹${monthlyRent}`,
-                        sub: dueDay ? `Due on ${dueDay}th` : 'No due date set',
+                        sub: autoRentDay ? `Generated on the ${getOrdinalDay(autoRentDay)} of every month` : 'Rent schedule not set',
                         icon: CreditCard,
                         color: 'text-emerald-600',
                         bg: 'bg-emerald-50'

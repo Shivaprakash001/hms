@@ -9,6 +9,16 @@ import PaymentModal from '../../components/student/payment/PaymentModal';
 const POLL_INTERVAL_MS = 3000;  // check every 3 seconds
 const POLL_MAX_ATTEMPTS = 12;   // give up after ~36 seconds
 
+const getOrdinalDay = (day) => {
+    if (!day) return '---';
+    if (day >= 11 && day <= 13) return `${day}th`;
+    const last = day % 10;
+    if (last === 1) return `${day}st`;
+    if (last === 2) return `${day}nd`;
+    if (last === 3) return `${day}rd`;
+    return `${day}th`;
+};
+
 const StudentPayments = () => {
     const { user } = useAuth();
     const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -132,6 +142,7 @@ const StudentPayments = () => {
     const pendingAmount = history.outstanding_balance || 0;
     const monthlyRent = user?.monthly_rent || 0;
     const rentAssigned = monthlyRent > 0;
+    const autoRentDay = history?.auto_rent_day || 1;
 
     const isOverdue = localPayments.some(p => p.status === 'overdue');
 
@@ -256,7 +267,7 @@ const StudentPayments = () => {
                     <h3 className="text-3xl font-black text-slate-900">₹{(user?.monthly_rent || 0).toLocaleString()}</h3>
                     <div className="mt-4 flex items-center gap-2 text-sm text-slate-500 font-medium">
                         <Calendar size={16} className="text-indigo-500" />
-                        <span>Due on {user?.due_day ? `${user.due_day}th` : '---'} of every month</span>
+                        <span>Rent request generated on the {getOrdinalDay(autoRentDay)} of every month</span>
                     </div>
                 </div>
 
