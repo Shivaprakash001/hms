@@ -21,7 +21,7 @@ export default function OwnerProfile() {
 
     const [ownerForm, setOwnerForm] = useState({ name: '', email: '', phone: '' });
     const [hostelForm, setHostelForm] = useState({
-        hostel_name: '', hostel_phone: '', address: '', city: '', state: '', pincode: '', upi_id: '', gst_number: ''
+        name: '', phone: '', address: '', city: '', state: '', pincode: '', upi_id: '', gst_number: ''
     });
     const [preferences, setPreferences] = useState({ currency: 'INR', rent_cycle: 'MONTHLY', receipt_prefix: 'HMS', timezone: 'Asia/Kolkata' });
 
@@ -40,8 +40,8 @@ export default function OwnerProfile() {
                     phone: owner.phone || ''
                 });
                 setHostelForm({
-                    hostel_name: hostel.name || '',
-                    hostel_phone: hostel.phone || '',
+                    name: hostel.name || '',
+                    phone: hostel.phone || '',
                     address: hostel.address || '',
                     city: hostel.city || '',
                     state: hostel.state || '',
@@ -103,8 +103,8 @@ export default function OwnerProfile() {
             const data = await ownerService.updateHostel(hostelForm);
             const hostel = data?.hostel || {};
             setHostelForm({
-                hostel_name: hostel.name || '',
-                hostel_phone: hostel.phone || '',
+                name: hostel.name || '',
+                phone: hostel.phone || '',
                 address: hostel.address || '',
                 city: hostel.city || '',
                 state: hostel.state || '',
@@ -184,9 +184,9 @@ export default function OwnerProfile() {
 
             {activeTab === 'hostel' && (
                 <form onSubmit={saveHostel} className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm space-y-4 max-w-4xl">
-                    <Field label="Hostel Name" value={hostelForm.hostel_name} onChange={(v) => setHostelForm({ ...hostelForm, hostel_name: v })} required />
+                    <Field label="Hostel Name" value={hostelForm.name} onChange={(v) => setHostelForm({ ...hostelForm, name: v })} required />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <Field label="Hostel Phone" value={hostelForm.hostel_phone} onChange={(v) => setHostelForm({ ...hostelForm, hostel_phone: v })} required />
+                        <Field label="Hostel Phone" value={hostelForm.phone} onChange={(v) => setHostelForm({ ...hostelForm, phone: v })} required />
                         <Field label="Pincode" value={hostelForm.pincode} onChange={(v) => setHostelForm({ ...hostelForm, pincode: v })} required />
                     </div>
                     <Field label="Address" value={hostelForm.address} onChange={(v) => setHostelForm({ ...hostelForm, address: v })} required />

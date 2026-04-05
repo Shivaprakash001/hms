@@ -119,8 +119,8 @@ def update_owner_profile(user_id: str, data: dict) -> Dict[str, Any]:
 def update_owner_hostel(user_id: str, data: dict) -> Dict[str, Any]:
     try:
         mapped = {
-            "name": data.get("hostel_name"),
-            "phone": data.get("hostel_phone"),
+            "name": data.get("name") if data.get("name") is not None else data.get("hostel_name"),
+            "phone": data.get("phone") if data.get("phone") is not None else data.get("hostel_phone"),
             "address": data.get("address"),
             "city": data.get("city"),
             "state": data.get("state"),

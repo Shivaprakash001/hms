@@ -19,6 +19,8 @@ class OwnerProfileUpdate(BaseModel):
 
 
 class HostelUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=2, max_length=200)
+    phone: Optional[str] = Field(None, max_length=15)
     hostel_name: Optional[str] = Field(None, min_length=2, max_length=200)
     hostel_phone: Optional[str] = Field(None, max_length=15)
     address: Optional[str] = Field(None, max_length=500)
@@ -28,7 +30,7 @@ class HostelUpdate(BaseModel):
     upi_id: Optional[str] = Field(None, max_length=100)
     gst_number: Optional[str] = Field(None, max_length=30)
 
-    @field_validator('hostel_phone')
+    @field_validator('phone', 'hostel_phone')
     @classmethod
     def validate_hostel_phone(cls, v):
         if v is None:
