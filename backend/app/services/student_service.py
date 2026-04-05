@@ -71,6 +71,33 @@ def _attach_hostel_info(student: dict) -> dict:
         return student
 
 
+def _apply_legacy_academic_fallback(student: dict) -> dict:
+    """Fill new students academic fields from legacy profiles columns when missing."""
+    profile = student.get("profile") or {}
+    if not isinstance(profile, dict):
+        return student
+
+    if not student.get("roll_number") and profile.get("college_roll_number"):
+        student["roll_number"] = profile.get("college_roll_number")
+
+    if not student.get("year_of_study") and profile.get("year_of_study"):
+        try:
+            student["year_of_study"] = int(profile.get("year_of_study"))
+        except Exception:
+            student["year_of_study"] = profile.get("year_of_study")
+
+    if not student.get("section") and profile.get("section"):
+        student["section"] = profile.get("section")
+
+    if not student.get("course") and profile.get("course"):
+        student["course"] = profile.get("course")
+
+    if not student.get("branch") and profile.get("branch"):
+        student["branch"] = profile.get("branch")
+
+    return student
+
+
 def create_student(
     data: dict,
     created_by: Optional[str] = None
@@ -230,6 +257,8 @@ def get_student(
                 )
 
             student = _attach_hostel_info(student)
+
+        student = _apply_legacy_academic_fallback(student)
         
         return ServiceResponse.success(student)
         
@@ -349,6 +378,7 @@ def get_student_by_profile(
                 )
 
         student = _attach_hostel_info(student)
+        student = _apply_legacy_academic_fallback(student)
         
         return ServiceResponse.success(student)
         
@@ -487,6 +517,8 @@ def get_all_students(
             obligation_payments = payments_by_obligation.get((obligation or {}).get("id"), [])
             latest_payment = latest_payment_by_student.get(student.get("id"))
             student["payment_summary"] = _build_payment_summary(student, obligation, obligation_payments, latest_payment)
+
+            student = _apply_legacy_academic_fallback(student)
             
             students_data.append(student)
         
