@@ -6,12 +6,11 @@
 ALTER TABLE payments
 ADD COLUMN IF NOT EXISTS receipt_number INTEGER;
 
--- Add composite unique constraint on (hostel_id, created_at month, receipt_number)
--- This ensures each hostel has unique receipt numbers per month
-ALTER TABLE payments
-ADD CONSTRAINT unique_receipt_per_hostel_month 
-UNIQUE (hostel_id, DATE_TRUNC('month', created_at AT TIME ZONE 'Asia/Kolkata'), receipt_number)
-DEFERRABLE INITIALLY DEFERRED;
+-- Create unique index to enforce unique receipt numbers per hostel per month
+-- Using index instead of constraint because it supports DATE_TRUNC expression
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_receipt_per_hostel_month
+ON payments (hostel_id, DATE_TRUNC('month', created_at AT TIME ZONE 'Asia/Kolkata'), receipt_number)
+WHERE receipt_number IS NOT NULL;
 
 -- Create index for faster querying by hostel and month
 CREATE INDEX IF NOT EXISTS idx_payments_hostel_month_receipt
