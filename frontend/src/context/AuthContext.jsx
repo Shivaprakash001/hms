@@ -87,9 +87,10 @@ export const AuthProvider = ({ children }) => {
 
     const login = async (email, password) => {
         try {
-            const response = await api.post('/auth/login', { email, password });
+            const normalizedEmail = (email || '').trim().toLowerCase();
+            const response = await api.post('/auth/login', { email: normalizedEmail, password });
             const { access_token, role, name, user_id, student_id, is_profile_completed } = response.data;
-            const userData = { email, role, name, id: user_id, student_id, is_profile_completed, token: access_token };
+            const userData = { email: normalizedEmail, role, name, id: user_id, student_id, is_profile_completed, token: access_token };
             setUser(userData);
 
             if (role === 'owner' || role === 'admin') {

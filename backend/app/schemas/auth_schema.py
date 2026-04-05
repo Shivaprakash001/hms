@@ -15,6 +15,7 @@ class TokenResponse(BaseModel):
     name: str
     user_id: str
     student_id: Optional[str] = None
+    is_profile_completed: Optional[bool] = False
 
 
 class PasswordChangeRequest(BaseModel):

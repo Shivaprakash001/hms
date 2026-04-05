@@ -18,16 +18,21 @@ def login(email: str, password: str) -> Dict[str, Any]:
     Authenticate user and return JWT token.
     """
     try:
-        logger.info(f"Login attempt for: {email}")
+        normalized_email = (email or "").strip().lower()
+        logger.info(f"Login attempt for: {normalized_email}")
+
+        if not normalized_email:
+            return ServiceResponse.error(ErrorCode.UNAUTHORIZED, "Invalid email or password")
         
         # 1. Fetch profile by email
         result = supabase.table("profiles")\
             .select("id, email, password_hash, role, name, is_active, is_profile_completed")\
-            .eq("email", email)\
+            .ilike("email", normalized_email)\
+            .limit(1)\
             .execute()
         
         if not result.data:
-            logger.warning(f"Login failed: Email not found: {email}")
+            logger.warning(f"Login failed: Email not found: {normalized_email}")
             return ServiceResponse.error(ErrorCode.UNAUTHORIZED, "Invalid email or password")
         
         profile = result.data[0]
@@ -51,7 +56,7 @@ def login(email: str, password: str) -> Dict[str, Any]:
         # 2. Verify password
         hashed_password = profile.get("password_hash")
         if not hashed_password or not verify_password(password, hashed_password):
-            logger.warning(f"Login failed: Incorrect password for: {email}")
+            logger.warning(f"Login failed: Incorrect password for: {normalized_email}")
             return ServiceResponse.error(ErrorCode.UNAUTHORIZED, "Invalid email or password")
             
         # 3. Create token
@@ -64,7 +69,7 @@ def login(email: str, password: str) -> Dict[str, Any]:
         
         token = create_access_token(token_data)
         
-        logger.info(f"Login successful: {email}")
+        logger.info(f"Login successful: {normalized_email}")
         return ServiceResponse.success({
             "access_token": token,
             "token_type": "bearer",
