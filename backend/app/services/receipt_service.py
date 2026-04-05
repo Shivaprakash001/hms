@@ -375,3 +375,111 @@ class ReceiptService:
             "status": obligation.get("status") or "PAID",
             "description": ReceiptService._build_description(obligation),
         }
+
+    @staticmethod
+    def _get_receipt_storage_path(payment_id: str, hostel_id: str, created_at: datetime) -> str:
+        """
+        Generate consistent storage path for receipt PDF.
+        Format: receipts/YYYY-MM/hostel_id/payment_id.pdf
+        """
+        try:
+            if isinstance(created_at, str):
+                dt = datetime.fromisoformat(str(created_at).replace("Z", "+00:00"))
+            else:
+                dt = created_at
+            month_str = dt.strftime("%Y-%m")
+        except Exception:
+            month_str = datetime.now().strftime("%Y-%m")
+        
+        return f"receipts/{month_str}/{hostel_id}/{payment_id}.pdf"
+
+    @staticmethod
+    async def cache_receipt_pdf(payment_id: str, pdf_bytes: bytes, hostel_id: str, created_at: str) -> str:
+        """
+        Cache generated receipt PDF to Supabase storage.
+        Returns the public URL or storage path.
+        """
+        try:
+            storage_path = ReceiptService._get_receipt_storage_path(payment_id, hostel_id, created_at)
+            
+            # Upload PDF to Supabase storage
+            res = supabase.storage.from_("receipts").upload(
+                path=storage_path,
+                file=pdf_bytes,
+                file_options={"content-type": "application/pdf"}
+            )
+            
+            # Get public URL
+            public_url = supabase.storage.from_("receipts").get_public_url(storage_path)
+            
+            # Update payment record with cached URL and timestamp
+            supabase.table("payments").update({
+                "receipt_pdf_url": public_url,
+                "receipt_pdf_generated_at": datetime.now(timezone.utc).isoformat()
+            }).eq("id", payment_id).execute()
+            
+            logger.info(f"Receipt PDF cached for payment {payment_id}: {public_url}")
+            return public_url
+            
+        except Exception as e:
+            logger.warning(f"Failed to cache receipt PDF for payment {payment_id}: {e}")
+            # Return None - caller should generate on-demand
+            return None
+
+    @staticmethod
+    async def get_or_generate_receipt_pdf(payment_id: str) -> tuple[BytesIO, bool]:
+        """
+        Get cached receipt PDF if available, otherwise generate new one.
+        Returns (BytesIO, is_cached) tuple.
+        """
+        try:
+            # Check if cached
+            res = supabase.table("payments").select(
+                "id, receipt_pdf_url, receipt_pdf_generated_at, hostel_id, created_at"
+            ).eq("id", payment_id).single().execute()
+            
+            if not res.data:
+                raise ValueError(f"Payment not found for id {payment_id}")
+            
+            payment = res.data
+            cached_url = payment.get("receipt_pdf_url")
+            
+            # If cached and recent (< 30 days), use cached version
+            if cached_url and payment.get("receipt_pdf_generated_at"):
+                try:
+                    gen_dt = datetime.fromisoformat(str(payment.get("receipt_pdf_generated_at")).replace("Z", "+00:00"))
+                    now = datetime.now(timezone.utc)
+                    age_days = (now - gen_dt).days
+                    
+                    if age_days < 30:
+                        # Download cached PDF
+                        storage_path = ReceiptService._get_receipt_storage_path(
+                            payment_id,
+                            payment.get("hostel_id"),
+                            payment.get("created_at")
+                        )
+                        
+                        cached_bytes = supabase.storage.from_("receipts").download(storage_path)
+                        return BytesIO(cached_bytes), True
+                except Exception as e:
+                    logger.warning(f"Failed to retrieve cached receipt for {payment_id}: {e}. Regenerating...")
+            
+            # Generate new PDF
+            pdf_buffer = await ReceiptService.generate_receipt_pdf(payment_id)
+            pdf_bytes = pdf_buffer.getvalue()
+            
+            # Try to cache it
+            await ReceiptService.cache_receipt_pdf(
+                payment_id,
+                pdf_bytes,
+                payment.get("hostel_id"),
+                payment.get("created_at")
+            )
+            
+            return BytesIO(pdf_bytes), False
+            
+        except Exception as e:
+            logger.exception(f"Error in get_or_generate_receipt_pdf for {payment_id}: {e}")
+            # Fallback: generate without caching
+            return await ReceiptService.generate_receipt_pdf(payment_id), False
+

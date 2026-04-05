@@ -161,7 +161,8 @@ async def download_receipt(
         # Audit logging
         logger.info(f"Receipt downloaded by user {user.user_id} (role: {user.role}) for payment {resolved_payment_id}, amount: ₹{payment.get('amount_paid', 0)}")
 
-        pdf_bytes = await ReceiptService.generate_receipt_pdf(str(resolved_payment_id))
+        # Use cached PDF if available, otherwise generate new one
+        pdf_bytes, is_cached = await ReceiptService.get_or_generate_receipt_pdf(str(resolved_payment_id))
         
         # Verify PDF was generated
         if not pdf_bytes or pdf_bytes.getbuffer().nbytes == 0:
