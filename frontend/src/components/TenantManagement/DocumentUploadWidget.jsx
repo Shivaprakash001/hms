@@ -98,6 +98,19 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true }) {
         }
     };
 
+    const handleReject = async (docId) => {
+        const reason = window.prompt('Reason for rejection (will be sent to tenant):', 'Document is unclear. Please upload a proper image.');
+        if (reason === null) return;
+        try {
+            await tenantDocumentService.reject(tenantId, docId, reason || undefined);
+            setSuccess('Document rejected. Tenant has been notified.');
+            setTimeout(() => setSuccess(''), 2500);
+            fetchDocuments();
+        } catch (err) {
+            setError('Failed to reject document');
+        }
+    };
+
     const currentDoc = documents.find(d => d.doc_type === activeDocType);
 
     return (
@@ -166,9 +179,14 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true }) {
                 <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200">
                     <div className="flex items-start justify-between">
                         <div className="flex items-center gap-4">
-                            <div className="w-14 h-14 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm">
+                            <button
+                                type="button"
+                                onClick={() => currentDoc.signed_url && window.open(currentDoc.signed_url, '_blank', 'noopener,noreferrer')}
+                                className="w-14 h-14 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm hover:border-indigo-300 transition-colors"
+                                title="View document"
+                            >
                                 <FileText size={24} className="text-indigo-500" />
-                            </div>
+                            </button>
                             <div>
                                 <p className="font-bold text-slate-700 text-sm">
                                     {DOC_TYPES.find(d => d.key === activeDocType)?.label}
@@ -182,6 +200,10 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true }) {
                                     {currentDoc.verified ? (
                                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-bold border border-emerald-100">
                                             <CheckCircle2 size={10} /> Verified
+                                        </span>
+                                    ) : currentDoc.rejected ? (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 text-[10px] font-bold border border-rose-100">
+                                            <AlertCircle size={10} /> Rejected
                                         </span>
                                     ) : (
                                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 text-[10px] font-bold border border-amber-100">
@@ -213,6 +235,15 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true }) {
                                     <Shield size={16} />
                                 </button>
                             )}
+                            {isOwner && !currentDoc.verified && (
+                                <button
+                                    onClick={() => handleReject(currentDoc.id)}
+                                    className="p-2 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors"
+                                    title="Reject Document"
+                                >
+                                    <X size={16} />
+                                </button>
+                            )}
                             {isOwner && (
                                 <button
                                     onClick={() => handleDelete(currentDoc.id)}
@@ -224,6 +255,12 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true }) {
                             )}
                         </div>
                     </div>
+
+                    {currentDoc.rejected && currentDoc.rejection_reason && (
+                        <div className="mt-3 rounded-lg bg-rose-50 border border-rose-100 px-3 py-2 text-xs text-rose-700">
+                            <span className="font-semibold">Rejection reason:</span> {currentDoc.rejection_reason}
+                        </div>
+                    )}
 
                     {/* Re-upload option */}
                     <div className="mt-4 pt-4 border-t border-slate-200">

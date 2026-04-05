@@ -10,6 +10,7 @@ from app.db import supabase
 from app.utils.responses import ServiceResponse, ErrorCode
 from app.utils.logger import get_logger
 from app.utils.file_handler import upload_file, delete_file, get_signed_url
+from app.services import notification_service
 
 logger = get_logger(__name__)
 
@@ -94,6 +95,8 @@ def upload_document(
                 "verified": False,  # Reset verification on re-upload
                 "verified_by": None,
                 "verified_at": None,
+                "rejected": False,
+                "rejection_reason": None,
                 "updated_at": "now()",
             }
             if document_number is not None:
@@ -120,6 +123,8 @@ def upload_document(
                 "document_number": document_number,
                 "document_image_url": file_path,
                 "verified": False,
+                "rejected": False,
+                "rejection_reason": None,
             }
 
             result = supabase.table("identification_documents") \
@@ -272,6 +277,8 @@ def verify_document(
         result = supabase.table("identification_documents") \
             .update({
                 "verified": True,
+                "rejected": False,
+                "rejection_reason": None,
                 "verified_by": verified_by,
                 "verified_at": "now()",
                 "updated_at": "now()"
@@ -303,3 +310,104 @@ def verify_document(
     except Exception as e:
         logger.exception(f"Error verifying document {doc_id}: {e}")
         return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to verify document", str(e))
+
+
+def reject_document(
+    doc_id: str,
+    rejected_by: str,
+    reason: Optional[str] = None,
+    requesting_user_role: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Mark a document as rejected and notify tenant to re-upload.
+
+    Authorization:
+    - Admin/Owner only
+    """
+    try:
+        if requesting_user_role not in ('admin', 'owner'):
+            return ServiceResponse.forbidden("Only admin/owner can reject documents")
+
+        logger.info(f"Rejecting document {doc_id} by {rejected_by}")
+
+        # Get document + tenant context
+        doc_res = supabase.table("identification_documents") \
+            .select("id, tenant_id, doc_type") \
+            .eq("id", doc_id) \
+            .execute()
+
+        if not doc_res.data:
+            return ServiceResponse.not_found("Document")
+
+        doc = doc_res.data[0]
+        tenant_id = doc.get("tenant_id")
+
+        update_payload = {
+            "verified": False,
+            "verified_by": None,
+            "verified_at": None,
+            "rejected": True,
+            "rejection_reason": reason,
+            "updated_at": "now()"
+        }
+
+        try:
+            result = supabase.table("identification_documents") \
+                .update(update_payload) \
+                .eq("id", doc_id) \
+                .execute()
+        except Exception as reject_err:
+            # Backward-compat: if rejected columns do not exist yet
+            err_text = str(reject_err).lower()
+            if ("rejected" in err_text and "column" in err_text) or ("rejection_reason" in err_text and "column" in err_text):
+                fallback_payload = {
+                    "verified": False,
+                    "verified_by": None,
+                    "verified_at": None,
+                    "updated_at": "now()"
+                }
+                result = supabase.table("identification_documents") \
+                    .update(fallback_payload) \
+                    .eq("id", doc_id) \
+                    .execute()
+            else:
+                raise
+
+        if not result.data:
+            return ServiceResponse.not_found("Document")
+
+        # Since at least one document is rejected/unverified, mark tenant docs overall as not verified
+        if tenant_id:
+            try:
+                supabase.table("students") \
+                    .update({"document_verified": False}) \
+                    .eq("id", tenant_id) \
+                    .execute()
+            except Exception as dv_err:
+                logger.warning(f"Failed to update student.document_verified for tenant {tenant_id}: {dv_err}")
+
+            # Notify tenant profile
+            try:
+                s_res = supabase.table("students") \
+                    .select("profile_id") \
+                    .eq("id", tenant_id) \
+                    .limit(1) \
+                    .execute()
+                if s_res.data:
+                    profile_id = s_res.data[0].get("profile_id")
+                    if profile_id:
+                        doc_label = str(doc.get("doc_type") or "Document").replace("_", " ").title()
+                        reason_text = (reason or "Please upload a clearer/valid document.").strip()
+                        notification_service.create_notification(
+                            user_id=str(profile_id),
+                            title=f"{doc_label} Rejected",
+                            message=f"Your {doc_label} was rejected. Reason: {reason_text}. Please re-upload.",
+                            n_type="document"
+                        )
+            except Exception as notify_err:
+                logger.warning(f"Failed to create rejection notification for tenant {tenant_id}: {notify_err}")
+
+        return ServiceResponse.success(result.data[0], "Document rejected successfully")
+    except Exception as e:
+        logger.exception(f"Error rejecting document {doc_id}: {e}")
+        return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to reject document", str(e))

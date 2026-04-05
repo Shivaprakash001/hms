@@ -424,5 +424,9 @@ export const tenantDocumentService = {
     verify: async (tenantId, docId) => {
         const response = await api.patch(`/tenants/${tenantId}/documents/${docId}/verify`);
         return response.data;
+    },
+    reject: async (tenantId, docId, reason) => {
+        const response = await api.patch(`/tenants/${tenantId}/documents/${docId}/reject`, { reason });
+        return response.data;
     }
 };

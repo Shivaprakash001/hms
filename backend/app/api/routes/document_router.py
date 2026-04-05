@@ -7,7 +7,7 @@ of identification documents (Aadhar, Driving License, Passport).
 
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, status
 from typing import Optional, List
-from app.schemas.document_schema import DocumentResponse, DocumentType
+from app.schemas.document_schema import DocumentResponse, DocumentType, DocumentRejectRequest
 from app.services import document_service
 from app.utils.auth import get_current_user, UserContext, require_admin_or_owner
 from app.utils.responses import ErrorCode
@@ -167,6 +167,27 @@ def verify_document(
     result = document_service.verify_document(
         doc_id=doc_id,
         verified_by=user.user_id,
+        requesting_user_role=user.role
+    )
+    return _handle_service_response(result)
+
+
+@router.patch(
+    "/{tenant_id}/documents/{doc_id}/reject",
+    summary="Reject a document",
+    description="Mark a document as rejected and notify tenant to re-upload (Admin/Owner only)",
+    dependencies=[Depends(require_admin_or_owner)]
+)
+def reject_document(
+    tenant_id: str,
+    doc_id: str,
+    data: Optional[DocumentRejectRequest] = None,
+    user: UserContext = Depends(get_current_user)
+):
+    result = document_service.reject_document(
+        doc_id=doc_id,
+        rejected_by=user.user_id,
+        reason=(data.reason if data else None),
         requesting_user_role=user.role
     )
     return _handle_service_response(result)

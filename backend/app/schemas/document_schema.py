@@ -35,6 +35,8 @@ class DocumentResponse(BaseModel):
     document_number: Optional[str] = None
     document_image_url: Optional[str] = None
     verified: bool = False
+    rejected: Optional[bool] = False
+    rejection_reason: Optional[str] = None
     verified_by: Optional[UUID] = None
     verified_at: Optional[datetime] = None
     created_at: datetime
@@ -57,3 +59,7 @@ class DocumentUpdate(BaseModel):
             if len(v) < 4:
                 raise ValueError('Document number must be at least 4 characters')
         return v
+
+
+class DocumentRejectRequest(BaseModel):
+    reason: Optional[str] = Field(None, max_length=300, description="Reason for rejection shown to tenant")
