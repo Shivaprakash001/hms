@@ -527,3 +527,68 @@ def reactivate_student(
     except Exception as e:
         logger.exception(f"Error reactivating student {student_id}: {e}")
         return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to reactivate student", str(e))
+
+
+def update_student_self_profile(
+    profile_id: str,
+    data: dict,
+    updated_by: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Update current student's own profile (profiles + students extended fields).
+    """
+    try:
+        # Resolve student by profile
+        student_res = supabase.table("students")\
+            .select("id, profile_id")\
+            .eq("profile_id", profile_id)\
+            .execute()
+
+        if not student_res.data:
+            return ServiceResponse.not_found("Student")
+
+        student_id = student_res.data[0].get("id")
+
+        profile_fields = {
+            "name", "email", "phone", "address", "emergency_contact"
+        }
+        student_fields = {
+            "photo_url", "phone_1", "phone_2", "phone_3", "personal_email",
+            "college_name", "branch", "office_name", "office_location", "job_role",
+            "permanent_address", "temporary_address"
+        }
+
+        profile_update = {k: v for k, v in data.items() if k in profile_fields and v is not None}
+        student_update = {k: v for k, v in data.items() if k in student_fields and v is not None}
+
+        if not profile_update and not student_update:
+            return ServiceResponse.validation_error("No valid fields to update")
+
+        # Update profiles table
+        if profile_update:
+            p_res = supabase.table("profiles")\
+                .update(profile_update)\
+                .eq("id", profile_id)\
+                .eq("is_active", True)\
+                .execute()
+            if not p_res.data:
+                return ServiceResponse.not_found("Profile")
+
+        # Update students table
+        if student_update:
+            s_res = supabase.table("students")\
+                .update(student_update)\
+                .eq("id", student_id)\
+                .execute()
+            if not s_res.data:
+                return ServiceResponse.not_found("Student")
+
+        # Return fresh merged record
+        return get_student_by_profile(
+            profile_id=profile_id,
+            requesting_user_id=profile_id,
+            requesting_user_role='student'
+        )
+    except Exception as e:
+        logger.exception(f"Error updating self profile for {profile_id}: {e}")
+        return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to update profile", str(e))

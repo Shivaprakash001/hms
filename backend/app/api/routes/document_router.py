@@ -74,7 +74,9 @@ async def upload_document(
         file_bytes=file_bytes,
         filename=file.filename or "document",
         content_type=file.content_type,
-        uploaded_by=user.user_id
+        uploaded_by=user.user_id,
+        requesting_user_id=user.user_id,
+        requesting_user_role=user.role
     )
     return _handle_service_response(result, status.HTTP_201_CREATED)
 

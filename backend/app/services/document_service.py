@@ -21,7 +21,9 @@ def upload_document(
     file_bytes: bytes,
     filename: str,
     content_type: Optional[str] = None,
-    uploaded_by: Optional[str] = None
+    uploaded_by: Optional[str] = None,
+    requesting_user_id: Optional[str] = None,
+    requesting_user_role: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Upload an identification document for a tenant.
@@ -52,6 +54,12 @@ def upload_document(
 
         if not tenant_result.data:
             return ServiceResponse.not_found("Student/Tenant")
+
+        # Authorization for students: can upload only for own tenant record
+        if requesting_user_role == 'student':
+            tenant_profile_id = str(tenant_result.data[0].get('profile_id'))
+            if tenant_profile_id != str(requesting_user_id):
+                return ServiceResponse.forbidden("You can only upload your own documents")
 
         # Check for existing document of same type
         existing = supabase.table("identification_documents") \

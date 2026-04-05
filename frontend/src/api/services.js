@@ -53,6 +53,14 @@ export const studentService = {
         const response = await api.get(`/students/by-profile/${profileId}`);
         return response.data;
     },
+    getMyProfile: async () => {
+        const response = await api.get('/students/me/profile');
+        return response.data;
+    },
+    updateMyProfile: async (data) => {
+        const response = await api.patch('/students/me/profile', data);
+        return response.data;
+    },
     create: async (data) => {
         const response = await api.post('/students/', data);
         return response.data;

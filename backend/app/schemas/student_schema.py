@@ -96,6 +96,35 @@ class StudentUpdate(BaseModel):
         return _validate_phone(v)
 
 
+class StudentSelfProfileUpdate(BaseModel):
+    """Schema for student self-service profile updates from student portal."""
+    # Profile fields
+    name: Optional[str] = Field(None, min_length=2, max_length=100)
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = Field(None, max_length=15)
+    address: Optional[str] = Field(None, max_length=500)
+    emergency_contact: Optional[str] = Field(None, max_length=15)
+
+    # Extended student fields
+    photo_url: Optional[str] = Field(None, description="Profile photo URL")
+    phone_1: Optional[str] = Field(None, max_length=15, description="Tenant primary phone")
+    phone_2: Optional[str] = Field(None, max_length=15, description="Parent/guardian phone")
+    phone_3: Optional[str] = Field(None, max_length=15, description="Optional additional phone")
+    personal_email: Optional[EmailStr] = Field(None, description="Personal email address")
+    college_name: Optional[str] = Field(None, max_length=200, description="College/university name")
+    branch: Optional[str] = Field(None, max_length=100, description="Branch/department")
+    office_name: Optional[str] = Field(None, max_length=200, description="Office/company name")
+    office_location: Optional[str] = Field(None, max_length=200, description="Office location")
+    job_role: Optional[str] = Field(None, max_length=100, description="Job title/role")
+    permanent_address: Optional[str] = Field(None, max_length=1000, description="Permanent address")
+    temporary_address: Optional[str] = Field(None, max_length=1000, description="Temporary/current address")
+
+    @field_validator('phone', 'emergency_contact', 'phone_1', 'phone_2', 'phone_3')
+    @classmethod
+    def validate_phones(cls, v):
+        return _validate_phone(v)
+
+
 class StudentResponse(BaseModel):
     """Complete student response with profile info and extended fields"""
     id: UUID

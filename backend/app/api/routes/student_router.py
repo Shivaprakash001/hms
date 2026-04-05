@@ -3,7 +3,7 @@ from typing import Optional, List
 from datetime import date
 from app.schemas.student_schema import (
     StudentCreate, StudentUpdate, StudentResponse,
-    StudentListResponse, StudentStatus, StudentReactivate
+    StudentListResponse, StudentStatus, StudentReactivate, StudentSelfProfileUpdate
 )
 from app.schemas.invitation_schema import TenantInviteRequest, TenantActivateRequest, TenantResendRequest, TenantInviteResponse
 from app.services import student_service, auth_service
@@ -215,6 +215,53 @@ def resend_invitation(
     Resend a pending invitation to a tenant.
     """
     result = InvitationService.resend_invitation(data.email, background_tasks)
+    return _handle_service_response(result)
+
+
+@router.get(
+    "/me/profile",
+    response_model=StudentResponse,
+    summary="Get current student profile",
+    description="Retrieve current student's full tenant profile with extended fields"
+)
+def read_my_profile(
+    user: UserContext = Depends(get_current_user)
+):
+    if not user.is_student():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only students can access this endpoint."
+        )
+
+    result = student_service.get_student_by_profile(
+        str(user.user_id),
+        requesting_user_id=user.user_id,
+        requesting_user_role=user.role
+    )
+    return _handle_service_response(result)
+
+
+@router.patch(
+    "/me/profile",
+    response_model=StudentResponse,
+    summary="Update current student profile",
+    description="Update current student's own profile and extended tenant fields"
+)
+def update_my_profile(
+    data: StudentSelfProfileUpdate,
+    user: UserContext = Depends(get_current_user)
+):
+    if not user.is_student():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only students can access this endpoint."
+        )
+
+    result = student_service.update_student_self_profile(
+        profile_id=str(user.user_id),
+        data=data.model_dump(exclude_unset=True),
+        updated_by=user.user_id
+    )
     return _handle_service_response(result)
 
 

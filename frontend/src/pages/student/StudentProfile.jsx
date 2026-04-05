@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Mail, Phone, MapPin, Camera, Save, Edit2, Shield, Key, Building2, Calendar, CheckCircle2, GraduationCap, Download, AlertTriangle, PhoneCall } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Camera, Save, Edit2, Key, Building2, Calendar, CheckCircle2, GraduationCap, Download, PhoneCall, Briefcase, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../../context/AuthContext';
-import { profileService, studentService } from '../../api/services';
+import { studentService } from '../../api/services';
+import DocumentUploadWidget from '../../components/TenantManagement/DocumentUploadWidget';
 
 const StudentProfile = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
-    const [profile, setProfile] = useState(null);
     const [studentInfo, setStudentInfo] = useState(null);
     const [isEditing, setIsEditing] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -21,26 +21,53 @@ const StudentProfile = () => {
         name: '',
         email: '',
         phone: '',
-        dob: '',
-        address: ''
+        emergency_contact: '',
+        address: '',
+        personal_email: '',
+        phone_1: '',
+        phone_2: '',
+        phone_3: '',
+        college_name: '',
+        branch: '',
+        office_name: '',
+        office_location: '',
+        job_role: '',
+        permanent_address: '',
+        temporary_address: '',
+        photo_url: ''
     });
 
     useEffect(() => {
         const fetchData = async () => {
             if (!user?.id) return;
             try {
-                const [profData, studData] = await Promise.all([
-                    profileService.get(user.id),
-                    studentService.getByProfileId(user.id)
-                ]);
-                setProfile(profData);
-                setStudentInfo(studData);
+                let meData = null;
+                try {
+                    meData = await studentService.getMyProfile();
+                } catch {
+                    meData = await studentService.getByProfileId(user.id);
+                }
+
+                const prof = meData?.profile || {};
+                setStudentInfo(meData);
                 setFormData({
-                    name: profData.name || '',
-                    email: profData.email || '',
-                    phone: profData.phone || '',
-                    dob: profData.dob || '',
-                    address: profData.address || ''
+                    name: prof.name || '',
+                    email: prof.email || '',
+                    phone: prof.phone || '',
+                    emergency_contact: prof.emergency_contact || '',
+                    address: prof.address || '',
+                    personal_email: meData.personal_email || '',
+                    phone_1: meData.phone_1 || '',
+                    phone_2: meData.phone_2 || '',
+                    phone_3: meData.phone_3 || '',
+                    college_name: meData.college_name || '',
+                    branch: meData.branch || '',
+                    office_name: meData.office_name || '',
+                    office_location: meData.office_location || '',
+                    job_role: meData.job_role || '',
+                    permanent_address: meData.permanent_address || '',
+                    temporary_address: meData.temporary_address || '',
+                    photo_url: meData.photo_url || ''
                 });
             } catch (error) {
                 console.error("Failed to fetch profile data:", error);
@@ -54,8 +81,48 @@ const StudentProfile = () => {
     const handleSave = async () => {
         setSaveLoading(true);
         try {
-            const updated = await profileService.update(user.id, formData);
-            setProfile(updated);
+            const payload = {
+                name: formData.name,
+                email: formData.email,
+                phone: formData.phone,
+                emergency_contact: formData.emergency_contact,
+                address: formData.address,
+                personal_email: formData.personal_email,
+                phone_1: formData.phone_1,
+                phone_2: formData.phone_2,
+                phone_3: formData.phone_3,
+                college_name: formData.college_name,
+                branch: formData.branch,
+                office_name: formData.office_name,
+                office_location: formData.office_location,
+                job_role: formData.job_role,
+                permanent_address: formData.permanent_address,
+                temporary_address: formData.temporary_address,
+                photo_url: formData.photo_url
+            };
+            const updated = await studentService.updateMyProfile(payload);
+            const prof = updated?.profile || {};
+            setStudentInfo(updated);
+            setFormData((prev) => ({
+                ...prev,
+                name: prof.name || prev.name,
+                email: prof.email || prev.email,
+                phone: prof.phone || prev.phone,
+                emergency_contact: prof.emergency_contact || prev.emergency_contact,
+                address: prof.address || prev.address,
+                personal_email: updated.personal_email || prev.personal_email,
+                phone_1: updated.phone_1 || prev.phone_1,
+                phone_2: updated.phone_2 || prev.phone_2,
+                phone_3: updated.phone_3 || prev.phone_3,
+                college_name: updated.college_name || prev.college_name,
+                branch: updated.branch || prev.branch,
+                office_name: updated.office_name || prev.office_name,
+                office_location: updated.office_location || prev.office_location,
+                job_role: updated.job_role || prev.job_role,
+                permanent_address: updated.permanent_address || prev.permanent_address,
+                temporary_address: updated.temporary_address || prev.temporary_address,
+                photo_url: updated.photo_url || prev.photo_url,
+            }));
             setIsEditing(false);
             setShowSuccess(true);
             setTimeout(() => setShowSuccess(false), 3000);
@@ -70,6 +137,10 @@ const StudentProfile = () => {
 
 
     if (loading) return <div className="flex items-center justify-center min-h-[400px]">Loading profile...</div>;
+
+    const currentRoom = studentInfo?.current_room || null;
+    const roomNo = currentRoom?.room_no || user?.room_no || 'Unassigned';
+    const floorNo = currentRoom?.floor_id;
 
     return (
         <div className="max-w-6xl mx-auto pb-20 animate-fade-in-up">
@@ -99,7 +170,7 @@ const StudentProfile = () => {
                         <div className="relative group shrink-0">
                             <div className="w-24 h-24 rounded-full border-4 border-white shadow-lg overflow-hidden bg-slate-100">
                                 <img
-                                    src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.name || 'User'}`}
+                                    src={formData.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.name || 'User'}`}
                                     alt="Profile"
                                     className="w-full h-full object-cover"
                                 />
@@ -120,11 +191,11 @@ const StudentProfile = () => {
                                     Student
                                 </span>
                                 <span className="px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-600 text-xs font-bold border border-indigo-100">
-                                    Room {user?.roomId || 'N/A'}
+                                    Room {roomNo}
                                 </span>
                                 <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-600 text-xs font-bold border border-emerald-100 flex items-center gap-1">
                                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                    Active Resident
+                                    {studentInfo?.status === 'ACTIVE' ? 'Active Resident' : (studentInfo?.status || 'Resident')}
                                 </span>
                             </div>
                         </div>
@@ -177,14 +248,6 @@ const StudentProfile = () => {
                                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                             />
                             <InfoField
-                                label="Date of Birth"
-                                value={formData.dob}
-                                icon={Calendar}
-                                isEditable={isEditing}
-                                type="date"
-                                onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
-                            />
-                            <InfoField
                                 label="Email Address"
                                 value={formData.email}
                                 icon={Mail}
@@ -200,6 +263,22 @@ const StudentProfile = () => {
                                 type="tel"
                                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                             />
+                            <InfoField
+                                label="Guardian / Emergency Phone"
+                                value={formData.emergency_contact || formData.phone_2}
+                                icon={Phone}
+                                isEditable={isEditing}
+                                type="tel"
+                                onChange={(e) => setFormData({ ...formData, emergency_contact: e.target.value, phone_2: e.target.value })}
+                            />
+                            <InfoField
+                                label="Personal Email"
+                                value={formData.personal_email}
+                                icon={Mail}
+                                isEditable={isEditing}
+                                type="email"
+                                onChange={(e) => setFormData({ ...formData, personal_email: e.target.value })}
+                            />
                             <div className="md:col-span-2">
                                 <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide ml-1 mb-1.5 block">Address</label>
                                 {isEditing ? (
@@ -208,8 +287,8 @@ const StudentProfile = () => {
                                             <MapPin size={16} />
                                         </div>
                                         <textarea
-                                            value={formData.address}
-                                            onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                                            value={formData.temporary_address || formData.address}
+                                            onChange={(e) => setFormData({ ...formData, temporary_address: e.target.value, address: e.target.value })}
                                             rows={2}
                                             className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all text-sm font-medium text-slate-900 resize-none"
                                         />
@@ -219,8 +298,68 @@ const StudentProfile = () => {
                                         <div className="text-slate-400 mt-0.5">
                                             <MapPin size={18} />
                                         </div>
-                                        <span className="font-medium">{formData.address}</span>
+                                        <span className="font-medium">{formData.temporary_address || formData.address || 'N/A'}</span>
                                     </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-2xl p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100">
+                        <div className="flex items-center gap-3 mb-6 border-b border-slate-50 pb-4">
+                            <div className="p-2 rounded-lg bg-violet-50 text-violet-600">
+                                <GraduationCap size={18} />
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-800">Education / Work</h3>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+                            <InfoField
+                                label="College"
+                                value={formData.college_name}
+                                icon={GraduationCap}
+                                isEditable={isEditing}
+                                onChange={(e) => setFormData({ ...formData, college_name: e.target.value })}
+                            />
+                            <InfoField
+                                label="Branch"
+                                value={formData.branch}
+                                icon={GraduationCap}
+                                isEditable={isEditing}
+                                onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
+                            />
+                            <InfoField
+                                label="Company"
+                                value={formData.office_name}
+                                icon={Building2}
+                                isEditable={isEditing}
+                                onChange={(e) => setFormData({ ...formData, office_name: e.target.value })}
+                            />
+                            <InfoField
+                                label="Job Role"
+                                value={formData.job_role}
+                                icon={Briefcase}
+                                isEditable={isEditing}
+                                onChange={(e) => setFormData({ ...formData, job_role: e.target.value })}
+                            />
+                            <InfoField
+                                label="Office Location"
+                                value={formData.office_location}
+                                icon={MapPin}
+                                isEditable={isEditing}
+                                onChange={(e) => setFormData({ ...formData, office_location: e.target.value })}
+                            />
+                            <div className="md:col-span-2">
+                                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide ml-1 mb-1.5 block">Permanent Address</label>
+                                {isEditing ? (
+                                    <textarea
+                                        value={formData.permanent_address}
+                                        onChange={(e) => setFormData({ ...formData, permanent_address: e.target.value })}
+                                        rows={2}
+                                        className="w-full px-4 py-2 bg-slate-50 border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all text-sm font-medium text-slate-900 resize-none"
+                                    />
+                                ) : (
+                                    <p className="text-sm text-slate-700 p-2">{formData.permanent_address || 'N/A'}</p>
                                 )}
                             </div>
                         </div>
@@ -243,11 +382,11 @@ const StudentProfile = () => {
                         <div className="space-y-4">
                             <div className="flex justify-between items-center bg-slate-50/50 p-3 rounded-lg border border-slate-100">
                                 <span className="text-slate-500 text-sm font-medium">Room No.</span>
-                                <span className="text-lg font-bold text-slate-800">{studentInfo?.room_no || 'Unassigned'}</span>
+                                <span className="text-lg font-bold text-slate-800">{roomNo}</span>
                             </div>
                             <div className="flex justify-between items-center bg-slate-50/50 p-3 rounded-lg border border-slate-100">
                                 <span className="text-slate-500 text-sm font-medium">Floor</span>
-                                <span className="text-slate-800 font-semibold">{studentInfo?.floor_id ? `Floor ${studentInfo.floor_id}` : 'N/A'}</span>
+                                <span className="text-slate-800 font-semibold">{floorNo ? `Floor ${floorNo}` : 'N/A'}</span>
                             </div>
                             <div className="flex justify-between items-center bg-slate-50/50 p-3 rounded-lg border border-slate-100">
                                 <span className="text-slate-500 text-sm font-medium">Joined</span>
@@ -290,6 +429,18 @@ const StudentProfile = () => {
                                 <div className="text-slate-300 group-hover:text-indigo-400">→</div>
                             </button>
                         </div>
+                    </div>
+
+                    <div className="bg-white rounded-2xl p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100">
+                        <div className="flex items-center gap-2 mb-4">
+                            <FileText size={16} className="text-indigo-500" />
+                            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide">Documents</h3>
+                        </div>
+                        {studentInfo?.id ? (
+                            <DocumentUploadWidget tenantId={studentInfo.id} isOwner={false} />
+                        ) : (
+                            <p className="text-sm text-slate-400">No tenant record found.</p>
+                        )}
                     </div>
 
                 </div>
