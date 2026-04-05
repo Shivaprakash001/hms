@@ -58,7 +58,7 @@ def get_me(user: UserContext = Depends(get_current_user)):
         if student_id:
             # Single join across students --> profiles and students --> room_allocations --> rooms
             res = supabase.table("students").select(
-                "monthly_rent, profiles:profile_id(due_day), room_allocations(room_id, end_date, rooms(room_no, capacity))"
+                "monthly_rent, profiles:profile_id(due_day, is_profile_completed), room_allocations(room_id, end_date, rooms(room_no, capacity))"
             ).eq("id", student_id).execute()
             
             if res.data and len(res.data) > 0:
@@ -69,6 +69,7 @@ def get_me(user: UserContext = Depends(get_current_user)):
                 if profile_rel:
                     p_dict = profile_rel[0] if isinstance(profile_rel, list) else profile_rel
                     extra["due_day"] = p_dict.get("due_day")
+                    extra["is_profile_completed"] = p_dict.get("is_profile_completed", False)
                     
                 allocations = student_data.get("room_allocations", [])
                 if isinstance(allocations, list):
@@ -84,9 +85,13 @@ def get_me(user: UserContext = Depends(get_current_user)):
                             extra["room_capacity"] = rm_dict.get("capacity")
         else:
             # Fallback if somehow there's still no student ID (shouldn't happen on pure students)
-            prof_res = supabase.table("profiles").select("due_day").eq("id", user.user_id).execute()
+            prof_res = supabase.table("profiles").select("due_day, is_profile_completed").eq("id", user.user_id).execute()
             if prof_res.data:
                 extra["due_day"] = prof_res.data[0].get("due_day")
+                extra["is_profile_completed"] = prof_res.data[0].get("is_profile_completed", False)
+    else:
+        # Non-students don't need profile completion flow
+        extra["is_profile_completed"] = True
         
     return {
         "user_id": str(user.user_id),

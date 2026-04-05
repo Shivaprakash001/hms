@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query, status, Depends
+from fastapi import APIRouter, HTTPException, Query, status, Depends, Form, File, UploadFile
 from typing import List, Optional
 from app.schemas.profile_schema import (
     ProfileCreate, ProfileUpdate, ProfileAdminUpdate,
@@ -259,4 +259,50 @@ def read_unassigned_students(
     """Get all student profiles that are not currently assigned to any room."""
     owner_id = user.user_id if user.role in ("admin", "owner") else None
     result = profile_service.get_unassigned_student_profiles(owner_id=owner_id)
+    return _handle_service_response(result)
+
+
+@router.post(
+    "/complete",
+    response_model=ProfileResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Complete a student profile",
+    description="Complete a student profile after login"
+)
+async def complete_student_profile(
+    name: str = Form(..., description="Full Name"),
+    college_roll_number: str = Form(..., description="College Roll Number"),
+    address: str = Form(..., description="Address"),
+    parent_phone: str = Form(..., description="Parent Phone"),
+    section: Optional[str] = Form(None, description="Section"),
+    branch: Optional[str] = Form(None, description="Branch"),
+    year_of_study: Optional[str] = Form(None, description="Year of Study"),
+    aadhaar_file: UploadFile = File(..., description="Aadhaar Card Image"),
+    user: UserContext = Depends(get_current_user)
+):
+    """
+    Complete student profile with details and Aadhaar upload.
+    This uses form data to allow file upload alongside profile fields.
+    """
+    if not user.is_student():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only students need to complete their profile."
+        )
+
+    file_bytes = await aadhaar_file.read()
+    
+    result = profile_service.complete_profile(
+        profile_id=str(user.user_id),
+        name=name,
+        college_roll_number=college_roll_number,
+        address=address,
+        parent_phone=parent_phone,
+        aadhaar_file_bytes=file_bytes,
+        aadhaar_filename=aadhaar_file.filename,
+        aadhaar_content_type=aadhaar_file.content_type,
+        section=section,
+        branch=branch,
+        year_of_study=year_of_study
+    )
     return _handle_service_response(result)

@@ -22,7 +22,7 @@ def login(email: str, password: str) -> Dict[str, Any]:
         
         # 1. Fetch profile by email
         result = supabase.table("profiles")\
-            .select("id, email, password_hash, role, name, is_active")\
+            .select("id, email, password_hash, role, name, is_active, is_profile_completed")\
             .eq("email", email)\
             .execute()
         
@@ -71,7 +71,8 @@ def login(email: str, password: str) -> Dict[str, Any]:
             "role": profile["role"],
             "name": profile["name"],
             "user_id": str(profile["id"]),
-            "student_id": str(profile.get("student_id")) if profile.get("student_id") else None
+            "student_id": str(profile.get("student_id")) if profile.get("student_id") else None,
+            "is_profile_completed": profile.get("is_profile_completed", False)
         })
         
     except Exception as e:

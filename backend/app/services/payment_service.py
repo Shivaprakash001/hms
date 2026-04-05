@@ -237,7 +237,7 @@ def generate_monthly_rent(rent_month: date, user_id: Optional[str] = None) -> Di
                 
                 # If amount is different, update it
                 # Convert both to float/decimal for comparison
-                current_amount = Decimal(str(existing["amount"]))
+                current_amount = Decimal(str(existing.get("amount") or 0))
                 target_amount = total_amount.quantize(Decimal('0.01'))
                 
                 if current_amount != target_amount:
@@ -376,7 +376,7 @@ def record_payment(
         if obligation["status"] == "WAIVED":
             return ServiceResponse.error(ErrorCode.INVALID_INPUT, "Cannot pay for a waived obligation.")
             
-        total_amount = Decimal(str(obligation["amount"]))
+        total_amount = Decimal(str(obligation.get("amount") or 0))
         
         # 2. Fetch existing payments for this obligation
         current_step = "fetch_existing_payments"
@@ -385,7 +385,7 @@ def record_payment(
             .eq("obligation_id", obligation_id)\
             .execute()
         
-        existing_paid = sum(Decimal(str(p["amount_paid"])) for p in (p_res.data or []))
+        existing_paid = sum(Decimal(str(p.get("amount_paid") or 0)) for p in (p_res.data or []))
         remaining_balance = total_amount - existing_paid
         
         if remaining_balance <= 0 and amount_paid > 0:
@@ -634,8 +634,8 @@ def get_student_payment_history(student_id: str) -> Dict[str, Any]:
             "operation": "get_student_history"
         })
 
-        total_due = sum(Decimal(str(o["amount"])) for o in obligations if o["status"] != "WAIVED")
-        total_paid = sum(Decimal(str(p["amount_paid"])) for p in payments)
+        total_due = sum(Decimal(str(o.get("amount") or 0)) for o in obligations if o["status"] != "WAIVED")
+        total_paid = sum(Decimal(str(p.get("amount_paid") or 0)) for p in payments)
         
         return ServiceResponse.success({
             "student_id": student_id,
@@ -713,7 +713,7 @@ def get_dues_report(user_id: str, rent_month: Optional[date] = None, status: Opt
             d["student_phone"] = profile.get("phone")
             d["room_no"] = room.get("room_no", "N/A")
             d["obligation_id"] = d["id"]
-            d["outstanding"] = float(Decimal(str(d["amount"])) - Decimal(0)) # Simplified
+            d["outstanding"] = float(Decimal(str(d.get("amount") or 0)) - Decimal(0)) # Simplified
             
             dues.append(d)
             

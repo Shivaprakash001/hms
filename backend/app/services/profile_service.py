@@ -3,6 +3,7 @@ from typing import Optional, Dict, Any
 from postgrest.exceptions import APIError
 from app.utils.responses import ServiceResponse, ErrorCode
 from app.utils.logger import get_logger
+from app.utils.file_handler import upload_file, get_signed_url
 
 logger = get_logger(__name__)
 
@@ -331,4 +332,87 @@ def get_unassigned_student_profiles(owner_id: Optional[str] = None) -> Dict[str,
     except Exception as e:
         logger.exception(f"Error fetching unassigned profiles: {e}")
         return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to fetch unassigned profiles", str(e))
+
+
+def complete_profile(
+    profile_id: str,
+    name: str,
+    college_roll_number: str,
+    address: str,
+    parent_phone: str,
+    aadhaar_file_bytes: bytes,
+    aadhaar_filename: str,
+    aadhaar_content_type: str,
+    section: Optional[str] = None,
+    branch: Optional[str] = None,
+    year_of_study: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Complete a student profile with educational details and Aadhaar document.
+    """
+    try:
+        logger.info(f"Completing profile for {profile_id}")
+        
+        # 1. Check if roll number already exists (must be unique)
+        roll_check = supabase.table("profiles")\
+            .select("id")\
+            .eq("college_roll_number", college_roll_number)\
+            .neq("id", profile_id)\
+            .execute()
+            
+        if roll_check.data:
+            return ServiceResponse.already_exists("Student", f"College Roll Number '{college_roll_number}' is already registered")
+
+        # 2. Upload Aadhaar file
+        # Find tenant_id (student_id) if it exists, otherwise use profile_id for folder
+        student_check = supabase.table("students").select("id").eq("profile_id", profile_id).execute()
+        folder_id = str(student_check.data[0]["id"]) if student_check.data else profile_id
+        
+        upload_result = upload_file(
+            file_bytes=aadhaar_file_bytes,
+            tenant_id=folder_id,
+            doc_type="AADHAAR",
+            filename=aadhaar_filename,
+            content_type=aadhaar_content_type
+        )
+        
+        if not upload_result.get("success"):
+            return ServiceResponse.error(
+                ErrorCode.VALIDATION_ERROR,
+                "Aadhaar upload failed",
+                upload_result.get("error", "Unknown upload error")
+            )
+            
+        file_path = upload_result.get("file_path")
+
+        # 3. Update profile
+        update_data = {
+            "name": name,
+            "college_roll_number": college_roll_number,
+            "address": address,
+            "parent_phone": parent_phone,
+            "section": section,
+            "branch": branch,
+            "year_of_study": year_of_study,
+            "aadhaar_image_url": file_path,
+            "is_profile_completed": True,
+            "updated_at": "now()"
+        }
+
+        result = supabase.table("profiles")\
+            .update(update_data)\
+            .eq("id", profile_id)\
+            .execute()
+            
+        if not result.data:
+            return ServiceResponse.not_found("Profile")
+            
+        return ServiceResponse.success(result.data[0], "Profile completed successfully")
+
+    except APIError as e:
+        logger.error(f"Database error completing profile: {e}")
+        return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Database conflict", str(e))
+    except Exception as e:
+        logger.exception(f"Unexpected error completing profile: {e}")
+        return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "An unexpected error occurred", str(e))
 

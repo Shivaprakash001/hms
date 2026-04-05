@@ -10,6 +10,17 @@ export const AuthProvider = ({ children }) => {
     const location = useLocation();
     const navigate = useNavigate();
 
+    const checkProfileCompletion = (userObj, currentPath) => {
+        // Exempt public paths and complete-profile
+        const pubPaths = ['/login', '/register', '/', '/complete-profile'];
+        if (pubPaths.includes(currentPath)) return;
+
+        // If it's a student and profile is not completed, redirect to complete-profile
+        if (userObj.role?.toLowerCase() === 'student' && !userObj.is_profile_completed) {
+            navigate('/complete-profile', { replace: true });
+        }
+    };
+
     useEffect(() => {
         // If user is already logged in, redirect unless on public page
         const publicPaths = ['/login', '/register', '/'];
@@ -24,6 +35,9 @@ export const AuthProvider = ({ children }) => {
                     navigate('/student/dashboard', { replace: true });
                 }
             }
+        } else if (user) {
+            // If logged in and NOT on a public page, check completion
+            checkProfileCompletion(user, location.pathname);
         }
     }, [user, location.pathname, navigate]);
 
@@ -47,6 +61,7 @@ export const AuthProvider = ({ children }) => {
                         monthly_rent: response.data.monthly_rent,
                         room_capacity: response.data.room_capacity,
                         room_id: response.data.room_id,
+                        is_profile_completed: response.data.is_profile_completed,
                     };
                     setUser(updatedUser);
 
@@ -73,8 +88,8 @@ export const AuthProvider = ({ children }) => {
     const login = async (email, password) => {
         try {
             const response = await api.post('/auth/login', { email, password });
-            const { access_token, role, name, user_id, student_id } = response.data;
-            const userData = { email, role, name, id: user_id, student_id, token: access_token };
+            const { access_token, role, name, user_id, student_id, is_profile_completed } = response.data;
+            const userData = { email, role, name, id: user_id, student_id, is_profile_completed, token: access_token };
             setUser(userData);
 
             if (role === 'owner' || role === 'admin') {
@@ -98,8 +113,8 @@ export const AuthProvider = ({ children }) => {
         try {
             // Pass the redirect_uri so the backend can use the same value when exchanging the code with Google
             const response = await api.post('/auth/google-callback', { code, redirect_uri: redirectUri });
-            const { access_token, role, name, user_id, student_id } = response.data;
-            const userData = { role, name, id: user_id, student_id, token: access_token };
+            const { access_token, role, name, user_id, student_id, is_profile_completed } = response.data;
+            const userData = { role, name, id: user_id, student_id, is_profile_completed, token: access_token };
             setUser(userData);
 
             if (role === 'owner' || role === 'admin') {

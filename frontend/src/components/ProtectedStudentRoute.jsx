@@ -13,6 +13,10 @@ const ProtectedStudentRoute = () => {
         return <Navigate to="/" replace />;
     }
 
+    if (!user.is_profile_completed) {
+        return <Navigate to="/complete-profile" replace />;
+    }
+
     return <Outlet />;
 };
 

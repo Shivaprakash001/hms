@@ -71,6 +71,15 @@ class ProfileResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
     
+    # Profile Completion Fields
+    is_profile_completed: bool = False
+    college_roll_number: Optional[str] = None
+    section: Optional[str] = None
+    branch: Optional[str] = None
+    year_of_study: Optional[str] = None
+    parent_phone: Optional[str] = None
+    aadhaar_image_url: Optional[str] = None
+    
     class Config:
         from_attributes = True
 
