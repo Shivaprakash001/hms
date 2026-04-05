@@ -11,6 +11,35 @@ from decimal import Decimal
 logger = get_logger(__name__)
 
 
+def _build_payment_summary(student: dict, obligation: Optional[dict], payments: list[dict], latest_payment: Optional[dict]) -> dict:
+    obligation_amount = Decimal(str((obligation or {}).get("amount") or 0))
+    paid_amount = sum(Decimal(str(payment.get("amount_paid") or 0)) for payment in payments)
+    pending_amount = max(Decimal("0"), obligation_amount - paid_amount)
+
+    if obligation:
+        obligation_status = str(obligation.get("status") or "PENDING").upper()
+        if obligation_status == "WAIVED":
+            payment_status = "WAIVED"
+        elif pending_amount <= Decimal("0"):
+            payment_status = "PAID"
+        elif paid_amount > Decimal("0"):
+            payment_status = "PARTIAL"
+        else:
+            payment_status = "PENDING"
+    else:
+        payment_status = "NOT_GENERATED" if student.get("status") == "ACTIVE" else "INACTIVE"
+
+    return {
+        "payment_status": payment_status,
+        "current_month_amount": float(obligation_amount),
+        "paid_amount": float(paid_amount),
+        "pending_amount": float(pending_amount),
+        "last_paid_at": latest_payment.get("payment_date") if latest_payment else None,
+        "last_paid_amount": float(latest_payment.get("amount_paid") or 0) if latest_payment else 0,
+        "current_obligation_id": obligation.get("id") if obligation else None
+    }
+
+
 def _attach_hostel_info(student: dict) -> dict:
     """Attach hostel/owner contact metadata to a student payload."""
     try:
@@ -378,10 +407,45 @@ def get_all_students(
         query = query.order("joined_on", desc=True)
         
         result = query.execute()
+
+        students_raw = result.data or []
+        student_ids = [student.get("id") for student in students_raw if student.get("id")]
+
+        current_month = date.today().replace(day=1).isoformat()
+        obligations_by_student = {}
+        payments_by_obligation = {}
+        latest_payment_by_student = {}
+
+        if student_ids:
+            obligation_result = supabase.table("rent_obligations")\
+                .select("id, student_id, amount, status, rent_month, due_date")\
+                .in_("student_id", student_ids)\
+                .eq("rent_month", current_month)\
+                .execute()
+
+            for obligation in (obligation_result.data or []):
+                obligations_by_student[obligation.get("student_id")] = obligation
+
+            payment_result = supabase.table("payments")\
+                .select("id, student_id, obligation_id, amount_paid, payment_date")\
+                .in_("student_id", student_ids)\
+                .order("payment_date", desc=True)\
+                .limit(500)\
+                .execute()
+
+            for payment in (payment_result.data or []):
+                student_id = payment.get("student_id")
+                obligation_id = payment.get("obligation_id")
+
+                if student_id and student_id not in latest_payment_by_student:
+                    latest_payment_by_student[student_id] = payment
+
+                if obligation_id:
+                    payments_by_obligation.setdefault(obligation_id, []).append(payment)
         
         # Process active room for each student
         students_data = []
-        for student in result.data:
+        for student in students_raw:
             # Normalize profile
             if "profiles" in student:
                 student["profile"] = student.pop("profiles")
@@ -407,6 +471,11 @@ def get_all_students(
                 email = (profile.get("email") or "").lower()
                 if search.lower() not in name and search.lower() not in email:
                     continue
+
+            obligation = obligations_by_student.get(student.get("id"))
+            obligation_payments = payments_by_obligation.get((obligation or {}).get("id"), [])
+            latest_payment = latest_payment_by_student.get(student.get("id"))
+            student["payment_summary"] = _build_payment_summary(student, obligation, obligation_payments, latest_payment)
             
             students_data.append(student)
         

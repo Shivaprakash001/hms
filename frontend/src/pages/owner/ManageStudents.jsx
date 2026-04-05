@@ -38,7 +38,8 @@ export default function ManageStudents() {
                 floor: s.current_room && s.current_room.room_no ? s.current_room.room_no.substring(0, s.current_room.room_no.length - 2) : 'N/A',
                 status: s.status,
                 rent: s.monthly_rent,
-                joinDate: s.joined_on
+                joinDate: s.joined_on,
+                paymentSummary: s.payment_summary || {}
             }));
 
             setStudents(data);
@@ -160,6 +161,20 @@ export default function ManageStudents() {
         return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
     };
 
+    const formatCurrency = (value) => `₹${Number(value || 0).toLocaleString('en-IN')}`;
+
+    const getPaymentBadgeStyles = (status) => {
+        const styles = {
+            PAID: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+            PARTIAL: 'bg-amber-50 text-amber-700 border-amber-100',
+            PENDING: 'bg-rose-50 text-rose-700 border-rose-100',
+            WAIVED: 'bg-slate-100 text-slate-700 border-slate-200',
+            NOT_GENERATED: 'bg-indigo-50 text-indigo-700 border-indigo-100',
+            INACTIVE: 'bg-slate-50 text-slate-500 border-slate-100'
+        };
+        return styles[status] || styles.PENDING;
+    };
+
     const getInitials = (name) => {
         return name ? name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : '??';
     };
@@ -254,7 +269,7 @@ export default function ManageStudents() {
                         <table className="w-full hidden md:table">
                             <thead className="bg-slate-50 border-b border-slate-100">
                                 <tr>
-                                    {['NAME', 'ROOM', 'PHONE', 'STATUS', 'RENT', 'JOIN DATE'].map((header) => (
+                                    {['NAME', 'ROOM', 'RENT', 'LAST PAID', 'PENDING', 'PAYMENT STATUS'].map((header) => (
                                         <th key={header} className="px-8 py-5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-widest">
                                             {header}
                                         </th>
@@ -299,20 +314,24 @@ export default function ManageStudents() {
                                                 </div>
                                             </td>
                                             <td className="px-8 py-5 text-slate-600 font-bold text-sm">{student.room}</td>
-                                            <td className="px-8 py-5 text-slate-500 text-sm font-medium">{student.phone}</td>
-                                            <td className="px-8 py-5">
-                                                <span className={`inline-flex items-center px-3 py-1 rounded-lg text-xs font-bold ${student.status === 'ACTIVE'
-                                                    ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
-                                                    : student.status === 'INVITED'
-                                                        ? 'bg-indigo-50 text-indigo-600 border border-indigo-100'
-                                                        : 'bg-slate-50 text-slate-600 border border-slate-100'
-                                                    }`}>
-                                                    {student.status}
-                                                </span>
-                                            </td>
-                                            <td className="px-8 py-5 text-slate-900 font-black text-sm">₹{student.rent?.toLocaleString()}</td>
+                                            <td className="px-8 py-5 text-slate-900 font-black text-sm">{formatCurrency(student.rent)}</td>
                                             <td className="px-8 py-5 text-slate-500 text-sm font-medium">
-                                                <span>{formatDate(student.joinDate)}</span>
+                                                <span>{formatDate(student.paymentSummary?.last_paid_at)}</span>
+                                            </td>
+                                            <td className="px-8 py-5">
+                                                <div className="flex flex-col">
+                                                    <span className={`text-sm font-bold ${Number(student.paymentSummary?.pending_amount || 0) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                                        {formatCurrency(student.paymentSummary?.pending_amount || 0)}
+                                                    </span>
+                                                    <span className="text-xs text-slate-400">
+                                                        {student.paymentSummary?.current_month_amount ? `of ${formatCurrency(student.paymentSummary.current_month_amount)}` : 'No dues'}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td className="px-8 py-5">
+                                                <span className={`inline-flex items-center px-3 py-1 rounded-lg text-xs font-bold border ${getPaymentBadgeStyles(student.paymentSummary?.payment_status)}`}>
+                                                    {student.paymentSummary?.payment_status === 'NOT_GENERATED' ? 'NOT GENERATED' : (student.paymentSummary?.payment_status || 'PENDING')}
+                                                </span>
                                             </td>
                                             <td className="px-8 py-5 text-right">
                                                 <div className="flex items-center justify-end gap-1">
@@ -355,13 +374,34 @@ export default function ManageStudents() {
                                         <div className="font-bold">{student.name}</div>
                                         <div className="text-sm font-bold text-slate-500">{student.room}</div>
                                     </div>
-                                    <div className="flex justify-between mt-2 text-sm text-slate-500 items-center">
+                                    <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                                        <div>
+                                            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Rent</p>
+                                            <p className="font-semibold text-slate-700">{formatCurrency(student.rent)}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Pending</p>
+                                            <p className={`font-semibold ${Number(student.paymentSummary?.pending_amount || 0) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                                {formatCurrency(student.paymentSummary?.pending_amount || 0)}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Last Paid</p>
+                                            <p className="font-semibold text-slate-700">{formatDate(student.paymentSummary?.last_paid_at)}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Payment</p>
+                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold border ${getPaymentBadgeStyles(student.paymentSummary?.payment_status)}`}>
+                                                {student.paymentSummary?.payment_status === 'NOT_GENERATED' ? 'NOT GENERATED' : (student.paymentSummary?.payment_status || 'PENDING')}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-between mt-3 text-sm text-slate-500 items-center">
                                         <div>
                                             <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${student.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-50 text-slate-500'
                                                 }`}>{student.status}</span>
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            <span>₹{student.rent}</span>
                                             {(student.status === 'ACTIVE' || student.status === 'LEFT') && (
                                                 <button
                                                     onClick={(e) => handleToggleStatus(student, e)}
