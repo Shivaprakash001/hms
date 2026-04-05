@@ -38,7 +38,8 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
     useEffect(() => {
         if (isOpen) {
             setStep('method');
-            setMethod('upi');
+            const saved = localStorage.getItem('preferred_upi_app') || 'upi';
+            setMethod(saved);
             setLoading(false);
             setVerifying(false);
             setError(null);
@@ -142,7 +143,8 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
             const orderData = await paymentService.initiatePayment({
                 ...(obligationId ? { obligation_id: obligationId } : {}),
                 amount: amount,
-                notes: { preferred_upi_app: selectedMethod }
+                preferred_app: selectedMethod,
+                notes: { preferred_upi_app: selectedMethod, preferred_app: selectedMethod }
             });
 
             // 3. Configure and open Razorpay Checkout widget
@@ -284,6 +286,18 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
                                                     <span className="font-black text-lg text-purple-600">पे</span>
                                                 </div>
                                                 <span className="font-bold text-slate-800">Pay with PhonePe</span>
+                                            </button>
+
+                                            {/* Other UPI */}
+                                            <button
+                                                onClick={() => handlePayment('paytm')}
+                                                disabled={loading}
+                                                className="w-full p-4 rounded-xl border-2 border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-all flex items-center justify-center gap-3 active:scale-95"
+                                            >
+                                                <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center text-slate-600">
+                                                    <span className="font-black text-lg text-sky-600">P</span>
+                                                </div>
+                                                <span className="font-bold text-slate-800">Pay with Paytm</span>
                                             </button>
 
                                             {/* Other UPI */}

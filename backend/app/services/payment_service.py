@@ -256,7 +256,8 @@ def record_payment(
     payment_method: str,
     reference_number: Optional[str] = None,
     payment_date: Optional[date] = None,
-    user_id: Optional[str] = None
+    user_id: Optional[str] = None,
+    preferred_app: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Record a payment and update obligation status.
@@ -284,9 +285,10 @@ def record_payment(
             except Exception as insert_err:
                 err_text = str(insert_err).lower()
                 # Backward-compatibility guard: production DB may not yet have payments.owner_id
-                if "owner_id" in err_text and "column" in err_text and "payments" in err_text:
+                if ("owner_id" in err_text and "column" in err_text and "payments" in err_text) or ("preferred_app" in err_text and "column" in err_text and "payments" in err_text):
                     fallback_data = dict(insert_data)
                     fallback_data.pop("owner_id", None)
+                    fallback_data.pop("preferred_app", None)
                     logger.warning("payments.owner_id column missing in DB; retrying insert without owner_id")
                     res_insert = supabase.table("payments").insert(fallback_data).execute()
                 else:
@@ -362,6 +364,8 @@ def record_payment(
         }
         if owner_id:
             payment_data["owner_id"] = owner_id
+        if preferred_app:
+            payment_data["preferred_app"] = preferred_app
 
         current_step = "insert_payment"
         insert_result = _insert_payment_row(payment_data, reference_number)
@@ -406,6 +410,94 @@ def record_payment(
             f"Failed to record payment (step: {current_step})",
             str(e)
         )
+
+
+def preview_monthly_rent(rent_month: date, user_id: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Preview monthly obligation generation without creating rows.
+    Returns affected tenants and expected total amount.
+    """
+    try:
+        target_month = rent_month.replace(day=1)
+        _, last_day = calendar.monthrange(target_month.year, target_month.month)
+        month_end_date = target_month.replace(day=last_day)
+
+        student_query = supabase.table("students").select("id, monthly_rent, status")
+        if user_id:
+            student_query = student_query.eq("owner_id", user_id)
+
+        student_res = student_query.execute()
+        owner_student_map = {s["id"]: s for s in (student_res.data or [])}
+        owner_student_ids = list(owner_student_map.keys())
+
+        if not owner_student_ids:
+            return ServiceResponse.success({
+                "target_month": target_month.isoformat(),
+                "tenants": 0,
+                "tenants_to_create": 0,
+                "tenants_already_generated": 0,
+                "total_amount": 0.0,
+            })
+
+        alloc_res = supabase.table("room_allocations") \
+            .select("id, student_id, start_date, end_date") \
+            .in_("student_id", owner_student_ids) \
+            .execute()
+
+        allocations = alloc_res.data or []
+        active_students = set()
+        for a in allocations:
+            start_val = str(a.get("start_date") or "").split('T')[0]
+            end_val = str(a.get("end_date") or "").split('T')[0] if a.get("end_date") else None
+            if not start_val:
+                continue
+            try:
+                alloc_start = date.fromisoformat(start_val)
+                is_after_start = end_val is None or date.fromisoformat(end_val) >= target_month
+                is_before_end = alloc_start <= month_end_date
+                if is_after_start and is_before_end:
+                    active_students.add(a.get("student_id"))
+            except Exception:
+                continue
+
+        if not active_students:
+            return ServiceResponse.success({
+                "target_month": target_month.isoformat(),
+                "tenants": 0,
+                "tenants_to_create": 0,
+                "tenants_already_generated": 0,
+                "total_amount": 0.0,
+            })
+
+        obligations_res = supabase.table("rent_obligations") \
+            .select("student_id") \
+            .in_("student_id", list(active_students)) \
+            .eq("rent_month", target_month.isoformat()) \
+            .execute()
+        existing_for_month = {o.get("student_id") for o in (obligations_res.data or [])}
+
+        tenants_to_create = []
+        total_amount = Decimal("0")
+        for student_id in active_students:
+            if student_id in existing_for_month:
+                continue
+            monthly_rent_val = owner_student_map.get(student_id, {}).get("monthly_rent", 0)
+            monthly_rent = Decimal(str(monthly_rent_val)) if monthly_rent_val is not None else Decimal(0)
+            if monthly_rent <= 0:
+                continue
+            tenants_to_create.append(student_id)
+            total_amount += monthly_rent
+
+        return ServiceResponse.success({
+            "target_month": target_month.isoformat(),
+            "tenants": len(active_students),
+            "tenants_to_create": len(tenants_to_create),
+            "tenants_already_generated": len(existing_for_month),
+            "total_amount": float(total_amount),
+        })
+    except Exception as e:
+        logger.exception(f"Error previewing monthly rent: {e}")
+        return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Failed to preview monthly rent", str(e))
 
 
 def get_student_payment_history(student_id: str) -> Dict[str, Any]:
@@ -929,6 +1021,7 @@ def handle_razorpay_webhook(event: Dict[str, Any]) -> Dict[str, Any]:
         notes = order.get("notes") or payment.get("notes") or {}
         obligation_id = notes.get("obligation_id")
         student_id = notes.get("student_id")
+        preferred_app = notes.get("preferred_upi_app") or notes.get("preferred_app")
 
         razorpay_payment_id = payment.get("id")
         razorpay_order_id = order.get("id")
@@ -996,7 +1089,8 @@ def handle_razorpay_webhook(event: Dict[str, Any]) -> Dict[str, Any]:
             amount_paid=amount_paid,
             payment_method=actual_method,
             reference_number=razorpay_payment_id,
-            payment_date=date.today()
+            payment_date=date.today(),
+            preferred_app=preferred_app
         )
 
         if not result.get("success"):
@@ -1075,11 +1169,14 @@ def verify_razorpay_payment(
         # 3. Fetch payment amount from Razorpay
         amount_paise = None
         payment_method = "UPI"
+        preferred_app = None
         try:
             rp_payment = razorpay_client.payment.fetch(razorpay_payment_id)
             amount_paise = rp_payment.get("amount")
             method_value = rp_payment.get("method")
             payment_method = str(method_value).upper() if method_value else "UPI"
+            payment_notes = rp_payment.get("notes") or {}
+            preferred_app = payment_notes.get("preferred_upi_app") or payment_notes.get("preferred_app")
         except Exception as fetch_err:
             logger.warning(f"[Verify] Could not fetch payment details: {fetch_err}")
 
@@ -1100,7 +1197,8 @@ def verify_razorpay_payment(
                 amount_paid=amount,
                 payment_method=payment_method,
                 reference_number=razorpay_payment_id,
-                payment_date=date.today()
+                payment_date=date.today(),
+                preferred_app=preferred_app
             )
             if not result.get("success"):
                 err_code = result.get("error", {}).get("code", "")

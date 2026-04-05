@@ -110,6 +110,18 @@ class PaymentInitiate(BaseModel):
     obligation_id: Optional[UUID] = None
     amount: Optional[Decimal] = Field(None, gt=0)
     notes: Optional[dict] = None
+    preferred_app: Optional[str] = Field(None, max_length=30)
+
+    @field_validator('preferred_app')
+    @classmethod
+    def validate_preferred_app(cls, v):
+        if v is None:
+            return v
+        allowed = {"gpay", "phonepe", "paytm", "upi", "other"}
+        normalized = v.strip().lower()
+        if normalized not in allowed:
+            raise ValueError("preferred_app must be one of: gpay, phonepe, paytm, upi, other")
+        return normalized
 
 
 class RazorpayOrderResponse(BaseModel):

@@ -223,33 +223,72 @@ def generate_rent(
     return _handle_service_response(result, status.HTTP_201_CREATED)
 
 
+@router.get(
+    "/generate-preview",
+    response_model=dict,
+    summary="Preview monthly rent generation",
+    dependencies=[Depends(require_admin_or_owner)]
+)
+def preview_generate_rent(
+    rent_month: date,
+    user: UserContext = Depends(get_current_user)
+):
+    """
+    Preview affected tenants and expected amount for monthly rent generation.
+    """
+    result = payment_service.preview_monthly_rent(rent_month, user_id=user.user_id)
+    return _handle_service_response(result)
+
+
 
 @router.post(
     "/",
     response_model=dict,
     status_code=status.HTTP_201_CREATED,
-    summary="Record a student payment",
+    summary="Record offline payment (owner/admin)",
+    dependencies=[Depends(require_admin_or_owner)]
 )
 def record_payment(
     data: PaymentCreate,
     user: UserContext = Depends(get_current_user)
 ):
     """
-    Record money received from a student against a specific obligation.
+    Record an offline payment (cash/bank transfer/UPI received manually) against a specific obligation.
     
     - Validates that payment doesn't exceed obligation balance.
     - Automatically updates obligation status to PARTIAL or PAID.
-    - Students can pay their own obligations; admin/owner can pay for anyone.
+    - Students are not allowed on this endpoint.
     """
-    # For students: validate that the obligation belongs to them
     if user.is_student():
-        from app.db import supabase
-        ob_res = supabase.table("rent_obligations").select("student_id").eq("id", str(data.obligation_id)).execute()
-        if not ob_res.data:
-            raise HTTPException(status_code=404, detail={"message": "Obligation not found"})
-        ob_student_id = ob_res.data[0].get("student_id")
-        if str(ob_student_id) != str(user.student_id):
-            raise HTTPException(status_code=403, detail={"message": "You can only pay your own obligations."})
+        raise HTTPException(status_code=403, detail={"message": "Students cannot record offline payments"})
+
+    result = payment_service.record_payment(
+        str(data.obligation_id),
+        data.amount_paid,
+        data.payment_method.value,
+        data.reference_number,
+        data.payment_date,
+        user_id=user.user_id
+    )
+    return _handle_service_response(result, status.HTTP_201_CREATED)
+
+
+@router.post(
+    "/offline",
+    response_model=dict,
+    status_code=status.HTTP_201_CREATED,
+    summary="Record offline payment (owner/admin)",
+    dependencies=[Depends(require_admin_or_owner)]
+)
+def record_offline_payment(
+    data: PaymentCreate,
+    user: UserContext = Depends(get_current_user)
+):
+    """
+    Explicit endpoint for owner/admin to record offline payments.
+    """
+    if user.is_student():
+        raise HTTPException(status_code=403, detail={"message": "Students cannot record offline payments"})
 
     result = payment_service.record_payment(
         str(data.obligation_id),
@@ -487,11 +526,16 @@ def initiate_payment(
                 detail="amount is required for student payment initiation"
             )
             
+        notes_payload = data.notes or {}
+        if data.preferred_app:
+            notes_payload["preferred_upi_app"] = data.preferred_app
+            notes_payload["preferred_app"] = data.preferred_app
+
         result = payment_service.create_razorpay_order(
             str(data.obligation_id),
             data.amount,
             str(user.student_id),
-            extra_notes=data.notes
+            extra_notes=notes_payload
         )
     else:
         # Owner/Admin flow: obligation_id is required, amount is taken from obligation

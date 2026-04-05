@@ -16,6 +16,8 @@ const Payments = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
     const [monthFilter, setMonthFilter] = useState('all');
+    const [methodFilter, setMethodFilter] = useState('all');
+    const [tenantFilter, setTenantFilter] = useState('all');
     const [selectedPayment, setSelectedPayment] = useState(null);
     const [historyTenant, setHistoryTenant] = useState(null);
 
@@ -27,6 +29,8 @@ const Payments = () => {
     });
     const [genLoading, setGenLoading] = useState(false);
     const [genResult, setGenResult] = useState(null); // { success, count, skipped }
+    const [previewLoading, setPreviewLoading] = useState(false);
+    const [previewData, setPreviewData] = useState(null);
     const [exportLoading, setExportLoading] = useState(false);
 
     const [activeTab, setActiveTab] = useState('dues'); // 'dues' or 'transactions'
@@ -36,10 +40,14 @@ const Payments = () => {
     useEffect(() => {
         if (activeTab === 'dues') {
             loadPayments();
-        } else {
-            loadTransactions();
         }
     }, [activeTab]);
+
+    useEffect(() => {
+        if (activeTab === 'transactions') {
+            loadTransactions();
+        }
+    }, [activeTab, monthFilter, statusFilter, methodFilter]);
 
     const loadPayments = async () => {
         setIsLoading(true);
@@ -68,7 +76,23 @@ const Payments = () => {
     const loadTransactions = async () => {
         setIsLoading(true);
         try {
-            const result = await paymentService.getAll({ limit: 100 });
+            const params = { limit: 100 };
+            if (methodFilter !== 'all') {
+                params.payment_method = methodFilter;
+            }
+            if (statusFilter !== 'all') {
+                params.status = statusFilter.toUpperCase();
+            }
+            if (monthFilter !== 'all') {
+                const [year, month] = monthFilter.split('-').map(Number);
+                const from = `${year}-${String(month).padStart(2, '0')}-01`;
+                const lastDay = new Date(year, month, 0).getDate();
+                const to = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+                params.date_from = from;
+                params.date_to = to;
+            }
+
+            const result = await paymentService.getAll(params);
             const data = result.payments || [];
             const formatted = data.map(item => ({
                 id: item.id,
@@ -76,10 +100,11 @@ const Payments = () => {
                 room: 'N/A', // We might need to fetch room from student profile join if needed
                 type: 'Payment',
                 amount: Number(item.amount_paid),
-                status: 'paid',
+                status: (item.status || 'PAID').toLowerCase(),
                 date: item.payment_date,
                 method: item.payment_method,
                 reference_number: item.reference_number,
+                preferred_app: item.preferred_app,
                 isReceiptAvailable: true,
                 entityType: 'payment'
             }));
@@ -99,9 +124,11 @@ const Payments = () => {
                 item.room?.toString().includes(searchTerm);
             const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
             const matchesMonth = monthFilter === 'all' || item.date?.includes(monthFilter);
-            return matchesSearch && matchesStatus && matchesMonth;
+            const matchesMethod = activeTab !== 'transactions' || methodFilter === 'all' || item.method === methodFilter;
+            const matchesTenant = tenantFilter === 'all' || item.tenantName === tenantFilter;
+            return matchesSearch && matchesStatus && matchesMonth && matchesMethod && matchesTenant;
         });
-    }, [payments, transactions, activeTab, searchTerm, statusFilter, monthFilter]);
+    }, [payments, transactions, activeTab, searchTerm, statusFilter, monthFilter, methodFilter, tenantFilter]);
 
     // Stats
     const stats = useMemo(() => {
@@ -237,11 +264,30 @@ const Payments = () => {
         }
     };
 
+    const handlePreviewRent = async () => {
+        setPreviewLoading(true);
+        try {
+            const data = await paymentService.previewGenerateRent(genMonth);
+            setPreviewData(data);
+        } catch (error) {
+            console.error("Preview rent failed:", error);
+            alert(error.response?.data?.detail?.message || 'Failed to preview monthly generation');
+        } finally {
+            setPreviewLoading(false);
+        }
+    };
+
     // Unique months from existing payments/transactions for month filter
     const availableMonths = useMemo(() => {
         const source = activeTab === 'dues' ? payments : transactions;
         const months = new Set(source.map(p => p.date?.slice(0, 7)).filter(Boolean));
         return [...months].sort().reverse();
+    }, [payments, transactions, activeTab]);
+
+    const availableTenants = useMemo(() => {
+        const source = activeTab === 'dues' ? payments : transactions;
+        const names = new Set(source.map(p => p.tenantName).filter(Boolean));
+        return [...names].sort();
     }, [payments, transactions, activeTab]);
 
     return (
@@ -262,7 +308,11 @@ const Payments = () => {
                         {exportLoading ? 'Exporting...' : 'Export Report'}
                     </button>
                     <button
-                        onClick={() => { setShowGenModal(true); setGenResult(null); }}
+                        onClick={() => {
+                            setShowGenModal(true);
+                            setGenResult(null);
+                            setPreviewData(null);
+                        }}
                         className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-600/20 transition-all font-semibold text-sm active:scale-95"
                     >
                         <Zap size={16} /> Generate Monthly Rent
@@ -328,16 +378,42 @@ const Payments = () => {
                     </div>
 
                     <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
-                        {activeTab === 'dues' && (
+                        <select
+                            className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100 hover:border-slate-300 transition-all cursor-pointer"
+                            value={tenantFilter}
+                            onChange={(e) => setTenantFilter(e.target.value)}
+                        >
+                            <option value="all">All Tenants</option>
+                            {availableTenants.map(name => (
+                                <option key={name} value={name}>{name}</option>
+                            ))}
+                        </select>
+
+                        <select
+                            className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100 hover:border-slate-300 transition-all cursor-pointer"
+                            value={statusFilter}
+                            onChange={(e) => setStatusFilter(e.target.value)}
+                        >
+                            <option value="all">All Status</option>
+                            <option value="paid">Paid</option>
+                            <option value="partial">Partial</option>
+                            <option value="pending">Pending</option>
+                            {activeTab === 'dues' && <option value="waived">Waived</option>}
+                        </select>
+
+                        {activeTab === 'transactions' && (
                             <select
                                 className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100 hover:border-slate-300 transition-all cursor-pointer"
-                                value={statusFilter}
-                                onChange={(e) => setStatusFilter(e.target.value)}
+                                value={methodFilter}
+                                onChange={(e) => setMethodFilter(e.target.value)}
                             >
-                                <option value="all">All Status</option>
-                                <option value="paid">Paid</option>
-                                <option value="pending">Pending</option>
-                                <option value="overdue">Overdue</option>
+                                <option value="all">All Methods</option>
+                                <option value="UPI">UPI</option>
+                                <option value="CARD">CARD</option>
+                                <option value="NETBANKING">NETBANKING</option>
+                                <option value="CASH">CASH</option>
+                                <option value="BANK_TRANSFER">BANK_TRANSFER</option>
+                                <option value="OTHER">OTHER</option>
                             </select>
                         )}
 
@@ -413,7 +489,10 @@ const Payments = () => {
                                                 <input
                                                     type="month"
                                                     value={genMonth.slice(0, 7)}
-                                                    onChange={(e) => setGenMonth(e.target.value + '-01')}
+                                                    onChange={(e) => {
+                                                        setGenMonth(e.target.value + '-01');
+                                                        setPreviewData(null);
+                                                    }}
                                                     max={`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`}
                                                     className="w-full px-4 py-3 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all"
                                                 />
@@ -432,17 +511,37 @@ const Payments = () => {
                                                 </ul>
                                             </div>
 
-                                            <button
-                                                onClick={handleGenerateRent}
-                                                disabled={genLoading}
-                                                className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20 active:scale-95 disabled:opacity-60"
-                                            >
-                                                {genLoading ? (
-                                                    <><Loader2 className="animate-spin" size={20} /> Generating...</>
-                                                ) : (
-                                                    <><Zap size={20} /> Generate for {new Date(genMonth).toLocaleString('default', { month: 'long', year: 'numeric' })}</>
-                                                )}
-                                            </button>
+                                            {previewData && (
+                                                <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-sm text-indigo-800">
+                                                    <p className="font-bold mb-1">Preview</p>
+                                                    <p>Active tenants: <span className="font-semibold">{previewData.tenants || 0}</span></p>
+                                                    <p>To generate: <span className="font-semibold">{previewData.tenants_to_create || 0}</span></p>
+                                                    <p>Already generated: <span className="font-semibold">{previewData.tenants_already_generated || 0}</span></p>
+                                                    <p>Total expected: <span className="font-semibold">₹{Number(previewData.total_amount || 0).toLocaleString()}</span></p>
+                                                </div>
+                                            )}
+
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                <button
+                                                    onClick={handlePreviewRent}
+                                                    disabled={previewLoading || genLoading}
+                                                    className="w-full py-3 bg-white border border-indigo-200 text-indigo-700 rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+                                                >
+                                                    {previewLoading ? <><Loader2 className="animate-spin" size={18} /> Previewing...</> : <>Preview</>}
+                                                </button>
+
+                                                <button
+                                                    onClick={handleGenerateRent}
+                                                    disabled={genLoading || !previewData}
+                                                    className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20 active:scale-95 disabled:opacity-60"
+                                                >
+                                                    {genLoading ? (
+                                                        <><Loader2 className="animate-spin" size={18} /> Generating...</>
+                                                    ) : (
+                                                        <><Zap size={18} /> Generate</>
+                                                    )}
+                                                </button>
+                                            </div>
                                         </>
                                     ) : genResult.success ? (
                                         <div className="text-center py-4 space-y-4">

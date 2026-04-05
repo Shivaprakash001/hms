@@ -273,8 +273,16 @@ export const paymentService = {
         return response.data;
     },
     recordPayment: async (data) => {
-        const response = await api.post('/payments/', data);
-        return response.data;
+        try {
+            const response = await api.post('/owner/payments/offline', data);
+            return response.data;
+        } catch (error) {
+            if (error?.response?.status === 404) {
+                const fallback = await api.post('/payments/offline', data);
+                return fallback.data;
+            }
+            throw error;
+        }
     },
     initiatePayment: async (data) => {
         const response = await api.post('/payments/initiate', data);
@@ -299,6 +307,10 @@ export const paymentService = {
     },
     generateRent: async (month) => {
         const response = await api.post('/payments/generate-monthly', { rent_month: month });
+        return response.data;
+    },
+    previewGenerateRent: async (month) => {
+        const response = await api.get('/payments/generate-preview', { params: { rent_month: month } });
         return response.data;
     },
     waive: async (obligationId, reason) => {
