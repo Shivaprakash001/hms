@@ -1,8 +1,10 @@
-from app.db import supabase
-from typing import Optional, Dict, Any, List
+from collections import defaultdict
 from decimal import Decimal
-from app.utils.responses import ServiceResponse, ErrorCode
+from typing import Optional, Dict, Any, List
+
+from app.db import supabase
 from app.utils.logger import get_logger
+from app.utils.responses import ServiceResponse, ErrorCode
 
 logger = get_logger(__name__)
 
@@ -15,126 +17,255 @@ def _get_floor_number(room_no: str) -> int:
         pass
     return 0
 
-def get_floors_with_rooms(owner_id: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Get all rooms grouped by floor.
-    Structure: [ { id: 'f1', number: 1, rooms: [ ... ] } ]
-    Uses two separate queries to avoid deep-nested join timeouts.
-    """
-    try:
-        # Query 1: Fetch rooms (flat, fast)
-        rooms_query = supabase.table("rooms").select("*").order("room_no")
-        if owner_id:
-            rooms_query = rooms_query.eq("owner_id", owner_id)
-        rooms_res = rooms_query.execute()
 
-        if not rooms_res.data:
+def _fetch_rooms(owner_id: Optional[str] = None, room_id: Optional[str] = None) -> List[dict]:
+    query = supabase.table("rooms").select("*").order("room_no")
+    if owner_id:
+        query = query.eq("owner_id", owner_id)
+    if room_id:
+        query = query.eq("id", room_id)
+    return query.execute().data or []
+
+
+def _fetch_room_allocations(room_ids: List[str]) -> List[dict]:
+    if not room_ids:
+        return []
+
+    return supabase.table("room_allocations")\
+        .select("id, room_id, student_id, start_date, students!inner(id, monthly_rent, status, profiles!students_profile_id_fkey(id, name, email, phone))")\
+        .in_("room_id", room_ids)\
+        .is_("end_date", "null")\
+        .execute().data or []
+
+
+def _fetch_student_financials(student_ids: List[str]) -> Dict[str, Any]:
+    latest_payment_by_student: Dict[str, dict] = {}
+    payments_by_obligation: Dict[str, Decimal] = defaultdict(lambda: Decimal(0))
+    pending_due_by_student: Dict[str, Decimal] = defaultdict(lambda: Decimal(0))
+    obligations_by_student: Dict[str, List[dict]] = defaultdict(list)
+
+    if not student_ids:
+        return {
+            "latest_payment_by_student": latest_payment_by_student,
+            "pending_due_by_student": pending_due_by_student,
+            "obligations_by_student": obligations_by_student
+        }
+
+    payments = supabase.table("payments")\
+        .select("id, student_id, obligation_id, amount_paid, payment_date, payment_method, reference_number")\
+        .in_("student_id", student_ids)\
+        .order("payment_date", desc=True)\
+        .execute().data or []
+
+    for payment in payments:
+        student_id = payment.get("student_id")
+        obligation_id = payment.get("obligation_id")
+
+        if student_id:
+            if student_id not in latest_payment_by_student:
+                latest_payment_by_student[student_id] = payment
+
+        if obligation_id:
+            payments_by_obligation[obligation_id] += Decimal(str(payment.get("amount_paid") or 0))
+
+    obligations = supabase.table("rent_obligations")\
+        .select("id, student_id, amount, status, rent_month, due_date")\
+        .in_("student_id", student_ids)\
+        .neq("status", "WAIVED")\
+        .order("due_date", desc=False)\
+        .execute().data or []
+
+    for obligation in obligations:
+        student_id = obligation.get("student_id")
+        if not student_id:
+            continue
+
+        obligation_amount = Decimal(str(obligation.get("amount") or 0))
+        paid_amount = payments_by_obligation.get(obligation.get("id"), Decimal(0))
+        remaining_due = max(obligation_amount - paid_amount, Decimal(0))
+
+        enriched = {
+            **obligation,
+            "remaining_due": float(remaining_due)
+        }
+        obligations_by_student[student_id].append(enriched)
+        pending_due_by_student[student_id] += remaining_due
+
+    return {
+        "latest_payment_by_student": latest_payment_by_student,
+        "pending_due_by_student": pending_due_by_student,
+        "obligations_by_student": obligations_by_student
+    }
+
+
+def _build_room_overview(room: dict, allocations: List[dict], financials: Dict[str, Any]) -> Dict[str, Any]:
+    latest_payment_by_student = financials["latest_payment_by_student"]
+    pending_due_by_student = financials["pending_due_by_student"]
+    obligations_by_student = financials["obligations_by_student"]
+
+    tenants = []
+    latest_payments = []
+
+    for allocation in allocations:
+        student = allocation.get("students") or {}
+        profile = student.get("profiles") or {}
+        student_id = student.get("id")
+        pending_due = pending_due_by_student.get(student_id, Decimal(0))
+        obligations = obligations_by_student.get(student_id, [])
+        latest_payment = latest_payment_by_student.get(student_id)
+
+        if pending_due <= 0:
+            payment_status = "PAID" if latest_payment else "NO_HISTORY"
+        elif latest_payment:
+            payment_status = "PARTIAL"
+        else:
+            payment_status = "PENDING"
+
+        tenant = {
+            "student_id": student_id,
+            "profile_id": profile.get("id"),
+            "name": profile.get("name"),
+            "email": profile.get("email"),
+            "phone": profile.get("phone"),
+            "joined_date": allocation.get("start_date"),
+            "rent": float(student.get("monthly_rent") or 0),
+            "payment_status": payment_status,
+            "last_payment": latest_payment.get("payment_date") if latest_payment else None,
+            "last_payment_amount": float(latest_payment.get("amount_paid") or 0) if latest_payment else 0,
+            "pending_dues": float(pending_due),
+            "status": student.get("status", "ACTIVE"),
+            "obligations": obligations
+        }
+        tenants.append(tenant)
+
+        if latest_payment:
+            latest_payments.append({
+                "student_id": student_id,
+                "student_name": profile.get("name"),
+                **latest_payment
+            })
+
+    tenants.sort(key=lambda item: item.get("name") or "")
+    latest_payments.sort(key=lambda item: item.get("payment_date") or "", reverse=True)
+
+    floor_number = _get_floor_number(room.get("room_no", ""))
+    occupancy_count = len(tenants)
+    capacity = room.get("capacity", 0) or 0
+
+    return {
+        "room": {
+            "id": room.get("id"),
+            "room_id": room.get("id"),
+            "room_no": room.get("room_no"),
+            "floor": floor_number,
+            "capacity": capacity,
+            "occupied": occupancy_count,
+            "remaining_capacity": max(capacity - occupancy_count, 0),
+            "status": "Vacant" if occupancy_count == 0 else ("Full" if occupancy_count >= capacity else "Occupied")
+        },
+        "tenants": tenants,
+        "payments": latest_payments,
+        "pending_dues": float(sum((Decimal(str(t["pending_dues"])) for t in tenants), Decimal(0)))
+    }
+
+
+def _build_room_overviews(rooms: List[dict]) -> List[Dict[str, Any]]:
+    if not rooms:
+        return []
+
+    room_ids = [room["id"] for room in rooms]
+    allocations = _fetch_room_allocations(room_ids)
+    allocations_by_room: Dict[str, List[dict]] = defaultdict(list)
+    student_ids: List[str] = []
+
+    for allocation in allocations:
+        room_id = allocation.get("room_id")
+        student_id = allocation.get("student_id")
+        if room_id:
+            allocations_by_room[room_id].append(allocation)
+        if student_id:
+            student_ids.append(student_id)
+
+    financials = _fetch_student_financials(student_ids)
+
+    return [
+        _build_room_overview(room, allocations_by_room.get(room["id"], []), financials)
+        for room in rooms
+    ]
+
+
+def get_floors_with_rooms(owner_id: Optional[str] = None) -> Dict[str, Any]:
+    try:
+        rooms = _fetch_rooms(owner_id=owner_id)
+        if not rooms:
             return ServiceResponse.success([])
 
-        rooms_data = rooms_res.data
-        room_ids = [r["id"] for r in rooms_data]
+        overviews = _build_room_overviews(rooms)
+        floors_map: Dict[str, dict] = {}
 
-        # Query 2: Fetch active allocations with student + profile for all rooms at once
-        allocs_res = supabase.table("room_allocations")\
-            .select("id, room_id, start_date, students!inner(id, status, profiles!students_profile_id_fkey(id, name, email, phone))")\
-            .in_("room_id", room_ids)\
-            .is_("end_date", "null")\
-            .execute()
-
-        # Build a lookup: room_id -> list of tenant dicts
-        tenants_by_room: Dict[str, list] = {r["id"]: [] for r in rooms_data}
-        for alloc in (allocs_res.data or []):
-            room_id = alloc.get("room_id")
-            student = alloc.get("students") or {}
-            profile = student.get("profiles") or {}
-            if room_id and profile:
-                tenants_by_room.setdefault(room_id, []).append({
-                    "id": student.get("id"),
-                    "name": profile.get("name"),
-                    "email": profile.get("email"),
-                    "phone": profile.get("phone"),
-                    "joinDate": alloc.get("start_date"),
-                    "status": student.get("status", "ACTIVE")
-                })
-
-        floors_map = {}
-        for room in rooms_data:
-            try:
-                floor_num = int(room["room_no"][:-2]) if len(room["room_no"]) >= 3 and room["room_no"][:-2].isdigit() else 0
-            except:
-                floor_num = 0
-
+        for overview in overviews:
+            room = overview["room"]
+            room_id = room["id"]
+            floor_num = room["floor"]
             floor_key = f"f{floor_num}"
+
             if floor_key not in floors_map:
                 floors_map[floor_key] = {"id": floor_key, "number": floor_num, "rooms": []}
 
-            tenants = tenants_by_room.get(room["id"], [])
             floors_map[floor_key]["rooms"].append({
-                "id": room["id"],
+                "id": room_id,
+                "room_id": room_id,
                 "number": room["room_no"],
+                "room_no": room["room_no"],
                 "capacity": room["capacity"],
-                "occupied": len(tenants),
+                "occupied": room["occupied"],
                 "floor": floor_num,
-                "tenants": tenants
+                "status": room["status"],
+                "tenants": overview["tenants"],
+                "pending_dues": overview["pending_dues"],
+                "payments": overview["payments"]
             })
 
-        floors_list = sorted(list(floors_map.values()), key=lambda x: x["number"])
-        return ServiceResponse.success(floors_list)
-
+        return ServiceResponse.success(sorted(floors_map.values(), key=lambda item: item["number"]))
     except Exception as e:
         logger.exception(f"Error fetching floors: {e}")
         return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, str(e))
 
 
 def get_all_rooms(limit: int = 50, offset: int = 0, owner_id: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Get all rooms with pagination.
-    """
     try:
         query = supabase.table("rooms")\
             .select("*", count="exact")\
             .order("room_no")\
             .limit(limit)\
             .offset(offset)
-        
+
         if owner_id:
             query = query.eq("owner_id", owner_id)
-        
+
         result = query.execute()
         rooms = result.data or []
-        
-        if rooms:
-            room_ids = [r["id"] for r in rooms]
-            # Fetch active allocations to calculate occupancy
-            allocs_res = supabase.table("room_allocations")\
-                .select("room_id")\
-                .in_("room_id", room_ids)\
-                .is_("end_date", "null")\
-                .execute()
-            
-            # Map occupancy count
-            occupancy_map = {}
-            for alloc in (allocs_res.data or []):
-                rid = alloc["room_id"]
-                occupancy_map[rid] = occupancy_map.get(rid, 0) + 1
-            
-            for room in rooms:
-                room["occupied"] = occupancy_map.get(room["id"], 0)
+        overviews = _build_room_overviews(rooms)
+
+        compact_rooms = []
+        for overview in overviews:
+            compact_rooms.append({
+                **overview["room"],
+                "tenants": overview["tenants"],
+                "pending_dues": overview["pending_dues"]
+            })
 
         return ServiceResponse.success({
-            "rooms": rooms,
-            "total": result.count if hasattr(result, "count") else len(rooms)
+            "rooms": compact_rooms,
+            "total": result.count if hasattr(result, "count") else len(compact_rooms)
         })
     except Exception as e:
         logger.exception(f"Error fetching rooms: {e}")
         return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, str(e))
 
+
 def create_room(data: dict) -> Dict[str, Any]:
-    """
-    Create a new room.
-    """
     try:
-        # Check if room already exists for this owner
         existing_query = supabase.table("rooms").select("id").eq("room_no", data["room_no"])
         if data.get("owner_id"):
             existing_query = existing_query.eq("owner_id", data["owner_id"])
@@ -143,163 +274,54 @@ def create_room(data: dict) -> Dict[str, Any]:
             return ServiceResponse.error(ErrorCode.RESOURCE_ALREADY_EXISTS, f"Room {data['room_no']} already exists")
 
         result = supabase.table("rooms").insert(data).execute()
-        
         if not result.data:
-             return ServiceResponse.error(ErrorCode.DB_002, "Failed to create room")
-
+            return ServiceResponse.error(ErrorCode.DB_002, "Failed to create room")
         return ServiceResponse.success(result.data[0], "Room created successfully")
     except Exception as e:
         logger.exception(f"Error creating room: {e}")
         return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, str(e))
 
+
 def get_room(room_id: str, owner_id: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Get room details with active occupants and payment summary.
-    """
     try:
-        room_query = supabase.table("rooms").select("*").eq("id", room_id)
-        if owner_id:
-            room_query = room_query.eq("owner_id", owner_id)
-
-        result = room_query.execute()
-        
-        if not result.data:
+        rooms = _fetch_rooms(owner_id=owner_id, room_id=room_id)
+        if not rooms:
             return ServiceResponse.not_found("Room")
-
-        room = result.data[0]
-        floor_number = _get_floor_number(room.get("room_no", ""))
-
-        allocations_res = supabase.table("room_allocations")\
-            .select("id, room_id, student_id, start_date, students!inner(id, monthly_rent, status, profiles!students_profile_id_fkey(id, name, email, phone))")\
-            .eq("room_id", room_id)\
-            .is_("end_date", "null")\
-            .execute()
-
-        allocations = allocations_res.data or []
-        student_ids = [alloc.get("student_id") for alloc in allocations if alloc.get("student_id")]
-
-        latest_payment_by_student: Dict[str, Dict[str, Any]] = {}
-        payments_by_obligation: Dict[str, Decimal] = {}
-        pending_due_by_student: Dict[str, Decimal] = {}
-        status_flags_by_student: Dict[str, Dict[str, bool]] = {}
-
-        if student_ids:
-            payments_res = supabase.table("payments")\
-                .select("student_id, obligation_id, amount_paid, payment_date")\
-                .in_("student_id", student_ids)\
-                .order("payment_date", desc=True)\
-                .execute()
-
-            for payment in (payments_res.data or []):
-                student_id = payment.get("student_id")
-                obligation_id = payment.get("obligation_id")
-
-                if student_id and student_id not in latest_payment_by_student:
-                    latest_payment_by_student[student_id] = payment
-
-                if obligation_id:
-                    payments_by_obligation[obligation_id] = payments_by_obligation.get(obligation_id, Decimal(0)) + Decimal(str(payment.get("amount_paid") or 0))
-
-            obligations_res = supabase.table("rent_obligations")\
-                .select("id, student_id, amount, status")\
-                .in_("student_id", student_ids)\
-                .neq("status", "WAIVED")\
-                .execute()
-
-            for obligation in (obligations_res.data or []):
-                student_id = obligation.get("student_id")
-                if not student_id:
-                    continue
-
-                flags = status_flags_by_student.setdefault(student_id, {"has_partial": False, "has_pending": False})
-                obligation_status = (obligation.get("status") or "").upper()
-                if obligation_status == "PARTIAL":
-                    flags["has_partial"] = True
-                elif obligation_status == "PENDING":
-                    flags["has_pending"] = True
-
-                obligation_amount = Decimal(str(obligation.get("amount") or 0))
-                paid_amount = payments_by_obligation.get(obligation.get("id"), Decimal(0))
-                remaining_due = max(obligation_amount - paid_amount, Decimal(0))
-                pending_due_by_student[student_id] = pending_due_by_student.get(student_id, Decimal(0)) + remaining_due
-
-        occupants = []
-        for alloc in allocations:
-            student = alloc.get("students") or {}
-            profile = student.get("profiles") or {}
-            student_id = student.get("id")
-            pending_due = pending_due_by_student.get(student_id, Decimal(0))
-            latest_payment = latest_payment_by_student.get(student_id)
-            status_flags = status_flags_by_student.get(student_id, {})
-
-            if pending_due <= 0:
-                payment_status = "PAID" if latest_payment else "NO_HISTORY"
-            elif status_flags.get("has_partial") or latest_payment:
-                payment_status = "PARTIAL"
-            else:
-                payment_status = "PENDING"
-
-            occupants.append({
-                "student_id": student_id,
-                "profile_id": profile.get("id"),
-                "name": profile.get("name"),
-                "email": profile.get("email"),
-                "phone": profile.get("phone"),
-                "joined_date": alloc.get("start_date"),
-                "rent": float(student.get("monthly_rent") or 0),
-                "payment_status": payment_status,
-                "last_payment": latest_payment.get("payment_date") if latest_payment else None,
-                "last_payment_amount": float(latest_payment.get("amount_paid") or 0) if latest_payment else 0,
-                "pending_dues": float(pending_due),
-                "status": student.get("status", "ACTIVE")
-            })
-
-        occupants.sort(key=lambda occupant: occupant.get("name") or "")
-
-        return ServiceResponse.success({
-            "id": room.get("id"),
-            "room_id": room.get("id"),
-            "room_no": room.get("room_no"),
-            "floor": floor_number,
-            "capacity": room.get("capacity", 0),
-            "occupancy_count": len(occupants),
-            "remaining_capacity": max((room.get("capacity") or 0) - len(occupants), 0),
-            "status": "Vacant" if len(occupants) == 0 else ("Full" if len(occupants) >= (room.get("capacity") or 0) else "Occupied"),
-            "occupants": occupants
-        })
+        return ServiceResponse.success(rooms[0])
     except Exception as e:
         logger.exception(f"Error fetching room: {e}")
         return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, str(e))
 
+
+def get_room_overview(room_id: str, owner_id: Optional[str] = None) -> Dict[str, Any]:
+    try:
+        rooms = _fetch_rooms(owner_id=owner_id, room_id=room_id)
+        if not rooms:
+            return ServiceResponse.not_found("Room")
+
+        overview = _build_room_overviews(rooms)[0]
+        return ServiceResponse.success(overview)
+    except Exception as e:
+        logger.exception(f"Error fetching room overview: {e}")
+        return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, str(e))
+
+
 def update_room(room_id: str, data: dict) -> Dict[str, Any]:
-    """
-    Update room details (e.g. capacity).
-    """
     try:
         result = supabase.table("rooms").update(data).eq("id", room_id).execute()
-        
         if not result.data:
             return ServiceResponse.not_found("Room")
-            
         return ServiceResponse.success(result.data[0], "Room updated successfully")
     except Exception as e:
         logger.exception(f"Error updating room: {e}")
         return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, str(e))
 
+
 def delete_room(room_id: str) -> Dict[str, Any]:
-    """
-    Delete a room.
-    """
     try:
-        # Check for active allocations before deleting? 
-        # Database Foreign key might handle this (ON DELETE CASCADE or RESTRICT).
-        # Assuming CASCADE for now based on migration 007.
-        
         result = supabase.table("rooms").delete().eq("id", room_id).execute()
-        
         if not result.data:
-             return ServiceResponse.not_found("Room")
-             
+            return ServiceResponse.not_found("Room")
         return ServiceResponse.success(None, "Room deleted successfully")
     except Exception as e:
         logger.exception(f"Error deleting room: {e}")

@@ -89,6 +89,10 @@ export const roomService = {
         const response = await api.get(`/rooms/${id}`);
         return response.data;
     },
+    getOverview: async (id) => {
+        const response = await api.get(`/rooms/${id}/overview`);
+        return response.data;
+    },
     create: async (data) => {
         const response = await api.post('/rooms/', data);
         return response.data;

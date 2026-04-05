@@ -65,7 +65,7 @@ const ManageRooms = () => {
 
         setRoomDetailsLoading(true);
         try {
-            const details = await roomService.getById(room.id);
+            const details = await roomService.getOverview(room.id);
             setSelectedRoomDetails(details);
         } catch (err) {
             console.error('Failed to fetch room details:', err);
@@ -88,7 +88,7 @@ const ManageRooms = () => {
         if (!targetRoomId) return;
 
         try {
-            const details = await roomService.getById(targetRoomId);
+            const details = await roomService.getOverview(targetRoomId);
             setSelectedRoomDetails(details);
         } catch (err) {
             console.error('Failed to refresh room details:', err);
@@ -518,10 +518,11 @@ const RoomCard = ({ room, onClick }) => {
 }
 
 const RoomDetailSidebar = ({ room, loading, onClose, onAddTenant, onRemoveTenant, onShiftTenant, onOpenTenant }) => {
-    const occupants = room?.occupants || room?.tenants || [];
-    const capacity = room?.capacity || 0;
-    const roomNo = room?.room_no || room?.number;
-    const floor = room?.floor ?? (roomNo?.length >= 3 ? roomNo.substring(0, roomNo.length - 2) : 'G');
+    const roomInfo = room?.room || room;
+    const occupants = room?.tenants || room?.occupants || roomInfo?.tenants || [];
+    const capacity = roomInfo?.capacity || 0;
+    const roomNo = roomInfo?.room_no || roomInfo?.number;
+    const floor = roomInfo?.floor ?? (roomNo?.length >= 3 ? roomNo.substring(0, roomNo.length - 2) : 'G');
 
     const getPaymentTone = (status) => {
         switch (status) {

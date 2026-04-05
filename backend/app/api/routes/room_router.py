@@ -64,6 +64,17 @@ def get_room(
     result = room_service.get_room(room_id, owner_id=user.user_id if user.role in ("admin", "owner") else None)
     return _handle_service_response(result)
 
+@router.get("/{room_id}/overview", response_model=dict)
+def get_room_overview(
+    room_id: str,
+    user: UserContext = Depends(require_admin_or_owner)
+):
+    """
+    Get room overview for drawer UI.
+    """
+    result = room_service.get_room_overview(room_id, owner_id=user.user_id if user.role in ("admin", "owner") else None)
+    return _handle_service_response(result)
+
 @router.put("/{room_id}", response_model=RoomResponse)
 def update_room(
     room_id: str,
