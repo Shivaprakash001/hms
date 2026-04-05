@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, status
 from app.utils.auth import get_current_user, UserContext
 from app.services import owner_service
-from app.schemas.owner_schema import OwnerProfileUpdate, HostelUpdate
+from app.schemas.owner_schema import OwnerProfileUpdate, HostelUpdate, OwnerPreferencesUpdate
 from app.utils.responses import ErrorCode
 
 router = APIRouter(prefix="/owner", tags=["Owner"])
@@ -53,4 +53,15 @@ def patch_my_owner_hostel(
     if not user.is_owner():
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner/admin can access this endpoint.")
     result = owner_service.update_owner_hostel(str(user.user_id), data.model_dump(exclude_unset=True))
+    return _handle_service_response(result)
+
+
+@router.patch("/me/preferences", response_model=dict, summary="Update owner preferences")
+def patch_my_owner_preferences(
+    data: OwnerPreferencesUpdate,
+    user: UserContext = Depends(get_current_user)
+):
+    if not user.is_owner():
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner/admin can access this endpoint.")
+    result = owner_service.update_owner_preferences(str(user.user_id), data.model_dump(exclude_unset=True))
     return _handle_service_response(result)

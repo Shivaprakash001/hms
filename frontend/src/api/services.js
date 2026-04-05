@@ -41,17 +41,78 @@ export const profileService = {
 
 // --- Owner Service ---
 export const ownerService = {
+    _requestWithFallback: async (method, path, data) => {
+        try {
+            const response = await api.request({ method, url: path, data });
+            return response.data;
+        } catch (error) {
+            if (error?.response?.status === 404 && !path.startsWith('/api/v1/')) {
+                const fallbackResponse = await api.request({ method, url: `/api/v1${path}`, data });
+                return fallbackResponse.data;
+            }
+            throw error;
+        }
+    },
     getProfile: async () => {
-        const response = await api.get('/owner/me/profile');
-        return response.data;
+        try {
+            return await ownerService._requestWithFallback('get', '/owner/me/profile');
+        } catch (error) {
+            if (error?.response?.status === 404) {
+                const stored = localStorage.getItem('ownerUser');
+                const parsed = stored ? JSON.parse(stored) : null;
+                const profileId = parsed?.id;
+
+                if (profileId) {
+                    const owner = await profileService.get(profileId);
+                    return {
+                        owner,
+                        hostel: {
+                            name: '', phone: '', address: '', city: '', state: '', pincode: '', upi_id: '', gst_number: ''
+                        },
+                        preferences: {
+                            currency: 'INR',
+                            rent_cycle: 'MONTHLY',
+                            receipt_prefix: 'HMS',
+                            timezone: 'Asia/Kolkata'
+                        }
+                    };
+                }
+            }
+            throw error;
+        }
     },
     updateOwner: async (data) => {
-        const response = await api.patch('/owner/me/profile', data);
-        return response.data;
+        try {
+            return await ownerService._requestWithFallback('patch', '/owner/me/profile', data);
+        } catch (error) {
+            if (error?.response?.status === 404) {
+                const stored = localStorage.getItem('ownerUser');
+                const parsed = stored ? JSON.parse(stored) : null;
+                const profileId = parsed?.id;
+                if (profileId) {
+                    const owner = await profileService.update(profileId, data);
+                    return {
+                        owner,
+                        hostel: {
+                            name: '', phone: '', address: '', city: '', state: '', pincode: '', upi_id: '', gst_number: ''
+                        },
+                        preferences: {
+                            currency: 'INR',
+                            rent_cycle: 'MONTHLY',
+                            receipt_prefix: 'HMS',
+                            timezone: 'Asia/Kolkata'
+                        }
+                    };
+                }
+            }
+            throw error;
+        }
     },
     updateHostel: async (data) => {
-        const response = await api.patch('/owner/me/hostel', data);
-        return response.data;
+        return ownerService._requestWithFallback('patch', '/owner/me/hostel', data);
+    },
+    updatePreferences: async (data) => {
+        return ownerService._requestWithFallback('patch', '/owner/me/preferences', data);
     }
 };
 

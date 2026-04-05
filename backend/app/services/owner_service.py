@@ -5,6 +5,13 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+DEFAULT_PREFERENCES = {
+    "currency": "INR",
+    "rent_cycle": "MONTHLY",
+    "receipt_prefix": "HMS",
+    "timezone": "Asia/Kolkata"
+}
+
 
 def _normalize_hostel_row(row: dict) -> dict:
     return {
@@ -16,6 +23,10 @@ def _normalize_hostel_row(row: dict) -> dict:
         "pincode": row.get("pincode"),
         "upi_id": row.get("upi_id"),
         "gst_number": row.get("gst_number"),
+        "currency": row.get("currency"),
+        "rent_cycle": row.get("rent_cycle"),
+        "receipt_prefix": row.get("receipt_prefix"),
+        "timezone": row.get("timezone"),
     }
 
 
@@ -41,6 +52,10 @@ def get_owner_profile(user_id: str) -> Dict[str, Any]:
             "pincode": None,
             "upi_id": None,
             "gst_number": None,
+            "currency": None,
+            "rent_cycle": None,
+            "receipt_prefix": None,
+            "timezone": None,
         }
 
         try:
@@ -57,12 +72,21 @@ def get_owner_profile(user_id: str) -> Dict[str, Any]:
 
         return ServiceResponse.success({
             "owner": owner,
-            "hostel": hostel,
+            "hostel": {
+                "name": hostel.get("name"),
+                "phone": hostel.get("phone"),
+                "address": hostel.get("address"),
+                "city": hostel.get("city"),
+                "state": hostel.get("state"),
+                "pincode": hostel.get("pincode"),
+                "upi_id": hostel.get("upi_id"),
+                "gst_number": hostel.get("gst_number"),
+            },
             "preferences": {
-                "currency": "INR",
-                "rent_cycle": "MONTHLY",
-                "receipt_prefix": "HMS",
-                "timezone": "Asia/Kolkata"
+                "currency": hostel.get("currency") or DEFAULT_PREFERENCES["currency"],
+                "rent_cycle": hostel.get("rent_cycle") or DEFAULT_PREFERENCES["rent_cycle"],
+                "receipt_prefix": hostel.get("receipt_prefix") or DEFAULT_PREFERENCES["receipt_prefix"],
+                "timezone": hostel.get("timezone") or DEFAULT_PREFERENCES["timezone"],
             }
         })
     except Exception as e:
@@ -135,3 +159,40 @@ def update_owner_hostel(user_id: str, data: dict) -> Dict[str, Any]:
     except Exception as e:
         logger.exception(f"Error updating owner hostel details: {e}")
         return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to update hostel details", str(e))
+
+
+def update_owner_preferences(user_id: str, data: dict) -> Dict[str, Any]:
+    try:
+        allowed = {"currency", "rent_cycle", "receipt_prefix", "timezone"}
+        update_data = {k: v for k, v in data.items() if k in allowed and v is not None}
+        if not update_data:
+            return ServiceResponse.validation_error("No valid preference fields to update")
+
+        try:
+            existing = supabase.table("hostels") \
+                .select("id") \
+                .eq("owner_id", user_id) \
+                .eq("is_active", True) \
+                .limit(1) \
+                .execute()
+
+            if not existing.data:
+                return ServiceResponse.validation_error("Please complete Hostel Details before setting preferences")
+
+            hostel_id = existing.data[0]["id"]
+            res = supabase.table("hostels") \
+                .update(update_data) \
+                .eq("id", hostel_id) \
+                .execute()
+
+            if not res.data:
+                return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to save preferences")
+
+        except Exception as pref_err:
+            logger.exception(f"Error saving hostel preferences: {pref_err}")
+            return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Preferences storage is unavailable", str(pref_err))
+
+        return get_owner_profile(user_id)
+    except Exception as e:
+        logger.exception(f"Error updating owner preferences: {e}")
+        return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to update owner preferences", str(e))

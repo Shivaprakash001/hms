@@ -37,3 +37,38 @@ class HostelUpdate(BaseModel):
         if not re.match(r'^\+?\d{10,15}$', cleaned):
             raise ValueError('Hostel phone number must be 10-15 digits, optionally starting with +')
         return cleaned
+
+
+class OwnerPreferencesUpdate(BaseModel):
+    currency: Optional[str] = Field(None, min_length=3, max_length=3)
+    rent_cycle: Optional[str] = Field(None, min_length=3, max_length=20)
+    receipt_prefix: Optional[str] = Field(None, min_length=2, max_length=20)
+    timezone: Optional[str] = Field(None, min_length=3, max_length=100)
+
+    @field_validator('currency')
+    @classmethod
+    def validate_currency(cls, v):
+        if v is None:
+            return v
+        return v.upper()
+
+    @field_validator('rent_cycle')
+    @classmethod
+    def validate_rent_cycle(cls, v):
+        if v is None:
+            return v
+        normalized = v.upper()
+        allowed = {'MONTHLY', 'QUARTERLY', 'YEARLY'}
+        if normalized not in allowed:
+            raise ValueError('Rent cycle must be one of MONTHLY, QUARTERLY, YEARLY')
+        return normalized
+
+    @field_validator('receipt_prefix')
+    @classmethod
+    def validate_receipt_prefix(cls, v):
+        if v is None:
+            return v
+        normalized = re.sub(r'\s+', '', v).upper()
+        if not re.match(r'^[A-Z0-9_-]{2,20}$', normalized):
+            raise ValueError('Receipt prefix must be 2-20 characters (A-Z, 0-9, _, -)')
+        return normalized

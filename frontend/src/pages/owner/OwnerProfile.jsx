@@ -23,7 +23,7 @@ export default function OwnerProfile() {
     const [hostelForm, setHostelForm] = useState({
         hostel_name: '', hostel_phone: '', address: '', city: '', state: '', pincode: '', upi_id: '', gst_number: ''
     });
-    const [preferences] = useState({ currency: 'INR', rent_cycle: 'MONTHLY', receipt_prefix: 'HMS', timezone: 'Asia/Kolkata' });
+    const [preferences, setPreferences] = useState({ currency: 'INR', rent_cycle: 'MONTHLY', receipt_prefix: 'HMS', timezone: 'Asia/Kolkata' });
 
     useEffect(() => {
         const load = async () => {
@@ -33,6 +33,7 @@ export default function OwnerProfile() {
                 const data = await ownerService.getProfile();
                 const owner = data?.owner || {};
                 const hostel = data?.hostel || {};
+                const prefs = data?.preferences || {};
                 setOwnerForm({
                     name: owner.name || '',
                     email: owner.email || '',
@@ -47,6 +48,12 @@ export default function OwnerProfile() {
                     pincode: hostel.pincode || '',
                     upi_id: hostel.upi_id || '',
                     gst_number: hostel.gst_number || ''
+                });
+                setPreferences({
+                    currency: prefs.currency || 'INR',
+                    rent_cycle: prefs.rent_cycle || 'MONTHLY',
+                    receipt_prefix: prefs.receipt_prefix || 'HMS',
+                    timezone: prefs.timezone || 'Asia/Kolkata'
                 });
             } catch (e) {
                 const detail = e?.response?.data?.detail;
@@ -114,6 +121,28 @@ export default function OwnerProfile() {
         }
     };
 
+    const savePreferences = async (e) => {
+        e.preventDefault();
+        setSaving(true);
+        setError('');
+        try {
+            const data = await ownerService.updatePreferences(preferences);
+            const prefs = data?.preferences || {};
+            setPreferences({
+                currency: prefs.currency || preferences.currency,
+                rent_cycle: prefs.rent_cycle || preferences.rent_cycle,
+                receipt_prefix: prefs.receipt_prefix || preferences.receipt_prefix,
+                timezone: prefs.timezone || preferences.timezone,
+            });
+            showTempSuccess('Preferences updated');
+        } catch (e) {
+            const detail = e?.response?.data?.detail;
+            setError(typeof detail === 'string' ? detail : (detail?.message || 'Failed to update preferences'));
+        } finally {
+            setSaving(false);
+        }
+    };
+
     if (loading) {
         return <div className="p-8 text-slate-500">Loading profile settings...</div>;
     }
@@ -174,15 +203,49 @@ export default function OwnerProfile() {
             )}
 
             {activeTab === 'preferences' && (
-                <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm max-w-3xl">
+                <form onSubmit={savePreferences} className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm max-w-3xl space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                        <Preference label="Currency" value={preferences.currency} />
-                        <Preference label="Rent Cycle" value={preferences.rent_cycle} />
-                        <Preference label="Receipt Prefix" value={preferences.receipt_prefix} />
-                        <Preference label="Timezone" value={preferences.timezone} />
+                        <SelectField
+                            label="Currency"
+                            value={preferences.currency}
+                            options={[
+                                { value: 'INR', label: 'INR' },
+                                { value: 'USD', label: 'USD' },
+                                { value: 'EUR', label: 'EUR' },
+                                { value: 'GBP', label: 'GBP' },
+                            ]}
+                            onChange={(v) => setPreferences(prev => ({ ...prev, currency: v }))}
+                        />
+                        <SelectField
+                            label="Rent Cycle"
+                            value={preferences.rent_cycle}
+                            options={[
+                                { value: 'MONTHLY', label: 'MONTHLY' },
+                                { value: 'QUARTERLY', label: 'QUARTERLY' },
+                                { value: 'YEARLY', label: 'YEARLY' },
+                            ]}
+                            onChange={(v) => setPreferences(prev => ({ ...prev, rent_cycle: v }))}
+                        />
+                        <Field
+                            label="Receipt Prefix"
+                            value={preferences.receipt_prefix}
+                            onChange={(v) => setPreferences(prev => ({ ...prev, receipt_prefix: v.toUpperCase().replace(/\s+/g, '') }))}
+                            required
+                        />
+                        <SelectField
+                            label="Timezone"
+                            value={preferences.timezone}
+                            options={[
+                                { value: 'Asia/Kolkata', label: 'Asia/Kolkata' },
+                                { value: 'Asia/Dubai', label: 'Asia/Dubai' },
+                                { value: 'UTC', label: 'UTC' },
+                                { value: 'America/New_York', label: 'America/New_York' },
+                            ]}
+                            onChange={(v) => setPreferences(prev => ({ ...prev, timezone: v }))}
+                        />
                     </div>
-                    <p className="text-xs text-slate-400 mt-4">Preferences are currently read-only and can be enabled in the next step.</p>
-                </div>
+                    <SaveButton saving={saving} />
+                </form>
             )}
         </div>
     );
@@ -216,11 +279,19 @@ function SaveButton({ saving }) {
     );
 }
 
-function Preference({ label, value }) {
+function SelectField({ label, value, onChange, options }) {
     return (
-        <div className="bg-slate-50 border border-slate-100 rounded-xl p-3">
-            <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">{label}</p>
-            <p className="text-slate-800 font-semibold mt-1">{value}</p>
+        <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">{label}</label>
+            <select
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border text-sm font-medium outline-none transition-all bg-slate-50 border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+            >
+                {options.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+            </select>
         </div>
     );
 }
