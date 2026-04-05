@@ -36,6 +36,12 @@
             margin-bottom: 4px;
             letter-spacing: -0.5px;
         }
+        .logo {
+            width: 44px;
+            height: 44px;
+            object-fit: contain;
+            margin-bottom: 8px;
+        }
         .header-left p {
             font-size: 13px;
             color: #6b7280;
@@ -176,6 +182,10 @@
             padding-top: 24px;
             border-top: 1px solid #e5e7eb;
         }
+        .footer-separator {
+            border-top: 1px solid #e5e7eb;
+            margin: 16px 0 12px;
+        }
         .footer-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -229,6 +239,9 @@
         <!-- Header -->
         <div class="header">
             <div class="header-left">
+                {% if hostel_logo_url %}
+                <img class="logo" src="{{ hostel_logo_url }}" alt="{{ hostel_name }} Logo" />
+                {% endif %}
                 <h1>{{ hostel_name }}</h1>
                 <p>{{ hostel_address }}</p>
             </div>
@@ -301,6 +314,10 @@
                     <span class="info-label">Phone:</span>
                     <span class="info-value">{{ student_phone }}</span>
                 </div>
+                <div class="info-row">
+                    <span class="info-label">Email:</span>
+                    <span class="info-value">{{ student_email }}</span>
+                </div>
             </div>
         </div>
 
@@ -319,6 +336,16 @@
                 <div class="info-row" style="display: block;">
                     <span class="info-label">Status:</span><br>
                     <span class="info-value" style="display: block; text-align: left; margin-left: 0; margin-top: 6px; color: #10b981;">{{ payment_status }}</span>
+                </div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 14px;">
+                <div class="info-row" style="display: block;">
+                    <span class="info-label">Payment Gateway:</span><br>
+                    <span class="info-value" style="display: block; text-align: left; margin-left: 0; margin-top: 6px;">{{ payment_gateway }}</span>
+                </div>
+                <div class="info-row" style="display: block;">
+                    <span class="info-label">Issued By:</span><br>
+                    <span class="info-value" style="display: block; text-align: left; margin-left: 0; margin-top: 6px;">{{ issued_by }}</span>
                 </div>
             </div>
         </div>
@@ -367,6 +394,7 @@
 
         <!-- Footer -->
         <div class="footer-section">
+            <div class="footer-separator"></div>
             <div class="footer-grid">
                 <div class="footer-block">
                     <div class="footer-block-title">Support & Contact</div>

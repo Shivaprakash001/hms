@@ -35,7 +35,19 @@ class ReceiptService:
     def _normalize_payment_method(method: str) -> str:
         if not method:
             return "N/A"
-        return str(method).replace("_", " ").title()
+        normalized = str(method).replace("_", " ").strip()
+        if normalized.upper() in {"UPI", "CASH", "CARD", "NEFT", "RTGS", "IMPS"}:
+            return normalized.upper()
+        return normalized.title()
+
+    @staticmethod
+    def _detect_payment_gateway(reference_number: str) -> str:
+        if not reference_number:
+            return os.getenv("RECEIPT_PAYMENT_GATEWAY", "N/A")
+        ref = str(reference_number).lower()
+        if ref.startswith("pay_"):
+            return "Razorpay"
+        return os.getenv("RECEIPT_PAYMENT_GATEWAY", "N/A")
 
     @staticmethod
     def _get_receipt_timezone() -> ZoneInfo:
@@ -304,6 +316,7 @@ class ReceiptService:
             hostel_address=hostel_address,
             hostel_email=hostel_email,
             hostel_phone=hostel_phone,
+            hostel_logo_url=os.getenv("RECEIPT_LOGO_URL", ""),
             
             # Student/Tenant info
             student_name=profile.get("name") or "N/A",
@@ -319,6 +332,8 @@ class ReceiptService:
             payment_method=ReceiptService._normalize_payment_method(payment.get("payment_method")),
             payment_status=obligation.get("status") or "PAID",
             transaction_id=transaction_id,
+            payment_gateway=ReceiptService._detect_payment_gateway(transaction_id),
+            issued_by=os.getenv("RECEIPT_ISSUED_BY", "Hostel Management System"),
             description=ReceiptService._build_description(obligation),
             amount=amount_formatted,
             
