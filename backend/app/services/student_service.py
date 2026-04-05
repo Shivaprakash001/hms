@@ -11,6 +11,37 @@ from decimal import Decimal
 logger = get_logger(__name__)
 
 
+def _attach_hostel_info(student: dict) -> dict:
+    """Attach hostel/owner contact metadata to a student payload."""
+    try:
+        owner_id = student.get("owner_id")
+        if not owner_id:
+            student["hostel"] = None
+            return student
+
+        owner_res = supabase.table("profiles")\
+            .select("id, name, phone, address")\
+            .eq("id", owner_id)\
+            .eq("is_active", True)\
+            .execute()
+
+        if not owner_res.data:
+            student["hostel"] = None
+            return student
+
+        owner = owner_res.data[0]
+        student["hostel"] = {
+            "owner_id": owner.get("id"),
+            "name": owner.get("name"),
+            "phone": owner.get("phone"),
+            "address": owner.get("address")
+        }
+        return student
+    except Exception:
+        student["hostel"] = None
+        return student
+
+
 def create_student(
     data: dict,
     created_by: Optional[str] = None
@@ -145,6 +176,11 @@ def get_student(
         
         student = result.data[0]
         
+        # Normalize joined profile relation
+        if "profiles" in student:
+            profile_rel = student.pop("profiles")
+            student["profile"] = profile_rel[0] if isinstance(profile_rel, list) and profile_rel else profile_rel
+
         # Process room allocations to find active one
         if "room_allocations" in student:
             allocations = student.pop("room_allocations")
@@ -163,12 +199,99 @@ def get_student(
                     "You can only view your own student record",
                     "Students can only access their own information"
                 )
+
+            student = _attach_hostel_info(student)
         
         return ServiceResponse.success(student)
         
     except Exception as e:
         logger.exception(f"Error fetching student {student_id}: {e}")
         return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to fetch student", str(e))
+
+
+def get_owner_tenant_overview(
+    student_id: str,
+    owner_id: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Minimal operational tenant profile for owner room-management views.
+    """
+    try:
+        query = supabase.table("students")\
+            .select("*, profiles!students_profile_id_fkey(name, email, phone, emergency_contact), room_allocations(*, rooms(id, room_no, capacity))")\
+            .eq("id", student_id)
+
+        if owner_id:
+            query = query.eq("owner_id", owner_id)
+
+        result = query.execute()
+        if not result.data:
+            return ServiceResponse.not_found("Student")
+
+        student = result.data[0]
+        profile_rel = student.get("profiles")
+        profile = profile_rel[0] if isinstance(profile_rel, list) and profile_rel else (profile_rel or {})
+        allocations = student.get("room_allocations") or []
+        active_allocation = next((alloc for alloc in allocations if alloc.get("end_date") is None), None)
+        current_room = active_allocation.get("rooms") if active_allocation else None
+
+        obligations_res = supabase.table("rent_obligations")\
+            .select("id, amount, status, rent_month, due_date")\
+            .eq("student_id", student_id)\
+            .neq("status", "WAIVED")\
+            .order("due_date", desc=False)\
+            .execute()
+        obligations = obligations_res.data or []
+
+        payments_res = supabase.table("payments")\
+            .select("id, amount_paid, payment_date, payment_method, reference_number, obligation_id")\
+            .eq("student_id", student_id)\
+            .order("payment_date", desc=True)\
+            .execute()
+        payments = payments_res.data or []
+
+        paid_by_obligation: Dict[str, Decimal] = {}
+        for payment in payments:
+            obligation_id = payment.get("obligation_id")
+            if obligation_id:
+                paid_by_obligation[obligation_id] = paid_by_obligation.get(obligation_id, Decimal(0)) + Decimal(str(payment.get("amount_paid") or 0))
+
+        total_due = sum(Decimal(str(obligation.get("amount") or 0)) for obligation in obligations)
+        total_paid = sum(Decimal(str(payment.get("amount_paid") or 0)) for payment in payments)
+        outstanding = max(total_due - total_paid, Decimal(0))
+
+        recent_payments = [
+            {
+                "id": payment.get("id"),
+                "amount": float(payment.get("amount_paid") or 0),
+                "date": payment.get("payment_date"),
+                "method": payment.get("payment_method"),
+                "status": "paid",
+                "reference_number": payment.get("reference_number")
+            }
+            for payment in payments[:5]
+        ]
+
+        return ServiceResponse.success({
+            "id": student.get("id"),
+            "name": profile.get("name"),
+            "phone": student.get("phone_1") or profile.get("phone"),
+            "guardian_phone": student.get("phone_2") or profile.get("emergency_contact"),
+            "email": profile.get("email"),
+            "room_number": current_room.get("room_no") if current_room else None,
+            "floor": current_room.get("room_no")[:-2] if current_room and current_room.get("room_no") and len(current_room.get("room_no")) >= 3 else "G",
+            "joined_at": student.get("joined_on"),
+            "status": student.get("status"),
+            "rent": float(student.get("monthly_rent") or 0),
+            "total_paid": float(total_paid),
+            "total_due": float(total_due),
+            "outstanding": float(outstanding),
+            "recent_payments": recent_payments
+        })
+
+    except Exception as e:
+        logger.exception(f"Error fetching owner tenant overview for {student_id}: {e}")
+        return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to fetch tenant overview", str(e))
 
 
 def get_student_by_profile(
@@ -190,6 +313,11 @@ def get_student_by_profile(
         
         student = result.data[0]
         
+        # Normalize joined profile relation
+        if "profiles" in student:
+            profile_rel = student.pop("profiles")
+            student["profile"] = profile_rel[0] if isinstance(profile_rel, list) and profile_rel else profile_rel
+
         # Process room allocations to find active one
         if "room_allocations" in student:
             allocations = student.pop("room_allocations")
@@ -205,6 +333,8 @@ def get_student_by_profile(
                 return ServiceResponse.forbidden(
                     "You can only view your own student record"
                 )
+
+        student = _attach_hostel_info(student)
         
         return ServiceResponse.success(student)
         

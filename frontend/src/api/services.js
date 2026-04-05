@@ -49,6 +49,10 @@ export const studentService = {
         const response = await api.get(`/students/${id}`);
         return response.data;
     },
+    getOwnerTenantOverview: async (id) => {
+        const response = await api.get(`/students/owner/tenants/${id}/overview`);
+        return response.data;
+    },
     getByProfileId: async (profileId) => {
         const response = await api.get(`/students/by-profile/${profileId}`);
         return response.data;
@@ -59,6 +63,18 @@ export const studentService = {
     },
     updateMyProfile: async (data) => {
         const response = await api.patch('/students/me/profile', data);
+        return response.data;
+    },
+    getMyDocuments: async () => {
+        const response = await api.get('/students/me/documents');
+        return response.data;
+    },
+    getMyPaymentHistory: async () => {
+        const response = await api.get('/students/me/payments/history');
+        return response.data;
+    },
+    getMyRoom: async () => {
+        const response = await api.get('/students/me/room');
         return response.data;
     },
     create: async (data) => {

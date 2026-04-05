@@ -48,11 +48,12 @@ const StudentProfile = () => {
                     meData = await studentService.getByProfileId(user.id);
                 }
 
-                const prof = meData?.profile || {};
+                const profRel = meData?.profile || meData?.profiles;
+                const prof = Array.isArray(profRel) ? (profRel[0] || {}) : (profRel || {});
                 setStudentInfo(meData);
                 setFormData({
-                    name: prof.name || '',
-                    email: prof.email || '',
+                    name: prof.name || user?.name || '',
+                    email: prof.email || user?.email || '',
                     phone: prof.phone || '',
                     emergency_contact: prof.emergency_contact || '',
                     address: prof.address || '',
@@ -101,12 +102,13 @@ const StudentProfile = () => {
                 photo_url: formData.photo_url
             };
             const updated = await studentService.updateMyProfile(payload);
-            const prof = updated?.profile || {};
+            const profRel = updated?.profile || updated?.profiles;
+            const prof = Array.isArray(profRel) ? (profRel[0] || {}) : (profRel || {});
             setStudentInfo(updated);
             setFormData((prev) => ({
                 ...prev,
-                name: prof.name || prev.name,
-                email: prof.email || prev.email,
+                name: prof.name || user?.name || prev.name,
+                email: prof.email || user?.email || prev.email,
                 phone: prof.phone || prev.phone,
                 emergency_contact: prof.emergency_contact || prev.emergency_contact,
                 address: prof.address || prev.address,
@@ -183,8 +185,8 @@ const StudentProfile = () => {
                         </div>
 
                         <div className="flex-1 text-center md:text-left space-y-2">
-                            <h1 className="text-2xl font-bold text-slate-900">{formData.name}</h1>
-                            <p className="text-slate-500 text-sm font-medium">{formData.email}</p>
+                            <h1 className="text-2xl font-bold text-slate-900">{formData.name || user?.name || 'Student'}</h1>
+                            <p className="text-slate-500 text-sm font-medium">{formData.email || user?.email || 'N/A'}</p>
 
                             <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 pt-1">
                                 <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-bold border border-slate-200">
@@ -469,7 +471,7 @@ const InfoField = ({ label, value, icon: Icon, isEditable, onChange, type = "tex
                 <div className="text-slate-400">
                     <Icon size={18} />
                 </div>
-                <span className="font-medium">{value}</span>
+                <span className="font-medium">{value || 'N/A'}</span>
             </div>
         )}
     </div>

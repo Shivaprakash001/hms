@@ -5,8 +5,10 @@ from app.schemas.student_schema import (
     StudentCreate, StudentUpdate, StudentResponse,
     StudentListResponse, StudentStatus, StudentReactivate, StudentSelfProfileUpdate
 )
+from app.schemas.document_schema import DocumentResponse
+from app.schemas.payment_schema import StudentPaymentHistory
 from app.schemas.invitation_schema import TenantInviteRequest, TenantActivateRequest, TenantResendRequest, TenantInviteResponse
-from app.services import student_service, auth_service
+from app.services import student_service, auth_service, document_service, payment_service
 from app.services.invitation_service import InvitationService
 from app.utils.auth import get_current_user, UserContext, require_admin, require_admin_or_owner
 from app.utils.responses import ErrorCode
@@ -261,6 +263,146 @@ def update_my_profile(
         profile_id=str(user.user_id),
         data=data.model_dump(exclude_unset=True),
         updated_by=user.user_id
+    )
+    return _handle_service_response(result)
+
+
+@router.get(
+    "/me/documents",
+    response_model=List[DocumentResponse],
+    summary="Get current student documents",
+    description="Retrieve current student's own identification documents"
+)
+def read_my_documents(
+    user: UserContext = Depends(get_current_user)
+):
+    if not user.is_student():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only students can access this endpoint."
+        )
+
+    from app.db import supabase
+    stu_res = supabase.table("students").select("id").eq("profile_id", str(user.user_id)).execute()
+    if not stu_res.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student record not found")
+
+    student_id = stu_res.data[0].get("id")
+    result = document_service.get_tenant_documents(
+        tenant_id=str(student_id),
+        requesting_user_id=user.user_id,
+        requesting_user_role=user.role
+    )
+    return _handle_service_response(result)
+
+
+@router.get(
+    "/me/payments/history",
+    response_model=StudentPaymentHistory,
+    summary="Get current student payment history",
+    description="Retrieve obligations, payments and outstanding balance for current student"
+)
+def read_my_payment_history(
+    user: UserContext = Depends(get_current_user)
+):
+    if not user.is_student():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only students can access this endpoint."
+        )
+
+    from app.db import supabase
+    student_id = user.student_id
+    if not student_id:
+        stu_res = supabase.table("students").select("id").eq("profile_id", str(user.user_id)).execute()
+        if stu_res.data:
+            student_id = stu_res.data[0].get("id")
+
+    if not student_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student record not found")
+
+    result = payment_service.get_student_payment_history(str(student_id))
+    return _handle_service_response(result)
+
+
+@router.get(
+    "/me/room",
+    response_model=dict,
+    summary="Get current student room details",
+    description="Retrieve current room, floor/capacity details and roommates for current student"
+)
+def read_my_room(
+    user: UserContext = Depends(get_current_user)
+):
+    if not user.is_student():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only students can access this endpoint."
+        )
+
+    from app.db import supabase
+
+    student_id = user.student_id
+    if not student_id:
+        stu_res = supabase.table("students").select("id").eq("profile_id", str(user.user_id)).execute()
+        if stu_res.data:
+            student_id = stu_res.data[0].get("id")
+
+    if not student_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student record not found")
+
+    alloc_res = supabase.table("room_allocations")\
+        .select("room_id, rooms(room_no, capacity, floor_id)")\
+        .eq("student_id", student_id)\
+        .is_("end_date", "null")\
+        .execute()
+
+    if not alloc_res.data:
+        return {"room": None, "roommates": []}
+
+    alloc = alloc_res.data[0]
+    room = alloc.get("rooms") or {}
+    room_id = alloc.get("room_id")
+
+    occupants_res = supabase.table("room_allocations")\
+        .select("student_id, students!room_allocations_student_id_fkey(profile_id, profiles!students_profile_id_fkey(name))")\
+        .eq("room_id", room_id)\
+        .is_("end_date", "null")\
+        .neq("student_id", student_id)\
+        .execute()
+
+    roommates = []
+    for occ in (occupants_res.data or []):
+        student_rec = occ.get("students") or {}
+        profile = student_rec.get("profiles!students_profile_id_fkey") or student_rec.get("profiles") or {}
+        name = profile.get("name")
+        if name:
+            roommates.append({"name": name})
+
+    return {
+        "room": {
+            "room_no": room.get("room_no"),
+            "capacity": room.get("capacity"),
+            "floor_id": room.get("floor_id"),
+        },
+        "roommates": roommates
+    }
+
+
+@router.get(
+    "/owner/tenants/{student_id}/overview",
+    response_model=dict,
+    summary="Get owner tenant overview",
+    description="Retrieve owner-safe tenant overview for room management",
+    dependencies=[Depends(require_admin_or_owner)]
+)
+def read_owner_tenant_overview(
+    student_id: str,
+    user: UserContext = Depends(get_current_user)
+):
+    result = student_service.get_owner_tenant_overview(
+        student_id,
+        owner_id=user.user_id if user.role in ("admin", "owner") else None
     )
     return _handle_service_response(result)
 
