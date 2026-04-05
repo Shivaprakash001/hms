@@ -217,48 +217,27 @@ def get_owner_tenant_overview(
     Minimal operational tenant profile for owner room-management views.
     """
     try:
-        query = supabase.table("students")\
-            .select("*, profiles!students_profile_id_fkey(name, email, phone, emergency_contact), room_allocations(*, rooms(id, room_no, capacity))")\
-            .eq("id", student_id)
+        student_result = get_student(student_id, requesting_user_role="owner")
+        if not student_result.get("success"):
+            return student_result
 
-        if owner_id:
-            query = query.eq("owner_id", owner_id)
+        student = student_result.get("data") or {}
+        if owner_id and str(student.get("owner_id")) != str(owner_id):
+            return ServiceResponse.forbidden("You can only view your own tenants")
 
-        result = query.execute()
-        if not result.data:
-            return ServiceResponse.not_found("Student")
+        profile = student.get("profile") or {}
+        current_room = student.get("current_room") or {}
 
-        student = result.data[0]
-        profile_rel = student.get("profiles")
-        profile = profile_rel[0] if isinstance(profile_rel, list) and profile_rel else (profile_rel or {})
-        allocations = student.get("room_allocations") or []
-        active_allocation = next((alloc for alloc in allocations if alloc.get("end_date") is None), None)
-        current_room = active_allocation.get("rooms") if active_allocation else None
+        from app.services import payment_service
+        payment_result = payment_service.get_student_payment_history(student_id)
+        if not payment_result.get("success"):
+            return payment_result
 
-        obligations_res = supabase.table("rent_obligations")\
-            .select("id, amount, status, rent_month, due_date")\
-            .eq("student_id", student_id)\
-            .neq("status", "WAIVED")\
-            .order("due_date", desc=False)\
-            .execute()
-        obligations = obligations_res.data or []
-
-        payments_res = supabase.table("payments")\
-            .select("id, amount_paid, payment_date, payment_method, reference_number, obligation_id")\
-            .eq("student_id", student_id)\
-            .order("payment_date", desc=True)\
-            .execute()
-        payments = payments_res.data or []
-
-        paid_by_obligation: Dict[str, Decimal] = {}
-        for payment in payments:
-            obligation_id = payment.get("obligation_id")
-            if obligation_id:
-                paid_by_obligation[obligation_id] = paid_by_obligation.get(obligation_id, Decimal(0)) + Decimal(str(payment.get("amount_paid") or 0))
-
-        total_due = sum(Decimal(str(obligation.get("amount") or 0)) for obligation in obligations)
-        total_paid = sum(Decimal(str(payment.get("amount_paid") or 0)) for payment in payments)
-        outstanding = max(total_due - total_paid, Decimal(0))
+        payment_data = payment_result.get("data") or {}
+        payments = payment_data.get("payments") or []
+        total_due = Decimal(str(payment_data.get("total_due") or 0))
+        total_paid = Decimal(str(payment_data.get("total_paid") or 0))
+        outstanding = Decimal(str(payment_data.get("outstanding_balance") or 0))
 
         recent_payments = [
             {

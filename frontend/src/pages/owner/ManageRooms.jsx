@@ -4,7 +4,7 @@ import { Plus, Layers, LayoutGrid, Users, DoorOpen, BedDouble, Trash2, ArrowRigh
 import AddRoomModal from '../../components/owner/rooms/AddRoomModal';
 import AddTenantModal from '../../components/owner/rooms/AddTenantModal';
 import ShiftTenantModal from '../../components/owner/rooms/ShiftTenantModal';
-import { roomService, allocationService, studentService } from '../../api/services';
+import { roomService, allocationService, studentService, paymentService } from '../../api/services';
 
 const ManageRooms = () => {
     // State
@@ -86,10 +86,46 @@ const ManageRooms = () => {
             const overview = await studentService.getOwnerTenantOverview(tenantId);
             setSelectedTenantProfile(overview);
         } catch (err) {
-            console.error('Failed to load tenant profile:', err);
-            alert('Failed to load tenant profile. Please try again.');
-            setSelectedTenant(null);
-            setSelectedTenantProfile(null);
+            console.error('Failed to load tenant overview, falling back to base student data:', err);
+            try {
+                const [studentRes, paymentHistoryRes] = await Promise.all([
+                    studentService.getById(tenantId),
+                    paymentService.getStudentHistory(tenantId)
+                ]);
+
+                const fallbackProfile = {
+                    id: studentRes?.id,
+                    name: studentRes?.profile?.name || tenant.name,
+                    phone: studentRes?.phone_1 || studentRes?.profile?.phone,
+                    guardian_phone: studentRes?.phone_2 || studentRes?.profile?.emergency_contact,
+                    email: studentRes?.profile?.email,
+                    room_number: studentRes?.current_room?.room_no,
+                    floor: studentRes?.current_room?.room_no && studentRes.current_room.room_no.length >= 3
+                        ? studentRes.current_room.room_no.slice(0, -2)
+                        : 'G',
+                    joined_at: studentRes?.joined_on,
+                    status: studentRes?.status,
+                    rent: Number(studentRes?.monthly_rent || 0),
+                    total_paid: Number(paymentHistoryRes?.total_paid || 0),
+                    total_due: Number(paymentHistoryRes?.total_due || 0),
+                    outstanding: Number(paymentHistoryRes?.outstanding_balance || 0),
+                    recent_payments: (paymentHistoryRes?.payments || []).slice(0, 5).map((payment) => ({
+                        id: payment.id,
+                        amount: Number(payment.amount_paid || 0),
+                        date: payment.payment_date,
+                        method: payment.payment_method,
+                        status: 'paid',
+                        reference_number: payment.reference_number
+                    }))
+                };
+
+                setSelectedTenantProfile(fallbackProfile);
+            } catch (fallbackErr) {
+                console.error('Failed to load tenant profile:', fallbackErr);
+                alert('Failed to load tenant profile. Please try again.');
+                setSelectedTenant(null);
+                setSelectedTenantProfile(null);
+            }
         } finally {
             setTenantProfileLoading(false);
         }

@@ -27,13 +27,45 @@ const Register = () => {
         e.preventDefault();
         setError('');
 
+        const getApiErrorMessage = (err) => {
+            const detail = err?.response?.data?.detail;
+            if (typeof detail === 'string') return detail;
+            if (Array.isArray(detail)) {
+                return detail.map((d) => d?.msg).filter(Boolean).join(', ') || 'Registration failed';
+            }
+            if (detail && typeof detail === 'object') {
+                return detail.message || detail.details || JSON.stringify(detail);
+            }
+            return err?.message || 'Registration failed';
+        };
+
         if (formData.password !== formData.confirmPassword) {
             setError('Passwords do not match');
             return;
         }
 
-        if (formData.password.length < 6) {
-            setError('Password must be at least 6 characters');
+        if (formData.password.length < 8) {
+            setError('Password must be at least 8 characters long');
+            return;
+        }
+
+        if (!/[A-Z]/.test(formData.password)) {
+            setError('Password must contain at least one uppercase letter');
+            return;
+        }
+
+        if (!/[a-z]/.test(formData.password)) {
+            setError('Password must contain at least one lowercase letter');
+            return;
+        }
+
+        if (!/[0-9]/.test(formData.password)) {
+            setError('Password must contain at least one number');
+            return;
+        }
+
+        if (!/[!@#$%^&*(),.?":{}|<>]/.test(formData.password)) {
+            setError('Password must contain at least one special character');
             return;
         }
 
@@ -47,7 +79,7 @@ const Register = () => {
             }, 3000);
         } catch (err) {
             console.error("Registration error:", err);
-            setError(err.response?.data?.detail?.message || err.message || 'Registration failed');
+            setError(getApiErrorMessage(err));
         } finally {
             setIsLoading(false);
         }
