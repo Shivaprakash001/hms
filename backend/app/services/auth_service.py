@@ -13,6 +13,38 @@ import secrets
 import os
 from datetime import datetime, timedelta, timezone
 
+
+def _verify_or_migrate_legacy_password(profile: dict, input_password: str) -> bool:
+    """
+    Verify password with graceful fallback for legacy/malformed stored values.
+
+    If the stored value is plain text (legacy bad data), allow one-time match and
+    migrate it to bcrypt hash immediately.
+    """
+    stored = profile.get("password_hash")
+    if not stored:
+        return False
+
+    try:
+        return verify_password(input_password, stored)
+    except Exception as verify_err:
+        logger.warning(f"Password hash verification failed for profile={profile.get('id')}: {verify_err}")
+
+        # Legacy fallback: plain-text password stored by mistake
+        if stored == input_password:
+            try:
+                new_hash = get_password_hash(input_password)
+                supabase.table("profiles") \
+                    .update({"password_hash": new_hash}) \
+                    .eq("id", profile.get("id")) \
+                    .execute()
+                logger.info(f"Migrated legacy plain-text password to bcrypt for profile={profile.get('id')}")
+            except Exception as migrate_err:
+                logger.warning(f"Failed to migrate legacy password hash for profile={profile.get('id')}: {migrate_err}")
+            return True
+
+        return False
+
 def login(email: str, password: str) -> Dict[str, Any]:
     """
     Authenticate user and return JWT token.
@@ -54,8 +86,7 @@ def login(email: str, password: str) -> Dict[str, Any]:
                     return ServiceResponse.error(ErrorCode.FORBIDDEN, "Account not activated. Please check your email.")
 
         # 2. Verify password
-        hashed_password = profile.get("password_hash")
-        if not hashed_password or not verify_password(password, hashed_password):
+        if not _verify_or_migrate_legacy_password(profile, password):
             logger.warning(f"Login failed: Incorrect password for: {normalized_email}")
             return ServiceResponse.error(ErrorCode.UNAUTHORIZED, "Invalid email or password")
             
