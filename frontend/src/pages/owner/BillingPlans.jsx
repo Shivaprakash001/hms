@@ -72,7 +72,12 @@ export default function BillingPlans() {
             {error && <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-xl px-4 py-3">{error}</div>}
 
             <section className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
-                <h3 className="text-base font-bold text-slate-900 mb-4">Current Plan</h3>
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-base font-bold text-slate-900">Current Plan</h3>
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                        {currentPlan.name}
+                    </span>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                     <Info label="Plan" value={`${currentPlan.name} Plan`} />
                     <Info label="Price" value={`${symbolFor(currentPlan.currency)}${currentPlan.price} / month`} />

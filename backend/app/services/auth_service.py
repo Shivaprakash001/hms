@@ -4,6 +4,7 @@ from app.utils.responses import ServiceResponse, ErrorCode
 from app.utils.logger import get_logger
 from typing import Dict, Any
 from app.services.email_service import EmailService
+from app.services import billing_service
 
 logger = get_logger(__name__)
 
@@ -143,6 +144,13 @@ def register_user(data: dict) -> Dict[str, Any]:
                     created_profile["hostel"] = hostel_res.data[0]
         except Exception as hostel_err:
             logger.warning(f"Hostel record creation skipped (table may be pending migration): {hostel_err}")
+
+        # 5. Ensure default Starter subscription for owner/admin (non-blocking)
+        try:
+            if created_profile.get("role") in ("owner", "admin"):
+                billing_service.ensure_owner_starter_subscription(user_id)
+        except Exception as sub_err:
+            logger.warning(f"Starter subscription ensure skipped: {sub_err}")
 
         return ServiceResponse.success(created_profile, "User registered successfully")
     except Exception as e:

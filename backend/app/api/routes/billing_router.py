@@ -39,3 +39,12 @@ def get_my_subscription(user: UserContext = Depends(get_current_user)):
 
     result = billing_service.get_owner_subscription(str(user.user_id))
     return _handle_service_response(result)
+
+
+@router.get("/owner/me/usage", response_model=dict, summary="Get owner usage metrics")
+def get_my_usage(user: UserContext = Depends(get_current_user)):
+    if not user.is_owner():
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner/admin can access this endpoint.")
+
+    result = billing_service.get_owner_usage(str(user.user_id))
+    return _handle_service_response(result)

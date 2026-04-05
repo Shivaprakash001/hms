@@ -135,6 +135,9 @@ export const billingService = {
     },
     getPlans: async () => {
         return billingService._requestWithFallback('get', '/plans');
+    },
+    getUsage: async () => {
+        return billingService._requestWithFallback('get', '/owner/me/usage');
     }
 };
 
