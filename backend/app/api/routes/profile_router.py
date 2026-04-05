@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query, status, Depends, Form, File, UploadFile
+from fastapi import APIRouter, HTTPException, Query, status, Depends, UploadFile, File, Form
 from typing import List, Optional
 from app.schemas.profile_schema import (
     ProfileCreate, ProfileUpdate, ProfileAdminUpdate,
@@ -262,47 +262,48 @@ def read_unassigned_students(
     return _handle_service_response(result)
 
 
+from app.schemas.profile_schema import CompleteProfileRequest
+import json
+from pydantic import ValidationError
+
 @router.post(
     "/complete",
     response_model=ProfileResponse,
     status_code=status.HTTP_200_OK,
-    summary="Complete a student profile",
-    description="Complete a student profile after login"
+    summary="Complete Profile",
+    description="Complete student profile with Aadhaar upload"
 )
 async def complete_student_profile(
-    name: str = Form(..., description="Full Name"),
-    college_roll_number: str = Form(..., description="College Roll Number"),
-    address: str = Form(..., description="Address"),
-    parent_phone: str = Form(..., description="Parent Phone"),
-    section: Optional[str] = Form(None, description="Section"),
-    branch: Optional[str] = Form(None, description="Branch"),
-    year_of_study: Optional[str] = Form(None, description="Year of Study"),
-    aadhaar_file: UploadFile = File(..., description="Aadhaar Card Image"),
+    profile_data: str = Form(..., description="JSON string of CompleteProfileRequest data"),
+    aadhaar_file: UploadFile = File(..., description="Aadhaar card image file"),
     user: UserContext = Depends(get_current_user)
 ):
     """
-    Complete student profile with details and Aadhaar upload.
-    This uses form data to allow file upload alongside profile fields.
+    Complete the student profile.
+    This accepts a multipart/form-data request combining the profile data (as a JSON string) and the Aadhaar image.
     """
-    if not user.is_student():
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only students need to complete their profile."
-        )
+    try:
+        # Parse profile data JSON
+        data_dict = json.loads(profile_data)
+        profile_req = CompleteProfileRequest(**data_dict)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=422, detail="Invalid JSON in profile_data")
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=e.errors())
+
+    # Check file
+    if not aadhaar_file.filename:
+        raise HTTPException(status_code=400, detail="Aadhaar file missing")
 
     file_bytes = await aadhaar_file.read()
-    
+
     result = profile_service.complete_profile(
         profile_id=str(user.user_id),
-        name=name,
-        college_roll_number=college_roll_number,
-        address=address,
-        parent_phone=parent_phone,
+        data=profile_req.model_dump(),
         aadhaar_file_bytes=file_bytes,
         aadhaar_filename=aadhaar_file.filename,
-        aadhaar_content_type=aadhaar_file.content_type,
-        section=section,
-        branch=branch,
-        year_of_study=year_of_study
+        aadhaar_content_type=aadhaar_file.content_type
     )
+
     return _handle_service_response(result)
+

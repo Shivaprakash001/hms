@@ -3,7 +3,7 @@ from typing import Optional, Dict, Any
 from postgrest.exceptions import APIError
 from app.utils.responses import ServiceResponse, ErrorCode
 from app.utils.logger import get_logger
-from app.utils.file_handler import upload_file, get_signed_url
+from app.services import document_service
 
 logger = get_logger(__name__)
 
@@ -336,83 +336,69 @@ def get_unassigned_student_profiles(owner_id: Optional[str] = None) -> Dict[str,
 
 def complete_profile(
     profile_id: str,
-    name: str,
-    college_roll_number: str,
-    address: str,
-    parent_phone: str,
+    data: dict,
     aadhaar_file_bytes: bytes,
     aadhaar_filename: str,
-    aadhaar_content_type: str,
-    section: Optional[str] = None,
-    branch: Optional[str] = None,
-    year_of_study: Optional[str] = None
+    aadhaar_content_type: str
 ) -> Dict[str, Any]:
     """
-    Complete a student profile with educational details and Aadhaar document.
+    Complete a user's profile with personal details and Aadhaar upload.
+    Will map to both profiles table and identification_documents table.
     """
     try:
-        logger.info(f"Completing profile for {profile_id}")
+        logger.info(f"Completing profile for user: {profile_id}")
         
-        # 1. Check if roll number already exists (must be unique)
-        roll_check = supabase.table("profiles")\
-            .select("id")\
-            .eq("college_roll_number", college_roll_number)\
-            .neq("id", profile_id)\
-            .execute()
+        # 1. Look up student record to get tenant_id for document upload
+        stu_res = supabase.table("students").select("id").eq("profile_id", profile_id).execute()
+        if not stu_res.data:
+            return ServiceResponse.not_found("Student record for this profile")
             
-        if roll_check.data:
-            return ServiceResponse.already_exists("Student", f"College Roll Number '{college_roll_number}' is already registered")
+        tenant_id = stu_res.data[0]["id"]
 
-        # 2. Upload Aadhaar file
-        # Find tenant_id (student_id) if it exists, otherwise use profile_id for folder
-        student_check = supabase.table("students").select("id").eq("profile_id", profile_id).execute()
-        folder_id = str(student_check.data[0]["id"]) if student_check.data else profile_id
-        
-        upload_result = upload_file(
+        # 2. Upload Aadhaar Document
+        doc_res = document_service.upload_document(
+            tenant_id=tenant_id,
+            doc_type="AADHAR",
+            document_number=None, # Not explicitly requested in form, can be added later
             file_bytes=aadhaar_file_bytes,
-            tenant_id=folder_id,
-            doc_type="AADHAAR",
             filename=aadhaar_filename,
-            content_type=aadhaar_content_type
+            content_type=aadhaar_content_type,
+            uploaded_by=profile_id,
+            requesting_user_id=profile_id,
+            requesting_user_role="student"
         )
         
-        if not upload_result.get("success"):
-            return ServiceResponse.error(
-                ErrorCode.VALIDATION_ERROR,
-                "Aadhaar upload failed",
-                upload_result.get("error", "Unknown upload error")
-            )
-            
-        file_path = upload_result.get("file_path")
+        if not doc_res.get("success"):
+            return doc_res # Bubble up the error
 
-        # 3. Update profile
+        # 3. Update Profiles Table
         update_data = {
-            "name": name,
-            "college_roll_number": college_roll_number,
-            "address": address,
-            "parent_phone": parent_phone,
-            "section": section,
-            "branch": branch,
-            "year_of_study": year_of_study,
-            "aadhaar_image_url": file_path,
-            "is_profile_completed": True,
-            "updated_at": "now()"
+            "name": data.get("name"),
+            "college_roll_number": data.get("college_roll_number"),
+            "section": data.get("section"),
+            "branch": data.get("branch"),
+            "year_of_study": data.get("year_of_study"),
+            "address": data.get("address"),
+            "parent_phone": data.get("parent_phone"),
+            "is_profile_completed": True
         }
-
-        result = supabase.table("profiles")\
-            .update(update_data)\
-            .eq("id", profile_id)\
-            .execute()
-            
+        
+        # Remove any None values just in case
+        update_data = {k: v for k, v in update_data.items() if v is not None}
+        
+        result = supabase.table("profiles").update(update_data).eq("id", profile_id).execute()
+        
         if not result.data:
-            return ServiceResponse.not_found("Profile")
-            
+            return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to update profile details")
+
         return ServiceResponse.success(result.data[0], "Profile completed successfully")
 
     except APIError as e:
-        logger.error(f"Database error completing profile: {e}")
-        return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Database conflict", str(e))
+        error_msg = str(e)
+        logger.error(f"Database error completing profile: {error_msg}")
+        if "unique" in error_msg.lower() and "college_roll_number" in error_msg.lower():
+            return ServiceResponse.already_exists("Student with this Roll Number", error_msg)
+        return ServiceResponse.error(ErrorCode.DB_CONSTRAINT_VIOLATION, "Database constraint violation", error_msg)
     except Exception as e:
-        logger.exception(f"Unexpected error completing profile: {e}")
-        return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "An unexpected error occurred", str(e))
-
+        logger.exception(f"Error completing profile {profile_id}: {e}")
+        return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Failed to complete profile", str(e))

@@ -90,8 +90,10 @@ def get_me(user: UserContext = Depends(get_current_user)):
                 extra["due_day"] = prof_res.data[0].get("due_day")
                 extra["is_profile_completed"] = prof_res.data[0].get("is_profile_completed", False)
     else:
-        # Non-students don't need profile completion flow
-        extra["is_profile_completed"] = True
+        # Non-students (admin/owner)
+        prof_res = supabase.table("profiles").select("is_profile_completed").eq("id", user.user_id).execute()
+        if prof_res.data:
+            extra["is_profile_completed"] = prof_res.data[0].get("is_profile_completed", False)
         
     return {
         "user_id": str(user.user_id),

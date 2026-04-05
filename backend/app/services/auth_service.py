@@ -259,7 +259,7 @@ async def google_login(code: str, redirect_uri: str = None) -> Dict[str, Any]:
 
             # 3. Find or Create Profile
             # Note: For production, you may want to restrict registration if needed.
-            result = supabase.table("profiles").select("*").eq("email", email).execute()
+            result = supabase.table("profiles").select("id, email, name, role, is_active, is_profile_completed").eq("email", email).execute()
             
             if result.data:
                 profile = result.data[0]
@@ -302,7 +302,8 @@ async def google_login(code: str, redirect_uri: str = None) -> Dict[str, Any]:
                 "role": profile["role"],
                 "name": profile["name"],
                 "user_id": str(profile["id"]),
-                "student_id": token_data.get("student_id")
+                "student_id": token_data.get("student_id"),
+                "is_profile_completed": profile.get("is_profile_completed", False)
             })
 
     except Exception as e:

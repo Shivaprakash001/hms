@@ -10,17 +10,6 @@ export const AuthProvider = ({ children }) => {
     const location = useLocation();
     const navigate = useNavigate();
 
-    const checkProfileCompletion = (userObj, currentPath) => {
-        // Exempt public paths and complete-profile
-        const pubPaths = ['/login', '/register', '/', '/complete-profile'];
-        if (pubPaths.includes(currentPath)) return;
-
-        // If it's a student and profile is not completed, redirect to complete-profile
-        if (userObj.role?.toLowerCase() === 'student' && !userObj.is_profile_completed) {
-            navigate('/complete-profile', { replace: true });
-        }
-    };
-
     useEffect(() => {
         // If user is already logged in, redirect unless on public page
         const publicPaths = ['/login', '/register', '/'];
@@ -35,9 +24,6 @@ export const AuthProvider = ({ children }) => {
                     navigate('/student/dashboard', { replace: true });
                 }
             }
-        } else if (user) {
-            // If logged in and NOT on a public page, check completion
-            checkProfileCompletion(user, location.pathname);
         }
     }, [user, location.pathname, navigate]);
 

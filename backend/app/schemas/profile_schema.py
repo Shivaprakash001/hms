@@ -58,6 +58,21 @@ class ProfileAdminUpdate(ProfileUpdate):
     role: Optional[RoleEnum] = Field(None, description="User role (admin only)")
 
 
+class CompleteProfileRequest(BaseModel):
+    name: str = Field(..., min_length=2, max_length=100)
+    college_roll_number: str = Field(...)
+    section: Optional[str] = None
+    branch: Optional[str] = None
+    year_of_study: Optional[str] = None
+    address: Optional[str] = None
+    parent_phone: str = Field(...)
+
+    @field_validator('parent_phone')
+    @classmethod
+    def validate_parent_phone(cls, v):
+        return validate_phone_number(v)
+
+
 class ProfileResponse(BaseModel):
     id: UUID
     name: str
@@ -67,18 +82,15 @@ class ProfileResponse(BaseModel):
     address: Optional[str] = None
     emergency_contact: Optional[str] = None
     is_active: bool = True
-    owner_id: Optional[UUID] = None
-    created_at: datetime
-    updated_at: Optional[datetime] = None
-    
-    # Profile Completion Fields
     is_profile_completed: bool = False
     college_roll_number: Optional[str] = None
     section: Optional[str] = None
     branch: Optional[str] = None
     year_of_study: Optional[str] = None
     parent_phone: Optional[str] = None
-    aadhaar_image_url: Optional[str] = None
+    owner_id: Optional[UUID] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
     
     class Config:
         from_attributes = True
