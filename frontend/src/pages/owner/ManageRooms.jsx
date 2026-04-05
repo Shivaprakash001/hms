@@ -83,49 +83,42 @@ const ManageRooms = () => {
         setTenantProfileLoading(true);
 
         try {
-            const overview = await studentService.getOwnerTenantOverview(tenantId);
-            setSelectedTenantProfile(overview);
+            const [studentRes, paymentHistoryRes] = await Promise.all([
+                studentService.getById(tenantId),
+                paymentService.getStudentHistory(tenantId)
+            ]);
+
+            const ownerProfile = {
+                id: studentRes?.id,
+                name: studentRes?.profile?.name || tenant.name,
+                phone: studentRes?.phone_1 || studentRes?.profile?.phone,
+                guardian_phone: studentRes?.phone_2 || studentRes?.profile?.emergency_contact,
+                email: studentRes?.profile?.email,
+                room_number: studentRes?.current_room?.room_no,
+                floor: studentRes?.current_room?.room_no && studentRes.current_room.room_no.length >= 3
+                    ? studentRes.current_room.room_no.slice(0, -2)
+                    : 'G',
+                joined_at: studentRes?.joined_on,
+                status: studentRes?.status,
+                rent: Number(studentRes?.monthly_rent || 0),
+                total_paid: Number(paymentHistoryRes?.total_paid || 0),
+                outstanding: Number(paymentHistoryRes?.outstanding_balance || 0),
+                recent_payments: (paymentHistoryRes?.payments || []).slice(0, 5).map((payment) => ({
+                    id: payment.id,
+                    amount: Number(payment.amount_paid || 0),
+                    date: payment.payment_date,
+                    method: payment.payment_method,
+                    status: 'paid',
+                    reference_number: payment.reference_number
+                }))
+            };
+
+            setSelectedTenantProfile(ownerProfile);
         } catch (err) {
-            console.error('Failed to load tenant overview, falling back to base student data:', err);
-            try {
-                const [studentRes, paymentHistoryRes] = await Promise.all([
-                    studentService.getById(tenantId),
-                    paymentService.getStudentHistory(tenantId)
-                ]);
-
-                const fallbackProfile = {
-                    id: studentRes?.id,
-                    name: studentRes?.profile?.name || tenant.name,
-                    phone: studentRes?.phone_1 || studentRes?.profile?.phone,
-                    guardian_phone: studentRes?.phone_2 || studentRes?.profile?.emergency_contact,
-                    email: studentRes?.profile?.email,
-                    room_number: studentRes?.current_room?.room_no,
-                    floor: studentRes?.current_room?.room_no && studentRes.current_room.room_no.length >= 3
-                        ? studentRes.current_room.room_no.slice(0, -2)
-                        : 'G',
-                    joined_at: studentRes?.joined_on,
-                    status: studentRes?.status,
-                    rent: Number(studentRes?.monthly_rent || 0),
-                    total_paid: Number(paymentHistoryRes?.total_paid || 0),
-                    total_due: Number(paymentHistoryRes?.total_due || 0),
-                    outstanding: Number(paymentHistoryRes?.outstanding_balance || 0),
-                    recent_payments: (paymentHistoryRes?.payments || []).slice(0, 5).map((payment) => ({
-                        id: payment.id,
-                        amount: Number(payment.amount_paid || 0),
-                        date: payment.payment_date,
-                        method: payment.payment_method,
-                        status: 'paid',
-                        reference_number: payment.reference_number
-                    }))
-                };
-
-                setSelectedTenantProfile(fallbackProfile);
-            } catch (fallbackErr) {
-                console.error('Failed to load tenant profile:', fallbackErr);
-                alert('Failed to load tenant profile. Please try again.');
-                setSelectedTenant(null);
-                setSelectedTenantProfile(null);
-            }
+            console.error('Failed to load tenant profile:', err);
+            alert('Failed to load tenant profile. Please try again.');
+            setSelectedTenant(null);
+            setSelectedTenantProfile(null);
         } finally {
             setTenantProfileLoading(false);
         }
@@ -673,6 +666,17 @@ const RoomDetailSidebar = ({ room, onClose, onAddTenant, onRemoveTenant, onShift
 
 const TenantProfileModal = ({ tenant, profile, loading, onClose }) => {
     const payments = profile?.recent_payments || [];
+    const latestPayment = payments[0] || null;
+    const formatDisplayDate = (value) => {
+        if (!value) return 'N/A';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return value;
+        return date.toLocaleDateString('en-IN', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric'
+        });
+    };
 
     return (
         <>
@@ -694,7 +698,7 @@ const TenantProfileModal = ({ tenant, profile, loading, onClose }) => {
                         <div>
                             <h3 className="text-2xl font-black text-slate-900">{profile?.name || tenant?.name || 'Tenant Profile'}</h3>
                             <p className="text-sm text-slate-500 font-medium mt-1">
-                                {profile?.room_number ? `Room ${profile.room_number}` : 'No room assigned'} • Joined {profile?.joined_at || 'N/A'}
+                                {profile?.room_number ? `Room ${profile.room_number}` : 'No room assigned'} • Joined {formatDisplayDate(profile?.joined_at)}
                             </p>
                         </div>
                         <button onClick={onClose} className="p-2 rounded-full hover:bg-white text-slate-400 hover:text-slate-900 transition-colors">
@@ -724,7 +728,7 @@ const TenantProfileModal = ({ tenant, profile, loading, onClose }) => {
                                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                         <InfoTile label="Room" value={profile?.room_number || 'Unassigned'} icon={BedDouble} />
                                         <InfoTile label="Floor" value={profile?.floor || 'G'} icon={LayoutGrid} />
-                                        <InfoTile label="Joined" value={profile?.joined_at || 'N/A'} icon={Calendar} />
+                                        <InfoTile label="Joined" value={formatDisplayDate(profile?.joined_at)} icon={Calendar} />
                                         <InfoTile label="Status" value={profile?.status || 'N/A'} icon={Users} />
                                     </div>
                                 </div>
@@ -734,8 +738,12 @@ const TenantProfileModal = ({ tenant, profile, loading, onClose }) => {
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                         <SummaryTile label="Monthly Rent" value={`₹${Number(profile?.rent || 0).toLocaleString()}`} />
                                         <SummaryTile label="Total Paid" value={`₹${Number(profile?.total_paid || 0).toLocaleString()}`} />
-                                        <SummaryTile label="Total Due" value={`₹${Number(profile?.total_due || 0).toLocaleString()}`} />
                                         <SummaryTile label="Outstanding" value={`₹${Number(profile?.outstanding || 0).toLocaleString()}`} />
+                                        <SummaryTile
+                                            label="Last Payment"
+                                            value={latestPayment ? `₹${Number(latestPayment.amount || 0).toLocaleString()}` : 'No payment'}
+                                            subtitle={latestPayment ? formatDisplayDate(latestPayment.date) : 'No payment history'}
+                                        />
                                     </div>
                                 </div>
 
@@ -752,7 +760,7 @@ const TenantProfileModal = ({ tenant, profile, loading, onClose }) => {
                                                     <div>
                                                         <div className="font-bold text-slate-900">₹{Number(payment.amount || 0).toLocaleString()}</div>
                                                         <div className="text-sm text-slate-500 mt-1">
-                                                            {payment.date || 'No date'} • {payment.method || 'Unknown method'}
+                                                            {formatDisplayDate(payment.date)} • {payment.method || 'Unknown method'}
                                                         </div>
                                                     </div>
                                                     <div className="text-right">
@@ -778,10 +786,11 @@ const TenantProfileModal = ({ tenant, profile, loading, onClose }) => {
     );
 };
 
-const SummaryTile = ({ label, value }) => (
+const SummaryTile = ({ label, value, subtitle }) => (
     <div className="rounded-2xl border border-slate-100 p-4 bg-white">
         <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{label}</p>
         <p className="text-2xl font-black text-slate-900 mt-2">{value}</p>
+        {subtitle && <p className="text-xs font-medium text-slate-400 mt-2">{subtitle}</p>}
     </div>
 );
 
