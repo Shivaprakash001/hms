@@ -53,15 +53,15 @@ def create_room(
     result = room_service.create_room(room_data)
     return _handle_service_response(result, status.HTTP_201_CREATED)
 
-@router.get("/{room_id}", response_model=RoomResponse)
+@router.get("/{room_id}", response_model=dict)
 def get_room(
     room_id: str,
-    user: UserContext = Depends(get_current_user)
+    user: UserContext = Depends(require_admin_or_owner)
 ):
     """
     Get room details.
     """
-    result = room_service.get_room(room_id)
+    result = room_service.get_room(room_id, owner_id=user.user_id if user.role in ("admin", "owner") else None)
     return _handle_service_response(result)
 
 @router.put("/{room_id}", response_model=RoomResponse)

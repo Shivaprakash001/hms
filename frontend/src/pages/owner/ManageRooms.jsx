@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Search, Filter, Layers, LayoutGrid, Users, MoreVertical, DoorOpen, BedDouble, Trash2, LogOut, ArrowRightLeft } from 'lucide-react';
+import { Plus, Layers, LayoutGrid, Users, DoorOpen, BedDouble, Trash2, ArrowRightLeft, X, Phone, Calendar, IndianRupee, CreditCard, Loader2 } from 'lucide-react';
 import AddRoomModal from '../../components/owner/rooms/AddRoomModal';
 import AddTenantModal from '../../components/owner/rooms/AddTenantModal';
 import ShiftTenantModal from '../../components/owner/rooms/ShiftTenantModal';
-import { roomService, allocationService, studentService, authService } from '../../api/services';
+import { roomService, allocationService, studentService, paymentService } from '../../api/services';
 
 const ManageRooms = () => {
     // State
@@ -12,13 +12,17 @@ const ManageRooms = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [selectedRoom, setSelectedRoom] = useState(null);
+    const [selectedRoomDetails, setSelectedRoomDetails] = useState(null);
+    const [roomDetailsLoading, setRoomDetailsLoading] = useState(false);
     const [showAddRoomModal, setShowAddRoomModal] = useState(false);
     const [showAddFloorModal, setShowAddFloorModal] = useState(false); // We'll reuse AddRoomModal for this
     const [showAddTenantModal, setShowAddTenantModal] = useState(false);
     const [showShiftTenantModal, setShowShiftTenantModal] = useState(false);
     const [selectedTenantForShift, setSelectedTenantForShift] = useState(null);
+    const [selectedTenant, setSelectedTenant] = useState(null);
+    const [selectedTenantProfile, setSelectedTenantProfile] = useState(null);
+    const [tenantProfileLoading, setTenantProfileLoading] = useState(false);
     const [filterStatus, setFilterStatus] = useState('All');
-    const [searchQuery, setSearchQuery] = useState('');
 
     // Fetch Data — uses grouped endpoint: returns [{id, number, rooms:[{id, number, capacity, occupied, tenants:[...]}]}]
     const fetchData = async () => {
@@ -55,6 +59,69 @@ const ManageRooms = () => {
     useEffect(() => {
         fetchData();
     }, []);
+
+    const loadRoomDetails = async (room) => {
+        if (!room?.id) return;
+
+        setRoomDetailsLoading(true);
+        try {
+            const details = await roomService.getById(room.id);
+            setSelectedRoomDetails(details);
+        } catch (err) {
+            console.error('Failed to fetch room details:', err);
+            alert('Failed to load room details. Please try again.');
+            setSelectedRoom(null);
+            setSelectedRoomDetails(null);
+        } finally {
+            setRoomDetailsLoading(false);
+        }
+    };
+
+    const openRoomDetails = async (room) => {
+        setSelectedRoom(room);
+        setSelectedRoomDetails(null);
+        await loadRoomDetails(room);
+    };
+
+    const refreshSelectedRoomDetails = async (roomId) => {
+        const targetRoomId = roomId || selectedRoom?.id;
+        if (!targetRoomId) return;
+
+        try {
+            const details = await roomService.getById(targetRoomId);
+            setSelectedRoomDetails(details);
+        } catch (err) {
+            console.error('Failed to refresh room details:', err);
+        }
+    };
+
+    const openTenantProfile = async (tenant) => {
+        if (!tenant?.student_id && !tenant?.id) return;
+
+        const tenantId = tenant.student_id || tenant.id;
+        setSelectedTenant({ id: tenantId, name: tenant.name });
+        setSelectedTenantProfile(null);
+        setTenantProfileLoading(true);
+
+        try {
+            const [studentRes, paymentHistoryRes] = await Promise.all([
+                studentService.getById(tenantId),
+                paymentService.getStudentHistory(tenantId)
+            ]);
+
+            setSelectedTenantProfile({
+                student: studentRes,
+                paymentHistory: paymentHistoryRes
+            });
+        } catch (err) {
+            console.error('Failed to load tenant profile:', err);
+            alert('Failed to load tenant profile. Please try again.');
+            setSelectedTenant(null);
+            setSelectedTenantProfile(null);
+        } finally {
+            setTenantProfileLoading(false);
+        }
+    };
 
     // Handlers
     const handleAddRoom = async (roomData) => {
@@ -144,6 +211,7 @@ const ManageRooms = () => {
             }
 
             await fetchData();
+            await refreshSelectedRoomDetails(room.id);
             setShowAddTenantModal(false);
         } catch (err) {
             console.error(err);
@@ -160,7 +228,7 @@ const ManageRooms = () => {
             // Soft delete student -> triggers auto-end allocation
             await studentService.delete(tenantId);
             await fetchData();
-            setSelectedRoom(null); // Close panel
+            await refreshSelectedRoomDetails();
         } catch (err) {
             alert("Failed to remove tenant: " + err.message);
         }
@@ -178,7 +246,7 @@ const ManageRooms = () => {
             await fetchData();
             setShowShiftTenantModal(false);
             setSelectedTenantForShift(null);
-            setSelectedRoom(null); // Close sidebar as tenant might be moved out
+            await refreshSelectedRoomDetails();
             alert("Tenant relocated successfully!");
         } catch (err) {
             console.error(err);
@@ -280,7 +348,7 @@ const ManageRooms = () => {
                                         <RoomCard
                                             key={room.id}
                                             room={room}
-                                            onClick={() => setSelectedRoom(room)}
+                                            onClick={() => openRoomDetails(room)}
                                         />
                                     ))}
 
@@ -324,14 +392,22 @@ const ManageRooms = () => {
             <AnimatePresence>
                 {selectedRoom && (
                     <RoomDetailSidebar
-                        room={selectedRoom}
-                        onClose={() => setSelectedRoom(null)}
+                        room={selectedRoomDetails || selectedRoom}
+                        loading={roomDetailsLoading}
+                        onClose={() => {
+                            setSelectedRoom(null);
+                            setSelectedRoomDetails(null);
+                        }}
                         onAddTenant={() => setShowAddTenantModal(true)}
                         onRemoveTenant={handleRemoveTenant}
                         onShiftTenant={(tenant) => {
-                            setSelectedTenantForShift(tenant);
+                            setSelectedTenantForShift({
+                                ...tenant,
+                                id: tenant.student_id || tenant.id
+                            });
                             setShowShiftTenantModal(true);
                         }}
+                        onOpenTenant={openTenantProfile}
                     />
                 )}
             </AnimatePresence>
@@ -362,6 +438,20 @@ const ManageRooms = () => {
                             setSelectedTenantForShift(null);
                         }}
                         onShift={handleShiftTenant}
+                    />
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {selectedTenant && (
+                    <TenantProfileModal
+                        tenant={selectedTenant}
+                        profile={selectedTenantProfile}
+                        loading={tenantProfileLoading}
+                        onClose={() => {
+                            setSelectedTenant(null);
+                            setSelectedTenantProfile(null);
+                        }}
                     />
                 )}
             </AnimatePresence>
@@ -427,7 +517,25 @@ const RoomCard = ({ room, onClick }) => {
     );
 }
 
-const RoomDetailSidebar = ({ room, onClose, onAddTenant, onRemoveTenant, onShiftTenant }) => {
+const RoomDetailSidebar = ({ room, loading, onClose, onAddTenant, onRemoveTenant, onShiftTenant, onOpenTenant }) => {
+    const occupants = room?.occupants || room?.tenants || [];
+    const capacity = room?.capacity || 0;
+    const roomNo = room?.room_no || room?.number;
+    const floor = room?.floor ?? (roomNo?.length >= 3 ? roomNo.substring(0, roomNo.length - 2) : 'G');
+
+    const getPaymentTone = (status) => {
+        switch (status) {
+            case 'PAID':
+                return 'bg-emerald-50 text-emerald-700 border-emerald-100';
+            case 'PARTIAL':
+                return 'bg-amber-50 text-amber-700 border-amber-100';
+            case 'PENDING':
+                return 'bg-rose-50 text-rose-700 border-rose-100';
+            default:
+                return 'bg-slate-50 text-slate-600 border-slate-100';
+        }
+    };
+
     return (
         <>
             <motion.div
@@ -447,8 +555,8 @@ const RoomDetailSidebar = ({ room, onClose, onAddTenant, onRemoveTenant, onShift
                 <div className="p-8">
                     <div className="flex justify-between items-center mb-8">
                         <div>
-                            <h2 className="text-3xl font-black text-slate-900">Room {room.room_no}</h2>
-                            <p className="text-slate-400 font-bold mt-1">Floor {room.room_no.length >= 3 ? room.room_no.substring(0, room.room_no.length - 2) : 'G'}</p>
+                            <h2 className="text-3xl font-black text-slate-900">Room {roomNo}</h2>
+                            <p className="text-slate-400 font-bold mt-1">Floor {floor}</p>
                         </div>
                         <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-900 transition-colors">
                             <ArrowRightLeft size={24} />
@@ -456,14 +564,32 @@ const RoomDetailSidebar = ({ room, onClose, onAddTenant, onRemoveTenant, onShift
                     </div>
 
                     <div className="space-y-8">
+                        {loading ? (
+                            <div className="py-16 text-center text-slate-400">
+                                <Loader2 size={28} className="animate-spin mx-auto mb-3" />
+                                <p className="text-sm font-medium">Loading room details...</p>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                                        <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Capacity</p>
+                                        <p className="text-2xl font-black text-slate-900 mt-2">{capacity}</p>
+                                    </div>
+                                    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                                        <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Occupied</p>
+                                        <p className="text-2xl font-black text-slate-900 mt-2">{occupants.length}</p>
+                                    </div>
+                                </div>
+
                         {/* Occupants List */}
                         <div>
                             <div className="flex justify-between items-center mb-4">
                                 <h3 className="font-bold text-slate-900 flex items-center gap-2">
                                     <Users size={20} />
-                                    Residents ({room.tenants.length}/{room.capacity})
+                                    Residents ({occupants.length}/{capacity})
                                 </h3>
-                                {room.tenants.length < room.capacity && (
+                                {occupants.length < capacity && (
                                     <button
                                         onClick={onAddTenant}
                                         className="text-sm font-bold text-blue-600 hover:text-blue-700 hover:underline"
@@ -474,15 +600,46 @@ const RoomDetailSidebar = ({ room, onClose, onAddTenant, onRemoveTenant, onShift
                             </div>
 
                             <div className="space-y-3">
-                                {room.tenants.map(tenant => (
-                                    <div key={tenant.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex justify-between items-center group">
+                                {occupants.map(tenant => (
+                                    <div
+                                        key={tenant.student_id || tenant.id}
+                                        className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex justify-between items-center group"
+                                    >
                                         <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-slate-700 font-bold shadow-sm">
-                                                {tenant.name.charAt(0)}
-                                            </div>
+                                            <button
+                                                onClick={() => onOpenTenant(tenant)}
+                                                className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-slate-700 font-bold shadow-sm hover:text-indigo-600 transition-colors"
+                                            >
+                                                {(tenant.name || '?').charAt(0)}
+                                            </button>
                                             <div>
-                                                <div className="font-bold text-slate-900">{tenant.name}</div>
-                                                <div className="text-xs font-semibold text-slate-400">Joined: {tenant.joinedOn}</div>
+                                                <button
+                                                    onClick={() => onOpenTenant(tenant)}
+                                                    className="font-bold text-slate-900 hover:text-indigo-600 transition-colors"
+                                                >
+                                                    {tenant.name}
+                                                </button>
+                                                <div className="text-xs font-semibold text-slate-400">Joined: {tenant.joined_date || tenant.joinedOn || 'N/A'}</div>
+                                                <div className="flex flex-wrap items-center gap-2 mt-2">
+                                                    {tenant.rent != null && (
+                                                        <span className="text-xs font-bold text-slate-600 bg-white px-2.5 py-1 rounded-full border border-slate-100">
+                                                            ₹{Number(tenant.rent).toLocaleString()}/month
+                                                        </span>
+                                                    )}
+                                                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${getPaymentTone((tenant.payment_status || '').toUpperCase())}`}>
+                                                        {(tenant.payment_status || 'NO_HISTORY').replace('_', ' ')}
+                                                    </span>
+                                                    {tenant.pending_dues > 0 && (
+                                                        <span className="text-xs font-bold text-rose-700 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-100">
+                                                            Due ₹{Number(tenant.pending_dues).toLocaleString()}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {tenant.last_payment && (
+                                                    <div className="text-xs text-slate-500 mt-2">
+                                                        Last paid on {tenant.last_payment}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                         <div className="flex gap-1">
@@ -494,7 +651,7 @@ const RoomDetailSidebar = ({ room, onClose, onAddTenant, onRemoveTenant, onShift
                                                 <ArrowRightLeft size={18} />
                                             </button>
                                             <button
-                                                onClick={() => onRemoveTenant(tenant.id)}
+                                                onClick={() => onRemoveTenant(tenant.student_id || tenant.id)}
                                                 className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
                                                 title="Remove Tenant"
                                             >
@@ -503,18 +660,139 @@ const RoomDetailSidebar = ({ room, onClose, onAddTenant, onRemoveTenant, onShift
                                         </div>
                                     </div>
                                 ))}
-                                {room.tenants.length === 0 && (
+                                {occupants.length === 0 && (
                                     <div className="py-8 text-center text-slate-400 text-sm font-medium border-2 border-dashed border-slate-100 rounded-2xl">
                                         Room is currently vacant
                                     </div>
                                 )}
                             </div>
                         </div>
+                            </>
+                        )}
                     </div>
                 </div>
             </motion.div>
         </>
     );
 };
+
+const TenantProfileModal = ({ tenant, profile, loading, onClose }) => {
+    const student = profile?.student;
+    const paymentHistory = profile?.paymentHistory;
+    const payments = paymentHistory?.payments || [];
+    const obligations = paymentHistory?.obligations || [];
+
+    return (
+        <>
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={onClose}
+                className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50"
+            />
+            <motion.div
+                initial={{ opacity: 0, y: 16, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 16, scale: 0.98 }}
+                className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            >
+                <div className="w-full max-w-3xl max-h-[85vh] overflow-hidden rounded-3xl bg-white shadow-2xl border border-slate-100 flex flex-col">
+                    <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+                        <div>
+                            <h3 className="text-2xl font-black text-slate-900">{tenant?.name || student?.profiles?.name || 'Tenant Profile'}</h3>
+                            <p className="text-sm text-slate-500 font-medium mt-1">Profile, room info, and payment history</p>
+                        </div>
+                        <button onClick={onClose} className="p-2 rounded-full hover:bg-white text-slate-400 hover:text-slate-900 transition-colors">
+                            <X size={22} />
+                        </button>
+                    </div>
+
+                    <div className="overflow-y-auto p-6 space-y-6">
+                        {loading ? (
+                            <div className="py-20 text-center text-slate-400">
+                                <Loader2 size={30} className="animate-spin mx-auto mb-3" />
+                                <p className="text-sm font-medium">Loading tenant profile...</p>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="rounded-2xl border border-slate-100 p-5 bg-slate-50">
+                                        <div className="flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider">
+                                            <Phone size={14} />
+                                            Contact
+                                        </div>
+                                        <p className="text-sm font-semibold text-slate-900 mt-3">{student?.profiles?.phone || 'No phone'}</p>
+                                        <p className="text-sm text-slate-500 mt-1 break-all">{student?.profiles?.email || 'No email'}</p>
+                                    </div>
+                                    <div className="rounded-2xl border border-slate-100 p-5 bg-slate-50">
+                                        <div className="flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider">
+                                            <Calendar size={14} />
+                                            Stay Info
+                                        </div>
+                                        <p className="text-sm font-semibold text-slate-900 mt-3">Joined {student?.joined_on || 'N/A'}</p>
+                                        <p className="text-sm text-slate-500 mt-1">Room {student?.current_room?.room_no || 'Unassigned'}</p>
+                                    </div>
+                                    <div className="rounded-2xl border border-slate-100 p-5 bg-slate-50">
+                                        <div className="flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider">
+                                            <IndianRupee size={14} />
+                                            Financials
+                                        </div>
+                                        <p className="text-sm font-semibold text-slate-900 mt-3">Rent ₹{Number(student?.monthly_rent || 0).toLocaleString()}</p>
+                                        <p className="text-sm text-slate-500 mt-1">Outstanding ₹{Number(paymentHistory?.outstanding_balance || 0).toLocaleString()}</p>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <SummaryTile label="Total Due" value={`₹${Number(paymentHistory?.total_due || 0).toLocaleString()}`} />
+                                    <SummaryTile label="Total Paid" value={`₹${Number(paymentHistory?.total_paid || 0).toLocaleString()}`} />
+                                    <SummaryTile label="Open Obligations" value={String(obligations.filter((item) => item.status !== 'PAID' && item.status !== 'WAIVED').length)} />
+                                </div>
+
+                                <div>
+                                    <h4 className="text-lg font-bold text-slate-900 mb-4">Recent Payments</h4>
+                                    <div className="space-y-3">
+                                        {payments.length === 0 ? (
+                                            <div className="rounded-2xl border-2 border-dashed border-slate-100 text-center py-10 text-slate-400 text-sm">
+                                                No payments recorded yet.
+                                            </div>
+                                        ) : (
+                                            payments.slice(0, 8).map((payment) => (
+                                                <div key={payment.id} className="rounded-2xl border border-slate-100 p-4 flex items-center justify-between gap-4">
+                                                    <div>
+                                                        <div className="font-bold text-slate-900">₹{Number(payment.amount_paid || 0).toLocaleString()}</div>
+                                                        <div className="text-sm text-slate-500 mt-1">
+                                                            {payment.payment_date || 'No date'} • {payment.payment_method || 'Unknown method'}
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold border bg-emerald-50 text-emerald-700 border-emerald-100">
+                                                            <CreditCard size={12} />
+                                                            Paid
+                                                        </div>
+                                                        {payment.reference_number && (
+                                                            <div className="text-xs text-slate-400 mt-2">{payment.reference_number}</div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            </motion.div>
+        </>
+    );
+};
+
+const SummaryTile = ({ label, value }) => (
+    <div className="rounded-2xl border border-slate-100 p-4 bg-white">
+        <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{label}</p>
+        <p className="text-2xl font-black text-slate-900 mt-2">{value}</p>
+    </div>
+);
 
 export default ManageRooms;

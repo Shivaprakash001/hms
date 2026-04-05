@@ -1,9 +1,19 @@
 from app.db import supabase
 from typing import Optional, Dict, Any, List
+from decimal import Decimal
 from app.utils.responses import ServiceResponse, ErrorCode
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _get_floor_number(room_no: str) -> int:
+    try:
+        if len(room_no) >= 3 and room_no[:-2].isdigit():
+            return int(room_no[:-2])
+    except Exception:
+        pass
+    return 0
 
 def get_floors_with_rooms(owner_id: Optional[str] = None) -> Dict[str, Any]:
     """
@@ -142,18 +152,121 @@ def create_room(data: dict) -> Dict[str, Any]:
         logger.exception(f"Error creating room: {e}")
         return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, str(e))
 
-def get_room(room_id: str) -> Dict[str, Any]:
+def get_room(room_id: str, owner_id: Optional[str] = None) -> Dict[str, Any]:
     """
-    Get generic room details.
-    For occupancy details, use room_allocation_service.get_room_occupants
+    Get room details with active occupants and payment summary.
     """
     try:
-        result = supabase.table("rooms").select("*").eq("id", room_id).execute()
+        room_query = supabase.table("rooms").select("*").eq("id", room_id)
+        if owner_id:
+            room_query = room_query.eq("owner_id", owner_id)
+
+        result = room_query.execute()
         
         if not result.data:
             return ServiceResponse.not_found("Room")
-            
-        return ServiceResponse.success(result.data[0])
+
+        room = result.data[0]
+        floor_number = _get_floor_number(room.get("room_no", ""))
+
+        allocations_res = supabase.table("room_allocations")\
+            .select("id, room_id, student_id, start_date, students!inner(id, monthly_rent, status, profiles!students_profile_id_fkey(id, name, email, phone))")\
+            .eq("room_id", room_id)\
+            .is_("end_date", "null")\
+            .execute()
+
+        allocations = allocations_res.data or []
+        student_ids = [alloc.get("student_id") for alloc in allocations if alloc.get("student_id")]
+
+        latest_payment_by_student: Dict[str, Dict[str, Any]] = {}
+        payments_by_obligation: Dict[str, Decimal] = {}
+        pending_due_by_student: Dict[str, Decimal] = {}
+        status_flags_by_student: Dict[str, Dict[str, bool]] = {}
+
+        if student_ids:
+            payments_res = supabase.table("payments")\
+                .select("student_id, obligation_id, amount_paid, payment_date")\
+                .in_("student_id", student_ids)\
+                .order("payment_date", desc=True)\
+                .execute()
+
+            for payment in (payments_res.data or []):
+                student_id = payment.get("student_id")
+                obligation_id = payment.get("obligation_id")
+
+                if student_id and student_id not in latest_payment_by_student:
+                    latest_payment_by_student[student_id] = payment
+
+                if obligation_id:
+                    payments_by_obligation[obligation_id] = payments_by_obligation.get(obligation_id, Decimal(0)) + Decimal(str(payment.get("amount_paid") or 0))
+
+            obligations_res = supabase.table("rent_obligations")\
+                .select("id, student_id, amount, status")\
+                .in_("student_id", student_ids)\
+                .neq("status", "WAIVED")\
+                .execute()
+
+            for obligation in (obligations_res.data or []):
+                student_id = obligation.get("student_id")
+                if not student_id:
+                    continue
+
+                flags = status_flags_by_student.setdefault(student_id, {"has_partial": False, "has_pending": False})
+                obligation_status = (obligation.get("status") or "").upper()
+                if obligation_status == "PARTIAL":
+                    flags["has_partial"] = True
+                elif obligation_status == "PENDING":
+                    flags["has_pending"] = True
+
+                obligation_amount = Decimal(str(obligation.get("amount") or 0))
+                paid_amount = payments_by_obligation.get(obligation.get("id"), Decimal(0))
+                remaining_due = max(obligation_amount - paid_amount, Decimal(0))
+                pending_due_by_student[student_id] = pending_due_by_student.get(student_id, Decimal(0)) + remaining_due
+
+        occupants = []
+        for alloc in allocations:
+            student = alloc.get("students") or {}
+            profile = student.get("profiles") or {}
+            student_id = student.get("id")
+            pending_due = pending_due_by_student.get(student_id, Decimal(0))
+            latest_payment = latest_payment_by_student.get(student_id)
+            status_flags = status_flags_by_student.get(student_id, {})
+
+            if pending_due <= 0:
+                payment_status = "PAID" if latest_payment else "NO_HISTORY"
+            elif status_flags.get("has_partial") or latest_payment:
+                payment_status = "PARTIAL"
+            else:
+                payment_status = "PENDING"
+
+            occupants.append({
+                "student_id": student_id,
+                "profile_id": profile.get("id"),
+                "name": profile.get("name"),
+                "email": profile.get("email"),
+                "phone": profile.get("phone"),
+                "joined_date": alloc.get("start_date"),
+                "rent": float(student.get("monthly_rent") or 0),
+                "payment_status": payment_status,
+                "last_payment": latest_payment.get("payment_date") if latest_payment else None,
+                "last_payment_amount": float(latest_payment.get("amount_paid") or 0) if latest_payment else 0,
+                "pending_dues": float(pending_due),
+                "status": student.get("status", "ACTIVE")
+            })
+
+        occupants.sort(key=lambda occupant: occupant.get("name") or "")
+
+        return ServiceResponse.success({
+            "id": room.get("id"),
+            "room_id": room.get("id"),
+            "room_no": room.get("room_no"),
+            "floor": floor_number,
+            "capacity": room.get("capacity", 0),
+            "occupancy_count": len(occupants),
+            "remaining_capacity": max((room.get("capacity") or 0) - len(occupants), 0),
+            "status": "Vacant" if len(occupants) == 0 else ("Full" if len(occupants) >= (room.get("capacity") or 0) else "Occupied"),
+            "occupants": occupants
+        })
     except Exception as e:
         logger.exception(f"Error fetching room: {e}")
         return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, str(e))
