@@ -582,6 +582,50 @@ def get_student_payment_history(student_id: str) -> Dict[str, Any]:
             
         obligations = ob_res.data
         payments = pay_res.data
+
+        next_due_date = None
+        pending_obligations = [
+            obligation for obligation in (obligations or [])
+            if obligation.get("status") in {"PENDING", "PARTIAL"} and obligation.get("due_date")
+        ]
+        if pending_obligations:
+            next_due_date = min(
+                pending_obligations,
+                key=lambda obligation: str(obligation.get("due_date"))
+            ).get("due_date")
+
+        student_res = supabase.table("students")\
+            .select("owner_id")\
+            .eq("id", student_id)\
+            .limit(1)\
+            .execute()
+
+        auto_rent_day = None
+        owner_id = None
+        if student_res.data:
+            owner_id = student_res.data[0].get("owner_id")
+
+        if owner_id:
+            hostel_res = supabase.table("hostels")\
+                .select("auto_rent_day")\
+                .eq("owner_id", owner_id)\
+                .eq("is_active", True)\
+                .limit(1)\
+                .execute()
+            if hostel_res.data:
+                auto_rent_day = hostel_res.data[0].get("auto_rent_day")
+
+        if not next_due_date and auto_rent_day:
+            today = date.today()
+            year = today.year
+            month = today.month
+            if today.day > int(auto_rent_day):
+                if month == 12:
+                    year += 1
+                    month = 1
+                else:
+                    month += 1
+            next_due_date = date(year, month, int(auto_rent_day)).isoformat()
         
         query_duration = time.time() - start_time
         logger.info("Fetched student history", extra={
@@ -599,7 +643,9 @@ def get_student_payment_history(student_id: str) -> Dict[str, Any]:
             "payments": payments,
             "total_due": float(total_due),
             "total_paid": float(total_paid),
-            "outstanding_balance": float(total_due - total_paid)
+            "outstanding_balance": float(total_due - total_paid),
+            "next_due_date": next_due_date,
+            "auto_rent_day": auto_rent_day,
         })
     except Exception as e:
         logger.exception(f"Error fetching history: {e}")

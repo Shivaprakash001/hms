@@ -60,11 +60,23 @@ const StudentDashboard = () => {
     // Calculate pending dues from obligations
     const pendingDues = dues.outstanding_balance || (dues.obligations || []).filter(o => o.status === 'pending' || o.status === 'partial' || o.status === 'overdue').reduce((sum, o) => sum + (o.amount || 0), 0);
 
-    // Compute next payment from due_day
+    // Prefer the backend next due date so this card follows auto rent generation settings.
     const getNextPaymentDate = () => {
+        const now = new Date();
+        const backendNextDueDate = dues?.next_due_date;
+
+        if (backendNextDueDate) {
+            const next = new Date(backendNextDueDate);
+            next.setHours(0, 0, 0, 0);
+            const today = new Date(now);
+            today.setHours(0, 0, 0, 0);
+            const daysLeft = Math.ceil((next - today) / (1000 * 60 * 60 * 24));
+            const formatted = next.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+            return { formatted, daysLeft };
+        }
+
         const dueDay = user?.due_day;
         if (!dueDay) return 'N/A';
-        const now = new Date();
         const year = now.getFullYear();
         const month = now.getMonth();
         let next = new Date(year, month, dueDay);

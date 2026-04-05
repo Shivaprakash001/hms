@@ -135,11 +135,24 @@ const StudentPayments = () => {
 
     const isOverdue = localPayments.some(p => p.status === 'overdue');
 
-    // Compute real next due date from owner-configured due_day
+    // Prefer the backend-calculated next due date so student UI stays aligned
+    // with generated obligations and the owner's configured auto rent day.
     const getNextDueInfo = () => {
+        const now = new Date();
+        const backendNextDueDate = history?.next_due_date;
+
+        if (backendNextDueDate) {
+            const next = new Date(backendNextDueDate);
+            next.setHours(0, 0, 0, 0);
+            const today = new Date(now);
+            today.setHours(0, 0, 0, 0);
+            const daysLeft = Math.ceil((next - today) / (1000 * 60 * 60 * 24));
+            const label = next.toLocaleDateString('en-IN', { day: 'numeric', month: 'long' });
+            return { label, daysLeft };
+        }
+
         const dueDay = user?.due_day;
         if (!dueDay) return { label: 'N/A', daysLeft: null };
-        const now = new Date();
         let next = new Date(now.getFullYear(), now.getMonth(), dueDay);
         if (next <= now) {
             next = new Date(now.getFullYear(), now.getMonth() + 1, dueDay);

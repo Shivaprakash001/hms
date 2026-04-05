@@ -94,6 +94,8 @@ class StudentPaymentHistory(BaseModel):
     total_due: Decimal
     total_paid: Decimal
     outstanding_balance: Decimal
+    next_due_date: Optional[date] = None
+    auto_rent_day: Optional[int] = None
 
 
 class DuesReportItem(BaseModel):
