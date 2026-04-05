@@ -1,10 +1,12 @@
 import sys
 import os
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 # Ensure the 'backend' directory is in the Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fastapi import FastAPI, status, Request
+from fastapi import FastAPI, status, Request, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -104,12 +106,13 @@ def startup_event():
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
     from app.jobs.payment_generation_job import PaymentGenerationJob
     
-    scheduler = AsyncIOScheduler()
-    # Schedule to run on the 25th of every month at 00:00
+    app_timezone = ZoneInfo(os.getenv("APP_TIMEZONE", "Asia/Kolkata"))
+    scheduler = AsyncIOScheduler(timezone=app_timezone)
+    # Schedule to run on the 1st of every month at 00:00
     scheduler.add_job(
-        PaymentGenerationJob.generate_monthly_payments, 
+        PaymentGenerationJob.run_monthly_rent_cycle,
         'cron', 
-        day=25, 
+        day=1,
         hour=0, 
         minute=0, 
         id='monthly_payment_generation', 
@@ -117,6 +120,32 @@ def startup_event():
     )
     scheduler.start()
     get_logger("scheduler").info("APScheduler initialized and jobs scheduled.")
+
+
+@app.post("/internal/cron/generate-rent", include_in_schema=False)
+def run_internal_rent_generation(x_cron_secret: str | None = Header(default=None)):
+    configured_secret = os.getenv("INTERNAL_CRON_SECRET")
+    if not configured_secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"message": "INTERNAL_CRON_SECRET is not configured"}
+        )
+    if x_cron_secret != configured_secret:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"message": "Invalid cron secret"}
+        )
+
+    from app.jobs.payment_generation_job import PaymentGenerationJob
+
+    app_timezone = ZoneInfo(os.getenv("APP_TIMEZONE", "Asia/Kolkata"))
+    target_month = datetime.now(app_timezone).date().replace(day=1)
+    result = PaymentGenerationJob.run_monthly_rent_cycle(target_month)
+    return {
+        "status": "ok",
+        "target_month": target_month.isoformat(),
+        "result": result.get("data", result)
+    }
 
 app.include_router(v1_router)
 app.include_router(v1_router, prefix="/api/v1")

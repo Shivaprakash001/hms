@@ -2,10 +2,29 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from app.db import supabase
 from app.utils.logger import get_logger
+from app.services import payment_service
 
 logger = get_logger(__name__)
 
 class PaymentGenerationJob:
+    @staticmethod
+    def run_monthly_rent_cycle(target_date=None, owner_id=None):
+        """
+        Use the main payment service to generate the month's rent obligations.
+        This keeps manual and automated generation on the same code path.
+        """
+        if not target_date:
+            target_month = datetime.now().date().replace(day=1)
+        elif isinstance(target_date, str):
+            target_month = datetime.strptime(target_date, "%Y-%m-%d").date().replace(day=1)
+        elif hasattr(target_date, "date"):
+            target_month = target_date.date().replace(day=1)  # type: ignore[attr-defined]
+        else:
+            target_month = target_date.replace(day=1)
+
+        logger.info(f"Starting monthly rent cycle for {target_month.isoformat()} owner={owner_id or 'ALL'}")
+        return payment_service.generate_monthly_rent(target_month, user_id=owner_id)
+
     @staticmethod
     async def generate_monthly_payments(target_date=None):
         """
