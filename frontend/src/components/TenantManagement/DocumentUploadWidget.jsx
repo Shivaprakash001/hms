@@ -17,10 +17,21 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true, onDocum
     const [documents, setDocuments] = useState([]);
     const [loading, setLoading] = useState(true);
     const [uploading, setUploading] = useState(false);
+    const [blobUrls, setBlobUrls] = useState({});
+    const [loadingBlobDocIds, setLoadingBlobDocIds] = useState(new Set());
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [docNumbers, setDocNumbers] = useState({ AADHAR: '', DRIVING_LICENSE: '', PASSPORT: '' });
     const fileInputRef = useRef(null);
+    const blobUrlRegistryRef = useRef({});
+
+    const clearBlobUrls = () => {
+        Object.values(blobUrlRegistryRef.current || {}).forEach((url) => {
+            if (url) URL.revokeObjectURL(url);
+        });
+        blobUrlRegistryRef.current = {};
+        setBlobUrls({});
+    };
 
     useEffect(() => {
         if (tenantId) fetchDocuments();
@@ -29,6 +40,7 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true, onDocum
     const fetchDocuments = async () => {
         try {
             setLoading(true);
+            clearBlobUrls();
             const data = await tenantDocumentService.getAll(tenantId);
             const normalized = Array.isArray(data) ? data : [];
             setDocuments(normalized);
@@ -116,11 +128,65 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true, onDocum
     };
 
     const currentDoc = documents.find(d => d.doc_type === activeDocType);
+    const previewSource = (currentDoc?.id && blobUrls[currentDoc.id]) || currentDoc?.signed_url || '';
+    const previewLoading = Boolean(currentDoc?.id && loadingBlobDocIds.has(currentDoc.id) && !blobUrls[currentDoc.id]);
     const isPdfDoc = Boolean(
         (currentDoc?.document_image_url || currentDoc?.signed_url || '')
             .toLowerCase()
             .includes('.pdf')
     );
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadAllDocBlobs = async () => {
+            for (const doc of documents) {
+                if (!doc?.id || !doc?.signed_url || blobUrlRegistryRef.current[doc.id]) continue;
+
+                setLoadingBlobDocIds(prev => {
+                    const next = new Set(prev);
+                    next.add(doc.id);
+                    return next;
+                });
+
+                try {
+                    const response = await fetch(doc.signed_url, { credentials: 'omit' });
+                    if (!response.ok) throw new Error(`Preview fetch failed: ${response.status}`);
+
+                    const blob = await response.blob();
+                    const objectUrl = URL.createObjectURL(blob);
+
+                    if (cancelled) {
+                        URL.revokeObjectURL(objectUrl);
+                        continue;
+                    }
+
+                    blobUrlRegistryRef.current = { ...blobUrlRegistryRef.current, [doc.id]: objectUrl };
+                    setBlobUrls(prev => ({ ...prev, [doc.id]: objectUrl }));
+                } catch (err) {
+                    console.warn('Blob preview failed, falling back to signed URL:', err);
+                } finally {
+                    setLoadingBlobDocIds(prev => {
+                        const next = new Set(prev);
+                        next.delete(doc.id);
+                        return next;
+                    });
+                }
+            }
+        };
+
+        loadAllDocBlobs();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [documents]);
+
+    useEffect(() => {
+        return () => {
+            clearBlobUrls();
+        };
+    }, []);
 
     return (
         <div className="space-y-5">
@@ -191,22 +257,28 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true, onDocum
                             {currentDoc.signed_url ? (
                                 <button
                                     type="button"
-                                    onClick={() => window.open(currentDoc.signed_url, '_blank', 'noopener,noreferrer')}
+                                    onClick={() => window.open(previewSource, '_blank', 'noopener,noreferrer')}
                                     className="w-32 h-24 rounded-xl bg-white border border-slate-200 overflow-hidden shadow-sm hover:border-indigo-300 transition-colors"
                                     title="Open full document"
                                 >
-                                    {isPdfDoc ? (
-                                        <iframe
-                                            src={`${currentDoc.signed_url}#toolbar=0&navpanes=0&scrollbar=0`}
-                                            title="Document preview"
-                                            className="w-full h-full pointer-events-none"
-                                        />
+                                    {previewLoading ? (
+                                        <div className="w-full h-full flex items-center justify-center text-slate-400">
+                                            <Loader2 size={16} className="animate-spin" />
+                                        </div>
                                     ) : (
-                                        <img
-                                            src={currentDoc.signed_url}
-                                            alt="Document preview"
-                                            className="w-full h-full object-cover"
-                                        />
+                                        isPdfDoc ? (
+                                            <iframe
+                                                src={`${previewSource}#toolbar=0&navpanes=0&scrollbar=0`}
+                                                title="Document preview"
+                                                className="w-full h-full pointer-events-none"
+                                            />
+                                        ) : (
+                                            <img
+                                                src={previewSource}
+                                                alt="Document preview"
+                                                className="w-full h-full object-cover"
+                                            />
+                                        )
                                     )}
                                 </button>
                             ) : (
@@ -241,7 +313,7 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true, onDocum
                                 {currentDoc.signed_url && (
                                     <button
                                         type="button"
-                                        onClick={() => window.open(currentDoc.signed_url, '_blank', 'noopener,noreferrer')}
+                                        onClick={() => window.open(previewSource, '_blank', 'noopener,noreferrer')}
                                         className="mt-2 text-xs font-semibold text-indigo-600 hover:text-indigo-700"
                                     >
                                         View Full Document
@@ -253,7 +325,7 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true, onDocum
                         <div className="flex items-center gap-1.5">
                             {currentDoc.signed_url && (
                                 <a
-                                    href={currentDoc.signed_url}
+                                    href={previewSource}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="p-2 rounded-lg hover:bg-white text-slate-400 hover:text-indigo-600 transition-colors"
