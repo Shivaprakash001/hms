@@ -34,6 +34,7 @@ class DocumentResponse(BaseModel):
     doc_type: DocumentType
     document_number: Optional[str] = None
     document_image_url: Optional[str] = None
+    signed_url: Optional[str] = None
     verified: bool = False
     rejected: Optional[bool] = False
     rejection_reason: Optional[str] = None
