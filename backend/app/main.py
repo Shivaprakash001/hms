@@ -37,7 +37,9 @@ app.add_middleware(LoggingMiddleware)
 # Explicitly allowed origins for CORS
 origins = [
     "https://trishul.solutions",
+    "https://www.trishul.solutions",
     "https://app.trishul.solutions",
+    "https://trishul-hms.vercel.app",
 ]
 
 from app.utils.middleware import QueryMonitorMiddleware
