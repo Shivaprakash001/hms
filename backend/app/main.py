@@ -24,18 +24,20 @@ from app.utils.hooks import register_hook
 from app.services.room_allocation_service import handle_student_left
 from app.middleware import LoggingMiddleware
 
-app = FastAPI(title="Hostel Management System API", version="1.0.0")
+app = FastAPI(
+    title="Hostel Management System API",
+    version="1.0.0",
+    servers=[
+        {"url": "https://api.trishul.solutions", "description": "Production server"}
+    ],
+)
 
 app.add_middleware(LoggingMiddleware)
 
 # Explicitly allowed origins for CORS
 origins = [
-    "https://trishul-hms.vercel.app",
-    "https://hms-r1u7wmn18-shivaprakash001s-projects.vercel.app",
     "https://trishul.solutions",
     "https://app.trishul.solutions",
-    "http://localhost:5173",
-    "http://localhost:3000",
 ]
 
 from app.utils.middleware import QueryMonitorMiddleware
