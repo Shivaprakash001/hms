@@ -32,6 +32,8 @@ app.add_middleware(LoggingMiddleware)
 origins = [
     "https://trishul-hms.vercel.app",
     "https://hms-r1u7wmn18-shivaprakash001s-projects.vercel.app",
+    "https://trishul.solutions",
+    "https://app.trishul.solutions",
     "http://localhost:5173",
     "http://localhost:3000",
 ]
