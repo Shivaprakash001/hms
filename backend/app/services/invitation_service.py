@@ -62,9 +62,9 @@ class InvitationService:
                     "Monthly rent is required and must be greater than 0"
                 )
 
-            # 3. Generate secure invitation token (24h expiry)
+            # 3. Generate secure invitation token (48h expiry)
             token = secrets.token_urlsafe(32)
-            expires_at = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+            expires_at = (datetime.now(timezone.utc) + timedelta(hours=48)).isoformat()
 
             invitation_data = {
                 "email": email,
@@ -86,17 +86,14 @@ class InvitationService:
 
             # 4. Send email asynchronously (non-blocking)
             base_url = os.getenv("FRONTEND_URL", "https://trishul.solutions")
-            activation_link = f"{base_url}/activate/{token}"
-            room_no = room.get("room_no", "N/A")
+            activation_link = f"{base_url}/activate?token={token}"
             
             # Send synchronously so failures are surfaced to caller immediately.
             # This prevents "Invitation Sent" responses when email delivery is misconfigured.
             email_result = EmailService.send_invitation_email(
-                email,
-                name,
-                activation_link,
-                room_no,
-                float(monthly_rent or 0)
+                to_email=email,
+                name=name,
+                activation_link=activation_link
             )
             if not email_result.get("sent"):
                 logger.error(
@@ -106,7 +103,7 @@ class InvitationService:
                 )
                 return ServiceResponse.error(
                     ErrorCode.INTERNAL_ERROR,
-                    "Invitation created but email delivery failed. Please verify email configuration and retry."
+                    "EMAIL_DELIVERY_FAILED"
                 )
 
             # SUCCESS: Return response with activation_link
@@ -114,7 +111,7 @@ class InvitationService:
                 "success": True,
                 "invitation_id": invitation_id,
                 "email": email,
-                "expires_in_hours": 24
+                "expires_in_hours": 48
             }
             if InvitationService._should_expose_activation_link():
                 response_data["activation_link"] = activation_link
@@ -250,9 +247,9 @@ class InvitationService:
                 if room_res.data:
                     room_no = room_res.data[0].get("room_no", "N/A")
 
-            # 2. Generate new token
+            # 2. Generate new token (48h expiry)
             token = secrets.token_urlsafe(32)
-            expires_at = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+            expires_at = (datetime.now(timezone.utc) + timedelta(hours=48)).isoformat()
 
             # 3. Update invitation
             supabase.table("invitations").update({
@@ -264,12 +261,12 @@ class InvitationService:
 
             # 4. Resend email
             base_url = os.getenv("FRONTEND_URL", "https://trishul.solutions")
-            activation_link = f"{base_url}/activate/{token}"
+            activation_link = f"{base_url}/activate?token={token}"
             
             if background_tasks:
-                background_tasks.add_task(EmailService.send_invitation_email, email, profile_name, activation_link, room_no, rent)
+                background_tasks.add_task(EmailService.send_invitation_email, email, profile_name, activation_link)
             else:
-                EmailService.send_invitation_email(email, profile_name, activation_link, room_no, rent)
+                EmailService.send_invitation_email(email, profile_name, activation_link)
 
             return ServiceResponse.success(None, "Invitation resent successfully")
 

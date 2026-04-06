@@ -1,20 +1,17 @@
-import httpx
 import os
-from pathlib import Path
-from jinja2 import Template
+import resend
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-RESEND_API_URL = "https://api.resend.com/emails"
-DEFAULT_FROM = os.getenv("EMAIL_FROM", "Trishul Solutions <noreply@trishul.solutions>")
+DEFAULT_FROM = os.getenv("EMAIL_FROM", "noreply@trishul.solutions")
 
 
 class EmailService:
     @staticmethod
     def _send_email(to_email: str, subject: str, html_body: str):
         """
-        Send an email via the Resend REST API.
+        Send an email via the Resend SDK.
         Falls back to logging if RESEND_API_KEY is not configured.
         """
         api_key = os.getenv("RESEND_API_KEY")
@@ -27,12 +24,9 @@ class EmailService:
             logger.info(f"------------------------")
             return {"sent": False, "error": "RESEND_API_KEY not configured"}
 
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        }
+        resend.api_key = api_key
 
-        payload = {
+        params: resend.Emails.SendParams = {
             "from": DEFAULT_FROM,
             "to": [to_email],
             "subject": subject,
@@ -40,40 +34,28 @@ class EmailService:
         }
 
         try:
-            response = httpx.post(RESEND_API_URL, json=payload, headers=headers, timeout=10.0)
-
-            if response.status_code == 200:
-                data = response.json()
-                logger.info(f"Email sent to {to_email} | Resend ID: {data.get('id')}")
-                return {"sent": True, "error": None, "provider_id": data.get("id")}
-            else:
-                logger.error(f"Resend API error ({response.status_code}): {response.text}")
-                return {
-                    "sent": False,
-                    "error": f"Resend API error ({response.status_code})",
-                    "details": response.text,
-                }
+            response = resend.Emails.send(params)
+            
+            logger.info(f"Email sent to {to_email} | Resend ID: {response.get('id')}")
+            return {"sent": True, "error": None, "provider_id": response.get("id")}
         except Exception as e:
             logger.error(f"Failed to send email to {to_email}: {e}")
             return {"sent": False, "error": str(e)}
 
     @staticmethod
-    def send_invitation_email(to_email: str, name: str, activation_link: str, room_no: str = "N/A", rent: float = 0.0):
+    def send_invitation_email(to_email: str, name: str, activation_link: str):
         """
-        Sends an invitation email to a new tenant via Resend.
+        Sends an invitation email to a new tenant via Resend SDK.
         """
-        subject = "You're invited to Trishul Solutions Hostel Portal"
+        subject = "You're invited to join the hostel"
 
-        template_path = Path(__file__).resolve().parent.parent / "templates" / "email" / "invite.html"
-        template = Template(template_path.read_text(encoding="utf-8"))
-        html_body = template.render(
-            name=name,
-            activation_link=activation_link,
-            room_no=room_no,
-            rent=f"{rent:,.0f}" if rent else "0",
-            hostel_name=os.getenv("HOSTEL_BRAND_NAME", "Trishul Solutions"),
-            sender_name=os.getenv("EMAIL_SENDER_NAME", "Trishul Solutions")
-        )
+        html_body = f"""
+        <p>Hello {name},</p>
+        <p>You have been invited to join the hostel management system.</p>
+        <p>Click the link below to activate your account:</p>
+        <p><a href="{activation_link}">{activation_link}</a></p>
+        <p>This activation link expires in 48 hours.</p>
+        """
 
         return EmailService._send_email(to_email, subject, html_body)
 
