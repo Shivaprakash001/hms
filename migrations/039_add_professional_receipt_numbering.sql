@@ -6,15 +6,15 @@
 ALTER TABLE payments
 ADD COLUMN IF NOT EXISTS receipt_number INTEGER;
 
--- Create unique index to enforce unique receipt numbers per hostel per month
+-- Create unique index to enforce unique receipt numbers per owner per month
 -- Using index instead of constraint because it supports DATE_TRUNC expression
-CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_receipt_per_hostel_month
-ON payments (hostel_id, DATE_TRUNC('month', created_at AT TIME ZONE 'Asia/Kolkata'), receipt_number)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_receipt_per_owner_month
+ON payments (owner_id, DATE_TRUNC('month', created_at AT TIME ZONE 'Asia/Kolkata'), receipt_number)
 WHERE receipt_number IS NOT NULL;
 
--- Create index for faster querying by hostel and month
-CREATE INDEX IF NOT EXISTS idx_payments_hostel_month_receipt
-ON payments (hostel_id, DATE_TRUNC('month', created_at AT TIME ZONE 'Asia/Kolkata'), receipt_number);
+-- Create index for faster querying by owner and month
+CREATE INDEX IF NOT EXISTS idx_payments_owner_month_receipt
+ON payments (owner_id, DATE_TRUNC('month', created_at AT TIME ZONE 'Asia/Kolkata'), receipt_number);
 
 -- Add sequence generator function to auto-assign receipt numbers
 CREATE OR REPLACE FUNCTION generate_receipt_number()
@@ -26,11 +26,11 @@ BEGIN
     -- Get the start of the month for the payment
     v_month_start := DATE_TRUNC('month', NEW.created_at AT TIME ZONE 'Asia/Kolkata');
     
-    -- Find the maximum receipt_number for this hostel in this month
+        -- Find the maximum receipt_number for this owner in this month
     SELECT COALESCE(MAX(receipt_number), 0) + 1
     INTO v_max_receipt
     FROM payments
-    WHERE hostel_id = NEW.hostel_id 
+        WHERE owner_id = NEW.owner_id 
       AND DATE_TRUNC('month', created_at AT TIME ZONE 'Asia/Kolkata') = v_month_start
       AND id != NEW.id;  -- Exclude current row for updates
     
@@ -50,12 +50,12 @@ BEFORE INSERT OR UPDATE ON payments
 FOR EACH ROW
 EXECUTE FUNCTION generate_receipt_number();
 
--- Backfill receipt_number for existing payments (group by hostel and month)
+-- Backfill receipt_number for existing payments (group by owner and month)
 WITH payment_ranking AS (
     SELECT 
         id,
         ROW_NUMBER() OVER (
-            PARTITION BY hostel_id, DATE_TRUNC('month', created_at AT TIME ZONE 'Asia/Kolkata')
+            PARTITION BY owner_id, DATE_TRUNC('month', created_at AT TIME ZONE 'Asia/Kolkata')
             ORDER BY created_at ASC, id ASC
         ) as new_receipt_number
     FROM payments

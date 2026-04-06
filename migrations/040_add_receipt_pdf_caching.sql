@@ -13,12 +13,12 @@ ADD COLUMN IF NOT EXISTS receipt_pdf_generated_at TIMESTAMP WITH TIME ZONE;
 
 -- Create index for fast lookup of uncached receipts
 CREATE INDEX IF NOT EXISTS idx_payments_receipt_pdf_status
-ON payments (hostel_id, receipt_pdf_generated_at)
+ON payments (owner_id, receipt_pdf_generated_at)
 WHERE receipt_pdf_url IS NULL;
 
 -- Add comment explaining the columns
 COMMENT ON COLUMN payments.receipt_pdf_url IS 
-    'URL to cached PDF receipt in Supabase storage. Format: receipts/YYYY-MM/hostel_id/payment_id.pdf';
+    'URL to cached PDF receipt in Supabase storage. Format: receipts/YYYY-MM/owner_id/payment_id.pdf';
 
 COMMENT ON COLUMN payments.receipt_pdf_generated_at IS 
     'Timestamp when PDF was generated and cached. Used to track cache status.';
