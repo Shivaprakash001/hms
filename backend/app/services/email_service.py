@@ -25,7 +25,7 @@ class EmailService:
             logger.info(f"To: {to_email}")
             logger.info(f"Subject: {subject}")
             logger.info(f"------------------------")
-            return
+            return {"sent": False, "error": "RESEND_API_KEY not configured"}
 
         headers = {
             "Authorization": f"Bearer {api_key}",
@@ -45,10 +45,17 @@ class EmailService:
             if response.status_code == 200:
                 data = response.json()
                 logger.info(f"Email sent to {to_email} | Resend ID: {data.get('id')}")
+                return {"sent": True, "error": None, "provider_id": data.get("id")}
             else:
                 logger.error(f"Resend API error ({response.status_code}): {response.text}")
+                return {
+                    "sent": False,
+                    "error": f"Resend API error ({response.status_code})",
+                    "details": response.text,
+                }
         except Exception as e:
             logger.error(f"Failed to send email to {to_email}: {e}")
+            return {"sent": False, "error": str(e)}
 
     @staticmethod
     def send_invitation_email(to_email: str, name: str, activation_link: str, room_no: str = "N/A", rent: float = 0.0):
@@ -68,7 +75,7 @@ class EmailService:
             sender_name=os.getenv("EMAIL_SENDER_NAME", "Trishul Solutions")
         )
 
-        EmailService._send_email(to_email, subject, html_body)
+        return EmailService._send_email(to_email, subject, html_body)
 
     @staticmethod
     def send_payment_receipt_email(
@@ -102,4 +109,4 @@ class EmailService:
         </html>
         """
 
-        EmailService._send_email(to_email, subject, html_body)
+        return EmailService._send_email(to_email, subject, html_body)

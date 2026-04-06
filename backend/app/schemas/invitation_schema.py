@@ -25,7 +25,7 @@ class TenantInviteResponse(BaseModel):
     success: bool = True
     invitation_id: str
     email: str
-    activation_link: str  # ← CRITICAL: Frontend expects this
+    activation_link: Optional[str] = None
     expires_in_hours: int = 24
     
     class Config:

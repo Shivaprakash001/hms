@@ -124,14 +124,21 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                 </div>
                                 <h3 className="text-2xl font-bold text-slate-900 mb-2">Invitation Sent!</h3>
                                 <p className="text-slate-500 font-medium mb-6">
-                                    Activation link generated for <b>{email}</b>.
+                                    Invitation processed for <b>{email}</b>.
                                 </p>
-                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-left mb-8">
-                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Activation Link (For Testing)</p>
-                                    <p className="text-xs font-mono break-all text-indigo-600 bg-white p-2 rounded border border-slate-100">
-                                        {successData.activation_link}
-                                    </p>
-                                </div>
+                                {successData.activation_link ? (
+                                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-left mb-8">
+                                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Activation Link (For Testing)</p>
+                                        <p className="text-xs font-mono break-all text-indigo-600 bg-white p-2 rounded border border-slate-100">
+                                            {successData.activation_link}
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200 text-left mb-8">
+                                        <p className="text-sm font-semibold text-emerald-700">Invitation email sent successfully.</p>
+                                        <p className="text-xs text-emerald-700/80 mt-1">The tenant will receive an activation link in their inbox.</p>
+                                    </div>
+                                )}
                                 <button
                                     onClick={onClose}
                                     className="w-full py-3.5 bg-slate-900 text-white rounded-xl font-bold shadow-lg shadow-slate-900/20 hover:scale-[1.02] active:scale-[0.98] transition-all"

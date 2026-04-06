@@ -12,6 +12,19 @@ logger = get_logger(__name__)
 
 class InvitationService:
     @staticmethod
+    def _should_expose_activation_link() -> bool:
+        """
+        Show activation links only in non-production by default.
+        Can be explicitly controlled with EXPOSE_ACTIVATION_LINK=true|false.
+        """
+        explicit = os.getenv("EXPOSE_ACTIVATION_LINK")
+        if explicit is not None:
+            return explicit.strip().lower() in {"1", "true", "yes", "on"}
+
+        app_env = os.getenv("APP_ENV", "").strip().lower()
+        return app_env not in {"prod", "production"}
+
+    @staticmethod
     def invite_tenant(data: dict, owner_id: str, background_tasks=None) -> Dict[str, Any]:
         """
         Create a tenant invitation.
@@ -76,19 +89,35 @@ class InvitationService:
             activation_link = f"{base_url}/activate/{token}"
             room_no = room.get("room_no", "N/A")
             
-            if background_tasks:
-                background_tasks.add_task(EmailService.send_invitation_email, email, name, activation_link, room_no, float(monthly_rent or 0))
-            else:
-                EmailService.send_invitation_email(email, name, activation_link, room_no, float(monthly_rent or 0))
+            # Send synchronously so failures are surfaced to caller immediately.
+            # This prevents "Invitation Sent" responses when email delivery is misconfigured.
+            email_result = EmailService.send_invitation_email(
+                email,
+                name,
+                activation_link,
+                room_no,
+                float(monthly_rent or 0)
+            )
+            if not email_result.get("sent"):
+                logger.error(
+                    "Invitation email delivery failed for %s: %s",
+                    email,
+                    email_result.get("error")
+                )
+                return ServiceResponse.error(
+                    ErrorCode.INTERNAL_ERROR,
+                    "Invitation created but email delivery failed. Please verify email configuration and retry."
+                )
 
             # SUCCESS: Return response with activation_link
             response_data = {
                 "success": True,
                 "invitation_id": invitation_id,
                 "email": email,
-                "activation_link": activation_link,  # ← CRITICAL
                 "expires_in_hours": 24
             }
+            if InvitationService._should_expose_activation_link():
+                response_data["activation_link"] = activation_link
             
             return ServiceResponse.success(response_data, "Invitation sent successfully")
 

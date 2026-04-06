@@ -19,10 +19,14 @@ The backend requires the following configuration variables:
 | `SUPABASE_URL` | Your Supabase project URL | `https://your-project.supabase.co` |
 | `SUPABASE_KEY` | Public anon key for Supabase client | `eyJhbGciOiJIUzI1Ni...` |
 | `SUPABASE_SERVICE_ROLE_KEY` | Secret service role key for admin tasks | `eyJhbGci...` |
+| `APP_ENV` | Runtime environment (`development`/`production`) | `production` |
 | `SMTP_HOST` | Hostname for your email provider's SMTP server | `smtp.gmail.com` |
 | `SMTP_PORT` | Port for the SMTP server | `587` |
 | `SMTP_USER` | Email address used for authentication | `youremail@example.com` |
 | `SMTP_PASS` | Password or app-specific password for the email | `your-smtp-password` |
+| `RESEND_API_KEY` | Resend API key for invitation/notification emails | `re_...` |
+| `FRONTEND_URL` | Public frontend base URL used in activation links | `https://trishul.solutions` |
+| `EXPOSE_ACTIVATION_LINK` | Expose activation links in API response (testing only) | `false` |
 | `RAZORPAY_WEBHOOK_SECRET` | Secret used to verify incoming webhooks | `hms_webhook_secret` |
 | `RAZORPAY_KEY_ID` | Your Razorpay account Key ID | `rzp_test_...` |
 | `RAZORPAY_KEY_SECRET` | Your Razorpay account Key Secret | `your_secret_key` |
