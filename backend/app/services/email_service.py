@@ -1,11 +1,13 @@
 import httpx
 import os
+from pathlib import Path
+from jinja2 import Template
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 RESEND_API_URL = "https://api.resend.com/emails"
-DEFAULT_FROM = "HMS <onboarding@resend.dev>"
+DEFAULT_FROM = os.getenv("EMAIL_FROM", "Trishul Solutions <noreply@trishul.solutions>")
 
 
 class EmailService:
@@ -53,25 +55,18 @@ class EmailService:
         """
         Sends an invitation email to a new tenant via Resend.
         """
-        subject = "Welcome to HMS - Activate Your Account"
+        subject = "You're invited to Trishul Solutions Hostel Portal"
 
-        html_body = f"""
-        <html>
-            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-                <h2>Welcome to HMS!</h2>
-                <p>Hi <strong>{name}</strong>,</p>
-                <p>You have been invited to join the Hostel Management System.</p>
-                <div style="background-color: #f4f4f4; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                    <p style="margin: 5px 0;"><strong>Room:</strong> {room_no}</p>
-                    <p style="margin: 5px 0;"><strong>Monthly Rent:</strong> ₹{rent}</p>
-                </div>
-                <p>Please click the button below to set your password and activate your account:</p>
-                <a href="{activation_link}" style="display: inline-block; background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; margin: 10px 0;">ACTIVATE ACCOUNT</a>
-                <p style="font-size: 0.8em; color: #666;">This link will expire in 72 hours.</p>
-                <p>Regards,<br>HMS Team</p>
-            </body>
-        </html>
-        """
+        template_path = Path(__file__).resolve().parent.parent / "templates" / "email" / "invite.html"
+        template = Template(template_path.read_text(encoding="utf-8"))
+        html_body = template.render(
+            name=name,
+            activation_link=activation_link,
+            room_no=room_no,
+            rent=f"{rent:,.0f}" if rent else "0",
+            hostel_name=os.getenv("HOSTEL_BRAND_NAME", "Trishul Solutions"),
+            sender_name=os.getenv("EMAIL_SENDER_NAME", "Trishul Solutions")
+        )
 
         EmailService._send_email(to_email, subject, html_body)
 

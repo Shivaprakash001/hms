@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>You're invited</title>
+  </head>
+  <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+    <h2>You're invited to {{ hostel_name }}</h2>
+    <p>Hello {{ name }},</p>
+    <p>You have been invited to join the hostel portal.</p>
+    <div style="background-color: #f4f4f4; padding: 12px; border-radius: 6px; margin: 14px 0;">
+      <p style="margin: 4px 0;"><strong>Room:</strong> {{ room_no }}</p>
+      <p style="margin: 4px 0;"><strong>Monthly Rent:</strong> ₹{{ rent }}</p>
+    </div>
+    <p>Activate your account using the link below:</p>
+    <p>
+      <a href="{{ activation_link }}" style="display: inline-block; background-color: #4F46E5; color: white; padding: 10px 18px; text-decoration: none; border-radius: 4px; font-weight: bold;">
+        Activate Account
+      </a>
+    </p>
+    <p style="font-size: 0.85em; color: #666;">This link expires in 24 hours.</p>
+    <p>— {{ sender_name }}</p>
+  </body>
+</html>
