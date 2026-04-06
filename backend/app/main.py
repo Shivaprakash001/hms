@@ -34,12 +34,22 @@ app = FastAPI(
 
 app.add_middleware(LoggingMiddleware)
 
-# Explicitly allowed origins for CORS
+# Explicitly allowed origins for CORS (can be overridden by CORS_ALLOW_ORIGINS env)
+cors_origins_env = os.getenv("CORS_ALLOW_ORIGINS", "").strip()
 origins = [
+    origin.strip()
+    for origin in cors_origins_env.split(",")
+    if origin.strip()
+] or [
     "https://trishul.solutions",
+    "http://trishul.solutions",
     "https://www.trishul.solutions",
+    "http://www.trishul.solutions",
     "https://app.trishul.solutions",
+    "http://app.trishul.solutions",
     "https://trishul-hms.vercel.app",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
 ]
 
 from app.utils.middleware import QueryMonitorMiddleware
@@ -47,6 +57,7 @@ from app.utils.middleware import QueryMonitorMiddleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=r"https?://([a-z0-9-]+\.)?trishul\.solutions$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
