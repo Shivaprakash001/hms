@@ -353,15 +353,15 @@ def complete_profile(
             "phone": data.get("phone") or data.get("parent_phone"),
             "emergency_contact": data.get("emergency_contact") or data.get("parent_phone"),
             "phone_1": data.get("phone") or data.get("parent_phone"),
-            "phone_2": data.get("parent_phone"),
+            "phone_2": data.get("parent_phone") or data.get("emergency_contact"),
+            "aadhaar_number": data.get("aadhaar_number"),
             "college_name": data.get("college_name") or data.get("college"),
             "roll_number": data.get("roll_number") or data.get("college_roll_number"),
             "course": data.get("course"),
             "year_of_study": int(data.get("year_of_study")) if data.get("year_of_study") not in (None, "") else None,
             "section": data.get("section"),
             "branch": data.get("branch"),
-            "temporary_address": data.get("temporary_address") or data.get("address"),
-            "permanent_address": data.get("permanent_address")
+            "address": data.get("address") or data.get("temporary_address") or data.get("permanent_address")
         }
         mapped = {k: v for k, v in mapped.items() if v is not None}
 

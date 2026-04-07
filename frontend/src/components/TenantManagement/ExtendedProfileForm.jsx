@@ -30,23 +30,18 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
         photo_url: '',
         phone_1: '',
         phone_2: '',
-        phone_3: '',
         personal_email: '',
+        aadhaar_number: '',
         college_name: '',
         roll_number: '',
         course: '',
         year_of_study: '',
         section: '',
         branch: '',
-        office_name: '',
-        office_location: '',
-        job_role: '',
-        permanent_address: '',
-        temporary_address: '',
+        address: '',
     });
 
-    // Profile type toggle: student vs working professional
-    const [profileType, setProfileType] = useState('student');
+
 
     const initializeFromStudent = useCallback((data) => {
         if (!data) return;
@@ -56,26 +51,18 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
             photo_url: data.photo_url || '',
             phone_1: data.phone_1 || '',
             phone_2: data.phone_2 || '',
-            phone_3: data.phone_3 || '',
             personal_email: data.personal_email || '',
+            aadhaar_number: data.aadhaar_number || '',
             college_name: data.college_name || '',
             roll_number: data.roll_number || '',
             course: data.course || '',
             year_of_study: data.year_of_study || '',
             section: data.section || '',
             branch: data.branch || '',
-            office_name: data.office_name || '',
-            office_location: data.office_location || '',
-            job_role: data.job_role || '',
-            permanent_address: data.permanent_address || '',
-            temporary_address: data.temporary_address || '',
+            address: data.address || data.temporary_address || data.permanent_address || '',
         });
 
-        if (data.office_name || data.job_role || data.office_location) {
-            setProfileType('working');
-        } else {
-            setProfileType('student');
-        }
+
 
         setPhotoPreview(data.photo_url || null);
     }, []);
@@ -158,7 +145,7 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4">
             <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -170,10 +157,10 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden relative z-10 flex flex-col"
+                className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-3xl h-full sm:h-auto sm:max-h-[90vh] overflow-hidden relative z-10 flex flex-col"
             >
                 {/* Header */}
-                <div className="px-8 py-5 border-b border-slate-100 flex justify-between items-center bg-gradient-to-r from-slate-50 to-white shrink-0">
+                <div className="px-4 sm:px-8 py-4 sm:py-5 border-b border-slate-100 flex justify-between items-center bg-gradient-to-r from-slate-50 to-white shrink-0">
                     <div>
                         <h2 className="text-xl font-black text-slate-900">Extended Profile</h2>
                         <p className="text-xs text-slate-400 font-medium mt-0.5">
@@ -196,7 +183,7 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
                 </div>
 
                 {/* Tabs */}
-                <div className="px-8 pt-4 border-b border-slate-100 flex gap-1 overflow-x-auto shrink-0">
+                <div className="px-4 sm:px-8 pt-4 border-b border-slate-100 flex gap-1 overflow-x-auto shrink-0 scrollbar-hide">
                     {TABS.map(tab => (
                         <button
                             key={tab.key}
@@ -208,7 +195,7 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
                             }`}
                         >
                             <tab.icon size={14} />
-                            {tab.label}
+                            {tab.key === 'education' ? 'Education' : tab.label}
                         </button>
                     ))}
                 </div>
@@ -217,20 +204,20 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
                 <AnimatePresence>
                     {successMsg && (
                         <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
-                            className="mx-8 mt-4 bg-emerald-50 text-emerald-600 border border-emerald-200 px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 shrink-0">
+                            className="mx-4 sm:mx-8 mt-4 bg-emerald-50 text-emerald-600 border border-emerald-200 px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 shrink-0">
                             <CheckCircle2 size={16} /> {successMsg}
                         </motion.div>
                     )}
                     {error && (
                         <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
-                            className="mx-8 mt-4 bg-red-50 text-red-600 border border-red-200 px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 shrink-0">
+                            className="mx-4 sm:mx-8 mt-4 bg-red-50 text-red-600 border border-red-200 px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2 shrink-0">
                             <AlertCircle size={16} /> {error}
                         </motion.div>
                     )}
                 </AnimatePresence>
 
                 {/* Tab Content */}
-                <div className="flex-1 overflow-y-auto p-8">
+                <div className="flex-1 overflow-y-auto p-4 sm:p-8">
                     {loadingDetails && (
                         <div className="mb-4 text-xs text-slate-500 flex items-center gap-2">
                             <Loader2 size={14} className="animate-spin" /> Loading complete tenant details...
@@ -269,81 +256,38 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
                             </div>
 
                             <FormField label="Personal Email" value={form.personal_email} onChange={v => handleChange('personal_email', v)} type="email" icon={Mail} placeholder="personal@email.com" disabled={!isEditing} />
+                            <FormField label="Aadhaar Number" value={form.aadhaar_number} onChange={v => handleChange('aadhaar_number', v)} icon={CheckCircle2} placeholder="12-digit Aadhaar Number" disabled={!isEditing} />
                         </div>
                     )}
 
                     {activeTab === 'contact' && (
                         <div className="space-y-5">
-                            <FormField label="Phone 1 (Primary)" value={form.phone_1} onChange={v => handleChange('phone_1', v)} type="tel" icon={Phone} placeholder="+91 9876543210" disabled={!isEditing} />
-                            <FormField label="Phone 2 (Parent / Guardian)" value={form.phone_2} onChange={v => handleChange('phone_2', v)} type="tel" icon={Phone} placeholder="+91 9876543210" disabled={!isEditing} />
-                            <FormField label="Phone 3 (Optional)" value={form.phone_3} onChange={v => handleChange('phone_3', v)} type="tel" icon={Phone} placeholder="+91 9876543210" disabled={!isEditing} />
+                            <FormField label="His Phone Number (Primary)" value={form.phone_1} onChange={v => handleChange('phone_1', v)} type="tel" icon={Phone} placeholder="+91 9876543210" disabled={!isEditing} />
+                            <FormField label="Parent Number (Emergency)" value={form.phone_2} onChange={v => handleChange('phone_2', v)} type="tel" icon={Phone} placeholder="+91 9876543210" disabled={!isEditing} />
                         </div>
                     )}
 
                     {activeTab === 'education' && (
-                        <div className="space-y-6">
-                            {/* Toggle */}
-                            <div className="flex items-center gap-2 bg-slate-50 rounded-xl p-1.5 w-fit">
-                                <button
-                                    onClick={() => setProfileType('student')}
-                                    disabled={!isEditing}
-                                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-                                        profileType === 'student' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'
-                                    }`}
-                                >
-                                    <GraduationCap size={14} className="inline mr-1.5" />Student
-                                </button>
-                                <button
-                                    onClick={() => setProfileType('working')}
-                                    disabled={!isEditing}
-                                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-                                        profileType === 'working' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'
-                                    }`}
-                                >
-                                    <Briefcase size={14} className="inline mr-1.5" />Working Professional
-                                </button>
-                            </div>
-
-                            {profileType === 'student' ? (
-                                <div className="space-y-5">
-                                    <FormField label="College / University" value={form.college_name} onChange={v => handleChange('college_name', v)} icon={GraduationCap} placeholder="e.g. VTU, JNTU" disabled={!isEditing} />
-                                    <FormField label="Roll Number" value={form.roll_number} onChange={v => handleChange('roll_number', v)} icon={GraduationCap} placeholder="e.g. 21BCS001" disabled={!isEditing} />
-                                    <FormField label="Course" value={form.course} onChange={v => handleChange('course', v)} icon={GraduationCap} placeholder="e.g. B.Tech" disabled={!isEditing} />
-                                    <FormField label="Year of Study" value={form.year_of_study} onChange={v => handleChange('year_of_study', v)} type="number" icon={GraduationCap} placeholder="1-6" disabled={!isEditing} />
-                                    <FormField label="Section" value={form.section} onChange={v => handleChange('section', v)} icon={GraduationCap} placeholder="e.g. A" disabled={!isEditing} />
-                                    <FormField label="Branch / Department" value={form.branch} onChange={v => handleChange('branch', v)} icon={GraduationCap} placeholder="e.g. Computer Science" disabled={!isEditing} />
-                                </div>
-                            ) : (
-                                <div className="space-y-5">
-                                    <FormField label="Company / Office Name" value={form.office_name} onChange={v => handleChange('office_name', v)} icon={Building2} placeholder="e.g. TCS, Infosys" disabled={!isEditing} />
-                                    <FormField label="Office Location" value={form.office_location} onChange={v => handleChange('office_location', v)} icon={MapPin} placeholder="e.g. Electronic City, Bangalore" disabled={!isEditing} />
-                                    <FormField label="Job Role / Designation" value={form.job_role} onChange={v => handleChange('job_role', v)} icon={Briefcase} placeholder="e.g. Software Engineer" disabled={!isEditing} />
-                                </div>
-                            )}
+                        <div className="space-y-5">
+                            <FormField label="College / University" value={form.college_name} onChange={v => handleChange('college_name', v)} icon={GraduationCap} placeholder="e.g. VTU, JNTU" disabled={!isEditing} />
+                            <FormField label="Roll Number" value={form.roll_number} onChange={v => handleChange('roll_number', v)} icon={GraduationCap} placeholder="e.g. 21BCS001" disabled={!isEditing} />
+                            <FormField label="Course" value={form.course} onChange={v => handleChange('course', v)} icon={GraduationCap} placeholder="e.g. B.Tech" disabled={!isEditing} />
+                            <FormField label="Year of Study" value={form.year_of_study} onChange={v => handleChange('year_of_study', v)} type="number" icon={GraduationCap} placeholder="1-6" disabled={!isEditing} />
+                            <FormField label="Section" value={form.section} onChange={v => handleChange('section', v)} icon={GraduationCap} placeholder="e.g. A" disabled={!isEditing} />
+                            <FormField label="Branch / Department" value={form.branch} onChange={v => handleChange('branch', v)} icon={GraduationCap} placeholder="e.g. Computer Science" disabled={!isEditing} />
                         </div>
                     )}
 
                     {activeTab === 'address' && (
                         <div className="space-y-5">
                             <div className="space-y-2">
-                                <label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">Permanent Address</label>
+                                <label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">Address</label>
                                 <textarea
-                                    value={form.permanent_address}
-                                    onChange={e => handleChange('permanent_address', e.target.value)}
+                                    value={form.address}
+                                    onChange={e => handleChange('address', e.target.value)}
                                     disabled={!isEditing}
-                                    rows={3}
-                                    placeholder="Full permanent address..."
-                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-medium text-sm focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none transition-all resize-none hover:bg-white disabled:opacity-70"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">Temporary / Current Address</label>
-                                <textarea
-                                    value={form.temporary_address}
-                                    onChange={e => handleChange('temporary_address', e.target.value)}
-                                    disabled={!isEditing}
-                                    rows={3}
-                                    placeholder="Current local address..."
+                                    rows={4}
+                                    placeholder="Full address details..."
                                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-medium text-sm focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none transition-all resize-none hover:bg-white disabled:opacity-70"
                                 />
                             </div>
@@ -357,7 +301,7 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
 
                 {/* Footer */}
                 {activeTab !== 'documents' && (
-                    <div className="px-8 py-4 border-t border-slate-100 flex gap-3 bg-slate-50/50 shrink-0">
+                    <div className="px-4 sm:px-8 py-4 border-t border-slate-100 flex gap-3 bg-slate-50/50 shrink-0 pb-safe">
                         <button onClick={onClose} className="flex-1 py-3 rounded-xl bg-white border border-slate-200 text-slate-500 font-bold hover:bg-slate-50 transition-colors text-sm">
                             {isEditing ? 'Cancel' : 'Close'}
                         </button>

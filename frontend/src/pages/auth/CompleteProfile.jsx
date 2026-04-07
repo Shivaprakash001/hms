@@ -22,14 +22,14 @@ const CompleteProfile = () => {
         phone: '',
         emergency_contact: '',
         personal_email: user?.email || '',
+        aadhaar_number: '',
         college_name: '',
         roll_number: '',
         course: '',
         year_of_study: '',
         section: '',
         branch: '',
-        permanent_address: '',
-        temporary_address: ''
+        address: ''
     });
 
     const [aadhaarFile, setAadhaarFile] = useState(null);
@@ -70,16 +70,16 @@ const CompleteProfile = () => {
 
     const validateRequired = () => {
         if (!formData.name.trim()) return 'Full name is required';
-        if (!formData.phone.trim()) return 'Phone is required';
-        if (!formData.emergency_contact.trim()) return 'Parent/Emergency phone is required';
-        if (!formData.college_name.trim()) return 'College is required';
+        if (!formData.phone.trim()) return 'Phone number is required';
+        if (!formData.emergency_contact.trim()) return 'Parent / Emergency number is required';
+        if (!formData.aadhaar_number.trim()) return 'Aadhaar number is required';
+        if (formData.aadhaar_number.trim().length !== 12) return 'Aadhaar number must be 12 digits';
+        if (!formData.college_name.trim()) return 'College name is required';
         if (!formData.roll_number.trim()) return 'Roll number is required';
         if (!formData.year_of_study) return 'Year of study is required';
         if (!formData.branch.trim()) return 'Branch is required';
-        if (!formData.temporary_address.trim() && !formData.permanent_address.trim()) {
-            return 'At least one address is required';
-        }
-        if (!aadhaarFile) return 'Aadhaar document is required';
+        if (!formData.address.trim()) return 'Address is required';
+        if (!aadhaarFile) return 'Aadhaar document upload is required';
         return null;
     };
 
@@ -102,14 +102,14 @@ const CompleteProfile = () => {
                 phone_1: formData.phone.trim(),
                 phone_2: formData.emergency_contact.trim(),
                 personal_email: formData.personal_email?.trim() || null,
+                aadhaar_number: formData.aadhaar_number.trim(),
                 college_name: formData.college_name.trim(),
                 roll_number: formData.roll_number.trim(),
                 course: formData.course?.trim() || null,
                 year_of_study: Number(formData.year_of_study),
                 section: formData.section?.trim() || null,
                 branch: formData.branch.trim(),
-                permanent_address: formData.permanent_address?.trim() || null,
-                temporary_address: formData.temporary_address?.trim() || null
+                address: formData.address.trim()
             };
 
             await studentService.completeMyProfile(payload, aadhaarFile);
@@ -165,8 +165,9 @@ const CompleteProfile = () => {
 
                                 <form onSubmit={handleSubmit} className="space-y-4">
                                     <Field icon={User} label="Full Name *" name="name" value={formData.name} onChange={handleInputChange} />
-                                    <Field icon={Phone} label="Phone *" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="10-15 digit number" />
-                                    <Field icon={Phone} label="Parent / Emergency Contact *" name="emergency_contact" value={formData.emergency_contact} onChange={handleInputChange} placeholder="10-15 digit number" />
+                                    <Field icon={Phone} label="His Phone Number (Primary) *" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="10-digit number" />
+                                    <Field icon={Phone} label="Parent Number (Emergency) *" name="emergency_contact" value={formData.emergency_contact} onChange={handleInputChange} placeholder="10-digit number" />
+                                    <Field icon={CheckCircle2} label="Aadhaar Number *" name="aadhaar_number" value={formData.aadhaar_number} onChange={handleInputChange} placeholder="12-digit number" />
                                     <Field icon={Mail} label="Personal Email" name="personal_email" value={formData.personal_email} onChange={handleInputChange} type="email" />
                                     <Field icon={GraduationCap} label="College *" name="college_name" value={formData.college_name} onChange={handleInputChange} />
                                     <Field icon={GraduationCap} label="Roll Number *" name="roll_number" value={formData.roll_number} onChange={handleInputChange} />
@@ -174,8 +175,7 @@ const CompleteProfile = () => {
                                     <Field icon={GraduationCap} label="Year of Study *" name="year_of_study" value={formData.year_of_study} onChange={handleInputChange} type="number" placeholder="1-6" />
                                     <Field icon={GraduationCap} label="Section" name="section" value={formData.section} onChange={handleInputChange} />
                                     <Field icon={GraduationCap} label="Branch *" name="branch" value={formData.branch} onChange={handleInputChange} />
-                                    <Field icon={MapPin} label="Temporary Address *" name="temporary_address" value={formData.temporary_address} onChange={handleInputChange} />
-                                    <Field icon={MapPin} label="Permanent Address" name="permanent_address" value={formData.permanent_address} onChange={handleInputChange} />
+                                    <Field icon={MapPin} label="Address *" name="address" value={formData.address} onChange={handleInputChange} />
 
                                     <div className="space-y-2">
                                         <label className="text-xs font-bold text-slate-500 ml-1 uppercase tracking-wider">Aadhaar Document *</label>

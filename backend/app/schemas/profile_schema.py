@@ -32,6 +32,7 @@ class ProfileCreate(BaseModel):
     role: RoleEnum = Field(..., description="User role in the system")
     address: Optional[str] = Field(None, max_length=500, description="Residential address")
     emergency_contact: Optional[str] = Field(None, max_length=15, description="Emergency contact number")
+    aadhaar_number: Optional[str] = Field(None, min_length=12, max_length=12, description="12-digit Aadhaar number")
     
     @field_validator('phone', 'emergency_contact')
     @classmethod
@@ -46,6 +47,7 @@ class ProfileUpdate(BaseModel):
     phone: Optional[str] = Field(None, min_length=10, max_length=15)
     address: Optional[str] = Field(None, max_length=500)
     emergency_contact: Optional[str] = Field(None, max_length=15)
+    aadhaar_number: Optional[str] = Field(None, min_length=12, max_length=12)
     
     @field_validator('phone', 'emergency_contact')
     @classmethod
@@ -66,6 +68,7 @@ class CompleteProfileRequest(BaseModel):
     year_of_study: Optional[str] = None
     address: Optional[str] = None
     parent_phone: str = Field(...)
+    aadhaar_number: str = Field(..., min_length=12, max_length=12)
 
     @field_validator('parent_phone')
     @classmethod
@@ -88,6 +91,7 @@ class ProfileResponse(BaseModel):
     branch: Optional[str] = None
     year_of_study: Optional[str] = None
     parent_phone: Optional[str] = None
+    aadhaar_number: Optional[str] = None
     owner_id: Optional[UUID] = None
     created_at: datetime
     updated_at: Optional[datetime] = None

@@ -774,9 +774,9 @@ def update_student_self_profile(
             "name", "email", "phone", "address"
         }
         student_fields = {
-            "photo_url", "phone_1", "phone_2", "phone_3", "personal_email",
-            "college_name", "roll_number", "course", "year_of_study", "section", "branch", "office_name", "office_location", "job_role",
-            "permanent_address", "temporary_address"
+            "photo_url", "phone_1", "phone_2", "aadhaar_number", "personal_email",
+            "college_name", "roll_number", "course", "year_of_study", "section", "branch",
+            "address"
         }
 
         profile_update = {k: v for k, v in data.items() if k in profile_fields and v is not None}
@@ -841,11 +841,12 @@ def update_student_self_profile(
             bool((profile.get("email") or "").strip()),
             bool((profile.get("phone") or student.get("phone_1") or "").strip()),
             bool((student.get("phone_2") or profile.get("emergency_contact") or "").strip()),
+            bool((student.get("aadhaar_number") or profile.get("aadhaar_number") or "").strip()),
             bool((student.get("college_name") or "").strip()),
             bool((student.get("roll_number") or "").strip()),
             bool(student.get("year_of_study")),
             bool((student.get("branch") or "").strip()),
-            bool((student.get("temporary_address") or student.get("permanent_address") or profile.get("address") or "").strip()),
+            bool((student.get("address") or profile.get("address") or "").strip()),
             has_aadhaar,
         ])
 
@@ -892,11 +893,12 @@ def complete_student_self_profile(
             "name": bool((data.get("name") or "").strip()),
             "phone": bool((data.get("phone") or "").strip()),
             "emergency_contact": bool((data.get("emergency_contact") or "").strip()),
+            "aadhaar_number": bool((data.get("aadhaar_number") or "").strip()),
             "college_name": bool((data.get("college_name") or "").strip()),
             "roll_number": bool((data.get("roll_number") or "").strip()),
             "year_of_study": bool(data.get("year_of_study")),
             "branch": bool((data.get("branch") or "").strip()),
-            "address": bool((data.get("temporary_address") or data.get("permanent_address") or data.get("address") or "").strip()),
+            "address": bool((data.get("address") or data.get("temporary_address") or data.get("permanent_address") or "").strip()),
             "aadhaar_file": bool(aadhaar_file_bytes),
         }
 
