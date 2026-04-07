@@ -139,201 +139,179 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
         }
     };
 
+    const [activeTab, setActiveTab] = useState('personal');
+
+    const tabs = [
+        { id: 'personal', label: 'Personal Info', icon: User },
+        { id: 'contact', label: 'Contact', icon: Phone },
+        { id: 'education', label: 'Education', icon: GraduationCap },
+        { id: 'address', label: 'Address', icon: MapPin },
+        { id: 'documents', label: 'Documents', icon: FileText }
+    ];
+
     if (!isOpen) return null;
+
+    const renderTabContent = () => {
+        switch (activeTab) {
+            case 'personal':
+                return (
+                    <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
+                         <div className="flex flex-col sm:flex-row gap-8">
+                            <div className="flex flex-col items-center gap-2 shrink-0">
+                                <div className="w-28 h-28 rounded-3xl bg-slate-50 border-2 border-white shadow-lg overflow-hidden relative">
+                                    {photoPreview ? (
+                                        <img src={photoPreview} alt="Profile" className="w-full h-full object-cover" />
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center text-slate-200">
+                                            <User size={40} strokeWidth={1.5} />
+                                        </div>
+                                    )}
+                                </div>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Identity Photo</p>
+                            </div>
+                            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <SaaSInput label="Full Name" value={form.name} readOnly placeholder="Not Entered" />
+                                <SaaSInput label="Personal Email" value={form.personal_email} readOnly icon={Lock} placeholder="Not Entered" />
+                                <SaaSInput label="Aadhaar Number" value={form.aadhaar_number} readOnly placeholder="XXXX XXXX XXXX" />
+                                <div className="flex items-end pb-1">
+                                    <div className="bg-indigo-50/50 border border-indigo-100/50 px-4 py-3 rounded-xl flex items-center gap-3 w-full">
+                                        <div className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
+                                        <p className="text-[10px] font-bold text-indigo-700 uppercase tracking-widest">Awaiting Verification</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </motion.div>
+                );
+            case 'contact':
+                return (
+                    <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-4 max-w-xl">
+                        <SaaSInput label="Primary Phone" value={form.phone_1} readOnly placeholder="Not Entered" />
+                        <SaaSInput label="Secondary / Emergency" value={form.phone_2} readOnly placeholder="Not Entered" />
+                        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 flex gap-4 mt-2">
+                            <Info size={16} className="text-slate-400 shrink-0 mt-0.5" />
+                            <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                                These contact details are managed exclusively by the tenant for emergency protocols and automated billing notifications.
+                            </p>
+                        </div>
+                    </motion.div>
+                );
+            case 'education':
+                return (
+                    <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <SaaSInput label="College Name" value={form.college_name} readOnly placeholder="Not Entered" />
+                        <SaaSInput label="Course / Major" value={form.course} readOnly placeholder="Not Entered" />
+                        <div className="space-y-1.5">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Current Year</label>
+                            <div className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 opacity-60">
+                                {form.year_of_study ? `${form.year_of_study} Year` : 'Not Entered'}
+                            </div>
+                        </div>
+                        <SaaSInput label="Student ID / Roll No" value={form.roll_number} readOnly placeholder="Not Entered" />
+                    </motion.div>
+                );
+            case 'address':
+                return (
+                    <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
+                        <SaaSInput label="Full Address" value={form.address} readOnly placeholder="Not Entered" />
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <SaaSInput label="City" value={form.city} readOnly placeholder="Not Entered" />
+                            <SaaSInput label="State" value={form.state} readOnly placeholder="Not Entered" />
+                            <SaaSInput label="Pincode" value={form.pincode} readOnly placeholder="Not Entered" />
+                        </div>
+                    </motion.div>
+                );
+            case 'documents':
+                return (
+                    <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <DocumentDropBox label="Aadhaar" />
+                        <DocumentDropBox label="College ID" />
+                        <DocumentDropBox label="Other" />
+                    </motion.div>
+                );
+            default: return null;
+        }
+    };
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4">
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={onClose}
-                className="absolute inset-0 bg-slate-900/40 backdrop-blur-md"
-            />
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" />
             
             <motion.div
-                initial={{ opacity: 0, scale: 0.98, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.98, y: 20 }}
-                className="bg-white rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl w-full sm:max-w-4xl h-full sm:h-auto sm:max-h-[90vh] overflow-hidden relative z-10 flex flex-col border border-slate-100"
+                initial={{ opacity: 0, scale: 0.98, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98, y: 20 }}
+                className="bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl w-full sm:max-w-4xl h-full sm:h-auto sm:max-h-[85vh] overflow-hidden relative z-10 flex flex-col border border-slate-100"
             >
-                {/* Modern Header */}
-                <div className="px-6 sm:px-10 py-6 border-b border-slate-50 flex justify-between items-center bg-white shrink-0">
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600">
-                            <User size={24} strokeWidth={2.5} />
+                {/* Image-Consistent Navigation Header */}
+                <div className="px-6 sm:px-10 py-6 border-b border-slate-50 flex flex-col gap-6 bg-white shrink-0">
+                    <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-600/20">
+                                <User size={20} strokeWidth={2.5} />
+                            </div>
+                            <div>
+                                <h2 className="text-xl font-black text-slate-900 tracking-tight">{form.name || 'Tenant Profile'}</h2>
+                                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{form.personal_email || 'Verified Tenant'}</p>
+                            </div>
                         </div>
-                        <div>
-                            <h2 className="text-xl font-black text-slate-900 tracking-tight">Extended Profile</h2>
-                            <div className="flex items-center gap-2 mt-1">
-                                <div className="w-32 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <button onClick={onClose} className="p-2.5 hover:bg-slate-50 rounded-full text-slate-400 hover:text-slate-900 transition-all border border-slate-100">
+                            <X size={20} />
+                        </button>
+                    </div>
+
+                    {/* Tab Navigation - Matches User Image */}
+                    <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar">
+                        {tabs.map(tab => (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id)}
+                                className={`flex items-center gap-2 px-5 py-3 rounded-2xl transition-all relative ${
+                                    activeTab === tab.id 
+                                    ? 'bg-indigo-50 text-indigo-600' 
+                                    : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
+                                }`}
+                            >
+                                <tab.icon size={16} strokeWidth={activeTab === tab.id ? 2.5 : 2} />
+                                <span className={`text-[13px] font-bold tracking-tight whitespace-nowrap ${activeTab === tab.id ? 'opacity-100' : 'opacity-80'}`}>
+                                    {tab.label}
+                                </span>
+                                {activeTab === tab.id && (
                                     <motion.div 
-                                        initial={{ width: 0 }}
-                                        animate={{ width: `${progress}%` }}
-                                        className="h-full bg-indigo-500 rounded-full"
+                                        layoutId="tabUnderline"
+                                        className="absolute -bottom-1 left-4 right-4 h-0.5 bg-indigo-500 rounded-full hidden sm:block"
                                     />
-                                </div>
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{progress}% Complete</span>
-                            </div>
-                        </div>
+                                )}
+                            </button>
+                        ))}
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-slate-50 rounded-xl text-slate-400 hover:text-slate-900 transition-all border border-transparent hover:border-slate-100">
-                        <X size={20} />
-                    </button>
                 </div>
 
-                {/* Two-Pane Body - Responsive */}
-                <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-                    {/* Left Pane: Main Scrolling Content (Personal, Address, Docs) */}
-                    <div className="flex-[1.6] overflow-y-auto p-6 sm:p-10 space-y-10 lg:border-r border-slate-50 scroll-smooth">
-                        {/* Section 1: Personal Information */}
-                        <div className="space-y-6">
-                            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 flex items-center gap-2">
-                                <User size={12} /> Personal Profile
-                            </h3>
-
-                            <div className="flex flex-col sm:flex-row gap-8">
-                                {/* Profile Photo - READ ONLY */}
-                                <div className="flex flex-col items-center gap-2 shrink-0">
-                                    <div className="w-24 h-24 rounded-2xl bg-slate-50 border-2 border-white shadow-lg overflow-hidden relative">
-                                        {photoPreview ? (
-                                            <img src={photoPreview} alt="Profile" className="w-full h-full object-cover" />
-                                        ) : (
-                                            <div className="w-full h-full flex items-center justify-center text-slate-300">
-                                                <Camera size={32} strokeWidth={1.5} />
-                                            </div>
-                                        )}
-                                    </div>
-                                    <p className="text-[9px] font-bold text-slate-400 uppercase">Profile Photo</p>
-                                </div>
-
-                                {/* Basic Info Fields - READ ONLY */}
-                                <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <SaaSInput label="Full Name" value={form.name} readOnly placeholder="Rahul Sharma" />
-                                    <SaaSInput label="Personal Email" value={form.personal_email} readOnly icon={Lock} placeholder="email@example.com" />
-                                    <SaaSInput label="Phone Number" value={form.phone_1} readOnly placeholder="+91 9876543210" />
-                                    <SaaSInput label="Aadhaar Number" value={form.aadhaar_number} readOnly placeholder="XXXX XXXX XXXX" />
-                                    <div className="sm:col-span-2">
-                                        <SaaSInput label="Emergency Contact" value={form.phone_2} readOnly placeholder="Parent/Guardian Name & Number" />
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Subsection: Address - READ ONLY */}
-                            <div className="bg-slate-50/50 p-6 rounded-[1.5rem] border border-slate-100 space-y-4 shadow-sm">
-                                <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                                    <MapPin size={12} /> Residential Address
-                                </h4>
-                                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                                    <div className="sm:col-span-4">
-                                        <SaaSInput label="Street" value={form.address} readOnly placeholder="Street name and House no." />
-                                    </div>
-                                    <div className="sm:col-span-2">
-                                        <SaaSInput label="City" value={form.city} readOnly placeholder="City" />
-                                    </div>
-                                    <div className="sm:col-span-1">
-                                        <SaaSInput label="State" value={form.state} readOnly placeholder="State" />
-                                    </div>
-                                    <div className="sm:col-span-1">
-                                        <SaaSInput label="Pincode" value={form.pincode} readOnly placeholder="Pincode" />
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Subsection: Documents */}
-                            <div className="space-y-4 pt-2">
-                                <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                                    <FileText size={12} /> ID Proofs & Documents
-                                </h4>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                                    <DocumentDropBox label="Aadhaar" />
-                                    <DocumentDropBox label="College ID" />
-                                    <DocumentDropBox label="Other Proof" />
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Right Pane: Sidebar (Education & Stats) */}
-                    <aside className="w-full lg:w-80 bg-slate-50/70 p-6 sm:p-8 space-y-8 overflow-y-auto">
-                        <div className="space-y-6">
-                            <div className="flex items-center gap-2 text-indigo-600">
-                                <GraduationCap size={16} strokeWidth={2.5} />
-                                <h3 className="text-[10px] font-black uppercase tracking-[0.2em]">Education Hub</h3>
-                            </div>
-
-                            <div className="space-y-4">
-                                <SaaSInput label="College Name" value={form.college_name} readOnly placeholder="College Name" />
-                                <SaaSInput label="Course / Degree" value={form.course} readOnly placeholder="B.Tech, MBA etc." />
-                                
-                                <div className="space-y-1.5">
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Current Year</label>
-                                    <div className="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 opacity-70">
-                                        {form.year_of_study ? `${form.year_of_study} Year` : 'Not Specified'}
-                                    </div>
-                                </div>
-
-                                <SaaSInput label="ID / Roll Number" value={form.roll_number} readOnly placeholder="Student ID" />
-
-                                <div className="pt-6">
-                                    <div className="bg-indigo-600 rounded-2xl p-5 text-white shadow-lg shadow-indigo-600/20">
-                                        <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-1">Status Overview</p>
-                                        <div className="flex items-center justify-between">
-                                            <h4 className="text-xl font-black">Verification</h4>
-                                            <div className="px-2 py-1 bg-white/20 rounded-lg text-[10px] font-bold">LOCKED</div>
-                                        </div>
-                                        <p className="text-xs mt-3 opacity-90 leading-relaxed font-medium">Verify documents in the main section to unlock full tenant status.</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </aside>
+                {/* Content Area */}
+                <div className="flex-1 overflow-y-auto px-6 sm:px-10 py-8 bg-white/50">
+                    <AnimatePresence mode="wait">
+                        {renderTabContent()}
+                    </AnimatePresence>
                 </div>
 
-                {/* Sticky Footer - Read-Only View */}
+                {/* Footer - Read Only View */}
                 <div className="px-10 py-6 border-t border-slate-50 bg-white flex justify-between items-center shrink-0">
                     <div className="flex items-center gap-2 text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100">
                         <Lock size={14} />
                         <span className="text-[10px] font-black uppercase tracking-wider">Managed by Tenant</span>
                     </div>
-                    <div className="flex gap-3">
-                        <button 
-                            onClick={onClose}
-                            className="px-8 py-3 rounded-2xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/10 active:scale-95 flex items-center gap-2"
-                        >
-                            Close Profile
-                        </button>
-                    </div>
+                    <button 
+                        onClick={onClose}
+                        className="px-8 py-3 rounded-2xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/10 active:scale-95"
+                    >
+                        Close Profile
+                    </button>
                 </div>
-
-                {/* Progress Snackbar (Mobile) */}
-                <AnimatePresence>
-                    {(successMsg || error) && (
-                        <motion.div 
-                            initial={{ y: 100 }}
-                            animate={{ y: 0 }}
-                            exit={{ y: 100 }}
-                            className={`absolute bottom-6 left-6 right-6 p-4 rounded-2xl shadow-2xl z-50 flex items-center justify-between border ${
-                                error ? 'bg-rose-600 border-rose-500 text-white' : 'bg-indigo-600 border-indigo-500 text-white'
-                            }`}
-                        >
-                            <div className="flex items-center gap-3">
-                                {error ? <AlertCircle size={20} /> : <CheckCircle2 size={20} />}
-                                <span className="text-sm font-bold">{successMsg || error}</span>
-                            </div>
-                            <button onClick={() => { setSuccessMsg(''); setError(''); }}>
-                                <X size={20} />
-                            </button>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
             </motion.div>
         </div>
     );
 }
 
 // Internal Styled Input Component
-function SaaSInput({ label, value, onChange, placeholder, readOnly = false, icon: Icon }) {
+function SaaSInput({ label, value, readOnly = true, placeholder, icon: Icon }) {
     const [isMasked, setIsMasked] = useState(label === 'Aadhaar Number');
     
     const displayValue = useMemo(() => {
@@ -351,40 +329,27 @@ function SaaSInput({ label, value, onChange, placeholder, readOnly = false, icon
 
     return (
         <div className="space-y-1.5 group">
-            <label className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400 ml-1 group-focus-within:text-indigo-600 transition-colors">
+            <label className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">
                 {label}
             </label>
             <div className="relative">
-                <input 
-                    type="text"
-                    value={displayValue}
-                    onChange={e => {
-                        let v = e.target.value;
-                        if (label === 'Aadhaar Number') {
-                             v = v.replace(/\D/g, '').substring(0, 12);
-                        }
-                        onChange?.(v);
-                    }}
-                    onFocus={() => label === 'Aadhaar Number' && setIsMasked(false)}
-                    onBlur={() => label === 'Aadhaar Number' && setIsMasked(true)}
-                    readOnly={readOnly}
-                    placeholder={placeholder}
-                    className={`w-full px-5 py-3.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-50/50 focus:border-indigo-400 transition-all placeholder:text-slate-200 hover:bg-slate-50 ${readOnly ? 'cursor-not-allowed opacity-70' : ''}`}
-                />
-                {label === 'Aadhaar Number' && (
-                    <button 
-                        type="button"
-                        onMouseDown={(e) => { e.preventDefault(); setIsMasked(!isMasked); }}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 hover:text-indigo-500 transition-colors"
-                    >
-                        {isMasked ? <Info size={14} /> : <CheckCircle2 size={14} />}
-                    </button>
-                )}
-                {Icon && label !== 'Aadhaar Number' && (
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300">
-                        <Icon size={14} />
-                    </div>
-                )}
+                <div className={`w-full px-5 py-3.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 flex items-center transition-all ${!value ? 'text-slate-300 italic' : ''}`}>
+                    {displayValue || placeholder}
+                    {label === 'Aadhaar Number' && (
+                        <button 
+                            type="button"
+                            onMouseDown={(e) => { e.preventDefault(); setIsMasked(!isMasked); }}
+                            className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 hover:text-indigo-500 transition-colors"
+                        >
+                            {isMasked ? <Info size={14} /> : <CheckCircle2 size={14} />}
+                        </button>
+                    )}
+                    {Icon && label !== 'Aadhaar Number' && (
+                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300">
+                            <Icon size={14} />
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );
@@ -393,13 +358,13 @@ function SaaSInput({ label, value, onChange, placeholder, readOnly = false, icon
 // Internal Styled Document Box
 function DocumentDropBox({ label }) {
     return (
-        <div className="border-2 border-dashed border-slate-200 rounded-[1.5rem] p-6 text-center hover:border-indigo-300 hover:bg-indigo-50/30 transition-all cursor-pointer group flex flex-col items-center justify-center gap-2 min-h-[140px]">
-            <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center group-hover:bg-indigo-100 transition-colors">
-                <Upload size={18} className="text-slate-400 group-hover:text-indigo-600" />
+        <div className="border border-slate-100 rounded-2xl p-6 text-center bg-slate-50/50 flex flex-col items-center justify-center gap-3 min-h-[140px]">
+            <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center text-slate-400">
+                <FileText size={18} />
             </div>
             <div>
-                <p className="text-[11px] font-black text-slate-700 group-hover:text-indigo-700">{label}</p>
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mt-1">PDF, JPG (Max 5MB)</p>
+                <p className="text-[11px] font-black text-slate-700">{label}</p>
+                <p className="text-[9px] font-bold text-indigo-400 uppercase tracking-tighter mt-1">Ready for Review</p>
             </div>
         </div>
     );
