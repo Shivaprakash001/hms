@@ -89,72 +89,41 @@ const OwnerDashboard = () => {
         <div className="space-y-8 relative pb-20">
             <div className="flex items-center justify-between">
                 <div>
-                    <h2 className="text-3xl font-black text-slate-900 tracking-tight">Property Overview</h2>
-                    <p className="text-sm font-semibold text-slate-400 mt-1">Live metrics from your hostel management system.</p>
+                    <h2 className="text-3xl font-black text-slate-900 tracking-tight">Dashboard Overview</h2>
+                    <p className="text-sm font-semibold text-slate-400 mt-1">Real-time property insights and performance.</p>
                 </div>
             </div>
 
-            {/* Premium Stats Grid (2x2) */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Target 4 Metric Boxes */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard 
-                    icon={<BedDouble />} 
-                    label="Total Rooms" 
-                    value={summary.total_rooms || 0} 
-                    color="indigo" 
+                    icon={<ArrowUpRight />} 
+                    label="Total Revenue" 
+                    value={`₹${summary.rent_collected_this_month.toLocaleString()}`} 
+                    color="emerald" 
+                    badge={{ text: '+0%', type: 'success' }}
                 />
                 <StatCard 
                     icon={<Users />} 
-                    label="Total Occupants" 
-                    value={summary.active_tenants} 
+                    label="Occupancy Rate" 
+                    value={`${summary.occupancy_rate || 0}%`} 
                     color="purple" 
+                    badge={{ text: `${summary.active_tenants} active`, type: 'info' }}
                 />
                 <StatCard 
-                    icon={<Bed />} 
-                    label="Total Capacity" 
-                    value={summary.total_capacity} 
-                    color="blue" 
+                    icon={<Clock />} 
+                    label="Pending Dues" 
+                    value={`₹${summary.pending_dues.toLocaleString()}`} 
+                    color="rose" 
+                    badge={{ text: '0%', type: 'danger' }}
                 />
                 <StatCard 
                     icon={<LayoutGrid />} 
-                    label="Occupancy Rate" 
-                    value={`${summary.occupancy_rate || 0}%`} 
-                    color="emerald" 
+                    label="Net Profit" 
+                    value={`₹${(summary.net_profit || 0).toLocaleString()}`} 
+                    color="pink" 
+                    badge={{ text: '0%', type: 'info' }}
                 />
-            </div>
-
-            {/* Financial Highlights */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white p-6 rounded-[28px] border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-600">
-                            <Clock size={24} />
-                        </div>
-                        <div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Pending Dues</p>
-                            <h4 className="text-2xl font-black text-slate-900">₹{summary.pending_dues.toLocaleString()}</h4>
-                        </div>
-                    </div>
-                    {summary.overdue_count > 0 && (
-                        <div className="px-3 py-1 bg-rose-500 text-white text-[10px] font-extrabold rounded-lg shadow-lg shadow-rose-200">
-                            {summary.overdue_count} OVERDUE
-                        </div>
-                    )}
-                </div>
-
-                <div className="bg-white p-6 rounded-[28px] border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600">
-                            <CreditCard size={24} />
-                        </div>
-                        <div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Rent Collected</p>
-                            <h4 className="text-2xl font-black text-slate-900">₹{summary.rent_collected_this_month.toLocaleString()}</h4>
-                        </div>
-                    </div>
-                    <div className="text-[10px] font-black text-slate-400 bg-slate-50 px-3 py-1 rounded-lg border border-slate-100">
-                        THIS MONTH
-                    </div>
-                </div>
             </div>
 
             <div className="grid grid-cols-1 gap-6">
@@ -163,7 +132,7 @@ const OwnerDashboard = () => {
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
                         <div>
                             <h3 className="font-black text-slate-900 text-xl tracking-tight">Financial Performance</h3>
-                            <p className="text-sm font-semibold text-slate-400 mt-1">Comparing monthly dues vs actual collections.</p>
+                            <p className="text-sm font-semibold text-slate-400 mt-1">Income vs Expenses over time</p>
                         </div>
                         <select
                             value={months}
@@ -239,26 +208,42 @@ const OwnerDashboard = () => {
     );
 };
 
-const StatCard = ({ icon, label, value, color }) => {
+const StatCard = ({ icon, label, value, color, badge }) => {
     const colorMap = {
         indigo: { bg: 'bg-indigo-50', text: 'text-indigo-600', icon: 'text-indigo-500' },
         purple: { bg: 'bg-purple-50', text: 'text-purple-600', icon: 'text-purple-500' },
         blue: { bg: 'bg-blue-50', text: 'text-blue-600', icon: 'text-blue-500' },
         emerald: { bg: 'bg-emerald-50', text: 'text-emerald-600', icon: 'text-emerald-500' },
+        rose: { bg: 'bg-rose-50', text: 'text-rose-600', icon: 'text-rose-500' },
+        pink: { bg: 'bg-pink-50', text: 'text-pink-600', icon: 'text-pink-500' },
     };
+    
+    const badgeColors = {
+        success: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+        danger: 'bg-rose-50 text-rose-600 border-rose-100',
+        info: 'bg-indigo-50 text-indigo-600 border-indigo-100',
+    };
+
     const style = colorMap[color] || colorMap.indigo;
 
     return (
         <div className={`bg-white p-6 rounded-[28px] border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all`}>
-            <div className={`absolute top-0 right-0 p-4 opacity-10 ${style.icon} group-hover:scale-110 transition-transform`}>
+            {badge && (
+                <div className={`absolute top-4 right-4 px-2 py-0.5 rounded-lg border ${badgeColors[badge.type] || badgeColors.info} text-[10px] font-black flex items-center gap-1`}>
+                    {badge.type === 'success' && <ArrowUpRight size={10} />}
+                    {badge.type === 'danger' && <ArrowUpRight size={10} className="rotate-90" />}
+                    {badge.text}
+                </div>
+            )}
+            <div className={`absolute top-0 left-0 p-4 opacity-5 ${style.icon} group-hover:scale-110 transition-transform`}>
                 {React.cloneElement(icon, { size: 64 })}
             </div>
-            <div className="relative z-10">
-                <div className={`w-14 h-14 rounded-2xl ${style.bg} flex items-center justify-center ${style.text} mb-5 group-hover:scale-110 transition-transform`}>
+            <div className="relative z-10 pt-2">
+                <div className={`w-14 h-14 rounded-2xl ${style.bg} flex items-center justify-center ${style.text} mb-5 group-hover:scale-110 transition-transform shadow-sm`}>
                     {React.cloneElement(icon, { size: 28 })}
                 </div>
-                <h4 className="text-slate-400 font-black text-[10px] uppercase tracking-widest mb-1.5">{label}</h4>
-                <div className="text-4xl font-black text-slate-900 tracking-tight">{value}</div>
+                <h4 className="text-slate-400 font-extrabold text-[10px] uppercase tracking-wider mb-1.5">{label}</h4>
+                <div className="text-3xl font-black text-slate-900 tracking-tight">{value}</div>
             </div>
         </div>
     );
