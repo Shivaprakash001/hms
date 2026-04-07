@@ -77,7 +77,7 @@ def get_owner_activity(
         if normalized_type in (None, "PAYMENT_RECEIVED"):
             payments_q = (
                 supabase.table("payments")
-                .select("id, student_name, amount_paid, payment_date, payment_method, reference_no, created_at")
+                .select("id, amount_paid, payment_date, payment_method, reference_number, created_at, students(profiles!students_profile_id_fkey(name))")
                 .eq("owner_id", user_id)
                 .order("payment_date", desc=True)
             )
@@ -92,9 +92,20 @@ def get_owner_activity(
                 event_day = event_at.date() if event_at else None
                 if not _in_date_range(event_day, start_date, end_date):
                     continue
+                
                 amount = float(p.get("amount_paid") or 0)
                 method = p.get("payment_method") or "payment"
-                ref = p.get("reference_no")
+                ref = p.get("reference_number")
+                
+                # Extract name from join
+                tenant_name = "Tenant"
+                stu_obj = p.get("students")
+                if stu_obj:
+                    # Handle both list and object results from supabase
+                    prof = stu_obj.get("profiles") if isinstance(stu_obj, dict) else None
+                    if prof:
+                        tenant_name = prof.get("name") or "Tenant"
+
                 detail = f"Received ₹{amount:,.0f} via {method}"
                 if ref:
                     detail = f"{detail} (Ref: {ref})"
@@ -104,7 +115,7 @@ def get_owner_activity(
                         "event_type": "PAYMENT_RECEIVED",
                         "title": "Payment Received",
                         "detail": detail,
-                        "tenant_name": p.get("student_name") or "Tenant",
+                        "tenant_name": tenant_name,
                         "room_no": None,
                         "amount": amount,
                         "event_at": event_at.isoformat() if event_at else None,
@@ -133,6 +144,17 @@ def get_owner_activity(
                     joined_day = _to_date(a.get("start_date"))
                     if _in_date_range(joined_day, start_date, end_date):
                         joined_at = _to_datetime(a.get("start_date"))
+                        
+                        # Fix nested data access
+                        tenant_name = "Tenant"
+                        stu_obj = a.get("students")
+                        if stu_obj:
+                            prof = stu_obj.get("profiles")
+                            if prof:
+                                tenant_name = prof.get("name") or "Tenant"
+                        
+                        room_no = (a.get("rooms") or {}).get("room_no")
+
                         events.append(
                             {
                                 "id": f"join_{a.get('id')}",

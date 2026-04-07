@@ -96,7 +96,7 @@ class InvitationService:
             # Roommates
             # Find active occupants in this room
             alloc_res = supabase.table("room_allocations")\
-                .select("student:students(profile:profiles(name))")\
+                .select("student:students(profile:profiles!students_profile_id_fkey(name))")\
                 .eq("room_id", room_id)\
                 .is_("end_date", "null")\
                 .execute()
@@ -306,7 +306,7 @@ class InvitationService:
 
             # Roommates
             alloc_res = supabase.table("room_allocations")\
-                .select("student:students(profile:profiles(name))")\
+                .select("student:students(profile:profiles!students_profile_id_fkey(name))")\
                 .eq("room_id", room_id)\
                 .is_("end_date", "null")\
                 .execute()

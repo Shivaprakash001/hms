@@ -27,23 +27,30 @@ const OwnerDashboard = () => {
 
     const updateDashboard = async () => {
         try {
-            const [summaryRes, monthlyRes, activityRes] = await Promise.all([
-                dashboardService.getSummary(),
-                dashboardService.getMonthlyStats(months),
-                activityService.getAll({ limit: 5, offset: 0 })
+            // Fetch summary and monthly stats in parallel
+            const [summaryRes, monthlyRes] = await Promise.all([
+                dashboardService.getSummary().catch(err => {
+                    console.error('Summary fetch failed:', err);
+                    return null;
+                }),
+                dashboardService.getMonthlyStats(months).catch(err => {
+                    console.error('Monthly stats fetch failed:', err);
+                    return [];
+                })
             ]);
 
-            const stats = summaryRes || {};
-            setSummary({
-                total_tenants: stats.total_tenants || 0,
-                active_tenants: stats.active_tenants || 0,
-                total_capacity: stats.total_capacity || 0,
-                vacant_beds: stats.vacant_beds || 0,
-                pending_dues: stats.pending_dues || 0,
-                overdue_amount: stats.overdue_amount || 0,
-                overdue_count: stats.overdue_count || 0,
-                rent_collected_this_month: stats.rent_collected_this_month || stats.revenue || 0,
-            });
+            if (summaryRes) {
+                setSummary({
+                    total_tenants: summaryRes.total_tenants || 0,
+                    active_tenants: summaryRes.active_tenants || 0,
+                    total_capacity: summaryRes.total_capacity || 0,
+                    vacant_beds: summaryRes.vacant_beds || 0,
+                    pending_dues: summaryRes.pending_dues || 0,
+                    overdue_amount: summaryRes.overdue_amount || 0,
+                    overdue_count: summaryRes.overdue_count || 0,
+                    rent_collected_this_month: summaryRes.rent_collected_this_month || summaryRes.revenue || 0,
+                });
+            }
 
             const monthly = Array.isArray(monthlyRes) ? monthlyRes : [];
             const normalizedMonthly = monthly.map((item) => ({
@@ -53,10 +60,18 @@ const OwnerDashboard = () => {
             }));
             setCollectionData(normalizedMonthly);
 
-            const items = Array.isArray(activityRes?.items) ? activityRes.items : [];
-            setRecentActivity(items);
+            // Fetch activity separately as it is more prone to schema inconsistencies
+            try {
+                const activityRes = await activityService.getAll({ limit: 5, offset: 0 });
+                const items = Array.isArray(activityRes?.items) ? activityRes.items : [];
+                setRecentActivity(items);
+            } catch (actErr) {
+                console.error('Activity fetch failed:', actErr);
+                setRecentActivity([]);
+            }
+
         } catch (error) {
-            console.error('Dashboard update failed:', error);
+            console.error('Dashboard logic error:', error);
         } finally {
             setLoading(false);
         }
