@@ -25,12 +25,29 @@ def get_dashboard_stats(user_id: str):
         # 2. Total Capacity & Rooms
         rooms_res = supabase.table("rooms").select("capacity").eq("owner_id", user_id).execute()
         total_rooms = len(rooms_res.data)
-        total_capacity = sum(r['capacity'] for r in rooms_res.data)
+        total_capacity = sum(int(r.get('capacity') or 0) for r in rooms_res.data)
         
         occupancy_rate = 0
         if total_capacity > 0:
             occupancy_rate = round((active_tenants / total_capacity) * 100)
         vacant_beds = max(total_capacity - active_tenants, 0)
+
+        if not all_student_ids:
+            return ServiceResponse.success({
+                "total_rooms": total_rooms,
+                "total_tenants": 0,
+                "active_tenants": 0,
+                "total_capacity": total_capacity,
+                "vacant_beds": total_capacity,
+                "occupancy_rate": occupancy_rate,
+                "revenue": 0.0,
+                "rent_collected_this_month": 0.0,
+                "expenses": 0.0,
+                "net_profit": 0.0,
+                "pending_dues": 0.0,
+                "overdue_amount": 0.0,
+                "overdue_count": 0
+            })
 
         # 3. Revenue (Current Month Collected)
         payments_res = supabase.table("payments")\
@@ -39,7 +56,7 @@ def get_dashboard_stats(user_id: str):
             .lt("payment_date", next_month.isoformat())\
             .eq("owner_id", user_id)\
             .execute()
-        current_revenue = sum(Decimal(str(p['amount_paid'])) for p in payments_res.data)
+        current_revenue = sum(Decimal(str(p.get('amount_paid') or 0)) for p in payments_res.data)
 
         # 4. Expenses (Current Month)
         expenses_res = supabase.table("expenses")\
@@ -48,7 +65,7 @@ def get_dashboard_stats(user_id: str):
             .lt("expense_date", next_month.isoformat())\
             .eq("owner_id", user_id)\
             .execute()
-        current_expenses = sum(Decimal(str(e['amount'])) for e in expenses_res.data)
+        current_expenses = sum(Decimal(str(e.get('amount') or 0)) for e in expenses_res.data)
 
         # 5. Pending Dues (Total Unpaid across all time)
         obligations_res = supabase.table("rent_obligations")\

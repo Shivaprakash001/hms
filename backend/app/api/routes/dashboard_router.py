@@ -1,11 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.services import dashboard_service
 from app.utils.auth import get_current_user, UserContext, require_admin_or_owner
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
 def _handle_response(result: dict):
     if not result.get("success"):
+        logger.error(f"Dashboard Stats Error: {result.get('error')} | Msg: {result.get('message')}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=result.get("error")
