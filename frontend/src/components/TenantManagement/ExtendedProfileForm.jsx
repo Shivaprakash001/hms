@@ -142,11 +142,8 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
     const [activeTab, setActiveTab] = useState('personal');
 
     const tabs = [
-        { id: 'personal', label: 'Personal Info', icon: User },
-        { id: 'contact', label: 'Contact', icon: Phone },
-        { id: 'education', label: 'Education', icon: GraduationCap },
-        { id: 'address', label: 'Address', icon: MapPin },
-        { id: 'documents', label: 'Documents', icon: FileText }
+        { id: 'personal', label: 'Personal Profile', icon: User },
+        { id: 'education', label: 'Education Hub', icon: GraduationCap }
     ];
 
     if (!isOpen) return null;
@@ -155,78 +152,103 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
         switch (activeTab) {
             case 'personal':
                 return (
-                    <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
-                         <div className="flex flex-col sm:flex-row gap-8">
-                            <div className="flex flex-col items-center gap-2 shrink-0">
-                                <div className="w-28 h-28 rounded-3xl bg-slate-50 border-2 border-white shadow-lg overflow-hidden relative">
-                                    {photoPreview ? (
-                                        <img src={photoPreview} alt="Profile" className="w-full h-full object-cover" />
-                                    ) : (
-                                        <div className="w-full h-full flex items-center justify-center text-slate-200">
-                                            <User size={40} strokeWidth={1.5} />
-                                        </div>
-                                    )}
+                    <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-12">
+                        {/* Subsection 1: Personal & Photo */}
+                        <div className="space-y-6">
+                            <h3 className="text-[10px] font-black uppercase tracking-widest text-indigo-500 flex items-center gap-2">
+                                <User size={12} /> Identity Records
+                            </h3>
+                            <div className="flex flex-col sm:flex-row gap-10">
+                                <div className="flex flex-col items-center gap-2 shrink-0">
+                                    <div className="w-32 h-32 rounded-[2rem] bg-indigo-50/30 border-4 border-white shadow-xl overflow-hidden relative">
+                                        {photoPreview ? (
+                                            <img src={photoPreview} alt="Profile" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center text-slate-200">
+                                                <User size={48} strokeWidth={1.5} />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2">Portrait</p>
                                 </div>
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Identity Photo</p>
-                            </div>
-                            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <SaaSInput label="Full Name" value={form.name} readOnly placeholder="Not Entered" />
-                                <SaaSInput label="Personal Email" value={form.personal_email} readOnly icon={Lock} placeholder="Not Entered" />
-                                <SaaSInput label="Aadhaar Number" value={form.aadhaar_number} readOnly placeholder="XXXX XXXX XXXX" />
-                                <div className="flex items-end pb-1">
-                                    <div className="bg-indigo-50/50 border border-indigo-100/50 px-4 py-3 rounded-xl flex items-center gap-3 w-full">
-                                        <div className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
-                                        <p className="text-[10px] font-bold text-indigo-700 uppercase tracking-widest">Awaiting Verification</p>
+                                <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                    <SaaSInput label="Full Name" value={form.name} readOnly placeholder="Not Set" />
+                                    <SaaSInput label="Personal Email" value={form.personal_email} readOnly icon={Lock} placeholder="Not Set" />
+                                    <SaaSInput label="Phone Number" value={form.phone_1} readOnly placeholder="Not Set" />
+                                    <SaaSInput label="Aadhaar Number" value={form.aadhaar_number} readOnly placeholder="XXXX XXXX XXXX" />
+                                    <div className="sm:col-span-2">
+                                        <SaaSInput label="Emergency Contact" value={form.phone_2} readOnly placeholder="Primary Guardian / Relative Contact" />
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </motion.div>
-                );
-            case 'contact':
-                return (
-                    <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-4 max-w-xl">
-                        <SaaSInput label="Primary Phone" value={form.phone_1} readOnly placeholder="Not Entered" />
-                        <SaaSInput label="Secondary / Emergency" value={form.phone_2} readOnly placeholder="Not Entered" />
-                        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 flex gap-4 mt-2">
-                            <Info size={16} className="text-slate-400 shrink-0 mt-0.5" />
-                            <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                                These contact details are managed exclusively by the tenant for emergency protocols and automated billing notifications.
-                            </p>
+
+                        {/* Subsection 2: Address */}
+                        <div className="space-y-6 pt-6 border-t border-slate-50">
+                            <h3 className="text-[10px] font-black uppercase tracking-widest text-indigo-500 flex items-center gap-2">
+                                <MapPin size={12} /> Residential Address
+                            </h3>
+                            <div className="space-y-6 p-8 bg-slate-50/50 rounded-[2.5rem] border border-slate-100/50">
+                                <SaaSInput label="Permanent/Full Address" value={form.address} readOnly placeholder="Not Set" />
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                                    <SaaSInput label="City" value={form.city} readOnly placeholder="Not Set" />
+                                    <SaaSInput label="State" value={form.state} readOnly placeholder="Not Set" />
+                                    <SaaSInput label="Pincode" value={form.pincode} readOnly placeholder="Not Set" />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Subsection 3: Documents */}
+                        <div className="space-y-6 pt-6 border-t border-slate-50">
+                            <h3 className="text-[10px] font-black uppercase tracking-widest text-indigo-500 flex items-center gap-2">
+                                <FileText size={12} /> Identity Documents
+                            </h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                                <DocumentDropBox label="Aadhaar Card" />
+                                <DocumentDropBox label="College ID" />
+                                <DocumentDropBox label="Other Verified Proof" />
+                            </div>
                         </div>
                     </motion.div>
                 );
             case 'education':
                 return (
-                    <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <SaaSInput label="College Name" value={form.college_name} readOnly placeholder="Not Entered" />
-                        <SaaSInput label="Course / Major" value={form.course} readOnly placeholder="Not Entered" />
-                        <div className="space-y-1.5">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Current Year</label>
-                            <div className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 opacity-60">
-                                {form.year_of_study ? `${form.year_of_study} Year` : 'Not Entered'}
+                    <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-10">
+                        <div className="bg-indigo-600 rounded-[2.5rem] p-10 text-white shadow-2xl shadow-indigo-600/30 overflow-hidden relative group">
+                            <GraduationCap className="absolute -right-10 -bottom-10 text-white/5 group-hover:scale-110 transition-transform" size={240} strokeWidth={1} />
+                            <div className="relative z-10">
+                                <p className="text-xs font-bold uppercase tracking-[0.25em] text-white/70 mb-4">Academic Status</p>
+                                <h3 className="text-4xl font-black tracking-tight">{form.college_name || 'Verification Pending'}</h3>
+                                <p className="text-lg font-bold text-white/90 mt-2">{form.course || 'Educational Institution not verified'}</p>
                             </div>
                         </div>
-                        <SaaSInput label="Student ID / Roll No" value={form.roll_number} readOnly placeholder="Not Entered" />
-                    </motion.div>
-                );
-            case 'address':
-                return (
-                    <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
-                        <SaaSInput label="Full Address" value={form.address} readOnly placeholder="Not Entered" />
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                            <SaaSInput label="City" value={form.city} readOnly placeholder="Not Entered" />
-                            <SaaSInput label="State" value={form.state} readOnly placeholder="Not Entered" />
-                            <SaaSInput label="Pincode" value={form.pincode} readOnly placeholder="Not Entered" />
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+                            <div className="bg-white p-8 rounded-[2rem] border-2 border-slate-50 shadow-sm space-y-4">
+                                <label className="text-[11px] font-black uppercase tracking-widest text-slate-400">Current Year of Study</label>
+                                <div className="text-2xl font-black text-slate-900">
+                                    {form.year_of_study ? `${form.year_of_study} Year` : 'Data Missing'}
+                                </div>
+                            </div>
+                            <div className="bg-white p-8 rounded-[2rem] border-2 border-slate-50 shadow-sm space-y-4">
+                                <label className="text-[11px] font-black uppercase tracking-widest text-slate-400">Institutional ID / Roll</label>
+                                <div className="text-2xl font-black text-slate-900 uppercase">
+                                    {form.roll_number || 'N/A'}
+                                </div>
+                            </div>
                         </div>
-                    </motion.div>
-                );
-            case 'documents':
-                return (
-                    <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <DocumentDropBox label="Aadhaar" />
-                        <DocumentDropBox label="College ID" />
-                        <DocumentDropBox label="Other" />
+
+                        <div className="bg-amber-50 border border-amber-100 p-8 rounded-[2rem] flex gap-6 items-center">
+                            <div className="w-16 h-16 rounded-2xl bg-white shadow-sm flex items-center justify-center text-amber-500 shrink-0">
+                                <Info size={28} />
+                            </div>
+                            <div>
+                                <h4 className="text-sm font-black text-amber-900 uppercase tracking-widest mb-1">Education Hub Privacy</h4>
+                                <p className="text-sm text-amber-800/80 font-medium leading-relaxed">
+                                    Academic details are used strictly for property records and cannot be modified by the owner to maintain the integrity of student enrollment records.
+                                </p>
+                            </div>
+                        </div>
                     </motion.div>
                 );
             default: return null;
@@ -235,49 +257,51 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" />
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" />
             
             <motion.div
-                initial={{ opacity: 0, scale: 0.98, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98, y: 20 }}
-                className="bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl w-full sm:max-w-4xl h-full sm:h-auto sm:max-h-[85vh] overflow-hidden relative z-10 flex flex-col border border-slate-100"
+                initial={{ opacity: 0, scale: 0.95, y: 30 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 30 }}
+                className="bg-white rounded-t-[3rem] sm:rounded-[3rem] shadow-2xl w-full sm:max-w-5xl h-[95vh] sm:h-[85vh] overflow-hidden relative z-10 flex flex-col border border-slate-100"
             >
-                {/* Image-Consistent Navigation Header */}
-                <div className="px-6 sm:px-10 py-6 border-b border-slate-50 flex flex-col gap-6 bg-white shrink-0">
-                    <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-600/20">
-                                <User size={20} strokeWidth={2.5} />
+                {/* Fixed Header */}
+                <div className="px-8 sm:px-12 py-10 border-b border-slate-50 flex flex-col gap-10 bg-white shrink-0">
+                    <div className="flex justify-between items-start">
+                        <div className="flex items-center gap-6">
+                            <div className="w-16 h-16 bg-slate-900 rounded-3xl flex items-center justify-center text-white shadow-2xl shadow-slate-900/20">
+                                <User size={28} strokeWidth={2.5} />
                             </div>
                             <div>
-                                <h2 className="text-xl font-black text-slate-900 tracking-tight">{form.name || 'Tenant Profile'}</h2>
-                                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{form.personal_email || 'Verified Tenant'}</p>
+                                <h2 className="text-3xl font-black text-slate-900 tracking-tight">{form.name || 'Student Profile'}</h2>
+                                <p className="text-sm font-bold text-indigo-500 uppercase tracking-widest mt-1 opacity-80">
+                                    ID: {student?.rollNumber || student?.id?.substring(0, 8) || 'HMS-TENANT-00'}
+                                </p>
                             </div>
                         </div>
-                        <button onClick={onClose} className="p-2.5 hover:bg-slate-50 rounded-full text-slate-400 hover:text-slate-900 transition-all border border-slate-100">
-                            <X size={20} />
+                        <button onClick={onClose} className="w-12 h-12 flex items-center justify-center bg-slate-50 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-2xl transition-all border border-slate-100 group">
+                            <X size={24} className="group-hover:rotate-90 transition-transform duration-300" />
                         </button>
                     </div>
 
-                    {/* Tab Navigation - Matches User Image */}
-                    <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar">
+                    {/* Consolidated Tabs */}
+                    <div className="flex items-center gap-2 border-b border-slate-50">
                         {tabs.map(tab => (
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
-                                className={`flex items-center gap-2 px-5 py-3 rounded-2xl transition-all relative ${
+                                className={`flex items-center gap-3 px-8 py-5 rounded-t-3xl transition-all relative shrink-0 ${
                                     activeTab === tab.id 
-                                    ? 'bg-indigo-50 text-indigo-600' 
+                                    ? 'bg-indigo-50/60 text-indigo-700' 
                                     : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
                                 }`}
                             >
-                                <tab.icon size={16} strokeWidth={activeTab === tab.id ? 2.5 : 2} />
-                                <span className={`text-[13px] font-bold tracking-tight whitespace-nowrap ${activeTab === tab.id ? 'opacity-100' : 'opacity-80'}`}>
+                                <tab.icon size={20} strokeWidth={activeTab === tab.id ? 2.5 : 2} />
+                                <span className={`text-[15px] font-black tracking-tight ${activeTab === tab.id ? 'opacity-100' : 'opacity-80'}`}>
                                     {tab.label}
                                 </span>
                                 {activeTab === tab.id && (
                                     <motion.div 
-                                        layoutId="tabUnderline"
-                                        className="absolute -bottom-1 left-4 right-4 h-0.5 bg-indigo-500 rounded-full hidden sm:block"
+                                        layoutId="tabBarIndicator"
+                                        className="absolute bottom-0 left-6 right-6 h-1 bg-indigo-600 rounded-full"
                                     />
                                 )}
                             </button>
@@ -285,23 +309,20 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
                     </div>
                 </div>
 
-                {/* Content Area */}
-                <div className="flex-1 overflow-y-auto px-6 sm:px-10 py-8 bg-white/50">
+                {/* Tab Content Area - Consolidated & Shared Scrolling */}
+                <div className="flex-1 overflow-y-auto px-8 sm:px-12 py-12 bg-white/50 no-scrollbar">
                     <AnimatePresence mode="wait">
                         {renderTabContent()}
                     </AnimatePresence>
                 </div>
 
-                {/* Footer - Read Only View */}
-                <div className="px-10 py-6 border-t border-slate-50 bg-white flex justify-between items-center shrink-0">
-                    <div className="flex items-center gap-2 text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100">
-                        <Lock size={14} />
-                        <span className="text-[10px] font-black uppercase tracking-wider">Managed by Tenant</span>
+                {/* Footer - Verification Enforcement */}
+                <div className="px-12 py-8 border-t border-slate-50 bg-white flex justify-between items-center shrink-0">
+                    <div className="hidden sm:flex items-center gap-4 text-slate-400 bg-slate-50 px-5 py-3 rounded-2xl border border-slate-100">
+                        <Lock size={16} />
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em]">Record Integrity: Strict Student-Only Edit Protocol</span>
                     </div>
-                    <button 
-                        onClick={onClose}
-                        className="px-8 py-3 rounded-2xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/10 active:scale-95"
-                    >
+                    <button onClick={onClose} className="w-full sm:w-auto px-12 py-4 rounded-[1.5rem] bg-indigo-600 text-white text-sm font-black hover:bg-slate-900 transition-all shadow-xl shadow-indigo-600/10 active:scale-95 uppercase tracking-widest outline-none">
                         Close Profile
                     </button>
                 </div>
@@ -328,25 +349,25 @@ function SaaSInput({ label, value, readOnly = true, placeholder, icon: Icon }) {
     }, [value, label, isMasked]);
 
     return (
-        <div className="space-y-1.5 group">
-            <label className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400 ml-1">
+        <div className="space-y-3 group">
+            <label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">
                 {label}
             </label>
             <div className="relative">
-                <div className={`w-full px-5 py-3.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 flex items-center transition-all ${!value ? 'text-slate-300 italic' : ''}`}>
+                <div className={`w-full px-6 py-4.5 bg-white border-2 border-slate-50 rounded-2xl text-[14px] font-black text-slate-700 flex items-center transition-all shadow-sm ${!value ? 'text-slate-200 italic' : ''}`}>
                     {displayValue || placeholder}
                     {label === 'Aadhaar Number' && (
                         <button 
                             type="button"
                             onMouseDown={(e) => { e.preventDefault(); setIsMasked(!isMasked); }}
-                            className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 hover:text-indigo-500 transition-colors"
+                            className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300 hover:text-indigo-600 transition-colors"
                         >
-                            {isMasked ? <Info size={14} /> : <CheckCircle2 size={14} />}
+                            {isMasked ? <Info size={16} /> : <CheckCircle2 size={16} />}
                         </button>
                     )}
                     {Icon && label !== 'Aadhaar Number' && (
-                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300">
-                            <Icon size={14} />
+                        <div className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300">
+                            <Icon size={18} />
                         </div>
                     )}
                 </div>
@@ -358,13 +379,13 @@ function SaaSInput({ label, value, readOnly = true, placeholder, icon: Icon }) {
 // Internal Styled Document Box
 function DocumentDropBox({ label }) {
     return (
-        <div className="border border-slate-100 rounded-2xl p-6 text-center bg-slate-50/50 flex flex-col items-center justify-center gap-3 min-h-[140px]">
-            <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center text-slate-400">
-                <FileText size={18} />
+        <div className="border border-slate-100 rounded-3xl p-8 text-center bg-slate-50/50 flex flex-col items-center justify-center gap-4 min-h-[160px] group hover:bg-indigo-50/30 transition-all">
+            <div className="w-12 h-12 rounded-2xl bg-white shadow-sm flex items-center justify-center text-slate-300 group-hover:text-indigo-500 transition-colors">
+                <FileText size={24} />
             </div>
             <div>
-                <p className="text-[11px] font-black text-slate-700">{label}</p>
-                <p className="text-[9px] font-bold text-indigo-400 uppercase tracking-tighter mt-1">Ready for Review</p>
+                <p className="text-xs font-black text-slate-800 uppercase tracking-tight">{label}</p>
+                <p className="text-[9px] font-black text-indigo-400 uppercase tracking-[0.2em] mt-1.5 opacity-80">Stored Securely</p>
             </div>
         </div>
     );
