@@ -280,7 +280,7 @@ const ManageRooms = () => {
     return (
         <div className="space-y-8 pb-20">
             {/* Header Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 gap-4">
                 <StatCard icon={<DoorOpen />} label="Total Rooms" value={totalRooms} color="blue" />
                 <StatCard icon={<Users />} label="Total Occupants" value={totalOccupants} color="purple" />
                 <StatCard icon={<BedDouble />} label="Total Capacity" value={totalCapacity} color="indigo" />

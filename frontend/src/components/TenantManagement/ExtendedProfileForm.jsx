@@ -247,7 +247,7 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+                        <div className="grid grid-cols-2 gap-4 sm:gap-8">
                             <div className="bg-white p-8 rounded-[2rem] border-2 border-slate-50 shadow-sm space-y-4">
                                 <label className="text-[11px] font-black uppercase tracking-widest text-slate-400">Branch</label>
                                 <div className="text-2xl font-black text-slate-900 uppercase tracking-tight">

@@ -140,7 +140,7 @@ const OwnerDashboard = () => {
             </div>
 
             {/* Hostel Health */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div className="grid grid-cols-2 gap-4">
                 <MetricCard title="Total Tenants" value={summary.total_tenants} icon={Users} iconClass="text-indigo-600 bg-indigo-50" />
                 <MetricCard title="Occupied Beds" value={summary.active_tenants} icon={BedDouble} iconClass="text-emerald-600 bg-emerald-50" />
                 <MetricCard title="Vacant Beds" value={summary.vacant_beds} icon={Bed} iconClass="text-amber-600 bg-amber-50" />
@@ -148,11 +148,10 @@ const OwnerDashboard = () => {
             </div>
 
             {/* Quick actions */}
-            <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-                <div className="flex flex-wrap gap-2">
+            <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
+                <div className="grid grid-cols-2 gap-3">
                     <ActionBtn onClick={() => navigate('/owner/students')} icon={UserPlus} label="Invite Tenant" />
                     <ActionBtn onClick={() => navigate('/owner/payments')} icon={Zap} label="Generate Rent" />
-                    <ActionBtn onClick={() => navigate('/owner/payments')} icon={CreditCard} label="Record Payment" />
                 </div>
             </div>
 
