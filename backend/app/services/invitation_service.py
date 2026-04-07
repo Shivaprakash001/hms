@@ -84,15 +84,50 @@ class InvitationService:
                 inv_res = supabase.table("invitations").insert(invitation_data).execute()
             invitation_id = inv_res.data[0]["id"]
 
-            # 4. Send email asynchronously (non-blocking)
+            # 4. Data fetching for Email branding & info
+            # Owner name
+            owner_res = supabase.table("profiles").select("name").eq("id", owner_id).execute()
+            owner_name = owner_res.data[0].get("name", "Hostel Owner") if owner_res.data else "Hostel Owner"
+
+            # Hostel branding
+            hostel_res = supabase.table("hostels").select("name").eq("owner_id", owner_id).execute()
+            hostel_name = hostel_res.data[0].get("name", "Trishul Solutions") if hostel_res.data else "Trishul Solutions"
+
+            # Roommates
+            # Find active occupants in this room
+            alloc_res = supabase.table("room_allocations")\
+                .select("student:students(profile:profiles(name))")\
+                .eq("room_id", room_id)\
+                .is_("end_date", "null")\
+                .execute()
+            
+            roommates = []
+            if alloc_res.data:
+                for alloc in alloc_res.data:
+                    stu_profile = alloc.get("student", {}).get("profile", {})
+                    # For supabase join syntax, check both possible structures
+                    if isinstance(stu_profile, list) and len(stu_profile) > 0:
+                        s_name = stu_profile[0].get("name")
+                    else:
+                        s_name = stu_profile.get("name")
+                    
+                    if s_name:
+                        roommates.append(s_name)
+            
+            roommates_html = "".join([f"<li>{r}</li>" for r in roommates])
+
+            # 5. Send email synchronously
             base_url = os.getenv("FRONTEND_URL", "https://trishul.solutions")
             activation_link = f"{base_url}/activate?token={token}"
             
-            # Send synchronously so failures are surfaced to caller immediately.
-            # This prevents "Invitation Sent" responses when email delivery is misconfigured.
             email_result = EmailService.send_invitation_email(
                 to_email=email,
-                name=name,
+                tenant_name=name,
+                owner_name=owner_name,
+                hostel_name=hostel_name,
+                room_number=room.get("room_no", "N/A"),
+                room_rent=float(monthly_rent),
+                roommates_list=roommates_html,
                 activation_link=activation_link
             )
             if not email_result.get("sent"):
@@ -259,14 +294,50 @@ class InvitationService:
                 "status": "PENDING"
             }).eq("id", invitation["id"]).execute()
 
-            # 4. Resend email
+            # 4. Data fetching for Email branding & info
+            owner_id = invitation.get("owner_id")
+            # Owner name
+            owner_res = supabase.table("profiles").select("name").eq("id", owner_id).execute()
+            owner_name = owner_res.data[0].get("name", "Hostel Owner") if owner_res.data else "Hostel Owner"
+
+            # Hostel branding
+            hostel_res = supabase.table("hostels").select("name").eq("owner_id", owner_id).execute()
+            hostel_name = hostel_res.data[0].get("name", "Trishul Solutions") if hostel_res.data else "Trishul Solutions"
+
+            # Roommates
+            alloc_res = supabase.table("room_allocations")\
+                .select("student:students(profile:profiles(name))")\
+                .eq("room_id", room_id)\
+                .is_("end_date", "null")\
+                .execute()
+            
+            roommates = []
+            if alloc_res.data:
+                for alloc in alloc_res.data:
+                    stu_profile = alloc.get("student", {}).get("profile", {})
+                    if isinstance(stu_profile, list) and len(stu_profile) > 0:
+                        s_name = stu_profile[0].get("name")
+                    else:
+                        s_name = stu_profile.get("name")
+                    if s_name:
+                        roommates.append(s_name)
+            
+            roommates_html = "".join([f"<li>{r}</li>" for r in roommates])
+
+            # 5. Resend email
             base_url = os.getenv("FRONTEND_URL", "https://trishul.solutions")
             activation_link = f"{base_url}/activate?token={token}"
             
-            if background_tasks:
-                background_tasks.add_task(EmailService.send_invitation_email, email, profile_name, activation_link)
-            else:
-                EmailService.send_invitation_email(email, profile_name, activation_link)
+            EmailService.send_invitation_email(
+                to_email=email,
+                tenant_name=profile_name,
+                owner_name=owner_name,
+                hostel_name=hostel_name,
+                room_number=room_no,
+                room_rent=rent,
+                roommates_list=roommates_html,
+                activation_link=activation_link
+            )
 
             return ServiceResponse.success(None, "Invitation resent successfully")
 
