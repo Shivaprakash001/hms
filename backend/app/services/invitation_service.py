@@ -12,6 +12,44 @@ logger = get_logger(__name__)
 
 class InvitationService:
     @staticmethod
+    def _resolve_hostel_branding(owner_id: str) -> tuple[str, Optional[str]]:
+        """
+        Pick the best hostel branding row for this owner.
+        Preference order:
+        1) Active hostel with logo
+        2) Active hostel
+        3) Any hostel with logo
+        4) First hostel row
+        """
+        default_name = "Trishul Solutions"
+        try:
+            hostel_rows = supabase.table("hostels") \
+                .select("name, logo_url, is_active") \
+                .eq("owner_id", owner_id) \
+                .execute()
+
+            rows = hostel_rows.data or []
+            if not rows:
+                return default_name, None
+
+            def score(row: dict) -> int:
+                active = bool(row.get("is_active"))
+                has_logo = bool(row.get("logo_url"))
+                if active and has_logo:
+                    return 4
+                if active:
+                    return 3
+                if has_logo:
+                    return 2
+                return 1
+
+            best = sorted(rows, key=score, reverse=True)[0]
+            return best.get("name") or default_name, best.get("logo_url")
+        except Exception as err:
+            logger.warning("Failed to resolve hostel branding for owner %s: %s", owner_id, err)
+            return default_name, None
+
+    @staticmethod
     def _should_expose_activation_link() -> bool:
         """
         Show activation links only in non-production by default.
@@ -90,9 +128,7 @@ class InvitationService:
             owner_name = owner_res.data[0].get("name", "Hostel Owner") if owner_res.data else "Hostel Owner"
 
             # Hostel branding
-            hostel_res = supabase.table("hostels").select("name, logo_url").eq("owner_id", owner_id).execute()
-            hostel_name = hostel_res.data[0].get("name", "Trishul Solutions") if hostel_res.data else "Trishul Solutions"
-            hostel_logo_url = hostel_res.data[0].get("logo_url") if hostel_res.data else None
+            hostel_name, hostel_logo_url = InvitationService._resolve_hostel_branding(owner_id)
 
             # Roommates
             # Find active occupants in this room
@@ -303,9 +339,7 @@ class InvitationService:
             owner_name = owner_res.data[0].get("name", "Hostel Owner") if owner_res.data else "Hostel Owner"
 
             # Hostel branding
-            hostel_res = supabase.table("hostels").select("name, logo_url").eq("owner_id", owner_id).execute()
-            hostel_name = hostel_res.data[0].get("name", "Trishul Solutions") if hostel_res.data else "Trishul Solutions"
-            hostel_logo_url = hostel_res.data[0].get("logo_url") if hostel_res.data else None
+            hostel_name, hostel_logo_url = InvitationService._resolve_hostel_branding(owner_id)
 
             # Roommates
             alloc_res = supabase.table("room_allocations")\

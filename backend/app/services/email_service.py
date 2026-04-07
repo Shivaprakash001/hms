@@ -9,6 +9,22 @@ DEFAULT_FROM = os.getenv("EMAIL_FROM", "noreply@trishul.solutions")
 
 class EmailService:
     @staticmethod
+    def _resolve_logo_url(hostel_logo_url: str | None) -> str:
+        default_logo = "https://trishul.solutions/logo.png"
+        raw = (hostel_logo_url or "").strip()
+        if not raw:
+            return default_logo
+
+        if raw.startswith("http://") or raw.startswith("https://"):
+            return raw
+
+        if raw.startswith("/"):
+            base = os.getenv("FRONTEND_URL", "https://trishul.solutions").rstrip("/")
+            return f"{base}{raw}"
+
+        return default_logo
+
+    @staticmethod
     def _send_email(to_email: str, subject: str, html_body: str):
         """
         Send an email via the Resend SDK.
@@ -58,7 +74,7 @@ class EmailService:
         Sends a professional SaaS-style invitation email to a new tenant via Resend SDK.
         """
         subject = f"You're invited to join {hostel_name}"
-        company_logo_url = hostel_logo_url or "https://trishul.solutions/logo.png"
+        company_logo_url = EmailService._resolve_logo_url(hostel_logo_url)
 
         # Roommates edge case handling
         roommates_info = roommates_list if roommates_list.strip() else "You will be the first tenant assigned to this room."

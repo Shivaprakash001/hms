@@ -368,8 +368,12 @@ export default function ManageStudents() {
                                             initial={{ opacity: 0 }}
                                             animate={{ opacity: 1 }}
                                             key={student.id}
-                                            onClick={() => setExtendedProfileStudent(student)}
-                                            className="hover:bg-slate-50/80 transition-colors cursor-pointer group"
+                                            onClick={() => {
+                                                if (student.status !== 'INVITED') {
+                                                    setExtendedProfileStudent(student);
+                                                }
+                                            }}
+                                            className={`hover:bg-slate-50/80 transition-colors group ${student.status === 'INVITED' ? 'cursor-default' : 'cursor-pointer'}`}
                                         >
                                             <td className="px-8 py-5 whitespace-nowrap">
                                                 <div className="flex items-center gap-4">
@@ -438,8 +442,12 @@ export default function ManageStudents() {
                             {filteredStudents.map(student => (
                                 <div 
                                     key={student.id} 
-                                    onClick={() => setExtendedProfileStudent(student)}
-                                    className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm cursor-pointer hover:bg-slate-50/80 transition-all active:scale-[0.98]"
+                                    onClick={() => {
+                                        if (student.status !== 'INVITED') {
+                                            setExtendedProfileStudent(student);
+                                        }
+                                    }}
+                                    className={`bg-white p-4 rounded-xl border border-slate-100 shadow-sm transition-all active:scale-[0.98] ${student.status === 'INVITED' ? 'cursor-default' : 'cursor-pointer hover:bg-slate-50/80'}`}
                                 >
                                     <div className="flex justify-between items-center">
                                         <div className="font-black text-slate-900">{student.name}</div>
@@ -474,6 +482,14 @@ export default function ManageStudents() {
                                         </span>
                                         
                                         <div className="flex items-center gap-2">
+                                            {student.status === 'INVITED' && (
+                                                <button
+                                                    onClick={(e) => handleResendInvitation(student, e)}
+                                                    className="px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all active:scale-95 bg-indigo-50 text-indigo-600 border border-indigo-100"
+                                                >
+                                                    Resend
+                                                </button>
+                                            )}
                                             {(student.status === 'ACTIVE' || student.status === 'LEFT') && (
                                                 <button
                                                     onClick={(e) => handleToggleStatus(student, e)}
