@@ -142,8 +142,10 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
     const [activeTab, setActiveTab] = useState('personal');
 
     const tabs = [
-        { id: 'personal', label: 'Personal Profile', icon: User },
-        { id: 'education', label: 'Education Hub', icon: GraduationCap }
+        { id: 'personal', label: 'Personal Info', icon: User },
+        { id: 'education', label: 'Education Hub', icon: GraduationCap },
+        { id: 'address', label: 'Residential Address', icon: MapPin },
+        { id: 'documents', label: 'Documents', icon: FileText }
     ];
 
     if (!isOpen) return null;
@@ -153,7 +155,6 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
             case 'personal':
                 return (
                     <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-12">
-                        {/* Subsection 1: Personal & Photo */}
                         <div className="space-y-6">
                             <h3 className="text-[10px] font-black uppercase tracking-widest text-indigo-500 flex items-center gap-2">
                                 <User size={12} /> Identity Records
@@ -183,30 +184,53 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
                             </div>
                         </div>
 
-                        {/* Subsection 2: Address */}
-                        <div className="space-y-6 pt-6 border-t border-slate-50">
-                            <h3 className="text-[10px] font-black uppercase tracking-widest text-indigo-500 flex items-center gap-2">
-                                <MapPin size={12} /> Residential Address
-                            </h3>
-                            <div className="space-y-6 p-8 bg-slate-50/50 rounded-[2.5rem] border border-slate-100/50">
-                                <SaaSInput label="Permanent/Full Address" value={form.address} readOnly placeholder="Not Set" />
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                                    <SaaSInput label="City" value={form.city} readOnly placeholder="Not Set" />
-                                    <SaaSInput label="State" value={form.state} readOnly placeholder="Not Set" />
-                                    <SaaSInput label="Pincode" value={form.pincode} readOnly placeholder="Not Set" />
-                                </div>
+                        <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 flex gap-4 mt-2">
+                            <Info size={20} className="text-indigo-400 shrink-0 mt-0.5" />
+                            <p className="text-xs text-slate-500 font-bold leading-relaxed">
+                                These identity markers are verified at the time of allocation. Any changes must be submitted through the tenant dashboard and approved by the administrator.
+                            </p>
+                        </div>
+                    </motion.div>
+                );
+            case 'address':
+                return (
+                    <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
+                        <div className="bg-indigo-50 p-8 rounded-[2.5rem] border border-indigo-100/50 flex items-center gap-6">
+                            <div className="w-14 h-14 rounded-2xl bg-white shadow-sm flex items-center justify-center text-indigo-600 shrink-0">
+                                <MapPin size={28} />
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-black text-indigo-900 uppercase tracking-widest">Resident Status</h3>
+                                <p className="text-xs text-indigo-700/70 font-bold mt-0.5">Permanent Address Records</p>
                             </div>
                         </div>
 
-                        {/* Subsection 3: Documents */}
-                        <div className="space-y-6 pt-6 border-t border-slate-50">
-                            <h3 className="text-[10px] font-black uppercase tracking-widest text-indigo-500 flex items-center gap-2">
-                                <FileText size={12} /> Identity Documents
-                            </h3>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                                <DocumentDropBox label="Aadhaar Card" />
-                                <DocumentDropBox label="College ID" />
-                                <DocumentDropBox label="Other Verified Proof" />
+                        <div className="space-y-6 p-10 bg-white rounded-[2.5rem] border-2 border-slate-50 shadow-sm transition-all hover:border-indigo-100">
+                             <SaaSInput label="Permanent/Full Address" value={form.address} readOnly placeholder="Not Set" />
+                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
+                                <SaaSInput label="City" value={form.city} readOnly placeholder="Not Set" />
+                                <SaaSInput label="State" value={form.state} readOnly placeholder="Not Set" />
+                                <SaaSInput label="Pincode" value={form.pincode} readOnly placeholder="Not Set" />
+                             </div>
+                        </div>
+                    </motion.div>
+                );
+            case 'documents':
+                return (
+                    <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-10">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                            <DocumentDropBox label="Aadhaar Card" />
+                            <DocumentDropBox label="College ID" />
+                            <DocumentDropBox label="Other Verified Proof" />
+                        </div>
+                        
+                        <div className="bg-amber-50 border border-amber-100 p-8 rounded-[2.5rem] flex gap-6 items-center">
+                            <Lock size={28} className="text-amber-500 shrink-0" />
+                            <div>
+                                <h4 className="text-[11px] font-black text-amber-900 uppercase tracking-widest mb-1">Encrypted Storage</h4>
+                                <p className="text-xs text-amber-800/80 font-bold leading-relaxed">
+                                    All uploaded documents are encrypted and stored in a secure cloud bucket. Access is restricted to authorized administrative personnel only.
+                                </p>
                             </div>
                         </div>
                     </motion.div>
@@ -237,18 +261,6 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
                                 </div>
                             </div>
                         </div>
-
-                        <div className="bg-amber-50 border border-amber-100 p-8 rounded-[2rem] flex gap-6 items-center">
-                            <div className="w-16 h-16 rounded-2xl bg-white shadow-sm flex items-center justify-center text-amber-500 shrink-0">
-                                <Info size={28} />
-                            </div>
-                            <div>
-                                <h4 className="text-sm font-black text-amber-900 uppercase tracking-widest mb-1">Education Hub Privacy</h4>
-                                <p className="text-sm text-amber-800/80 font-medium leading-relaxed">
-                                    Academic details are used strictly for property records and cannot be modified by the owner to maintain the integrity of student enrollment records.
-                                </p>
-                            </div>
-                        </div>
                     </motion.div>
                 );
             default: return null;
@@ -272,9 +284,14 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
                             </div>
                             <div>
                                 <h2 className="text-3xl font-black text-slate-900 tracking-tight">{form.name || 'Student Profile'}</h2>
-                                <p className="text-sm font-bold text-indigo-500 uppercase tracking-widest mt-1 opacity-80">
-                                    ID: {student?.rollNumber || student?.id?.substring(0, 8) || 'HMS-TENANT-00'}
-                                </p>
+                                <div className="flex items-center gap-3 mt-1.5">
+                                    <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+                                        ID: {student?.rollNumber || student?.id?.substring(0, 8) || 'HMS-00'}
+                                    </span>
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest border border-slate-100 px-2 py-0.5 rounded-md">
+                                        Tenant Record
+                                    </span>
+                                </div>
                             </div>
                         </div>
                         <button onClick={onClose} className="w-12 h-12 flex items-center justify-center bg-slate-50 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-2xl transition-all border border-slate-100 group">
@@ -282,8 +299,8 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
                         </button>
                     </div>
 
-                    {/* Consolidated Tabs */}
-                    <div className="flex items-center gap-2 border-b border-slate-50">
+                    {/* Navigation Tabs - More Granular */}
+                    <div className="flex items-center gap-2 border-b border-slate-50 overflow-x-auto no-scrollbar">
                         {tabs.map(tab => (
                             <button
                                 key={tab.id}
