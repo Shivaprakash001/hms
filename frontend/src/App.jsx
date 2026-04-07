@@ -13,6 +13,7 @@ import Payments from './pages/owner/Payments.jsx';
 import Expenses from './pages/owner/Expenses.jsx';
 import OwnerProfile from './pages/owner/OwnerProfile.jsx';
 import BillingPlans from './pages/owner/BillingPlans.jsx';
+import ActivityHistory from './pages/owner/ActivityHistory.jsx';
 
 // Student Imports
 
@@ -62,6 +63,7 @@ function App() {
             <Route path="expenses" element={<Expenses />} />
             <Route path="billing" element={<BillingPlans />} />
             <Route path="profile" element={<OwnerProfile />} />
+            <Route path="activities" element={<ActivityHistory />} />
           </Route>
         </Route>
         {/* Global Redirects */}

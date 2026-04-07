@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Bed, Users, Clock, TrendingUp, TrendingDown, AlertCircle, ArrowUpRight, ArrowDownRight, Activity } from 'lucide-react';
 import { allocationService, paymentService, dashboardService } from '../../api/services';
 
 const OwnerDashboard = () => {
+    const navigate = useNavigate();
     // State
     const [monthlyData, setMonthlyData] = useState([]);
     const [recentActivity, setRecentActivity] = useState([]);
@@ -92,12 +94,14 @@ const OwnerDashboard = () => {
 
             // 6. Recent Activity
             const activities = [];
+            const dashActivities = []; // For dashboard (allocations only)
             const now = new Date();
 
-            // Payments
-            payments.slice(0, 5).forEach(p => {
+            // Payments (For full history)
+            payments.forEach(p => {
                 activities.push({
                     id: `pay_${p.id}`,
+                    type: 'PAYMENT',
                     action: 'Payment Received',
                     detail: `${p.student_name} paid ₹${p.amount_paid}`,
                     date: new Date(p.payment_date),
@@ -106,34 +110,42 @@ const OwnerDashboard = () => {
                     bg: 'bg-green-50'
                 });
             });
-            // New Tenants (Allocations)
-            (activeAllocations || []).slice(0, 5).forEach(a => {
-                // Check if recent
+
+            // Room Allocations (For both)
+            (activeAllocations || []).forEach(a => {
                 const start = new Date(a.start_date);
-                if ((now - start) < 7 * 24 * 60 * 60 * 1000) { // last 7 days
-                    activities.push({
-                        id: `alloc_${a.id}`,
-                        action: a.student?.profiles?.name || 'New Tenant',
-                        detail: `Joined Room ${a.room?.room_no}`,
-                        date: start,
-                        icon: Users,
-                        color: 'text-indigo-600',
-                        bg: 'bg-indigo-50'
-                    });
+                const isRecent = (now - start) < 30 * 24 * 60 * 60 * 1000; // 30 days
+                
+                const item = {
+                    id: `alloc_${a.id}`,
+                    type: 'ALLOCATION',
+                    action: a.student?.profiles?.name || 'New Tenant',
+                    detail: `Occupied Room ${a.room?.room_no}`,
+                    date: start,
+                    icon: Users,
+                    color: 'text-indigo-600',
+                    bg: 'bg-indigo-50'
+                };
+                
+                activities.push(item);
+                if (isRecent) {
+                    dashActivities.push(item);
                 }
             });
 
+            // Sort both
             activities.sort((a, b) => b.date - a.date);
+            dashActivities.sort((a, b) => b.date - a.date);
 
-            const formattedActivities = activities.map(act => {
+            const format = (act) => {
                 const diffTime = Math.abs(new Date() - act.date);
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                 let timeStr = diffDays <= 1 ? 'Today' : `${diffDays} days ago`;
                 return { ...act, time: timeStr };
-            });
+            };
 
-            setRecentActivity(formattedActivities.slice(0, 5));
-            setAllActivities(formattedActivities);
+            setRecentActivity(dashActivities.slice(0, 5).map(format));
+            setAllActivities(activities.map(format));
 
             // 7. Chart Data
             let monthData = [];
@@ -298,7 +310,7 @@ const OwnerDashboard = () => {
                         )}
                     </div>
                     <button
-                        onClick={() => setShowHistoryModal(true)}
+                        onClick={() => navigate('/owner/activities')}
                         className="mt-8 w-full py-3 text-sm font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors flex items-center justify-center gap-2"
                     >
                         View Full History <ArrowUpRight size={16} />
