@@ -4,7 +4,7 @@ import {
     ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip
 } from 'recharts';
 import {
-    Users, BedDouble, Bed, Clock, ArrowUpRight
+    Users, BedDouble, Bed, Clock, ArrowUpRight, LayoutGrid, CreditCard
 } from 'lucide-react';
 import { activityService, dashboardService } from '../../api/services';
 
@@ -86,34 +86,89 @@ const OwnerDashboard = () => {
     if (loading) return <div className="p-8 text-center text-slate-400">Loading dashboard...</div>;
 
     return (
-        <div className="space-y-6 relative">
+        <div className="space-y-8 relative pb-20">
             <div className="flex items-center justify-between">
                 <div>
-                    <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Dashboard Overview</h2>
-                    <p className="text-sm text-slate-500">Understand your hostel in seconds.</p>
+                    <h2 className="text-3xl font-black text-slate-900 tracking-tight">Property Overview</h2>
+                    <p className="text-sm font-semibold text-slate-400 mt-1">Live metrics from your hostel management system.</p>
                 </div>
             </div>
 
-            {/* Hostel Health */}
-            <div className="grid grid-cols-2 gap-4">
-                <MetricCard title="Total Tenants" value={summary.total_tenants} icon={Users} iconClass="text-indigo-600 bg-indigo-50" />
-                <MetricCard title="Occupied Beds" value={summary.active_tenants} icon={BedDouble} iconClass="text-emerald-600 bg-emerald-50" />
-                <MetricCard title="Vacant Beds" value={summary.vacant_beds} icon={Bed} iconClass="text-amber-600 bg-amber-50" />
-                <MetricCard title="Pending Dues" value={`₹${summary.pending_dues.toLocaleString()}`} icon={Clock} iconClass="text-rose-600 bg-rose-50" />
+            {/* Premium Stats Grid (2x2) */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <StatCard 
+                    icon={<BedDouble />} 
+                    label="Total Rooms" 
+                    value={summary.total_rooms || 0} 
+                    color="indigo" 
+                />
+                <StatCard 
+                    icon={<Users />} 
+                    label="Total Occupants" 
+                    value={summary.active_tenants} 
+                    color="purple" 
+                />
+                <StatCard 
+                    icon={<Bed />} 
+                    label="Total Capacity" 
+                    value={summary.total_capacity} 
+                    color="blue" 
+                />
+                <StatCard 
+                    icon={<LayoutGrid />} 
+                    label="Occupancy Rate" 
+                    value={`${summary.occupancy_rate || 0}%`} 
+                    color="emerald" 
+                />
+            </div>
+
+            {/* Financial Highlights */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-white p-6 rounded-[28px] border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-600">
+                            <Clock size={24} />
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Pending Dues</p>
+                            <h4 className="text-2xl font-black text-slate-900">₹{summary.pending_dues.toLocaleString()}</h4>
+                        </div>
+                    </div>
+                    {summary.overdue_count > 0 && (
+                        <div className="px-3 py-1 bg-rose-500 text-white text-[10px] font-extrabold rounded-lg shadow-lg shadow-rose-200">
+                            {summary.overdue_count} OVERDUE
+                        </div>
+                    )}
+                </div>
+
+                <div className="bg-white p-6 rounded-[28px] border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+                            <CreditCard size={24} />
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Rent Collected</p>
+                            <h4 className="text-2xl font-black text-slate-900">₹{summary.rent_collected_this_month.toLocaleString()}</h4>
+                        </div>
+                    </div>
+                    <div className="text-[10px] font-black text-slate-400 bg-slate-50 px-3 py-1 rounded-lg border border-slate-100">
+                        THIS MONTH
+                    </div>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 gap-6">
                 {/* Collection chart */}
-                <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-100 shadow-sm min-w-0">
-                    <div className="flex items-center justify-between gap-4 mb-4">
+                <div className="bg-white p-6 sm:p-8 rounded-[32px] border border-slate-100 shadow-sm min-w-0">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
                         <div>
-                            <h3 className="font-bold text-slate-900 text-lg">Rent Collected vs Rent Due</h3>
-                            <p className="text-sm text-slate-500">Monthly collection discipline.</p>
+                            <h3 className="font-black text-slate-900 text-xl tracking-tight">Financial Performance</h3>
+                            <p className="text-sm font-semibold text-slate-400 mt-1">Comparing monthly dues vs actual collections.</p>
                         </div>
                         <select
                             value={months}
                             onChange={(e) => setMonths(Number(e.target.value))}
-                            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                            className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all cursor-pointer"
                         >
                             <option value={3}>Last 3 months</option>
                             <option value={6}>Last 6 months</option>
@@ -124,11 +179,11 @@ const OwnerDashboard = () => {
                         <ResponsiveContainer width="100%" height="100%" minWidth={280} minHeight={280}>
                             <BarChart data={collectionData} barGap={10} margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} />
-                                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} tickFormatter={(v) => `₹${Math.round(v / 1000)}k`} width={55} />
-                                <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} formatter={(v) => `₹${Number(v).toLocaleString()}`} />
-                                <Bar dataKey="due" name="Dues" fill="#e2e8f0" radius={[6, 6, 0, 0]} maxBarSize={48} />
-                                <Bar dataKey="collected" name="Collected" fill="#4f46e5" radius={[6, 6, 0, 0]} maxBarSize={48} />
+                                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 700, fill: '#94a3b8' }} />
+                                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 700, fill: '#94a3b8' }} tickFormatter={(v) => `₹${Math.round(v / 1000)}k`} width={55} />
+                                <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '1.25rem', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '16px' }} formatter={(v) => `₹${Number(v).toLocaleString()}`} />
+                                <Bar dataKey="due" name="Dues" fill="#e2e8f0" radius={[8, 8, 0, 0]} maxBarSize={40} />
+                                <Bar dataKey="collected" name="Collected" fill="#6366f1" radius={[8, 8, 0, 0]} maxBarSize={40} />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
@@ -136,49 +191,66 @@ const OwnerDashboard = () => {
             </div>
 
             {/* Recent Activity */}
-            <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-100 shadow-sm">
-                <h3 className="font-bold text-slate-900 text-lg mb-1">Recent Activity</h3>
-                <p className="text-sm text-slate-500 mb-5">What changed today.</p>
+            <div className="bg-white p-6 sm:p-8 rounded-[32px] border border-slate-100 shadow-sm">
+                <div className="flex items-center justify-between mb-8">
+                    <div>
+                        <h3 className="font-black text-slate-900 text-xl tracking-tight">Recent Activity</h3>
+                        <p className="text-sm font-semibold text-slate-400 mt-1">Key movements and financial updates.</p>
+                    </div>
+                    <button
+                        onClick={() => navigate('/owner/activity')}
+                        className="p-2.5 bg-slate-50 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+                    >
+                        <ArrowUpRight size={22} />
+                    </button>
+                </div>
+                
                 <div className="space-y-4">
                     {recentActivity.length === 0 ? (
-                        <div className="text-sm text-slate-400">No recent activity</div>
+                        <div className="py-10 text-center border-2 border-dashed border-slate-50 rounded-24px">
+                            <Clock size={40} className="mx-auto mb-3 text-slate-100" />
+                            <p className="text-sm font-bold text-slate-300">No recent activity detected.</p>
+                        </div>
                     ) : recentActivity.map((activity) => (
-                        <div key={activity.id} className="flex gap-3">
-                            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-indigo-50 text-indigo-600">
-                                <ArrowUpRight size={16} />
+                        <div key={activity.id} className="flex gap-4 p-4 rounded-2xl bg-slate-50/50 border border-slate-50 hover:bg-white hover:shadow-sm transition-all group">
+                            <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 bg-white border border-slate-200 text-indigo-600 shadow-sm group-hover:scale-105 transition-transform">
+                                <ArrowUpRight size={18} />
                             </div>
                             <div className="flex-1">
-                                <div className="flex justify-between items-start">
-                                    <p className="text-sm font-semibold text-slate-900">{activity.title || activity.event_type}</p>
-                                    <span className="text-[10px] text-slate-500">
-                                        {activity.event_at ? new Date(activity.event_at).toLocaleDateString() : ''}
+                                <div className="flex justify-between items-start mb-0.5">
+                                    <p className="text-sm font-extrabold text-slate-900">{activity.title || activity.event_type}</p>
+                                    <span className="text-[10px] font-black text-slate-400 bg-white px-2 py-0.5 rounded-full border border-slate-100">
+                                        {activity.event_at ? new Date(activity.event_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''}
                                     </span>
                                 </div>
-                                <p className="text-xs text-slate-500 mt-0.5">{activity.detail}</p>
+                                <p className="text-xs font-medium text-slate-500">{activity.detail}</p>
                             </div>
                         </div>
                     ))}
                 </div>
                 <button
                     onClick={() => navigate('/owner/activity')}
-                    className="mt-5 w-full sm:w-auto px-4 py-2 text-sm font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors"
+                    className="mt-8 w-full py-4 text-sm font-black text-indigo-600 bg-indigo-50/50 hover:bg-indigo-100 rounded-2xl transition-all tracking-wide uppercase"
                 >
-                    View Full History
+                    Browse Full Activity Log
                 </button>
             </div>
         </div>
     );
 };
 
-const MetricCard = ({ title, value, icon: Icon, iconClass }) => (
-    <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-        <div className="flex justify-between items-start mb-3">
-            <div className={`p-2.5 rounded-xl ${iconClass}`}>
-                <Icon size={18} />
-            </div>
+const StatCard = ({ icon, label, value, color }) => (
+    <div className={`bg-white p-6 rounded-[28px] border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all`}>
+        <div className={`absolute top-0 right-0 p-4 opacity-10 text-${color}-500 group-hover:scale-110 transition-transform`}>
+            {React.cloneElement(icon, { size: 64 })}
         </div>
-        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{title}</p>
-        <h3 className="text-2xl font-bold text-slate-900 mt-1">{value}</h3>
+        <div className="relative z-10">
+            <div className={`w-14 h-14 rounded-2xl bg-${color}-50 flex items-center justify-center text-${color}-600 mb-5 group-hover:scale-110 transition-transform`}>
+                {React.cloneElement(icon, { size: 28 })}
+            </div>
+            <h4 className="text-slate-400 font-black text-[10px] uppercase tracking-widest mb-1.5">{label}</h4>
+            <div className="text-4xl font-black text-slate-900 tracking-tight">{value}</div>
+        </div>
     </div>
 );
 
