@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { notificationService, ownerService } from '../api/services';
 import SearchResultsDropdown from '../components/owner/SearchResultsDropdown';
+import ProfileMenu from '../components/owner/ProfileMenu';
 
 
 const OwnerLayout = () => {
@@ -473,75 +474,25 @@ const OwnerLayout = () => {
 
                         <div className="h-8 w-[1px] bg-slate-200 hidden sm:block"></div>
 
-                        {/* User Profile Section */}
-                        <div className="relative" ref={profileRef}>
-                            <button
-                                onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-                                className="hidden sm:flex items-center gap-3 p-1.5 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-200 transition-all group"
-                            >
-                                <div className="text-end leading-tight">
-                                    <p className="text-xs font-medium text-slate-500 capitalize">{user?.role || 'Staff'}</p>
-                                    <p className="text-sm font-bold text-slate-900 group-hover:text-indigo-700 transition-colors">{user?.name?.split(' ')[0] || 'User'}</p>
-                                </div>
-                                <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-sm shadow-sm ring-2 ring-white">
-                                    {user?.name?.[0] || <User size={18} />}
-                                </div>
-                                <ChevronDown size={14} className={`text-slate-400 transition-transform ${profileMenuOpen ? 'rotate-180' : ''}`} />
-                            </button>
-
-                            {/* Profile Dropdown */}
-                            <AnimatePresence>
-                                {profileMenuOpen && (
-                                    <motion.div
-                                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                        className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden z-50 origin-top-right"
-                                    >
-                                        <div className="p-4 border-b border-slate-100 bg-slate-50/50">
-                                            <p className="text-sm font-bold text-slate-900">{user?.name || 'Account'}</p>
-                                            <p className="text-xs text-slate-500">{user?.email || ''}</p>
-                                        </div>
-                                        <div className="p-1.5">
-                                            <button
-                                                onClick={() => {
-                                                    setProfileMenuOpen(false);
-                                                    navigate('/owner/profile?tab=owner');
-                                                }}
-                                                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-lg transition-colors"
-                                            >
-                                                <User size={16} /> Profile Settings
-                                            </button>
-                                            <button
-                                                onClick={() => {
-                                                    setProfileMenuOpen(false);
-                                                    navigate('/owner/billing');
-                                                }}
-                                                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-lg transition-colors"
-                                            >
-                                                <CreditCard size={16} /> Billing & Plans
-                                            </button>
-                                            <button
-                                                onClick={() => {
-                                                    setProfileMenuOpen(false);
-                                                    navigate('/owner/profile?tab=preferences');
-                                                }}
-                                                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-lg transition-colors"
-                                            >
-                                                <Settings size={16} /> Preferences
-                                            </button>
-                                            <div className="h-px bg-slate-100 my-1" />
-                                            <button
-                                                onClick={handleLogout}
-                                                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                                            >
-                                                <LogOut size={16} /> Sign Out
-                                            </button>
-                                        </div>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-                        </div>
+                        <ProfileMenu
+                            user={user}
+                            isOpen={profileMenuOpen}
+                            onToggle={() => setProfileMenuOpen(!profileMenuOpen)}
+                            onProfileSettings={() => {
+                                setProfileMenuOpen(false);
+                                navigate('/owner/profile?tab=owner');
+                            }}
+                            onBilling={() => {
+                                setProfileMenuOpen(false);
+                                navigate('/owner/billing');
+                            }}
+                            onPreferences={() => {
+                                setProfileMenuOpen(false);
+                                navigate('/owner/profile?tab=preferences');
+                            }}
+                            onSignOut={handleLogout}
+                            menuRef={profileRef}
+                        />
                     </div>
                 </header>
 
