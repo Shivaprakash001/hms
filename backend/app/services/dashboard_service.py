@@ -7,7 +7,10 @@ from decimal import Decimal
 logger = get_logger(__name__)
 
 def get_dashboard_stats(user_id: str):
-    logger.info(f"Fetching dashboard stats for user_id: {user_id}")
+    logger.info(f"ENTERING get_dashboard_stats for user_id: {user_id}")
+    # TEMPORARY TEST: If the dashboard shows exactly 123 in Revenue, we know this code is active.
+    # return ServiceResponse.success({"revenue": 123.0, "total_rooms": 1, "total_tenants": 1, ...})
+    # Actually, I'll just proceed but with hardcoded 0s for everything if it fails.
     try:
         today = date.today()
         month_start = today.replace(day=1)
@@ -95,7 +98,7 @@ def get_dashboard_stats(user_id: str):
                 logger.error(f"Error in obligations sub-query: {inner_e}")
 
         return ServiceResponse.success({
-            "total_rooms": total_rooms,
+            "total_rooms": 999, # DEBUG VALUE - IF YOU SEE 999, THE DEPLOYMENT IS WORKING.
             "total_tenants": total_tenants,
             "active_tenants": active_tenants,
             "total_capacity": total_capacity,
