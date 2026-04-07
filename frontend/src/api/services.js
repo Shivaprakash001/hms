@@ -419,6 +419,10 @@ export const expenseService = {
 
 // --- Dashboard Service ---
 export const dashboardService = {
+    getSummary: async () => {
+        const response = await api.get('/dashboard/summary');
+        return response.data;
+    },
     getStats: async () => {
         const response = await api.get('/dashboard/stats');
         return response.data;

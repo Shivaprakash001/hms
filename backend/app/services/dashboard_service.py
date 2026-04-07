@@ -19,6 +19,7 @@ def get_dashboard_stats(user_id: str):
         # 1. Base query for owner's students
         all_owner_students = supabase.table("students").select("id, status").eq("owner_id", user_id).execute()
         all_student_ids = [s['id'] for s in all_owner_students.data]
+        total_tenants = len(all_owner_students.data)
         active_tenants = len([s for s in all_owner_students.data if s['status'] == 'ACTIVE'])
 
         # 2. Total Capacity
@@ -31,6 +32,7 @@ def get_dashboard_stats(user_id: str):
             # Actually, let's use allocations for accuracy if possible, but active students is faster.
             # Logic: Active students = Active allocations usually.
             occupancy_rate = round((active_tenants / total_capacity) * 100)
+        vacant_beds = max(total_capacity - active_tenants, 0)
 
         # 3. Revenue (Current Month)
         payments_res = supabase.table("payments")\
@@ -58,7 +60,7 @@ def get_dashboard_stats(user_id: str):
             obligations_res_data = []
         else:
             obligations_res = supabase.table("rent_obligations")\
-                .select("id, amount")\
+                .select("id, amount, due_date")\
                 .neq("status", "PAID")\
                 .neq("status", "WAIVED")\
                 .in_("student_id", all_student_ids)\
@@ -66,21 +68,40 @@ def get_dashboard_stats(user_id: str):
             obligations_res_data = obligations_res.data
             
         pending_total = Decimal(0)
+        overdue_total = Decimal(0)
+        overdue_count = 0
         for ob in obligations_res_data:
             amount = Decimal(str(ob['amount']))
             # Get payments for this ob
             p_res = supabase.table("payments").select("amount_paid").eq("obligation_id", ob['id']).execute()
             paid = sum(Decimal(str(p['amount_paid'])) for p in p_res.data)
-            pending_total += (amount - paid)
+            remaining = amount - paid
+            if remaining > 0:
+                pending_total += remaining
+
+                due_date_raw = ob.get('due_date')
+                if due_date_raw:
+                    try:
+                        due_date = date.fromisoformat(str(due_date_raw).split('T')[0])
+                        if due_date < today:
+                            overdue_total += remaining
+                            overdue_count += 1
+                    except Exception:
+                        pass
 
         return ServiceResponse.success({
+            "total_tenants": total_tenants,
             "active_tenants": active_tenants,
             "total_capacity": total_capacity,
+            "vacant_beds": vacant_beds,
             "occupancy_rate": occupancy_rate,
             "revenue": float(current_revenue),
+            "rent_collected_this_month": float(current_revenue),
             "expenses": float(current_expenses),
             "net_profit": float(current_revenue - current_expenses),
-            "pending_dues": float(pending_total)
+            "pending_dues": float(pending_total),
+            "overdue_amount": float(overdue_total),
+            "overdue_count": overdue_count
         })
 
     except Exception as e:
@@ -105,11 +126,11 @@ def get_monthly_stats(user_id: str, months: int = 6):
             .eq("owner_id", user_id)\
             .execute()
             
-        # 2. Fetch expenses for those months
-        expenses_res = supabase.table("expenses")\
-            .select("amount, date")\
-            .gte("date", start_date.isoformat())\
-            .lt("date", end_date.isoformat())\
+        # 2. Fetch obligations (due) for those months
+        obligations_res = supabase.table("rent_obligations")\
+            .select("amount, rent_month, status")\
+            .gte("rent_month", start_date.isoformat())\
+            .lt("rent_month", end_date.isoformat())\
             .eq("owner_id", user_id)\
             .execute()
 
@@ -122,8 +143,8 @@ def get_monthly_stats(user_id: str, months: int = 6):
             month_name = calendar.month_abbr[d.month]
             monthly_data[month_key] = {
                 "month": month_name,
-                "income": Decimal(0),
-                "expenses": Decimal(0),
+                "collected": Decimal(0),
+                "due": Decimal(0),
                 "sort_key": month_key
             }
 
@@ -132,14 +153,15 @@ def get_monthly_stats(user_id: str, months: int = 6):
             p_date = date.fromisoformat(p['payment_date'].split('T')[0])
             month_key = f"{p_date.year}-{p_date.month:02d}"
             if month_key in monthly_data:
-                monthly_data[month_key]['income'] += Decimal(str(p['amount_paid']))
+                monthly_data[month_key]['collected'] += Decimal(str(p['amount_paid']))
 
-        # Process expenses
-        for e in expenses_res.data:
-            e_date = date.fromisoformat(e['date'].split('T')[0])
-            month_key = f"{e_date.year}-{e_date.month:02d}"
+        # Process obligations (excluding waived)
+        for e in obligations_res.data:
+            if str(e.get('status') or '').upper() == 'WAIVED':
+                continue
+            month_key = str(e.get('rent_month') or '').split('T')[0][:7]
             if month_key in monthly_data:
-                monthly_data[month_key]['expenses'] += Decimal(str(e['amount']))
+                monthly_data[month_key]['due'] += Decimal(str(e.get('amount') or 0))
 
         # Convert to list and sort chronologically
         result = list(monthly_data.values())
@@ -147,8 +169,14 @@ def get_monthly_stats(user_id: str, months: int = 6):
         
         # Clean up Decimal to float and sort_key
         for r in result:
-            r['income'] = float(r['income'])
-            r['expenses'] = float(r['expenses'])
+            collected = float(r['collected'])
+            due = float(r['due'])
+            r['collected'] = collected
+            r['due'] = due
+            # Backward compatibility keys used in old UI
+            r['income'] = collected
+            r['expenses'] = max(due - collected, 0)
+            r['collection_rate'] = round((collected / due) * 100, 2) if due > 0 else 0
             del r['sort_key']
 
         return ServiceResponse.success(result)

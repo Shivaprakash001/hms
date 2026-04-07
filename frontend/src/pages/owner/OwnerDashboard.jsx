@@ -1,176 +1,103 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Bed, Users, Clock, TrendingUp, TrendingDown, AlertCircle, ArrowUpRight, ArrowDownRight, Activity } from 'lucide-react';
+import {
+    ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+    PieChart, Pie, Cell
+} from 'recharts';
+import {
+    Users, BedDouble, Bed, Clock, AlertCircle, ArrowUpRight,
+    UserPlus, CreditCard, Zap
+} from 'lucide-react';
 import { allocationService, paymentService, dashboardService } from '../../api/services';
+
+const PIE_COLORS = ['#6366f1', '#cbd5e1'];
 
 const OwnerDashboard = () => {
     const navigate = useNavigate();
-    // State
-    const [monthlyData, setMonthlyData] = useState([]);
+    const [summary, setSummary] = useState({
+        total_tenants: 0,
+        active_tenants: 0,
+        total_capacity: 0,
+        vacant_beds: 0,
+        pending_dues: 0,
+        overdue_amount: 0,
+        overdue_count: 0,
+        rent_collected_this_month: 0,
+    });
+    const [collectionData, setCollectionData] = useState([]);
     const [recentActivity, setRecentActivity] = useState([]);
     const [allActivities, setAllActivities] = useState([]);
-    const [showFinancialModal, setShowFinancialModal] = useState(false);
     const [showHistoryModal, setShowHistoryModal] = useState(false);
     const [loading, setLoading] = useState(true);
-    const [dashboardStats, setDashboardStats] = useState({
-        revenue: 0,
-        expenses: 0,
-        net_profit: 0,
-        occupancy_rate: 0,
-        active_tenants: 0,
-        pending_dues: 0
-    });
-
-    const [stats, setStats] = useState([
-        { title: 'Total Revenue', value: '₹0', trend: '0%', trendUp: true, icon: TrendingUp },
-        { title: 'Occupancy Rate', value: '0%', trend: '0%', trendUp: true, icon: Users },
-        { title: 'Pending Dues', value: '₹0', trend: '0%', trendUp: false, icon: Clock },
-        { title: 'Total Expenses', value: '₹0', trend: '0%', trendUp: false, icon: TrendingDown },
-    ]);
 
     const updateDashboard = async () => {
         try {
-            // Fetch real data in parallel
-            const [statsRes, activeAllocations, paymentsRes, monthlyRes] = await Promise.all([
-                dashboardService.getStats(),
-                allocationService.getAllActive(), // For activity feed
-                paymentService.getAll({ limit: 10 }), // For activity feed
-                dashboardService.getMonthlyStats(6) // Real Chart data
+            const [summaryRes, activeAllocations, paymentsRes, monthlyRes] = await Promise.all([
+                dashboardService.getSummary(),
+                allocationService.getAllActive(),
+                paymentService.getAll({ limit: 10 }),
+                dashboardService.getMonthlyStats(6)
             ]);
 
-            const dashboardStats = statsRes || {};
-            setDashboardStats({
-                revenue: dashboardStats.revenue || 0,
-                expenses: dashboardStats.expenses || 0,
-                net_profit: dashboardStats.net_profit || 0,
-                occupancy_rate: dashboardStats.occupancy_rate || 0,
-                active_tenants: dashboardStats.active_tenants || 0,
-                pending_dues: dashboardStats.pending_dues || 0
+            const stats = summaryRes || {};
+            setSummary({
+                total_tenants: stats.total_tenants || 0,
+                active_tenants: stats.active_tenants || 0,
+                total_capacity: stats.total_capacity || 0,
+                vacant_beds: stats.vacant_beds || 0,
+                pending_dues: stats.pending_dues || 0,
+                overdue_amount: stats.overdue_amount || 0,
+                overdue_count: stats.overdue_count || 0,
+                rent_collected_this_month: stats.rent_collected_this_month || stats.revenue || 0,
             });
+
+            const monthly = Array.isArray(monthlyRes) ? monthlyRes : [];
+            const normalizedMonthly = monthly.map((item) => ({
+                month: item.month,
+                collected: Number(item.collected ?? item.income ?? 0),
+                due: Number(item.due ?? item.expenses ?? 0),
+            }));
+            setCollectionData(normalizedMonthly);
+
             const payments = Array.isArray(paymentsRes) ? paymentsRes : (paymentsRes?.payments || []);
-
-            // Updated Stats from Backend
-            setStats([
-                {
-                    title: 'Total Revenue',
-                    value: `₹${(dashboardStats.revenue || 0).toLocaleString()}`,
-                    trend: '+0%', // Backend doesn't provide trend yet
-                    trendUp: true,
-                    icon: TrendingUp,
-                    color: 'text-emerald-600',
-                    bg: 'bg-emerald-50'
-                },
-                {
-                    title: 'Occupancy Rate',
-                    value: `${dashboardStats.occupancy_rate || 0}%`,
-                    trend: `${dashboardStats.active_tenants || 0} active`,
-                    trendUp: true,
-                    icon: Users,
-                    color: 'text-indigo-600',
-                    bg: 'bg-indigo-50'
-                },
-                {
-                    title: 'Pending Dues',
-                    value: `₹${(dashboardStats.pending_dues || 0).toLocaleString()}`,
-                    trend: '0%',
-                    trendUp: false,
-                    icon: Clock,
-                    color: 'text-rose-600',
-                    bg: 'bg-rose-50'
-                },
-                {
-                    title: 'Net Profit',
-                    value: `₹${(dashboardStats.net_profit || 0).toLocaleString()}`,
-                    trend: '0%',
-                    trendUp: true,
-                    icon: Activity,
-                    color: 'text-violet-600',
-                    bg: 'bg-violet-50',
-                    onClick: () => setShowFinancialModal(true),
-                    cursor: 'cursor-pointer'
-                },
-            ]);
-
-            // 6. Recent Activity
             const activities = [];
-            const dashActivities = []; // For dashboard (allocations only)
             const now = new Date();
 
-            // Payments (For full history)
-            payments.forEach(p => {
+            payments.slice(0, 5).forEach((p) => {
                 activities.push({
                     id: `pay_${p.id}`,
-                    type: 'PAYMENT',
-                    action: 'Payment Received',
-                    detail: `${p.student_name} paid ₹${p.amount_paid}`,
-                    date: new Date(p.payment_date),
-                    icon: TrendingUp,
-                    color: 'text-green-600',
-                    bg: 'bg-green-50'
+                    action: 'Payment received',
+                    detail: `${p.student_name} paid ₹${Number(p.amount_paid || 0).toLocaleString()}`,
+                    date: new Date(p.payment_date || p.created_at || Date.now()),
+                    color: 'text-emerald-600',
+                    bg: 'bg-emerald-50'
                 });
             });
 
-            // Room Allocations (For both)
-            (activeAllocations || []).forEach(a => {
+            (activeAllocations || []).slice(0, 5).forEach((a) => {
                 const start = new Date(a.start_date);
-                const isRecent = (now - start) < 30 * 24 * 60 * 60 * 1000; // 30 days
-                
-                const item = {
-                    id: `alloc_${a.id}`,
-                    type: 'ALLOCATION',
-                    action: a.student?.profiles?.name || 'New Tenant',
-                    detail: `Occupied Room ${a.room?.room_no}`,
-                    date: start,
-                    icon: Users,
-                    color: 'text-indigo-600',
-                    bg: 'bg-indigo-50'
-                };
-                
-                activities.push(item);
-                if (isRecent) {
-                    dashActivities.push(item);
+                if ((now - start) < 7 * 24 * 60 * 60 * 1000) {
+                    activities.push({
+                        id: `alloc_${a.id}`,
+                        action: 'New tenant joined',
+                        detail: `${a.student?.profiles?.name || 'Tenant'} joined Room ${a.room?.room_no || 'N/A'}`,
+                        date: start,
+                        color: 'text-indigo-600',
+                        bg: 'bg-indigo-50'
+                    });
                 }
             });
 
-            // Sort both
             activities.sort((a, b) => b.date - a.date);
-            dashActivities.sort((a, b) => b.date - a.date);
+            const formatted = activities.map((act) => {
+                const diffDays = Math.ceil(Math.abs(new Date() - act.date) / (1000 * 60 * 60 * 24));
+                return { ...act, time: diffDays <= 1 ? 'Today' : `${diffDays} days ago` };
+            });
 
-            const format = (act) => {
-                const diffTime = Math.abs(new Date() - act.date);
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                let timeStr = diffDays <= 1 ? 'Today' : `${diffDays} days ago`;
-                return { ...act, time: timeStr };
-            };
-
-            setRecentActivity(dashActivities.slice(0, 5).map(format));
-            setAllActivities(activities.map(format));
-
-            // 7. Chart Data
-            let monthData = [];
-            if (Array.isArray(monthlyRes)) {
-                monthData = monthlyRes;
-            } else if (monthlyRes?.data && Array.isArray(monthlyRes.data)) {
-                monthData = monthlyRes.data;
-            } else {
-                // Fallback to empty mock
-                const last6Months = [];
-                for (let i = 5; i >= 0; i--) {
-                    const date = new Date();
-                    date.setMonth(date.getMonth() - i);
-                    last6Months.push({
-                        month: date.toLocaleString('default', { month: 'short' }),
-                        income: 0,
-                        expenses: 0
-                    });
-                }
-                monthData = last6Months;
-            }
-            setMonthlyData(monthData);
-
-        } catch (e) {
-            console.error("Dashboard update failed:", e);
+            setRecentActivity(formatted.slice(0, 5));
+            setAllActivities(formatted);
+        } catch (error) {
+            console.error('Dashboard update failed:', error);
         } finally {
             setLoading(false);
         }
@@ -178,29 +105,28 @@ const OwnerDashboard = () => {
 
     useEffect(() => {
         updateDashboard();
-        const interval = setInterval(updateDashboard, 15000); // Poll every 15s
+        const interval = setInterval(updateDashboard, 20000);
         return () => clearInterval(interval);
     }, []);
 
-    // Helper Modal Component
-    const Modal = ({ isOpen, onClose, title, children }) => {
-        if (!isOpen) return null;
-        return (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
-                <div className="bg-white rounded-2xl w-full max-w-2xl shadow-xl border border-slate-100 overflow-hidden flex flex-col max-h-[80vh]">
-                    <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                        <h3 className="font-bold text-lg text-slate-800">{title}</h3>
-                        <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors">
-                            <ArrowDownRight className="rotate-45" size={20} />
-                        </button>
-                    </div>
-                    <div className="p-6 overflow-y-auto">
-                        {children}
-                    </div>
-                </div>
-            </div>
-        );
-    };
+    const occupancyData = useMemo(() => ([
+        { name: 'Occupied', value: Number(summary.active_tenants || 0) },
+        { name: 'Vacant', value: Number(summary.vacant_beds || 0) },
+    ]), [summary.active_tenants, summary.vacant_beds]);
+
+    const alerts = useMemo(() => {
+        const list = [];
+        if (summary.overdue_count > 0) {
+            list.push(`⚠ ${summary.overdue_count} rent obligation(s) overdue (₹${summary.overdue_amount.toLocaleString()})`);
+        }
+        if (summary.vacant_beds > 0) {
+            list.push(`⚠ ${summary.vacant_beds} bed(s) are currently vacant`);
+        }
+        if (summary.pending_dues > 0) {
+            list.push(`⚠ Pending dues total ₹${summary.pending_dues.toLocaleString()}`);
+        }
+        return list;
+    }, [summary]);
 
     if (loading) return <div className="p-8 text-center text-slate-400">Loading dashboard...</div>;
 
@@ -209,165 +135,162 @@ const OwnerDashboard = () => {
             <div className="flex items-center justify-between">
                 <div>
                     <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Dashboard Overview</h2>
-                    <p className="text-sm text-slate-500">Real-time property insights and performance.</p>
+                    <p className="text-sm text-slate-500">Understand your hostel in seconds.</p>
                 </div>
             </div>
 
-            {/* KPI Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
-                {stats.map((stat, idx) => {
-                    const Icon = stat.icon;
-                    return (
-                        <div
-                            key={idx}
-                            onClick={stat.onClick}
-                            className={`bg-white p-4 sm:p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-lg transition-all duration-300 ${stat.cursor || ''} ${stat.onClick ? 'active:scale-95' : ''} flex flex-col justify-between min-h-[140px] sm:min-h-0`}
-                        >
-                            <div className="flex justify-between items-start">
-                                <div className={`p-2.5 sm:p-3 rounded-xl ${stat.bg} ${stat.color}`}>
-                                    <Icon size={20} className="stroke-[2.5] sm:w-6 sm:h-6" />
-                                </div>
-                                <span className={`flex items-center text-[10px] sm:text-xs font-bold px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full border ${stat.trendUp ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-rose-50 text-rose-700 border-rose-100'}`}>
-                                    {stat.trendUp ? <ArrowUpRight size={12} className="sm:mr-1" /> : <ArrowDownRight size={12} className="sm:mr-1" />}
-                                    <span className="hidden xs:inline">{stat.trend}</span>
-                                </span>
-                            </div>
-                            <div className="mt-4">
-                                <p className="text-slate-500 text-[10px] sm:text-xs font-bold uppercase tracking-wider line-clamp-1">{stat.title}</p>
-                                <h3 className="text-xl sm:text-3xl font-black text-slate-900 mt-1 tracking-tight truncate">{stat.value}</h3>
-                            </div>
-                        </div>
-                    );
-                })}
+            {/* Hostel Health */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                <MetricCard title="Total Tenants" value={summary.total_tenants} icon={Users} iconClass="text-indigo-600 bg-indigo-50" />
+                <MetricCard title="Occupied Beds" value={summary.active_tenants} icon={BedDouble} iconClass="text-emerald-600 bg-emerald-50" />
+                <MetricCard title="Vacant Beds" value={summary.vacant_beds} icon={Bed} iconClass="text-amber-600 bg-amber-50" />
+                <MetricCard title="Pending Dues" value={`₹${summary.pending_dues.toLocaleString()}`} icon={Clock} iconClass="text-rose-600 bg-rose-50" />
+            </div>
+
+            {/* Quick actions */}
+            <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                <div className="flex flex-wrap gap-2">
+                    <ActionBtn onClick={() => navigate('/owner/students')} icon={UserPlus} label="Invite Tenant" />
+                    <ActionBtn onClick={() => navigate('/owner/payments')} icon={Zap} label="Generate Rent" />
+                    <ActionBtn onClick={() => navigate('/owner/payments')} icon={CreditCard} label="Record Payment" />
+                </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Main Chart */}
-                <div className="lg:col-span-2 bg-white p-4 sm:p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow min-w-0">
-                    <div className="flex items-center justify-between mb-6">
-                        <div>
-                            <h3 className="font-bold text-slate-900 text-lg">Financial Performance</h3>
-                            <p className="text-sm text-slate-500">Income vs Expenses over time</p>
-                        </div>
-                        <select className="text-sm border-none bg-slate-50 text-slate-600 font-medium rounded-lg px-3 py-2 cursor-pointer hover:bg-slate-100 transition-colors focus:ring-2 focus:ring-indigo-100 outline-none">
-                            <option>Last 6 Months</option>
-                            <option>Last Year</option>
-                        </select>
-                    </div>
-                    <div className="h-64 sm:h-80 w-full min-w-0" style={{ minHeight: '260px' }}>
-                        <ResponsiveContainer width="100%" height="100%" minWidth={280} minHeight={220}>
-                            <BarChart data={monthlyData} barGap={8}>
+                {/* Collection chart */}
+                <div className="lg:col-span-2 bg-white p-4 sm:p-6 rounded-2xl border border-slate-100 shadow-sm min-w-0">
+                    <h3 className="font-bold text-slate-900 text-lg">Rent Collected vs Rent Due</h3>
+                    <p className="text-sm text-slate-500 mb-4">Monthly collection discipline.</p>
+                    <div className="h-[300px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={collectionData} barGap={10}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }} dy={10} />
-                                <YAxis axisLine={false} tickLine={false} width={46} tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }} tickFormatter={(value) => `₹${value / 1000}k`} dx={-6} />
-                                <Tooltip cursor={{ fill: '#f8fafc' }} content={({ active, payload, label }) => {
-                                    if (active && payload && payload.length) {
-                                        return (
-                                            <div className="bg-slate-900 text-white text-xs rounded-xl p-3 shadow-xl border border-slate-800 backdrop-blur-md bg-slate-900/95">
-                                                <p className="font-bold mb-2 text-slate-300">{label}</p>
-                                                <div className="flex items-center justify-between gap-4 mb-1.5">
-                                                    <span className="text-indigo-400 font-medium">Income</span>
-                                                    <span className="font-mono font-bold">₹{payload[0].value.toLocaleString()}</span>
-                                                </div>
-                                                <div className="flex items-center justify-between gap-4">
-                                                    <span className="text-slate-400 font-medium">Expenses</span>
-                                                    <span className="font-mono font-bold">₹{payload[1].value.toLocaleString()}</span>
-                                                </div>
-                                            </div>
-                                        );
-                                    }
-                                    return null;
-                                }} />
-                                <Bar dataKey="income" fill="#4f46e5" radius={[6, 6, 0, 0]} maxBarSize={50} />
-                                <Bar dataKey="expenses" fill="#cbd5e1" radius={[6, 6, 0, 0]} maxBarSize={50} />
+                                <XAxis dataKey="month" axisLine={false} tickLine={false} />
+                                <YAxis axisLine={false} tickLine={false} tickFormatter={(v) => `₹${Math.round(v / 1000)}k`} width={52} />
+                                <Tooltip formatter={(v) => `₹${Number(v).toLocaleString()}`} />
+                                <Bar dataKey="due" fill="#cbd5e1" radius={[6, 6, 0, 0]} maxBarSize={44} />
+                                <Bar dataKey="collected" fill="#4f46e5" radius={[6, 6, 0, 0]} maxBarSize={44} />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
                 </div>
 
-                {/* Recent Activity */}
-                <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow flex flex-col">
-                    <h3 className="font-bold text-slate-900 text-lg mb-1">Recent Activity</h3>
-                    <p className="text-sm text-slate-500 mb-6">Latest updates from your property.</p>
-                    <div className="flex-1 space-y-6">
-                        {recentActivity.length === 0 ? (
-                            <div className="text-center text-slate-400 text-sm py-4">No recent activity</div>
+                {/* Occupancy + Alerts */}
+                <div className="space-y-6">
+                    <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-100 shadow-sm">
+                        <h3 className="font-bold text-slate-900 text-lg">Occupancy Insights</h3>
+                        <p className="text-sm text-slate-500 mb-4">Occupied vs vacant beds.</p>
+                        <div className="h-[260px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie
+                                        data={occupancyData}
+                                        dataKey="value"
+                                        nameKey="name"
+                                        innerRadius={55}
+                                        outerRadius={90}
+                                        paddingAngle={3}
+                                    >
+                                        {occupancyData.map((entry, index) => (
+                                            <Cell key={entry.name} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+                        <div className="mt-2 text-xs text-slate-500 flex gap-3">
+                            <span>Occupied: <strong>{summary.active_tenants}</strong></span>
+                            <span>Vacant: <strong>{summary.vacant_beds}</strong></span>
+                        </div>
+                    </div>
+
+                    <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-100 shadow-sm">
+                        <h3 className="font-bold text-slate-900 text-lg">Alerts</h3>
+                        <p className="text-sm text-slate-500 mb-4">Action items needing attention.</p>
+                        {alerts.length === 0 ? (
+                            <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">
+                                All good. No urgent alerts right now.
+                            </div>
                         ) : (
-                            recentActivity.map((activity) => (
-                                <div key={activity.id} className="flex gap-4 group cursor-pointer">
-                                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${activity.bg} ${activity.color} group-hover:scale-105 transition-transform`}>
-                                        <activity.icon size={20} className="stroke-[2.5]" />
+                            <div className="space-y-2">
+                                {alerts.map((item) => (
+                                    <div key={item} className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 flex items-start gap-2">
+                                        <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                                        <span>{item}</span>
                                     </div>
-                                    <div className="flex-1 pt-1">
-                                        <div className="flex justify-between items-start">
-                                            <p className="text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">{activity.action}</p>
-                                            <span className="text-[10px] text-slate-400 font-medium bg-slate-50 px-2 py-0.5 rounded-full">{activity.time}</span>
-                                        </div>
-                                        <p className="text-xs text-slate-500 mt-1 line-clamp-2">{activity.detail}</p>
-                                    </div>
-                                </div>
-                            ))
+                                ))}
+                            </div>
                         )}
                     </div>
-                    <button
-                        onClick={() => navigate('/owner/activities')}
-                        className="mt-8 w-full py-3 text-sm font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors flex items-center justify-center gap-2"
-                    >
-                        View Full History <ArrowUpRight size={16} />
-                    </button>
                 </div>
             </div>
 
-            {/* Modals */}
-            <Modal isOpen={showFinancialModal} onClose={() => setShowFinancialModal(false)} title="Financial Breakdown">
-                <div className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
-                            <p className="text-emerald-600 text-xs font-bold uppercase">Total Income</p>
-                            <p className="text-2xl font-bold text-emerald-700 mt-1">
-                                {`₹${dashboardStats.revenue.toLocaleString()}`}
-                            </p>
-                            <p className="text-xs text-emerald-600 mt-1">Rent Collected (This Month)</p>
-                        </div>
-                        <div className="bg-rose-50 p-4 rounded-xl border border-rose-100">
-                            <p className="text-rose-600 text-xs font-bold uppercase">Total Expenses</p>
-                            <p className="text-2xl font-bold text-rose-700 mt-1">
-                                {`₹${dashboardStats.expenses.toLocaleString()}`}
-                            </p>
-                            <p className="text-xs text-rose-600 mt-1">Maintenance & Utilities</p>
-                        </div>
-                        <div className="bg-violet-50 p-4 rounded-xl border border-violet-100">
-                            <p className="text-violet-600 text-xs font-bold uppercase">Net Profit</p>
-                            <p className="text-2xl font-bold text-violet-700 mt-1">
-                                {`₹${dashboardStats.net_profit.toLocaleString()}`}
-                            </p>
-                            <p className="text-xs text-violet-600 mt-1">Income - Expenses</p>
-                        </div>
-                    </div>
-                </div>
-            </Modal>
-
-            <Modal isOpen={showHistoryModal} onClose={() => setShowHistoryModal(false)} title="Full Activity History">
+            {/* Recent Activity */}
+            <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-100 shadow-sm">
+                <h3 className="font-bold text-slate-900 text-lg mb-1">Recent Activity</h3>
+                <p className="text-sm text-slate-500 mb-5">What changed today.</p>
                 <div className="space-y-4">
-                    {allActivities.map((activity) => (
-                        <div key={activity.id} className="flex gap-4 p-4 hover:bg-slate-50 rounded-xl transition-colors border border-transparent hover:border-slate-100">
-                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${activity.bg} ${activity.color}`}>
-                                <activity.icon size={20} className="stroke-[2.5]" />
+                    {recentActivity.length === 0 ? (
+                        <div className="text-sm text-slate-400">No recent activity</div>
+                    ) : recentActivity.map((activity) => (
+                        <div key={activity.id} className="flex gap-3">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${activity.bg} ${activity.color}`}>
+                                <ArrowUpRight size={16} />
                             </div>
                             <div className="flex-1">
                                 <div className="flex justify-between items-start">
-                                    <p className="font-bold text-slate-900">{activity.action}</p>
-                                    <span className="text-xs text-slate-500 font-medium bg-slate-100 px-2 py-1 rounded-full">{activity.time}</span>
+                                    <p className="text-sm font-semibold text-slate-900">{activity.action}</p>
+                                    <span className="text-[10px] text-slate-500">{activity.time}</span>
                                 </div>
-                                <p className="text-sm text-slate-600 mt-1">{activity.detail}</p>
-                                <p className="text-xs text-slate-400 mt-2">{activity.date.toLocaleDateString()} at {activity.date.toLocaleTimeString()}</p>
+                                <p className="text-xs text-slate-500 mt-0.5">{activity.detail}</p>
                             </div>
                         </div>
                     ))}
                 </div>
-            </Modal>
+                {allActivities.length > 0 && (
+                    <button
+                        onClick={() => setShowHistoryModal(!showHistoryModal)}
+                        className="mt-5 w-full sm:w-auto px-4 py-2 text-sm font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors"
+                    >
+                        {showHistoryModal ? 'Hide Full History' : 'View Full History'}
+                    </button>
+                )}
+                {showHistoryModal && (
+                    <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
+                        {allActivities.map((activity) => (
+                            <div key={`all_${activity.id}`} className="flex justify-between text-xs text-slate-600">
+                                <span>{activity.detail}</span>
+                                <span>{activity.time}</span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
         </div>
     );
 };
+
+const MetricCard = ({ title, value, icon: Icon, iconClass }) => (
+    <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+        <div className="flex justify-between items-start mb-3">
+            <div className={`p-2.5 rounded-xl ${iconClass}`}>
+                <Icon size={18} />
+            </div>
+        </div>
+        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{title}</p>
+        <h3 className="text-2xl font-bold text-slate-900 mt-1">{value}</h3>
+    </div>
+);
+
+const ActionBtn = ({ onClick, icon: Icon, label }) => (
+    <button
+        onClick={onClick}
+        className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors text-sm font-semibold"
+    >
+        <Icon size={16} />
+        {label}
+    </button>
+);
 
 export default OwnerDashboard;

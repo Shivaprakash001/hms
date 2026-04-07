@@ -20,6 +20,15 @@ def get_dashboard_stats(user: UserContext = Depends(require_admin_or_owner)):
     result = dashboard_service.get_dashboard_stats(user_id=user.user_id)
     return _handle_response(result)
 
+
+@router.get("/summary")
+def get_dashboard_summary(user: UserContext = Depends(require_admin_or_owner)):
+    """
+    Consolidated owner dashboard summary payload.
+    """
+    result = dashboard_service.get_dashboard_stats(user_id=user.user_id)
+    return _handle_response(result)
+
 @router.get("/monthly-stats")
 def get_monthly_dashboard_stats(months: int = 6, user: UserContext = Depends(require_admin_or_owner)):
     """
