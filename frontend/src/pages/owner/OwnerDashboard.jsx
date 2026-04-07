@@ -239,19 +239,29 @@ const OwnerDashboard = () => {
     );
 };
 
-const StatCard = ({ icon, label, value, color }) => (
-    <div className={`bg-white p-6 rounded-[28px] border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all`}>
-        <div className={`absolute top-0 right-0 p-4 opacity-10 text-${color}-500 group-hover:scale-110 transition-transform`}>
-            {React.cloneElement(icon, { size: 64 })}
-        </div>
-        <div className="relative z-10">
-            <div className={`w-14 h-14 rounded-2xl bg-${color}-50 flex items-center justify-center text-${color}-600 mb-5 group-hover:scale-110 transition-transform`}>
-                {React.cloneElement(icon, { size: 28 })}
+const StatCard = ({ icon, label, value, color }) => {
+    const colorMap = {
+        indigo: { bg: 'bg-indigo-50', text: 'text-indigo-600', icon: 'text-indigo-500' },
+        purple: { bg: 'bg-purple-50', text: 'text-purple-600', icon: 'text-purple-500' },
+        blue: { bg: 'bg-blue-50', text: 'text-blue-600', icon: 'text-blue-500' },
+        emerald: { bg: 'bg-emerald-50', text: 'text-emerald-600', icon: 'text-emerald-500' },
+    };
+    const style = colorMap[color] || colorMap.indigo;
+
+    return (
+        <div className={`bg-white p-6 rounded-[28px] border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all`}>
+            <div className={`absolute top-0 right-0 p-4 opacity-10 ${style.icon} group-hover:scale-110 transition-transform`}>
+                {React.cloneElement(icon, { size: 64 })}
             </div>
-            <h4 className="text-slate-400 font-black text-[10px] uppercase tracking-widest mb-1.5">{label}</h4>
-            <div className="text-4xl font-black text-slate-900 tracking-tight">{value}</div>
+            <div className="relative z-10">
+                <div className={`w-14 h-14 rounded-2xl ${style.bg} flex items-center justify-center ${style.text} mb-5 group-hover:scale-110 transition-transform`}>
+                    {React.cloneElement(icon, { size: 28 })}
+                </div>
+                <h4 className="text-slate-400 font-black text-[10px] uppercase tracking-widest mb-1.5">{label}</h4>
+                <div className="text-4xl font-black text-slate-900 tracking-tight">{value}</div>
+            </div>
         </div>
-    </div>
-);
+    );
+};
 
 export default OwnerDashboard;

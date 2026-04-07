@@ -454,29 +454,57 @@ const ManageRooms = () => {
     );
 };
 
-const StatCard = ({ icon, label, value, color }) => (
-    <div className={`bg-white p-6 rounded-[28px] border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all`}>
-        <div className={`absolute top-0 right-0 p-4 opacity-10 text-${color}-500 group-hover:scale-110 transition-transform`}>
-            {React.cloneElement(icon, { size: 64 })}
-        </div>
-        <div className="relative z-10">
-            <div className={`w-14 h-14 rounded-2xl bg-${color}-50 flex items-center justify-center text-${color}-600 mb-5 group-hover:scale-110 transition-transform`}>
-                {React.cloneElement(icon, { size: 28 })}
+const StatCard = ({ icon, label, value, color }) => {
+    const colorMap = {
+        indigo: { bg: 'bg-indigo-50', text: 'text-indigo-600', icon: 'text-indigo-500' },
+        purple: { bg: 'bg-purple-50', text: 'text-purple-600', icon: 'text-purple-500' },
+        blue: { bg: 'bg-blue-50', text: 'text-blue-600', icon: 'text-blue-500' },
+        emerald: { bg: 'bg-emerald-50', text: 'text-emerald-600', icon: 'text-emerald-500' },
+    };
+    const style = colorMap[color] || colorMap.indigo;
+
+    return (
+        <div className={`bg-white p-6 rounded-[28px] border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all`}>
+            <div className={`absolute top-0 right-0 p-4 opacity-10 ${style.icon} group-hover:scale-110 transition-transform`}>
+                {React.cloneElement(icon, { size: 64 })}
             </div>
-            <h4 className="text-slate-400 font-bold text-xs uppercase tracking-[0.12em] mb-1.5">{label}</h4>
-            <div className="text-4xl font-black text-slate-900 tracking-tight">{value}</div>
+            <div className="relative z-10">
+                <div className={`w-14 h-14 rounded-2xl ${style.bg} flex items-center justify-center ${style.text} mb-5 group-hover:scale-110 transition-transform`}>
+                    {React.cloneElement(icon, { size: 28 })}
+                </div>
+                <h4 className="text-slate-400 font-bold text-xs uppercase tracking-[0.12em] mb-1.5">{label}</h4>
+                <div className="text-4xl font-black text-slate-900 tracking-tight">{value}</div>
+            </div>
         </div>
-    </div>
-);
+    );
+};
 
 const RoomCard = ({ room, onClick }) => {
     const isFull = room.tenants?.length >= room.capacity;
     const isVacant = (room.tenants?.length || 0) === 0;
     
     const getStatusStyle = () => {
-        if (isFull) return { color: 'rose', label: 'FULL' };
-        if (isVacant) return { color: 'emerald', label: 'VACANT' };
-        return { color: 'amber', label: 'OCCUPIED' };
+        if (isFull) return { 
+            bg: 'bg-rose-50', 
+            text: 'text-rose-600', 
+            fill: 'bg-rose-500', 
+            border: 'hover:border-rose-200', 
+            label: 'FULL' 
+        };
+        if (isVacant) return { 
+            bg: 'bg-emerald-50', 
+            text: 'text-emerald-600', 
+            fill: 'bg-emerald-500', 
+            border: 'hover:border-emerald-200', 
+            label: 'VACANT' 
+        };
+        return { 
+            bg: 'bg-amber-50', 
+            text: 'text-amber-600', 
+            fill: 'bg-amber-500', 
+            border: 'hover:border-amber-200', 
+            label: 'OCCUPIED' 
+        };
     };
     
     const status = getStatusStyle();
@@ -485,14 +513,14 @@ const RoomCard = ({ room, onClick }) => {
         <motion.div
             whileHover={{ y: -4, scale: 1.02 }}
             onClick={onClick}
-            className={`cursor-pointer group relative bg-white rounded-2xl border border-slate-100 hover:border-${status.color}-200 shadow-sm hover:shadow-xl transition-all p-6`}
+            className={`cursor-pointer group relative bg-white rounded-2xl border border-slate-100 ${status.border} shadow-sm hover:shadow-xl transition-all p-6`}
         >
             <div className="flex justify-between items-start mb-6">
                 <div className="flex flex-col">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Room</span>
                     <span className="text-3xl font-black text-slate-900 leading-none">{room.room_no}</span>
                 </div>
-                <div className={`px-2.5 py-1 rounded-lg bg-${status.color}-50 text-${status.color}-600 text-[10px] font-black uppercase tracking-widest`}>
+                <div className={`px-2.5 py-1 rounded-lg ${status.bg} ${status.text} text-[10px] font-black uppercase tracking-widest`}>
                     {status.label}
                 </div>
             </div>
@@ -505,7 +533,7 @@ const RoomCard = ({ room, onClick }) => {
                 {/* Progress bar */}
                 <div className="h-2 w-full bg-slate-50 rounded-full overflow-hidden border border-slate-100/50">
                     <div
-                        className={`h-full bg-${status.color}-500 transition-all duration-700 ease-out`}
+                        className={`h-full ${status.fill} transition-all duration-700 ease-out`}
                         style={{ width: `${((room.tenants?.length || 0) / room.capacity) * 100}%` }}
                     />
                 </div>
