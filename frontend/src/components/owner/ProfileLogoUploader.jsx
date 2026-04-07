@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { ImagePlus, Loader2, UploadCloud } from 'lucide-react';
+import Avatar from '../common/Avatar';
 
 const MAX_UPLOAD_SIZE = 2 * 1024 * 1024;
 const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
@@ -87,13 +88,13 @@ export default function ProfileLogoUploader({ logoUrl, onUpload, disabled = fals
     return (
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
             <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                <div className="w-16 h-16 rounded-2xl bg-white border border-slate-200 overflow-hidden flex items-center justify-center shrink-0">
-                    {logoUrl ? (
-                        <img src={logoUrl} alt="Hostel logo" className="w-full h-full object-cover" />
-                    ) : (
+                {logoUrl ? (
+                    <Avatar src={logoUrl} name="Hostel Logo" size={72} className="ring-2 ring-white border border-slate-200" />
+                ) : (
+                    <div className="w-[72px] h-[72px] rounded-full bg-white border border-slate-200 overflow-hidden flex items-center justify-center shrink-0">
                         <ImagePlus size={22} className="text-slate-400" />
-                    )}
-                </div>
+                    </div>
+                )}
                 <div className="flex-1">
                     <p className="text-sm font-semibold text-slate-900">Hostel Logo</p>
                     <p className="text-xs text-slate-500 mt-0.5">Used in owner avatar and receipt branding. PNG/JPG/WEBP, max 2MB.</p>

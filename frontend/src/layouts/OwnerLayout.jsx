@@ -11,6 +11,7 @@ import { useAuth } from '../context/AuthContext';
 import { notificationService, ownerService } from '../api/services';
 import SearchResultsDropdown from '../components/owner/SearchResultsDropdown';
 import ProfileMenu from '../components/owner/ProfileMenu';
+import Avatar from '../components/common/Avatar';
 
 
 const OwnerLayout = () => {
@@ -293,11 +294,12 @@ const OwnerLayout = () => {
                             onClick={() => setSidebarAccountOpen(!sidebarAccountOpen)}
                             className={`flex items-center gap-3 w-full p-2.5 rounded-xl hover:bg-slate-800 border border-slate-800 hover:border-slate-700 transition-all shadow-sm ${!sidebarOpen && 'justify-center'}`}
                         >
-                            <div className="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center shrink-0 border border-slate-700 overflow-hidden">
-                                {hostelLogoUrl
-                                    ? <img src={hostelLogoUrl} alt="Hostel logo" className="w-full h-full object-cover" />
-                                    : <User size={18} className="text-slate-400" />}
-                            </div>
+                            <Avatar
+                                src={hostelLogoUrl}
+                                name={user?.name}
+                                size={36}
+                                className="border border-slate-700 bg-slate-800 text-slate-200"
+                            />
                             {sidebarOpen && (
                                 <div className="text-left overflow-hidden flex-1">
                                     <p className="text-sm font-bold text-white truncate">{user?.name || 'User'}</p>

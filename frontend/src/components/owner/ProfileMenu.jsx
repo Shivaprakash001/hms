@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, CreditCard, LogOut, Settings, User } from 'lucide-react';
+import Avatar from '../common/Avatar';
 
 const ProfileMenu = ({
     user,
@@ -14,11 +15,6 @@ const ProfileMenu = ({
 }) => {
     const role = user?.role || 'Staff';
     const firstName = user?.name?.trim()?.split(' ')?.[0] || 'User';
-    const avatarInitial = user?.name?.trim()?.[0]?.toUpperCase() || 'U';
-    const avatarNode = logoUrl
-        ? <img src={logoUrl} alt="Hostel logo" className="w-full h-full object-cover" />
-        : avatarInitial;
-
     return (
         <div className="relative" ref={menuRef}>
             <button
@@ -33,9 +29,12 @@ const ProfileMenu = ({
                     <p className="text-xs font-medium text-slate-500 capitalize">{role}</p>
                     <p className="text-sm font-bold text-slate-900 group-hover:text-indigo-700 transition-colors">{firstName}</p>
                 </div>
-                <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-sm shadow-sm ring-2 ring-white">
-                    {avatarNode || <User size={18} />}
-                </div>
+                <Avatar
+                    src={logoUrl}
+                    name={user?.name}
+                    size={36}
+                    className="shadow-sm ring-2 ring-white group-hover:ring-indigo-200 transition-all"
+                />
                 <ChevronDown size={14} className={`text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </button>
 
@@ -47,9 +46,12 @@ const ProfileMenu = ({
                 aria-label="Open profile menu"
                 className="flex sm:hidden p-1 rounded-full text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
             >
-                <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-sm shadow-sm ring-2 ring-white">
-                    {avatarNode || <User size={18} />}
-                </div>
+                <Avatar
+                    src={logoUrl}
+                    name={user?.name}
+                    size={36}
+                    className="shadow-sm ring-2 ring-white hover:ring-indigo-400 transition-all"
+                />
             </button>
 
             <AnimatePresence>

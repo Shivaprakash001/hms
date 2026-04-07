@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 import { useAuth } from '../context/AuthContext';
 import { notificationService } from '../api/services';
+import Avatar from '../components/common/Avatar';
 
 const StudentLayout = () => {
     const { user, logout } = useAuth();
@@ -202,9 +203,12 @@ const StudentLayout = () => {
                                 </>
                             )}
                         </button>
-                        <div className="w-8 h-8 rounded-full bg-indigo-100 border border-indigo-200 text-indigo-700 flex items-center justify-center font-bold text-sm">
-                            {user?.name?.split(' ').map(n => n[0]).join('').substring(0, 2) || 'ST'}
-                        </div>
+                        <Avatar
+                            src={user?.avatar_url || user?.profile_photo_url || user?.avatar}
+                            name={user?.name}
+                            size={32}
+                            className="border border-indigo-200 hover:ring-2 hover:ring-indigo-500 transition-all"
+                        />
                     </div>
                 </header>
 
