@@ -191,21 +191,11 @@ const OwnerDashboard = () => {
                 </div>
                 {allActivities.length > 0 && (
                     <button
-                        onClick={() => setShowHistoryModal(!showHistoryModal)}
+                        onClick={() => navigate('/owner/activities')}
                         className="mt-5 w-full sm:w-auto px-4 py-2 text-sm font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors"
                     >
-                        {showHistoryModal ? 'Hide Full History' : 'View Full History'}
+                        View Full History
                     </button>
-                )}
-                {showHistoryModal && (
-                    <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
-                        {allActivities.map((activity) => (
-                            <div key={`all_${activity.id}`} className="flex justify-between text-xs text-slate-600">
-                                <span>{activity.detail}</span>
-                                <span>{activity.time}</span>
-                            </div>
-                        ))}
-                    </div>
                 )}
             </div>
         </div>

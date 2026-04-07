@@ -203,6 +203,7 @@ const OwnerLayout = () => {
         { name: 'Tenants', icon: Users, path: '/owner/students' },
         { name: 'Payments', icon: CreditCard, path: '/owner/payments' },
         { name: 'Expenses', icon: Receipt, path: '/owner/expenses' },
+        { name: 'Activity Log', icon: Clock, path: '/owner/activities' },
         { name: 'Billing & Plans', icon: CreditCard, path: '/owner/billing' },
     ];
 
