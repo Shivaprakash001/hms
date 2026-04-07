@@ -119,7 +119,20 @@ export const ownerService = {
     uploadLogo: async (file) => {
         const formData = new FormData();
         formData.append('file', file);
-        return ownerService._requestWithFallback('post', '/owner/logo', formData);
+        try {
+            const response = await api.post('/owner/logo', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            return response.data;
+        } catch (error) {
+            if (error?.response?.status === 404) {
+                const fallback = await api.post('/api/v1/owner/logo', formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+                return fallback.data;
+            }
+            throw error;
+        }
     },
     searchTenants: async (query, limit = 10) => {
         const response = await api.get('/owner/search', {

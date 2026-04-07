@@ -30,6 +30,14 @@ const api = axios.create({
 // Add a request interceptor to include the auth token
 api.interceptors.request.use(
     (config) => {
+        // For multipart requests, let the browser/axios set the boundary automatically.
+        // A forced JSON content-type causes FastAPI to miss UploadFile fields.
+        if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+            if (config.headers) {
+                delete config.headers['Content-Type'];
+            }
+        }
+
         // Check both potential storage keys used in AuthContext
         const ownerData = localStorage.getItem('ownerUser');
         const studentData = localStorage.getItem('studentUser');
