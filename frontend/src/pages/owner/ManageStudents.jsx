@@ -272,33 +272,27 @@ export default function ManageStudents() {
                     {/* Year Perspective - 1/3 width */}
                     <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col items-center justify-center min-h-[300px]">
                         <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">Academic Mix</h3>
-                        <div className="h-[200px] w-full min-w-[260px]" style={{ minHeight: 200 }}>
-                            {yearDistribution.length === 0 ? (
-                                <div className="h-full w-full flex items-center justify-center text-xs font-semibold text-slate-400">
-                                    No academic data yet
-                                </div>
-                            ) : (
-                                <ResponsiveContainer width="100%" height="100%" minWidth={260} minHeight={200}>
-                                    <PieChart>
-                                        <Pie
-                                            data={yearDistribution}
-                                            dataKey="value"
-                                            nameKey="name"
-                                            innerRadius={50}
-                                            outerRadius={75}
-                                            paddingAngle={5}
-                                            stroke="none"
-                                        >
-                                            {yearDistribution.map((entry, index) => (
-                                                <Cell key={entry.name} fill={YEAR_COLORS[index % YEAR_COLORS.length]} />
-                                            ))}
-                                        </Pie>
-                                        <RechartsTooltip 
-                                            contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '12px', fontWeight: 'bold' }}
-                                        />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            )}
+                        <div className="h-[180px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie
+                                        data={yearDistribution}
+                                        dataKey="value"
+                                        nameKey="name"
+                                        innerRadius={50}
+                                        outerRadius={75}
+                                        paddingAngle={5}
+                                        stroke="none"
+                                    >
+                                        {yearDistribution.map((entry, index) => (
+                                            <Cell key={entry.name} fill={YEAR_COLORS[index % YEAR_COLORS.length]} />
+                                        ))}
+                                    </Pie>
+                                    <RechartsTooltip 
+                                        contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '12px', fontWeight: 'bold' }}
+                                    />
+                                </PieChart>
+                            </ResponsiveContainer>
                         </div>
                         <div className="mt-4 flex flex-wrap justify-center gap-x-4 gap-y-1">
                             {yearDistribution.map((entry, index) => (
@@ -374,12 +368,8 @@ export default function ManageStudents() {
                                             initial={{ opacity: 0 }}
                                             animate={{ opacity: 1 }}
                                             key={student.id}
-                                            onClick={() => {
-                                                if (student.status !== 'INVITED') {
-                                                    setExtendedProfileStudent(student);
-                                                }
-                                            }}
-                                            className={`hover:bg-slate-50/80 transition-colors group ${student.status === 'INVITED' ? 'cursor-default' : 'cursor-pointer'}`}
+                                            onClick={() => setExtendedProfileStudent(student)}
+                                            className="hover:bg-slate-50/80 transition-colors cursor-pointer group"
                                         >
                                             <td className="px-8 py-5 whitespace-nowrap">
                                                 <div className="flex items-center gap-4">
@@ -448,12 +438,8 @@ export default function ManageStudents() {
                             {filteredStudents.map(student => (
                                 <div 
                                     key={student.id} 
-                                    onClick={() => {
-                                        if (student.status !== 'INVITED') {
-                                            setExtendedProfileStudent(student);
-                                        }
-                                    }}
-                                    className={`bg-white p-4 rounded-xl border border-slate-100 shadow-sm transition-all active:scale-[0.98] ${student.status === 'INVITED' ? 'cursor-default' : 'cursor-pointer hover:bg-slate-50/80'}`}
+                                    onClick={() => setExtendedProfileStudent(student)}
+                                    className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm cursor-pointer hover:bg-slate-50/80 transition-all active:scale-[0.98]"
                                 >
                                     <div className="flex justify-between items-center">
                                         <div className="font-black text-slate-900">{student.name}</div>
@@ -488,14 +474,6 @@ export default function ManageStudents() {
                                         </span>
                                         
                                         <div className="flex items-center gap-2">
-                                            {student.status === 'INVITED' && (
-                                                <button
-                                                    onClick={(e) => handleResendInvitation(student, e)}
-                                                    className="px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all active:scale-95 bg-indigo-50 text-indigo-600 border border-indigo-100"
-                                                >
-                                                    Resend
-                                                </button>
-                                            )}
                                             {(student.status === 'ACTIVE' || student.status === 'LEFT') && (
                                                 <button
                                                     onClick={(e) => handleToggleStatus(student, e)}
