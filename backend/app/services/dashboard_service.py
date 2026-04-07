@@ -7,6 +7,7 @@ from decimal import Decimal
 logger = get_logger(__name__)
 
 def get_dashboard_stats(user_id: str):
+    logger.info(f"Fetching dashboard stats for user_id: {user_id}")
     try:
         today = date.today()
         month_start = today.replace(day=1)
@@ -17,46 +18,32 @@ def get_dashboard_stats(user_id: str):
             next_month = today.replace(month=today.month + 1, day=1)
         
         # 1. Base query for owner's students
-        all_owner_students = supabase.table("students").select("id, status").eq("owner_id", user_id).execute()
-        all_student_ids = [s['id'] for s in all_owner_students.data]
-        total_tenants = len(all_owner_students.data)
-        active_tenants = len([s for s in all_owner_students.data if s['status'] == 'ACTIVE'])
+        students_res = supabase.table("students").select("id, status").eq("owner_id", user_id).execute()
+        students_data = students_res.data if students_res and students_res.data else []
+        all_student_ids = [s.get('id') for s in students_data if s.get('id')]
+        total_tenants = len(students_data)
+        active_tenants = len([s for s in students_data if s.get('status') == 'ACTIVE'])
 
         # 2. Total Capacity & Rooms
         rooms_res = supabase.table("rooms").select("capacity").eq("owner_id", user_id).execute()
-        total_rooms = len(rooms_res.data)
-        total_capacity = sum(int(r.get('capacity') or 0) for r in rooms_res.data)
+        rooms_data = rooms_res.data if rooms_res and rooms_res.data else []
+        total_rooms = len(rooms_data)
+        total_capacity = sum(int(r.get('capacity') or 0) for r in rooms_data)
         
         occupancy_rate = 0
         if total_capacity > 0:
             occupancy_rate = round((active_tenants / total_capacity) * 100)
         vacant_beds = max(total_capacity - active_tenants, 0)
 
-        if not all_student_ids:
-            return ServiceResponse.success({
-                "total_rooms": total_rooms,
-                "total_tenants": 0,
-                "active_tenants": 0,
-                "total_capacity": total_capacity,
-                "vacant_beds": total_capacity,
-                "occupancy_rate": occupancy_rate,
-                "revenue": 0.0,
-                "rent_collected_this_month": 0.0,
-                "expenses": 0.0,
-                "net_profit": 0.0,
-                "pending_dues": 0.0,
-                "overdue_amount": 0.0,
-                "overdue_count": 0
-            })
-
         # 3. Revenue (Current Month Collected)
-        payments_res = supabase.table("payments")\
+        payments_curr_res = supabase.table("payments")\
             .select("amount_paid")\
             .gte("payment_date", month_start.isoformat())\
             .lt("payment_date", next_month.isoformat())\
             .eq("owner_id", user_id)\
             .execute()
-        current_revenue = sum(Decimal(str(p.get('amount_paid') or 0)) for p in payments_res.data)
+        payments_curr_data = payments_curr_res.data if payments_curr_res and payments_curr_res.data else []
+        current_revenue = sum(Decimal(str(p.get('amount_paid') or 0)) for p in payments_curr_data)
 
         # 4. Expenses (Current Month)
         expenses_res = supabase.table("expenses")\
@@ -65,38 +52,47 @@ def get_dashboard_stats(user_id: str):
             .lt("expense_date", next_month.isoformat())\
             .eq("owner_id", user_id)\
             .execute()
-        current_expenses = sum(Decimal(str(e.get('amount') or 0)) for e in expenses_res.data)
+        expenses_data = expenses_res.data if expenses_res and expenses_res.data else []
+        current_expenses = sum(Decimal(str(e.get('amount') or 0)) for e in expenses_data)
 
-        # 5. Pending Dues (Total Unpaid across all time)
-        obligations_res = supabase.table("rent_obligations")\
-            .select("id, amount, due_date, status")\
-            .in_("student_id", all_student_ids)\
-            .neq("status", "PAID")\
-            .neq("status", "WAIVED")\
-            .execute()
-            
+        # Defaults for remaining metrics if no students
         pending_total = Decimal(0)
         overdue_total = Decimal(0)
         overdue_count = 0
 
-        for ob in obligations_res.data:
-            amount = Decimal(str(ob['amount']))
-            # Get payments for this obligation
-            p_res = supabase.table("payments").select("amount_paid").eq("obligation_id", ob['id']).execute()
-            paid = sum(Decimal(str(p['amount_paid'])) for p in p_res.data)
-            remaining = amount - paid
-            if remaining > 0:
-                pending_total += remaining
-
-                due_date_raw = ob.get('due_date')
-                if due_date_raw:
-                    try:
-                        due_date = date.fromisoformat(str(due_date_raw).split('T')[0])
-                        if due_date < today:
-                            overdue_total += remaining
-                            overdue_count += 1
-                    except Exception:
-                        pass
+        # 5. Pending Dues (Total Unpaid across all time)
+        if all_student_ids:
+            try:
+                obligations_res = supabase.table("rent_obligations")\
+                    .select("id, amount, due_date, status")\
+                    .in_("student_id", all_student_ids)\
+                    .neq("status", "PAID")\
+                    .neq("status", "WAIVED")\
+                    .execute()
+                obligations_data = obligations_res.data if obligations_res and obligations_res.data else []
+                
+                for ob in obligations_data:
+                    rem = Decimal(str(ob.get('amount') or 0))
+                    # Check for partial payments
+                    ob_id = ob.get('id')
+                    if ob_id:
+                        p_res = supabase.table("payments").select("amount_paid").eq("obligation_id", ob_id).execute()
+                        if p_res and p_res.data:
+                            paid = sum(Decimal(str(p.get('amount_paid') or 0)) for p in p_res.data)
+                            rem -= paid
+                    
+                    if rem > 0:
+                        pending_total += rem
+                        due_date_raw = ob.get('due_date')
+                        if due_date_raw:
+                            try:
+                                d_date = date.fromisoformat(str(due_date_raw).split('T')[0])
+                                if d_date < today:
+                                    overdue_total += rem
+                                    overdue_count += 1
+                            except: pass
+            except Exception as inner_e:
+                logger.error(f"Error in obligations sub-query: {inner_e}")
 
         return ServiceResponse.success({
             "total_rooms": total_rooms,
@@ -115,8 +111,8 @@ def get_dashboard_stats(user_id: str):
         })
 
     except Exception as e:
-        logger.exception(f"Error fetching dashboard stats: {e}")
-        return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, str(e))
+        logger.exception(f"Fatal error fetching dashboard stats: {e}")
+        return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, f"Dashboard system error: {str(e)}")
 
 def get_monthly_stats(user_id: str, months: int = 6):
     try:
