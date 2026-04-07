@@ -22,7 +22,7 @@ def get_dashboard_stats(user_id: str):
         total_tenants = len(all_owner_students.data)
         active_tenants = len([s for s in all_owner_students.data if s['status'] == 'ACTIVE'])
 
-        # 2. Total Capacity
+        # 2. Total Capacity & Rooms
         rooms_res = supabase.table("rooms").select("capacity").eq("owner_id", user_id).execute()
         total_rooms = len(rooms_res.data)
         total_capacity = sum(r['capacity'] for r in rooms_res.data)
@@ -32,8 +32,55 @@ def get_dashboard_stats(user_id: str):
             occupancy_rate = round((active_tenants / total_capacity) * 100)
         vacant_beds = max(total_capacity - active_tenants, 0)
 
-        # 3. Revenue (Current Month)
-        # ... (rest of the code)
+        # 3. Revenue (Current Month Collected)
+        payments_res = supabase.table("payments")\
+            .select("amount_paid")\
+            .gte("payment_date", month_start.isoformat())\
+            .lt("payment_date", next_month.isoformat())\
+            .eq("owner_id", user_id)\
+            .execute()
+        current_revenue = sum(Decimal(str(p['amount_paid'])) for p in payments_res.data)
+
+        # 4. Expenses (Current Month)
+        expenses_res = supabase.table("expenses")\
+            .select("amount")\
+            .gte("expense_date", month_start.isoformat())\
+            .lt("expense_date", next_month.isoformat())\
+            .eq("owner_id", user_id)\
+            .execute()
+        current_expenses = sum(Decimal(str(e['amount'])) for e in expenses_res.data)
+
+        # 5. Pending Dues (Total Unpaid across all time)
+        obligations_res = supabase.table("rent_obligations")\
+            .select("id, amount, due_date, status")\
+            .in_("student_id", all_student_ids)\
+            .neq("status", "PAID")\
+            .neq("status", "WAIVED")\
+            .execute()
+            
+        pending_total = Decimal(0)
+        overdue_total = Decimal(0)
+        overdue_count = 0
+
+        for ob in obligations_res.data:
+            amount = Decimal(str(ob['amount']))
+            # Get payments for this obligation
+            p_res = supabase.table("payments").select("amount_paid").eq("obligation_id", ob['id']).execute()
+            paid = sum(Decimal(str(p['amount_paid'])) for p in p_res.data)
+            remaining = amount - paid
+            if remaining > 0:
+                pending_total += remaining
+
+                due_date_raw = ob.get('due_date')
+                if due_date_raw:
+                    try:
+                        due_date = date.fromisoformat(str(due_date_raw).split('T')[0])
+                        if due_date < today:
+                            overdue_total += remaining
+                            overdue_count += 1
+                    except Exception:
+                        pass
+
         return ServiceResponse.success({
             "total_rooms": total_rooms,
             "total_tenants": total_tenants,
