@@ -134,9 +134,9 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                         </p>
                                     </div>
                                 ) : (
-                                    <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200 text-left mb-8">
-                                        <p className="text-sm font-semibold text-emerald-700">Invitation email sent successfully.</p>
-                                        <p className="text-xs text-emerald-700/80 mt-1">The tenant will receive an activation link in their inbox.</p>
+                                    <div className="bg-green-50 p-4 rounded-xl border border-green-200 text-left mb-8">
+                                        <p className="text-sm font-semibold text-green-700">Invitation email sent successfully.</p>
+                                        <p className="text-xs text-green-700/80 mt-1">The tenant will receive an activation link in their inbox.</p>
                                     </div>
                                 )}
                                 <button

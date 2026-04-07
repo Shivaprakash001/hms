@@ -168,9 +168,9 @@ export default function ManageStudents() {
 
     const getPaymentBadgeStyles = (status) => {
         const styles = {
-            PAID: 'bg-emerald-50 text-emerald-700 border-emerald-100',
-            PARTIAL: 'bg-amber-50 text-amber-700 border-amber-100',
-            PENDING: 'bg-rose-50 text-rose-700 border-rose-100',
+            PAID: 'bg-green-50 text-green-700 border-green-100',
+            PARTIAL: 'bg-yellow-50 text-yellow-700 border-yellow-100',
+            PENDING: 'bg-red-50 text-red-700 border-red-100',
             WAIVED: 'bg-slate-100 text-slate-700 border-slate-200',
             NOT_GENERATED: 'bg-indigo-50 text-indigo-700 border-indigo-100',
             INACTIVE: 'bg-slate-50 text-slate-500 border-slate-100'
@@ -228,16 +228,16 @@ export default function ManageStudents() {
                         title="Active Tenants"
                         value={stats.active}
                         icon={CheckCircle2}
-                        iconBg="bg-emerald-50"
-                        iconColor="text-emerald-600"
+                        iconBg="bg-green-50"
+                        iconColor="text-green-600"
                         isCurrency={false}
                     />
                     <StatCard
                         title="Left / Inactive"
                         value={stats.left}
                         icon={AlertCircle}
-                        iconBg="bg-amber-50"
-                        iconColor="text-amber-600"
+                        iconBg="bg-yellow-50"
+                        iconColor="text-yellow-600"
                         isCurrency={false}
                     />
                 </div>
@@ -325,7 +325,7 @@ export default function ManageStudents() {
                                             </td>
                                             <td className="px-8 py-5">
                                                 <div className="flex flex-col">
-                                                    <span className={`text-sm font-bold ${Number(student.paymentSummary?.pending_amount || 0) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                                    <span className={`text-sm font-bold ${Number(student.paymentSummary?.pending_amount || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
                                                         {formatCurrency(student.paymentSummary?.pending_amount || 0)}
                                                     </span>
                                                     <span className="text-xs text-slate-400">
@@ -394,7 +394,7 @@ export default function ManageStudents() {
                                         </div>
                                         <div>
                                             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Pending</p>
-                                            <p className={`font-semibold ${Number(student.paymentSummary?.pending_amount || 0) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                            <p className={`font-semibold ${Number(student.paymentSummary?.pending_amount || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
                                                 {formatCurrency(student.paymentSummary?.pending_amount || 0)}
                                             </p>
                                         </div>
@@ -411,20 +411,20 @@ export default function ManageStudents() {
                                     </div>
                                     <div className="flex justify-between mt-3 text-sm text-slate-500 items-center">
                                         <div>
-                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${student.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-50 text-slate-500'
+                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${student.status === 'ACTIVE' ? 'bg-green-50 text-green-600' : 'bg-slate-50 text-slate-500'
                                                 }`}>{student.status}</span>
                                         </div>
                                         <div className="flex items-center gap-2">
                                             {(student.status === 'ACTIVE' || student.status === 'LEFT') && (
-                                                <button
-                                                    onClick={(e) => handleToggleStatus(student, e)}
-                                                    className={`px-2 py-1 rounded text-xs font-bold ${student.status === 'ACTIVE'
-                                                        ? 'bg-amber-50 text-amber-600'
-                                                        : 'bg-emerald-50 text-emerald-600'
-                                                        }`}
-                                                >
-                                                    {student.status === 'ACTIVE' ? 'Mark Left' : 'Activate'}
-                                                </button>
+                                                    <button
+                                                        onClick={(e) => handleToggleStatus(student, e)}
+                                                        className={`px-2 py-1 rounded text-xs font-bold ${student.status === 'ACTIVE'
+                                                            ? 'bg-yellow-50 text-yellow-600'
+                                                            : 'bg-green-50 text-green-600'
+                                                            }`}
+                                                    >
+                                                        {student.status === 'ACTIVE' ? 'Mark Left' : 'Activate'}
+                                                    </button>
                                             )}
                                         </div>
                                     </div>

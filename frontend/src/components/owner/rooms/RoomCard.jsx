@@ -10,17 +10,17 @@ const RoomCard = ({ room, onClick }) => {
 
     // Status Badge Helpers
     const getStatusStyles = () => {
-        if (isFull) return { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-100', label: 'Full' };
-        if (isEmpty) return { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-100', label: 'Vacant' };
-        return { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-100', label: 'Occupied' };
+        if (isFull) return { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-100', label: 'Full' };
+        if (isEmpty) return { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-100', label: 'Vacant' };
+        return { bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-100', label: 'Occupied' };
     };
 
     const status = getStatusStyles();
 
     // Progress Bar Color
     const getProgressColor = () => {
-        if (occupancyPercentage < 50) return 'bg-emerald-500';
-        if (occupancyPercentage < 80) return 'bg-orange-500';
+        if (occupancyPercentage < 50) return 'bg-green-500';
+        if (occupancyPercentage < 80) return 'bg-yellow-500';
         return 'bg-red-500';
     };
 
@@ -79,7 +79,7 @@ const RoomCard = ({ room, onClick }) => {
                             <Users size={14} className="text-slate-400" />
                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Vacancy</span>
                         </div>
-                        <p className={`text-sm font-bold ml-5 ${vacantBeds > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                        <p className={`text-sm font-bold ml-5 ${vacantBeds > 0 ? 'text-green-600' : 'text-slate-400'}`}>
                             {vacantBeds} Available
                         </p>
                     </div>

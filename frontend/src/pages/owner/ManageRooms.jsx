@@ -284,7 +284,7 @@ const ManageRooms = () => {
                 <StatCard icon={<DoorOpen />} label="Total Rooms" value={totalRooms} color="blue" />
                 <StatCard icon={<Users />} label="Total Occupants" value={totalOccupants} color="purple" />
                 <StatCard icon={<BedDouble />} label="Total Capacity" value={totalCapacity} color="indigo" />
-                <StatCard icon={<LayoutGrid />} label="Occupancy Rate" value={`${occupancyRate}%`} color="emerald" />
+                <StatCard icon={<LayoutGrid />} label="Occupancy Rate" value={`${occupancyRate}%`} color="green" />
             </div>
 
             {/* Controls */}
@@ -471,9 +471,9 @@ const StatCard = ({ icon, label, value, color }) => (
 const RoomCard = ({ room, onClick }) => {
     const getStatusColor = (status) => {
         switch (status) {
-            case 'Vacant': return 'emerald';
-            case 'Full': return 'rose';
-            default: return 'amber';
+            case 'Vacant': return 'green';
+            case 'Full': return 'red';
+            default: return 'yellow';
         }
     };
     const statusColor = getStatusColor(room.status);
@@ -521,11 +521,11 @@ const RoomDetailSidebar = ({ room, onClose, onAddTenant, onRemoveTenant, onShift
     const getPaymentTone = (status) => {
         switch (status) {
             case 'PAID':
-                return 'bg-emerald-50 text-emerald-700 border-emerald-100';
+                return 'bg-green-50 text-green-700 border-green-100';
             case 'PARTIAL':
-                return 'bg-amber-50 text-amber-700 border-amber-100';
+                return 'bg-yellow-50 text-yellow-700 border-yellow-100';
             case 'PENDING':
-                return 'bg-rose-50 text-rose-700 border-rose-100';
+                return 'bg-red-50 text-red-700 border-red-100';
             default:
                 return 'bg-slate-50 text-slate-600 border-slate-100';
         }

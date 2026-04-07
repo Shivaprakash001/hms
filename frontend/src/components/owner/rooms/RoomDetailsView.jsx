@@ -23,11 +23,11 @@ const RoomDetailsView = ({ room, onBack, onAddTenant, onShiftTenant, onRemoveTen
 
     const getAvailabilityBadge = () => {
         if (vacantBeds > 1) {
-            return { color: 'bg-emerald-100 text-emerald-700', text: `${vacantBeds} Beds Available` };
+            return { color: 'bg-green-100 text-green-700', text: `${vacantBeds} Beds Available` };
         } else if (vacantBeds === 1) {
-            return { color: 'bg-amber-100 text-amber-700', text: '1 Bed Available' };
+            return { color: 'bg-yellow-100 text-yellow-700', text: '1 Bed Available' };
         } else {
-            return { color: 'bg-rose-100 text-rose-700', text: 'Full Capacity' };
+            return { color: 'bg-red-100 text-red-700', text: 'Full Capacity' };
         }
     };
 
@@ -67,7 +67,7 @@ const RoomDetailsView = ({ room, onBack, onAddTenant, onShiftTenant, onRemoveTen
                             <div>
                                 <div className="flex items-center gap-3 mb-2">
                                     <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Room Details</h1>
-                                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide border ${badge.color === 'bg-emerald-100 text-emerald-700' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : badge.color === 'bg-amber-100 text-amber-700' ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-rose-50 text-rose-700 border-rose-100'}`}>
+                                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide border ${badge.color === 'bg-green-100 text-green-700' ? 'bg-green-50 text-green-700 border-green-100' : badge.color === 'bg-yellow-100 text-yellow-700' ? 'bg-yellow-50 text-yellow-700 border-yellow-100' : 'bg-red-50 text-red-700 border-red-100'}`}>
                                         {badge.text}
                                     </span>
                                 </div>
@@ -101,7 +101,7 @@ const RoomDetailsView = ({ room, onBack, onAddTenant, onShiftTenant, onRemoveTen
                     {[
                         { label: 'Total Beds', val: room.capacity, icon: Bed, color: 'text-blue-600', bg: 'bg-blue-50' },
                         { label: 'Occupied', val: room.occupied, icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-                        { label: 'Vacant', val: vacantBeds, icon: Bed, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                        { label: 'Vacant', val: vacantBeds, icon: Bed, color: 'text-green-600', bg: 'bg-green-50' },
                         { label: 'Revenue', val: `₹${totalRent.toLocaleString()}`, icon: CreditCard, color: 'text-violet-600', bg: 'bg-violet-50' }
                     ].map((stat) => (
                         <motion.div
@@ -180,7 +180,7 @@ const RoomDetailsView = ({ room, onBack, onAddTenant, onShiftTenant, onRemoveTen
                                             </button>
                                             <button
                                                 onClick={() => onRemoveTenant(tenant.id)}
-                                                className="flex items-center justify-center gap-2 px-3 py-2 text-sm font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 hover:text-rose-700 rounded-lg transition-colors"
+                                                className="flex items-center justify-center gap-2 px-3 py-2 text-sm font-bold text-red-600 bg-red-50 hover:bg-red-100 hover:text-red-700 rounded-lg transition-colors"
                                             >
                                                 <Trash2 size={14} /> Vacate
                                             </button>
