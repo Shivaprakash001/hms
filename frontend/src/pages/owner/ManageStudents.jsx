@@ -371,60 +371,57 @@ export default function ManageStudents() {
                             </tbody>
                         </table>
 
-                        {/* Mobile Card View (Simplified) */}
                         <div className="md:hidden space-y-4 p-4">
                             {filteredStudents.map(student => (
-                                <div key={student.id} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-                                    <div className="flex justify-between" onClick={() => setExtendedProfileStudent(student)}>
-                                        <div className="font-bold">{student.name}</div>
-                                        <div className="text-sm font-bold text-slate-500">{student.room}</div>
+                                <div 
+                                    key={student.id} 
+                                    onClick={() => setExtendedProfileStudent(student)}
+                                    className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm cursor-pointer hover:bg-slate-50/80 transition-all active:scale-[0.98]"
+                                >
+                                    <div className="flex justify-between items-center">
+                                        <div className="font-black text-slate-900">{student.name}</div>
+                                        <div className="px-2.5 py-1 bg-slate-50 rounded-lg text-[11px] font-black text-slate-500 border border-slate-100 uppercase tracking-wider">
+                                            Room {student.room}
+                                        </div>
                                     </div>
-                                    <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                                        <div>
-                                            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Roll No</p>
-                                            <p className="font-semibold text-slate-700">{student.rollNumber || '-'}</p>
+                                    <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
+                                        <div className="space-y-1">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Roll Number</p>
+                                            <p className="font-bold text-slate-700">{student.rollNumber || '-'}</p>
                                         </div>
-                                        <div>
-                                            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Year</p>
-                                            <p className="font-semibold text-slate-700">{student.yearOfStudy ? `${student.yearOfStudy} Year` : '-'}</p>
+                                        <div className="space-y-1">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Year</p>
+                                            <p className="font-bold text-slate-700">{student.yearOfStudy ? `${student.yearOfStudy} Year` : '-'}</p>
                                         </div>
-                                        <div>
-                                            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Rent</p>
-                                            <p className="font-semibold text-slate-700">{formatCurrency(student.rent)}</p>
+                                        <div className="space-y-1">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Monthly Rent</p>
+                                            <p className="font-bold text-slate-900">{formatCurrency(student.rent)}</p>
                                         </div>
-                                        <div>
-                                            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Pending</p>
-                                            <p className={`font-semibold ${Number(student.paymentSummary?.pending_amount || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                        <div className="space-y-1">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Dues Pending</p>
+                                            <p className={`font-bold ${Number(student.paymentSummary?.pending_amount || 0) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                                                 {formatCurrency(student.paymentSummary?.pending_amount || 0)}
                                             </p>
                                         </div>
-                                        <div>
-                                            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Last Paid</p>
-                                            <p className="font-semibold text-slate-700">{formatDate(student.paymentSummary?.last_paid_at)}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Payment</p>
-                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold border ${getPaymentBadgeStyles(student.paymentSummary?.payment_status)}`}>
-                                                {student.paymentSummary?.payment_status === 'NOT_GENERATED' ? 'NOT GENERATED' : (student.paymentSummary?.payment_status || 'PENDING')}
-                                            </span>
-                                        </div>
                                     </div>
-                                    <div className="flex justify-between mt-3 text-sm text-slate-500 items-center">
-                                        <div>
-                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${student.status === 'ACTIVE' ? 'bg-green-50 text-green-600' : 'bg-slate-50 text-slate-500'
-                                                }`}>{student.status}</span>
-                                        </div>
+                                    
+                                    <div className="mt-5 pt-4 border-t border-slate-50 flex items-center justify-between">
+                                        <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-black border uppercase tracking-wider ${getPaymentBadgeStyles(student.paymentSummary?.payment_status)}`}>
+                                            {student.paymentSummary?.payment_status || 'PENDING'}
+                                        </span>
+                                        
                                         <div className="flex items-center gap-2">
                                             {(student.status === 'ACTIVE' || student.status === 'LEFT') && (
-                                                    <button
-                                                        onClick={(e) => handleToggleStatus(student, e)}
-                                                        className={`px-2 py-1 rounded text-xs font-bold ${student.status === 'ACTIVE'
-                                                            ? 'bg-yellow-50 text-yellow-600'
-                                                            : 'bg-green-50 text-green-600'
-                                                            }`}
-                                                    >
-                                                        {student.status === 'ACTIVE' ? 'Mark Left' : 'Activate'}
-                                                    </button>
+                                                <button
+                                                    onClick={(e) => handleToggleStatus(student, e)}
+                                                    className={`px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all active:scale-95 ${
+                                                        student.status === 'ACTIVE'
+                                                        ? 'bg-amber-50 text-amber-600 border border-amber-100'
+                                                        : 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                                                    }`}
+                                                >
+                                                    {student.status === 'ACTIVE' ? 'Mark Left' : 'Activate'}
+                                                </button>
                                             )}
                                         </div>
                                     </div>
