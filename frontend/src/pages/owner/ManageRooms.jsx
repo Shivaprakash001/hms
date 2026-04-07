@@ -280,22 +280,23 @@ const ManageRooms = () => {
     return (
         <div className="space-y-8 pb-20">
             {/* Header Stats */}
-            <div className="grid grid-cols-2 gap-4">
+            {/* Header Stats */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard icon={<DoorOpen />} label="Total Rooms" value={totalRooms} color="blue" />
                 <StatCard icon={<Users />} label="Total Occupants" value={totalOccupants} color="purple" />
                 <StatCard icon={<BedDouble />} label="Total Capacity" value={totalCapacity} color="indigo" />
-                <StatCard icon={<LayoutGrid />} label="Occupancy Rate" value={`${occupancyRate}%`} color="green" />
+                <StatCard icon={<LayoutGrid />} label="Occupancy Rate" value={`${occupancyRate}%`} color="emerald" />
             </div>
 
             {/* Controls */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div className="flex gap-2 bg-white p-1 rounded-xl border border-slate-200 shadow-sm overflow-x-auto max-w-full">
+                <div className="flex gap-2 bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm overflow-x-auto max-w-full">
                     {['All', 'Occupied', 'Vacant', 'Full'].map((status) => (
                         <button
                             key={status}
                             onClick={() => setFilterStatus(status)}
-                            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${filterStatus === status
-                                ? 'bg-slate-900 text-white shadow-md'
+                            className={`px-5 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${filterStatus === status
+                                ? 'bg-indigo-600 text-white shadow-md'
                                 : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
                                 }`}
                         >
@@ -307,14 +308,14 @@ const ManageRooms = () => {
                 <div className="flex gap-3 w-full md:w-auto">
                     <button
                         onClick={() => setShowAddFloorModal(true)}
-                        className="px-6 py-3 bg-white text-slate-700 border border-slate-200 rounded-xl font-bold hover:bg-slate-50 transition-all flex items-center gap-2 shadow-sm"
+                        className="flex-1 md:flex-none px-6 py-3 bg-white text-slate-700 border border-slate-200 rounded-xl font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-2 shadow-sm"
                     >
-                        <Layers size={18} />
+                        <Plus size={18} />
                         Add Floor
                     </button>
                     <button
                         onClick={() => setShowAddRoomModal(true)}
-                        className="px-6 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-black transition-all flex items-center gap-2 shadow-lg shadow-slate-200"
+                        className="flex-1 md:flex-none px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-100"
                     >
                         <Plus size={18} />
                         Add Room
@@ -325,15 +326,15 @@ const ManageRooms = () => {
             {/* Floors and Rooms */}
             <div className="space-y-8">
                 {floors.map((floor) => (
-                    <div key={floor.id} className="bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden">
-                        <div className="px-8 py-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-700 font-black shadow-sm">
+                    <div key={floor.id} className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden">
+                        <div className="px-8 py-6 border-b border-slate-50 bg-slate-50/30 flex justify-between items-center">
+                            <div className="flex items-center gap-4">
+                                <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-900 font-black shadow-sm">
                                     {floor.number}
                                 </div>
-                                <h3 className="text-lg font-bold text-slate-800">Floor {floor.number}</h3>
+                                <h3 className="text-xl font-black text-slate-900 tracking-tight">Floor {floor.number}</h3>
                             </div>
-                            <span className="text-sm font-medium text-slate-400">
+                            <span className="text-sm font-bold text-slate-400">
                                 {floor.rooms.length} Rooms
                             </span>
                         </div>
@@ -355,7 +356,7 @@ const ManageRooms = () => {
                                     onClick={() => {
                                         setShowAddRoomModal(true);
                                     }}
-                                    className="h-[180px] rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-3 text-slate-400 hover:border-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all group"
+                                    className="h-[180px] rounded-24px border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-3 text-slate-400 hover:border-indigo-300 hover:text-indigo-500 hover:bg-indigo-50/30 transition-all group"
                                 >
                                     <div className="w-12 h-12 rounded-full bg-slate-50 group-hover:bg-white flex items-center justify-center transition-colors">
                                         <Plus size={24} />
@@ -368,17 +369,17 @@ const ManageRooms = () => {
                 ))}
 
                 {floors.length === 0 && (
-                    <div className="text-center py-20 bg-white rounded-[32px] border border-dashed border-slate-200">
-                        <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6 text-slate-300">
-                            <Layers size={40} />
+                    <div className="text-center py-24 bg-white rounded-[40px] border border-dashed border-slate-200">
+                        <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6 text-slate-200">
+                            <Layers size={48} />
                         </div>
-                        <h3 className="text-xl font-black text-slate-900 mb-2">No Rooms Found</h3>
-                        <p className="text-slate-500 max-w-sm mx-auto mb-8">
-                            Get started by adding floors and rooms to your property structure.
+                        <h3 className="text-2xl font-black text-slate-900 mb-2">Build Your Property</h3>
+                        <p className="text-slate-500 max-w-sm mx-auto mb-10 font-medium">
+                            Configure your hostel by adding floors and assigning room structures to start accepting tenants.
                         </p>
                         <button
                             onClick={() => setShowAddFloorModal(true)}
-                            className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-bold hover:bg-black transition-all shadow-xl shadow-slate-200"
+                            className="px-8 py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100"
                         >
                             Add First Floor
                         </button>
@@ -454,56 +455,58 @@ const ManageRooms = () => {
 };
 
 const StatCard = ({ icon, label, value, color }) => (
-    <div className={`bg-white p-6 rounded-[24px] border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all`}>
+    <div className={`bg-white p-6 rounded-[28px] border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all`}>
         <div className={`absolute top-0 right-0 p-4 opacity-10 text-${color}-500 group-hover:scale-110 transition-transform`}>
-            {React.cloneElement(icon, { size: 48 })}
+            {React.cloneElement(icon, { size: 64 })}
         </div>
         <div className="relative z-10">
-            <div className={`w-12 h-12 rounded-2xl bg-${color}-50 flex items-center justify-center text-${color}-600 mb-4 group-hover:scale-110 transition-transform`}>
-                {icon}
+            <div className={`w-14 h-14 rounded-2xl bg-${color}-50 flex items-center justify-center text-${color}-600 mb-5 group-hover:scale-110 transition-transform`}>
+                {React.cloneElement(icon, { size: 28 })}
             </div>
-            <h4 className="text-slate-400 font-bold text-sm uppercase tracking-wider mb-1">{label}</h4>
-            <div className="text-3xl font-black text-slate-900">{value}</div>
+            <h4 className="text-slate-400 font-bold text-xs uppercase tracking-[0.12em] mb-1.5">{label}</h4>
+            <div className="text-4xl font-black text-slate-900 tracking-tight">{value}</div>
         </div>
     </div>
 );
 
 const RoomCard = ({ room, onClick }) => {
-    const getStatusColor = (status) => {
-        switch (status) {
-            case 'Vacant': return 'green';
-            case 'Full': return 'red';
-            default: return 'yellow';
-        }
+    const isFull = room.tenants?.length >= room.capacity;
+    const isVacant = (room.tenants?.length || 0) === 0;
+    
+    const getStatusStyle = () => {
+        if (isFull) return { color: 'rose', label: 'FULL' };
+        if (isVacant) return { color: 'emerald', label: 'VACANT' };
+        return { color: 'amber', label: 'OCCUPIED' };
     };
-    const statusColor = getStatusColor(room.status);
+    
+    const status = getStatusStyle();
 
     return (
         <motion.div
-            whileHover={{ y: -4 }}
+            whileHover={{ y: -4, scale: 1.02 }}
             onClick={onClick}
-            className={`cursor-pointer group relative bg-white rounded-2xl border-2 border-transparent hover:border-${statusColor}-100 shadow-sm hover:shadow-xl transition-all p-5`}
+            className={`cursor-pointer group relative bg-white rounded-2xl border border-slate-100 hover:border-${status.color}-200 shadow-sm hover:shadow-xl transition-all p-6`}
         >
-            <div className="flex justify-between items-start mb-4">
+            <div className="flex justify-between items-start mb-6">
                 <div className="flex flex-col">
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Room</span>
-                    <span className="text-2xl font-black text-slate-900">{room.room_no}</span>
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Room</span>
+                    <span className="text-3xl font-black text-slate-900 leading-none">{room.room_no}</span>
                 </div>
-                <div className={`px-3 py-1 rounded-full bg-${statusColor}-50 text-${statusColor}-600 text-xs font-bold uppercase tracking-wide`}>
-                    {room.status}
+                <div className={`px-2.5 py-1 rounded-lg bg-${status.color}-50 text-${status.color}-600 text-[10px] font-black uppercase tracking-widest`}>
+                    {status.label}
                 </div>
             </div>
 
-            <div className="space-y-3">
-                <div className="flex items-center gap-2 text-slate-500 text-sm font-medium">
-                    <Users size={16} />
-                    <span>{room.tenants.length} / {room.capacity} Occupants</span>
+            <div className="space-y-4">
+                <div className="flex items-center gap-2 text-slate-500 text-xs font-bold">
+                    <Users size={16} className="text-slate-300" />
+                    <span>{room.tenants?.length || 0} / {room.capacity} Occupants</span>
                 </div>
                 {/* Progress bar */}
-                <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-2 w-full bg-slate-50 rounded-full overflow-hidden border border-slate-100/50">
                     <div
-                        className={`h-full bg-${statusColor}-500 transition-all duration-500`}
-                        style={{ width: `${(room.tenants.length / room.capacity) * 100}%` }}
+                        className={`h-full bg-${status.color}-500 transition-all duration-700 ease-out`}
+                        style={{ width: `${((room.tenants?.length || 0) / room.capacity) * 100}%` }}
                     />
                 </div>
             </div>
