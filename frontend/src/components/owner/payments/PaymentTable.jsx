@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { MoreVertical, CheckCircle, Clock, AlertCircle, Eye, History, Download, FileText } from 'lucide-react';
+import { CheckCircle, Clock, AlertCircle, Eye, History, Download, Landmark } from 'lucide-react';
 
 const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadReceipt }) => {
     return (
@@ -13,7 +13,9 @@ const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadRece
                         <th className="text-left py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider">Tenant</th>
                         <th className="text-left py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider">Room</th>
                         <th className="text-left py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider">Month</th>
-                        <th className="text-left py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider">Amount</th>
+                        <th className="text-left py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider">Rent</th>
+                        <th className="text-left py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider">Paid</th>
+                        <th className="text-left py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider">Balance</th>
                         <th className="text-left py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
                         <th className="text-right py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
                     </tr>
@@ -21,7 +23,7 @@ const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadRece
                 <tbody className="divide-y divide-slate-50">
                     {payments.length === 0 ? (
                         <tr>
-                            <td colSpan="6" className="py-12 text-center">
+                            <td colSpan="8" className="py-12 text-center">
                                 <div className="flex flex-col items-center justify-center text-slate-400">
                                     <Clock size={48} className="mb-4 text-slate-200" />
                                     <p className="text-lg font-medium text-slate-900">No payments found</p>
@@ -55,7 +57,9 @@ const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadRece
                                     </span>
                                 </td>
                                 <td className="py-4 px-6 text-sm text-slate-600 font-medium">{payment.month}</td>
-                                <td className="py-4 px-6 text-sm font-bold text-slate-900">₹{payment.amount.toLocaleString()}</td>
+                                <td className="py-4 px-6 text-sm font-bold text-slate-900">₹{Number(payment.rentAmount || 0).toLocaleString()}</td>
+                                <td className="py-4 px-6 text-sm font-semibold text-emerald-700">₹{Number(payment.paidAmount || 0).toLocaleString()}</td>
+                                <td className="py-4 px-6 text-sm font-semibold text-amber-700">₹{Number(payment.balance || 0).toLocaleString()}</td>
                                 <td className="py-4 px-6">
                                     <StatusBadge status={payment.status} />
                                 </td>
@@ -64,9 +68,12 @@ const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadRece
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                onDownloadReceipt(payment.id);
+                                                if (payment.latestPaymentId) {
+                                                    onDownloadReceipt(payment.latestPaymentId);
+                                                }
                                             }}
-                                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                            disabled={!payment.latestPaymentId}
+                                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-40"
                                             title="Download Receipt"
                                         >
                                             <Download size={18} />
@@ -88,6 +95,18 @@ const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadRece
                                     >
                                         <Eye size={18} />
                                     </button>
+                                    {Number(payment.balance || 0) > 0 && payment.status !== 'waived' && (
+                                        <button
+                                            className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                                            title="Record Payment"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onSelectPayment(payment);
+                                            }}
+                                        >
+                                            <Landmark size={18} />
+                                        </button>
+                                    )}
                                 </td>
                             </motion.tr>
                         ))
@@ -122,7 +141,7 @@ const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadRece
                                         <p className="text-xs text-slate-500 font-medium">Room {payment.room}</p>
                                     </div>
                                 </div>
-                                <span className="text-sm font-bold text-slate-900">₹{payment.amount.toLocaleString()}</span>
+                                <span className="text-sm font-bold text-slate-900">₹{Number(payment.balance || 0).toLocaleString()}</span>
                             </div>
 
                             <div className="flex items-center justify-between pt-2 border-t border-slate-50 text-xs">
@@ -141,13 +160,17 @@ const StatusBadge = ({ status }) => {
     const styles = {
         paid: 'bg-emerald-50 text-emerald-700 border-emerald-100',
         pending: 'bg-amber-50 text-amber-700 border-amber-100',
-        overdue: 'bg-rose-50 text-rose-700 border-rose-100'
+        partial: 'bg-sky-50 text-sky-700 border-sky-100',
+        overdue: 'bg-rose-50 text-rose-700 border-rose-100',
+        waived: 'bg-slate-100 text-slate-700 border-slate-200'
     };
 
     const icons = {
         paid: CheckCircle,
         pending: Clock,
-        overdue: AlertCircle
+        partial: Clock,
+        overdue: AlertCircle,
+        waived: CheckCircle
     };
 
     const Icon = icons[status] || Clock;

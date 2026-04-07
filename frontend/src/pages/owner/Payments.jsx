@@ -13,7 +13,8 @@ import { paymentService } from '../../api/services';
 
 const Payments = () => {
     const navigate = useNavigate();
-    const [payments, setPayments] = useState([]);
+    const [ledgerRows, setLedgerRows] = useState([]);
+    const [paymentRecords, setPaymentRecords] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
@@ -22,6 +23,8 @@ const Payments = () => {
     const [tenantFilter, setTenantFilter] = useState('all');
     const [selectedPayment, setSelectedPayment] = useState(null);
     const [historyTenant, setHistoryTenant] = useState(null);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
 
     // Generate rent modal state
     const [showGenModal, setShowGenModal] = useState(false);
@@ -35,131 +38,142 @@ const Payments = () => {
     const [previewData, setPreviewData] = useState(null);
     const [exportLoading, setExportLoading] = useState(false);
 
-    const [activeTab, setActiveTab] = useState('dues'); // 'dues' or 'transactions'
-    const [transactions, setTransactions] = useState([]);
-    
-    // Initial Data Load
     useEffect(() => {
-        if (activeTab === 'dues') {
-            loadPayments();
-        }
-    }, [activeTab]);
+        loadLedger();
+    }, []);
 
-    useEffect(() => {
-        if (activeTab === 'transactions') {
-            loadTransactions();
+    const normalizeStatus = (status, dueDate, balance) => {
+        const raw = String(status || '').toUpperCase();
+        if (raw === 'PAID') return 'paid';
+        if (raw === 'WAIVED') return 'waived';
+        if (raw === 'PARTIAL') {
+            if (!dueDate) return 'partial';
+            return new Date(dueDate) < new Date() && Number(balance) > 0 ? 'overdue' : 'partial';
         }
-    }, [activeTab, monthFilter, statusFilter, methodFilter]);
-
-    const loadPayments = async () => {
-        setIsLoading(true);
-        try {
-            const data = await paymentService.getAllDues();
-            const formatted = data.map(item => ({
-                id: item.obligation_id,
-                obligationId: item.obligation_id,
-                tenantId: item.student_id,
-                tenantName: item.student_name,
-                tenantPhone: item.student_phone || null,
-                tenantEmail: item.student_email || null,
-                room: item.room_no,
-                type: 'Rent',
-                amount: Number(item.amount),
-                status: item.status.toLowerCase(),
-                date: item.rent_month,
-                month: item.rent_month,
-                dueDate: item.due_date,
-                method: null,
-                isReceiptAvailable: false,
-                entityType: 'obligation'
-            }));
-            setPayments(formatted);
-        } catch (error) {
-            console.error("Failed to load payments:", error);
-        } finally {
-            setIsLoading(false);
-        }
+        if (!dueDate) return 'pending';
+        return new Date(dueDate) < new Date() && Number(balance) > 0 ? 'overdue' : 'pending';
     };
 
-    const loadTransactions = async () => {
+    const loadLedger = async () => {
         setIsLoading(true);
         try {
-            const params = { limit: 100 };
-            if (methodFilter !== 'all') {
-                params.payment_method = methodFilter;
-            }
-            if (statusFilter !== 'all') {
-                params.status = statusFilter.toUpperCase();
-            }
-            if (monthFilter !== 'all') {
-                const [year, month] = monthFilter.split('-').map(Number);
-                const from = `${year}-${String(month).padStart(2, '0')}-01`;
-                const lastDay = new Date(year, month, 0).getDate();
-                const to = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-                params.date_from = from;
-                params.date_to = to;
-            }
+            const [dues, paymentsResult] = await Promise.all([
+                paymentService.getAllDues(),
+                paymentService.getAll({ limit: 1000 })
+            ]);
 
-            const result = await paymentService.getAll(params);
-            const data = result.payments || [];
-            const formatted = data.map(item => ({
+            const paymentsData = paymentsResult?.payments || [];
+            const normalizedPayments = paymentsData.map(item => ({
                 id: item.id,
                 obligationId: item.obligation_id,
                 tenantId: item.student_id,
                 tenantName: item.student_name,
-                tenantPhone: item.student_phone || null,
-                tenantEmail: item.student_email || null,
-                room: item.room_no || 'N/A',
-                type: 'Payment',
-                amount: Number(item.amount_paid),
-                status: (item.status || 'PAID').toLowerCase(),
-                date: item.payment_date,
+                amount: Number(item.amount_paid || 0),
                 month: item.rent_month,
-                dueDate: item.due_date,
-                method: item.payment_method,
-                createdAt: item.created_at,
+                date: item.payment_date,
                 paymentDate: item.payment_date,
-                reference_number: item.reference_number,
-                preferred_app: item.preferred_app,
-                transactionId: item.reference_number || item.id,
-                isReceiptAvailable: true,
-                entityType: 'payment'
+                createdAt: item.created_at,
+                method: item.payment_method,
+                status: 'paid'
             }));
-            setTransactions(formatted);
+            setPaymentRecords(normalizedPayments);
+
+            const paymentsByObligation = paymentsData.reduce((acc, item) => {
+                const key = item.obligation_id;
+                if (!key) return acc;
+                if (!acc[key]) acc[key] = [];
+                acc[key].push(item);
+                return acc;
+            }, {});
+
+            const rows = (dues || []).map((item) => {
+                const obligationPayments = paymentsByObligation[item.obligation_id] || [];
+                const paidAmount = obligationPayments.reduce((sum, p) => sum + Number(p.amount_paid || 0), 0);
+                const rentAmount = Number(item.amount || 0);
+                const balance = Math.max(0, rentAmount - paidAmount);
+                const latestPayment = obligationPayments
+                    .slice()
+                    .sort((a, b) => new Date(b.payment_date || b.created_at || 0) - new Date(a.payment_date || a.created_at || 0))[0];
+
+                const status = normalizeStatus(item.status, item.due_date, balance);
+
+                return {
+                    id: item.obligation_id,
+                    obligationId: item.obligation_id,
+                    tenantId: item.student_id,
+                    tenantName: item.student_name,
+                    tenantPhone: item.student_phone || null,
+                    tenantEmail: item.student_email || null,
+                    room: item.room_no || 'N/A',
+                    month: item.rent_month,
+                    dueDate: item.due_date,
+                    rentAmount,
+                    paidAmount,
+                    balance,
+                    status,
+                    statusRaw: String(item.status || '').toUpperCase(),
+                    paymentMethod: latestPayment?.payment_method || null,
+                    paymentMethods: [...new Set(obligationPayments.map((p) => p.payment_method).filter(Boolean))],
+                    latestPaymentId: latestPayment?.id || null,
+                    reference_number: latestPayment?.reference_number || null,
+                    preferred_app: latestPayment?.preferred_app || null,
+                    createdAt: latestPayment?.created_at || null,
+                    paymentDate: latestPayment?.payment_date || null,
+                    isReceiptAvailable: Boolean(latestPayment?.id),
+                    entityType: 'ledger',
+                    amount: balance > 0 ? balance : paidAmount || rentAmount,
+                };
+            });
+
+            setLedgerRows(rows);
         } catch (error) {
-            console.error("Failed to load transactions:", error);
+            console.error('Failed to load ledger:', error);
         } finally {
             setIsLoading(false);
         }
     };
 
-    // Filtered data depending on active tab
     const filteredData = useMemo(() => {
-        const sourceData = activeTab === 'dues' ? payments : transactions;
-        return sourceData.filter(item => {
+        return ledgerRows.filter(item => {
             const matchesSearch = item.tenantName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 item.room?.toString().includes(searchTerm);
             const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
-            const matchesMonth = monthFilter === 'all' || item.date?.includes(monthFilter);
-            const matchesMethod = activeTab !== 'transactions' || methodFilter === 'all' || item.method === methodFilter;
+            const matchesMonth = monthFilter === 'all' || item.month?.slice(0, 7) === monthFilter;
+            const matchesMethod = methodFilter === 'all' || item.paymentMethods?.includes(methodFilter);
             const matchesTenant = tenantFilter === 'all' || item.tenantName === tenantFilter;
             return matchesSearch && matchesStatus && matchesMonth && matchesMethod && matchesTenant;
         });
-    }, [payments, transactions, activeTab, searchTerm, statusFilter, monthFilter, methodFilter, tenantFilter]);
+    }, [ledgerRows, searchTerm, statusFilter, monthFilter, methodFilter, tenantFilter]);
+
+    const paginatedData = useMemo(() => {
+        const start = (currentPage - 1) * pageSize;
+        return filteredData.slice(start, start + pageSize);
+    }, [filteredData, currentPage, pageSize]);
+
+    const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, statusFilter, monthFilter, methodFilter, tenantFilter, pageSize]);
 
     // Stats
     const stats = useMemo(() => {
-        const totalCollected = payments.filter(p => p.status === 'paid').reduce((acc, curr) => acc + curr.amount, 0);
-        const totalPending = payments.filter(p => p.status === 'pending' || p.status === 'partial').reduce((acc, curr) => acc + curr.amount, 0);
-        const uniqueTenants = new Set(payments.map(p => p.tenantName)).size;
-        return { totalCollected, totalPending, uniqueTenants };
-    }, [payments]);
+        const totalCollected = ledgerRows.reduce((acc, curr) => acc + Number(curr.paidAmount || 0), 0);
+        const totalPending = ledgerRows
+            .filter(p => ['pending', 'partial', 'overdue'].includes(p.status))
+            .reduce((acc, curr) => acc + Number(curr.balance || 0), 0);
+        const overdueAmount = ledgerRows
+            .filter(p => p.status === 'overdue')
+            .reduce((acc, curr) => acc + Number(curr.balance || 0), 0);
+        const uniqueTenants = new Set(ledgerRows.map(p => p.tenantName)).size;
+        return { totalCollected, totalPending, overdueAmount, uniqueTenants };
+    }, [ledgerRows]);
 
     // Mark as paid
     const handleMarkAsPaid = async (formData) => {
         try {
             const { paymentId, amount, method, reference_number } = formData;
-            const payment = payments.find(p => p.id === paymentId);
+            const payment = ledgerRows.find(p => p.id === paymentId);
             if (payment && payment.status === 'paid') return;
             const today = new Date();
             const localDate = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
@@ -170,7 +184,7 @@ const Payments = () => {
                 reference_number: reference_number || "",
                 payment_date: localDate
             });
-            loadPayments();
+            loadLedger();
             setSelectedPayment(null);
         } catch (error) {
             console.error("Failed to mark as paid:", error);
@@ -220,11 +234,11 @@ const Payments = () => {
     };
 
     const handleDownloadFromSelection = async (payment) => {
-        if (!payment?.isReceiptAvailable || payment?.entityType !== 'payment') {
+        if (!payment?.isReceiptAvailable || !payment?.latestPaymentId) {
             alert('Receipt is only available for recorded transactions.');
             return;
         }
-        await handleDownloadReceipt(payment.id, payment.reference_number);
+        await handleDownloadReceipt(payment.latestPaymentId, payment.reference_number);
     };
 
     const handleExportReport = async () => {
@@ -268,7 +282,7 @@ const Payments = () => {
         try {
             const data = await paymentService.generateRent(genMonth);
             setGenResult({ success: true, data });
-            loadPayments(); // refresh list
+            loadLedger(); // refresh list
         } catch (error) {
             console.error("Generate rent failed:", error);
             const errorMessage = error.response?.data?.detail?.message 
@@ -296,13 +310,20 @@ const Payments = () => {
 
     // Unique months from existing payments/transactions for month filter
     const availableMonths = useMemo(() => {
-        const source = activeTab === 'dues' ? payments : transactions;
-        const months = new Set(source.map(p => p.month?.slice(0, 7) || p.date?.slice(0, 7)).filter(Boolean));
+        const months = new Set(ledgerRows.map(p => p.month?.slice(0, 7)).filter(Boolean));
         return [...months].sort().reverse();
-    }, [payments, transactions, activeTab]);
+    }, [ledgerRows]);
+
+    const availableMethods = useMemo(() => {
+        const methods = new Set();
+        ledgerRows.forEach((row) => {
+            (row.paymentMethods || []).forEach((method) => methods.add(method));
+        });
+        return [...methods].sort();
+    }, [ledgerRows]);
 
     const tenantRecentPayments = useMemo(() => {
-        return transactions.reduce((acc, txn) => {
+        return paymentRecords.reduce((acc, txn) => {
             if (!txn.tenantId) return acc;
             if (!acc[txn.tenantId]) {
                 acc[txn.tenantId] = [];
@@ -312,7 +333,7 @@ const Payments = () => {
             acc[txn.tenantId] = acc[txn.tenantId].slice(0, 5);
             return acc;
         }, {});
-    }, [transactions]);
+    }, [paymentRecords]);
 
     const selectedPaymentWithContext = useMemo(() => {
         if (!selectedPayment) return null;
@@ -331,18 +352,17 @@ const Payments = () => {
     };
 
     const availableTenants = useMemo(() => {
-        const source = activeTab === 'dues' ? payments : transactions;
-        const names = new Set(source.map(p => p.tenantName).filter(Boolean));
+        const names = new Set(ledgerRows.map(p => p.tenantName).filter(Boolean));
         return [...names].sort();
-    }, [payments, transactions, activeTab]);
+    }, [ledgerRows]);
 
     return (
         <div className="space-y-8 animate-fade-in-up">
             {/* Header Section */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Payments</h1>
-                    <p className="text-slate-500 text-sm">Track and manage tenant payments</p>
+                    <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Payments & Rent Ledger</h1>
+                    <p className="text-slate-500 text-sm">Unified ledger of rent, payments, balances, and collection actions.</p>
                 </div>
                 <div className="flex gap-2 flex-wrap">
                     <button
@@ -367,7 +387,7 @@ const Payments = () => {
             </div>
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
                 <PaymentStatsCard
                     title="Total Collected"
                     value={`₹${stats.totalCollected.toLocaleString()}`}
@@ -380,7 +400,14 @@ const Payments = () => {
                     value={`₹${stats.totalPending.toLocaleString()}`}
                     type="warning"
                     icon={TrendingDown}
-                    subtext={<span className="text-amber-600 flex items-center gap-1">{payments.filter(p => p.status === 'pending').length} pending</span>}
+                    subtext={<span className="text-amber-600 flex items-center gap-1">{ledgerRows.filter(p => ['pending', 'partial', 'overdue'].includes(p.status)).length} due rows</span>}
+                />
+                <PaymentStatsCard
+                    title="Overdue Amount"
+                    value={`₹${stats.overdueAmount.toLocaleString()}`}
+                    type="danger"
+                    icon={AlertCircle}
+                    subtext={<span className="text-rose-600 flex items-center gap-1">{ledgerRows.filter(p => p.status === 'overdue').length} overdue</span>}
                 />
                 <PaymentStatsCard
                     title="Active Tenants"
@@ -394,22 +421,6 @@ const Payments = () => {
             {/* Main Content Area */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
                 
-                {/* Tabs */}
-                <div className="p-4 border-b border-slate-100 flex gap-4">
-                    <button 
-                        onClick={() => setActiveTab('dues')}
-                        className={`pb-2 px-2 text-sm font-bold transition-all border-b-2 ${activeTab === 'dues' ? 'text-indigo-600 border-indigo-600' : 'text-slate-400 border-transparent hover:text-slate-600'}`}
-                    >
-                        Rent Dues
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('transactions')}
-                        className={`pb-2 px-2 text-sm font-bold transition-all border-b-2 ${activeTab === 'transactions' ? 'text-indigo-600 border-indigo-600' : 'text-slate-400 border-transparent hover:text-slate-600'}`}
-                    >
-                        Recent Transactions
-                    </button>
-                </div>
-
                 {/* Filters Bar */}
                 <div className="p-4 border-b border-slate-100 bg-white flex flex-col sm:flex-row gap-4 justify-between items-center sticky top-0 z-10">
                     <div className="relative w-full sm:w-72 group">
@@ -444,24 +455,20 @@ const Payments = () => {
                             <option value="paid">Paid</option>
                             <option value="partial">Partial</option>
                             <option value="pending">Pending</option>
-                            {activeTab === 'dues' && <option value="waived">Waived</option>}
+                            <option value="overdue">Overdue</option>
+                            <option value="waived">Waived</option>
                         </select>
 
-                        {activeTab === 'transactions' && (
-                            <select
-                                className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100 hover:border-slate-300 transition-all cursor-pointer"
-                                value={methodFilter}
-                                onChange={(e) => setMethodFilter(e.target.value)}
-                            >
-                                <option value="all">All Methods</option>
-                                <option value="UPI">UPI</option>
-                                <option value="CARD">CARD</option>
-                                <option value="NETBANKING">NETBANKING</option>
-                                <option value="CASH">CASH</option>
-                                <option value="BANK_TRANSFER">BANK_TRANSFER</option>
-                                <option value="OTHER">OTHER</option>
-                            </select>
-                        )}
+                        <select
+                            className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100 hover:border-slate-300 transition-all cursor-pointer"
+                            value={methodFilter}
+                            onChange={(e) => setMethodFilter(e.target.value)}
+                        >
+                            <option value="all">All Methods</option>
+                            {availableMethods.map(method => (
+                                <option key={method} value={method}>{method}</option>
+                            ))}
+                        </select>
 
                         <select
                             className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100 hover:border-slate-300 transition-all cursor-pointer"
@@ -480,18 +487,39 @@ const Payments = () => {
 
                 {/* Table */}
                 <PaymentTable
-                    payments={filteredData}
+                    payments={paginatedData}
                     onSelectPayment={setSelectedPayment}
                     onViewHistory={setHistoryTenant}
-                    onDownloadReceipt={activeTab === 'transactions' ? handleDownloadReceipt : null}
+                    onDownloadReceipt={handleDownloadReceipt}
                 />
 
                 {/* Pagination */}
                 <div className="p-4 border-t border-slate-100 flex items-center justify-between text-sm text-slate-500">
-                    <span>Showing {filteredData.length} results</span>
-                    <div className="flex gap-2">
-                        <button className="px-3 py-1 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50" disabled>Previous</button>
-                        <button className="px-3 py-1 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50" disabled>Next</button>
+                    <span>Showing {filteredData.length === 0 ? 0 : ((currentPage - 1) * pageSize + 1)}-{Math.min(currentPage * pageSize, filteredData.length)} of {filteredData.length} results</span>
+                    <div className="flex items-center gap-2">
+                        <select
+                            className="px-2 py-1 border border-slate-200 rounded-lg bg-white"
+                            value={String(pageSize)}
+                            onChange={(e) => setPageSize(Number(e.target.value))}
+                        >
+                            <option value="10">10</option>
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                        </select>
+                        <button
+                            className="px-3 py-1 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50"
+                            disabled={currentPage <= 1}
+                            onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                        >
+                            Previous
+                        </button>
+                        <button
+                            className="px-3 py-1 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50"
+                            disabled={currentPage >= totalPages}
+                            onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                        >
+                            Next
+                        </button>
                     </div>
                 </div>
             </div>
