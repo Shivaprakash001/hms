@@ -51,8 +51,8 @@ def get_dashboard_stats(user_id: str):
         # 4. Expenses (Current Month)
         expenses_res = supabase.table("expenses")\
             .select("amount")\
-            .gte("expense_date", month_start.isoformat())\
-            .lt("expense_date", next_month.isoformat())\
+            .gte("date", month_start.isoformat())\
+            .lt("date", next_month.isoformat())\
             .eq("owner_id", user_id)\
             .execute()
         expenses_data = expenses_res.data if expenses_res and expenses_res.data else []
@@ -98,7 +98,7 @@ def get_dashboard_stats(user_id: str):
                 logger.error(f"Error in obligations sub-query: {inner_e}")
 
         return ServiceResponse.success({
-            "total_rooms": 999, # DEBUG VALUE - IF YOU SEE 999, THE DEPLOYMENT IS WORKING.
+            "total_rooms": total_rooms,
             "total_tenants": total_tenants,
             "active_tenants": active_tenants,
             "total_capacity": total_capacity,
