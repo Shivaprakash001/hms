@@ -20,6 +20,8 @@ const OwnerDashboard = () => {
         overdue_amount: 0,
         overdue_count: 0,
         rent_collected_this_month: 0,
+        occupancy_rate: 0,
+        net_profit: 0,
     });
     const [collectionData, setCollectionData] = useState([]);
     const [recentActivity, setRecentActivity] = useState([]);
@@ -49,6 +51,8 @@ const OwnerDashboard = () => {
                     overdue_amount: summaryRes.overdue_amount || 0,
                     overdue_count: summaryRes.overdue_count || 0,
                     rent_collected_this_month: summaryRes.rent_collected_this_month || summaryRes.revenue || 0,
+                    occupancy_rate: summaryRes.occupancy_rate || 0,
+                    net_profit: summaryRes.net_profit || 0,
                 });
             }
 
