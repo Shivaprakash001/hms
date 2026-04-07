@@ -35,7 +35,8 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
         course: '',
         year_of_study: '',
         roll_number: '',
-        branch: ''
+        branch: '',
+        section: ''
     });
 
     const initializeFromStudent = useCallback((data) => {
@@ -56,7 +57,8 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
             course: data.course || '',
             year_of_study: data.year_of_study || '',
             roll_number: data.roll_number || '',
-            branch: data.branch || ''
+            branch: data.branch || '',
+            section: data.section || ''
         });
         setPhotoPreview(data.photo_url || null);
     }, []);
@@ -218,10 +220,8 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
             case 'documents':
                 return (
                     <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-10">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div className="max-w-sm">
                             <DocumentDropBox label="Aadhaar Card" />
-                            <DocumentDropBox label="College ID" />
-                            <DocumentDropBox label="Other Verified Proof" />
                         </div>
                         
                         <div className="bg-amber-50 border border-amber-100 p-8 rounded-[2.5rem] flex gap-6 items-center">
@@ -229,7 +229,7 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
                             <div>
                                 <h4 className="text-[11px] font-black text-amber-900 uppercase tracking-widest mb-1">Encrypted Storage</h4>
                                 <p className="text-xs text-amber-800/80 font-bold leading-relaxed">
-                                    All uploaded documents are encrypted and stored in a secure cloud bucket. Access is restricted to authorized administrative personnel only.
+                                    Aadhaar documents are encrypted and stored securely. Access is strictly limited to authorized personnel.
                                 </p>
                             </div>
                         </div>
@@ -249,15 +249,27 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
                             <div className="bg-white p-8 rounded-[2rem] border-2 border-slate-50 shadow-sm space-y-4">
-                                <label className="text-[11px] font-black uppercase tracking-widest text-slate-400">Current Year of Study</label>
+                                <label className="text-[11px] font-black uppercase tracking-widest text-slate-400">Branch</label>
+                                <div className="text-2xl font-black text-slate-900 uppercase tracking-tight">
+                                    {form.branch || 'N/A'}
+                                </div>
+                            </div>
+                            <div className="bg-white p-8 rounded-[2rem] border-2 border-slate-50 shadow-sm space-y-4">
+                                <label className="text-[11px] font-black uppercase tracking-widest text-slate-400">Year</label>
                                 <div className="text-2xl font-black text-slate-900">
                                     {form.year_of_study ? `${form.year_of_study} Year` : 'Data Missing'}
                                 </div>
                             </div>
                             <div className="bg-white p-8 rounded-[2rem] border-2 border-slate-50 shadow-sm space-y-4">
-                                <label className="text-[11px] font-black uppercase tracking-widest text-slate-400">Institutional ID / Roll</label>
+                                <label className="text-[11px] font-black uppercase tracking-widest text-slate-400">Roll No</label>
                                 <div className="text-2xl font-black text-slate-900 uppercase">
                                     {form.roll_number || 'N/A'}
+                                </div>
+                            </div>
+                            <div className="bg-white p-8 rounded-[2rem] border-2 border-slate-50 shadow-sm space-y-4">
+                                <label className="text-[11px] font-black uppercase tracking-widest text-slate-400">Section</label>
+                                <div className="text-2xl font-black text-slate-900 uppercase">
+                                    {form.section || 'N/A'}
                                 </div>
                             </div>
                         </div>
