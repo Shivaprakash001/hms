@@ -1,3 +1,5 @@
+import os
+import time
 from typing import Dict, Any, List
 from app.db import supabase
 from app.utils.responses import ServiceResponse, ErrorCode
@@ -11,6 +13,14 @@ DEFAULT_PREFERENCES = {
     "receipt_prefix": "HMS",
     "timezone": "Asia/Kolkata",
     "auto_rent_day": 1,
+}
+
+HOSTEL_ASSETS_BUCKET = os.getenv("HOSTEL_ASSETS_BUCKET", "hostel-assets")
+MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024
+ALLOWED_LOGO_CONTENT_TYPES = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/webp": "webp",
 }
 
 
@@ -33,7 +43,23 @@ def _normalize_hostel_row(row: dict) -> dict:
         "receipt_prefix": row.get("receipt_prefix"),
         "timezone": row.get("timezone"),
         "auto_rent_day": row.get("auto_rent_day"),
+        "logo_url": row.get("logo_url"),
     }
+
+
+def _extract_public_url(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        data = value.get("data") if isinstance(value.get("data"), dict) else {}
+        return (
+            value.get("publicURL")
+            or value.get("publicUrl")
+            or data.get("publicURL")
+            or data.get("publicUrl")
+            or ""
+        )
+    return ""
 
 
 def get_owner_profile(user_id: str) -> Dict[str, Any]:
@@ -63,6 +89,7 @@ def get_owner_profile(user_id: str) -> Dict[str, Any]:
             "receipt_prefix": None,
             "timezone": None,
             "auto_rent_day": None,
+            "logo_url": None,
         }
 
         try:
@@ -88,6 +115,7 @@ def get_owner_profile(user_id: str) -> Dict[str, Any]:
                 "pincode": hostel.get("pincode"),
                 "upi_id": hostel.get("upi_id"),
                 "gst_number": hostel.get("gst_number"),
+                "logo_url": hostel.get("logo_url"),
             },
             "preferences": {
                 "currency": hostel.get("currency") or DEFAULT_PREFERENCES["currency"],
@@ -368,3 +396,74 @@ def search_tenants(user_id: str, query: str, limit: int = 10) -> Dict[str, Any]:
     except Exception as e:
         logger.exception(f"Error searching owner tenants: {e}")
         return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to search tenants", str(e))
+
+
+def upload_hostel_logo(user_id: str, file_bytes: bytes, content_type: str | None) -> Dict[str, Any]:
+    try:
+        if not file_bytes:
+            return ServiceResponse.validation_error("Logo file is empty")
+
+        if len(file_bytes) > MAX_LOGO_SIZE_BYTES:
+            return ServiceResponse.validation_error("Logo file must be 2MB or smaller")
+
+        normalized_content_type = (content_type or "").lower()
+        ext = ALLOWED_LOGO_CONTENT_TYPES.get(normalized_content_type)
+        if not ext:
+            return ServiceResponse.validation_error("Only PNG, JPG, or WEBP logo files are supported")
+
+        hostel_row = supabase.table("hostels") \
+            .select("id") \
+            .eq("owner_id", user_id) \
+            .eq("is_active", True) \
+            .limit(1) \
+            .execute()
+
+        if hostel_row.data:
+            hostel_id = hostel_row.data[0]["id"]
+        else:
+            create_res = supabase.table("hostels").insert({
+                "owner_id": user_id,
+                "is_active": True,
+            }).execute()
+            if not create_res.data:
+                return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to prepare hostel record for logo upload")
+            hostel_id = create_res.data[0]["id"]
+
+        for existing_ext in ("png", "jpg", "webp"):
+            if existing_ext != ext:
+                stale_path = f"{user_id}/logo.{existing_ext}"
+                try:
+                    supabase.storage.from_(HOSTEL_ASSETS_BUCKET).remove([stale_path])
+                except Exception:
+                    pass
+
+        file_path = f"{user_id}/logo.{ext}"
+        supabase.storage.from_(HOSTEL_ASSETS_BUCKET).upload(
+            path=file_path,
+            file=file_bytes,
+            file_options={
+                "content-type": normalized_content_type,
+                "upsert": "true",
+                "cache-control": "3600",
+            }
+        )
+
+        public_url_result = supabase.storage.from_(HOSTEL_ASSETS_BUCKET).get_public_url(file_path)
+        public_url = _extract_public_url(public_url_result)
+        if not public_url:
+            return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to generate logo public URL")
+
+        versioned_url = f"{public_url}?v={int(time.time())}"
+
+        update_res = supabase.table("hostels") \
+            .update({"logo_url": versioned_url}) \
+            .eq("id", hostel_id) \
+            .execute()
+
+        if not update_res.data:
+            return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to save hostel logo")
+
+        return ServiceResponse.success({"logo_url": versioned_url}, "Hostel logo uploaded successfully")
+    except Exception as e:
+        logger.exception(f"Error uploading hostel logo for owner {user_id}: {e}")
+        return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to upload hostel logo", str(e))

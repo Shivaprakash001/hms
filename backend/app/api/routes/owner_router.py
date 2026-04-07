@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, UploadFile, File
 from app.utils.auth import get_current_user, UserContext
 from app.services import owner_service, payment_service
 from app.schemas.owner_schema import OwnerProfileUpdate, HostelUpdate, OwnerPreferencesUpdate
@@ -96,5 +96,22 @@ def record_owner_offline_payment(
         data.reference_number,
         data.payment_date,
         user_id=user.user_id
+    )
+    return _handle_service_response(result)
+
+
+@router.post("/logo", response_model=dict, summary="Upload owner hostel logo")
+async def upload_owner_logo(
+    file: UploadFile = File(...),
+    user: UserContext = Depends(get_current_user)
+):
+    if not user.is_owner():
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner/admin can access this endpoint.")
+
+    file_bytes = await file.read()
+    result = owner_service.upload_hostel_logo(
+        str(user.user_id),
+        file_bytes=file_bytes,
+        content_type=file.content_type,
     )
     return _handle_service_response(result)

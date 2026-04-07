@@ -15,6 +15,12 @@
         }
         @page { size: A4; margin: 0; }
         .header { text-align: center; margin-bottom: 10px; }
+        .logo-wrap { margin-bottom: 8px; }
+        .logo {
+            max-height: 60px;
+            max-width: 220px;
+            object-fit: contain;
+        }
         .hostel-name { font-size: 18px; font-weight: 700; }
         .muted { color: #666; }
         .title { text-align: center; font-size: 16px; font-weight: 700; margin: 8px 0 14px; }
@@ -38,6 +44,11 @@
 </head>
 <body>
     <div class="header">
+        {% if hostel_logo_url %}
+        <div class="logo-wrap">
+            <img src="{{ hostel_logo_url }}" class="logo" alt="Hostel Logo" />
+        </div>
+        {% endif %}
         <div class="hostel-name">{{ hostel_name }}</div>
         <div class="muted">{{ hostel_address }}</div>
         <div class="muted">Phone: {{ hostel_phone }} | Email: {{ hostel_email }}</div>

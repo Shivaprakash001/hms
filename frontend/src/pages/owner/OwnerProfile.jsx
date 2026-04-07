@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { User, Building2, Settings, Save, Loader2 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { ownerService } from '../../api/services';
+import ProfileLogoUploader from '../../components/owner/ProfileLogoUploader';
 
 const tabs = [
     { key: 'owner', label: 'Owner Profile', icon: User },
@@ -21,7 +22,7 @@ export default function OwnerProfile() {
 
     const [ownerForm, setOwnerForm] = useState({ name: '', email: '', phone: '' });
     const [hostelForm, setHostelForm] = useState({
-        name: '', phone: '', address: '', city: '', state: '', pincode: '', upi_id: '', gst_number: ''
+        name: '', phone: '', address: '', city: '', state: '', pincode: '', upi_id: '', gst_number: '', logo_url: ''
     });
     const [preferences, setPreferences] = useState({ currency: 'INR', rent_cycle: 'MONTHLY', receipt_prefix: 'HMS', timezone: 'Asia/Kolkata', auto_rent_day: 1 });
 
@@ -47,7 +48,8 @@ export default function OwnerProfile() {
                     state: hostel.state || '',
                     pincode: hostel.pincode || '',
                     upi_id: hostel.upi_id || '',
-                    gst_number: hostel.gst_number || ''
+                    gst_number: hostel.gst_number || '',
+                    logo_url: hostel.logo_url || ''
                 });
                 setPreferences({
                     currency: prefs.currency || 'INR',
@@ -111,7 +113,8 @@ export default function OwnerProfile() {
                 state: hostel.state || '',
                 pincode: hostel.pincode || '',
                 upi_id: hostel.upi_id || '',
-                gst_number: hostel.gst_number || ''
+                gst_number: hostel.gst_number || '',
+                logo_url: hostel.logo_url || ''
             });
             showTempSuccess('Hostel details updated');
         } catch (e) {
@@ -140,6 +143,25 @@ export default function OwnerProfile() {
         } catch (e) {
             const detail = e?.response?.data?.detail;
             setError(typeof detail === 'string' ? detail : (detail?.message || 'Failed to update preferences'));
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const uploadLogo = async (file) => {
+        setSaving(true);
+        setError('');
+        try {
+            const response = await ownerService.uploadLogo(file);
+            const logoUrl = response?.logo_url || '';
+            setHostelForm(prev => ({ ...prev, logo_url: logoUrl }));
+            window.dispatchEvent(new CustomEvent('owner-branding-updated', {
+                detail: { logoUrl }
+            }));
+            showTempSuccess('Hostel logo updated');
+        } catch (e) {
+            const detail = e?.response?.data?.detail;
+            setError(typeof detail === 'string' ? detail : (detail?.message || 'Failed to upload hostel logo'));
         } finally {
             setSaving(false);
         }
@@ -186,6 +208,11 @@ export default function OwnerProfile() {
 
             {activeTab === 'hostel' && (
                 <form onSubmit={saveHostel} className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm space-y-4 max-w-4xl">
+                    <ProfileLogoUploader
+                        logoUrl={hostelForm.logo_url}
+                        onUpload={uploadLogo}
+                        disabled={saving}
+                    />
                     <Field label="Hostel Name" value={hostelForm.name} onChange={(v) => setHostelForm({ ...hostelForm, name: v })} required />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <Field label="Hostel Phone" value={hostelForm.phone} onChange={(v) => setHostelForm({ ...hostelForm, phone: v })} required />

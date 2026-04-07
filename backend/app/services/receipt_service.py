@@ -224,7 +224,7 @@ class ReceiptService:
         try:
             owner_id = payment.get("owner_id")
             if owner_id:
-                hostel_res = supabase.table("hostels").select("name, address, city, state, pincode, phone").eq("owner_id", owner_id).single().execute()
+                hostel_res = supabase.table("hostels").select("name, address, city, state, pincode, phone, logo_url").eq("owner_id", owner_id).single().execute()
                 if hostel_res.data:
                     hostel = hostel_res.data
                 owner_res = supabase.table("profiles").select("email, phone").eq("id", owner_id).single().execute()
@@ -316,7 +316,7 @@ class ReceiptService:
             hostel_address=hostel_address,
             hostel_email=hostel_email,
             hostel_phone=hostel_phone,
-            hostel_logo_url=os.getenv("RECEIPT_LOGO_URL", ""),
+            hostel_logo_url=hostel.get("logo_url") or os.getenv("RECEIPT_LOGO_URL", ""),
             
             # Student/Tenant info
             student_name=profile.get("name") or "N/A",

@@ -67,7 +67,7 @@ export const ownerService = {
                     return {
                         owner,
                         hostel: {
-                            name: '', phone: '', address: '', city: '', state: '', pincode: '', upi_id: '', gst_number: ''
+                            name: '', phone: '', address: '', city: '', state: '', pincode: '', upi_id: '', gst_number: '', logo_url: ''
                         },
                         preferences: {
                             currency: 'INR',
@@ -95,7 +95,7 @@ export const ownerService = {
                     return {
                         owner,
                         hostel: {
-                            name: '', phone: '', address: '', city: '', state: '', pincode: '', upi_id: '', gst_number: ''
+                            name: '', phone: '', address: '', city: '', state: '', pincode: '', upi_id: '', gst_number: '', logo_url: ''
                         },
                         preferences: {
                             currency: 'INR',
@@ -115,6 +115,11 @@ export const ownerService = {
     },
     updatePreferences: async (data) => {
         return ownerService._requestWithFallback('patch', '/owner/me/preferences', data);
+    },
+    uploadLogo: async (file) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        return ownerService._requestWithFallback('post', '/owner/logo', formData);
     },
     searchTenants: async (query, limit = 10) => {
         const response = await api.get('/owner/search', {

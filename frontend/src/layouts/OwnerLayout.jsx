@@ -15,6 +15,7 @@ import ProfileMenu from '../components/owner/ProfileMenu';
 
 const OwnerLayout = () => {
     const { user, logout } = useAuth();
+    const [hostelLogoUrl, setHostelLogoUrl] = useState('');
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [notifications, setNotifications] = useState([]);
@@ -39,6 +40,35 @@ const OwnerLayout = () => {
         fetchNotifications();
         const interval = setInterval(fetchNotifications, 30000); // Poll every 30s
         return () => clearInterval(interval);
+    }, []);
+
+    useEffect(() => {
+        let mounted = true;
+        const loadHostelBranding = async () => {
+            try {
+                const profile = await ownerService.getProfile();
+                if (mounted) {
+                    setHostelLogoUrl(profile?.hostel?.logo_url || '');
+                }
+            } catch {
+                if (mounted) {
+                    setHostelLogoUrl('');
+                }
+            }
+        };
+
+        const handleBrandingUpdate = (event) => {
+            const nextLogo = event?.detail?.logoUrl || '';
+            setHostelLogoUrl(nextLogo);
+        };
+
+        loadHostelBranding();
+        window.addEventListener('owner-branding-updated', handleBrandingUpdate);
+
+        return () => {
+            mounted = false;
+            window.removeEventListener('owner-branding-updated', handleBrandingUpdate);
+        };
     }, []);
 
     const handleMarkAllRead = async () => {
@@ -263,8 +293,10 @@ const OwnerLayout = () => {
                             onClick={() => setSidebarAccountOpen(!sidebarAccountOpen)}
                             className={`flex items-center gap-3 w-full p-2.5 rounded-xl hover:bg-slate-800 border border-slate-800 hover:border-slate-700 transition-all shadow-sm ${!sidebarOpen && 'justify-center'}`}
                         >
-                            <div className="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center shrink-0 border border-slate-700">
-                                <User size={18} className="text-slate-400" />
+                            <div className="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center shrink-0 border border-slate-700 overflow-hidden">
+                                {hostelLogoUrl
+                                    ? <img src={hostelLogoUrl} alt="Hostel logo" className="w-full h-full object-cover" />
+                                    : <User size={18} className="text-slate-400" />}
                             </div>
                             {sidebarOpen && (
                                 <div className="text-left overflow-hidden flex-1">
@@ -476,6 +508,7 @@ const OwnerLayout = () => {
 
                         <ProfileMenu
                             user={user}
+                            logoUrl={hostelLogoUrl}
                             isOpen={profileMenuOpen}
                             onToggle={() => setProfileMenuOpen(!profileMenuOpen)}
                             onProfileSettings={() => {
