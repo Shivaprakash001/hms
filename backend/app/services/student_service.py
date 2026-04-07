@@ -542,10 +542,13 @@ def get_all_students(
                 rooms_by_id = {r.get("id"): r for r in (room_res.data or [])}
 
             for inv in invitations_raw:
+                invite_id = inv.get("id")
                 room = rooms_by_id.get(inv.get("room_id")) if inv.get("room_id") else None
                 invited_row = {
-                    "id": f"invite_{inv.get('id')}",
-                    "profile_id": None,
+                    "id": invite_id,
+                    # StudentResponse requires profile_id UUID; invitation has no profile yet,
+                    # so we reuse invitation UUID as a stable placeholder identifier.
+                    "profile_id": invite_id,
                     "owner_id": owner_id,
                     "monthly_rent": inv.get("monthly_rent") or 0,
                     "joined_on": str(inv.get("created_at") or "").split("T")[0] if inv.get("created_at") else None,

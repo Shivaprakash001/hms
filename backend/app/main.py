@@ -112,7 +112,15 @@ async def security_headers_middleware(request: Request, call_next):
             )
             return _apply_cors_headers(request, blocked)
 
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        logger.exception("Unhandled request error: %s", exc)
+        failed = JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"detail": "Internal Server Error"}
+        )
+        return _apply_cors_headers(request, failed)
 
     # Security headers
     response.headers["X-Content-Type-Options"] = "nosniff"

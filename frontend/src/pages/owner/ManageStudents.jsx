@@ -272,27 +272,33 @@ export default function ManageStudents() {
                     {/* Year Perspective - 1/3 width */}
                     <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col items-center justify-center min-h-[300px]">
                         <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">Academic Mix</h3>
-                        <div className="h-[180px] w-full min-w-[220px]">
-                            <ResponsiveContainer width="100%" height="100%" minWidth={220} minHeight={180}>
-                                <PieChart>
-                                    <Pie
-                                        data={yearDistribution}
-                                        dataKey="value"
-                                        nameKey="name"
-                                        innerRadius={50}
-                                        outerRadius={75}
-                                        paddingAngle={5}
-                                        stroke="none"
-                                    >
-                                        {yearDistribution.map((entry, index) => (
-                                            <Cell key={entry.name} fill={YEAR_COLORS[index % YEAR_COLORS.length]} />
-                                        ))}
-                                    </Pie>
-                                    <RechartsTooltip 
-                                        contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '12px', fontWeight: 'bold' }}
-                                    />
-                                </PieChart>
-                            </ResponsiveContainer>
+                        <div className="h-[200px] w-full min-w-[260px]" style={{ minHeight: 200 }}>
+                            {yearDistribution.length === 0 ? (
+                                <div className="h-full w-full flex items-center justify-center text-xs font-semibold text-slate-400">
+                                    No academic data yet
+                                </div>
+                            ) : (
+                                <ResponsiveContainer width="100%" height="100%" minWidth={260} minHeight={200}>
+                                    <PieChart>
+                                        <Pie
+                                            data={yearDistribution}
+                                            dataKey="value"
+                                            nameKey="name"
+                                            innerRadius={50}
+                                            outerRadius={75}
+                                            paddingAngle={5}
+                                            stroke="none"
+                                        >
+                                            {yearDistribution.map((entry, index) => (
+                                                <Cell key={entry.name} fill={YEAR_COLORS[index % YEAR_COLORS.length]} />
+                                            ))}
+                                        </Pie>
+                                        <RechartsTooltip 
+                                            contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '12px', fontWeight: 'bold' }}
+                                        />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            )}
                         </div>
                         <div className="mt-4 flex flex-wrap justify-center gap-x-4 gap-y-1">
                             {yearDistribution.map((entry, index) => (
