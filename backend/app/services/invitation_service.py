@@ -90,8 +90,9 @@ class InvitationService:
             owner_name = owner_res.data[0].get("name", "Hostel Owner") if owner_res.data else "Hostel Owner"
 
             # Hostel branding
-            hostel_res = supabase.table("hostels").select("name").eq("owner_id", owner_id).execute()
+            hostel_res = supabase.table("hostels").select("name, logo_url").eq("owner_id", owner_id).execute()
             hostel_name = hostel_res.data[0].get("name", "Trishul Solutions") if hostel_res.data else "Trishul Solutions"
+            hostel_logo_url = hostel_res.data[0].get("logo_url") if hostel_res.data else None
 
             # Roommates
             # Find active occupants in this room
@@ -125,6 +126,7 @@ class InvitationService:
                 tenant_name=name,
                 owner_name=owner_name,
                 hostel_name=hostel_name,
+                hostel_logo_url=hostel_logo_url,
                 room_number=room.get("room_no", "N/A"),
                 room_rent=float(monthly_rent),
                 roommates_list=roommates_html,
@@ -301,8 +303,9 @@ class InvitationService:
             owner_name = owner_res.data[0].get("name", "Hostel Owner") if owner_res.data else "Hostel Owner"
 
             # Hostel branding
-            hostel_res = supabase.table("hostels").select("name").eq("owner_id", owner_id).execute()
+            hostel_res = supabase.table("hostels").select("name, logo_url").eq("owner_id", owner_id).execute()
             hostel_name = hostel_res.data[0].get("name", "Trishul Solutions") if hostel_res.data else "Trishul Solutions"
+            hostel_logo_url = hostel_res.data[0].get("logo_url") if hostel_res.data else None
 
             # Roommates
             alloc_res = supabase.table("room_allocations")\
@@ -333,6 +336,7 @@ class InvitationService:
                 tenant_name=profile_name,
                 owner_name=owner_name,
                 hostel_name=hostel_name,
+                hostel_logo_url=hostel_logo_url,
                 room_number=room_no,
                 room_rent=rent,
                 roommates_list=roommates_html,

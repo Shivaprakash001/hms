@@ -48,6 +48,7 @@ class EmailService:
         tenant_name: str, 
         owner_name: str, 
         hostel_name: str, 
+        hostel_logo_url: str | None,
         room_number: str, 
         room_rent: float, 
         roommates_list: str, 
@@ -57,7 +58,7 @@ class EmailService:
         Sends a professional SaaS-style invitation email to a new tenant via Resend SDK.
         """
         subject = f"You're invited to join {hostel_name}"
-        company_logo_url = "https://trishul.solutions/logo.png"
+        company_logo_url = hostel_logo_url or "https://trishul.solutions/logo.png"
 
         # Roommates edge case handling
         roommates_info = roommates_list if roommates_list.strip() else "You will be the first tenant assigned to this room."
@@ -92,7 +93,7 @@ class EmailService:
         </head>
         <body>
             <div class="container">
-                <img src="{company_logo_url}" alt="Trishul Solutions" class="logo">
+                <img src="{company_logo_url}" alt="{hostel_name}" class="logo">
                 <div class="card">
                     <h1 class="title">You're invited to join {hostel_name}</h1>
                     
