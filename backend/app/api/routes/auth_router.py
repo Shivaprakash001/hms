@@ -58,12 +58,13 @@ def get_me(user: UserContext = Depends(get_current_user)):
         if student_id:
             # Single join across students --> profiles and students --> room_allocations --> rooms
             res = supabase.table("students").select(
-                "monthly_rent, profile_completed, profiles:profile_id(due_day, is_profile_completed), room_allocations(room_id, end_date, rooms(room_no, capacity))"
+                "monthly_rent, status, profile_completed, profiles:profile_id(due_day, is_profile_completed), room_allocations(room_id, end_date, rooms(room_no, capacity))"
             ).eq("id", student_id).execute()
             
             if res.data and len(res.data) > 0:
                 student_data = res.data[0]
                 extra["monthly_rent"] = student_data.get("monthly_rent")
+                extra["student_status"] = student_data.get("status")
                 
                 profile_rel = student_data.get("profiles")
                 if profile_rel:

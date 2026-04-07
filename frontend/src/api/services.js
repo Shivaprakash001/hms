@@ -241,6 +241,18 @@ export const studentService = {
         const response = await api.post(`/students/${id}/reactivate`, data);
         return response.data;
     },
+    requestReactivation: async () => {
+        const response = await api.post('/students/me/reactivation-request');
+        return response.data;
+    },
+    getReactivationRequests: async () => {
+        const response = await api.get('/students/owner/reactivation-requests');
+        return response.data;
+    },
+    decideReactivationRequest: async (requestId, action, notes = '') => {
+        const response = await api.post(`/students/owner/reactivation-requests/${requestId}/decision`, { action, notes });
+        return response.data;
+    },
     invite: async (data) => {
         const response = await api.post('/students/invite', data);
         return response.data;
@@ -433,6 +445,14 @@ export const dashboardService = {
     },
     getMonthlyStats: async (months = 6) => {
         const response = await api.get(`/dashboard/monthly-stats?months=${months}`);
+        return response.data;
+    }
+};
+
+// --- Activity Service ---
+export const activityService = {
+    getAll: async (params = {}) => {
+        const response = await api.get('/activity/', { params });
         return response.data;
     }
 };

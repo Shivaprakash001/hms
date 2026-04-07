@@ -11,6 +11,7 @@ from app.api.routes.notification_router import router as notification_router
 from app.api.routes.document_router import router as document_router
 from app.api.routes.owner_router import router as owner_router
 from app.api.routes.billing_router import router as billing_router
+from app.api.routes.activity_router import router as activity_router
 
 router = APIRouter()
 
@@ -27,6 +28,7 @@ router.include_router(notification_router)
 router.include_router(document_router)
 router.include_router(owner_router)
 router.include_router(billing_router)
+router.include_router(activity_router)
 
 @router.get("/health", tags=["API v1 system"])
 def health_check():

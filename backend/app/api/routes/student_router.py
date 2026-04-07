@@ -5,7 +5,8 @@ import json
 from pydantic import ValidationError
 from app.schemas.student_schema import (
     StudentCreate, StudentUpdate, StudentResponse,
-    StudentListResponse, StudentStatus, StudentReactivate, StudentSelfProfileUpdate
+    StudentListResponse, StudentStatus, StudentReactivate, StudentSelfProfileUpdate,
+    ReactivationDecisionRequest
 )
 from app.schemas.document_schema import DocumentResponse
 from app.schemas.payment_schema import StudentPaymentHistory
@@ -113,7 +114,7 @@ def read_all_students(
     - Student: ❌ Cannot access (use GET /students/me instead)
     
     **Filters:**
-    - **status**: Filter by student status (APPLIED, ACTIVE, LEFT, etc.)
+    - **status**: Filter by student status (INVITED, ACTIVE, LEFT)
     - **joined_after**: Students who joined after this date
     - **joined_before**: Students who joined before this date
     - **search**: Search by student name or email
@@ -498,10 +499,10 @@ def modify_student(
     
     **Business Rules:**
     - Cannot reduce rent below 0
-    - Status changes must follow state machine rules:
-      - APPLIED → ACTIVE, LEFT
-      - ACTIVE → LEFT, BLACKLISTED
-      - LEFT → ARCHIVED (cannot go back to ACTIVE without re-admission)
+        - Status changes must follow state machine rules:
+            - INVITED → ACTIVE, LEFT
+            - ACTIVE → LEFT
+            - LEFT → ACTIVE
     - If status changes to LEFT, active room allocation must be ended
     
     **Authorization:**
@@ -578,7 +579,7 @@ def reactivate_student_endpoint(
     
     **Business Rules:**
     - Student must have LEFT status
-    - Cannot reactivate from other statuses (ACTIVE, BLACKLISTED, etc.)
+    - Cannot reactivate from other statuses (e.g. ACTIVE)
     - Requires new monthly_rent and joined_on date
     
     **Authorization:**
@@ -594,5 +595,63 @@ def reactivate_student_endpoint(
         joined_on=reactivation.joined_on,
         reactivated_by=user.user_id,
         requesting_user_role=user.role
+    )
+    return _handle_service_response(result)
+
+
+@router.post(
+    "/me/reactivation-request",
+    response_model=dict,
+    status_code=status.HTTP_201_CREATED,
+    summary="Request tenant reactivation",
+    description="Student requests owner to restore invited/left access"
+)
+def create_my_reactivation_request(
+    user: UserContext = Depends(get_current_user)
+):
+    if not user.is_student():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only students can access this endpoint."
+        )
+
+    result = student_service.create_reactivation_request(
+        profile_id=str(user.user_id),
+        requested_by=str(user.user_id)
+    )
+    return _handle_service_response(result, status.HTTP_201_CREATED)
+
+
+@router.get(
+    "/owner/reactivation-requests",
+    response_model=List[dict],
+    summary="List tenant reactivation requests",
+    description="Owner/admin view of all reactivation requests",
+    dependencies=[Depends(require_admin_or_owner)]
+)
+def list_owner_reactivation_requests(
+    user: UserContext = Depends(get_current_user)
+):
+    result = student_service.list_reactivation_requests(owner_id=str(user.user_id))
+    return _handle_service_response(result)
+
+
+@router.post(
+    "/owner/reactivation-requests/{request_id}/decision",
+    response_model=dict,
+    summary="Approve/Reject tenant reactivation request",
+    description="Owner/admin action to process a reactivation request",
+    dependencies=[Depends(require_admin_or_owner)]
+)
+def decide_reactivation_request(
+    request_id: str,
+    payload: ReactivationDecisionRequest,
+    user: UserContext = Depends(get_current_user)
+):
+    result = student_service.process_reactivation_request(
+        request_id=request_id,
+        owner_id=str(user.user_id),
+        action=payload.action,
+        notes=payload.notes
     )
     return _handle_service_response(result)

@@ -63,7 +63,8 @@ function App() {
             <Route path="expenses" element={<Expenses />} />
             <Route path="billing" element={<BillingPlans />} />
             <Route path="profile" element={<OwnerProfile />} />
-            <Route path="activities" element={<ActivityHistory />} />
+            <Route path="activity" element={<ActivityHistory />} />
+            <Route path="activities" element={<Navigate to="/owner/activity" replace />} />
           </Route>
         </Route>
         {/* Global Redirects */}

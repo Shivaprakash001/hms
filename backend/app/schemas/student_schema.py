@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator, EmailStr
-from typing import Optional
+from typing import Optional, Literal
 from uuid import UUID
 from datetime import date, datetime
 from enum import Enum
@@ -12,18 +12,25 @@ class StudentStatus(str, Enum):
     INVITED = "INVITED"
     ACTIVE = "ACTIVE"
     LEFT = "LEFT"
-    BLACKLISTED = "BLACKLISTED"
-    ARCHIVED = "ARCHIVED"
 
 
 # Valid status transitions
 VALID_STATUS_TRANSITIONS = {
-    StudentStatus.INVITED: [StudentStatus.ACTIVE],
-    StudentStatus.ACTIVE: [StudentStatus.LEFT, StudentStatus.BLACKLISTED],
-    StudentStatus.LEFT: [StudentStatus.ACTIVE, StudentStatus.ARCHIVED],  # Can go back to ACTIVE (owner re-admits)
-    StudentStatus.BLACKLISTED: [StudentStatus.ARCHIVED],
-    StudentStatus.ARCHIVED: []  # Terminal state
+    StudentStatus.INVITED: [StudentStatus.ACTIVE, StudentStatus.LEFT],
+    StudentStatus.ACTIVE: [StudentStatus.LEFT],
+    StudentStatus.LEFT: [StudentStatus.ACTIVE],
 }
+
+
+class ReactivationRequestStatus(str, Enum):
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+
+class ReactivationDecisionRequest(BaseModel):
+    action: Literal["approve", "reject"]
+    notes: Optional[str] = Field(default=None, max_length=500)
 
 
 class StudentCreate(BaseModel):

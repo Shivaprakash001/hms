@@ -286,9 +286,9 @@ def get_unassigned_student_profiles(owner_id: Optional[str] = None) -> Dict[str,
         
         assigned_student_ids = [a.get("student_id") for a in active_allocations.data]
         
-        # 2. Get profiles to exclude: 
+        # 2. Get profiles to exclude:
         # - Those with active allocations
-        # - Those marked as BLACKLISTED or ARCHIVED (restricted)
+        # - Those marked as LEFT
         exclude_profile_ids = []
         
         # Get profile_ids for assigned students
@@ -299,10 +299,10 @@ def get_unassigned_student_profiles(owner_id: Optional[str] = None) -> Dict[str,
                 .execute()
             exclude_profile_ids.extend([s.get("profile_id") for s in assigned_students.data])
             
-        # Get profile_ids for restricted students
+        # Get profile_ids for students who left
         restricted_students = supabase.table("students")\
             .select("profile_id")\
-            .in_("status", ["BLACKLISTED", "ARCHIVED"])\
+            .eq("status", "LEFT")\
             .execute()
         exclude_profile_ids.extend([s.get("profile_id") for s in restricted_students.data])
         

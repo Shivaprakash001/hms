@@ -515,6 +515,21 @@ def initiate_payment(
       student-centric order creation flow.
     """
     if user.is_student():
+        from app.db import supabase
+
+        student_status_res = supabase.table("students")\
+            .select("status")\
+            .eq("id", str(user.student_id))\
+            .limit(1)\
+            .execute()
+
+        student_status = (student_status_res.data[0].get("status") if student_status_res.data else None) or ""
+        if str(student_status).upper() != "ACTIVE":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Payments are disabled for student status '{student_status}'."
+            )
+
         # Student flow: requirement for obligation_id
         if not data.obligation_id:
             raise HTTPException(
@@ -572,6 +587,19 @@ def verify_razorpay_payment(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only students can verify payments."
+        )
+
+    from app.db import supabase
+    student_status_res = supabase.table("students")\
+        .select("status")\
+        .eq("id", str(user.student_id))\
+        .limit(1)\
+        .execute()
+    student_status = (student_status_res.data[0].get("status") if student_status_res.data else None) or ""
+    if str(student_status).upper() != "ACTIVE":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Payments are disabled for student status '{student_status}'."
         )
 
     result = payment_service.verify_razorpay_payment(

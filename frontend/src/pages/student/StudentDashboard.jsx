@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { Home, CreditCard, Bell, BedDouble, Calendar, AlertCircle, User } from 'lucide-react';
+import { Home, CreditCard, Bell, BedDouble, Calendar, AlertCircle, User, ShieldAlert } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { paymentService, notificationService } from '../../api/services';
+import { paymentService, notificationService, studentService } from '../../api/services';
 import api from '../../api/axios';
 
 const getOrdinalDay = (day) => {
@@ -25,16 +25,25 @@ const StudentDashboard = () => {
     const [announcements, setAnnouncements] = useState([]);
     const [announcementsLoading, setAnnouncementsLoading] = useState(true);
     const [announcementsError, setAnnouncementsError] = useState('');
+    const [studentProfile, setStudentProfile] = useState(null);
+    const [requestLoading, setRequestLoading] = useState(false);
+    const [requestMessage, setRequestMessage] = useState('');
+    const [requestError, setRequestError] = useState('');
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         const fetchData = async () => {
-            if (!user?.student_id) return;
+            if (!user?.student_id) {
+                setIsLoading(false);
+                setAnnouncementsLoading(false);
+                return;
+            }
             try {
-                const [payRes, roomRes, notifRes] = await Promise.allSettled([
+                const [payRes, roomRes, notifRes, profileRes] = await Promise.allSettled([
                     paymentService.getStudentHistory(user.student_id),
                     api.get('/allocations/my-room'),
-                    notificationService.getAll()
+                    notificationService.getAll(),
+                    studentService.getMyProfile()
                 ]);
                 if (payRes.status === 'fulfilled') setDues(payRes.value || { obligations: [], outstanding_balance: 0 });
                 if (roomRes.status === 'fulfilled') setRoomData(roomRes.value?.data || null);
@@ -44,6 +53,10 @@ const StudentDashboard = () => {
                     setAnnouncementsError('');
                 } else {
                     setAnnouncementsError('Could not load announcements.');
+                }
+
+                if (profileRes.status === 'fulfilled') {
+                    setStudentProfile(profileRes.value || null);
                 }
             } catch (error) {
                 console.error("Failed to fetch dashboard data:", error);
@@ -100,6 +113,60 @@ const StudentDashboard = () => {
 
     const nextPayment = getNextPaymentDate();
 
+    const normalizedStatus = useMemo(() => {
+        const raw = (studentProfile?.status || user?.student_status || '').toString().toUpperCase();
+        if (raw === 'ACTIVE') return 'ACTIVE';
+        if (raw === 'INVITED') return 'INVITED';
+        if (!raw || ['INACTIVE', 'BLOCKED', 'BLACKLISTED', 'ARCHIVED', 'APPLIED', 'PENDING_APPROVAL'].includes(raw)) {
+            return 'LEFT';
+        }
+        return raw === 'LEFT' ? 'LEFT' : 'LEFT';
+    }, [studentProfile?.status, user?.student_status]);
+
+    const statusConfig = useMemo(() => {
+        const map = {
+            ACTIVE: {
+                title: 'Account Active',
+                message: 'Your hostel access is active.',
+                card: 'bg-emerald-50 border-emerald-200 text-emerald-800',
+                button: false
+            },
+            INVITED: {
+                title: 'Invitation Pending Activation',
+                message: 'Your tenant access is invited but not active yet. Request activation from the owner if needed.',
+                card: 'bg-rose-50 border-rose-200 text-rose-800',
+                button: true
+            },
+            LEFT: {
+                title: 'No Active Tenancy',
+                message: 'You are no longer an active tenant of this hostel.',
+                card: 'bg-slate-100 border-slate-300 text-slate-700',
+                button: false
+            },
+        };
+        return map[normalizedStatus] || map.LEFT;
+    }, [normalizedStatus]);
+
+    const isActiveTenant = normalizedStatus === 'ACTIVE';
+
+    const requestReactivation = async () => {
+        setRequestLoading(true);
+        setRequestMessage('');
+        setRequestError('');
+        try {
+            await studentService.requestReactivation();
+            setRequestMessage('Reactivation request sent to your owner.');
+        } catch (err) {
+            const detail = err?.response?.data?.detail;
+            const message = typeof detail === 'string'
+                ? detail
+                : detail?.message || err?.message || 'Failed to send reactivation request';
+            setRequestError(message);
+        } finally {
+            setRequestLoading(false);
+        }
+    };
+
     // Real data from backend
     const roomNo = user?.room_no || roomData?.room?.room_no;
     const roomCapacity = user?.room_capacity || roomData?.room?.capacity;
@@ -136,6 +203,55 @@ const StudentDashboard = () => {
         );
     }
 
+    if (!isActiveTenant) {
+        return (
+            <div className="space-y-6">
+                <div>
+                    <h1 className="text-2xl font-bold text-slate-900">Hello, {user?.name} 👋</h1>
+                    <p className="text-slate-500">Account lifecycle update for your tenancy.</p>
+                </div>
+
+                <div className={`rounded-2xl border p-4 ${statusConfig.card}`}>
+                    <div className="flex items-start gap-3">
+                        <ShieldAlert size={20} className="mt-0.5" />
+                        <div>
+                            <p className="font-bold">⚠ {statusConfig.title}</p>
+                            <p className="text-sm mt-1">{statusConfig.message}</p>
+                            <p className="text-xs mt-2 opacity-80">You can still view payment history, receipts, and profile.</p>
+                        </div>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                        {statusConfig.button && (
+                            <button
+                                onClick={requestReactivation}
+                                disabled={requestLoading}
+                                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-semibold"
+                            >
+                                {requestLoading ? 'Sending...' : 'Request Activation'}
+                            </button>
+                        )}
+                        <button
+                            onClick={() => navigate('/student/payments')}
+                            className="px-4 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-sm font-semibold text-slate-700"
+                        >
+                            View Payment History
+                        </button>
+                        <button
+                            onClick={() => navigate('/student/profile')}
+                            className="px-4 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-sm font-semibold text-slate-700"
+                        >
+                            Contact / Profile
+                        </button>
+                    </div>
+
+                    {requestMessage && <p className="text-sm text-emerald-700 mt-3">{requestMessage}</p>}
+                    {requestError && <p className="text-sm text-rose-700 mt-3">{requestError}</p>}
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-8">
             {/* Welcome Section */}
@@ -143,16 +259,6 @@ const StudentDashboard = () => {
                 <div>
                     <h1 className="text-2xl font-bold text-slate-900">Hello, {user?.name} 👋</h1>
                     <p className="text-slate-500">Here's what's happening in your hostel today.</p>
-
-                    {(user?.status === 'Vacated' || user?.status === 'Shifted') && (
-                        <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-700">
-                            <AlertCircle size={24} />
-                            <div>
-                                <p className="font-bold">Status: {user.status}</p>
-                                <p className="text-sm">You have been {user.status.toLowerCase()} from your room.</p>
-                            </div>
-                        </div>
-                    )}
                 </div>
                 <div className="flex gap-3">
                     <button 

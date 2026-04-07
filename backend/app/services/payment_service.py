@@ -905,12 +905,27 @@ def create_razorpay_order(obligation_id: str, amount: Decimal, student_id: str, 
         if not obligation_id:
              return ServiceResponse.error(ErrorCode.INVALID_INPUT, "Obligation ID is required")
 
-        # 2. Fetch Obligation to verify balance
+        # 2. Fetch Obligation to verify ownership and balance
         ob_res = supabase.table("rent_obligations").select("*").eq("id", obligation_id).execute()
         if not ob_res.data:
             return ServiceResponse.not_found("Rent Obligation")
         
         obligation = ob_res.data[0]
+
+        if str(obligation.get("student_id")) != str(student_id):
+            return ServiceResponse.error(ErrorCode.FORBIDDEN, "Obligation does not belong to this student")
+
+        student_res = supabase.table("students")\
+            .select("id, status")\
+            .eq("id", student_id)\
+            .limit(1)\
+            .execute()
+        if not student_res.data:
+            return ServiceResponse.not_found("Student")
+
+        student_status = str(student_res.data[0].get("status") or "").upper()
+        if student_status != "ACTIVE":
+            return ServiceResponse.error(ErrorCode.FORBIDDEN, f"Payments are disabled for student status '{student_status}'")
         
         # 3. Fetch existing payments to verify amount doesn't exceed balance
         p_res = supabase.table("payments").select("amount_paid").eq("obligation_id", obligation_id).execute()

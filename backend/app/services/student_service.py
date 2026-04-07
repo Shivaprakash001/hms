@@ -1,6 +1,6 @@
 from app.db import supabase
 from typing import Optional, Dict, Any
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from postgrest.exceptions import APIError
 from app.utils.responses import ServiceResponse, ErrorCode
 from app.utils.logger import get_logger
@@ -584,13 +584,26 @@ def update_student(
         new_status = update_data.get('status')
         if new_status and new_status != current_status:
             # Check if transition is valid
-            valid_transitions = VALID_STATUS_TRANSITIONS.get(StudentStatus(current_status), [])
-            
-            if StudentStatus(new_status) not in valid_transitions:
+            try:
+                current_status_enum = StudentStatus(current_status)
+            except Exception:
+                # Legacy/unknown states are treated as LEFT in simplified lifecycle
+                current_status_enum = StudentStatus.LEFT
+
+            try:
+                new_status_enum = StudentStatus(new_status)
+            except Exception:
+                return ServiceResponse.validation_error(
+                    f"Unsupported status '{new_status}'. Allowed: INVITED, ACTIVE, LEFT"
+                )
+
+            valid_transitions = VALID_STATUS_TRANSITIONS.get(current_status_enum, [])
+
+            if new_status_enum not in valid_transitions:
                 logger.warning(f"Invalid status transition: {current_status} -> {new_status}")
                 return ServiceResponse.validation_error(
                     f"Invalid status transition from '{current_status}' to '{new_status}'",
-                    f"Valid transitions from '{current_status}': {[s.value for s in valid_transitions]}"
+                    f"Valid transitions from '{current_status_enum.value}': {[s.value for s in valid_transitions]}"
                 )
             
             # CRITICAL: If changing to LEFT, must end active room allocation
@@ -748,6 +761,206 @@ def reactivate_student(
     except Exception as e:
         logger.exception(f"Error reactivating student {student_id}: {e}")
         return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to reactivate student", str(e))
+
+
+def create_reactivation_request(
+    profile_id: str,
+    requested_by: str
+) -> Dict[str, Any]:
+    """
+    Student asks owner to reactivate access.
+    Abuse guard: at most 1 request per 24 hours.
+    """
+    try:
+        student_res = supabase.table("students")\
+            .select("id, owner_id, status, profile_id, profiles!students_profile_id_fkey(name), room_allocations(room_id, end_date, rooms(room_no))")\
+            .eq("profile_id", profile_id)\
+            .limit(1)\
+            .execute()
+
+        if not student_res.data:
+            return ServiceResponse.not_found("Student")
+
+        student = student_res.data[0]
+        student_id = str(student.get("id"))
+        owner_id = str(student.get("owner_id")) if student.get("owner_id") else None
+        current_status = str(student.get("status") or "").upper()
+
+        if not owner_id:
+            return ServiceResponse.validation_error("Owner not linked for this student")
+
+        if current_status == StudentStatus.ACTIVE.value:
+            return ServiceResponse.validation_error("Account is already active")
+
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+        recent_req = supabase.table("reactivation_requests")\
+            .select("id, status, created_at")\
+            .eq("student_id", student_id)\
+            .gte("created_at", cutoff)\
+            .order("created_at", desc=True)\
+            .limit(1)\
+            .execute()
+
+        if recent_req.data:
+            latest = recent_req.data[0]
+            return ServiceResponse.validation_error(
+                "Reactivation request already sent recently",
+                f"Please wait 24 hours before sending a new request. Last request status: {latest.get('status')}"
+            )
+
+        insert_res = supabase.table("reactivation_requests").insert({
+            "student_id": student_id,
+            "owner_id": owner_id,
+            "requested_by_profile_id": requested_by,
+            "current_status": current_status,
+            "status": "PENDING"
+        }).execute()
+
+        if not insert_res.data:
+            return ServiceResponse.error(ErrorCode.DB_INSERT_ERROR, "Failed to create reactivation request")
+
+        student_name = (student.get("profiles!students_profile_id_fkey") or {}).get("name") or "Tenant"
+        room_no = None
+        allocations = student.get("room_allocations") or []
+        if isinstance(allocations, list):
+            active_alloc = next((a for a in allocations if a.get("end_date") is None), None)
+            if active_alloc:
+                room_rel = active_alloc.get("rooms") or {}
+                room_no = room_rel.get("room_no") if isinstance(room_rel, dict) else None
+
+        try:
+            from app.services import notification_service
+            notification_service.create_notification(
+                owner_id,
+                "Reactivation Request",
+                f"{student_name}{f' (Room {room_no})' if room_no else ''} requested access again.",
+                "reactivation_request"
+            )
+        except Exception as notify_err:
+            logger.warning(f"Failed to create owner notification for reactivation request: {notify_err}")
+
+        return ServiceResponse.success(insert_res.data[0], "Reactivation request submitted")
+    except Exception as e:
+        logger.exception(f"Error creating reactivation request: {e}")
+        return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Failed to create reactivation request", str(e))
+
+
+def list_reactivation_requests(owner_id: str) -> Dict[str, Any]:
+    try:
+        res = supabase.table("reactivation_requests")\
+            .select("*, students(id, status, profile_id, room_allocations(room_id, end_date, rooms(room_no)), profiles!students_profile_id_fkey(name, email, phone))")\
+            .eq("owner_id", owner_id)\
+            .order("created_at", desc=True)\
+            .execute()
+
+        rows = res.data or []
+        flattened = []
+        for row in rows:
+            student = row.get("students") or {}
+            profile = student.get("profiles!students_profile_id_fkey") or {}
+            room_no = None
+            allocs = student.get("room_allocations") or []
+            if isinstance(allocs, list):
+                active_alloc = next((a for a in allocs if a.get("end_date") is None), None)
+                if active_alloc:
+                    room = active_alloc.get("rooms") or {}
+                    room_no = room.get("room_no") if isinstance(room, dict) else None
+
+            flattened.append({
+                "id": row.get("id"),
+                "student_id": row.get("student_id"),
+                "owner_id": row.get("owner_id"),
+                "current_status": row.get("current_status"),
+                "status": row.get("status"),
+                "notes": row.get("notes"),
+                "created_at": row.get("created_at"),
+                "processed_at": row.get("processed_at"),
+                "processed_by": row.get("processed_by"),
+                "student_name": profile.get("name"),
+                "student_email": profile.get("email"),
+                "student_phone": profile.get("phone"),
+                "room_no": room_no
+            })
+
+        return ServiceResponse.success(flattened)
+    except Exception as e:
+        logger.exception(f"Error fetching reactivation requests: {e}")
+        return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Failed to fetch reactivation requests", str(e))
+
+
+def process_reactivation_request(
+    request_id: str,
+    owner_id: str,
+    action: str,
+    notes: Optional[str] = None
+) -> Dict[str, Any]:
+    try:
+        req_res = supabase.table("reactivation_requests")\
+            .select("*")\
+            .eq("id", request_id)\
+            .eq("owner_id", owner_id)\
+            .limit(1)\
+            .execute()
+
+        if not req_res.data:
+            return ServiceResponse.not_found("Reactivation request")
+
+        req = req_res.data[0]
+        if str(req.get("status") or "").upper() != "PENDING":
+            return ServiceResponse.validation_error("Request already processed")
+
+        action_norm = (action or "").strip().lower()
+        if action_norm not in ("approve", "reject"):
+            return ServiceResponse.validation_error("Action must be approve or reject")
+
+        new_status = "APPROVED" if action_norm == "approve" else "REJECTED"
+
+        if action_norm == "approve":
+            student_update = supabase.table("students")\
+                .update({"status": StudentStatus.ACTIVE.value})\
+                .eq("id", req.get("student_id"))\
+                .eq("owner_id", owner_id)\
+                .execute()
+
+            if not student_update.data:
+                return ServiceResponse.validation_error("Unable to activate student for this request")
+
+            try:
+                trigger_hook("student_reactivated", student_id=req.get("student_id"), user_id=owner_id)
+            except Exception:
+                pass
+
+        update_res = supabase.table("reactivation_requests")\
+            .update({
+                "status": new_status,
+                "notes": notes,
+                "processed_at": datetime.now(timezone.utc).isoformat(),
+                "processed_by": owner_id
+            })\
+            .eq("id", request_id)\
+            .eq("owner_id", owner_id)\
+            .execute()
+
+        if not update_res.data:
+            return ServiceResponse.error(ErrorCode.DB_UPDATE_ERROR, "Failed to update reactivation request")
+
+        try:
+            from app.services import notification_service
+            profile_id = req.get("requested_by_profile_id")
+            if profile_id:
+                notification_service.create_notification(
+                    str(profile_id),
+                    "Reactivation Request Update",
+                    "Your reactivation request was approved." if action_norm == "approve" else "Your reactivation request was rejected.",
+                    "reactivation_request"
+                )
+        except Exception as notify_err:
+            logger.warning(f"Failed to create student notification for reactivation decision: {notify_err}")
+
+        return ServiceResponse.success(update_res.data[0], f"Request {new_status.lower()}")
+    except Exception as e:
+        logger.exception(f"Error processing reactivation request {request_id}: {e}")
+        return ServiceResponse.error(ErrorCode.INTERNAL_ERROR, "Failed to process reactivation request", str(e))
 
 
 def update_student_self_profile(
