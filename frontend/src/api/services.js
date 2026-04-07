@@ -300,6 +300,10 @@ export const allocationService = {
     getAllActive: async () => {
         const response = await api.get('/allocations/active');
         return response.data;
+    },
+    getHistory: async () => {
+        const response = await api.get('/allocations/owner-history');
+        return response.data;
     }
 };
 

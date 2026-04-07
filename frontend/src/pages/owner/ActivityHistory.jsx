@@ -2,74 +2,65 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
     Users, 
-    TrendingUp, 
     Search, 
     ArrowLeft, 
-    Filter, 
     Calendar,
     ChevronRight,
     Home,
-    MoveHorizontal,
-    CreditCard
+    Clock,
+    UserMinus,
+    ArrowUpRight
 } from 'lucide-react';
-import { allocationService, paymentService } from '../../api/services';
+import { allocationService } from '../../api/services';
 
 const ActivityHistory = () => {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [activities, setActivities] = useState([]);
     const [filteredActivities, setFilteredActivities] = useState([]);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [typeFilter, setTypeFilter] = useState('all');
     const [dateFilter, setDateFilter] = useState({ start: '', end: '' });
 
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [paymentsRes, activeAllocations] = await Promise.all([
-                paymentService.getAll({ limit: 100 }),
-                allocationService.getAllActive()
-            ]);
-
-            const payments = Array.isArray(paymentsRes) ? paymentsRes : (paymentsRes?.payments || []);
-            const allLocal = [];
-
-            // Payments
-            payments.forEach(p => {
-                allLocal.push({
-                    id: `pay_${p.id}`,
-                    type: 'payment',
-                    title: 'Payment Received',
-                    user: p.student_name,
-                    detail: `Paid ₹${p.amount_paid} via ${p.payment_method}`,
-                    date: new Date(p.payment_date),
-                    icon: CreditCard,
-                    color: 'text-emerald-600',
-                    bg: 'bg-emerald-50'
-                });
+            const history = await allocationService.getHistory();
+            
+            const formatted = (history || []).map(a => {
+                const isPast = !!a.end_date;
+                return {
+                    id: a.id,
+                    studentName: a.student?.profiles?.name || 'Unknown Tenant',
+                    roomNo: a.room?.room_no || 'N/A',
+                    startDate: new Date(a.start_date),
+                    endDate: a.end_date ? new Date(a.end_date) : null,
+                    isReallocation: a.is_reallocation || false, // We could detect this by checking if student has multiple segments
+                    type: isPast ? 'EXIT' : 'ALLOCATION'
+                };
             });
 
-            // Allocations
-            (activeAllocations || []).forEach(a => {
-                const startDate = new Date(a.start_date);
-                allLocal.push({
-                    id: `alloc_${a.id}`,
-                    type: 'allocation',
-                    title: 'Room Allocation',
-                    user: a.student?.profiles?.name || 'New Tenant',
-                    detail: `Allocated to Room ${a.room?.room_no}`,
-                    date: startDate,
-                    icon: Home,
-                    color: 'text-indigo-600',
-                    bg: 'bg-indigo-50'
-                });
+            // Detect reallocations (consecutive moves)
+            // Group by student and check if there are multiple segments
+            const grouped = {};
+            formatted.forEach(f => {
+                if(!grouped[f.studentName]) grouped[f.studentName] = [];
+                grouped[f.studentName].push(f);
+            });
+            
+            formatted.forEach(f => {
+                const studentHistory = grouped[f.studentName];
+                if (studentHistory && studentHistory.length > 1) {
+                    // If not the very first (oldest) allocation, let's call it a reallocation/move
+                    const sorted = [...studentHistory].sort((a,b) => a.startDate - b.startDate);
+                    if (f.id !== sorted[0].id) {
+                        f.isReallocation = true;
+                    }
+                }
             });
 
-            allLocal.sort((a, b) => b.date - a.date);
-            setActivities(allLocal);
-            setFilteredActivities(allLocal);
+            setActivities(formatted.sort((a,b) => b.startDate - a.startDate));
+            setFilteredActivities(formatted);
         } catch (error) {
-            console.error("Failed to fetch activity history:", error);
+            console.error("Failed to fetch allocation history:", error);
         } finally {
             setLoading(false);
         }
@@ -81,137 +72,143 @@ const ActivityHistory = () => {
 
     useEffect(() => {
         let filtered = activities.filter(act => {
-            const matchesSearch = 
-                act.user.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                act.detail.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                act.title.toLowerCase().includes(searchTerm.toLowerCase());
-            
-            const matchesType = typeFilter === 'all' || act.type === typeFilter;
-            
-            const actDate = act.date.toISOString().split('T')[0];
+            const actDate = act.startDate.toISOString().split('T')[0];
             const matchesStart = !dateFilter.start || actDate >= dateFilter.start;
             const matchesEnd = !dateFilter.end || actDate <= dateFilter.end;
-
-            return matchesSearch && matchesType && matchesStart && matchesEnd;
+            return matchesStart && matchesEnd;
         });
         setFilteredActivities(filtered);
-    }, [searchTerm, typeFilter, dateFilter, activities]);
+    }, [dateFilter, activities]);
 
-    const getTypeIcon = (type) => {
-        switch(type) {
-            case 'payment': return <TrendingUp size={18} />;
-            case 'allocation': return <Users size={18} />;
-            default: return <Filter size={18} />;
-        }
+    const getStatusTheme = (act) => {
+        if (act.type === 'EXIT') return { bg: 'bg-rose-50', color: 'text-rose-600', icon: UserMinus, label: 'Vacated' };
+        if (act.isReallocation) return { bg: 'bg-amber-50', color: 'text-amber-600', icon: Clock, label: 'Re-allocated' };
+        return { bg: 'bg-indigo-50', color: 'text-indigo-600', icon: Home, label: 'First Allocation' };
     };
 
     return (
-        <div className="max-w-4xl mx-auto space-y-6 pb-20">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
+        <div className="max-w-4xl mx-auto space-y-8 pb-20">
+            {/* Elegant Header */}
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6">
+                <div className="flex items-center gap-5">
                     <button 
                         onClick={() => navigate(-1)}
-                        className="p-2 hover:bg-slate-100 rounded-xl text-slate-500 transition-colors"
+                        className="p-3 bg-white border border-slate-200 hover:bg-slate-50 rounded-2xl text-slate-500 transition-all shadow-sm"
                     >
                         <ArrowLeft size={20} />
                     </button>
                     <div>
-                        <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Activity History</h2>
-                        <p className="text-sm text-slate-500">Comprehensive logs of all property events.</p>
-                    </div>
-                </div>
-            </div>
-
-            {/* Filters */}
-            <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="relative group">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
-                        <input 
-                            type="text"
-                            placeholder="Search by name, room, or detail..."
-                            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
-                    </div>
-                    <div className="flex gap-2">
-                        <select 
-                            className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100 cursor-pointer"
-                            value={typeFilter}
-                            onChange={(e) => setTypeFilter(e.target.value)}
-                        >
-                            <option value="all">All Activities</option>
-                            <option value="payment">Payments Only</option>
-                            <option value="allocation">Allocations Only</option>
-                        </select>
+                        <h2 className="text-3xl font-black text-slate-900 tracking-tight">Tenant Movement</h2>
+                        <p className="text-sm text-slate-500 mt-1 font-medium italic">Tracking every allocation and relocation.</p>
                     </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-center gap-3 pt-2 border-t border-slate-50">
-                    <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                        <Calendar size={14} />
-                        <span>Filter by Date</span>
-                    </div>
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                {/* Simplified Date Filter */}
+                <div className="bg-white p-2 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-2">
+                    <div className="flex items-center px-3 py-2 bg-slate-50 rounded-xl gap-3">
+                        <Calendar size={16} className="text-indigo-400" />
                         <input 
                             type="date"
-                            className="flex-1 sm:w-auto px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                            className="bg-transparent border-none text-xs font-bold text-slate-600 outline-none w-28"
                             value={dateFilter.start}
                             onChange={(e) => setDateFilter(prev => ({ ...prev, start: e.target.value }))}
                         />
-                        <span className="text-slate-300">to</span>
+                    </div>
+                    <span className="text-slate-300 font-bold">→</span>
+                    <div className="flex items-center px-3 py-2 bg-slate-50 rounded-xl gap-3">
                         <input 
                             type="date"
-                            className="flex-1 sm:w-auto px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                            className="bg-transparent border-none text-xs font-bold text-slate-600 outline-none w-28"
                             value={dateFilter.end}
                             onChange={(e) => setDateFilter(prev => ({ ...prev, end: e.target.value }))}
                         />
-                        {(dateFilter.start || dateFilter.end) && (
-                            <button 
-                                onClick={() => setDateFilter({ start: '', end: '' })}
-                                className="text-[10px] font-bold text-rose-500 hover:text-rose-600 uppercase tracking-tighter"
-                            >
-                                Clear
-                            </button>
-                        )}
                     </div>
+                    {(dateFilter.start || dateFilter.end) && (
+                        <button 
+                            onClick={() => setDateFilter({ start: '', end: '' })}
+                            className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                        >
+                            <UserMinus size={18} />
+                        </button>
+                    )}
                 </div>
             </div>
 
-            {/* Activity List */}
-            <div className="space-y-3">
+            {/* Main Log List */}
+            <div className="space-y-4">
                 {loading ? (
-                    <div className="py-12 text-center text-slate-400">Loading details...</div>
+                    <div className="flex flex-col items-center justify-center py-20 gap-4">
+                        <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                        <p className="text-sm font-bold text-slate-400 animate-pulse">Retrieving Logs...</p>
+                    </div>
                 ) : filteredActivities.length === 0 ? (
-                    <div className="bg-white p-12 rounded-2xl border border-dashed border-slate-200 text-center text-slate-400">
-                        No activities found matching your filters.
+                    <div className="bg-white p-16 rounded-[2rem] border-2 border-dashed border-slate-200 text-center space-y-4">
+                        <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto">
+                            <Search size={32} className="text-slate-300" />
+                        </div>
+                        <p className="text-slate-400 font-bold">No movements recorded during this period.</p>
                     </div>
                 ) : (
-                    filteredActivities.map((act) => (
-                        <div 
-                            key={act.id}
-                            className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all group flex items-center gap-4"
-                        >
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${act.bg} ${act.color} group-hover:scale-105 transition-transform`}>
-                                <act.icon size={22} className="stroke-[2.5]" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <div className="flex justify-between items-start mb-0.5">
-                                    <h4 className="font-bold text-slate-900 truncate">{act.user}</h4>
-                                    <span className="text-[10px] sm:text-xs font-medium text-slate-400 whitespace-nowrap bg-slate-50 px-2 py-0.5 rounded-full border border-slate-100">
-                                        {act.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                                    </span>
+                    <div className="grid gap-3">
+                        {filteredActivities.map((act) => {
+                            const theme = getStatusTheme(act);
+                            return (
+                                <div 
+                                    key={act.id}
+                                    className="group bg-white p-5 rounded-[1.5rem] border border-slate-100 shadow-sm hover:shadow-xl hover:border-indigo-100 transition-all duration-300 flex items-center gap-6 relative overflow-hidden"
+                                >
+                                    {/* Sidebar indicator */}
+                                    <div className={`absolute top-0 left-0 bottom-0 w-1 ${theme.color.replace('text', 'bg')}`}></div>
+
+                                    {/* Icon Box */}
+                                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 ${theme.bg} ${theme.color} group-hover:scale-110 transition-transform shadow-sm`}>
+                                        <theme.icon size={26} className="stroke-[2]" />
+                                    </div>
+
+                                    {/* Content Area */}
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex justify-between items-start">
+                                            <h4 className="text-lg font-black text-slate-900 group-hover:text-indigo-600 transition-colors truncate">
+                                                {act.studentName}
+                                            </h4>
+                                            <div className="flex flex-col items-end">
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-300 mb-1">Movement Date</span>
+                                                <span className="text-xs font-bold text-slate-600 bg-slate-50 px-3 py-1 rounded-full border border-slate-100">
+                                                    {act.startDate.toLocaleDateString(undefined, { 
+                                                        month: 'long', 
+                                                        day: 'numeric',
+                                                        year: 'numeric'
+                                                    })}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-3 mt-3">
+                                            <div className={`px-4 py-1.5 rounded-xl ${theme.bg} ${theme.color} text-[10px] font-black uppercase tracking-widest border border-current opacity-70`}>
+                                                {theme.label}
+                                            </div>
+                                            <div className="h-1 w-1 bg-slate-200 rounded-full"></div>
+                                            <p className="text-sm font-bold text-slate-500 flex items-center gap-2">
+                                                <span className="text-slate-400">Target:</span>
+                                                <span className="text-slate-900 bg-slate-100 px-2 py-0.5 rounded-lg">Room {act.roomNo}</span>
+                                            </p>
+                                        </div>
+
+                                        {act.endDate && (
+                                            <p className="text-[10px] font-bold text-rose-400 mt-2 flex items-center gap-1.5 uppercase">
+                                                <ChevronRight size={12} /> Vacated on {act.endDate.toLocaleDateString()}
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    {/* Detail Button (Hidden on Mobile) */}
+                                    <div className="hidden sm:flex items-center justify-center w-10 h-10 rounded-full bg-slate-50 text-slate-300 group-hover:bg-indigo-600 group-hover:text-white transition-all">
+                                        <ArrowUpRight size={20} />
+                                    </div>
                                 </div>
-                                <p className="text-sm text-indigo-600 font-semibold mb-1 flex items-center gap-1.5">
-                                    {act.title}
-                                    <ChevronRight size={14} className="text-slate-300" />
-                                </p>
-                                <p className="text-xs text-slate-500 leading-relaxed truncate">{act.detail}</p>
-                            </div>
-                        </div>
-                    ))
+                            );
+                        })}
+                    </div>
                 )}
             </div>
         </div>

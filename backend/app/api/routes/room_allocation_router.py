@@ -50,6 +50,22 @@ def get_active_allocations(
     return _handle_service_response(result)
 
 
+@router.get(
+    "/owner-history",
+    response_model=List[RoomAllocationResponse],
+    summary="Get all past and current allocations for the owner's students",
+    dependencies=[Depends(require_admin_or_owner)]
+)
+def get_owner_allocation_history(
+    user: UserContext = Depends(get_current_user)
+):
+    """
+    Get a complete list of all room assignments (past and present) for your students.
+    """
+    result = room_allocation_service.get_all_allocations_history(user.user_id)
+    return _handle_service_response(result)
+
+
 @router.post(
     "/",
     response_model=dict, # Returns detailed success summary

@@ -356,3 +356,30 @@ def get_active_allocations(user_id: str) -> Dict[str, Any]:
         logger.exception(f"Error fetching active allocations: {e}")
         return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, str(e))
 
+
+def get_all_allocations_history(user_id: str) -> Dict[str, Any]:
+    """Get all past and current allocations for an owner's students."""
+    try:
+        # Fetch allocations with student and room info
+        res = supabase.table("room_allocations")\
+            .select("*, students(id, owner_id, profiles!students_profile_id_fkey(name)), rooms(*)")\
+            .order("start_date", desc=True)\
+            .execute()
+
+        data = []
+        for item in (res.data or []):
+            student = item.get("students") or {}
+            # Filter by owner_id
+            if str(student.get("owner_id", "")) != str(user_id):
+                continue
+            
+            # Map student profile for UI
+            item["student"] = student
+            item["room"] = item.pop("rooms", None)
+            data.append(item)
+
+        return ServiceResponse.success(data)
+    except Exception as e:
+        logger.exception(f"Error fetching allocation history: {e}")
+        return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, str(e))
+
