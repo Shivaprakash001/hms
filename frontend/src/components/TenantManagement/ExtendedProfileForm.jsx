@@ -182,194 +182,126 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
                     </button>
                 </div>
 
-                {/* Scrolling Content */}
-                <div className="flex-1 overflow-y-auto px-6 sm:px-10 py-8 space-y-12 scroll-smooth">
-                    {/* Section 1: Personal Information */}
-                    <div className="space-y-8">
-                        <div className="flex items-center gap-2 text-indigo-600">
-                            <h3 className="text-sm font-black uppercase tracking-[0.2em]">Personal Information</h3>
-                            <div className="h-px flex-1 bg-gradient-to-r from-indigo-50 to-transparent"></div>
-                        </div>
+                {/* Two-Pane Body - Responsive */}
+                <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+                    {/* Left Pane: Main Scrolling Content (Personal, Address, Docs) */}
+                    <div className="flex-[1.6] overflow-y-auto p-6 sm:p-10 space-y-10 lg:border-r border-slate-50 scroll-smooth">
+                        {/* Section 1: Personal Information */}
+                        <div className="space-y-6">
+                            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 flex items-center gap-2">
+                                <User size={12} /> Personal Profile
+                            </h3>
 
-                        <div className="flex flex-col md:flex-row gap-10">
-                            {/* Profile Photo Upload */}
-                            <div className="flex flex-col items-center gap-4 shrink-0">
-                                <div className="relative group">
-                                    <div className="w-32 h-32 rounded-[2rem] bg-slate-50 border-4 border-white shadow-xl overflow-hidden relative">
+                            <div className="flex flex-col sm:flex-row gap-8">
+                                {/* Profile Photo - READ ONLY */}
+                                <div className="flex flex-col items-center gap-2 shrink-0">
+                                    <div className="w-24 h-24 rounded-2xl bg-slate-50 border-2 border-white shadow-lg overflow-hidden relative">
                                         {photoPreview ? (
                                             <img src={photoPreview} alt="Profile" className="w-full h-full object-cover" />
                                         ) : (
                                             <div className="w-full h-full flex items-center justify-center text-slate-300">
-                                                <Camera size={40} strokeWidth={1.5} />
+                                                <Camera size={32} strokeWidth={1.5} />
                                             </div>
                                         )}
-                                        <label className="absolute inset-0 bg-indigo-900/60 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer">
-                                            <Upload className="text-white mb-1" size={20} />
-                                            <span className="text-[10px] font-bold text-white uppercase">Upload</span>
-                                            <input type="file" className="hidden" accept="image/*" onChange={handlePhotoSelect} />
-                                        </label>
+                                    </div>
+                                    <p className="text-[9px] font-bold text-slate-400 uppercase">Profile Photo</p>
+                                </div>
+
+                                {/* Basic Info Fields - READ ONLY */}
+                                <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <SaaSInput label="Full Name" value={form.name} readOnly placeholder="Rahul Sharma" />
+                                    <SaaSInput label="Personal Email" value={form.personal_email} readOnly icon={Lock} placeholder="email@example.com" />
+                                    <SaaSInput label="Phone Number" value={form.phone_1} readOnly placeholder="+91 9876543210" />
+                                    <SaaSInput label="Aadhaar Number" value={form.aadhaar_number} readOnly placeholder="XXXX XXXX XXXX" />
+                                    <div className="sm:col-span-2">
+                                        <SaaSInput label="Emergency Contact" value={form.phone_2} readOnly placeholder="Parent/Guardian Name & Number" />
                                     </div>
                                 </div>
-                                <div className="text-center">
-                                    <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-1">Max Size 5MB</p>
-                                    <p className="text-[10px] text-slate-300">JPG, PNG or WebP</p>
+                            </div>
+
+                            {/* Subsection: Address - READ ONLY */}
+                            <div className="bg-slate-50/50 p-6 rounded-[1.5rem] border border-slate-100 space-y-4 shadow-sm">
+                                <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                                    <MapPin size={12} /> Residential Address
+                                </h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                                    <div className="sm:col-span-4">
+                                        <SaaSInput label="Street" value={form.address} readOnly placeholder="Street name and House no." />
+                                    </div>
+                                    <div className="sm:col-span-2">
+                                        <SaaSInput label="City" value={form.city} readOnly placeholder="City" />
+                                    </div>
+                                    <div className="sm:col-span-1">
+                                        <SaaSInput label="State" value={form.state} readOnly placeholder="State" />
+                                    </div>
+                                    <div className="sm:col-span-1">
+                                        <SaaSInput label="Pincode" value={form.pincode} readOnly placeholder="Pincode" />
+                                    </div>
                                 </div>
                             </div>
 
-                            {/* Basic Info Fields */}
-                            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-6">
-                                <SaaSInput 
-                                    label="Full Name" 
-                                    value={form.name} 
-                                    onChange={v => handleChange('name', v)} 
-                                    placeholder="Ex: Rahul Sharma" 
-                                />
-                                <SaaSInput 
-                                    label="Personal Email" 
-                                    value={form.personal_email} 
-                                    readOnly 
-                                    icon={Lock}
-                                    placeholder="rahul.sharma@email.com" 
-                                />
-                                <SaaSInput 
-                                    label="Phone Number" 
-                                    value={form.phone_1} 
-                                    onChange={v => handleChange('phone_1', v)} 
-                                    placeholder="Ex: +91 9876543210" 
-                                />
-                                <SaaSInput 
-                                    label="Aadhaar Number" 
-                                    value={form.aadhaar_number} 
-                                    onChange={v => handleChange('aadhaar_number', v)} 
-                                    placeholder="Enter 12-digit Aadhaar number" 
-                                />
-                                <SaaSInput 
-                                    label="Emergency Contact" 
-                                    value={form.phone_2} 
-                                    onChange={v => handleChange('phone_2', v)} 
-                                    placeholder="Ex: +91 9123456789" 
-                                />
-                            </div>
-                        </div>
-
-                        {/* Subsection: Address */}
-                        <div className="bg-slate-50/50 p-6 sm:p-8 rounded-[2rem] border border-slate-100 space-y-6">
-                            <div className="flex items-center gap-2">
-                                <MapPin size={16} className="text-indigo-500" />
-                                <h4 className="text-[11px] font-black uppercase tracking-widest text-slate-500">Residential Address</h4>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-6 gap-6">
-                                <div className="sm:col-span-6">
-                                    <SaaSInput 
-                                        label="Street Address" 
-                                        value={form.address} 
-                                        onChange={v => handleChange('address', v)} 
-                                        placeholder="Flat, House no, Building, Company, Apartment" 
-                                    />
-                                </div>
-                                <div className="sm:col-span-2">
-                                    <SaaSInput 
-                                        label="City" 
-                                        value={form.city} 
-                                        onChange={v => handleChange('city', v)} 
-                                        placeholder="Ex: Mumbai" 
-                                    />
-                                </div>
-                                <div className="sm:col-span-2">
-                                    <SaaSInput 
-                                        label="State" 
-                                        value={form.state} 
-                                        onChange={v => handleChange('state', v)} 
-                                        placeholder="Ex: Maharashtra" 
-                                    />
-                                </div>
-                                <div className="sm:col-span-2">
-                                    <SaaSInput 
-                                        label="Pincode" 
-                                        value={form.pincode} 
-                                        onChange={v => handleChange('pincode', v)} 
-                                        placeholder="6 digits" 
-                                    />
+                            {/* Subsection: Documents */}
+                            <div className="space-y-4 pt-2">
+                                <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                                    <FileText size={12} /> ID Proofs & Documents
+                                </h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                    <DocumentDropBox label="Aadhaar" />
+                                    <DocumentDropBox label="College ID" />
+                                    <DocumentDropBox label="Other Proof" />
                                 </div>
                             </div>
                         </div>
+                    </div>
 
-                        {/* Subsection: Documents */}
+                    {/* Right Pane: Sidebar (Education & Stats) */}
+                    <aside className="w-full lg:w-80 bg-slate-50/70 p-6 sm:p-8 space-y-8 overflow-y-auto">
                         <div className="space-y-6">
-                            <div className="flex items-center gap-2">
-                                <FileText size={16} className="text-indigo-500" />
-                                <h4 className="text-[11px] font-black uppercase tracking-widest text-slate-500">Verification Documents</h4>
+                            <div className="flex items-center gap-2 text-indigo-600">
+                                <GraduationCap size={16} strokeWidth={2.5} />
+                                <h3 className="text-[10px] font-black uppercase tracking-[0.2em]">Education Hub</h3>
                             </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                <DocumentDropBox label="Aadhaar Upload" />
-                                <DocumentDropBox label="College ID Upload" />
-                                <DocumentDropBox label="Other Document" />
+
+                            <div className="space-y-4">
+                                <SaaSInput label="College Name" value={form.college_name} readOnly placeholder="College Name" />
+                                <SaaSInput label="Course / Degree" value={form.course} readOnly placeholder="B.Tech, MBA etc." />
+                                
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Current Year</label>
+                                    <div className="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 opacity-70">
+                                        {form.year_of_study ? `${form.year_of_study} Year` : 'Not Specified'}
+                                    </div>
+                                </div>
+
+                                <SaaSInput label="ID / Roll Number" value={form.roll_number} readOnly placeholder="Student ID" />
+
+                                <div className="pt-6">
+                                    <div className="bg-indigo-600 rounded-2xl p-5 text-white shadow-lg shadow-indigo-600/20">
+                                        <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-1">Status Overview</p>
+                                        <div className="flex items-center justify-between">
+                                            <h4 className="text-xl font-black">Verification</h4>
+                                            <div className="px-2 py-1 bg-white/20 rounded-lg text-[10px] font-bold">LOCKED</div>
+                                        </div>
+                                        <p className="text-xs mt-3 opacity-90 leading-relaxed font-medium">Verify documents in the main section to unlock full tenant status.</p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
-
-                    {/* Section 2: Education Information */}
-                    <div className="space-y-8">
-                        <div className="flex items-center gap-2 text-indigo-600">
-                            <h3 className="text-sm font-black uppercase tracking-[0.2em]">Education Info</h3>
-                            <div className="h-px flex-1 bg-gradient-to-r from-indigo-50 to-transparent"></div>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                            <SaaSInput 
-                                label="College Name" 
-                                value={form.college_name} 
-                                onChange={v => handleChange('college_name', v)} 
-                                placeholder="Ex: VIT University" 
-                            />
-                            <SaaSInput 
-                                label="Course / Degree" 
-                                value={form.course} 
-                                onChange={v => handleChange('course', v)} 
-                                placeholder="Ex: B.Tech Computer Science" 
-                            />
-                            <select 
-                                value={form.year_of_study} 
-                                onChange={e => handleChange('year_of_study', e.target.value)}
-                                className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-50/50 focus:border-indigo-400 transition-all cursor-pointer appearance-none"
-                            >
-                                <option value="">Select Year</option>
-                                <option value="1">1st Year</option>
-                                <option value="2">2nd Year</option>
-                                <option value="3">3rd Year</option>
-                                <option value="4">4th Year</option>
-                                <option value="5">5th Year+</option>
-                            </select>
-                            <SaaSInput 
-                                label="Student ID / Roll No" 
-                                value={form.roll_number} 
-                                onChange={v => handleChange('roll_number', v)} 
-                                placeholder="Ex: 2021BCS0042" 
-                            />
-                        </div>
-                    </div>
+                    </aside>
                 </div>
 
-                {/* Sticky Footer */}
+                {/* Sticky Footer - Read-Only View */}
                 <div className="px-10 py-6 border-t border-slate-50 bg-white flex justify-between items-center shrink-0">
-                    <div className="flex items-center gap-2 text-slate-400">
-                        <Info size={14} />
-                        <span className="text-[10px] font-bold uppercase tracking-wider">All data is encrypted</span>
+                    <div className="flex items-center gap-2 text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100">
+                        <Lock size={14} />
+                        <span className="text-[10px] font-black uppercase tracking-wider">Managed by Tenant</span>
                     </div>
                     <div className="flex gap-3">
                         <button 
                             onClick={onClose}
-                            className="px-6 py-3 rounded-2xl text-sm font-bold text-slate-500 hover:bg-slate-50 transition-all active:scale-95"
+                            className="px-8 py-3 rounded-2xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/10 active:scale-95 flex items-center gap-2"
                         >
-                            Cancel
-                        </button>
-                        <button 
-                            onClick={handleSubmit}
-                            disabled={saving}
-                            className="px-8 py-3 rounded-2xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-600/20 active:scale-95 flex items-center gap-2 disabled:opacity-50"
-                        >
-                            {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                            {saving ? 'Saving...' : 'Save Changes'}
+                            Close Profile
                         </button>
                     </div>
                 </div>
@@ -402,15 +334,30 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
 
 // Internal Styled Input Component
 function SaaSInput({ label, value, onChange, placeholder, readOnly = false, icon: Icon }) {
+    const [isMasked, setIsMasked] = useState(label === 'Aadhaar Number');
+    
+    const displayValue = useMemo(() => {
+        if (!value) return '';
+        if (label === 'Aadhaar Number' && isMasked) {
+             const clean = value.replace(/\s/g, '');
+             const masked = clean.substring(0, 8).replace(/./g, 'X') + clean.substring(8);
+             return masked.replace(/(\w{4})/g, '$1 ').trim();
+        }
+        if (label === 'Aadhaar Number') {
+            return value.replace(/\s/g, '').replace(/(\d{4})/g, '$1 ').trim();
+        }
+        return value || '';
+    }, [value, label, isMasked]);
+
     return (
-        <div className="space-y-2 group">
+        <div className="space-y-1.5 group">
             <label className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400 ml-1 group-focus-within:text-indigo-600 transition-colors">
                 {label}
             </label>
             <div className="relative">
                 <input 
                     type="text"
-                    value={label === 'Aadhaar Number' ? (value ? value.replace(/\s/g, '').replace(/(\d{4})/g, '$1 ').trim() : '') : (value || '')}
+                    value={displayValue}
                     onChange={e => {
                         let v = e.target.value;
                         if (label === 'Aadhaar Number') {
@@ -418,13 +365,24 @@ function SaaSInput({ label, value, onChange, placeholder, readOnly = false, icon
                         }
                         onChange?.(v);
                     }}
+                    onFocus={() => label === 'Aadhaar Number' && setIsMasked(false)}
+                    onBlur={() => label === 'Aadhaar Number' && setIsMasked(true)}
                     readOnly={readOnly}
                     placeholder={placeholder}
-                    className={`w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-50/50 focus:border-indigo-400 transition-all placeholder:text-slate-300 hover:bg-white ${readOnly ? 'cursor-not-allowed opacity-70' : ''}`}
+                    className={`w-full px-5 py-3.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-50/50 focus:border-indigo-400 transition-all placeholder:text-slate-200 hover:bg-slate-50 ${readOnly ? 'cursor-not-allowed opacity-70' : ''}`}
                 />
-                {Icon && (
+                {label === 'Aadhaar Number' && (
+                    <button 
+                        type="button"
+                        onMouseDown={(e) => { e.preventDefault(); setIsMasked(!isMasked); }}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 hover:text-indigo-500 transition-colors"
+                    >
+                        {isMasked ? <Info size={14} /> : <CheckCircle2 size={14} />}
+                    </button>
+                )}
+                {Icon && label !== 'Aadhaar Number' && (
                     <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300">
-                        <Icon size={16} />
+                        <Icon size={14} />
                     </div>
                 )}
             </div>
