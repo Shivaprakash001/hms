@@ -231,7 +231,7 @@ const OwnerLayout = () => {
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans text-slate-900 flex">
+        <div className="min-h-screen bg-slate-50 font-sans text-slate-900 flex overflow-x-hidden relative">
             {/* Sidebar (Desktop) */}
             <aside
                 className={`hidden lg:flex flex-col fixed inset-y-0 left-0 z-50 bg-slate-900 border-r border-slate-800 transition-all duration-300 ease-in-out shadow-xl ${sidebarOpen ? 'w-72' : 'w-20'}`}
@@ -392,7 +392,7 @@ const OwnerLayout = () => {
             </aside>
 
             {/* Main Content Wrapper */}
-            <div className={`flex-1 flex flex-col min-h-screen transition-all duration-300 ${sidebarOpen ? 'lg:ml-72' : 'lg:ml-20'}`}>
+            <div className={`flex-1 flex flex-col min-h-screen max-w-full transition-all duration-300 ${sidebarOpen ? 'lg:ml-72' : 'lg:ml-20'} overflow-x-hidden`}>
 
                 {/* Top Header */}
                 <header className="h-16 bg-white border-b border-slate-200 sticky top-0 z-40 px-4 sm:px-8 flex items-center justify-between">
@@ -532,7 +532,7 @@ const OwnerLayout = () => {
                 </header>
 
                 {/* Content Area */}
-                <main className="flex-1 p-3 sm:p-8 overflow-y-auto pb-safe">
+                <main className="flex-1 p-3 sm:p-8 overflow-y-auto overflow-x-hidden pb-safe">
                     <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8 animate-fade-in-up">
                         <Outlet />
                     </div>

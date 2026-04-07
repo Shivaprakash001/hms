@@ -364,11 +364,11 @@ const Payments = () => {
                     <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Payments & Rent Ledger</h1>
                     <p className="text-slate-500 text-sm">Unified ledger of rent, payments, balances, and collection actions.</p>
                 </div>
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex flex-col sm:flex-row gap-2 flex-wrap sm:items-center">
                     <button
                         onClick={handleExportReport}
                         disabled={exportLoading}
-                        className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-sm font-semibold text-sm disabled:opacity-60"
+                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-sm font-bold text-sm disabled:opacity-60"
                     >
                         {exportLoading ? <Loader2 className="animate-spin" size={16} /> : <Download size={16} />}
                         {exportLoading ? 'Exporting...' : 'Export Report'}
@@ -379,7 +379,7 @@ const Payments = () => {
                             setGenResult(null);
                             setPreviewData(null);
                         }}
-                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-600/20 transition-all font-semibold text-sm active:scale-95"
+                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-600/20 transition-all font-bold text-sm active:scale-95"
                     >
                         <Zap size={16} /> Generate Monthly Rent
                     </button>
@@ -422,21 +422,21 @@ const Payments = () => {
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
                 
                 {/* Filters Bar */}
-                <div className="p-4 border-b border-slate-100 bg-white flex flex-col sm:flex-row gap-4 justify-between items-center sticky top-0 z-10">
-                    <div className="relative w-full sm:w-72 group">
+                <div className="p-4 border-b border-slate-100 bg-white space-y-4 sticky top-0 z-10 w-full overflow-hidden">
+                    <div className="relative group w-full">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
                         <input
                             type="text"
                             placeholder="Search tenant..."
-                            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all placeholder:text-slate-400"
+                            className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all placeholder:text-slate-400"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
                     </div>
 
-                    <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
+                    <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 w-full max-w-full">
                         <select
-                            className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100 hover:border-slate-300 transition-all cursor-pointer"
+                            className="shrink-0 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100 hover:border-slate-300 transition-all cursor-pointer"
                             value={tenantFilter}
                             onChange={(e) => setTenantFilter(e.target.value)}
                         >
@@ -447,7 +447,7 @@ const Payments = () => {
                         </select>
 
                         <select
-                            className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100 hover:border-slate-300 transition-all cursor-pointer"
+                            className="shrink-0 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100 hover:border-slate-300 transition-all cursor-pointer"
                             value={statusFilter}
                             onChange={(e) => setStatusFilter(e.target.value)}
                         >
@@ -460,7 +460,7 @@ const Payments = () => {
                         </select>
 
                         <select
-                            className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100 hover:border-slate-300 transition-all cursor-pointer"
+                            className="shrink-0 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100 hover:border-slate-300 transition-all cursor-pointer"
                             value={methodFilter}
                             onChange={(e) => setMethodFilter(e.target.value)}
                         >
@@ -471,7 +471,7 @@ const Payments = () => {
                         </select>
 
                         <select
-                            className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100 hover:border-slate-300 transition-all cursor-pointer"
+                            className="shrink-0 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100 hover:border-slate-300 transition-all cursor-pointer"
                             value={monthFilter}
                             onChange={(e) => setMonthFilter(e.target.value)}
                         >

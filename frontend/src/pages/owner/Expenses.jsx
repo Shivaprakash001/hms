@@ -238,15 +238,15 @@ export default function Expenses() {
                         <span className="text-xs text-slate-400">Last updated: Just now</span>
                     </div>
                 </div>
-                <div className="flex items-center gap-3">
-                    <div className="relative hidden md:block group">
+                <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+                    <div className="relative w-full sm:w-64 group">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={16} />
                         <input
                             type="text"
                             placeholder="Search expenses..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 w-64 transition-all"
+                            className="pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 w-full transition-all"
                         />
                     </div>
                     <button
@@ -254,7 +254,7 @@ export default function Expenses() {
                             resetForm();
                             setIsModalOpen(true);
                         }}
-                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-lg shadow-indigo-600/20 transition-all text-sm font-semibold active:scale-95"
+                        className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-lg shadow-indigo-600/20 transition-all text-sm font-bold active:scale-95"
                     >
                         <Plus size={18} /> Add Expense
                     </button>
@@ -332,11 +332,11 @@ export default function Expenses() {
             {/* Quick Filters (Mobile accessible) & Table */}
             <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden hover:shadow-md transition-shadow">
                 {/* Desktop Table Header / Filters */}
-                <div className="p-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4 bg-slate-50/30">
-                    <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+                <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-slate-50/30 overflow-hidden">
+                    <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 w-full sm:w-auto">
                         <button
                             onClick={() => setCategoryFilter('all')}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${categoryFilter === 'all'
+                            className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${categoryFilter === 'all'
                                 ? 'bg-white border-slate-200 text-slate-900 shadow-sm'
                                 : 'bg-transparent border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-700'
                                 }`}
@@ -347,7 +347,7 @@ export default function Expenses() {
                             <button
                                 key={cat}
                                 onClick={() => setCategoryFilter(cat)}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all whitespace-nowrap ${categoryFilter === cat
+                                className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all whitespace-nowrap ${categoryFilter === cat
                                     ? 'bg-white border-slate-200 text-slate-900 shadow-sm'
                                     : 'bg-transparent border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-700'
                                     }`}
@@ -357,11 +357,11 @@ export default function Expenses() {
                         ))}
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 justify-between sm:justify-end">
                         <select
                             value={dateFilter}
                             onChange={(e) => setDateFilter(e.target.value)}
-                            className="bg-white border border-slate-200 text-slate-600 text-xs font-semibold py-2 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-100 cursor-pointer hover:border-slate-300 transition-all"
+                            className="bg-white border border-slate-200 text-slate-600 text-xs font-bold py-2 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-100 cursor-pointer hover:border-slate-300 transition-all flex-1 sm:flex-none"
                         >
                             <option value="all">All Time</option>
                             <option value="today">Today</option>
@@ -373,9 +373,9 @@ export default function Expenses() {
                             onClick={handleDownloadExpenses}
                             disabled={isExporting}
                             title="Download filtered expenses"
-                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="p-2.5 text-slate-500 hover:text-indigo-600 hover:bg-white border border-transparent hover:border-slate-200 rounded-lg transition-all disabled:opacity-50"
                         >
-                            <Download size={16} />
+                            <Download size={18} />
                         </button>
                     </div>
                 </div>
