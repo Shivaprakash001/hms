@@ -147,80 +147,22 @@ const OwnerDashboard = () => {
                 <MetricCard title="Pending Dues" value={`₹${summary.pending_dues.toLocaleString()}`} icon={Clock} iconClass="text-rose-600 bg-rose-50" />
             </div>
 
-            {/* Quick actions */}
-            <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
-                <div className="grid grid-cols-2 gap-3">
-                    <ActionBtn onClick={() => navigate('/owner/students')} icon={UserPlus} label="Invite Tenant" />
-                    <ActionBtn onClick={() => navigate('/owner/payments')} icon={Zap} label="Generate Rent" />
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Collection chart */}
-                <div className="lg:col-span-2 bg-white p-4 sm:p-6 rounded-2xl border border-slate-100 shadow-sm min-w-0">
-                    <h3 className="font-bold text-slate-900 text-lg">Rent Collected vs Rent Due</h3>
-                    <p className="text-sm text-slate-500 mb-4">Monthly collection discipline.</p>
-                    <div className="h-[300px] w-full">
+            <div className="grid grid-cols-1 gap-6">
+                {/* Collection chart - Full Width */}
+                <div className="bg-white p-4 sm:p-8 rounded-[2.5rem] border border-slate-100 shadow-sm min-w-0">
+                    <h3 className="text-xl font-black text-slate-900 tracking-tight">Financial Health: Rent Collection Trend</h3>
+                    <p className="text-sm text-slate-500 mb-8 font-medium">Monthly collection vs projected receivables.</p>
+                    <div className="h-[350px] w-full">
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={collectionData} barGap={10}>
+                            <BarChart data={collectionData} barGap={12}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                <XAxis dataKey="month" axisLine={false} tickLine={false} />
-                                <YAxis axisLine={false} tickLine={false} tickFormatter={(v) => `₹${Math.round(v / 1000)}k`} width={52} />
-                                <Tooltip formatter={(v) => `₹${Number(v).toLocaleString()}`} />
-                                <Bar dataKey="due" fill="#cbd5e1" radius={[6, 6, 0, 0]} maxBarSize={44} />
-                                <Bar dataKey="collected" fill="#4f46e5" radius={[6, 6, 0, 0]} maxBarSize={44} />
+                                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} />
+                                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} tickFormatter={(v) => `₹${Math.round(v / 1000)}k`} width={55} />
+                                <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} formatter={(v) => `₹${Number(v).toLocaleString()}`} />
+                                <Bar dataKey="due" name="Dues" fill="#e2e8f0" radius={[6, 6, 0, 0]} maxBarSize={48} />
+                                <Bar dataKey="collected" name="Collected" fill="#4f46e5" radius={[6, 6, 0, 0]} maxBarSize={48} />
                             </BarChart>
                         </ResponsiveContainer>
-                    </div>
-                </div>
-
-                {/* Occupancy + Alerts */}
-                <div className="space-y-6">
-                    <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-100 shadow-sm">
-                        <h3 className="font-bold text-slate-900 text-lg">Occupancy Insights</h3>
-                        <p className="text-sm text-slate-500 mb-4">Occupied vs vacant beds.</p>
-                        <div className="h-[260px] w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                    <Pie
-                                        data={occupancyData}
-                                        dataKey="value"
-                                        nameKey="name"
-                                        innerRadius={55}
-                                        outerRadius={90}
-                                        paddingAngle={3}
-                                    >
-                                        {occupancyData.map((entry, index) => (
-                                            <Cell key={entry.name} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        </div>
-                        <div className="mt-2 text-xs text-slate-500 flex gap-3">
-                            <span>Occupied: <strong>{summary.active_tenants}</strong></span>
-                            <span>Vacant: <strong>{summary.vacant_beds}</strong></span>
-                        </div>
-                    </div>
-
-                    <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-100 shadow-sm">
-                        <h3 className="font-bold text-slate-900 text-lg">Alerts</h3>
-                        <p className="text-sm text-slate-500 mb-4">Action items needing attention.</p>
-                        {alerts.length === 0 ? (
-                            <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">
-                                All good. No urgent alerts right now.
-                            </div>
-                        ) : (
-                            <div className="space-y-2">
-                                {alerts.map((item) => (
-                                    <div key={item} className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 flex items-start gap-2">
-                                        <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                                        <span>{item}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
                     </div>
                 </div>
             </div>

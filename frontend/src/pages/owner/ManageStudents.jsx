@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Plus, User, Phone, Home, CreditCard, Calendar, CheckCircle2, AlertCircle, X, Save, History, Trash2, RefreshCw, ToggleLeft, ToggleRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import { studentService, authService, allocationService, roomService } from '../../api/services';
 import TenantHistoryModal from '../../components/owner/payments/TenantHistoryModal';
 import TenantInvitationForm from '../../components/owner/TenantInvitationForm';
@@ -164,6 +165,30 @@ export default function ManageStudents() {
         return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
     };
 
+    // Year Distribution Calculation
+    const yearDistribution = React.useMemo(() => {
+        const counts = {
+            '1st Year': 0,
+            '2nd Year': 0,
+            '3rd Year': 0,
+            '4th Year': 0,
+            'Other': 0
+        };
+        students.forEach(s => {
+            const year = Number(s.yearOfStudy);
+            if (year === 1) counts['1st Year']++;
+            else if (year === 2) counts['2nd Year']++;
+            else if (year === 3) counts['3rd Year']++;
+            else if (year === 4) counts['4th Year']++;
+            else counts['Other']++;
+        });
+        return Object.entries(counts)
+            .map(([name, value]) => ({ name, value }))
+            .filter(item => item.value > 0);
+    }, [students]);
+
+    const YEAR_COLORS = ['#4f46e5', '#818cf8', '#c7d2fe', '#e0e7ff', '#94a3b8'];
+
     const formatCurrency = (value) => `₹${Number(value || 0).toLocaleString('en-IN')}`;
 
     const getPaymentBadgeStyles = (status) => {
@@ -208,38 +233,76 @@ export default function ManageStudents() {
                     </div>
                 </div>
 
-                {/* Stats Grid */}
-                <div className="grid grid-cols-2 gap-4 sm:gap-6">
-                    <StatCard
-                        title="Total Tenants"
-                        value={stats.total}
-                        icon={User}
-                        iconBg="bg-indigo-50"
-                        iconColor="text-indigo-600"
-                    />
-                    <StatCard
-                        title="Occupied Rooms"
-                        value={stats.occupiedRooms}
-                        icon={Home}
-                        iconBg="bg-indigo-50"
-                        iconColor="text-indigo-600"
-                    />
-                    <StatCard
-                        title="Active Tenants"
-                        value={stats.active}
-                        icon={CheckCircle2}
-                        iconBg="bg-green-50"
-                        iconColor="text-green-600"
-                        isCurrency={false}
-                    />
-                    <StatCard
-                        title="Left / Inactive"
-                        value={stats.left}
-                        icon={AlertCircle}
-                        iconBg="bg-yellow-50"
-                        iconColor="text-yellow-600"
-                        isCurrency={false}
-                    />
+                {/* Stats & Charts Section */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Stats Grid - 2/3 width on large screens */}
+                    <div className="lg:col-span-2 grid grid-cols-2 gap-4 sm:gap-6">
+                        <StatCard
+                            title="Total Tenants"
+                            value={stats.total}
+                            icon={User}
+                            iconBg="bg-indigo-50"
+                            iconColor="text-indigo-600"
+                        />
+                        <StatCard
+                            title="Occupied Rooms"
+                            value={stats.occupiedRooms}
+                            icon={Home}
+                            iconBg="bg-blue-50"
+                            iconColor="text-blue-600"
+                        />
+                        <StatCard
+                            title="Active Tenants"
+                            value={stats.active}
+                            icon={CheckCircle2}
+                            iconBg="bg-emerald-50"
+                            iconColor="text-emerald-600"
+                            isCurrency={false}
+                        />
+                        <StatCard
+                            title="Left / Inactive"
+                            value={stats.left}
+                            icon={AlertCircle}
+                            iconBg="bg-rose-50"
+                            iconColor="text-rose-600"
+                            isCurrency={false}
+                        />
+                    </div>
+
+                    {/* Year Perspective - 1/3 width */}
+                    <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col items-center justify-center min-h-[300px]">
+                        <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">Academic Mix</h3>
+                        <div className="h-[180px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie
+                                        data={yearDistribution}
+                                        dataKey="value"
+                                        nameKey="name"
+                                        innerRadius={50}
+                                        outerRadius={75}
+                                        paddingAngle={5}
+                                        stroke="none"
+                                    >
+                                        {yearDistribution.map((entry, index) => (
+                                            <Cell key={entry.name} fill={YEAR_COLORS[index % YEAR_COLORS.length]} />
+                                        ))}
+                                    </Pie>
+                                    <RechartsTooltip 
+                                        contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '12px', fontWeight: 'bold' }}
+                                    />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+                        <div className="mt-4 flex flex-wrap justify-center gap-x-4 gap-y-1">
+                            {yearDistribution.map((entry, index) => (
+                                <div key={entry.name} className="flex items-center gap-1.5">
+                                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: YEAR_COLORS[index % YEAR_COLORS.length] }} />
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">{entry.name}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
                 </div>
 
                 {/* Search & Toggle */}
