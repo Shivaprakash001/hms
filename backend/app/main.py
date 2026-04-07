@@ -1,5 +1,6 @@
 import sys
 import os
+import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -52,6 +53,35 @@ origins = [
     "http://127.0.0.1:5173",
 ]
 
+_ALLOWED_ORIGIN_REGEX = re.compile(r"https?://([a-z0-9-]+\.)?trishul\.solutions$")
+
+
+def _is_origin_allowed(origin: str | None) -> bool:
+    if not origin:
+        return False
+    if origin in origins:
+        return True
+    return bool(_ALLOWED_ORIGIN_REGEX.fullmatch(origin))
+
+
+def _apply_cors_headers(request: Request, response: JSONResponse):
+    origin = request.headers.get("origin")
+    if not _is_origin_allowed(origin):
+        return response
+
+    response.headers["Access-Control-Allow-Origin"] = origin
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    vary_header = response.headers.get("Vary")
+    response.headers["Vary"] = "Origin" if not vary_header else f"{vary_header}, Origin"
+
+    request_headers = request.headers.get("access-control-request-headers")
+    if request_headers:
+        response.headers["Access-Control-Allow-Headers"] = request_headers
+    else:
+        response.headers.setdefault("Access-Control-Allow-Headers", "*")
+    response.headers.setdefault("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
+    return response
+
 from app.utils.middleware import QueryMonitorMiddleware
 
 app.add_middleware(
@@ -71,17 +101,19 @@ from fastapi import Request, HTTPException
 @app.middleware("http")
 async def security_headers_middleware(request: Request, call_next):
     # Apply global API rate limit
-    from app.utils.rate_limit import check_api_rate_limit
-    try:
-        check_api_rate_limit(request)
-    except HTTPException as exc:
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={"detail": exc.detail}
-        )
-    
+    if request.method != "OPTIONS":
+        from app.utils.rate_limit import check_api_rate_limit
+        try:
+            check_api_rate_limit(request)
+        except HTTPException as exc:
+            blocked = JSONResponse(
+                status_code=exc.status_code,
+                content={"detail": exc.detail}
+            )
+            return _apply_cors_headers(request, blocked)
+
     response = await call_next(request)
-    
+
     # Security headers
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
@@ -90,8 +122,8 @@ async def security_headers_middleware(request: Request, call_next):
     # TEMP: CSP disabled to unblock Swagger UI during testing.
     # Re-enable before production hardening.
     # response.headers["Content-Security-Policy"] = "..."
-    
-    return response
+
+    return _apply_cors_headers(request, response)
 
 @app.on_event("startup")
 def startup_event():

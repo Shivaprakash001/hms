@@ -272,8 +272,8 @@ export default function ManageStudents() {
                     {/* Year Perspective - 1/3 width */}
                     <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col items-center justify-center min-h-[300px]">
                         <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">Academic Mix</h3>
-                        <div className="h-[180px] w-full">
-                            <ResponsiveContainer width="100%" height="100%">
+                        <div className="h-[180px] w-full min-w-[220px]">
+                            <ResponsiveContainer width="100%" height="100%" minWidth={220} minHeight={180}>
                                 <PieChart>
                                     <Pie
                                         data={yearDistribution}
