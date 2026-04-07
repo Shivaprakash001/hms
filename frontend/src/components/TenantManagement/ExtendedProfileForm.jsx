@@ -145,8 +145,8 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
 
     const tabs = [
         { id: 'personal', label: 'Personal Info', icon: User },
-        { id: 'education', label: 'Education Hub', icon: GraduationCap },
-        { id: 'address', label: 'Residential Address', icon: MapPin },
+        { id: 'education', label: 'Education Info', icon: GraduationCap },
+        { id: 'address', label: 'Address', icon: MapPin },
         { id: 'documents', label: 'Documents', icon: FileText }
     ];
 
