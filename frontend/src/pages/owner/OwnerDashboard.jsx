@@ -202,27 +202,27 @@ const OwnerDashboard = () => {
             </div>
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
                 {stats.map((stat, idx) => {
                     const Icon = stat.icon;
                     return (
                         <div
                             key={idx}
                             onClick={stat.onClick}
-                            className={`bg-white p-4 sm:p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-lg transition-all duration-300 ${stat.cursor || ''} ${stat.onClick ? 'active:scale-95' : ''}`}
+                            className={`bg-white p-4 sm:p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-lg transition-all duration-300 ${stat.cursor || ''} ${stat.onClick ? 'active:scale-95' : ''} flex flex-col justify-between min-h-[140px] sm:min-h-0`}
                         >
-                            <div className="flex justify-between items-start mb-4">
-                                <div className={`p-3 rounded-xl ${stat.bg} ${stat.color}`}>
-                                    <Icon size={22} className="stroke-[2.5]" />
+                            <div className="flex justify-between items-start">
+                                <div className={`p-2.5 sm:p-3 rounded-xl ${stat.bg} ${stat.color}`}>
+                                    <Icon size={20} className="stroke-[2.5] sm:w-6 sm:h-6" />
                                 </div>
-                                <span className={`flex items-center text-xs font-bold px-2.5 py-1 rounded-full border ${stat.trendUp ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-rose-50 text-rose-700 border-rose-100'}`}>
-                                    {stat.trendUp ? <ArrowUpRight size={14} className="mr-1" /> : <ArrowDownRight size={14} className="mr-1" />}
-                                    {stat.trend}
+                                <span className={`flex items-center text-[10px] sm:text-xs font-bold px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full border ${stat.trendUp ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-rose-50 text-rose-700 border-rose-100'}`}>
+                                    {stat.trendUp ? <ArrowUpRight size={12} className="sm:mr-1" /> : <ArrowDownRight size={12} className="sm:mr-1" />}
+                                    <span className="hidden xs:inline">{stat.trend}</span>
                                 </span>
                             </div>
-                            <div>
-                                <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">{stat.title}</p>
-                                <h3 className="text-2xl sm:text-3xl font-bold text-slate-900 mt-1 tracking-tight">{stat.value}</h3>
+                            <div className="mt-4">
+                                <p className="text-slate-500 text-[10px] sm:text-xs font-bold uppercase tracking-wider line-clamp-1">{stat.title}</p>
+                                <h3 className="text-xl sm:text-3xl font-black text-slate-900 mt-1 tracking-tight truncate">{stat.value}</h3>
                             </div>
                         </div>
                     );
