@@ -465,9 +465,6 @@ const StatCard = ({ icon, label, value, color }) => {
 
     return (
         <div className={`bg-white p-5 rounded-[24px] border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all`}>
-            <div className={`absolute top-0 right-0 p-4 opacity-10 ${style.icon} group-hover:scale-110 transition-transform`}>
-                {React.cloneElement(icon, { size: 56 })}
-            </div>
             <div className="relative z-10">
                 <div className={`w-12 h-12 rounded-2xl ${style.bg} flex items-center justify-center ${style.text} mb-4 group-hover:scale-110 transition-transform`}>
                     {React.cloneElement(icon, { size: 24 })}

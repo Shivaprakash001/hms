@@ -239,9 +239,6 @@ const StatCard = ({ icon, label, value, color, badge }) => {
                     {badge.text}
                 </div>
             )}
-            <div className={`absolute top-0 left-0 p-4 opacity-5 ${style.icon} group-hover:scale-110 transition-transform`}>
-                {React.cloneElement(icon, { size: 56 })}
-            </div>
             <div className="relative z-10 pt-1">
                 <div className={`w-12 h-12 rounded-2xl ${style.bg} flex items-center justify-center ${style.text} mb-4 group-hover:scale-110 transition-transform shadow-sm`}>
                     {React.cloneElement(icon, { size: 24 })}
