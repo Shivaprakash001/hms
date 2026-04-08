@@ -243,8 +243,8 @@ const OwnerLayout = () => {
                     onClick={() => navigate('/owner/dashboard')}
                 >
                     <div className="flex items-center gap-3 overflow-hidden">
-                        <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center shrink-0 shadow-lg shadow-indigo-900/50 text-white">
-                            <ShieldCheck size={20} />
+                        <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shrink-0 shadow-sm border border-slate-800/50 overflow-hidden">
+                            <img src="https://trishul.solutions/logo.png" alt="Trishul Logo" className="w-7 h-7 object-contain" />
                         </div>
                         <div className={`transition-all duration-300 ${sidebarOpen ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4 hidden'}`}>
                             <h1 className="font-bold text-lg tracking-tight text-white leading-tight">
@@ -351,8 +351,8 @@ const OwnerLayout = () => {
             <aside className={`lg:hidden fixed inset-y-0 left-0 z-50 w-72 bg-slate-900 shadow-2xl transition-transform duration-300 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
                 <div className="h-16 flex items-center justify-between px-6 border-b border-slate-800">
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white">
-                            <ShieldCheck size={18} />
+                        <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center overflow-hidden border border-slate-800">
+                            <img src="https://trishul.solutions/logo.png" alt="Trishul Logo" className="w-6 h-6 object-contain" />
                         </div>
                         <span className="font-bold text-lg text-white">Trishul</span>
                     </div>
