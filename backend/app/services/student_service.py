@@ -984,7 +984,7 @@ def update_student_self_profile(
         student_id = student_res.data[0].get("id")
 
         profile_fields = {
-            "name", "email", "phone", "address"
+            "name", "email", "phone"
         }
         student_fields = {
             "photo_url", "phone_1", "phone_2", "aadhaar_number", "personal_email",
