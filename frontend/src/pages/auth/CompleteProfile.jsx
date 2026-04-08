@@ -120,7 +120,17 @@ const CompleteProfile = () => {
             }, 1200);
         } catch (err) {
             const detail = err?.response?.data?.detail;
-            const msg = typeof detail === 'object' ? detail?.message : detail;
+            let msg = 'Submission failed. Please try again.';
+            
+            if (typeof detail === 'object') {
+                msg = detail.message;
+                if (detail.details) {
+                    msg = `${msg}: ${detail.details}`;
+                }
+            } else if (typeof detail === 'string') {
+                msg = detail;
+            }
+            
             setError(msg || err.message || 'Submission failed. Please try again.');
         } finally {
             setIsLoading(false);
