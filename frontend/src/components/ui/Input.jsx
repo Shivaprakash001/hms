@@ -1,59 +1,23 @@
-import React from 'react';
-import { clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
+import * as React from "react"
+import { Input as InputPrimitive } from "@base-ui/react/input"
 
-const Input = React.forwardRef(({
-  label,
-  error,
-  helperText,
+import { cn } from "@/lib/utils"
+
+function Input({
   className,
-  containerClassName,
-  size = 'md',
-  type = 'text',
+  type,
   ...props
-}, ref) => {
-  const sizes = {
-    sm: 'px-3 py-1.5 text-xs',
-    md: 'px-3 py-2 text-sm',
-    lg: 'px-4 py-3 text-base',
-  };
-
-  const inputClasses = twMerge(
-    clsx(
-      'w-full rounded-lg bg-neutral-800 border text-neutral-100 placeholder-neutral-500',
-      'focus:outline-none focus:ring-2 transition-colors',
-      'disabled:opacity-50 disabled:cursor-not-allowed',
-      sizes[size],
-      error
-        ? 'border-red-500 focus:ring-red-500/50 focus:border-red-500'
-        : 'border-neutral-700 focus:ring-indigo-500/50 focus:border-indigo-500',
-      className
-    )
-  );
-
+}) {
   return (
-    <div className={twMerge(clsx('flex flex-col gap-1', containerClassName))}>
-      {label && (
-        <label className="text-sm font-medium text-neutral-300">
-          {label}
-        </label>
+    <InputPrimitive
+      type={type}
+      data-slot="input"
+      className={cn(
+        "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:disabled:bg-input/80 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40",
+        className
       )}
-      <input
-        ref={ref}
-        type={type}
-        className={inputClasses}
-        {...props}
-      />
-      {error && (
-        <p className="text-xs text-red-400">{error}</p>
-      )}
-      {helperText && !error && (
-        <p className="text-xs text-neutral-500">{helperText}</p>
-      )}
-    </div>
+      {...props} />
   );
-});
+}
 
-Input.displayName = 'Input';
-
-export default Input;
+export { Input }

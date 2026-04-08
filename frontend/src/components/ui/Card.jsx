@@ -1,104 +1,114 @@
-import React from 'react';
-import { clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
+import * as React from "react"
 
-const Card = ({
-  children,
+import { cn } from "@/lib/utils"
+
+function Card({
   className,
-  padding = 'md',
-  hover = false,
+  size = "default",
   ...props
-}) => {
-  const paddings = {
-    none: '',
-    sm: 'p-4',
-    md: 'p-6',
-    lg: 'p-8',
-  };
-
+}) {
   return (
     <div
-      className={twMerge(
-        clsx(
-          'bg-neutral-900 border border-neutral-800 rounded-xl',
-          paddings[padding],
-          hover && 'transition-colors hover:border-neutral-700 hover:bg-neutral-800/50',
-          className
-        )
+      data-slot="card"
+      data-size={size}
+      className={cn(
+        "group/card flex flex-col gap-4 overflow-hidden rounded-xl bg-card py-4 text-sm text-card-foreground ring-1 ring-foreground/10 has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:gap-3 data-[size=sm]:py-3 data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
+        className
       )}
-      {...props}
-    >
-      {children}
-    </div>
+      {...props} />
   );
-};
+}
 
-const CardHeader = ({ children, className, ...props }) => (
-  <div
-    className={twMerge(clsx('flex items-center justify-between mb-4', className))}
-    {...props}
-  >
-    {children}
-  </div>
-);
-
-const CardTitle = ({ children, className, ...props }) => (
-  <h3
-    className={twMerge(clsx('text-base font-semibold text-neutral-100', className))}
-    {...props}
-  >
-    {children}
-  </h3>
-);
-
-const CardContent = ({ children, className, ...props }) => (
-  <div className={twMerge(clsx('text-neutral-300', className))} {...props}>
-    {children}
-  </div>
-);
-
-const Badge = ({
-  children,
-  variant = 'default',
-  size = 'md',
+function CardHeader({
   className,
   ...props
-}) => {
-  const variants = {
-    default: 'bg-neutral-800 text-neutral-300 border border-neutral-700',
-    primary: 'bg-indigo-600/20 text-indigo-400 border border-indigo-600/30',
-    success: 'bg-green-600/20 text-green-400 border border-green-600/30',
-    warning: 'bg-yellow-600/20 text-yellow-400 border border-yellow-600/30',
-    danger: 'bg-red-600/20 text-red-400 border border-red-600/30',
-    info: 'bg-blue-600/20 text-blue-400 border border-blue-600/30',
-  };
-
-  const sizes = {
-    sm: 'px-2 py-0.5 text-xs',
-    md: 'px-2.5 py-1 text-xs',
-    lg: 'px-3 py-1.5 text-sm',
-  };
-
+}) {
   return (
-    <span
-      className={twMerge(
-        clsx(
-          'inline-flex items-center rounded-full font-medium',
-          variants[variant],
-          sizes[size],
-          className
-        )
+    <div
+      data-slot="card-header"
+      className={cn(
+        "group/card-header @container/card-header grid auto-rows-min items-start gap-1 rounded-t-xl px-4 group-data-[size=sm]/card:px-3 has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-description]:grid-rows-[auto_auto] [.border-b]:pb-4 group-data-[size=sm]/card:[.border-b]:pb-3",
+        className
       )}
-      {...props}
-    >
-      {children}
-    </span>
+      {...props} />
   );
-};
+}
 
-Card.Header = CardHeader;
-Card.Title = CardTitle;
-Card.Content = CardContent;
+function CardTitle({
+  className,
+  ...props
+}) {
+  return (
+    <div
+      data-slot="card-title"
+      className={cn(
+        "font-heading text-base leading-snug font-medium group-data-[size=sm]/card:text-sm",
+        className
+      )}
+      {...props} />
+  );
+}
 
-export { Card, Badge };
-export default Card;
+function CardDescription({
+  className,
+  ...props
+}) {
+  return (
+    <div
+      data-slot="card-description"
+      className={cn("text-sm text-muted-foreground", className)}
+      {...props} />
+  );
+}
+
+function CardAction({
+  className,
+  ...props
+}) {
+  return (
+    <div
+      data-slot="card-action"
+      className={cn(
+        "col-start-2 row-span-2 row-start-1 self-start justify-self-end",
+        className
+      )}
+      {...props} />
+  );
+}
+
+function CardContent({
+  className,
+  ...props
+}) {
+  return (
+    <div
+      data-slot="card-content"
+      className={cn("px-4 group-data-[size=sm]/card:px-3", className)}
+      {...props} />
+  );
+}
+
+function CardFooter({
+  className,
+  ...props
+}) {
+  return (
+    <div
+      data-slot="card-footer"
+      className={cn(
+        "flex items-center rounded-b-xl border-t bg-muted/50 p-4 group-data-[size=sm]/card:p-3",
+        className
+      )}
+      {...props} />
+  );
+}
+
+export {
+  Card,
+  CardHeader,
+  CardFooter,
+  CardTitle,
+  CardAction,
+  CardDescription,
+  CardContent,
+}

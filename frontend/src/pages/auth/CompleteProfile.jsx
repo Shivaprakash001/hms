@@ -1,10 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, MapPin, Phone, GraduationCap, Loader2, CheckCircle2, Upload, Mail } from 'lucide-react';
+import { User, MapPin, Phone, GraduationCap, Loader2, CheckCircle2, Upload, Mail, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { studentService } from '../../api/services';
-import { ShieldCheck } from 'lucide-react';
+
+// Shadcn UI Components
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardTitle, CardDescription } from "@/components/ui/card";
 
 const LogoImage = ({ src }) => {
     const [error, setError] = useState(false);
@@ -164,106 +169,136 @@ const CompleteProfile = () => {
             <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="w-full max-w-[520px] relative z-10 py-8"
+                className="w-full max-w-[560px] relative z-10 py-8"
             >
-                <div className="bg-white border border-slate-100 p-8 md:p-10 rounded-3xl shadow-2xl relative overflow-hidden">
+                <Card className="border-slate-200 shadow-2xl relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
-
-                    <AnimatePresence mode="wait">
-                        {isSuccess ? (
-                            <motion.div key="success" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-6">
-                                <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 text-green-600">
-                                    <CheckCircle2 size={40} />
-                                </div>
-                                <h2 className="text-3xl font-black text-slate-900 mb-4">Profile Completed!</h2>
-                                <p className="text-slate-500 font-medium mb-6">Redirecting to dashboard...</p>
-                                <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mx-auto" />
-                            </motion.div>
-                        ) : (
-                            <motion.div key="form">
-                                <div className="text-center mb-8">
-                                    <div className="inline-flex items-center justify-center w-20 h-20 bg-white rounded-2xl mb-6 shadow-xl border border-slate-100 overflow-hidden">
-                                        <LogoImage src="https://trishul.solutions/logo.png" />
+                    
+                    <CardContent className="p-8 md:p-10">
+                        <AnimatePresence mode="wait">
+                            {isSuccess ? (
+                                <motion.div key="success" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-6">
+                                    <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 text-green-600">
+                                        <CheckCircle2 size={40} />
                                     </div>
-                                    <h1 className="text-3xl font-black tracking-tight text-slate-900 mb-2">Complete Your Profile</h1>
-                                    <p className="text-slate-500 text-sm font-medium">Uses the same fields as Student Profile</p>
-                                </div>
-
-                                {error && (
-                                    <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm font-medium mb-6 text-center">{error}</div>
-                                )}
-
-                                <form onSubmit={handleSubmit} className="space-y-4">
-                                    <Field icon={User} label="Full Name *" name="name" value={formData.name} onChange={handleInputChange} />
-                                    <Field icon={Phone} label="His Phone Number (Primary) *" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="10-digit number" />
-                                    <Field icon={Phone} label="Parent Number (Emergency) *" name="emergency_contact" value={formData.emergency_contact} onChange={handleInputChange} placeholder="10-digit number" />
-                                    <Field icon={CheckCircle2} label="Aadhaar Number *" name="aadhaar_number" value={formData.aadhaar_number} onChange={handleInputChange} placeholder="12-digit number" />
-                                    <Field icon={Mail} label="Personal Email" name="personal_email" value={formData.personal_email} onChange={handleInputChange} type="email" />
-                                    <Field icon={GraduationCap} label="College *" name="college_name" value={formData.college_name} onChange={handleInputChange} />
-                                    <Field icon={GraduationCap} label="Roll Number *" name="roll_number" value={formData.roll_number} onChange={handleInputChange} />
-                                    <Field icon={GraduationCap} label="Course" name="course" value={formData.course} onChange={handleInputChange} />
-                                    <Field icon={GraduationCap} label="Year of Study *" name="year_of_study" value={formData.year_of_study} onChange={handleInputChange} type="number" placeholder="1-6" />
-                                    <Field icon={GraduationCap} label="Section" name="section" value={formData.section} onChange={handleInputChange} />
-                                    <Field icon={GraduationCap} label="Branch *" name="branch" value={formData.branch} onChange={handleInputChange} />
-                                    <Field icon={MapPin} label="Address *" name="address" value={formData.address} onChange={handleInputChange} />
-
-                                    <div className="space-y-2">
-                                        <label className="text-xs font-bold text-slate-500 ml-1 uppercase tracking-wider">Aadhaar Document *</label>
-                                        <label className="block w-full cursor-pointer bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-4 hover:border-indigo-400 transition-colors">
-                                            <input type="file" className="hidden" accept="image/*,.pdf" onChange={handleFileChange} />
-                                            <div className="flex flex-col items-center justify-center gap-2">
-                                                {previewUrl ? (
-                                                    <img src={previewUrl} alt="Preview" className="h-28 object-contain rounded-md" />
-                                                ) : (
-                                                    <>
-                                                        <Upload className="h-8 w-8 text-slate-400" />
-                                                        <span className="text-sm font-medium text-slate-600">Click to upload Aadhaar</span>
-                                                        <span className="text-xs text-slate-400">JPG, PNG, WebP or PDF up to 5MB</span>
-                                                    </>
-                                                )}
-                                                {aadhaarFile && !previewUrl && (
-                                                    <span className="text-xs text-slate-600 font-medium">{aadhaarFile.name}</span>
-                                                )}
-                                            </div>
-                                        </label>
+                                    <h2 className="text-3xl font-black text-slate-900 mb-4">Profile Completed!</h2>
+                                    <p className="text-slate-500 font-medium mb-6">Redirecting to dashboard...</p>
+                                    <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mx-auto" />
+                                </motion.div>
+                            ) : (
+                                <motion.div key="form">
+                                    <div className="text-center mb-8">
+                                        <div className="inline-flex items-center justify-center w-20 h-20 bg-white rounded-2xl mb-6 shadow-xl border border-slate-100 overflow-hidden">
+                                            <LogoImage src="https://trishul.solutions/logo.png" />
+                                        </div>
+                                        <CardTitle className="text-3xl font-black tracking-tight text-slate-900 mb-2">Complete Your Profile</CardTitle>
+                                        <CardDescription className="text-slate-500 text-sm font-medium">Verify your identity and academic details</CardDescription>
                                     </div>
 
-                                    <button
-                                        type="submit"
-                                        disabled={isLoading}
-                                        className="w-full flex items-center justify-center py-4 px-4 rounded-xl shadow-lg shadow-indigo-600/25 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-all disabled:opacity-70 mt-2"
-                                    >
-                                        {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Complete Profile'}
-                                    </button>
-                                </form>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-                </div>
+                                    {error && (
+                                        <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm font-medium mb-6 text-center border border-red-100">{error}</div>
+                                    )}
+
+                                    <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="md:col-span-2">
+                                            <Label htmlFor="name">Full Name *</Label>
+                                            <Input id="name" name="name" value={formData.name} onChange={handleInputChange} className="mt-1" />
+                                        </div>
+                                        
+                                        <div>
+                                            <Label htmlFor="phone">Phone Number *</Label>
+                                            <Input id="phone" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="10-digit number" className="mt-1" />
+                                        </div>
+                                        
+                                        <div>
+                                            <Label htmlFor="emergency_contact">Emergency Contact *</Label>
+                                            <Input id="emergency_contact" name="emergency_contact" value={formData.emergency_contact} onChange={handleInputChange} placeholder="Parent/Guardian" className="mt-1" />
+                                        </div>
+
+                                        <div className="md:col-span-2">
+                                            <Label htmlFor="aadhaar_number">Aadhaar Number *</Label>
+                                            <Input id="aadhaar_number" name="aadhaar_number" value={formData.aadhaar_number} onChange={handleInputChange} placeholder="12-digit number" className="mt-1" />
+                                        </div>
+
+                                        <div className="md:col-span-2">
+                                            <Label htmlFor="personal_email">Personal Email</Label>
+                                            <Input id="personal_email" name="personal_email" type="email" value={formData.personal_email} onChange={handleInputChange} className="mt-1" />
+                                        </div>
+
+                                        <div className="md:col-span-2 space-y-4 pt-2">
+                                            <div className="h-px bg-slate-100 w-full" />
+                                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Academic Information</p>
+                                        </div>
+
+                                        <div className="md:col-span-2">
+                                            <Label htmlFor="college_name">College Name *</Label>
+                                            <Input id="college_name" name="college_name" value={formData.college_name} onChange={handleInputChange} className="mt-1" />
+                                        </div>
+
+                                        <div>
+                                            <Label htmlFor="roll_number">Roll Number *</Label>
+                                            <Input id="roll_number" name="roll_number" value={formData.roll_number} onChange={handleInputChange} className="mt-1" />
+                                        </div>
+
+                                        <div>
+                                            <Label htmlFor="course">Course</Label>
+                                            <Input id="course" name="course" value={formData.course} onChange={handleInputChange} className="mt-1" />
+                                        </div>
+
+                                        <div>
+                                            <Label htmlFor="year_of_study">Year of Study *</Label>
+                                            <Input id="year_of_study" name="year_of_study" type="number" min="1" max="6" value={formData.year_of_study} onChange={handleInputChange} className="mt-1" />
+                                        </div>
+
+                                        <div>
+                                            <Label htmlFor="branch">Branch *</Label>
+                                            <Input id="branch" name="branch" value={formData.branch} onChange={handleInputChange} className="mt-1" />
+                                        </div>
+
+                                        <div className="md:col-span-2">
+                                            <Label htmlFor="address">Permanent Address *</Label>
+                                            <Input id="address" name="address" value={formData.address} onChange={handleInputChange} className="mt-1" />
+                                        </div>
+
+                                        <div className="md:col-span-2 space-y-2 pt-2">
+                                            <Label>Aadhaar Document *</Label>
+                                            <label className="block w-full cursor-pointer bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-6 hover:bg-slate-100 hover:border-indigo-400 transition-all text-center">
+                                                <input type="file" className="hidden" accept="image/*,.pdf" onChange={handleFileChange} />
+                                                <div className="flex flex-col items-center justify-center gap-2">
+                                                    {previewUrl ? (
+                                                        <img src={previewUrl} alt="Preview" className="h-32 object-contain rounded-lg shadow-sm" />
+                                                    ) : (
+                                                        <>
+                                                            <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm border border-slate-100 mb-1">
+                                                                <Upload className="h-6 w-6 text-indigo-600" />
+                                                            </div>
+                                                            <span className="text-sm font-bold text-slate-700">Upload Aadhaar Copy</span>
+                                                            <span className="text-xs text-slate-400">PDF, JPG or PNG (max 5MB)</span>
+                                                        </>
+                                                    )}
+                                                    {aadhaarFile && !previewUrl && (
+                                                        <span className="text-xs text-indigo-600 font-bold bg-indigo-50 px-3 py-1 rounded-full">{aadhaarFile.name}</span>
+                                                    )}
+                                                </div>
+                                            </label>
+                                        </div>
+
+                                        <Button
+                                            type="submit"
+                                            disabled={isLoading}
+                                            className="md:col-span-2 w-full h-12 shadow-xl shadow-indigo-600/20 text-base font-bold transition-all hover:scale-[1.01] active:scale-[0.99] mt-4"
+                                        >
+                                            {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Submit & Complete Registration'}
+                                        </Button>
+                                    </form>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </CardContent>
+                </Card>
             </motion.div>
         </div>
     );
 };
-
-function Field({ icon: Icon, label, name, value, onChange, placeholder, type = 'text' }) {
-    return (
-        <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-500 ml-1 uppercase tracking-wider">{label}</label>
-            <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <Icon className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
-                </div>
-                <input
-                    type={type}
-                    name={name}
-                    value={value}
-                    onChange={onChange}
-                    placeholder={placeholder}
-                    className="block w-full pl-11 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all text-sm"
-                />
-            </div>
-        </div>
-    );
-}
 
 export default CompleteProfile;
