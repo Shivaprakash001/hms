@@ -93,6 +93,7 @@ class StudentUpdate(BaseModel):
     job_role: Optional[str] = Field(None, max_length=100, description="Job title/role")
     permanent_address: Optional[str] = Field(None, max_length=1000, description="Permanent address")
     temporary_address: Optional[str] = Field(None, max_length=1000, description="Temporary/current address")
+    aadhaar_number: Optional[str] = Field(None, max_length=12, description="Aadhaar number")
 
     @field_validator('monthly_rent')
     @classmethod
@@ -133,6 +134,7 @@ class StudentSelfProfileUpdate(BaseModel):
     job_role: Optional[str] = Field(None, max_length=100, description="Job title/role")
     permanent_address: Optional[str] = Field(None, max_length=1000, description="Permanent address")
     temporary_address: Optional[str] = Field(None, max_length=1000, description="Temporary/current address")
+    aadhaar_number: Optional[str] = Field(None, description="Aadhaar number")
 
     @field_validator('phone', 'emergency_contact', 'phone_1', 'phone_2', 'phone_3')
     @classmethod
@@ -168,6 +170,7 @@ class StudentResponse(BaseModel):
     job_role: Optional[str] = None
     permanent_address: Optional[str] = None
     temporary_address: Optional[str] = None
+    aadhaar_number: Optional[str] = None
     document_verified: Optional[bool] = False
     profile_completed: Optional[bool] = False
 
