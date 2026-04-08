@@ -49,7 +49,7 @@ def _attach_hostel_info(student: dict) -> dict:
             return student
 
         owner_res = supabase.table("profiles")\
-            .select("id, name, phone, address")\
+            .select("id, name, phone")\
             .eq("id", owner_id)\
             .eq("is_active", True)\
             .execute()
@@ -59,11 +59,24 @@ def _attach_hostel_info(student: dict) -> dict:
             return student
 
         owner = owner_res.data[0]
+        hostel_address = None
+        try:
+            hostel_res = supabase.table("hostels") \
+                .select("address") \
+                .eq("owner_id", owner_id) \
+                .eq("is_active", True) \
+                .limit(1) \
+                .execute()
+            if hostel_res.data:
+                hostel_address = hostel_res.data[0].get("address")
+        except Exception:
+            hostel_address = None
+
         student["hostel"] = {
             "owner_id": owner.get("id"),
             "name": owner.get("name"),
             "phone": owner.get("phone"),
-            "address": owner.get("address")
+            "address": hostel_address
         }
         return student
     except Exception:
@@ -989,7 +1002,7 @@ def update_student_self_profile(
         student_fields = {
             "photo_url", "phone_1", "phone_2", "aadhaar_number", "personal_email",
             "college_name", "roll_number", "course", "year_of_study", "section", "branch",
-            "address"
+            "temporary_address", "permanent_address"
         }
 
         profile_update = {k: v for k, v in data.items() if k in profile_fields and v is not None}
@@ -999,6 +1012,14 @@ def update_student_self_profile(
         # because many deployments do not have profiles.emergency_contact column.
         if data.get("emergency_contact") is not None and "phone_2" not in student_update:
             student_update["phone_2"] = data.get("emergency_contact")
+
+        # Backward-compatible mapping: legacy clients send a single `address` field.
+        # Persist it to temporary/permanent student address columns.
+        if data.get("address") is not None:
+            if "temporary_address" not in student_update:
+                student_update["temporary_address"] = data.get("address")
+            if "permanent_address" not in student_update:
+                student_update["permanent_address"] = data.get("address")
 
         if not profile_update and not student_update:
             return ServiceResponse.validation_error("No valid fields to update")
@@ -1059,7 +1080,7 @@ def update_student_self_profile(
             bool((student.get("roll_number") or "").strip()),
             bool(student.get("year_of_study")),
             bool((student.get("branch") or "").strip()),
-            bool((student.get("address") or profile.get("address") or "").strip()),
+            bool((student.get("temporary_address") or student.get("permanent_address") or "").strip()),
             has_aadhaar,
         ])
 
