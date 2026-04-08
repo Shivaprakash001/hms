@@ -4,6 +4,26 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { User, MapPin, Phone, GraduationCap, Loader2, CheckCircle2, Upload, Mail } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { studentService } from '../../api/services';
+import { ShieldCheck } from 'lucide-react';
+
+const LogoImage = ({ src }) => {
+    const [error, setError] = useState(false);
+    if (!src || error) {
+        return (
+            <div className="w-full h-full bg-indigo-600 flex items-center justify-center text-white">
+                <ShieldCheck size={24} />
+            </div>
+        );
+    }
+    return (
+        <img
+            src={src}
+            alt="Logo"
+            className="w-full h-full object-contain p-2"
+            onError={() => setError(true)}
+        />
+    );
+};
 
 const CompleteProfile = () => {
     const navigate = useNavigate();
@@ -162,8 +182,8 @@ const CompleteProfile = () => {
                         ) : (
                             <motion.div key="form">
                                 <div className="text-center mb-8">
-                                    <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl mb-6 shadow-xl text-white transform rotate-3">
-                                        <User className="w-8 h-8" />
+                                    <div className="inline-flex items-center justify-center w-20 h-20 bg-white rounded-2xl mb-6 shadow-xl border border-slate-100 overflow-hidden">
+                                        <LogoImage src="https://trishul.solutions/logo.png" />
                                     </div>
                                     <h1 className="text-3xl font-black tracking-tight text-slate-900 mb-2">Complete Your Profile</h1>
                                     <p className="text-slate-500 text-sm font-medium">Uses the same fields as Student Profile</p>
