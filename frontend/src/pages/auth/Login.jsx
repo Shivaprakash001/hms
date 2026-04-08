@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Lock, Eye, EyeOff, Loader2, KeyRound, Mail, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { User, Lock, Eye, EyeOff, Loader2, KeyRound, Mail, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, Link } from 'react-router-dom';
@@ -117,7 +117,13 @@ const Login = () => {
                             transition={{ delay: 0.1, duration: 0.5 }}
                             className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl mb-6 shadow-xl shadow-indigo-600/20 text-white transform rotate-3"
                         >
-                            <ShieldCheck className="w-8 h-8" />
+                            <img
+                                src="/android-chrome-512x512.png"
+                                alt="Trishul Solutions logo"
+                                className="w-10 h-10 object-contain"
+                                loading="eager"
+                                decoding="async"
+                            />
                         </motion.div>
                         <h1 className="text-3xl font-black tracking-tight text-slate-900 mb-2">
                             Trishul <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600">Solutions</span>
