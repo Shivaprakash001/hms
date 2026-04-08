@@ -231,20 +231,20 @@ const StatCard = ({ icon, label, value, color, badge }) => {
     const style = colorMap[color] || colorMap.indigo;
 
     return (
-        <div className={`bg-white p-5 rounded-[24px] border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all`}>
+        <div className={`bg-white p-4 sm:p-5 rounded-2xl sm:rounded-[24px] border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all`}>
             {badge && (
-                <div className={`absolute top-4 right-4 px-2 py-0.5 rounded-lg border ${badgeColors[badge.type] || badgeColors.info} text-[10px] font-black flex items-center gap-1`}>
+                <div className={`absolute top-3 sm:top-4 right-3 sm:right-4 px-1.5 sm:px-2 py-0.5 rounded-lg border ${badgeColors[badge.type] || badgeColors.info} text-[9px] sm:text-[10px] font-black flex items-center gap-1`}>
                     {badge.type === 'success' && <ArrowUpRight size={10} />}
                     {badge.type === 'danger' && <ArrowUpRight size={10} className="rotate-90" />}
                     {badge.text}
                 </div>
             )}
             <div className="relative z-10 pt-1">
-                <div className={`w-12 h-12 rounded-2xl ${style.bg} flex items-center justify-center ${style.text} mb-4 group-hover:scale-110 transition-transform shadow-sm`}>
-                    {React.cloneElement(icon, { size: 24 })}
+                <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl ${style.bg} flex items-center justify-center ${style.text} mb-3 sm:mb-4 group-hover:scale-110 transition-transform shadow-sm`}>
+                    {React.cloneElement(icon, { size: 20, className: "sm:size-[24px]" })}
                 </div>
-                <h4 className="text-slate-400 font-extrabold text-[10px] uppercase tracking-wider mb-1">{label}</h4>
-                <div className="text-2xl font-black text-slate-900 tracking-tight">{value}</div>
+                <h4 className="text-slate-400 font-extrabold text-[9px] sm:text-[10px] uppercase tracking-wider mb-1">{label}</h4>
+                <div className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">{value}</div>
             </div>
         </div>
     );

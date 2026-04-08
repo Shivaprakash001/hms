@@ -464,13 +464,13 @@ const StatCard = ({ icon, label, value, color }) => {
     const style = colorMap[color] || colorMap.indigo;
 
     return (
-        <div className={`bg-white p-5 rounded-[24px] border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all`}>
+        <div className={`bg-white p-4 sm:p-5 rounded-2xl sm:rounded-[24px] border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all`}>
             <div className="relative z-10">
-                <div className={`w-12 h-12 rounded-2xl ${style.bg} flex items-center justify-center ${style.text} mb-4 group-hover:scale-110 transition-transform`}>
-                    {React.cloneElement(icon, { size: 24 })}
+                <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl ${style.bg} flex items-center justify-center ${style.text} mb-3 sm:mb-4 group-hover:scale-110 transition-transform`}>
+                    {React.cloneElement(icon, { size: 20, className: "sm:size-[24px]" })}
                 </div>
-                <h4 className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.12em] mb-1">{label}</h4>
-                <div className="text-3xl font-black text-slate-900 tracking-tight">{value}</div>
+                <h4 className="text-slate-400 font-bold text-[9px] sm:text-[10px] uppercase tracking-[0.12em] mb-1">{label}</h4>
+                <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">{value}</div>
             </div>
         </div>
     );
