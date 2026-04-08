@@ -326,13 +326,13 @@ const ManageRooms = () => {
             {/* Floors and Rooms */}
             <div className="space-y-8">
                 {floors.map((floor) => (
-                    <div key={floor.id} className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden">
-                        <div className="px-8 py-6 border-b border-slate-50 bg-slate-50/30 flex justify-between items-center">
+                    <div key={floor.id} className="bg-white rounded-[28px] border border-slate-100 shadow-sm overflow-hidden">
+                        <div className="px-7 py-5 border-b border-slate-50 bg-slate-50/30 flex justify-between items-center">
                             <div className="flex items-center gap-4">
-                                <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-900 font-black shadow-sm">
+                                <div className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-900 font-black shadow-sm text-sm">
                                     {floor.number}
                                 </div>
-                                <h3 className="text-xl font-black text-slate-900 tracking-tight">Floor {floor.number}</h3>
+                                <h3 className="text-lg font-black text-slate-900 tracking-tight">Floor {floor.number}</h3>
                             </div>
                             <span className="text-sm font-bold text-slate-400">
                                 {floor.rooms.length} Rooms
@@ -464,16 +464,16 @@ const StatCard = ({ icon, label, value, color }) => {
     const style = colorMap[color] || colorMap.indigo;
 
     return (
-        <div className={`bg-white p-6 rounded-[28px] border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all`}>
+        <div className={`bg-white p-5 rounded-[24px] border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all`}>
             <div className={`absolute top-0 right-0 p-4 opacity-10 ${style.icon} group-hover:scale-110 transition-transform`}>
-                {React.cloneElement(icon, { size: 64 })}
+                {React.cloneElement(icon, { size: 56 })}
             </div>
             <div className="relative z-10">
-                <div className={`w-14 h-14 rounded-2xl ${style.bg} flex items-center justify-center ${style.text} mb-5 group-hover:scale-110 transition-transform`}>
-                    {React.cloneElement(icon, { size: 28 })}
+                <div className={`w-12 h-12 rounded-2xl ${style.bg} flex items-center justify-center ${style.text} mb-4 group-hover:scale-110 transition-transform`}>
+                    {React.cloneElement(icon, { size: 24 })}
                 </div>
-                <h4 className="text-slate-400 font-bold text-xs uppercase tracking-[0.12em] mb-1.5">{label}</h4>
-                <div className="text-4xl font-black text-slate-900 tracking-tight">{value}</div>
+                <h4 className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.12em] mb-1">{label}</h4>
+                <div className="text-3xl font-black text-slate-900 tracking-tight">{value}</div>
             </div>
         </div>
     );
@@ -513,7 +513,7 @@ const RoomCard = ({ room, onClick }) => {
         <motion.div
             whileHover={{ y: -4, scale: 1.02 }}
             onClick={onClick}
-            className={`cursor-pointer group relative bg-white rounded-2xl border border-slate-100 ${status.border} shadow-sm hover:shadow-xl transition-all p-6`}
+            className={`cursor-pointer group relative bg-white rounded-xl border border-slate-100 ${status.border} shadow-sm hover:shadow-xl transition-all p-5`}
         >
             <div className="flex justify-between items-start mb-6">
                 <div className="flex flex-col">

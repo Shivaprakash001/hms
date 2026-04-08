@@ -533,13 +533,13 @@ export default function ManageStudents() {
 }
 
 const StatCard = ({ title, value, icon: Icon, iconBg, iconColor, isCurrency = false }) => (
-    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between hover:shadow-md transition-shadow">
+    <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between hover:shadow-md transition-shadow">
         <div>
             <p className="text-slate-400 text-[11px] font-bold uppercase tracking-wider mb-2">{title}</p>
-            <h3 className="text-3xl font-black text-slate-900">{isCurrency ? '₹' : ''}{value}</h3>
+            <h3 className="text-2xl font-black text-slate-900">{isCurrency ? '₹' : ''}{value}</h3>
         </div>
-        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${iconBg} ${iconColor}`}>
-            <Icon size={24} strokeWidth={2.5} />
+        <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${iconBg} ${iconColor}`}>
+            <Icon size={22} strokeWidth={2.5} />
         </div>
     </div>
 );

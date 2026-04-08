@@ -132,7 +132,7 @@ const OwnerDashboard = () => {
 
             <div className="grid grid-cols-1 gap-6">
                 {/* Collection chart */}
-                <div className="bg-white p-6 sm:p-8 rounded-[32px] border border-slate-100 shadow-sm min-w-0">
+                <div className="bg-white p-6 sm:p-7 rounded-[28px] border border-slate-100 shadow-sm min-w-0">
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
                         <div>
                             <h3 className="font-black text-slate-900 text-xl tracking-tight">Financial Performance</h3>
@@ -164,7 +164,7 @@ const OwnerDashboard = () => {
             </div>
 
             {/* Recent Activity */}
-            <div className="bg-white p-6 sm:p-8 rounded-[32px] border border-slate-100 shadow-sm">
+            <div className="bg-white p-6 sm:p-7 rounded-[28px] border border-slate-100 shadow-sm">
                 <div className="flex items-center justify-between mb-8">
                     <div>
                         <h3 className="font-black text-slate-900 text-xl tracking-tight">Recent Activity</h3>
@@ -231,7 +231,7 @@ const StatCard = ({ icon, label, value, color, badge }) => {
     const style = colorMap[color] || colorMap.indigo;
 
     return (
-        <div className={`bg-white p-6 rounded-[28px] border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all`}>
+        <div className={`bg-white p-5 rounded-[24px] border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all`}>
             {badge && (
                 <div className={`absolute top-4 right-4 px-2 py-0.5 rounded-lg border ${badgeColors[badge.type] || badgeColors.info} text-[10px] font-black flex items-center gap-1`}>
                     {badge.type === 'success' && <ArrowUpRight size={10} />}
@@ -240,14 +240,14 @@ const StatCard = ({ icon, label, value, color, badge }) => {
                 </div>
             )}
             <div className={`absolute top-0 left-0 p-4 opacity-5 ${style.icon} group-hover:scale-110 transition-transform`}>
-                {React.cloneElement(icon, { size: 64 })}
+                {React.cloneElement(icon, { size: 56 })}
             </div>
-            <div className="relative z-10 pt-2">
-                <div className={`w-14 h-14 rounded-2xl ${style.bg} flex items-center justify-center ${style.text} mb-5 group-hover:scale-110 transition-transform shadow-sm`}>
-                    {React.cloneElement(icon, { size: 28 })}
+            <div className="relative z-10 pt-1">
+                <div className={`w-12 h-12 rounded-2xl ${style.bg} flex items-center justify-center ${style.text} mb-4 group-hover:scale-110 transition-transform shadow-sm`}>
+                    {React.cloneElement(icon, { size: 24 })}
                 </div>
-                <h4 className="text-slate-400 font-extrabold text-[10px] uppercase tracking-wider mb-1.5">{label}</h4>
-                <div className="text-3xl font-black text-slate-900 tracking-tight">{value}</div>
+                <h4 className="text-slate-400 font-extrabold text-[10px] uppercase tracking-wider mb-1">{label}</h4>
+                <div className="text-2xl font-black text-slate-900 tracking-tight">{value}</div>
             </div>
         </div>
     );
