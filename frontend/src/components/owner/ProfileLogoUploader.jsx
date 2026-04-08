@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { ImagePlus, Loader2, UploadCloud } from 'lucide-react';
+import { ImagePlus, Loader2, Trash2, UploadCloud } from 'lucide-react';
 import Avatar from '../common/Avatar';
 
 const MAX_UPLOAD_SIZE = 2 * 1024 * 1024;
@@ -49,9 +49,10 @@ const resizeLogoFile = async (file) => {
     return new File([blob], 'logo.webp', { type: 'image/webp' });
 };
 
-export default function ProfileLogoUploader({ logoUrl, onUpload, disabled = false }) {
+export default function ProfileLogoUploader({ logoUrl, onUpload, onRemove, disabled = false }) {
     const inputRef = useRef(null);
     const [uploading, setUploading] = useState(false);
+    const [removing, setRemoving] = useState(false);
     const [error, setError] = useState('');
 
     const handleChooseFile = () => {
@@ -85,6 +86,22 @@ export default function ProfileLogoUploader({ logoUrl, onUpload, disabled = fals
         }
     };
 
+    const handleRemove = async () => {
+        if (disabled || uploading || removing || !logoUrl || !onRemove) return;
+        const confirmed = window.confirm('Remove the hostel logo?');
+        if (!confirmed) return;
+
+        setError('');
+        try {
+            setRemoving(true);
+            await onRemove();
+        } catch (uploadError) {
+            setError(uploadError?.message || 'Failed to remove logo.');
+        } finally {
+            setRemoving(false);
+        }
+    };
+
     return (
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
             <div className="flex flex-col sm:flex-row sm:items-center gap-4">
@@ -109,6 +126,17 @@ export default function ProfileLogoUploader({ logoUrl, onUpload, disabled = fals
                     {uploading ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} />}
                     {uploading ? 'Uploading...' : 'Upload Logo'}
                 </button>
+                {logoUrl && (
+                    <button
+                        type="button"
+                        onClick={handleRemove}
+                        disabled={disabled || uploading || removing}
+                        className="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl border border-rose-200 bg-white text-rose-600 text-sm font-semibold hover:bg-rose-50 transition-colors disabled:opacity-70"
+                    >
+                        {removing ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                        {removing ? 'Removing...' : 'Remove Logo'}
+                    </button>
+                )}
             </div>
 
             <input

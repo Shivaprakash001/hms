@@ -115,3 +115,12 @@ async def upload_owner_logo(
         content_type=file.content_type,
     )
     return _handle_service_response(result)
+
+
+@router.delete("/logo", response_model=dict, summary="Remove owner hostel logo")
+def remove_owner_logo(user: UserContext = Depends(get_current_user)):
+    if not user.is_owner():
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner/admin can access this endpoint.")
+
+    result = owner_service.remove_hostel_logo(str(user.user_id))
+    return _handle_service_response(result)

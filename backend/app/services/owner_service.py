@@ -24,6 +24,18 @@ ALLOWED_LOGO_CONTENT_TYPES = {
 }
 
 
+def _hostel_logo_paths(user_id: str) -> list[str]:
+    return [f"{user_id}/logo.{ext}" for ext in ("png", "jpg", "webp")]
+
+
+def _remove_hostel_logo_assets(user_id: str) -> None:
+    for logo_path in _hostel_logo_paths(user_id):
+        try:
+            supabase.storage.from_(HOSTEL_ASSETS_BUCKET).remove([logo_path])
+        except Exception:
+            pass
+
+
 def _escape_ilike(value: str) -> str:
     return value.replace('%', '\\%').replace('_', '\\_')
 
@@ -429,21 +441,15 @@ def upload_hostel_logo(user_id: str, file_bytes: bytes, content_type: str | None
                 return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to prepare hostel record for logo upload")
             hostel_id = create_res.data[0]["id"]
 
-        for existing_ext in ("png", "jpg", "webp"):
-            if existing_ext != ext:
-                stale_path = f"{user_id}/logo.{existing_ext}"
-                try:
-                    supabase.storage.from_(HOSTEL_ASSETS_BUCKET).remove([stale_path])
-                except Exception:
-                    pass
-
         file_path = f"{user_id}/logo.{ext}"
+        _remove_hostel_logo_assets(user_id)
+
         supabase.storage.from_(HOSTEL_ASSETS_BUCKET).upload(
             path=file_path,
             file=file_bytes,
             file_options={
                 "content-type": normalized_content_type,
-                "upsert": "true",
+                "upsert": True,
                 "cache-control": "3600",
             }
         )
@@ -467,3 +473,30 @@ def upload_hostel_logo(user_id: str, file_bytes: bytes, content_type: str | None
     except Exception as e:
         logger.exception(f"Error uploading hostel logo for owner {user_id}: {e}")
         return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to upload hostel logo", str(e))
+
+
+def remove_hostel_logo(user_id: str) -> Dict[str, Any]:
+    try:
+        hostel_row = supabase.table("hostels") \
+            .select("id") \
+            .eq("owner_id", user_id) \
+            .eq("is_active", True) \
+            .limit(1) \
+            .execute()
+
+        _remove_hostel_logo_assets(user_id)
+
+        if hostel_row.data:
+            hostel_id = hostel_row.data[0]["id"]
+            update_res = supabase.table("hostels") \
+                .update({"logo_url": None}) \
+                .eq("id", hostel_id) \
+                .execute()
+
+            if not update_res.data:
+                return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to remove hostel logo")
+
+        return ServiceResponse.success({"logo_url": None}, "Hostel logo removed successfully")
+    except Exception as e:
+        logger.exception(f"Error removing hostel logo for owner {user_id}: {e}")
+        return ServiceResponse.error(ErrorCode.DB_QUERY_ERROR, "Failed to remove hostel logo", str(e))

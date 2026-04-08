@@ -134,6 +134,18 @@ export const ownerService = {
             throw error;
         }
     },
+    removeLogo: async () => {
+        try {
+            const response = await api.delete('/owner/logo');
+            return response.data;
+        } catch (error) {
+            if (error?.response?.status === 404) {
+                const fallback = await api.delete('/api/v1/owner/logo');
+                return fallback.data;
+            }
+            throw error;
+        }
+    },
     searchTenants: async (query, limit = 10) => {
         const response = await api.get('/owner/search', {
             params: { q: query, limit }

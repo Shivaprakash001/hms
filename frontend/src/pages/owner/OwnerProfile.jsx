@@ -167,6 +167,24 @@ export default function OwnerProfile() {
         }
     };
 
+    const removeLogo = async () => {
+        setSaving(true);
+        setError('');
+        try {
+            await ownerService.removeLogo();
+            setHostelForm(prev => ({ ...prev, logo_url: '' }));
+            window.dispatchEvent(new CustomEvent('owner-branding-updated', {
+                detail: { logoUrl: '' }
+            }));
+            showTempSuccess('Hostel logo removed');
+        } catch (e) {
+            const detail = e?.response?.data?.detail;
+            setError(typeof detail === 'string' ? detail : (detail?.message || 'Failed to remove hostel logo'));
+        } finally {
+            setSaving(false);
+        }
+    };
+
     if (loading) {
         return <div className="p-8 text-slate-500">Loading profile settings...</div>;
     }
@@ -211,6 +229,7 @@ export default function OwnerProfile() {
                     <ProfileLogoUploader
                         logoUrl={hostelForm.logo_url}
                         onUpload={uploadLogo}
+                        onRemove={removeLogo}
                         disabled={saving}
                     />
                     <Field label="Hostel Name" value={hostelForm.name} onChange={(v) => setHostelForm({ ...hostelForm, name: v })} required />
