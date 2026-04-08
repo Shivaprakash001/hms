@@ -449,7 +449,7 @@ def upload_hostel_logo(user_id: str, file_bytes: bytes, content_type: str | None
             file=file_bytes,
             file_options={
                 "content-type": normalized_content_type,
-                "upsert": True,
+                "upsert": "true",
                 "cache-control": "3600",
             }
         )
