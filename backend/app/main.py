@@ -26,9 +26,11 @@ import uvicorn
 from app.utils.hooks import register_hook
 from app.services.room_allocation_service import handle_student_left
 from app.services import payment_service
+from app.utils.logger import get_logger
 
 app = FastAPI(title="Hostel Management System API", version="1.0.0")
 app.state.payment_reconciliation_task = None
+logger = get_logger(__name__)
 
 try:
     complaint_router = getattr(importlib.import_module("app.api.routes.complaint_router"), "router", None)
@@ -56,9 +58,10 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     from app.services.notification_handler import (
-        handle_student_enrolled, handle_student_allocated,
-        handle_payment_recorded, handle_complaint_created,
-        handle_complaint_resolved, handle_rent_generated
+        handle_student_enrolled,
+        handle_student_allocated,
+        handle_payment_recorded,
+        handle_rent_generated,
     )
     
     # Core logic hooks
@@ -68,9 +71,27 @@ async def startup_event():
     register_hook("student_enrolled", handle_student_enrolled)
     register_hook("student_allocated_room", handle_student_allocated)
     register_hook("payment_recorded", handle_payment_recorded)
-    register_hook("complaint_created", handle_complaint_created)
-    register_hook("complaint_updated", handle_complaint_resolved)
     register_hook("rent_obligation_created", handle_rent_generated)
+
+    # Optional complaint hooks (do not crash startup if handlers are not implemented yet)
+    try:
+        from app.services import notification_handler as notification_module
+
+        complaint_created_handler = getattr(notification_module, "handle_complaint_created", None)
+        complaint_updated_handler = getattr(notification_module, "handle_complaint_resolved", None)
+
+        if callable(complaint_created_handler):
+            register_hook("complaint_created", complaint_created_handler)
+        else:
+            logger.warning("Complaint created notification hook is not implemented")
+
+        if callable(complaint_updated_handler):
+            register_hook("complaint_updated", complaint_updated_handler)
+        else:
+            logger.warning("Complaint updated notification hook is not implemented")
+    except Exception:
+        logger.exception("Failed to configure optional complaint notification hooks")
+
     if app.state.payment_reconciliation_task is None:
         app.state.payment_reconciliation_task = asyncio.create_task(_payment_reconciliation_loop())
 
