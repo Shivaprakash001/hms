@@ -1,191 +1,280 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CheckCircle, CreditCard, Smartphone, Globe, Loader2, QrCode, Copy, ShieldCheck } from 'lucide-react';
+import {
+    AlertCircle,
+    CheckCircle,
+    Copy,
+    Loader2,
+    QrCode,
+    ShieldCheck,
+    Smartphone,
+    X
+} from 'lucide-react';
 
-const PaymentModal = ({ isOpen, onClose, amount, onSuccess }) => {
-    const [step, setStep] = useState('method'); // method, processing, success
-    const [method, setMethod] = useState('upi'); // upi, card, netbanking
+import { paymentService } from '../../../api/services';
+import QrCodeImage from '../../shared/QrCodeImage';
+
+const POLL_INTERVAL_MS = 4000;
+const TERMINAL_STATUSES = ['SUCCESS', 'FAILED', 'EXPIRED', 'CANCELLED'];
+
+const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
     const [loading, setLoading] = useState(false);
+    const [attempt, setAttempt] = useState(null);
+    const [status, setStatus] = useState('idle');
+    const [error, setError] = useState('');
+    const [copied, setCopied] = useState(false);
+    const [redirecting, setRedirecting] = useState(false);
 
-    // Reset state on open
     useEffect(() => {
-        if (isOpen) {
-            setStep('method');
-            setMethod('upi');
+        if (!isOpen) {
             setLoading(false);
+            setAttempt(null);
+            setStatus('idle');
+            setError('');
+            setCopied(false);
+            setRedirecting(false);
         }
     }, [isOpen]);
 
-    const handlePayment = () => {
+    useEffect(() => {
+        if (!isOpen || !attempt?.attempt_id || TERMINAL_STATUSES.includes(status)) {
+            return undefined;
+        }
+
+        const timer = window.setInterval(async () => {
+            try {
+                const latest = await paymentService.getAttempt(attempt.attempt_id);
+                setAttempt(current => ({ ...current, ...latest }));
+                setStatus(latest.status);
+                if (latest.status === 'SUCCESS') {
+                    onSuccess?.(latest);
+                }
+            } catch (pollError) {
+                console.error('Failed to poll payment status', pollError);
+            }
+        }, POLL_INTERVAL_MS);
+
+        return () => window.clearInterval(timer);
+    }, [attempt?.attempt_id, isOpen, onSuccess, status]);
+
+    const canRetry = useMemo(() => ['FAILED', 'EXPIRED', 'CANCELLED'].includes(status), [status]);
+
+    const handleCreateIntent = async () => {
+        if (!obligationId) {
+            setError('No payable obligation is available right now.');
+            return;
+        }
+
         setLoading(true);
-        // Simulate processing delay
-        setTimeout(() => {
+        setError('');
+        try {
+            const intent = await paymentService.createIntent({
+                obligation_id: obligationId,
+                amount
+            });
+            sessionStorage.setItem('lastPaymentAttemptId', intent.attempt_id);
+            setAttempt(intent);
+            setStatus(intent.status);
+            if (intent.checkout_url) {
+                setRedirecting(true);
+                window.location.href = intent.checkout_url;
+            }
+        } catch (intentError) {
+            const message = intentError?.response?.data?.detail?.message
+                || intentError?.response?.data?.detail
+                || 'Unable to start payment right now.';
+            setError(message);
+        } finally {
             setLoading(false);
-            setStep('success');
-            // Auto close after success
-            setTimeout(() => {
-                onSuccess({
-                    id: 'txn_' + Date.now(),
-                    date: new Date().toISOString().split('T')[0],
-                    amount: amount,
-                    method: method.toUpperCase(),
-                    status: 'success'
-                });
-                onClose();
-            }, 2000);
-        }, 2000);
+        }
+    };
+
+    const handleCopy = async () => {
+        if (!attempt?.qr_payload) return;
+        try {
+            await navigator.clipboard.writeText(attempt.qr_payload);
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 1600);
+        } catch (copyError) {
+            console.error('Failed to copy QR payload', copyError);
+        }
     };
 
     if (!isOpen) return null;
 
     return (
         <AnimatePresence>
-            {isOpen && (
-                <>
-                    {/* Backdrop */}
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-50"
+            >
+                <div
+                    className="absolute inset-0 bg-slate-900/65 backdrop-blur-sm"
+                    onClick={loading || status === 'SUCCESS' ? undefined : onClose}
+                />
+                <div className="absolute inset-0 flex items-center justify-center p-4">
                     <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        onClick={onClose}
-                        className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50"
-                    />
-
-                    {/* Modal */}
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                        className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
+                        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 24, scale: 0.96 }}
+                        className="w-full max-w-md overflow-hidden rounded-[28px] bg-white shadow-2xl"
                     >
-                        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md pointer-events-auto overflow-hidden relative">
-                            {/* Header */}
-                            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 backdrop-blur-md">
-                                <div>
-                                    <h2 className="text-xl font-black text-slate-900">Payment Gateway</h2>
-                                    <p className="text-sm text-slate-500 font-medium">Secure Transaction</p>
-                                </div>
-                                {!loading && step !== 'success' && (
-                                    <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400 hover:text-slate-600">
-                                        <X size={20} />
+                        <div className="flex items-start justify-between border-b border-slate-100 bg-slate-50 px-6 py-5">
+                            <div>
+                                <h2 className="text-xl font-black text-slate-900">Pay Rent Online</h2>
+                                <p className="text-sm font-medium text-slate-500">PhonePe is the default gateway when configured.</p>
+                            </div>
+                            {status !== 'SUCCESS' && (
+                                <button
+                                    onClick={onClose}
+                                    className="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700"
+                                >
+                                    <X size={18} />
+                                </button>
+                            )}
+                        </div>
+
+                        <div className="space-y-5 p-6">
+                            <div className="rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3">
+                                <p className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-500">Amount</p>
+                                <p className="mt-2 text-3xl font-black text-slate-900">₹{Number(amount || 0).toLocaleString()}</p>
+                            </div>
+
+                            {!attempt && (
+                                <div className="space-y-4">
+                                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-600 text-white">
+                                                <Smartphone size={20} />
+                                            </div>
+                                            <div>
+                                                <p className="font-bold text-slate-900">PhonePe Hosted Checkout</p>
+                                                <p className="text-sm text-slate-500">We will redirect you to PhonePe to finish the payment securely.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {error && (
+                                        <div className="flex items-start gap-3 rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                                            <AlertCircle size={18} className="mt-0.5 shrink-0" />
+                                            <span>{error}</span>
+                                        </div>
+                                    )}
+
+                                    <button
+                                        onClick={handleCreateIntent}
+                                        disabled={loading}
+                                        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-4 font-bold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                                    >
+                                        {loading ? <Loader2 size={18} className="animate-spin" /> : <ShieldCheck size={18} />}
+                                        {loading ? 'Creating payment...' : 'Continue To Payment'}
                                     </button>
-                                )}
-                            </div>
+                                </div>
+                            )}
 
-                            {/* Content */}
-                            <div className="p-6">
-                                {step === 'method' && (
-                                    <div className="space-y-6">
-                                        <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 flex justify-between items-center">
-                                            <span className="text-sm font-bold text-slate-600">Total Amount</span>
-                                            <span className="text-2xl font-black text-indigo-700">₹{amount.toLocaleString()}</span>
-                                        </div>
-
-                                        <div className="space-y-3">
-                                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Select Method</p>
-
-                                            {/* UPI Option */}
-                                            <button
-                                                onClick={() => setMethod('upi')}
-                                                className={`w-full p-4 rounded-xl border-2 flex items-center gap-4 transition-all ${method === 'upi' ? 'border-indigo-600 bg-indigo-50/50' : 'border-slate-100 hover:border-slate-200'
-                                                    }`}
-                                            >
-                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${method === 'upi' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
-                                                    }`}>
-                                                    <Smartphone size={20} />
-                                                </div>
-                                                <div className="text-left flex-1">
-                                                    <p className={`font-bold ${method === 'upi' ? 'text-indigo-900' : 'text-slate-700'}`}>UPI / QR</p>
-                                                    <p className="text-xs text-slate-500">Google Pay, PhonePe, Paytm</p>
-                                                </div>
-                                                {method === 'upi' && <div className="w-4 h-4 rounded-full bg-indigo-600" />}
-                                            </button>
-
-                                            {/* Card Option */}
-                                            <button
-                                                onClick={() => setMethod('card')}
-                                                className={`w-full p-4 rounded-xl border-2 flex items-center gap-4 transition-all ${method === 'card' ? 'border-indigo-600 bg-indigo-50/50' : 'border-slate-100 hover:border-slate-200'
-                                                    }`}
-                                            >
-                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${method === 'card' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
-                                                    }`}>
-                                                    <CreditCard size={20} />
-                                                </div>
-                                                <div className="text-left flex-1">
-                                                    <p className={`font-bold ${method === 'card' ? 'text-indigo-900' : 'text-slate-700'}`}>Cards</p>
-                                                    <p className="text-xs text-slate-500">Debit / Credit Card</p>
-                                                </div>
-                                                {method === 'card' && <div className="w-4 h-4 rounded-full bg-indigo-600" />}
-                                            </button>
-
-                                            {/* Net Banking Option */}
-                                            <button
-                                                onClick={() => setMethod('netbanking')}
-                                                className={`w-full p-4 rounded-xl border-2 flex items-center gap-4 transition-all ${method === 'netbanking' ? 'border-indigo-600 bg-indigo-50/50' : 'border-slate-100 hover:border-slate-200'
-                                                    }`}
-                                            >
-                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${method === 'netbanking' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
-                                                    }`}>
-                                                    <Globe size={20} />
-                                                </div>
-                                                <div className="text-left flex-1">
-                                                    <p className={`font-bold ${method === 'netbanking' ? 'text-indigo-900' : 'text-slate-700'}`}>Net Banking</p>
-                                                    <p className="text-xs text-slate-500">All Indian Banks</p>
-                                                </div>
-                                                {method === 'netbanking' && <div className="w-4 h-4 rounded-full bg-indigo-600" />}
-                                            </button>
-                                        </div>
-
-                                        {/* Method Specific Content */}
-                                        {method === 'upi' && (
-                                            <motion.div
-                                                initial={{ opacity: 0, height: 0 }}
-                                                animate={{ opacity: 1, height: 'auto' }}
-                                                className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center space-y-3"
-                                            >
-                                                <div className="w-32 h-32 bg-white mx-auto rounded-lg border border-slate-200 flex items-center justify-center">
-                                                    <QrCode size={80} className="text-slate-800" />
-                                                </div>
-                                                <p className="text-xs text-slate-500 font-medium">Scan to Pay via any UPI App</p>
-                                            </motion.div>
-                                        )}
-
-                                        <button
-                                            onClick={handlePayment}
-                                            disabled={loading}
-                                            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 active:scale-95"
-                                        >
-                                            {loading ? <Loader2 className="animate-spin" /> : <ShieldCheck size={20} />}
-                                            {loading ? 'Processing...' : `Pay ₹${amount.toLocaleString()}`}
-                                        </button>
-                                    </div>
-                                )}
-
-                                {step === 'success' && (
-                                    <div className="flex flex-col items-center justify-center py-8 text-center space-y-4">
-                                        <motion.div
-                                            initial={{ scale: 0 }}
-                                            animate={{ scale: 1 }}
-                                            transition={{ type: "spring", stiffness: 200, damping: 10 }}
-                                            className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center"
-                                        >
-                                            <CheckCircle size={40} strokeWidth={3} />
-                                        </motion.div>
+                            {attempt && (
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                                         <div>
-                                            <h3 className="text-xl font-black text-slate-900">Payment Successful!</h3>
-                                            <p className="text-slate-500 mt-1">Transaction ID: txn_{Date.now().toString().slice(-6)}</p>
+                                            <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Provider</p>
+                                            <p className="mt-1 font-bold text-slate-900">{attempt.provider}</p>
                                         </div>
-                                        <div className="bg-slate-50 px-6 py-3 rounded-xl border border-slate-100">
-                                            <p className="text-sm font-medium text-slate-500">Amount Paid</p>
-                                            <p className="text-2xl font-black text-slate-900">₹{amount.toLocaleString()}</p>
+                                        <div className={`rounded-full px-3 py-1 text-xs font-bold ${
+                                            status === 'SUCCESS' ? 'bg-emerald-100 text-emerald-700'
+                                                : canRetry ? 'bg-rose-100 text-rose-700'
+                                                    : 'bg-amber-100 text-amber-700'
+                                        }`}>
+                                            {status}
                                         </div>
                                     </div>
-                                )}
-                            </div>
+
+                                    {status === 'SUCCESS' ? (
+                                        <div className="space-y-4 text-center">
+                                            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                                                <CheckCircle size={38} strokeWidth={2.5} />
+                                            </div>
+                                            <div>
+                                                <p className="text-2xl font-black text-slate-900">Payment confirmed</p>
+                                                <p className="mt-1 text-sm text-slate-500">HMS has confirmed your payment and updated your dues.</p>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {attempt.checkout_url && (
+                                                <div className="rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-800">
+                                                    <p className="font-semibold">Hosted checkout ready</p>
+                                                    <p className="mt-1">{redirecting ? 'Redirecting to PhonePe...' : 'If you are not redirected automatically, use the button below.'}</p>
+                                                </div>
+                                            )}
+                                            <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
+                                                <div className="rounded-3xl bg-white p-3 shadow-inner ring-1 ring-slate-200">
+                                                    <QrCodeImage value={attempt.qr_payload || attempt.upi_intent_url || attempt.checkout_url} />
+                                                </div>
+                                                <div className="flex flex-col gap-3">
+                                                    <a
+                                                        href={attempt.checkout_url || '#'}
+                                                        target="_self"
+                                                        rel="noreferrer"
+                                                        className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold ${
+                                                            attempt.checkout_url
+                                                                ? 'bg-slate-900 text-white hover:bg-slate-800'
+                                                                : 'bg-slate-100 text-slate-400 pointer-events-none'
+                                                        }`}
+                                                    >
+                                                        <ShieldCheck size={16} />
+                                                        Open PhonePe Checkout
+                                                    </a>
+                                                    <a
+                                                        href={attempt.upi_intent_url || '#'}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold ${
+                                                            attempt.upi_intent_url
+                                                                ? 'bg-indigo-600 text-white hover:bg-indigo-500'
+                                                                : 'bg-slate-100 text-slate-400 pointer-events-none'
+                                                        }`}
+                                                    >
+                                                        <Smartphone size={16} />
+                                                        Open UPI App
+                                                    </a>
+                                                    <button
+                                                        onClick={handleCopy}
+                                                        disabled={!attempt.qr_payload}
+                                                        className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50 disabled:text-slate-300"
+                                                    >
+                                                        <Copy size={16} />
+                                                        {copied ? 'Copied' : 'Copy QR Payload'}
+                                                    </button>
+                                                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                                                        <div className="flex items-center gap-2 font-semibold text-slate-700">
+                                                            <QrCode size={16} />
+                                                            Waiting for confirmation
+                                                        </div>
+                                                        <p className="mt-1">Keep this window open while we confirm the payment.</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {canRetry && (
+                                                <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                                                    This attempt ended with status <span className="font-bold">{status}</span>. You can close this and try again.
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+
+                                    <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                                        <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Merchant Transaction ID</p>
+                                        <p className="mt-2 break-all font-mono text-sm text-slate-700">{attempt.merchant_txn_id || attempt.gateway_txn_id || attempt.attempt_id}</p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </motion.div>
-                </>
-            )}
+                </div>
+            </motion.div>
         </AnimatePresence>
     );
 };

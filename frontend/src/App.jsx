@@ -16,6 +16,7 @@ import Expenses from './pages/owner/Expenses.jsx';
 import StudentLayout from './layouts/StudentLayout.jsx';
 import StudentDashboard from './pages/student/StudentDashboard.jsx';
 import StudentPayments from './pages/student/StudentPayments.jsx';
+import StudentPaymentReturn from './pages/student/StudentPaymentReturn.jsx';
 import StudentComplaints from './pages/student/StudentComplaints.jsx';
 import StudentProfile from './pages/student/StudentProfile.jsx';
 import StudentSettings from './pages/student/StudentSettings.jsx';
@@ -30,16 +31,18 @@ function App() {
         <Route path="/" element={<Login />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/activate" element={<ActivateAccount />} />
+            <Route path="/activate" element={<ActivateAccount />} />
+            <Route path="/payment-return" element={<StudentPaymentReturn />} />
 
         {/* Student Routes */}
 
         <Route element={<ProtectedStudentRoute />}>
-          <Route path="/student" element={<StudentLayout />}>
-            <Route index element={<Navigate to="dashboard" replace />} />
-            <Route path="dashboard" element={<StudentDashboard />} />
-            <Route path="payments" element={<StudentPayments />} />
-            <Route path="complaints" element={<StudentComplaints />} />
+            <Route path="/student" element={<StudentLayout />}>
+                <Route index element={<Navigate to="dashboard" replace />} />
+                <Route path="dashboard" element={<StudentDashboard />} />
+                <Route path="payments" element={<StudentPayments />} />
+                <Route path="payment-return" element={<StudentPaymentReturn />} />
+                <Route path="complaints" element={<StudentComplaints />} />
             <Route path="profile" element={<StudentProfile />} />
             <Route path="settings" element={<StudentSettings />} />
           </Route>

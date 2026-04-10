@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, status
-from app.schemas.payment_schema import PaymentCreate, PaymentResponse, \
+from app.schemas.payment_schema import PaymentAttemptResponse, PaymentCreate, PaymentIntentCreate, PaymentIntentResponse, PaymentResponse, \
     ObligationResponse, StudentPaymentHistory, DuesReportItem, WaiveRequest, RentGenerationRequest
 from app.services import payment_service
 from app.utils.auth import get_current_user, UserContext, require_admin, require_admin_or_owner
@@ -91,6 +91,46 @@ def record_payment(
     return _handle_service_response(result, status.HTTP_201_CREATED)
 
 
+@router.post(
+    "/create-intent",
+    response_model=PaymentIntentResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create an online payment intent",
+)
+def create_payment_intent(
+    data: PaymentIntentCreate,
+    user: UserContext = Depends(get_current_user)
+):
+    if user.is_student() and not user.student_id:
+        raise HTTPException(status_code=403, detail={"message": "Student account is not linked to a student record."})
+
+    result = payment_service.create_payment_intent(
+        str(data.obligation_id),
+        data.amount,
+        user_id=user.user_id,
+        student_id=user.student_id if user.is_student() else None,
+    )
+    return _handle_service_response(result, status.HTTP_201_CREATED)
+
+
+@router.get(
+    "/attempts/{attempt_id}",
+    response_model=PaymentAttemptResponse,
+    summary="Get online payment attempt status",
+)
+def get_payment_attempt(
+    attempt_id: str,
+    user: UserContext = Depends(get_current_user)
+):
+    result = payment_service.get_payment_attempt(
+        attempt_id,
+        user_id=user.user_id,
+        role=user.role,
+        student_id=user.student_id,
+    )
+    return _handle_service_response(result)
+
+
 
 @router.get(
     "/",
@@ -175,3 +215,4 @@ def waive_obligation(
     """
     result = payment_service.waive_obligation(obligation_id, user_id=user.user_id)
     return _handle_service_response(result)
+

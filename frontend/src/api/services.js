@@ -153,6 +153,14 @@ export const paymentService = {
         const response = await api.post('/payments/', data);
         return response.data;
     },
+    createIntent: async (data) => {
+        const response = await api.post('/payments/create-intent', data);
+        return response.data;
+    },
+    getAttempt: async (attemptId) => {
+        const response = await api.get(`/payments/attempts/${attemptId}`);
+        return response.data;
+    },
     generateRent: async (month) => {
         const response = await api.post('/payments/generate-monthly', { rent_month: month });
         return response.data;

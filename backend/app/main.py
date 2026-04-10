@@ -1,5 +1,6 @@
 import sys
 import os
+import asyncio
 
 # Ensure the 'backend' directory is in the Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -13,6 +14,7 @@ from app.api.routes.profile_router import router as profile_router
 from app.api.routes.room_allocation_router import router as room_allocation_router
 
 from app.api.routes.payment_router import router as payment_router
+from app.api.routes.payment_webhook_router import router as payment_webhook_router
 from app.api.routes.auth_router import router as auth_router
 from app.api.routes.complaint_router import router as complaint_router
 from app.api.routes.room_router import router as room_router
@@ -23,8 +25,10 @@ import uvicorn
 
 from app.utils.hooks import register_hook
 from app.services.room_allocation_service import handle_student_left
+from app.services import payment_service
 
 app = FastAPI(title="Hostel Management System API", version="1.0.0")
+app.state.payment_reconciliation_task = None
 
 # CORS Configuration
 origins = [
@@ -43,7 +47,7 @@ app.add_middleware(
 )
 
 @app.on_event("startup")
-def startup_event():
+async def startup_event():
     from app.services.notification_handler import (
         handle_student_enrolled, handle_student_allocated,
         handle_payment_recorded, handle_complaint_created,
@@ -60,11 +64,35 @@ def startup_event():
     register_hook("complaint_created", handle_complaint_created)
     register_hook("complaint_updated", handle_complaint_resolved)
     register_hook("rent_obligation_created", handle_rent_generated)
+    if app.state.payment_reconciliation_task is None:
+        app.state.payment_reconciliation_task = asyncio.create_task(_payment_reconciliation_loop())
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    task = app.state.payment_reconciliation_task
+    if task:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+
+async def _payment_reconciliation_loop():
+    while True:
+        try:
+            payment_service.reconcile_pending_payment_attempts()
+        except Exception:
+            from app.utils.logger import get_logger
+            get_logger(__name__).exception("Payment reconciliation loop failed")
+        await asyncio.sleep(900)
 
 app.include_router(student_router)
 app.include_router(profile_router)
 app.include_router(room_allocation_router)
 app.include_router(payment_router)
+app.include_router(payment_webhook_router)
 app.include_router(auth_router)
 app.include_router(complaint_router)
 app.include_router(room_router)

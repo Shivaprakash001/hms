@@ -67,6 +67,10 @@ const StudentPayments = () => {
     }, [history]);
 
     const pendingAmount = history.outstanding_balance || 0;
+    const payableObligation = useMemo(
+        () => history.obligations?.find(o => o.status === 'PENDING' || o.status === 'PARTIAL' || o.status === 'pending' || o.status === 'partial'),
+        [history.obligations]
+    );
 
     const isOverdue = localPayments.some(p => p.status === 'overdue');
 
@@ -85,26 +89,13 @@ const StudentPayments = () => {
     };
     const { label: nextDueDate, daysLeft } = getNextDueInfo();
 
-    const handlePaymentSuccess = async (paymentData) => {
+    const handlePaymentSuccess = async () => {
         try {
-            const pendingOb = history.obligations?.find(o => o.status === 'pending' || o.status === 'partial');
-            if (!pendingOb) {
-                alert("No pending dues to pay!");
-                return;
-            }
-            const today = new Date();
-            const localDate = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
-            await paymentService.recordPayment({
-                obligation_id: pendingOb.id,
-                amount_paid: paymentData.amount || pendingAmount,
-                payment_method: paymentData.method?.toUpperCase() || 'UPI',
-                payment_date: localDate
-            });
-            loadHistory();
-            setShowPaymentModal(false);
+            await loadHistory();
         } catch (error) {
             console.error("Payment failed", error);
-            alert("Payment recording failed. Please contact support.");
+        } finally {
+            setShowPaymentModal(false);
         }
     };
 
@@ -272,6 +263,7 @@ const StudentPayments = () => {
                 isOpen={showPaymentModal}
                 onClose={() => setShowPaymentModal(false)}
                 amount={pendingAmount > 0 ? pendingAmount : 0}
+                obligationId={payableObligation?.id}
                 onSuccess={handlePaymentSuccess}
             />
         </div>

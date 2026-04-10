@@ -12,8 +12,9 @@ export const AuthProvider = ({ children }) => {
 
     useEffect(() => {
         // If user is already logged in, redirect unless on public page
-        const publicPaths = ['/login', '/register', '/'];
-        if (user && publicPaths.includes(location.pathname)) {
+        const publicPaths = ['/login', '/register', '/', '/payment-return'];
+        const isPaymentReturnPath = location.pathname === '/payment-return';
+        if (user && publicPaths.includes(location.pathname) && !isPaymentReturnPath) {
             const role = user.role?.toLowerCase();
             if (role === 'owner' || role === 'admin') {
                 if (!location.pathname.startsWith('/owner')) {
