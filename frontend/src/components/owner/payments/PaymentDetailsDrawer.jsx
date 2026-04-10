@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Calendar, DollarSign, CreditCard, User, Home, Download, CheckCircle, Phone, Mail, Receipt, ArrowUpRight, FileClock, Landmark } from 'lucide-react';
+import { X, Calendar, DollarSign, CreditCard, User, Home, Download, CheckCircle, Phone, Mail, Receipt, ArrowUpRight, FileClock, Landmark, Smartphone } from 'lucide-react';
 
 const formatCurrency = (value) => `₹${Number(value || 0).toLocaleString('en-IN')}`;
 
@@ -53,7 +53,7 @@ const SectionCard = ({ title, children }) => (
     </section>
 );
 
-const PaymentDetailsDrawer = ({ isOpen, onClose, payment, onMarkPaid, onDownloadReceipt, onViewTenant, onViewHistory }) => {
+const PaymentDetailsDrawer = ({ isOpen, onClose, payment, onMarkPaid, onDownloadReceipt, onViewTenant, onViewHistory, onStartOnlineTest }) => {
     const [showForm, setShowForm] = useState(false);
     const [payAmount, setPayAmount] = useState('');
     const [payMethod, setPayMethod] = useState('CASH');
@@ -255,6 +255,15 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, onMarkPaid, onDownload
                                         Download Receipt
                                     </button>
                                 </div>
+                                {payment.status !== 'paid' && Number(payment.balance || 0) > 0 && payment.status !== 'waived' && (
+                                    <button
+                                        onClick={() => onStartOnlineTest?.(payment)}
+                                        className="mb-4 w-full py-3.5 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-xl font-bold hover:bg-indigo-100 transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <Smartphone size={18} />
+                                        Start Online Test Checkout
+                                    </button>
+                                )}
                                 {payment.status !== 'paid' ? (
                                     showForm ? (
                                         <div className="space-y-4">

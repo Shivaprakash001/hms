@@ -1,9 +1,9 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { CheckCircle, Clock, AlertCircle, Eye, History, Download, Landmark } from 'lucide-react';
+import { CheckCircle, Clock, AlertCircle, Eye, History, Download, Landmark, Smartphone } from 'lucide-react';
 
-const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadReceipt }) => {
+const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadReceipt, onStartOnlineTest }) => {
     return (
         <div className="overflow-x-auto">
             {/* Desktop Table View */}
@@ -95,6 +95,18 @@ const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadRece
                                     >
                                         <Eye size={18} />
                                     </button>
+                                    {Number(payment.balance || 0) > 0 && payment.status !== 'waived' && (
+                                        <button
+                                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                            title="Test Online Payment"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onStartOnlineTest?.(payment);
+                                            }}
+                                        >
+                                            <Smartphone size={18} />
+                                        </button>
+                                    )}
                                     {Number(payment.balance || 0) > 0 && payment.status !== 'waived' && (
                                         <button
                                             className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"

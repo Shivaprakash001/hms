@@ -9,6 +9,7 @@ import PaymentStatsCard from '../../components/owner/payments/PaymentStatsCard';
 import PaymentTable from '../../components/owner/payments/PaymentTable';
 import PaymentDetailsDrawer from '../../components/owner/payments/PaymentDetailsDrawer';
 import TenantHistoryModal from '../../components/owner/payments/TenantHistoryModal';
+import OnlinePaymentTestModal from '../../components/owner/payments/OnlinePaymentTestModal';
 import { paymentService } from '../../api/services';
 
 const Payments = () => {
@@ -23,6 +24,7 @@ const Payments = () => {
     const [tenantFilter, setTenantFilter] = useState('all');
     const [selectedPayment, setSelectedPayment] = useState(null);
     const [historyTenant, setHistoryTenant] = useState(null);
+    const [onlineTestTarget, setOnlineTestTarget] = useState(null);
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
 
@@ -351,6 +353,22 @@ const Payments = () => {
         navigate('/owner/students', { state: { selectedTenantId: payment.tenantId } });
     };
 
+    const handleOpenOnlineTest = (payment) => {
+        if (!payment?.obligationId) {
+            alert('Unable to start payment test for this row.');
+            return;
+        }
+        if (Number(payment.balance || 0) <= 0) {
+            alert('Selected obligation has no pending balance.');
+            return;
+        }
+        setOnlineTestTarget(payment);
+    };
+
+    const handleOnlineSettled = () => {
+        loadLedger();
+    };
+
     const availableTenants = useMemo(() => {
         const names = new Set(ledgerRows.map(p => p.tenantName).filter(Boolean));
         return [...names].sort();
@@ -491,6 +509,7 @@ const Payments = () => {
                     onSelectPayment={setSelectedPayment}
                     onViewHistory={setHistoryTenant}
                     onDownloadReceipt={handleDownloadReceipt}
+                    onStartOnlineTest={handleOpenOnlineTest}
                 />
 
                 {/* Pagination */}
@@ -674,6 +693,14 @@ const Payments = () => {
                 onDownloadReceipt={handleDownloadFromSelection}
                 onViewTenant={handleViewTenant}
                 onViewHistory={setHistoryTenant}
+                onStartOnlineTest={handleOpenOnlineTest}
+            />
+
+            <OnlinePaymentTestModal
+                isOpen={!!onlineTestTarget}
+                onClose={() => setOnlineTestTarget(null)}
+                obligation={onlineTestTarget}
+                onSettled={handleOnlineSettled}
             />
 
             {/* Tenant History Modal */}
