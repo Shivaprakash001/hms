@@ -453,18 +453,38 @@ export const expenseService = {
     }
 };
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const requestWithRetry = async (fn, { retries = 2, delayMs = 1500 } = {}) => {
+    let lastError;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+            return await fn();
+        } catch (error) {
+            lastError = error;
+            const status = error?.response?.status;
+            const shouldRetry = !status || [502, 503, 504].includes(status);
+            if (!shouldRetry || attempt === retries) {
+                throw error;
+            }
+            await sleep(delayMs * (attempt + 1));
+        }
+    }
+    throw lastError;
+};
+
 // --- Dashboard Service ---
 export const dashboardService = {
     getSummary: async () => {
-        const response = await api.get('/dashboard/summary');
+        const response = await requestWithRetry(() => api.get('/dashboard/summary'));
         return response.data;
     },
     getStats: async () => {
-        const response = await api.get('/dashboard/stats');
+        const response = await requestWithRetry(() => api.get('/dashboard/stats'));
         return response.data;
     },
     getMonthlyStats: async (months = 6) => {
-        const response = await api.get(`/dashboard/monthly-stats?months=${months}`);
+        const response = await requestWithRetry(() => api.get(`/dashboard/monthly-stats?months=${months}`));
         return response.data;
     }
 };
@@ -472,7 +492,7 @@ export const dashboardService = {
 // --- Activity Service ---
 export const activityService = {
     getAll: async (params = {}) => {
-        const response = await api.get('/activity/', { params });
+        const response = await requestWithRetry(() => api.get('/activity/', { params }));
         return response.data;
     }
 };

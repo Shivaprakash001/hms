@@ -153,5 +153,20 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 def read_root():
     return {"message": "Hello World"}
 
+
+@app.head("/")
+def read_root_head():
+    return JSONResponse(status_code=status.HTTP_200_OK, content=None)
+
+
+@app.get("/healthz")
+def health_check():
+    return {"status": "ok"}
+
+
+@app.head("/healthz")
+def health_check_head():
+    return JSONResponse(status_code=status.HTTP_200_OK, content=None)
+
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
