@@ -20,6 +20,20 @@ class PaymentMethod(str, Enum):
     OTHER = "OTHER"
 
 
+class OnlinePaymentProvider(str, Enum):
+    PHONEPE = "PHONEPE"
+    RAZORPAY = "RAZORPAY"
+
+
+class PaymentAttemptStatus(str, Enum):
+    CREATED = "CREATED"
+    PENDING = "PENDING"
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+    EXPIRED = "EXPIRED"
+    CANCELLED = "CANCELLED"
+
+
 class RentGenerationRequest(BaseModel):
     rent_month: date = Field(..., description="The month to generate rent for (usually 1st of month)")
     
@@ -54,6 +68,36 @@ class PaymentCreate(BaseModel):
         return v
 
 
+class PaymentIntentCreate(BaseModel):
+    obligation_id: UUID
+    amount: Optional[Decimal] = Field(default=None, gt=0)
+
+
+class PaymentIntentResponse(BaseModel):
+    attempt_id: UUID
+    provider: OnlinePaymentProvider
+    merchant_txn_id: str
+    checkout_url: Optional[str] = None
+    upi_intent_url: Optional[str] = None
+    qr_payload: Optional[str] = None
+    status: PaymentAttemptStatus
+    expires_at: Optional[datetime] = None
+
+
+class PaymentAttemptResponse(BaseModel):
+    attempt_id: UUID
+    status: PaymentAttemptStatus
+    provider: OnlinePaymentProvider
+    merchant_txn_id: Optional[str] = None
+    checkout_url: Optional[str] = None
+    upi_intent_url: Optional[str] = None
+    qr_payload: Optional[str] = None
+    amount: Decimal
+    expires_at: Optional[datetime] = None
+    confirmed_at: Optional[datetime] = None
+    gateway_txn_id: Optional[str] = None
+
+
 class WaiveRequest(BaseModel):
     reason: Optional[str] = None
 
@@ -66,6 +110,7 @@ class PaymentResponse(BaseModel):
     payment_date: date
     payment_method: str
     reference_number: Optional[str]
+    payment_attempt_id: Optional[UUID] = None
     created_at: datetime
 
     class Config:
