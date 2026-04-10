@@ -1,384 +1,280 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CheckCircle, CreditCard, Smartphone, Globe, Loader2, QrCode, ShieldCheck, AlertCircle, RefreshCw } from 'lucide-react';
+import {
+    AlertCircle,
+    CheckCircle,
+    Copy,
+    Loader2,
+    QrCode,
+    ShieldCheck,
+    Smartphone,
+    X
+} from 'lucide-react';
+
 import { paymentService } from '../../../api/services';
+import QrCodeImage from '../../shared/QrCodeImage';
 
-const loadRazorpayScript = () =>
-    new Promise((resolve) => {
-        if (window.Razorpay) {
-            resolve(true);
-            return;
-        }
-        const script = document.createElement('script');
-        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-        script.onload = () => resolve(true);
-        script.onerror = () => resolve(false);
-        document.body.appendChild(script);
-    });
+const POLL_INTERVAL_MS = 4000;
+const TERMINAL_STATUSES = ['SUCCESS', 'FAILED', 'EXPIRED', 'CANCELLED'];
 
-/**
- * PaymentModal
- * Wires the full Razorpay payment flow:
- *   1. Create order via /payments/initiate
- *   2. Open Razorpay checkout
- *   3. Verify payment server-side via /payments/verify
- *   4. Call onSuccess with verified result
- *
- * States: 'method' → 'processing' → 'verifying' → 'success' | 'failed'
- */
 const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
-    const [step, setStep] = useState('method'); // method, processing, verifying, success, failed
-    const [method, setMethod] = useState('upi'); // upi, card, netbanking
     const [loading, setLoading] = useState(false);
-    const [verifying, setVerifying] = useState(false);
-    const [error, setError] = useState(null);
-    const [verifiedData, setVerifiedData] = useState(null);
+    const [attempt, setAttempt] = useState(null);
+    const [status, setStatus] = useState('idle');
+    const [error, setError] = useState('');
+    const [copied, setCopied] = useState(false);
+    const [redirecting, setRedirecting] = useState(false);
 
-    // Reset state on open
     useEffect(() => {
-        if (isOpen) {
-            setStep('method');
-            const saved = localStorage.getItem('preferred_upi_app') || 'upi';
-            setMethod(saved);
+        if (!isOpen) {
             setLoading(false);
-            setVerifying(false);
-            setError(null);
-            setVerifiedData(null);
+            setAttempt(null);
+            setStatus('idle');
+            setError('');
+            setCopied(false);
+            setRedirecting(false);
         }
     }, [isOpen]);
-    
-    // Validate amount before proceeding
+
     useEffect(() => {
-        if (isOpen && amount) {
-            if (amount <= 0) {
-                setError('Invalid amount: Payment amount must be greater than zero');
-                setStep('failed');
-            } else if (amount > 1000000) {
-                setError('Invalid amount: Payment amount cannot exceed ₹10,00,000');
-                setStep('failed');
-            }
+        if (!isOpen || !attempt?.attempt_id || TERMINAL_STATUSES.includes(status)) {
+            return undefined;
         }
-    }, [isOpen, amount]);
 
-    const handleVerify = async (razorpayResponse, orderData) => {
-        setVerifying(true);
-        setStep('verifying');
-        try {
-            const verifyPayload = {
-                razorpay_order_id: razorpayResponse.razorpay_order_id,
-                razorpay_payment_id: razorpayResponse.razorpay_payment_id,
-                razorpay_signature: razorpayResponse.razorpay_signature,
-            };
-            if (obligationId) {
-                verifyPayload.obligation_id = obligationId;
-            }
-
-            const result = await paymentService.verifyPayment(verifyPayload);
-            setVerifiedData(result);
-            setStep('success');
-            setTimeout(() => {
-                onSuccess({
-                    ...razorpayResponse,
-                    amount,
-                    obligation_status: result?.obligation_status,
-                });
-            }, 1800);
-        } catch (verifyErr) {
-            // 409 = "already exists" — webhook recorded the payment first.
-            // Treat it as success because the money IS captured.
-            const httpStatus = verifyErr?.response?.status;
-            if (httpStatus === 409) {
-                setVerifiedData({ obligation_status: 'PAID' });
-                setStep('success');
-                setTimeout(() => {
-                    onSuccess({
-                        ...razorpayResponse,
-                        amount,
-                        obligation_status: 'PAID',
-                    });
-                }, 1800);
-                return;
-            }
-
-            const msg = verifyErr?.response?.data?.detail?.message
-                || verifyErr?.response?.data?.detail
-                || verifyErr?.message
-                || 'Payment verification failed. Please contact support.';
-            setError(msg);
-            setStep('failed');
-        } finally {
-            setVerifying(false);
-        }
-    };
-
-    const handlePayment = async (selectedMethod) => {
-        // Validate amount first
-        if (!amount || amount <= 0) {
-            setError('Invalid payment amount. Please refresh and try again.');
-            setStep('failed');
-            return;
-        }
-        
-        if (amount > 1000000) {
-            setError('Payment amount exceeds maximum limit of ₹10,00,000');
-            setStep('failed');
-            return;
-        }
-        
-        setMethod(selectedMethod);
-        setLoading(true);
-        setError(null);
-
-        try {
-            // 1. Load Razorpay SDK dynamically
-            const scriptLoaded = await loadRazorpayScript();
-            if (!scriptLoaded) {
-                throw new Error('Failed to load payment gateway. Please check your internet connection and try again.');
-            }
-
-            // Save preference
-            localStorage.setItem('preferred_upi_app', selectedMethod);
-
-            // 2. Create Razorpay order via backend
-            const orderData = await paymentService.initiatePayment({
-                ...(obligationId ? { obligation_id: obligationId } : {}),
-                amount: amount,
-                preferred_app: selectedMethod,
-                notes: { preferred_upi_app: selectedMethod, preferred_app: selectedMethod }
-            });
-
-            // 3. Configure and open Razorpay Checkout widget
-            const options = {
-                key: orderData.key_id,
-                amount: orderData.amount,
-                currency: orderData.currency,
-                name: orderData.name,
-                description: orderData.description,
-                order_id: orderData.order_id,
-                prefill: orderData.prefill || {},
-                notes: orderData.notes || {},
-                theme: { color: '#4F46E5' },
-                method: {
-                    upi: true,
-                    card: true,
-                    netbanking: true,
-                    wallet: true,
-                    paylater: false
-                },
-                handler: (response) => {
-                    // Payment captured by Razorpay – now verify server-side
-                    handleVerify(response, orderData);
-                },
-                modal: {
-                    ondismiss: () => {
-                        setLoading(false);
-                        // Dismissed by user – remain on 'method' step so they can retry
-                        setStep('method');
-                    }
+        const timer = window.setInterval(async () => {
+            try {
+                const latest = await paymentService.getAttempt(attempt.attempt_id);
+                setAttempt(current => ({ ...current, ...latest }));
+                setStatus(latest.status);
+                if (latest.status === 'SUCCESS') {
+                    onSuccess?.(latest);
                 }
-            };
-
-            const rzp = new window.Razorpay(options);
-            rzp.on('payment.failed', (response) => {
-                const failReason = response.error?.description || 'Payment failed';
-                setError(`${failReason}. Please try again or use a different payment method.`);
-                setStep('failed');
-                setLoading(false);
-            });
-            rzp.open();
-            // Loading spinner stays visible until the checkout widget opens/closes
-        } catch (err) {
-            const errorMsg = err?.response?.data?.detail?.message 
-                || err?.response?.data?.detail 
-                || err.message 
-                || 'Failed to initiate payment';
-            
-            // Enhanced error messages
-            if (err?.response?.status === 422) {
-                setError('Invalid payment details. Please refresh and try again.');
-            } else if (err?.response?.status === 404) {
-                setError('Payment obligation not found. Please refresh the page.');
-            } else if (!navigator.onLine) {
-                setError('No internet connection. Please check your network and try again.');
-            } else {
-                setError(errorMsg);
+            } catch (pollError) {
+                console.error('Failed to poll payment status', pollError);
             }
-            
+        }, POLL_INTERVAL_MS);
+
+        return () => window.clearInterval(timer);
+    }, [attempt?.attempt_id, isOpen, onSuccess, status]);
+
+    const canRetry = useMemo(() => ['FAILED', 'EXPIRED', 'CANCELLED'].includes(status), [status]);
+
+    const handleCreateIntent = async () => {
+        if (!obligationId) {
+            setError('No payable obligation is available right now.');
+            return;
+        }
+
+        setLoading(true);
+        setError('');
+        try {
+            const intent = await paymentService.createIntent({
+                obligation_id: obligationId,
+                amount
+            });
+            sessionStorage.setItem('lastPaymentAttemptId', intent.attempt_id);
+            setAttempt(intent);
+            setStatus(intent.status);
+            if (intent.checkout_url) {
+                setRedirecting(true);
+                window.location.href = intent.checkout_url;
+            }
+        } catch (intentError) {
+            const message = intentError?.response?.data?.detail?.message
+                || intentError?.response?.data?.detail
+                || 'Unable to start payment right now.';
+            setError(message);
+        } finally {
             setLoading(false);
-            setStep('failed');
         }
     };
 
-    const handleRetry = () => {
-        setStep('method');
-        setError(null);
+    const handleCopy = async () => {
+        if (!attempt?.qr_payload) return;
+        try {
+            await navigator.clipboard.writeText(attempt.qr_payload);
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 1600);
+        } catch (copyError) {
+            console.error('Failed to copy QR payload', copyError);
+        }
     };
 
     if (!isOpen) return null;
 
     return (
         <AnimatePresence>
-            {isOpen && (
-                <>
-                    {/* Backdrop */}
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-50"
+            >
+                <div
+                    className="absolute inset-0 bg-slate-900/65 backdrop-blur-sm"
+                    onClick={loading || status === 'SUCCESS' ? undefined : onClose}
+                />
+                <div className="absolute inset-0 flex items-center justify-center p-4">
                     <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        onClick={!loading && !verifying && step !== 'verifying' ? onClose : undefined}
-                        className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50"
-                    />
-
-                    {/* Modal */}
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                        className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
+                        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 24, scale: 0.96 }}
+                        className="w-full max-w-md overflow-hidden rounded-[28px] bg-white shadow-2xl"
                     >
-                        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md pointer-events-auto overflow-hidden relative">
-                            {/* Header */}
-                            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 backdrop-blur-md">
-                                <div>
-                                    <h2 className="text-xl font-black text-slate-900">Payment Gateway</h2>
-                                    <p className="text-sm text-slate-500 font-medium">Secure Transaction</p>
-                                </div>
-                                {!loading && !verifying && step !== 'success' && step !== 'verifying' && (
-                                    <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400 hover:text-slate-600">
-                                        <X size={20} />
+                        <div className="flex items-start justify-between border-b border-slate-100 bg-slate-50 px-6 py-5">
+                            <div>
+                                <h2 className="text-xl font-black text-slate-900">Pay Rent Online</h2>
+                                <p className="text-sm font-medium text-slate-500">PhonePe is the default gateway when configured.</p>
+                            </div>
+                            {status !== 'SUCCESS' && (
+                                <button
+                                    onClick={onClose}
+                                    className="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700"
+                                >
+                                    <X size={18} />
+                                </button>
+                            )}
+                        </div>
+
+                        <div className="space-y-5 p-6">
+                            <div className="rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3">
+                                <p className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-500">Amount</p>
+                                <p className="mt-2 text-3xl font-black text-slate-900">₹{Number(amount || 0).toLocaleString()}</p>
+                            </div>
+
+                            {!attempt && (
+                                <div className="space-y-4">
+                                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-600 text-white">
+                                                <Smartphone size={20} />
+                                            </div>
+                                            <div>
+                                                <p className="font-bold text-slate-900">PhonePe Hosted Checkout</p>
+                                                <p className="text-sm text-slate-500">We will redirect you to PhonePe to finish the payment securely.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {error && (
+                                        <div className="flex items-start gap-3 rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                                            <AlertCircle size={18} className="mt-0.5 shrink-0" />
+                                            <span>{error}</span>
+                                        </div>
+                                    )}
+
+                                    <button
+                                        onClick={handleCreateIntent}
+                                        disabled={loading}
+                                        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-4 font-bold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                                    >
+                                        {loading ? <Loader2 size={18} className="animate-spin" /> : <ShieldCheck size={18} />}
+                                        {loading ? 'Creating payment...' : 'Continue To Payment'}
                                     </button>
-                                )}
-                            </div>
+                                </div>
+                            )}
 
-                            {/* Content */}
-                            <div className="p-6">
-                                {(step === 'method' || step === 'failed') && (
-                                    <div className="space-y-6">
-                                        <div className="text-center space-y-1 mb-4">
-                                            <h3 className="text-2xl font-black text-slate-900">₹{amount.toLocaleString()}</h3>
-                                            <p className="text-sm font-medium text-slate-500">Total Amount Due</p>
-                                        </div>
-
-                                        <div className="space-y-3">
-                                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest text-center mb-4">Select Payment App</p>
-
-                                            {/* Google Pay */}
-                                            <button
-                                                onClick={() => handlePayment('gpay')}
-                                                disabled={loading}
-                                                className="w-full p-4 rounded-xl border-2 border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-all flex items-center justify-center gap-3 active:scale-95"
-                                            >
-                                                <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center text-slate-600">
-                                                    {/* Ideally GPay Icon, using fallback */}
-                                                    <span className="font-black text-lg text-blue-500">G</span>
-                                                </div>
-                                                <span className="font-bold text-slate-800">Pay with Google Pay</span>
-                                            </button>
-
-                                            {/* PhonePe */}
-                                            <button
-                                                onClick={() => handlePayment('phonepe')}
-                                                disabled={loading}
-                                                className="w-full p-4 rounded-xl border-2 border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-all flex items-center justify-center gap-3 active:scale-95"
-                                            >
-                                                <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center text-slate-600">
-                                                    {/* Ideally PhonePe Icon, using fallback */}
-                                                    <span className="font-black text-lg text-purple-600">पे</span>
-                                                </div>
-                                                <span className="font-bold text-slate-800">Pay with PhonePe</span>
-                                            </button>
-
-                                            {/* Other UPI */}
-                                            <button
-                                                onClick={() => handlePayment('paytm')}
-                                                disabled={loading}
-                                                className="w-full p-4 rounded-xl border-2 border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-all flex items-center justify-center gap-3 active:scale-95"
-                                            >
-                                                <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center text-slate-600">
-                                                    <span className="font-black text-lg text-sky-600">P</span>
-                                                </div>
-                                                <span className="font-bold text-slate-800">Pay with Paytm</span>
-                                            </button>
-
-                                            {/* Other UPI */}
-                                            <button
-                                                onClick={() => handlePayment('upi')}
-                                                disabled={loading}
-                                                className="w-full p-4 rounded-xl border-2 border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-all flex items-center justify-center gap-3 active:scale-95"
-                                            >
-                                                <div className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center text-slate-600">
-                                                    <Smartphone size={18} />
-                                                </div>
-                                                <span className="font-bold text-slate-800">Other UPI Apps</span>
-                                            </button>
-                                        </div>
-
-                                        <p className="text-xs text-center text-slate-500 font-medium">
-                                            You'll be redirected to Razorpay secure checkout to complete your payment.
-                                        </p>
-
-                                        {/* Error message */}
-                                        {error && (
-                                            <div className="flex items-start gap-2 p-3 bg-rose-50 border border-rose-100 rounded-xl text-sm text-rose-700">
-                                                <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                                                <span>{error}</span>
-                                            </div>
-                                        )}
-
-                                        {step === 'failed' && (
-                                            <button
-                                                onClick={handleRetry}
-                                                className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-all flex items-center justify-center gap-2"
-                                            >
-                                                <RefreshCw size={18} />
-                                                Retry
-                                            </button>
-                                        )}
-                                        
-                                        {loading && (
-                                            <div className="flex items-center justify-center gap-2 text-indigo-600 font-bold py-2">
-                                                <Loader2 size={20} className="animate-spin" />
-                                                Opening Payment Gateway...
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                {step === 'verifying' && (
-                                    <div className="flex flex-col items-center justify-center py-10 text-center space-y-4">
-                                        <Loader2 size={48} className="animate-spin text-indigo-600" />
+                            {attempt && (
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                                         <div>
-                                            <h3 className="text-lg font-black text-slate-900">Verifying Payment…</h3>
-                                            <p className="text-slate-500 text-sm mt-1">Confirming with our server. Please wait.</p>
+                                            <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Provider</p>
+                                            <p className="mt-1 font-bold text-slate-900">{attempt.provider}</p>
+                                        </div>
+                                        <div className={`rounded-full px-3 py-1 text-xs font-bold ${
+                                            status === 'SUCCESS' ? 'bg-emerald-100 text-emerald-700'
+                                                : canRetry ? 'bg-rose-100 text-rose-700'
+                                                    : 'bg-amber-100 text-amber-700'
+                                        }`}>
+                                            {status}
                                         </div>
                                     </div>
-                                )}
 
-                                {step === 'success' && (
-                                    <div className="flex flex-col items-center justify-center py-8 text-center space-y-4">
-                                        <motion.div
-                                            initial={{ scale: 0 }}
-                                            animate={{ scale: 1 }}
-                                            transition={{ type: "spring", stiffness: 200, damping: 10 }}
-                                            className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center"
-                                        >
-                                            <CheckCircle size={40} strokeWidth={3} />
-                                        </motion.div>
-                                        <div>
-                                            <h3 className="text-xl font-black text-slate-900">Payment Verified!</h3>
-                                            <p className="text-slate-500 mt-1">Your payment has been confirmed.</p>
+                                    {status === 'SUCCESS' ? (
+                                        <div className="space-y-4 text-center">
+                                            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                                                <CheckCircle size={38} strokeWidth={2.5} />
+                                            </div>
+                                            <div>
+                                                <p className="text-2xl font-black text-slate-900">Payment confirmed</p>
+                                                <p className="mt-1 text-sm text-slate-500">HMS has confirmed your payment and updated your dues.</p>
+                                            </div>
                                         </div>
-                                        <div className="bg-slate-50 px-6 py-3 rounded-xl border border-slate-100">
-                                            <p className="text-sm font-medium text-slate-500">Amount Paid</p>
-                                            <p className="text-2xl font-black text-slate-900">₹{amount.toLocaleString()}</p>
-                                        </div>
+                                    ) : (
+                                        <>
+                                            {attempt.checkout_url && (
+                                                <div className="rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-800">
+                                                    <p className="font-semibold">Hosted checkout ready</p>
+                                                    <p className="mt-1">{redirecting ? 'Redirecting to PhonePe...' : 'If you are not redirected automatically, use the button below.'}</p>
+                                                </div>
+                                            )}
+                                            <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
+                                                <div className="rounded-3xl bg-white p-3 shadow-inner ring-1 ring-slate-200">
+                                                    <QrCodeImage value={attempt.qr_payload || attempt.upi_intent_url || attempt.checkout_url} />
+                                                </div>
+                                                <div className="flex flex-col gap-3">
+                                                    <a
+                                                        href={attempt.checkout_url || '#'}
+                                                        target="_self"
+                                                        rel="noreferrer"
+                                                        className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold ${
+                                                            attempt.checkout_url
+                                                                ? 'bg-slate-900 text-white hover:bg-slate-800'
+                                                                : 'bg-slate-100 text-slate-400 pointer-events-none'
+                                                        }`}
+                                                    >
+                                                        <ShieldCheck size={16} />
+                                                        Open PhonePe Checkout
+                                                    </a>
+                                                    <a
+                                                        href={attempt.upi_intent_url || '#'}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold ${
+                                                            attempt.upi_intent_url
+                                                                ? 'bg-indigo-600 text-white hover:bg-indigo-500'
+                                                                : 'bg-slate-100 text-slate-400 pointer-events-none'
+                                                        }`}
+                                                    >
+                                                        <Smartphone size={16} />
+                                                        Open UPI App
+                                                    </a>
+                                                    <button
+                                                        onClick={handleCopy}
+                                                        disabled={!attempt.qr_payload}
+                                                        className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50 disabled:text-slate-300"
+                                                    >
+                                                        <Copy size={16} />
+                                                        {copied ? 'Copied' : 'Copy QR Payload'}
+                                                    </button>
+                                                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                                                        <div className="flex items-center gap-2 font-semibold text-slate-700">
+                                                            <QrCode size={16} />
+                                                            Waiting for confirmation
+                                                        </div>
+                                                        <p className="mt-1">Keep this window open while we confirm the payment.</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {canRetry && (
+                                                <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                                                    This attempt ended with status <span className="font-bold">{status}</span>. You can close this and try again.
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+
+                                    <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                                        <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Merchant Transaction ID</p>
+                                        <p className="mt-2 break-all font-mono text-sm text-slate-700">{attempt.merchant_txn_id || attempt.gateway_txn_id || attempt.attempt_id}</p>
                                     </div>
-                                )}
-                            </div>
+                                </div>
+                            )}
                         </div>
                     </motion.div>
-                </>
-            )}
+                </div>
+            </motion.div>
         </AnimatePresence>
     );
 };
