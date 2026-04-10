@@ -1,6 +1,7 @@
 import sys
 import os
 import asyncio
+import importlib
 
 # Ensure the 'backend' directory is in the Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -16,7 +17,6 @@ from app.api.routes.room_allocation_router import router as room_allocation_rout
 from app.api.routes.payment_router import router as payment_router
 from app.api.routes.payment_webhook_router import router as payment_webhook_router
 from app.api.routes.auth_router import router as auth_router
-from app.api.routes.complaint_router import router as complaint_router
 from app.api.routes.room_router import router as room_router
 from app.api.routes.expense_router import router as expense_router
 from app.api.routes.dashboard_router import router as dashboard_router
@@ -30,8 +30,15 @@ from app.services import payment_service
 app = FastAPI(title="Hostel Management System API", version="1.0.0")
 app.state.payment_reconciliation_task = None
 
+try:
+    complaint_router = getattr(importlib.import_module("app.api.routes.complaint_router"), "router", None)
+except ImportError:
+    complaint_router = None
+
 # CORS Configuration
 origins = [
+    "https://trishul.solutions",
+    "https://www.trishul.solutions",
     "https://trishul-hms.vercel.app",
     "https://hms-sand-five.vercel.app",
     "http://localhost:5173",
@@ -40,7 +47,7 @@ origins = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_origin_regex=r"https://.*\.vercel\.app|https://(.*\.)?trishul\.solutions",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -94,7 +101,8 @@ app.include_router(room_allocation_router)
 app.include_router(payment_router)
 app.include_router(payment_webhook_router)
 app.include_router(auth_router)
-app.include_router(complaint_router)
+if complaint_router is not None:
+    app.include_router(complaint_router)
 app.include_router(room_router)
 app.include_router(expense_router)
 app.include_router(dashboard_router)
