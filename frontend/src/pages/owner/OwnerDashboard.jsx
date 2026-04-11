@@ -171,7 +171,7 @@ const OwnerDashboard = () => {
                         <p className="text-sm font-semibold text-slate-400 mt-1">Key movements and financial updates.</p>
                     </div>
                     <button
-                        onClick={() => navigate('/owner/activity')}
+                        onClick={() => navigate('/owner/activities')}
                         className="p-2.5 bg-slate-50 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
                     >
                         <ArrowUpRight size={22} />
@@ -202,7 +202,7 @@ const OwnerDashboard = () => {
                     ))}
                 </div>
                 <button
-                    onClick={() => navigate('/owner/activity')}
+                    onClick={() => navigate('/owner/activities')}
                     className="mt-8 w-full py-4 text-sm font-black text-indigo-600 bg-indigo-50/50 hover:bg-indigo-100 rounded-2xl transition-all tracking-wide uppercase"
                 >
                     Browse Full Activity Log

@@ -10,6 +10,9 @@ import ManageRooms from './pages/owner/ManageRooms.jsx';
 import Payments from './pages/owner/Payments.jsx';
 import Complaints from './pages/owner/Complaints.jsx';
 import Expenses from './pages/owner/Expenses.jsx';
+import ActivityHistory from './pages/owner/ActivityHistory.jsx';
+import BillingPlans from './pages/owner/BillingPlans.jsx';
+import OwnerProfile from './pages/owner/OwnerProfile.jsx';
 
 // Student Imports
 
@@ -58,6 +61,10 @@ function App() {
             <Route path="payments" element={<Payments />} />
             <Route path="complaints" element={<Complaints />} />
             <Route path="expenses" element={<Expenses />} />
+            <Route path="activities" element={<ActivityHistory />} />
+            <Route path="activity" element={<Navigate to="/owner/activities" replace />} />
+            <Route path="billing" element={<BillingPlans />} />
+            <Route path="profile" element={<OwnerProfile />} />
           </Route>
         </Route>
         {/* Global Redirects */}
