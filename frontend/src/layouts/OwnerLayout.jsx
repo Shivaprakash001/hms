@@ -37,6 +37,8 @@ const LogoImage = ({ src }) => {
 
 const OwnerLayout = () => {
     const { user, logout } = useAuth();
+    const navigate = useNavigate();
+    const location = useLocation();
     const [hostelLogoUrl, setHostelLogoUrl] = useState('');
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -113,9 +115,6 @@ const OwnerLayout = () => {
     const [notificationsOpen, setNotificationsOpen] = useState(false);
     const [profileMenuOpen, setProfileMenuOpen] = useState(false);
     const [sidebarAccountOpen, setSidebarAccountOpen] = useState(false);
-
-    const navigate = useNavigate();
-    const location = useLocation();
 
     const handleLogout = () => {
         logout();
