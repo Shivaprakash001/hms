@@ -71,6 +71,12 @@ const OwnerLayout = () => {
                 const profile = await ownerService.getProfile();
                 if (mounted) {
                     setHostelLogoUrl(profile?.hostel?.logo_url || '');
+
+                    const merchantId = (profile?.preferences?.phonepe_merchant_id || '').trim();
+                    const onPreferencesPage = location.pathname === '/owner/profile' && new URLSearchParams(location.search).get('tab') === 'preferences';
+                    if (!merchantId && !onPreferencesPage) {
+                        navigate('/owner/profile?tab=preferences&setup=phonepe', { replace: true });
+                    }
                 }
             } catch {
                 if (mounted) {
@@ -91,7 +97,7 @@ const OwnerLayout = () => {
             mounted = false;
             window.removeEventListener('owner-branding-updated', handleBrandingUpdate);
         };
-    }, []);
+    }, [location.pathname, location.search, navigate]);
 
     const handleMarkAllRead = async () => {
         try {

@@ -21,6 +21,7 @@ from app.api.routes.room_router import router as room_router
 from app.api.routes.expense_router import router as expense_router
 from app.api.routes.dashboard_router import router as dashboard_router
 from app.api.routes.notification_router import router as notification_router
+from app.api.routes.document_router import router as document_router
 from app.api.routes.owner_router import router as owner_router
 from app.api.routes.activity_router import router as activity_router
 from app.api.routes.billing_router import router as billing_router
@@ -131,6 +132,7 @@ app.include_router(room_router)
 app.include_router(expense_router)
 app.include_router(dashboard_router)
 app.include_router(notification_router)
+app.include_router(document_router)
 app.include_router(owner_router)
 app.include_router(activity_router)
 app.include_router(billing_router)
