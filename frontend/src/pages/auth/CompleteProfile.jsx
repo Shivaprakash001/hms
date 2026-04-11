@@ -6,10 +6,10 @@ import { useAuth } from '../../context/AuthContext';
 import { studentService } from '../../api/services';
 
 // Shadcn UI Components
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardTitle, CardDescription } from "@/components/ui/Card";
 
 const LogoImage = ({ src }) => {
     const [error, setError] = useState(false);
@@ -32,15 +32,22 @@ const LogoImage = ({ src }) => {
 
 const CompleteProfile = () => {
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const { user, loading } = useAuth();
 
     useEffect(() => {
+        if (loading) {
+            return;
+        }
         if (!user) {
             navigate('/', { replace: true });
         } else if (user.is_profile_completed) {
             navigate('/student/dashboard', { replace: true });
         }
-    }, [user, navigate]);
+    }, [user, loading, navigate]);
+
+    if (loading) {
+        return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-600">Loading...</div>;
+    }
 
     const [formData, setFormData] = useState({
         name: user?.name || '',
