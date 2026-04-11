@@ -24,7 +24,7 @@ export default function OwnerProfile() {
     const [hostelForm, setHostelForm] = useState({
         name: '', phone: '', address: '', city: '', state: '', pincode: '', upi_id: '', gst_number: '', logo_url: ''
     });
-    const [preferences, setPreferences] = useState({ currency: 'INR', rent_cycle: 'MONTHLY', receipt_prefix: 'HMS', timezone: 'Asia/Kolkata', auto_rent_day: 1, phonepe_merchant_id: '' });
+    const [preferences, setPreferences] = useState({ currency: 'INR', rent_cycle: 'MONTHLY', receipt_prefix: 'HMS', timezone: 'Asia/Kolkata', auto_rent_day: 1, phonepe_merchant_id: '', upi_id: '' });
 
     useEffect(() => {
         const load = async () => {
@@ -57,7 +57,8 @@ export default function OwnerProfile() {
                     receipt_prefix: prefs.receipt_prefix || 'HMS',
                     timezone: prefs.timezone || 'Asia/Kolkata',
                     auto_rent_day: prefs.auto_rent_day || 1,
-                    phonepe_merchant_id: prefs.phonepe_merchant_id || ''
+                    phonepe_merchant_id: prefs.phonepe_merchant_id || '',
+                    upi_id: hostel.upi_id || ''
                 });
             } catch (e) {
                 const detail = e?.response?.data?.detail;
@@ -131,8 +132,20 @@ export default function OwnerProfile() {
         setSaving(true);
         setError('');
         try {
-            const data = await ownerService.updatePreferences(preferences);
+            await ownerService.updateHostel({ upi_id: preferences.upi_id });
+
+            const preferencePayload = {
+                currency: preferences.currency,
+                rent_cycle: preferences.rent_cycle,
+                receipt_prefix: preferences.receipt_prefix,
+                timezone: preferences.timezone,
+                auto_rent_day: preferences.auto_rent_day,
+                phonepe_merchant_id: preferences.phonepe_merchant_id,
+            };
+
+            const data = await ownerService.updatePreferences(preferencePayload);
             const prefs = data?.preferences || {};
+            const hostel = data?.hostel || {};
             setPreferences({
                 currency: prefs.currency || preferences.currency,
                 rent_cycle: prefs.rent_cycle || preferences.rent_cycle,
@@ -140,7 +153,12 @@ export default function OwnerProfile() {
                 timezone: prefs.timezone || preferences.timezone,
                 auto_rent_day: prefs.auto_rent_day || preferences.auto_rent_day,
                 phonepe_merchant_id: prefs.phonepe_merchant_id ?? preferences.phonepe_merchant_id,
+                upi_id: hostel.upi_id ?? preferences.upi_id,
             });
+            setHostelForm((prev) => ({
+                ...prev,
+                upi_id: hostel.upi_id ?? preferences.upi_id,
+            }));
             showTempSuccess('Preferences updated');
         } catch (e) {
             const detail = e?.response?.data?.detail;
@@ -301,6 +319,11 @@ export default function OwnerProfile() {
                                 { value: 'America/New_York', label: 'America/New_York' },
                             ]}
                             onChange={(v) => setPreferences(prev => ({ ...prev, timezone: v }))}
+                        />
+                        <Field
+                            label="Hostel UPI ID (required for tenant payments)"
+                            value={preferences.upi_id || ''}
+                            onChange={(v) => setPreferences(prev => ({ ...prev, upi_id: v }))}
                         />
                         <Field
                             label="PhonePe Merchant ID (optional)"
