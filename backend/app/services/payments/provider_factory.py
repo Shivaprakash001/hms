@@ -137,7 +137,7 @@ def get_provider_for_owner(owner_id: str) -> Tuple[Any, Dict[str, Any]] | Tuple[
             }
         return None, ServiceResponse.error(
             ErrorCode.RESOURCE_NOT_FOUND,
-            "Payment provider not configured for this owner.",
+            "Payment provider not configured for this owner. Add Hostel UPI ID in owner profile, or configure platform PhonePe credentials.",
         )
 
     default_config = next((cfg for cfg in configs if cfg.get("is_default")), None)
@@ -161,5 +161,5 @@ def get_provider_for_owner(owner_id: str) -> Tuple[Any, Dict[str, Any]] | Tuple[
 
     return None, ServiceResponse.error(
         ErrorCode.INVALID_INPUT,
-        "Configured payment providers could not be loaded.",
+        "Configured payment providers could not be loaded. Verify PhonePe credentials and owner payment setup.",
     )

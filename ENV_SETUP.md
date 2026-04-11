@@ -31,8 +31,26 @@ The backend requires the following configuration variables:
 | `RAZORPAY_KEY_ID` | Your Razorpay account Key ID | `rzp_test_...` |
 | `RAZORPAY_KEY_SECRET` | Your Razorpay account Key Secret | `your_secret_key` |
 | `RECEIPT_VERIFY_BASE_URL` | Public API base URL for receipt verification links/QR (`/{payment_id}` is appended automatically) | `https://trishul-solutions1.onrender.com/payments/verify/receipt` |
+| `UPI_ID` | Optional global fallback UPI ID for direct UPI mode (if owner UPI not used) | `hostel@oksbi` |
+| `PHONEPE_UPI_PAYEE_NAME` | Payee name shown in direct UPI intents | `Trishul Hostel` |
+| `PHONEPE_MERCHANT_ID` | PhonePe merchant ID (Hosted PG mode) | `M23JHAKJOAJAC` |
+| `PHONEPE_CLIENT_ID` | PhonePe OAuth client id (Hosted PG mode) | `...` |
+| `PHONEPE_CLIENT_SECRET` | PhonePe OAuth client secret (Hosted PG mode) | `...` |
+| `PHONEPE_BASE_URL` | PhonePe API base URL | `https://api-preprod.phonepe.com/apis/pg-sandbox` |
+| `PHONEPE_REDIRECT_URL` | Frontend redirect URL after payment | `https://trishul.solutions/payment-return` |
+| `PHONEPE_CALLBACK_URL` | Backend webhook callback URL | `https://api.trishul.solutions/webhooks/phonepe` |
 
 > **Note:** For Gmail SMTP, it is highly recommended to use App Passwords.
+
+### ✅ Minimum setup for successful tenant payments
+
+At owner level (in app):
+- Hostel Details → `upi_id` (required for direct UPI fallback)
+- Preferences → `phonepe_merchant_id` (recommended for PhonePe PG mapping)
+
+At backend deployment:
+- For direct UPI fallback only: no PhonePe OAuth credentials required.
+- For Hosted PhonePe checkout: set `PHONEPE_CLIENT_ID`, `PHONEPE_CLIENT_SECRET`, `PHONEPE_BASE_URL` and callback/redirect URLs.
 
 ---
 
