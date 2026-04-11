@@ -45,10 +45,6 @@ const CompleteProfile = () => {
         }
     }, [user, loading, navigate]);
 
-    if (loading) {
-        return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-600">Loading...</div>;
-    }
-
     const [formData, setFormData] = useState({
         name: user?.name || '',
         phone: '',
@@ -69,6 +65,18 @@ const CompleteProfile = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [isSuccess, setIsSuccess] = useState(false);
+
+    useEffect(() => {
+        setFormData((prev) => ({
+            ...prev,
+            name: prev.name || user?.name || '',
+            personal_email: prev.personal_email || user?.email || '',
+        }));
+    }, [user?.name, user?.email]);
+
+    if (loading) {
+        return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-600">Loading...</div>;
+    }
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
