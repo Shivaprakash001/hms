@@ -62,7 +62,26 @@ def _env_phonepe_config() -> Dict[str, Any] | None:
     }
 
 
+def _owner_phonepe_overrides(owner_id: str) -> Dict[str, Any]:
+    try:
+        hostels = supabase.table("hostels") \
+            .select("phonepe_merchant_id") \
+            .eq("owner_id", owner_id) \
+            .eq("is_active", True) \
+            .limit(1) \
+            .execute()
+        row = (hostels.data or [{}])[0]
+        merchant_id = (row.get("phonepe_merchant_id") or "").strip()
+        if merchant_id:
+            return {"merchant_id": merchant_id}
+    except Exception as exc:
+        logger.warning("Failed to load owner PhonePe overrides owner_id=%s error=%s", owner_id, exc)
+    return {}
+
+
 def get_provider_for_owner(owner_id: str) -> Tuple[Any, Dict[str, Any]] | Tuple[None, Dict[str, Any]]:
+    owner_overrides = _owner_phonepe_overrides(owner_id)
+
     res = supabase.table("payment_gateway_configs") \
         .select("*") \
         .eq("owner_id", owner_id) \
@@ -73,6 +92,7 @@ def get_provider_for_owner(owner_id: str) -> Tuple[Any, Dict[str, Any]] | Tuple[
     if not configs:
         env_phonepe = _env_phonepe_config()
         if env_phonepe:
+            env_phonepe = {**env_phonepe, **owner_overrides}
             return _instantiate("PHONEPE", env_phonepe), {
                 "owner_id": owner_id,
                 "provider": "PHONEPE",
@@ -97,6 +117,8 @@ def get_provider_for_owner(owner_id: str) -> Tuple[Any, Dict[str, Any]] | Tuple[
             continue
         try:
             decrypted = decrypt_config(config_row["encrypted_config"])
+            if config_row.get("provider") == "PHONEPE" and owner_overrides.get("merchant_id"):
+                decrypted["merchant_id"] = owner_overrides["merchant_id"]
             provider = _instantiate(config_row["provider"], decrypted)
             return provider, config_row
         except Exception as exc:  # pragma: no cover - protective fallback

@@ -47,6 +47,7 @@ class OwnerPreferencesUpdate(BaseModel):
     receipt_prefix: Optional[str] = Field(None, min_length=2, max_length=20)
     timezone: Optional[str] = Field(None, min_length=3, max_length=100)
     auto_rent_day: Optional[int] = Field(None, ge=1, le=28)
+    phonepe_merchant_id: Optional[str] = Field(None, min_length=3, max_length=100)
 
     @field_validator('currency')
     @classmethod
@@ -74,4 +75,16 @@ class OwnerPreferencesUpdate(BaseModel):
         normalized = re.sub(r'\s+', '', v).upper()
         if not re.match(r'^[A-Z0-9_-]{2,20}$', normalized):
             raise ValueError('Receipt prefix must be 2-20 characters (A-Z, 0-9, _, -)')
+        return normalized
+
+    @field_validator('phonepe_merchant_id')
+    @classmethod
+    def validate_phonepe_merchant_id(cls, v):
+        if v is None:
+            return v
+        normalized = v.strip()
+        if not normalized:
+            return None
+        if not re.match(r'^[A-Za-z0-9._-]{3,100}$', normalized):
+            raise ValueError('PhonePe merchant id must be 3-100 characters (letters, numbers, ., _, -)')
         return normalized

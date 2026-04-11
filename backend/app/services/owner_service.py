@@ -13,6 +13,7 @@ DEFAULT_PREFERENCES = {
     "receipt_prefix": "HMS",
     "timezone": "Asia/Kolkata",
     "auto_rent_day": 1,
+    "phonepe_merchant_id": "",
 }
 
 HOSTEL_ASSETS_BUCKET = os.getenv("HOSTEL_ASSETS_BUCKET", "hostel-assets")
@@ -55,6 +56,7 @@ def _normalize_hostel_row(row: dict) -> dict:
         "receipt_prefix": row.get("receipt_prefix"),
         "timezone": row.get("timezone"),
         "auto_rent_day": row.get("auto_rent_day"),
+        "phonepe_merchant_id": row.get("phonepe_merchant_id"),
         "logo_url": row.get("logo_url"),
     }
 
@@ -101,6 +103,7 @@ def get_owner_profile(user_id: str) -> Dict[str, Any]:
             "receipt_prefix": None,
             "timezone": None,
             "auto_rent_day": None,
+            "phonepe_merchant_id": None,
             "logo_url": None,
         }
 
@@ -135,6 +138,7 @@ def get_owner_profile(user_id: str) -> Dict[str, Any]:
                 "receipt_prefix": hostel.get("receipt_prefix") or DEFAULT_PREFERENCES["receipt_prefix"],
                 "timezone": hostel.get("timezone") or DEFAULT_PREFERENCES["timezone"],
                 "auto_rent_day": hostel.get("auto_rent_day") or DEFAULT_PREFERENCES["auto_rent_day"],
+                "phonepe_merchant_id": hostel.get("phonepe_merchant_id") or DEFAULT_PREFERENCES["phonepe_merchant_id"],
             }
         })
     except Exception as e:
@@ -211,7 +215,7 @@ def update_owner_hostel(user_id: str, data: dict) -> Dict[str, Any]:
 
 def update_owner_preferences(user_id: str, data: dict) -> Dict[str, Any]:
     try:
-        allowed = {"currency", "rent_cycle", "receipt_prefix", "timezone", "auto_rent_day"}
+        allowed = {"currency", "rent_cycle", "receipt_prefix", "timezone", "auto_rent_day", "phonepe_merchant_id"}
         update_data = {k: v for k, v in data.items() if k in allowed and v is not None}
         if not update_data:
             return ServiceResponse.validation_error("No valid preference fields to update")

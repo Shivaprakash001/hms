@@ -24,7 +24,7 @@ export default function OwnerProfile() {
     const [hostelForm, setHostelForm] = useState({
         name: '', phone: '', address: '', city: '', state: '', pincode: '', upi_id: '', gst_number: '', logo_url: ''
     });
-    const [preferences, setPreferences] = useState({ currency: 'INR', rent_cycle: 'MONTHLY', receipt_prefix: 'HMS', timezone: 'Asia/Kolkata', auto_rent_day: 1 });
+    const [preferences, setPreferences] = useState({ currency: 'INR', rent_cycle: 'MONTHLY', receipt_prefix: 'HMS', timezone: 'Asia/Kolkata', auto_rent_day: 1, phonepe_merchant_id: '' });
 
     useEffect(() => {
         const load = async () => {
@@ -56,7 +56,8 @@ export default function OwnerProfile() {
                     rent_cycle: prefs.rent_cycle || 'MONTHLY',
                     receipt_prefix: prefs.receipt_prefix || 'HMS',
                     timezone: prefs.timezone || 'Asia/Kolkata',
-                    auto_rent_day: prefs.auto_rent_day || 1
+                    auto_rent_day: prefs.auto_rent_day || 1,
+                    phonepe_merchant_id: prefs.phonepe_merchant_id || ''
                 });
             } catch (e) {
                 const detail = e?.response?.data?.detail;
@@ -138,6 +139,7 @@ export default function OwnerProfile() {
                 receipt_prefix: prefs.receipt_prefix || preferences.receipt_prefix,
                 timezone: prefs.timezone || preferences.timezone,
                 auto_rent_day: prefs.auto_rent_day || preferences.auto_rent_day,
+                phonepe_merchant_id: prefs.phonepe_merchant_id ?? preferences.phonepe_merchant_id,
             });
             showTempSuccess('Preferences updated');
         } catch (e) {
@@ -299,6 +301,11 @@ export default function OwnerProfile() {
                                 { value: 'America/New_York', label: 'America/New_York' },
                             ]}
                             onChange={(v) => setPreferences(prev => ({ ...prev, timezone: v }))}
+                        />
+                        <Field
+                            label="PhonePe Merchant ID (optional)"
+                            value={preferences.phonepe_merchant_id || ''}
+                            onChange={(v) => setPreferences(prev => ({ ...prev, phonepe_merchant_id: v }))}
                         />
                     </div>
                     <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-700">
