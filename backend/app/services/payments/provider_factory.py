@@ -79,8 +79,35 @@ def _owner_phonepe_overrides(owner_id: str) -> Dict[str, Any]:
     return {}
 
 
+def _owner_direct_upi_config(owner_id: str) -> Dict[str, Any] | None:
+    try:
+        hostels = supabase.table("hostels") \
+            .select("upi_id,name,currency") \
+            .eq("owner_id", owner_id) \
+            .eq("is_active", True) \
+            .limit(1) \
+            .execute()
+        row = (hostels.data or [{}])[0]
+        upi_id = (row.get("upi_id") or "").strip()
+        if not upi_id:
+            return None
+
+        return {
+            "mode": "DIRECT_UPI",
+            "upi_id": upi_id,
+            "payee_name": (row.get("name") or "HMS Hostel").strip() or "HMS Hostel",
+            "currency": (row.get("currency") or "INR").strip() or "INR",
+            "expires_in_seconds": int(os.getenv("PHONEPE_UPI_EXPIRES_IN_SECONDS", "900")),
+            "payment_message": os.getenv("PHONEPE_PAYMENT_MESSAGE", "Hostel rent payment"),
+        }
+    except Exception as exc:
+        logger.warning("Failed to load owner direct UPI config owner_id=%s error=%s", owner_id, exc)
+        return None
+
+
 def get_provider_for_owner(owner_id: str) -> Tuple[Any, Dict[str, Any]] | Tuple[None, Dict[str, Any]]:
     owner_overrides = _owner_phonepe_overrides(owner_id)
+    owner_direct_upi = _owner_direct_upi_config(owner_id)
 
     res = supabase.table("payment_gateway_configs") \
         .select("*") \
@@ -97,6 +124,14 @@ def get_provider_for_owner(owner_id: str) -> Tuple[Any, Dict[str, Any]] | Tuple[
                 "owner_id": owner_id,
                 "provider": "PHONEPE",
                 "source": "env",
+                "is_default": True,
+                "is_active": True,
+            }
+        if owner_direct_upi:
+            return _instantiate("PHONEPE", owner_direct_upi), {
+                "owner_id": owner_id,
+                "provider": "PHONEPE",
+                "source": "owner_upi",
                 "is_default": True,
                 "is_active": True,
             }

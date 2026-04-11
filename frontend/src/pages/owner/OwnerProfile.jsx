@@ -312,7 +312,10 @@ export default function OwnerProfile() {
                         Auto rent generation assigns the month’s rent request on the selected day. Due date stays controlled separately by your owner due-day setting.
                     </div>
                     <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                        To accept tenant online payments via PhonePe, add your <strong>PhonePe Merchant ID</strong> and save preferences. Platform-level PhonePe API credentials must also be configured on the backend.
+                        To start collecting tenant payments, complete <strong>both</strong> setup steps:<br />
+                        1) Add <strong>Hostel UPI ID</strong> in <strong>Hostel Details</strong> (required for Direct UPI fallback).<br />
+                        2) Add <strong>PhonePe Merchant ID</strong> here in Preferences (used for PhonePe PG setups).<br />
+                        Note: Hosted PhonePe checkout additionally requires platform PhonePe API credentials on backend deployment.
                     </div>
                     <SaveButton saving={saving} />
                 </form>

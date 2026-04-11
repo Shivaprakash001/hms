@@ -75,8 +75,22 @@ const OwnerLayout = () => {
                     setHostelLogoUrl(profile?.hostel?.logo_url || '');
 
                     const merchantId = (profile?.preferences?.phonepe_merchant_id || '').trim();
-                    const onPreferencesPage = location.pathname === '/owner/profile' && new URLSearchParams(location.search).get('tab') === 'preferences';
-                    if (!merchantId && !onPreferencesPage) {
+                    const ownerUpiId = (profile?.hostel?.upi_id || '').trim();
+                    const tab = new URLSearchParams(location.search).get('tab');
+                    const onPreferencesPage = location.pathname === '/owner/profile' && tab === 'preferences';
+                    const onHostelPage = location.pathname === '/owner/profile' && tab === 'hostel';
+
+                    if (!ownerUpiId && !merchantId && !onHostelPage && !onPreferencesPage) {
+                        navigate('/owner/profile?tab=hostel&setup=payments', { replace: true });
+                        return;
+                    }
+
+                    if (!ownerUpiId && !onHostelPage && !onPreferencesPage) {
+                        navigate('/owner/profile?tab=hostel&setup=upi', { replace: true });
+                        return;
+                    }
+
+                    if (!merchantId && !onPreferencesPage && !onHostelPage) {
                         navigate('/owner/profile?tab=preferences&setup=phonepe', { replace: true });
                     }
                 }
