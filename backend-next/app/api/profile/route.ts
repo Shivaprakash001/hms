@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { getSession, apiError, apiResponse } from "@/lib/auth";
 import { userService } from "@/lib/services/user-service";
-import { ProfileUpdateSchema } from "@/lib/validators";
+import { StudentProfileUpdateSchema } from "@/lib/validators";
 
 export async function GET(req: NextRequest) {
   const session = await getSession(req);

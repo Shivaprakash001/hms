@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiResponse, apiError } from "@/lib/auth";
 import { authService } from "@/lib/services/auth-service";
-import { AuthSchema } from "@/lib/validators";
+import { LoginSchema } from "@/lib/validators";
 
 /**
  * 🔐 AUTH LOGIN (Production Secure)
