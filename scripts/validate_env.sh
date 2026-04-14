@@ -37,10 +37,7 @@ check_vars() {
 }
 
 echo -e "\n🛠 Checking Backend Environment..."
-BACKEND_ENV=".env"
-if [ -f "backend/.env" ]; then
-    BACKEND_ENV="backend/.env"
-fi
+BACKEND_ENV="backend-next/.env"
 check_vars "$BACKEND_ENV" "${BACKEND_VARS[@]}"
 
 echo -e "\n💻 Checking Frontend Environment..."
