@@ -1,7 +1,7 @@
 import { prisma } from "../db";
 import { verifyPassword, hashPassword, generateToken } from "../auth";
 import { z } from "zod";
-import { AuthSchema } from "../validators";
+import { LoginSchema } from "../validators";
 import { eventSystem } from "../events";
 
 export class AuthService {
