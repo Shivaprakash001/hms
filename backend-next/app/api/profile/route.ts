@@ -23,7 +23,7 @@ export async function PATCH(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const validated = ProfileUpdateSchema.safeParse(body);
+    const validated = StudentProfileUpdateSchema.safeParse(body);
 
     if (!validated.success) {
       return apiError("Validation failed", "VALIDATION_ERROR", 400);

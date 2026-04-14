@@ -10,7 +10,7 @@ import { LoginSchema } from "@/lib/validators";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const validated = AuthSchema.safeParse(body);
+    const validated = LoginSchema.safeParse(body);
     
     if (!validated.success) {
       return apiError("Validation error", "VALIDATION_ERROR", 400);
