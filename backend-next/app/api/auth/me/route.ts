@@ -2,6 +2,8 @@ import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
+export const runtime = "nodejs";
+
 export async function GET(req: NextRequest) {
   const session = await getSession(req);
   if (!session) return apiError("Unauthorized", "UNAUTHORIZED", 401);

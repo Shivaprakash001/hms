@@ -3,6 +3,8 @@ import { apiResponse, apiError } from "@/lib/auth";
 import { authService } from "@/lib/services/auth-service";
 import { LoginSchema } from "@/lib/validators";
 
+export const runtime = "nodejs";
+
 /**
  * 🔐 AUTH LOGIN (Production Secure)
  * Now sets a secure, HTTP-only cookie for session management.

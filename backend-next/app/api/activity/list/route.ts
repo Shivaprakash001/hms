@@ -2,6 +2,8 @@ import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { activityService } from "@/lib/services/activity-service";
 
+export const runtime = "nodejs";
+
 /**
  * 🔍 Audit & Activity Timeline
  * Access: Owner/Admin only

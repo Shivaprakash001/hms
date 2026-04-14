@@ -1,6 +1,9 @@
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { roomAllocationService } from "@/lib/services/room-allocation-service";
+import { AllocationSchema } from "@/lib/validators";
+
+export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
   const session = await getSession(req);
@@ -20,18 +23,25 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { student_id, room_id, start_date } = body;
+    const validated = AllocationSchema.safeParse(body);
+    
+    if (!validated.success) {
+      return apiError("Validation error", "VALIDATION_ERROR", 400);
+    }
 
-    const allocation = await roomAllocationService.allocateRoom(
-      student_id,
-      room_id,
-      new Date(start_date),
-      session.sub
-    );
+    const { student_id, room_id, start_date } = validated.data;
+
+    const allocation = await roomAllocationService.allocateRoom({
+      studentId: student_id,
+      roomId: room_id,
+      startDate: start_date.toISOString(),
+      ownerId: session.sub
+    });
 
     return apiResponse(allocation, 201);
   } catch (error: any) {
-    if (error.message.startsWith("BAD_REQUEST")) return apiError(error.message.split(": ")[1], "BAD_REQUEST", 400);
+    if (error.message.startsWith("VALIDATION_ERROR")) return apiError(error.message.split(": ")[1], "VALIDATION_ERROR", 400);
+    if (error.message.startsWith("RPC_ERROR")) return apiError(error.message.split(": ")[1], "RPC_ERROR", 500);
     return apiError(error.message || "Allocation failed");
   }
 }

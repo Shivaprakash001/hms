@@ -1,6 +1,9 @@
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { studentService } from "@/lib/services/student-service";
+import { StudentProfileUpdateSchema } from "@/lib/validators";
+
+export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
   const session = await getSession(req);
@@ -24,8 +27,13 @@ export async function PATCH(req: NextRequest) {
 
   try {
     const body = await req.json();
-    // In production, we'd use a specific validator here from lib/validators
-    const updated = await studentService.updateStudentSelfProfile(session.sub, body, session.sub);
+    const validated = StudentProfileUpdateSchema.safeParse(body);
+    
+    if (!validated.success) {
+      return apiError("Validation error", "VALIDATION_ERROR", 400);
+    }
+
+    const updated = await studentService.updateStudentSelfProfile(session.sub, validated.data, session.sub);
     return apiResponse(updated);
   } catch (error: any) {
     return apiError(error.message || "Failed to update profile");

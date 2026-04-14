@@ -3,6 +3,8 @@ import { getSession, apiError, apiResponse } from "@/lib/auth";
 import { userService } from "@/lib/services/user-service";
 import { StudentProfileUpdateSchema } from "@/lib/validators";
 
+export const runtime = "nodejs";
+
 export async function GET(req: NextRequest) {
   const session = await getSession(req);
   if (!session) return apiError("Unauthorized", "UNAUTHORIZED", 401);

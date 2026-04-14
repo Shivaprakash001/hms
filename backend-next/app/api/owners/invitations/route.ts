@@ -3,6 +3,8 @@ import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { invitationService } from "@/lib/services/invitation-service";
 import { InvitationSchema } from "@/lib/validators";
 
+export const runtime = "nodejs";
+
 /**
  * 📧 Tenant Invitation System
  * Access: Owner only

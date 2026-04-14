@@ -2,6 +2,8 @@ import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { dashboardService } from "@/lib/services/dashboard-service";
 
+export const runtime = "nodejs";
+
 /**
  * 📊 Advanced Analytics Dashboard
  * Access: Owner/Admin only
