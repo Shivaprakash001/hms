@@ -2,13 +2,32 @@ import { prisma, supabase } from "../db";
 import { eventSystem } from "../events";
 
 export class RoomAllocationService {
+
+  // ✅ FIXED: Added missing method
+  async getActiveAllocations(userId: string) {
+    return await prisma.roomAllocation.findMany({
+      where: {
+        student: {
+          profile_id: userId
+        },
+        end_date: null // active allocations
+      },
+      include: {
+        room: true,
+        student: true
+      },
+      orderBy: {
+        start_date: "desc"
+      }
+    });
+  }
+
+  // ✅ Allocate Room (RPC based)
   async allocateRoom(data: { studentId: string; roomId: string; startDate: string; ownerId: string }) {
     const { studentId, roomId, startDate, ownerId } = data;
 
     /**
      * DATABASE-LEVEL ATOMICITY
-     * Preserving original FastAPI behavior by calling the PostgreSQL RPC function.
-     * This uses FOR UPDATE locking internally to prevent double-booking.
      */
     const { data: result, error } = await supabase.rpc("allocate_room_safely", {
       p_student_id: studentId,
@@ -21,7 +40,6 @@ export class RoomAllocationService {
       throw new Error(`RPC_ERROR: ${error.message}`);
     }
 
-    // result follows JSONB format from migrations/008_add_allocation_rpc.sql
     if (!result?.success) {
       const msg = result?.message || "Room allocation failed";
       throw new Error(`VALIDATION_ERROR: ${msg}`);
@@ -29,7 +47,7 @@ export class RoomAllocationService {
 
     const allocationData = result.data;
 
-    // Trigger Side Effects (Hooks)
+    // ✅ Trigger Events
     await eventSystem.trigger("student_allocated_room", {
       student_id: studentId,
       room_id: roomId,
@@ -40,37 +58,41 @@ export class RoomAllocationService {
     return allocationData;
   }
 
+  // ✅ End Allocation
   async endAllocation(allocationId: string, endDate: string) {
-    // End allocation logic remains via Prisma or Supabase client
     return await prisma.roomAllocation.update({
       where: { id: allocationId },
       data: { end_date: new Date(endDate) }
     });
   }
 
+  // ✅ Shift Room
   async shiftRoom(studentId: string, newRoomId: string, shiftDate: string, ownerId: string) {
+
     // 1. Find active allocation
     const active = await prisma.roomAllocation.findFirst({
       where: { student_id: studentId, end_date: null },
       orderBy: { start_date: "desc" }
     });
 
-    if (!active) throw new Error("NOT_FOUND: No active allocation found for student");
+    if (!active) {
+      throw new Error("NOT_FOUND: No active allocation found for student");
+    }
 
-    // 2. Perform Atomic Allocation for new room
-    // Note: This effectively calls the RPC for the new room's capacity check
-    await this.allocateRoom({ 
-      studentId, 
-      roomId: newRoomId, 
-      startDate: shiftDate, 
-      ownerId 
+    // 2. Allocate new room (atomic)
+    await this.allocateRoom({
+      studentId,
+      roomId: newRoomId,
+      startDate: shiftDate,
+      ownerId
     });
 
-    // 3. Mark old as ended
+    // 3. End old allocation
     await this.endAllocation(active.id, shiftDate);
 
     return { success: true };
   }
 }
 
+// ✅ Singleton export
 export const roomAllocationService = new RoomAllocationService();
