@@ -128,6 +128,7 @@ export class AuthService {
           name: data.name,
           phone: data.phone || null,
           role: "OWNER",
+          is_active: true,
           hostels: {
             create: {
               name: data.hostel_name,
