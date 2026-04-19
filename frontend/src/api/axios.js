@@ -1,23 +1,50 @@
 import axios from 'axios';
 
-// Determine the API base URL:
-// In production (browser not on localhost), ALWAYS use the Render backend URL
-// to prevent any accidental localhost references from build-time env vars.
-// In development (localhost), use the env var or fall back to localhost:8000.
-// Backend is now Next.js on Vercel — all API routes live under /api/
-const PRODUCTION_API_URL = '/api';
+// Production frontend and backend are deployed as separate apps right now.
+// Until `api.trishul.solutions` is fully pointed at the Vercel backend,
+// the frontend should target the direct Vercel API deployment.
+const PRODUCTION_API_URL = 'https://hms-r68g.vercel.app/api';
 const isLocalDev = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+
+const normalizeProductionApiUrl = (rawUrl) => {
+    if (!rawUrl) {
+        return PRODUCTION_API_URL;
+    }
+
+    // Temporary safety: if env still points to legacy API domain,
+    // route production traffic to the known-good Vercel backend.
+    if (rawUrl.includes('api.trishul.solutions')) {
+        return PRODUCTION_API_URL;
+    }
+
+    // Preserve relative paths for same-origin setups.
+    if (rawUrl.startsWith('/')) {
+        return rawUrl.endsWith('/api') ? rawUrl : `${rawUrl.replace(/\/$/, '')}/api`;
+    }
+
+    try {
+        const parsed = new URL(rawUrl);
+        const normalizedPath = parsed.pathname.endsWith('/api')
+            ? parsed.pathname
+            : `${parsed.pathname.replace(/\/$/, '')}/api`;
+
+        return `${parsed.origin}${normalizedPath}`;
+    } catch {
+        return rawUrl;
+    }
+};
 
 let baseURL;
 if (isLocalDev) {
     baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 } else {
-    baseURL = import.meta.env.VITE_API_URL || PRODUCTION_API_URL;
+    baseURL = normalizeProductionApiUrl(import.meta.env.VITE_API_URL);
 }
 
 
 const api = axios.create({
     baseURL,
+    withCredentials: true,
     headers: {
         'Content-Type': 'application/json',
     },

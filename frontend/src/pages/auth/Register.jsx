@@ -37,6 +37,10 @@ const Register = () => {
 
         const getApiErrorMessage = (err) => {
             const detail = err?.response?.data?.detail;
+            const apiErrorMessage = err?.response?.data?.error?.message;
+            if (typeof apiErrorMessage === 'string' && apiErrorMessage.trim()) {
+                return apiErrorMessage;
+            }
             if (typeof detail === 'string') return detail;
             if (Array.isArray(detail)) {
                 return detail.map((d) => d?.msg).filter(Boolean).join(', ') || 'Registration failed';

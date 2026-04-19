@@ -2,8 +2,31 @@ import { prisma, supabase } from "../db";
 import { verifyPassword, hashPassword, generateToken } from "../auth";
 import { z } from "zod";
 import { LoginSchema } from "../validators";
+import { randomUUID } from "crypto";
 
 export class AuthService {
+  private async verifyOrMigrateLegacyPassword(profile: { id: string; password_hash: string | null }, inputPassword: string) {
+    const stored = profile.password_hash;
+    if (!stored) return false;
+
+    try {
+      return await verifyPassword(inputPassword, stored);
+    } catch {
+      // Preserve compatibility with legacy bad rows where a plain-text password
+      // or malformed hash was stored by older backend code.
+      if (stored === inputPassword) {
+        const newHash = await hashPassword(inputPassword);
+        await prisma.profile.update({
+          where: { id: profile.id },
+          data: { password_hash: newHash },
+        });
+        return true;
+      }
+
+      return false;
+    }
+  }
+
   async login(email: string, password: string) {
     const normalizedEmail = email.trim().toLowerCase();
 
@@ -14,7 +37,7 @@ export class AuthService {
     if (!profile) throw new Error("UNAUTHORIZED: Invalid email or password");
     if (!profile.is_active) throw new Error("FORBIDDEN: Account is disabled");
 
-    const isValid = await verifyPassword(password, profile.password_hash || "");
+    const isValid = await this.verifyOrMigrateLegacyPassword(profile, password);
     if (!isValid) throw new Error("UNAUTHORIZED: Invalid email or password");
 
     let studentId = null;
@@ -70,18 +93,28 @@ export class AuthService {
     const existing = await prisma.profile.findUnique({ where: { email: normalizedEmail } });
     if (existing) throw new Error("ALREADY_EXISTS: Email already registered");
 
-    // 2. Create Supabase Auth user to get a UUID
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email: normalizedEmail,
-      password: data.password,
-      email_confirm: true,
-    });
+    // 2. Prefer creating Supabase Auth user for shared UUIDs.
+    // If admin auth is misconfigured in an environment, fall back to local UUID
+    // so registration is not blocked.
+    let userId: string = randomUUID();
+    let createdSupabaseUser = false;
 
-    if (authError || !authData.user) {
-      throw new Error("INTERNAL: Failed to create auth user");
+    try {
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email: normalizedEmail,
+        password: data.password,
+        email_confirm: true,
+      });
+
+      if (!authError && authData.user?.id) {
+        userId = authData.user.id;
+        createdSupabaseUser = true;
+      } else {
+        console.warn("Supabase auth admin createUser failed, using local UUID fallback", authError?.message);
+      }
+    } catch (supabaseCreateError: any) {
+      console.warn("Supabase auth admin createUser threw, using local UUID fallback", supabaseCreateError?.message);
     }
-
-    const userId = authData.user.id;
 
     // 3. Hash password and create profile + hostel in one transaction
     const hashedPassword = await hashPassword(data.password);
@@ -113,7 +146,9 @@ export class AuthService {
       return profile;
     } catch (dbError) {
       // Rollback Supabase user creation if Prisma transaction fails
-      await supabase.auth.admin.deleteUser(userId);
+      if (createdSupabaseUser) {
+        await supabase.auth.admin.deleteUser(userId);
+      }
       throw dbError;
     }
   }
@@ -241,6 +276,5 @@ export class AuthService {
 }
 
 export const authService = new AuthService();
-
 
 
