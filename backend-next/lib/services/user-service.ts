@@ -11,7 +11,7 @@ export class UserService extends BaseService {
   async getProfile(userId: string) {
     return this.db.profile.findUnique({
       where: { id: userId },
-      include: { student: true },
+      include: { student_details: true },
     });
   }
 
