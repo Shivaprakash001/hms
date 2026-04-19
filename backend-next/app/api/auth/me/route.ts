@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
     const profile = await prisma.profile.findUnique({
       where: { id: session.sub },
       include: {
-        student: {
+        student_details: {
           include: {
             allocations: {
               where: { is_active: true },
@@ -26,12 +26,12 @@ export async function GET(req: NextRequest) {
     if (!profile) return apiError("User not found", "NOT_FOUND", 404);
 
     const extra: any = {};
-    if (profile.student) {
-      extra.monthly_rent = profile.student.monthly_rent;
-      extra.student_status = profile.student.status;
-      extra.is_profile_completed = profile.student.profile_completed || profile.is_profile_completed;
+    if (profile.student_details) {
+      extra.monthly_rent = profile.student_details.monthly_rent;
+      extra.student_status = profile.student_details.status;
+      extra.is_profile_completed = profile.student_details.profile_completed || profile.is_profile_completed;
       
-      const activeAlloc = profile.student.allocations[0];
+      const activeAlloc = profile.student_details.allocations[0];
       if (activeAlloc) {
         extra.room_id = activeAlloc.room_id;
         extra.room_no = activeAlloc.room.room_no;
@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
       user_id: profile.id,
       email: profile.email,
       role: profile.role,
-      student_id: profile.student?.id || null,
+      student_id: profile.student_details?.id || null,
       is_admin: profile.role === "ADMIN",
       is_owner: profile.role === "OWNER",
       is_student: profile.role === "STUDENT",
