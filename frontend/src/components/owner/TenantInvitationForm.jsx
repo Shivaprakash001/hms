@@ -32,7 +32,7 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
         setIsLoading(true);
         try {
             // Get flat list of rooms (grouped=false)
-            const response = await api.get('/rooms/?grouped=false');
+            const response = await api.get('/rooms?grouped=false');
             const allRooms = response.data || [];
             // Only show rooms that are not full
             const available = allRooms.filter(r => !r.is_full);
