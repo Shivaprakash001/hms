@@ -1,44 +1,16 @@
 import axios from 'axios';
 
-// Production frontend and backend are deployed as separate apps right now.
-// Until `api.trishul.solutions` is fully pointed at the Vercel backend,
-// the frontend should target the direct Vercel API deployment.
+// Force production traffic to the Vercel API deployment.
+// This avoids stale/misconfigured VITE_API_URL values causing requests to hit
+// legacy backends (which return errors like: permission denied for schema public).
 const PRODUCTION_API_URL = 'https://hms-r68g.vercel.app/api';
 const isLocalDev = typeof window !== 'undefined' && window.location.hostname === 'localhost';
-
-const normalizeProductionApiUrl = (rawUrl) => {
-    if (!rawUrl) {
-        return PRODUCTION_API_URL;
-    }
-
-    // Temporary safety: if env still points to legacy API domain,
-    // route production traffic to the known-good Vercel backend.
-    if (rawUrl.includes('api.trishul.solutions')) {
-        return PRODUCTION_API_URL;
-    }
-
-    // Preserve relative paths for same-origin setups.
-    if (rawUrl.startsWith('/')) {
-        return rawUrl.endsWith('/api') ? rawUrl : `${rawUrl.replace(/\/$/, '')}/api`;
-    }
-
-    try {
-        const parsed = new URL(rawUrl);
-        const normalizedPath = parsed.pathname.endsWith('/api')
-            ? parsed.pathname
-            : `${parsed.pathname.replace(/\/$/, '')}/api`;
-
-        return `${parsed.origin}${normalizedPath}`;
-    } catch {
-        return rawUrl;
-    }
-};
 
 let baseURL;
 if (isLocalDev) {
     baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 } else {
-    baseURL = normalizeProductionApiUrl(import.meta.env.VITE_API_URL);
+    baseURL = PRODUCTION_API_URL;
 }
 
 
