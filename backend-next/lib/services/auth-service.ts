@@ -239,7 +239,7 @@ export class AuthService {
     // 3. Find or Create Profile
     let profile = await prisma.profile.findUnique({
       where: { email: normalizedEmail },
-      include: { student: true }
+      include: { student_details: true }
     });
 
     if (!profile) {
@@ -252,7 +252,7 @@ export class AuthService {
           role: "OWNER",
           is_active: true,
         },
-        include: { student: true }
+        include: { student_details: true }
       });
     }
 
@@ -269,8 +269,8 @@ export class AuthService {
       role: profile.role,
       name: profile.name,
       user_id: profile.id,
-      student_id: profile.student?.id || null,
-      is_profile_completed: profile.student ? profile.student.profile_completed : profile.is_profile_completed,
+      student_id: profile.student_details?.id || null,
+      is_profile_completed: profile.student_details ? profile.student_details.student_details.profile_completed : profile.is_profile_completed,
     };
   }
 }
