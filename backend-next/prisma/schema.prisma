@@ -24,6 +24,7 @@ model Profile {
   state                String?
   pincode              String?
   owner_id             String?   @db.Uuid
+  emergency_contact    String?
   created_at           DateTime  @default(now())
   updated_at           DateTime? @updatedAt
 
