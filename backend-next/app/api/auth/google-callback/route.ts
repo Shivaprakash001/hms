@@ -3,6 +3,8 @@ import { apiError } from "@/lib/auth";
 import { authService } from "@/lib/services/auth-service";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 
 /**
  * 🔐 GOOGLE CALLBACK

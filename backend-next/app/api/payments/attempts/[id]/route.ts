@@ -3,6 +3,10 @@ import { paymentService } from "@/lib/services/payment-service";
 import { authService } from "@/lib/services/auth-service";
 import { apiError } from "@/lib/utils/api-utils";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+
 export async function GET(
   req: Request,
   { params }: { params: { id: string } }

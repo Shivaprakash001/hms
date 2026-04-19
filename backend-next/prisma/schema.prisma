@@ -4,46 +4,10 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-  schemas  = ["public"]
-}
-
-enum Role {
-  ADMIN
-  OWNER
-  WARDEN
-  STUDENT
-
-  @@schema("public")
-}
-
-enum StudentStatus {
-  INVITED
-  ACTIVE
-  LEFT
-
-  @@schema("public")
-}
-
-enum PaymentStatus {
-  PENDING
-  PARTIAL
-  PAID
-  WAIVED
-
-  @@schema("public")
-}
-
-enum AttemptStatus {
-  CREATED
-  PENDING
-  SUCCESS
-  FAILED
-  EXPIRED
-  CANCELLED
-
-  @@schema("public")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+  schemas   = ["public"]
 }
 
 model Profile {
@@ -62,13 +26,11 @@ model Profile {
   due_day              Int?           @default(5)
   created_at           DateTime       @default(now()) @db.Timestamptz(6)
   updated_at           DateTime?      @updatedAt @db.Timestamptz(6)
-  student              Student?
   hostels              Hostel[]
+  notifications        Notification[]
   owner                Profile?       @relation("OwnerToManager", fields: [owner_id], references: [id])
   managers             Profile[]      @relation("OwnerToManager")
-  notifications        Notification[]
-  expenses             Expense[]
-
+  student              Student?
 
   @@map("profiles")
   @@schema("public")
@@ -102,15 +64,13 @@ model Student {
   document_verified     Boolean                  @default(false)
   created_at            DateTime                 @default(now()) @db.Timestamptz(6)
   updated_at            DateTime?                @updatedAt @db.Timestamptz(6)
-  profile               Profile                  @relation(fields: [profile_id], references: [id])
-  allocations           RoomAllocation[]
-  obligations           RentObligation[]
-  payments              Payment[]
-  payment_attempts      PaymentAttempt[]
   documents             IdentificationDocument[]
+  payment_attempts      PaymentAttempt[]
+  payments              Payment[]
   reactivation_requests ReactivationRequest[]
-  complaints            Complaint[]
-
+  obligations           RentObligation[]
+  allocations           RoomAllocation[]
+  profile               Profile                  @relation(fields: [profile_id], references: [id])
 
   @@map("students")
   @@schema("public")
@@ -153,8 +113,8 @@ model Room {
   is_active   Boolean          @default(true)
   created_at  DateTime         @default(now()) @db.Timestamptz(6)
   updated_at  DateTime?        @updatedAt @db.Timestamptz(6)
-  hostel      Hostel           @relation(fields: [hostel_id], references: [id])
   allocations RoomAllocation[]
+  hostel      Hostel           @relation(fields: [hostel_id], references: [id])
 
   @@map("rooms")
   @@schema("public")
@@ -169,9 +129,9 @@ model RoomAllocation {
   is_active   Boolean          @default(true)
   created_at  DateTime         @default(now()) @db.Timestamptz(6)
   updated_at  DateTime?        @updatedAt @db.Timestamptz(6)
-  student     Student          @relation(fields: [student_id], references: [id])
-  room        Room             @relation(fields: [room_id], references: [id])
   obligations RentObligation[]
+  room        Room             @relation(fields: [room_id], references: [id])
+  student     Student          @relation(fields: [student_id], references: [id])
 
   @@map("room_allocations")
   @@schema("public")
@@ -188,29 +148,29 @@ model RentObligation {
   status        PaymentStatus    @default(PENDING)
   created_at    DateTime         @default(now()) @db.Timestamptz(6)
   updated_at    DateTime?        @updatedAt @db.Timestamptz(6)
-  student       Student          @relation(fields: [student_id], references: [id])
-  allocation    RoomAllocation?  @relation(fields: [allocation_id], references: [id])
-  payments      Payment[]
   attempts      PaymentAttempt[]
+  payments      Payment[]
+  allocation    RoomAllocation?  @relation(fields: [allocation_id], references: [id])
+  student       Student          @relation(fields: [student_id], references: [id])
 
   @@map("rent_obligations")
   @@schema("public")
 }
 
 model Payment {
-  id                 String         @id @default(uuid()) @db.Uuid
-  obligation_id      String         @db.Uuid
-  student_id         String         @db.Uuid
-  owner_id           String?        @db.Uuid
-  amount_paid        Decimal        @db.Decimal(10, 2)
+  id                 String          @id @default(uuid()) @db.Uuid
+  obligation_id      String          @db.Uuid
+  student_id         String          @db.Uuid
+  owner_id           String?         @db.Uuid
+  amount_paid        Decimal         @db.Decimal(10, 2)
   payment_method     String
   reference_number   String?
-  payment_date       DateTime       @db.Date
-  payment_attempt_id String?        @db.Uuid
-  created_at         DateTime       @default(now()) @db.Timestamptz(6)
-  obligation         RentObligation @relation(fields: [obligation_id], references: [id])
-  student            Student        @relation(fields: [student_id], references: [id])
+  payment_date       DateTime        @db.Date
+  payment_attempt_id String?         @db.Uuid
+  created_at         DateTime        @default(now()) @db.Timestamptz(6)
+  obligation         RentObligation  @relation(fields: [obligation_id], references: [id])
   attempt            PaymentAttempt? @relation(fields: [payment_attempt_id], references: [id])
+  student            Student         @relation(fields: [student_id], references: [id])
 
   @@map("payments")
   @@schema("public")
@@ -312,37 +272,39 @@ model ActivityLog {
   @@schema("public")
 }
 
-model Expense {
-  id          String   @id @default(uuid()) @db.Uuid
-  owner_id    String   @db.Uuid
-  title       String
-  amount      Decimal  @db.Decimal(10, 2)
-  date        DateTime @db.Date
-  category    String
-  status      String?  @default("paid")
-  created_at  DateTime @default(now()) @db.Timestamptz(6)
-  owner       Profile  @relation(fields: [owner_id], references: [id])
+enum Role {
+  ADMIN
+  OWNER
+  WARDEN
+  STUDENT
 
-  @@map("expenses")
   @@schema("public")
 }
 
-model Complaint {
-  id          String    @id @default(uuid()) @db.Uuid
-  student_id  String    @db.Uuid
-  owner_id    String    @db.Uuid
-  title       String
-  description String
-  category    String
-  status      String    @default("PENDING")
-  priority    String    @default("MEDIUM")
-  resolved_at DateTime? @db.Timestamptz(6)
-  comment     String?
-  created_at  DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at  DateTime? @updatedAt @db.Timestamptz(6)
-  student     Student   @relation(fields: [student_id], references: [id])
+enum StudentStatus {
+  INVITED
+  ACTIVE
+  LEFT
 
-  @@map("complaints")
   @@schema("public")
 }
 
+enum PaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+  WAIVED
+
+  @@schema("public")
+}
+
+enum AttemptStatus {
+  CREATED
+  PENDING
+  SUCCESS
+  FAILED
+  EXPIRED
+  CANCELLED
+
+  @@schema("public")
+}

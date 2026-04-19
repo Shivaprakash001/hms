@@ -3,6 +3,8 @@ import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { complaintService } from "@/lib/services/complaint-service";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 
 /**
  * 🛠 Complaints Collection

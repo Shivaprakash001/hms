@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { User, Lock, Eye, EyeOff, Loader2, KeyRound, Mail, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
@@ -59,9 +59,10 @@ const Login = () => {
         setError('');
         try {
             const user = await login(email, password);
-            if (user.role === 'owner' || user.role === 'admin') {
+            const role = (user?.role || '').toLowerCase();
+            if (role === 'owner' || role === 'admin') {
                 navigate('/owner/dashboard');
-            } else if (user.role === 'student') {
+            } else if (role === 'student') {
                 navigate('/student/dashboard');
             }
         } catch (err) {

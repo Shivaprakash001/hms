@@ -42,6 +42,23 @@ The backend requires the following configuration variables:
 
 > **Note:** For Gmail SMTP, it is highly recommended to use App Passwords.
 
+## ▲ Next.js Vercel Backend (`/backend-next`)
+
+If you are using the Next.js backend on Vercel, these variables must be configured in the Vercel project settings:
+
+| Variable | Description | Example Value |
+|----------|-------------|---------------|
+| `DATABASE_URL` | Prisma PostgreSQL connection string used by the Next.js API | `postgresql://postgres:password@db.project.supabase.co:5432/postgres` |
+| `SUPABASE_URL` | Supabase project URL used for admin/auth operations | `https://your-project.supabase.co` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key | `eyJhbGci...` |
+| `JWT_SECRET` | Secret used to sign session JWTs | `long-random-secret` |
+| `NEXT_PUBLIC_FRONTEND_URL` | Allowed browser origin for API CORS | `https://trishul.solutions` |
+| `GOOGLE_CLIENT_ID` | Google OAuth client id | `...apps.googleusercontent.com` |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret | `...` |
+| `GOOGLE_REDIRECT_URI` | Google OAuth redirect URI | `https://trishul.solutions/callback` |
+
+Without a valid `DATABASE_URL`, the deployed Vercel backend cannot initialize Prisma and login will fail before password verification.
+
 ### ✅ Minimum setup for successful tenant payments
 
 At owner level (in app):

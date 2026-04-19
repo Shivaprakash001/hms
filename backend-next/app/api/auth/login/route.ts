@@ -34,7 +34,15 @@ export async function POST(req: NextRequest) {
 
     return response;
   } catch (error: any) {
+    if (error?.message?.includes("DATABASE_URL") || error?.message?.includes("Error validating datasource")) {
+      return apiError(
+        "Server configuration error: DATABASE_URL is missing or invalid for the Vercel backend.",
+        "SERVER_MISCONFIGURED",
+        500
+      );
+    }
     if (error.message.startsWith("UNAUTHORIZED")) return apiError(error.message.split(": ")[1], "UNAUTHORIZED", 401);
+    if (error.message.startsWith("FORBIDDEN")) return apiError(error.message.split(": ")[1], "FORBIDDEN", 403);
     return apiError(error.message || "Login failed");
   }
 }

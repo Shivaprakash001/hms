@@ -1,14 +1,23 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../api/axios';
 
 const AuthContext = createContext(null);
 
+const normalizeRole = (role) => (role || '').toString().toLowerCase();
+
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
     const location = useLocation();
     const navigate = useNavigate();
+
+    const logout = () => {
+        setUser(null);
+        localStorage.removeItem('studentUser');
+        localStorage.removeItem('ownerUser');
+    };
 
     useEffect(() => {
         // If user is already logged in, redirect unless on public page
@@ -41,6 +50,7 @@ export const AuthProvider = ({ children }) => {
                     const updatedUser = {
                         ...storedData,
                         ...response.data,
+                        role: normalizeRole(response.data.role ?? storedData.role),
                         id: response.data.user_id,
                         student_id: response.data.student_id,
                         due_day: response.data.due_day,
@@ -52,7 +62,7 @@ export const AuthProvider = ({ children }) => {
                     };
                     setUser(updatedUser);
 
-                    if (updatedUser.role?.toLowerCase() === 'owner' || updatedUser.role?.toLowerCase() === 'admin') {
+                    if (normalizeRole(updatedUser.role) === 'owner' || normalizeRole(updatedUser.role) === 'admin') {
                         localStorage.setItem('ownerUser', JSON.stringify(updatedUser));
                     } else {
                         localStorage.setItem('studentUser', JSON.stringify(updatedUser));
@@ -77,10 +87,11 @@ export const AuthProvider = ({ children }) => {
             const normalizedEmail = (email || '').trim().toLowerCase();
             const response = await api.post('/auth/login', { email: normalizedEmail, password });
             const { access_token, role, name, user_id, student_id, is_profile_completed } = response.data;
-            const userData = { email: normalizedEmail, role, name, id: user_id, student_id, is_profile_completed, token: access_token };
+            const normalizedRole = normalizeRole(role);
+            const userData = { email: normalizedEmail, role: normalizedRole, name, id: user_id, student_id, is_profile_completed, token: access_token };
             setUser(userData);
 
-            if (role === 'owner' || role === 'admin') {
+            if (normalizedRole === 'owner' || normalizedRole === 'admin') {
                 localStorage.setItem('ownerUser', JSON.stringify(userData));
                 localStorage.removeItem('studentUser');
             } else {
@@ -102,10 +113,11 @@ export const AuthProvider = ({ children }) => {
             // Pass the redirect_uri so the backend can use the same value when exchanging the code with Google
             const response = await api.post('/auth/google-callback', { code, redirect_uri: redirectUri });
             const { access_token, role, name, user_id, student_id, is_profile_completed } = response.data;
-            const userData = { role, name, id: user_id, student_id, is_profile_completed, token: access_token };
+            const normalizedRole = normalizeRole(role);
+            const userData = { role: normalizedRole, name, id: user_id, student_id, is_profile_completed, token: access_token };
             setUser(userData);
 
-            if (role === 'owner' || role === 'admin') {
+            if (normalizedRole === 'owner' || normalizedRole === 'admin') {
                 localStorage.setItem('ownerUser', JSON.stringify(userData));
                 localStorage.removeItem('studentUser');
             } else {
@@ -118,12 +130,6 @@ export const AuthProvider = ({ children }) => {
             console.error("Google login failed:", error);
             throw new Error(error.response?.data?.detail || 'Google authentication failed');
         }
-    };
-
-    const logout = () => {
-        setUser(null);
-        localStorage.removeItem('studentUser');
-        localStorage.removeItem('ownerUser');
     };
 
     return (

@@ -3,6 +3,8 @@ import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { notificationService } from "@/lib/services/notification-service";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 
 /**
  * 🔔 Mark Notification as Read

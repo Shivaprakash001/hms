@@ -3,6 +3,8 @@ import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { activityService } from "@/lib/services/activity-service";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 
 /**
  * 📊 Activity Collection

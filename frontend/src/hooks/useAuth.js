@@ -1,16 +1,10 @@
-import { useContext } from 'react';
-import { AuthContext } from '../context/AuthContext';
+import { useAuth as useAuthContext } from '../context/AuthContext';
 
 /**
  * Hook to access authentication state and methods
  */
 export const useAuth = () => {
-  const context = useContext(AuthContext);
-  
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
-  }
-  
+  const context = useAuthContext();
   const { user, loading, login, logout, register } = context;
   
   return {
@@ -20,8 +14,8 @@ export const useAuth = () => {
     logout,
     register,
     isAuthenticated: !!user,
-    isAdmin: user?.role === 'admin',
-    isWarden: user?.role === 'warden',
-    isStudent: user?.role === 'student',
+    isAdmin: user?.role?.toLowerCase() === 'admin',
+    isWarden: user?.role?.toLowerCase() === 'warden',
+    isStudent: user?.role?.toLowerCase() === 'student',
   };
 };

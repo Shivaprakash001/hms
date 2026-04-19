@@ -3,6 +3,8 @@ import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { expenseService } from "@/lib/services/expense-service";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 
 /**
  * 💸 Expenses Collection
