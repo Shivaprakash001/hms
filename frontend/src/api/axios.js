@@ -4,12 +4,12 @@ import axios from 'axios';
 // In production (browser not on localhost), ALWAYS use the Render backend URL
 // to prevent any accidental localhost references from build-time env vars.
 // In development (localhost), use the env var or fall back to localhost:8000.
-const PRODUCTION_API_URL = 'https://api.trishul.solutions/api';
+const PRODUCTION_API_URL = 'https://api.trishul.solutions';
 const isLocalDev = typeof window !== 'undefined' && window.location.hostname === 'localhost';
 
 let baseURL;
 if (isLocalDev) {
-    baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+    baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 } else {
     // In production, only use VITE_API_URL if it's NOT pointing to localhost
     const envUrl = import.meta.env.VITE_API_URL;
