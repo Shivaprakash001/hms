@@ -19,12 +19,12 @@ export async function POST(req: NextRequest) {
     }
 
     const { email, password } = validated.data;
-    const { user, token } = await authService.login(email, password);
+    const loginResult = await authService.login(email, password);
     
-    const response = NextResponse.json({ user, token }, { status: 200 });
+    const response = NextResponse.json(loginResult, { status: 200 });
 
     // Set HTTP-only Cookie for security (Prevents XSS)
-    response.cookies.set("hms_session", token, {
+    response.cookies.set("hms_session", loginResult.access_token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
