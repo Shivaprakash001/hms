@@ -26,15 +26,25 @@ export class ComplaintService {
 
   async createComplaint(data: {
     student_id: string;
-    owner_id: string;
     title: string;
     description: string;
     category: string;
     priority?: string;
   }) {
+    // Security: Fetch the correct owner_id for this student from DB
+    const student = await prisma.student.findUnique({
+      where: { id: data.student_id },
+      select: { owner_id: true }
+    });
+
+    if (!student || !student.owner_id) {
+      throw new Error("UNAUTHORIZED: Student not found or has no owner linked");
+    }
+
     const complaint = await prisma.complaint.create({
       data: {
         ...data,
+        owner_id: student.owner_id,
         status: "PENDING"
       }
     });
@@ -42,11 +52,12 @@ export class ComplaintService {
     await eventSystem.trigger("complaint_created", {
       complaint_id: complaint.id,
       student_id: data.student_id,
-      owner_id: data.owner_id
+      owner_id: student.owner_id
     });
 
     return complaint;
   }
+
 
   async updateComplaintStatus(complaintId: string, ownerId: string, data: {
     status: string;

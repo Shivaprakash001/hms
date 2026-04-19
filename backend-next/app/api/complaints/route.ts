@@ -45,9 +45,9 @@ export async function POST(req: NextRequest) {
     // If not in session, we look it up.
     const complaint = await complaintService.createComplaint({
       ...body,
-      student_id: session.sub,
-      owner_id: session.owner_id // This should be in session if using my new auth implementation
+      student_id: session.sub
     });
+
     return apiResponse(complaint, 201);
   } catch (error: any) {
     return apiError(error.message || "Failed to create complaint");

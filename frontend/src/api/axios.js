@@ -5,19 +5,16 @@ import axios from 'axios';
 // to prevent any accidental localhost references from build-time env vars.
 // In development (localhost), use the env var or fall back to localhost:8000.
 // Backend is now Next.js on Vercel — all API routes live under /api/
-const PRODUCTION_API_URL = 'https://api.trishul.solutions/api';
+const PRODUCTION_API_URL = '/api';
 const isLocalDev = typeof window !== 'undefined' && window.location.hostname === 'localhost';
 
 let baseURL;
 if (isLocalDev) {
     baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 } else {
-    const envUrl = import.meta.env.VITE_API_URL;
-    const normalizedEnv = envUrl && !envUrl.includes('localhost')
-        ? envUrl
-        : null;
-    baseURL = normalizedEnv || PRODUCTION_API_URL;
+    baseURL = import.meta.env.VITE_API_URL || PRODUCTION_API_URL;
 }
+
 
 const api = axios.create({
     baseURL,
