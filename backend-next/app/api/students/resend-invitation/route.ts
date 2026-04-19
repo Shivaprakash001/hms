@@ -25,8 +25,9 @@ export async function POST(req: NextRequest) {
     
     return apiResponse(result, 200);
   } catch (error: any) {
-    if (error.message.startsWith("NOT_FOUND")) return apiError(error.message.split(": ")[1], "NOT_FOUND", 404);
-    if (error.message.startsWith("BAD_REQUEST")) return apiError(error.message.split(": ")[1], "VALIDATION_ERROR", 400);
-    return apiError(error.message || "Failed to resend invitation");
+    const msg = typeof error?.message === "string" ? error.message : String(error);
+    if (msg.startsWith("NOT_FOUND")) return apiError(msg.split(": ")[1] ?? msg, "NOT_FOUND", 404);
+    if (msg.startsWith("BAD_REQUEST")) return apiError(msg.split(": ")[1] ?? msg, "VALIDATION_ERROR", 400);
+    return apiError(msg || "Failed to resend invitation");
   }
 }

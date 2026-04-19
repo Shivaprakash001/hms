@@ -1,0 +1,60 @@
+import { NextResponse } from "next/server";
+import { paymentService } from "@/lib/services/payment-service";
+import { authService } from "@/lib/services/auth-service";
+import { apiError } from "@/lib/utils/api-utils";
+
+export async function GET(req: Request) {
+  try {
+    const user = await authService.getCurrentUser(req);
+    if (!user || user.role !== "OWNER") {
+      return apiError("Unauthorized", "UNAUTHORIZED", 401);
+    }
+
+    const { searchParams } = new URL(req.url);
+    const limit = parseInt(searchParams.get("limit") || "50", 10);
+    const offset = parseInt(searchParams.get("offset") || "0", 10);
+
+    const result = await paymentService.getAllPayments(
+      user.id,
+      isNaN(limit) ? 50 : limit,
+      isNaN(offset) ? 0 : offset
+    );
+
+    return NextResponse.json(result);
+  } catch (error: any) {
+    console.error("Error fetching payments:", error);
+    const message = String(error?.message ?? error);
+    return apiError(message, "INTERNAL_ERROR", 500);
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const user = await authService.getCurrentUser(req);
+    if (!user) {
+      return apiError("Unauthorized", "UNAUTHORIZED", 401);
+    }
+
+    const data = await req.json();
+    
+    // Authorization check for manual recording: only OWNER/ADMIN
+    if (user.role !== "OWNER" && user.role !== "ADMIN") {
+        return apiError("Only owners can record manual payments", "FORBIDDEN", 403);
+    }
+
+    const result = await paymentService.recordPayment({
+      obligationId: data.obligation_id,
+      amountPaid: Number(data.amount_paid),
+      paymentMethod: data.payment_method,
+      referenceNumber: data.reference_number,
+      paymentDate: data.payment_date ? new Date(data.payment_date) : undefined,
+      userId: user.id
+    });
+
+    return NextResponse.json(result);
+  } catch (error: any) {
+    console.error("Error recording payment:", error);
+    const message = String(error?.message ?? error);
+    return apiError(message, "INTERNAL_ERROR", 500);
+  }
+}

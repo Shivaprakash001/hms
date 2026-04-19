@@ -3,8 +3,8 @@ import { prisma } from "../db";
 export class DashboardService {
   async getOwnerStats(userId: string) {
     const today = new Date();
-    const monthStart = new Date(today.getFullYear(), today.month, 1);
-    const nextMonth = new Date(today.getFullYear(), today.month + 1, 1);
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
 
     const [students, rooms, payments, costs] = await Promise.all([
       prisma.student.findMany({ where: { owner_id: userId }, select: { status: true } }),
@@ -21,9 +21,9 @@ export class DashboardService {
     ]);
 
     const totalTenants = students.length;
-    const activeTenants = students.filter(s => s.status === "ACTIVE").length;
-    const totalCapacity = rooms.reduce((sum, r) => sum + r.capacity, 0);
-    const currentRevenue = payments.reduce((sum, p) => sum + Number(p.amount_paid), 0);
+    const activeTenants = students.filter((s: any) => s.status === "ACTIVE").length;
+    const totalCapacity = rooms.reduce((sum: number, r: any) => sum + r.capacity, 0);
+    const currentRevenue = payments.reduce((sum: number, p: any) => sum + Number(p.amount_paid), 0);
     const occupancyRate = totalCapacity > 0 ? Math.round((activeTenants / totalCapacity) * 100) : 0;
 
     // Pending dues calculation
@@ -39,8 +39,8 @@ export class DashboardService {
     let overdueTotal = 0;
     let overdueCount = 0;
 
-    undpaidObligations.forEach(ob => {
-      const paid = ob.payments.reduce((sum, p) => sum + Number(p.amount_paid), 0);
+    undpaidObligations.forEach((ob: any) => {
+      const paid = ob.payments.reduce((sum: number, p: any) => sum + Number(p.amount_paid), 0);
       const remaining = Number(ob.amount) - paid;
       if (remaining > 0) {
         pendingTotal += remaining;
@@ -115,11 +115,11 @@ export class DashboardService {
     if (!student) throw new Error("NOT_FOUND: Student record not found");
 
     let pendingTotal = 0;
-    let nextPayment = null;
-    let oldestObligationId = null;
+    let nextPayment: Date | null = null;
+    let oldestObligationId: string | null = null;
 
-    student.obligations.forEach(ob => {
-      const paid = ob.payments.reduce((sum, p) => sum + Number(p.amount_paid), 0);
+    student.obligations.forEach((ob: any) => {
+      const paid = ob.payments.reduce((sum: number, p: any) => sum + Number(p.amount_paid), 0);
       const remaining = Number(ob.amount) - paid;
       if (remaining > 0) {
         pendingTotal += remaining;

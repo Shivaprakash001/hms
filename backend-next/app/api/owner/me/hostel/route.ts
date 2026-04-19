@@ -19,8 +19,9 @@ export async function PATCH(req: NextRequest) {
     const result = await propertyService.updateHostel(session.sub, body);
     return apiResponse(result);
   } catch (error: any) {
-    if (error.message.startsWith("NOT_FOUND"))
-      return apiError(error.message.split(": ")[1], "NOT_FOUND", 404);
-    return apiError(error.message || "Failed to update hostel details");
+    const msg = typeof error === "string" ? error : (error && typeof error.message === "string" ? error.message : String(error));
+    if (msg.startsWith("NOT_FOUND"))
+      return apiError(msg.split(": ")[1] ?? msg, "NOT_FOUND", 404);
+    return apiError(msg || "Failed to update hostel details");
   }
 }

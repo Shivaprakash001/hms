@@ -155,13 +155,13 @@ Search for:
 **PowerShell:**
 ```powershell
 # API calls
-Select-String -Path "src/**/*" -Pattern "fetch\(|axios\.|http\."
+Get-ChildItem -Path "src" -Recurse -File | Select-String -Pattern "fetch\(|axios\.|http\."
 
 # Database connections
-Select-String -Path "**/*" -Pattern "DATABASE_URL|mongodb|postgres|mysql"
+Get-ChildItem -Recurse -File | Select-String -Pattern "DATABASE_URL|mongodb|postgres|mysql"
 
 # Third-party services
-Select-String -Path "**/*" -Pattern "stripe|sendgrid|twilio|aws-sdk"
+Get-ChildItem -Recurse -File | Select-String -Pattern "stripe|sendgrid|twilio|aws-sdk"
 ```
 
 **Bash:**
@@ -192,10 +192,10 @@ Search for indicators:
 **PowerShell:**
 ```powershell
 # TODOs and FIXMEs
-Select-String -Path "src/**/*" -Pattern "TODO|FIXME|HACK|XXX"
+Get-ChildItem -Path "src" -Recurse -File | Select-String -Pattern "TODO|FIXME|HACK|XXX"
 
 # Deprecated markers
-Select-String -Path "**/*" -Pattern "@deprecated|DEPRECATED"
+Get-ChildItem -Recurse -File | Select-String -Pattern "@deprecated|DEPRECATED"
 ```
 
 **Bash:**

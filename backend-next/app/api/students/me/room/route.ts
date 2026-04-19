@@ -49,8 +49,8 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    const roommates = occupants.map(occ => ({
-      name: occ.student.profile.name
+    const roommates = occupants.map((occ: any) => ({
+      name: occ.student?.profile?.name || "Unknown"
     }));
 
     return apiResponse({
@@ -62,6 +62,6 @@ export async function GET(req: NextRequest) {
       roommates
     });
   } catch (error: any) {
-    return apiError(error.message || "Failed to fetch room data");
+    return apiError(error?.message || "Failed to fetch room data");
   }
 }

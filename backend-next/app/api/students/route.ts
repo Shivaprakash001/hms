@@ -19,8 +19,10 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status") || undefined;
     const search = searchParams.get("search") || undefined;
-    const limit = parseInt(searchParams.get("limit") || "50");
-    const offset = parseInt(searchParams.get("offset") || "0");
+    const parsedLimit = parseInt(searchParams.get("limit") || "50", 10);
+    const limit = Number.isNaN(parsedLimit) ? 50 : parsedLimit;
+    const parsedOffset = parseInt(searchParams.get("offset") || "0", 10);
+    const offset = Number.isNaN(parsedOffset) ? 0 : parsedOffset;
 
     const result = await studentService.getAllStudents({
       status, search, ownerId: session.sub, limit, offset

@@ -16,7 +16,8 @@ export async function GET(req: NextRequest) {
 
   try {
     const { searchParams } = new URL(req.url);
-    const months = parseInt(searchParams.get("months") || "6");
+    const parseResult = parseInt(searchParams.get("months") || "6", 10);
+    const months = Number.isNaN(parseResult) ? 6 : Math.max(1, Math.min(36, parseResult));
     const stats = await dashboardService.getMonthlyStats(session.sub, months);
     return apiResponse(stats);
   } catch (error: any) {

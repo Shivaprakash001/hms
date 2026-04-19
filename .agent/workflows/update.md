@@ -153,17 +153,11 @@ cp .gsd-update-temp/VERSION ./
 **PowerShell:**
 ```powershell
 Remove-Item -Recurse -Force ".gsd-update-temp"
-Remove-Item -Recurse -Force ".agent.backup"
-Remove-Item -Recurse -Force ".agents.backup"
-Remove-Item -Recurse -Force ".gsd/templates.backup"
 ```
 
 **Bash:**
 ```bash
 rm -rf .gsd-update-temp
-rm -rf .agent.backup
-rm -rf .agents.backup
-rm -rf .gsd/templates.backup
 ```
 
 ---
@@ -176,6 +170,15 @@ rm -rf .gsd/templates.backup
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Updated to version {remote-version}
+
+Backups of your previous installation have been preserved:
+• .agent.backup
+• .agents.backup
+• .gsd/templates.backup
+
+If everything works well, you can clean them up manually:
+Bash: rm -rf .agent.backup .agents.backup .gsd/templates.backup
+PowerShell: Remove-Item -Recurse -Force ".agent.backup", ".agents.backup", ".gsd/templates.backup"
 
 ───────────────────────────────────────────────────────
 

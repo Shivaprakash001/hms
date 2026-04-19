@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
 
     // Check for duplicate room number
     const existing = await prisma.room.findFirst({
-      where: { hostel_id: hostel.id, room_no: validated.data.room_no },
+      where: { hostel_id: hostel.id, room_no: validated.data.room_no, is_active: true },
     });
     if (existing) {
       return apiError(`Room ${validated.data.room_no} already exists`, "ALREADY_EXISTS", 409);

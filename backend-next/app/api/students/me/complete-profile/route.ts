@@ -43,7 +43,9 @@ export async function POST(req: NextRequest) {
     
     return apiResponse(updated, 201);
   } catch (error: any) {
-    if (error.message.startsWith("NOT_FOUND")) return apiError(error.message.split(": ")[1], "NOT_FOUND", 404);
-    return apiError(error.message || "Failed to complete profile");
+    if (error && typeof error.message === "string" && error.message.startsWith("NOT_FOUND")) {
+      return apiError(error.message.split(": ")[1] ?? error.message, "NOT_FOUND", 404);
+    }
+    return apiError(error?.message || "Failed to complete profile");
   }
 }

@@ -1,6 +1,7 @@
 import { prisma } from "../db";
 import { hashPassword } from "../auth";
 import crypto from "crypto";
+import { eventSystem } from "../events";
 
 export class InvitationService {
   async inviteTenant(data: any, ownerId: string) {
@@ -21,10 +22,13 @@ export class InvitationService {
     // 4. Save Invitation (using a new model in Prisma or just using Student with "INVITED" status)
     // Note: The FastAPI code uses an 'invitations' table. I'll assume it exists or use Student. status="INVITED"
     // I'll create a new student record with status "INVITED" and include invitation metadata.
+    const studentId = crypto.randomUUID();
     const student = await prisma.student.create({
       data: {
+        id: studentId,
         profile: {
           create: {
+            id: crypto.randomUUID(),
             email,
             name,
             phone,
@@ -70,6 +74,31 @@ export class InvitationService {
     // await prisma.student.update({ where: { id: invitation.student_id }, data: { status: "ACTIVE" } });
 
     return { success: true };
+  }
+
+  async resendInvitation(email: string) {
+    // 1. Find the student by email
+    const profile = await prisma.profile.findUnique({
+      where: { email },
+      include: { student: true }
+    });
+    if (!profile || !profile.student) {
+      throw new Error("NOT_FOUND: User not found");
+    }
+
+    if (profile.student.status !== "INVITED") {
+      throw new Error("BAD_REQUEST: Student is already active or left");
+    }
+
+    // 2. Generate new token
+    const token = crypto.randomBytes(32).toString('hex');
+    const baseUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    const activationLink = `${baseUrl}/activate?token=${token}`;
+
+    return {
+      message: "Invitation resent successfully",
+      activation_link: activationLink
+    };
   }
 }
 

@@ -1,0 +1,31 @@
+import { NextResponse } from "next/server";
+import { paymentService } from "@/lib/services/payment-service";
+import { authService } from "@/lib/services/auth-service";
+import { apiError } from "@/lib/utils/api-utils";
+
+export async function GET(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const user = await authService.getCurrentUser(req);
+    if (!user) {
+      return apiError("Unauthorized", "UNAUTHORIZED", 401);
+    }
+
+    const result = await paymentService.getPaymentAttempt(
+      params.id,
+      user.id,
+      user.role,
+      user.role === "STUDENT" ? user.id : undefined
+    );
+
+    return NextResponse.json(result);
+  } catch (error: any) {
+    console.error("Error fetching attempt:", error);
+    const message = String(error?.message ?? error);
+    if (message.includes("FORBIDDEN")) return apiError(message, "FORBIDDEN", 403);
+    if (message.includes("NOT_FOUND")) return apiError(message, "NOT_FOUND", 404);
+    return apiError(message, "INTERNAL_ERROR", 500);
+  }
+}

@@ -19,11 +19,14 @@ export async function POST(
 
   try {
     const body = await req.json();
-    if (!body.monthly_rent || !body.joined_on) {
-      return apiError("monthly_rent and joined_on are required", "VALIDATION_ERROR", 400);
+    if (body.monthly_rent === undefined || body.monthly_rent === null || !Number.isFinite(body.monthly_rent) || body.joined_on === undefined || body.joined_on === null) {
+      return apiError("Valid monthly_rent and joined_on are required", "VALIDATION_ERROR", 400);
     }
     
     const joinedOnDate = new Date(body.joined_on);
+    if (isNaN(joinedOnDate.getTime())) {
+      return apiError("Invalid joined_on date", "VALIDATION_ERROR", 400);
+    }
 
     const result = await studentService.reactivateStudent(
       params.id, 
@@ -34,9 +37,10 @@ export async function POST(
 
     return apiResponse(result);
   } catch (error: any) {
-    if (error.message.startsWith("NOT_FOUND")) return apiError(error.message.split(": ")[1], "NOT_FOUND", 404);
-    if (error.message.startsWith("FORBIDDEN")) return apiError(error.message.split(": ")[1], "FORBIDDEN", 403);
-    if (error.message.startsWith("VALIDATION")) return apiError(error.message.split(": ")[1], "VALIDATION_ERROR", 400);
-    return apiError(error.message || "Failed to reactivate student");
+    const msg = typeof error?.message === "string" ? error.message : (String(error) || "Failed to reactivate student");
+    if (msg.startsWith("NOT_FOUND")) return apiError(msg.split(": ")[1] ?? msg, "NOT_FOUND", 404);
+    if (msg.startsWith("FORBIDDEN")) return apiError(msg.split(": ")[1] ?? msg, "FORBIDDEN", 403);
+    if (msg.startsWith("VALIDATION")) return apiError(msg.split(": ")[1] ?? msg, "VALIDATION_ERROR", 400);
+    return apiError(msg || "Failed to reactivate student");
   }
 }

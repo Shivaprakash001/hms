@@ -1,5 +1,5 @@
 import { prisma } from "../db";
-import { ServiceResponse } from "./index"; // Assuming index.ts has a helper or just use the pattern
+
 
 export class PropertyService {
   async getOwnerProfile(userId: string) {
@@ -156,18 +156,18 @@ export class PropertyService {
 
     const floorsMap: Map<number, any> = new Map();
 
-    rooms.forEach(room => {
+    rooms.forEach((room: any) => {
       const floorNum = room.floor ?? this.extractFloor(room.room_no);
       if (!floorsMap.has(floorNum)) {
         floorsMap.set(floorNum, { id: `f${floorNum}`, number: floorNum, rooms: [] });
       }
 
-      const tenants = room.allocations.map(a => {
+      const tenants = room.allocations.map((a: any) => {
         const student = a.student;
         const profile = student.profile;
-        const totalAmount = student.obligations.reduce((sum, o) => sum + Number(o.amount), 0);
-        const totalPaid = student.obligations.reduce((sum, o) => 
-          sum + o.payments.reduce((pSum, p) => pSum + Number(p.amount_paid), 0), 0);
+        const totalAmount = student.obligations.reduce((sum: number, o: any) => sum + Number(o.amount), 0);
+        const totalPaid = student.obligations.reduce((sum: number, o: any) => 
+          sum + o.payments.reduce((pSum: number, p: any) => pSum + Number(p.amount_paid), 0), 0);
         const pendingDues = totalAmount - totalPaid;
 
         return {
@@ -189,7 +189,7 @@ export class PropertyService {
         occupied: tenants.length,
         floor: floorNum,
         tenants,
-        pending_dues: tenants.reduce((sum, t) => sum + t.pending_dues, 0)
+        pending_dues: tenants.reduce((sum: number, t: any) => sum + t.pending_dues, 0)
       });
     });
 
@@ -260,14 +260,14 @@ export class PropertyService {
 
     // Gather latest payments for the room
     const payments = tenants
-      .filter(t => t.last_payment)
-      .map(t => ({
+      .filter((t: any) => t.last_payment)
+      .map((t: any) => ({
         student_id: t.student_id,
         student_name: t.name,
         payment_date: t.last_payment,
         amount_paid: t.last_payment_amount
       }))
-      .sort((p1, p2) => new Date(p2.payment_date).getTime() - new Date(p1.payment_date).getTime());
+      .sort((p1: any, p2: any) => new Date(p2.payment_date).getTime() - new Date(p1.payment_date).getTime());
 
     return {
       room: {
@@ -282,7 +282,7 @@ export class PropertyService {
       },
       tenants,
       payments,
-      pending_dues: tenants.reduce((sum, t) => sum + t.pending_dues, 0)
+      pending_dues: tenants.reduce((sum: number, t: any) => sum + t.pending_dues, 0)
     };
   }
 

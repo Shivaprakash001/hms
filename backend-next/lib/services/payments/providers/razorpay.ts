@@ -1,6 +1,6 @@
 import axios from "axios";
-import { PaymentProvider, CreateIntentResult, WebhookVerificationResult, FetchStatusResult } from "./provider-base";
-import { generateHMAC, compareDigest } from "./crypto";
+import { PaymentProvider, CreateIntentResult, WebhookVerificationResult, FetchStatusResult } from "../provider-base";
+import { generateHMAC, compareDigest } from "../crypto";
 
 export class RazorpayProvider extends PaymentProvider {
   private get auth() {

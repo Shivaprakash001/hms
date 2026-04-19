@@ -65,13 +65,13 @@ git clone --depth 1 https://github.com/toonight/get-shit-done-for-antigravity.gi
 **PowerShell:**
 ```powershell
 # Core directories
-Copy-Item -Recurse ".gsd-install-temp\.agent" ".\"
-Copy-Item -Recurse ".gsd-install-temp\.agents" ".\"
-Copy-Item -Recurse ".gsd-install-temp\.gemini" ".\"
-Copy-Item -Recurse ".gsd-install-temp\.gsd" ".\"
-Copy-Item -Recurse ".gsd-install-temp\adapters" ".\"
-Copy-Item -Recurse ".gsd-install-temp\docs" ".\"
-Copy-Item -Recurse ".gsd-install-temp\scripts" ".\"
+Copy-Item -Recurse -Force ".gsd-install-temp\.agent" ".\"
+Copy-Item -Recurse -Force ".gsd-install-temp\.agents" ".\"
+Copy-Item -Recurse -Force ".gsd-install-temp\.gemini" ".\"
+Copy-Item -Recurse -Force ".gsd-install-temp\.gsd" ".\"
+Copy-Item -Recurse -Force ".gsd-install-temp\adapters" ".\"
+Copy-Item -Recurse -Force ".gsd-install-temp\docs" ".\"
+Copy-Item -Recurse -Force ".gsd-install-temp\scripts" ".\"
 
 # Root files
 Copy-Item -Force ".gsd-install-temp\PROJECT_RULES.md" ".\"
@@ -82,18 +82,18 @@ Copy-Item -Force ".gsd-install-temp\model_capabilities.yaml" ".\"
 **Bash:**
 ```bash
 # Core directories
-cp -r .gsd-install-temp/.agent ./
-cp -r .gsd-install-temp/.agents ./
-cp -r .gsd-install-temp/.gemini ./
-cp -r .gsd-install-temp/.gsd ./
-cp -r .gsd-install-temp/adapters ./
-cp -r .gsd-install-temp/docs ./
-cp -r .gsd-install-temp/scripts ./
+cp -rf .gsd-install-temp/.agent ./
+cp -rf .gsd-install-temp/.agents ./
+cp -rf .gsd-install-temp/.gemini ./
+cp -rf .gsd-install-temp/.gsd ./
+cp -rf .gsd-install-temp/adapters ./
+cp -rf .gsd-install-temp/docs ./
+cp -rf .gsd-install-temp/scripts ./
 
 # Root files
-cp .gsd-install-temp/PROJECT_RULES.md ./
-cp .gsd-install-temp/GSD-STYLE.md ./
-cp .gsd-install-temp/model_capabilities.yaml ./
+cp -f .gsd-install-temp/PROJECT_RULES.md ./
+cp -f .gsd-install-temp/GSD-STYLE.md ./
+cp -f .gsd-install-temp/model_capabilities.yaml ./
 ```
 
 ---

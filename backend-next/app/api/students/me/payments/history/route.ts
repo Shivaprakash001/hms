@@ -28,7 +28,8 @@ export async function GET(req: NextRequest) {
     const history = await paymentService.getStudentPaymentHistory(student.id);
     return apiResponse(history);
   } catch (error: any) {
-    if (error.message.startsWith("NOT_FOUND")) return apiError(error.message.split(": ")[1], "NOT_FOUND", 404);
-    return apiError(error.message || "Failed to fetch payment history");
+    const msg = typeof error?.message === "string" ? error.message : String(error);
+    if (msg.startsWith("NOT_FOUND")) return apiError(msg.split(": ")[1] ?? msg, "NOT_FOUND", 404);
+    return apiError(msg || "Failed to fetch payment history");
   }
 }

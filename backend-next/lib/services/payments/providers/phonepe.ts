@@ -1,6 +1,6 @@
 import axios from "axios";
-import { PaymentProvider, CreateIntentResult, WebhookVerificationResult, FetchStatusResult } from "./provider-base";
-import { generateSHA256, compareDigest } from "./crypto";
+import { PaymentProvider, CreateIntentResult, WebhookVerificationResult, FetchStatusResult } from "../provider-base";
+import { generateSHA256, compareDigest } from "../crypto";
 
 export class PhonePeProvider extends PaymentProvider {
   private get baseUrl() {

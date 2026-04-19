@@ -86,31 +86,36 @@ export class AuthService {
     // 3. Hash password and create profile + hostel in one transaction
     const hashedPassword = await hashPassword(data.password);
 
-    const profile = await prisma.profile.create({
-      data: {
-        id: userId,
-        email: normalizedEmail,
-        password_hash: hashedPassword,
-        name: data.name,
-        phone: data.phone || null,
-        role: "OWNER",
-        hostels: {
-          create: {
-            name: data.hostel_name,
-            phone: data.hostel_phone,
-            address: data.hostel_address,
-            city: data.hostel_city,
-            state: data.hostel_state,
-            pincode: data.hostel_pincode,
-            upi_id: data.upi_id || null,
-            gst_number: data.gst_number || null,
+    try {
+      const profile = await prisma.profile.create({
+        data: {
+          id: userId,
+          email: normalizedEmail,
+          password_hash: hashedPassword,
+          name: data.name,
+          phone: data.phone || null,
+          role: "OWNER",
+          hostels: {
+            create: {
+              name: data.hostel_name,
+              phone: data.hostel_phone,
+              address: data.hostel_address,
+              city: data.hostel_city,
+              state: data.hostel_state,
+              pincode: data.hostel_pincode,
+              upi_id: data.upi_id || null,
+              gst_number: data.gst_number || null,
+            },
           },
         },
-      },
-      include: { hostels: true },
-    });
-
-    return profile;
+        include: { hostels: true },
+      });
+      return profile;
+    } catch (dbError) {
+      // Rollback Supabase user creation if Prisma transaction fails
+      await supabase.auth.admin.deleteUser(userId);
+      throw dbError;
+    }
   }
 
   async changePassword(userId: string, oldPassword: string, newPassword: string) {
@@ -119,6 +124,15 @@ export class AuthService {
 
     const isValid = await verifyPassword(oldPassword, profile.password_hash || "");
     if (!isValid) throw new Error("UNAUTHORIZED: Current password is incorrect");
+
+    // Sync new password with Supabase Auth
+    const { error: supabaseError } = await supabase.auth.admin.updateUserById(userId, {
+      password: newPassword,
+    });
+    
+    if (supabaseError) {
+      throw new Error(`INTERNAL: Failed to update auth provider password: ${supabaseError.message}`);
+    }
 
     const newHash = await hashPassword(newPassword);
     await prisma.profile.update({
@@ -138,7 +152,21 @@ export class AuthService {
     });
     return { success: true };
   }
+
+  async getCurrentUser(req: Request) {
+    const { getSession } = await import("../auth-edge");
+    const session = await getSession(req as any);
+    if (!session) return null;
+
+    return {
+      id: session.sub,
+      email: session.email,
+      role: session.role,
+      owner_id: session.owner_id
+    };
+  }
 }
 
 export const authService = new AuthService();
+
 

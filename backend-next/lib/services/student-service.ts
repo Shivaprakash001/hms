@@ -221,7 +221,7 @@ export class StudentService {
       }
     });
 
-    return requests.map(req => {
+    return requests.map((req: any) => {
       const student = req.student;
       const profile = student.profile;
       const room = student.allocations[0]?.room;
@@ -290,7 +290,7 @@ export class StudentService {
     });
 
     if (!student) throw new Error("NOT_FOUND: Tenant not found");
-    if (student.owner_id && student.owner_id !== ownerId) {
+    if (student.owner_id !== ownerId) {
       throw new Error("FORBIDDEN: You can only view your own tenants");
     }
 
@@ -364,7 +364,7 @@ export class StudentService {
   async updateStudent(id: string, data: any, ownerId: string) {
     const student = await prisma.student.findUnique({ where: { id } });
     if (!student) throw new Error("NOT_FOUND: Student not found");
-    if (student.owner_id && student.owner_id !== ownerId) throw new Error("FORBIDDEN: You can only update your own tenants");
+    if (student.owner_id !== ownerId) throw new Error("FORBIDDEN: You can only update your own tenants");
 
     if (data.status === "LEFT") {
       // Auto-end active allocations if any exists
@@ -384,7 +384,7 @@ export class StudentService {
   async deleteStudent(id: string, ownerId: string) {
     const student = await prisma.student.findUnique({ where: { id } });
     if (!student) throw new Error("NOT_FOUND: Student not found");
-    if (student.owner_id && student.owner_id !== ownerId) throw new Error("FORBIDDEN: You can only delete your own tenants");
+    if (student.owner_id !== ownerId) throw new Error("FORBIDDEN: You can only delete your own tenants");
 
     // Soft delete: status = LEFT
     await prisma.roomAllocation.updateMany({
@@ -402,7 +402,7 @@ export class StudentService {
   async reactivateStudent(id: string, rent: number, joinedOn: Date, ownerId: string) {
     const student = await prisma.student.findUnique({ where: { id } });
     if (!student) throw new Error("NOT_FOUND: Student not found");
-    if (student.owner_id && student.owner_id !== ownerId) throw new Error("FORBIDDEN: You can only reactivate your own tenants");
+    if (student.owner_id !== ownerId) throw new Error("FORBIDDEN: You can only reactivate your own tenants");
     if (student.status !== "LEFT") throw new Error("VALIDATION: Only students with LEFT status can be reactivated");
 
     return await prisma.student.update({
