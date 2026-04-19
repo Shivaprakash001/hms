@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { User, Lock, Eye, EyeOff, Loader2, KeyRound, Mail, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
-import { AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
