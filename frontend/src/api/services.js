@@ -41,21 +41,11 @@ export const profileService = {
 
 // --- Owner Service ---
 export const ownerService = {
-    _requestWithFallback: async (method, path, data) => {
-        try {
-            const response = await api.request({ method, url: path, data });
-            return response.data;
-        } catch (error) {
-            if (error?.response?.status === 404 && !path.startsWith('/api/v1/')) {
-                const fallbackResponse = await api.request({ method, url: `/api/v1${path}`, data });
-                return fallbackResponse.data;
-            }
-            throw error;
-        }
-    },
+
     getProfile: async () => {
         try {
-            return await ownerService._requestWithFallback('get', '/owner/me/profile');
+            const response = await api.get('/owner/me/profile');
+            return response.data;
         } catch (error) {
             if (error?.response?.status === 404) {
                 const stored = localStorage.getItem('ownerUser');
@@ -85,7 +75,8 @@ export const ownerService = {
     },
     updateOwner: async (data) => {
         try {
-            return await ownerService._requestWithFallback('patch', '/owner/me/profile', data);
+            const response = await api.patch('/owner/me/profile', data);
+            return response.data;
         } catch (error) {
             if (error?.response?.status === 404) {
                 const stored = localStorage.getItem('ownerUser');
@@ -113,40 +104,24 @@ export const ownerService = {
         }
     },
     updateHostel: async (data) => {
-        return ownerService._requestWithFallback('patch', '/owner/me/hostel', data);
+        const response = await api.patch('/owner/me/hostel', data);
+        return response.data;
     },
     updatePreferences: async (data) => {
-        return ownerService._requestWithFallback('patch', '/owner/me/preferences', data);
+        const response = await api.patch('/owner/me/preferences', data);
+        return response.data;
     },
     uploadLogo: async (file) => {
         const formData = new FormData();
         formData.append('file', file);
-        try {
-            const response = await api.post('/owner/logo', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
-            return response.data;
-        } catch (error) {
-            if (error?.response?.status === 404) {
-                const fallback = await api.post('/api/v1/owner/logo', formData, {
-                    headers: { 'Content-Type': 'multipart/form-data' }
-                });
-                return fallback.data;
-            }
-            throw error;
-        }
+        const response = await api.post('/owner/logo', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        return response.data;
     },
     removeLogo: async () => {
-        try {
-            const response = await api.delete('/owner/logo');
-            return response.data;
-        } catch (error) {
-            if (error?.response?.status === 404) {
-                const fallback = await api.delete('/api/v1/owner/logo');
-                return fallback.data;
-            }
-            throw error;
-        }
+        const response = await api.delete('/owner/logo');
+        return response.data;
     },
     searchTenants: async (query, limit = 10) => {
         const response = await api.get('/owner/search', {
@@ -158,26 +133,18 @@ export const ownerService = {
 
 // --- Billing & Plans Service ---
 export const billingService = {
-    _requestWithFallback: async (method, path, data) => {
-        try {
-            const response = await api.request({ method, url: path, data });
-            return response.data;
-        } catch (error) {
-            if (error?.response?.status === 404 && !path.startsWith('/api/v1/')) {
-                const fallbackResponse = await api.request({ method, url: `/api/v1${path}`, data });
-                return fallbackResponse.data;
-            }
-            throw error;
-        }
-    },
+
     getSubscription: async () => {
-        return billingService._requestWithFallback('get', '/owner/me/subscription');
+        const response = await api.get('/owner/me/subscription');
+        return response.data;
     },
     getPlans: async () => {
-        return billingService._requestWithFallback('get', '/plans');
+        const response = await api.get('/plans');
+        return response.data;
     },
     getUsage: async () => {
-        return billingService._requestWithFallback('get', '/owner/me/usage');
+        const response = await api.get('/owner/me/usage');
+        return response.data;
     }
 };
 

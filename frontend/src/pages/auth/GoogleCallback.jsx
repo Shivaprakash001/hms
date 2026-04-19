@@ -16,10 +16,11 @@ export const GoogleCallback = () => {
           // We compute it dynamically so it works across all deployment environments.
           const redirectUri = `${window.location.origin}/callback`;
           const user = await loginWithGoogle(code, redirectUri);
+          const role = (user?.role || '').toLowerCase();
           
-          if (user.role === 'owner' || user.role === 'admin') {
+          if (role === 'owner' || role === 'admin') {
             navigate('/owner/dashboard');
-          } else if (user.role === 'student') {
+          } else if (role === 'student') {
             navigate('/student/dashboard');
           } else {
             navigate('/login');

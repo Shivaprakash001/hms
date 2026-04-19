@@ -149,7 +149,7 @@ const OwnerDashboard = () => {
                         </select>
                     </div>
                     <div className="h-[320px] min-h-[320px] w-full min-w-0">
-                        <ResponsiveContainer width="100%" height="100%" minWidth={280} minHeight={280}>
+                        <ResponsiveContainer width="100%" height="100%" minWidth={280} minHeight={320} debounce={50}>
                             <BarChart data={collectionData} barGap={10} margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                 <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 700, fill: '#94a3b8' }} />
