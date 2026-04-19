@@ -36,7 +36,7 @@ export class ActivityService {
         event_type: "PAYMENT_RECEIVED",
         title: "Payment Received",
         detail: `Received ₹${Number(p.amount_paid).toLocaleString()} via ${p.payment_method}`,
-        tenant_name: p.student_details.profile.name,
+        tenant_name: p.student.profile.name,
         amount: Number(p.amount_paid),
         event_at: p.payment_date
       });
@@ -48,8 +48,8 @@ export class ActivityService {
         id: `join_${a.id}`,
         event_type: "TENANT_JOINED",
         title: "Tenant Joined",
-        detail: `${a.student_details.profile.name} moved into Room ${a.room.room_no}`,
-        tenant_name: a.student_details.profile.name,
+        detail: `${a.student.profile.name} moved into Room ${a.room.room_no}`,
+        tenant_name: a.student.profile.name,
         room_no: a.room.room_no,
         event_at: a.start_date
       });
@@ -59,8 +59,8 @@ export class ActivityService {
           id: `left_${a.id}`,
           event_type: "TENANT_LEFT",
           title: "Tenant Left",
-          detail: `${a.student_details.profile.name} left Room ${a.room.room_no}`,
-          tenant_name: a.student_details.profile.name,
+          detail: `${a.student.profile.name} left Room ${a.room.room_no}`,
+          tenant_name: a.student.profile.name,
           room_no: a.room.room_no,
           event_at: a.end_date
         });
