@@ -34,9 +34,14 @@ export async function POST(req: NextRequest) {
 
     return response;
   } catch (error: any) {
-    if (error?.message?.includes("DATABASE_URL") || error?.message?.includes("Error validating datasource")) {
+    if (
+      error?.message?.includes("DATABASE_URL") ||
+      error?.message?.includes("Error validating datasource") ||
+      error?.message?.includes("Authentication failed against database server") ||
+      error?.message?.includes("provided database credentials")
+    ) {
       return apiError(
-        "Server configuration error: DATABASE_URL is missing or invalid for the Vercel backend.",
+        "Server configuration error: the Vercel backend database connection is missing, invalid, or using incorrect credentials.",
         "SERVER_MISCONFIGURED",
         500
       );

@@ -11,29 +11,34 @@ datasource db {
 }
 
 model Profile {
-  id                   String         @id @db.Uuid
-  email                String         @unique
-  password_hash        String?
+  id                   String    @id @default(uuid()) @db.Uuid
+  email                String    @unique
   name                 String
-  role                 Role           @default(ADMIN)
-  is_active            Boolean        @default(true)
-  is_profile_completed Boolean        @default(false)
   phone                String?
+  password_hash        String?
+  role                 Role
+  is_active            Boolean   @default(false)
+  is_profile_completed Boolean   @default(false)
   address              String?
-  emergency_contact    String?
-  aadhaar_number       String?        @db.VarChar(12)
-  owner_id             String?        @db.Uuid
-  due_day              Int?           @default(5)
-  created_at           DateTime       @default(now()) @db.Timestamptz(6)
-  updated_at           DateTime?      @updatedAt @db.Timestamptz(6)
-  hostels              Hostel[]
-  notifications        Notification[]
-  expenses             Expense[]
+  city                 String?
+  state                String?
+  pincode              String?
+  owner_id             String?   @db.Uuid
+  created_at           DateTime  @default(now())
+  updated_at           DateTime? @updatedAt
 
-  owner                Profile?       @relation("OwnerToManager", fields: [owner_id], references: [id])
-  managers             Profile[]      @relation("OwnerToManager")
-  student              Student?
+  invitation_token      String?   @unique
+  invitation_expires_at DateTime?
 
+  owner           Profile?  @relation("OwnerStudent", fields: [owner_id], references: [id])
+  students        Profile[] @relation("OwnerStudent")
+  student_details Student?  @relation("StudentToProfile")
+
+  hostels       Hostel[]
+  notifications Notification[]
+  expenses      Expense[]
+
+  @@index([owner_id])
   @@map("profiles")
   @@schema("public")
 }
@@ -66,15 +71,14 @@ model Student {
   document_verified     Boolean                  @default(false)
   created_at            DateTime                 @default(now()) @db.Timestamptz(6)
   updated_at            DateTime?                @updatedAt @db.Timestamptz(6)
+  complaints            Complaint[]
   documents             IdentificationDocument[]
   payment_attempts      PaymentAttempt[]
   payments              Payment[]
   reactivation_requests ReactivationRequest[]
-  complaints            Complaint[]
-
   obligations           RentObligation[]
   allocations           RoomAllocation[]
-  profile               Profile                  @relation(fields: [profile_id], references: [id])
+  profile               Profile                  @relation(fields: [profile_id], references: [id], name: "StudentToProfile")
 
   @@map("students")
   @@schema("public")
@@ -276,6 +280,40 @@ model ActivityLog {
   @@schema("public")
 }
 
+model Expense {
+  id         String   @id @default(uuid()) @db.Uuid
+  owner_id   String   @db.Uuid
+  title      String
+  amount     Decimal  @db.Decimal(10, 2)
+  date       DateTime @db.Date
+  category   String
+  status     String?  @default("paid")
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  owner      Profile  @relation(fields: [owner_id], references: [id])
+
+  @@map("expenses")
+  @@schema("public")
+}
+
+model Complaint {
+  id          String    @id @default(uuid()) @db.Uuid
+  student_id  String    @db.Uuid
+  owner_id    String    @db.Uuid
+  title       String
+  description String
+  category    String
+  status      String    @default("PENDING")
+  priority    String    @default("MEDIUM")
+  resolved_at DateTime? @db.Timestamptz(6)
+  comment     String?
+  created_at  DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime? @updatedAt @db.Timestamptz(6)
+  student     Student   @relation(fields: [student_id], references: [id])
+
+  @@map("complaints")
+  @@schema("public")
+}
+
 enum Role {
   ADMIN
   OWNER
@@ -312,38 +350,3 @@ enum AttemptStatus {
 
   @@schema("public")
 }
-
-model Expense {
-  id          String   @id @default(uuid()) @db.Uuid
-  owner_id    String   @db.Uuid
-  title       String
-  amount      Decimal  @db.Decimal(10, 2)
-  date        DateTime @db.Date
-  category    String
-  status      String?  @default("paid")
-  created_at  DateTime @default(now()) @db.Timestamptz(6)
-  owner       Profile  @relation(fields: [owner_id], references: [id])
-
-  @@map("expenses")
-  @@schema("public")
-}
-
-model Complaint {
-  id          String    @id @default(uuid()) @db.Uuid
-  student_id  String    @db.Uuid
-  owner_id    String    @db.Uuid
-  title       String
-  description String
-  category    String
-  status      String    @default("PENDING")
-  priority    String    @default("MEDIUM")
-  resolved_at DateTime? @db.Timestamptz(6)
-  comment     String?
-  created_at  DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at  DateTime? @updatedAt @db.Timestamptz(6)
-  student     Student   @relation(fields: [student_id], references: [id])
-
-  @@map("complaints")
-  @@schema("public")
-}
-

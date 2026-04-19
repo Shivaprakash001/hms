@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyToken } from "./lib/auth-edge";
 
 const PUBLIC_ROUTES = [
+  "/api/health",
   "/api/auth/login",
   "/api/auth/register",
   "/api/auth/refresh",
+  "/api/auth/google-callback",
 ];
 
 /**
