@@ -184,7 +184,7 @@ export const billingService = {
 // --- Student Services ---
 export const studentService = {
     getAll: async (params) => {
-        const response = await api.get('/students/', { params });
+        const response = await api.get('/students', { params });
         return response.data;
     },
     getById: async (id) => {
@@ -240,7 +240,7 @@ export const studentService = {
         return response.data;
     },
     create: async (data) => {
-        const response = await api.post('/students/', data);
+        const response = await api.post('/students', data);
         return response.data;
     },
     update: async (id, data) => {
@@ -280,7 +280,7 @@ export const studentService = {
 // --- Room Services ---
 export const roomService = {
     getAll: async (params) => {
-        const response = await api.get('/rooms/', { params });
+        const response = await api.get('/rooms', { params });
         return response.data;
     },
     getById: async (id) => {
@@ -292,7 +292,7 @@ export const roomService = {
         return response.data;
     },
     create: async (data) => {
-        const response = await api.post('/rooms/', data);
+        const response = await api.post('/rooms', data);
         return response.data;
     },
     update: async (id, data) => {
@@ -308,7 +308,7 @@ export const roomService = {
 // --- Allocation Services ---
 export const allocationService = {
     allocate: async (data) => {
-        const response = await api.post('/allocations/', data);
+        const response = await api.post('/allocations', data);
         return response.data;
     },
     end: async (allocationId, data) => {
@@ -337,7 +337,7 @@ export const allocationService = {
 // --- Payment Services ---
 export const paymentService = {
     getAll: async (params) => {
-        const response = await api.get('/payments/', { params });
+        const response = await api.get('/payments', { params });
         return response.data;
     },
     getAllDues: async (params) => {
@@ -438,11 +438,11 @@ export const paymentService = {
 // --- Expense Service ---
 export const expenseService = {
     getAll: async () => {
-        const response = await api.get('/expenses/');
+        const response = await api.get('/expenses');
         return response.data;
     },
     create: async (data) => {
-        const response = await api.post('/expenses/', data);
+        const response = await api.post('/expenses', data);
         return response.data;
     },
     update: async (id, data) => {
@@ -494,7 +494,7 @@ export const dashboardService = {
 // --- Activity Service ---
 export const activityService = {
     getAll: async (params = {}) => {
-        const response = await requestWithRetry(() => api.get('/activity/', { params }));
+        const response = await requestWithRetry(() => api.get('/activity', { params }));
         return response.data;
     }
 };
@@ -502,7 +502,7 @@ export const activityService = {
 // --- Notification Service ---
 export const notificationService = {
     getAll: async () => {
-        const response = await api.get('/notifications/');
+        const response = await api.get('/notifications');
         return response.data;
     },
     markAsRead: async (id) => {

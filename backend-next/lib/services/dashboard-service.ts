@@ -16,14 +16,20 @@ export class DashboardService {
         }, 
         select: { amount_paid: true } 
       }),
-      // Assuming costs (expenses) table exists in schema, otherwise skip
-      prisma.$queryRaw`SELECT SUM(amount) as total FROM "Expense" WHERE owner_id = ${userId}::uuid AND date >= ${monthStart} AND date < ${nextMonth}` as Promise<any>
+      prisma.expense.aggregate({
+        where: {
+          owner_id: userId,
+          date: { gte: monthStart, lt: nextMonth },
+        },
+        _sum: { amount: true },
+      }),
     ]);
 
     const totalTenants = students.length;
     const activeTenants = students.filter((s: any) => s.status === "ACTIVE").length;
     const totalCapacity = rooms.reduce((sum: number, r: any) => sum + r.capacity, 0);
     const currentRevenue = payments.reduce((sum: number, p: any) => sum + Number(p.amount_paid), 0);
+    const monthlyExpenses = Number(costs?._sum?.amount || 0);
     const occupancyRate = totalCapacity > 0 ? Math.round((activeTenants / totalCapacity) * 100) : 0;
 
     // Pending dues calculation
@@ -59,6 +65,7 @@ export class DashboardService {
       vacant_beds: Math.max(totalCapacity - activeTenants, 0),
       occupancy_rate: occupancyRate,
       revenue: currentRevenue,
+      expenses_this_month: monthlyExpenses,
       rent_collected_this_month: currentRevenue,
       pending_dues: pendingTotal,
       overdue_amount: overdueTotal,
