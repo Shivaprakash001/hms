@@ -270,7 +270,7 @@ export class AuthService {
       name: profile.name,
       user_id: profile.id,
       student_id: profile.student_details?.id || null,
-      is_profile_completed: profile.student_details ? profile.student_details.student_details.profile_completed : profile.is_profile_completed,
+      is_profile_completed: profile.student_details ? profile.student_details.profile_completed : profile.is_profile_completed,
     };
   }
 }
