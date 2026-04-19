@@ -12,25 +12,49 @@ export class ExpenseService {
     owner_id: string;
     title: string;
     amount: number;
-    date: Date;
+    date: Date | string;
     category: string;
     status?: string;
   }) {
+    // Parse date safely — handle both Date objects and ISO strings
+    let parsedDate: Date;
+    if (data.date instanceof Date) {
+      parsedDate = data.date;
+    } else {
+      parsedDate = new Date(data.date);
+    }
+
+    // Validate the parsed date
+    if (isNaN(parsedDate.getTime())) {
+      throw new Error("VALIDATION: Invalid date provided");
+    }
+
     return prisma.expense.create({
       data: {
-        ...data,
-        amount: data.amount
+        owner_id: data.owner_id,
+        title: data.title,
+        amount: data.amount,
+        date: parsedDate,
+        category: data.category,
+        status: data.status || "paid",
       }
     });
   }
 
   async updateExpense(expenseId: string, ownerId: string, data: any) {
+    const updateData: any = {};
+    if (data.title !== undefined) updateData.title = data.title;
+    if (data.amount !== undefined) updateData.amount = Number(data.amount);
+    if (data.category !== undefined) updateData.category = data.category;
+    if (data.status !== undefined) updateData.status = data.status;
+    if (data.date !== undefined) {
+      const d = new Date(data.date);
+      if (!isNaN(d.getTime())) updateData.date = d;
+    }
+
     return prisma.expense.update({
       where: { id: expenseId, owner_id: ownerId },
-      data: {
-        ...data,
-        ...(data.amount && { amount: data.amount })
-      }
+      data: updateData
     });
   }
 

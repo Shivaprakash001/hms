@@ -32,13 +32,24 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
+
+    if (!body.title || !body.amount || !body.date || !body.category) {
+      return apiError("Missing required fields: title, amount, date, category", "VALIDATION_ERROR", 400);
+    }
+
     const expense = await expenseService.createExpense({
-      ...body,
       owner_id: session.sub,
-      date: new Date(body.date)
+      title: body.title,
+      amount: Number(body.amount),
+      date: body.date,
+      category: body.category,
+      status: body.status || "paid",
     });
     return apiResponse(expense, 201);
   } catch (error: any) {
-    return apiError(error.message || "Failed to create expense");
+    const msg = String(error?.message || "");
+    if (msg.startsWith("VALIDATION"))
+      return apiError(msg.split(": ")[1] ?? msg, "VALIDATION_ERROR", 400);
+    return apiError(msg || "Failed to create expense");
   }
 }
