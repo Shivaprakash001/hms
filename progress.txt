@@ -14,7 +14,8 @@
 - Dues Reporting & Obligations Waiver
 - Payment History aggregation (Student & Owner)
 
-## Phase 4: Support & Notifications [PENDING]
+## Phase 4: Support & Notifications [COMPLETED]
+
 - In-app notifications
 - Email alerts
 - Export to Excel/PDF reports

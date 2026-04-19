@@ -165,8 +165,82 @@ export class AuthService {
       owner_id: session.owner_id
     };
   }
+  async googleLogin(code: string, redirectUri?: string) {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    const effectiveRedirectUri = redirectUri || process.env.GOOGLE_REDIRECT_URI || "https://hms-sand-five.vercel.app/callback";
+
+    // 1. Exchange code for tokens
+    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: clientId!,
+        client_secret: clientSecret!,
+        redirect_uri: effectiveRedirectUri,
+        grant_type: "authorization_code",
+      }),
+    });
+
+    if (!tokenRes.ok) {
+      throw new Error("UNAUTHORIZED: Failed to exchange Google code");
+    }
+
+    const { access_token } = await tokenRes.json();
+
+    // 2. Get user info
+    const userRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+      headers: { Authorization: `Bearer ${access_token}` },
+    });
+
+    if (!userRes.ok) {
+      throw new Error("UNAUTHORIZED: Failed to get Google user info");
+    }
+
+    const { email, name } = await userRes.json();
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // 3. Find or Create Profile
+    let profile = await prisma.profile.findUnique({
+      where: { email: normalizedEmail },
+      include: { student: true }
+    });
+
+    if (!profile) {
+      // Create new profile for first-time Google login (default to OWNER/ADMIN for now as per Python)
+      profile = await prisma.profile.create({
+        data: {
+          id: crypto.randomUUID(),
+          email: normalizedEmail,
+          name: name || "User",
+          role: "OWNER",
+          is_active: true,
+        },
+        include: { student: true }
+      });
+    }
+
+    // 4. Create local JWT
+    const token = await generateToken({
+      sub: profile.id,
+      role: profile.role,
+      email: profile.email,
+    });
+
+    return {
+      access_token: token,
+      token_type: "bearer",
+      role: profile.role,
+      name: profile.name,
+      user_id: profile.id,
+      student_id: profile.student?.id || null,
+      is_profile_completed: profile.student ? profile.student.profile_completed : profile.is_profile_completed,
+    };
+  }
 }
 
 export const authService = new AuthService();
+
 
 
