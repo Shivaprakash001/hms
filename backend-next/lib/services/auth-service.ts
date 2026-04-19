@@ -1,8 +1,7 @@
-import { prisma } from "../db";
+import { prisma, supabase } from "../db";
 import { verifyPassword, hashPassword, generateToken } from "../auth";
 import { z } from "zod";
 import { LoginSchema } from "../validators";
-import { eventSystem } from "../events";
 
 export class AuthService {
   async login(email: string, password: string) {
@@ -38,7 +37,6 @@ export class AuthService {
       sub: profile.id,
       role: profile.role,
       email: profile.email,
-      studentId,
     });
 
     return {
@@ -52,45 +50,95 @@ export class AuthService {
     };
   }
 
-  async registerOwner(data: any) {
-    const existing = await prisma.profile.findUnique({ where: { email: data.email } });
+  async registerOwner(data: {
+    email: string;
+    password: string;
+    name: string;
+    phone?: string;
+    hostel_name: string;
+    hostel_phone: string;
+    hostel_address: string;
+    hostel_city: string;
+    hostel_state: string;
+    hostel_pincode: string;
+    upi_id?: string;
+    gst_number?: string;
+  }) {
+    const normalizedEmail = data.email.trim().toLowerCase();
+
+    // 1. Check for existing profile
+    const existing = await prisma.profile.findUnique({ where: { email: normalizedEmail } });
     if (existing) throw new Error("ALREADY_EXISTS: Email already registered");
 
+    // 2. Create Supabase Auth user to get a UUID
+    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      email: normalizedEmail,
+      password: data.password,
+      email_confirm: true,
+    });
+
+    if (authError || !authData.user) {
+      throw new Error("INTERNAL: Failed to create auth user");
+    }
+
+    const userId = authData.user.id;
+
+    // 3. Hash password and create profile + hostel in one transaction
     const hashedPassword = await hashPassword(data.password);
 
     const profile = await prisma.profile.create({
       data: {
-        email: data.email,
+        id: userId,
+        email: normalizedEmail,
         password_hash: hashedPassword,
         name: data.name,
-        phone: data.phone,
+        phone: data.phone || null,
         role: "OWNER",
-        hostels: data.hostel_name ? {
+        hostels: {
           create: {
             name: data.hostel_name,
-            phone: data.hostel_phone || data.phone,
-            address: data.hostel_address || "",
+            phone: data.hostel_phone,
+            address: data.hostel_address,
             city: data.hostel_city,
-          }
-        } : undefined
+            state: data.hostel_state,
+            pincode: data.hostel_pincode,
+            upi_id: data.upi_id || null,
+            gst_number: data.gst_number || null,
+          },
+        },
       },
+      include: { hostels: true },
     });
 
-    await eventSystem.trigger("owner_registered", { profileId: profile.id });
     return profile;
   }
 
+  async changePassword(userId: string, oldPassword: string, newPassword: string) {
+    const profile = await prisma.profile.findUnique({ where: { id: userId } });
+    if (!profile) throw new Error("NOT_FOUND: User not found");
+
+    const isValid = await verifyPassword(oldPassword, profile.password_hash || "");
+    if (!isValid) throw new Error("UNAUTHORIZED: Current password is incorrect");
+
+    const newHash = await hashPassword(newPassword);
+    await prisma.profile.update({
+      where: { id: userId },
+      data: { password_hash: newHash },
+    });
+
+    return { success: true, message: "Password updated successfully" };
+  }
+
   async logout(token: string) {
-    // In JWT setup, we typically blacklist or just rely on client side deletion.
-    // The FastAPI version inserts into token_blacklist.
     await prisma.tokenBlacklist.create({
       data: {
         token,
-        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000), // Default 24h
-      }
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
     });
     return { success: true };
   }
 }
 
 export const authService = new AuthService();
+

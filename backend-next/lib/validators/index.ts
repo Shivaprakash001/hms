@@ -8,9 +8,22 @@ export const LoginSchema = z.object({
 
 export const RegisterSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(8),
+  password: z.string().min(8).max(64),
   name: z.string().min(2),
-  role: z.enum(["OWNER", "WARDEN", "ADMIN", "STUDENT"]).default("OWNER"),
+  phone: z.string().optional(),
+  hostel_name: z.string().min(2).max(200),
+  hostel_phone: z.string().min(10).max(15),
+  hostel_address: z.string().min(5).max(500),
+  hostel_city: z.string().min(2).max(100),
+  hostel_state: z.string().min(2).max(100),
+  hostel_pincode: z.string().min(4).max(10),
+  upi_id: z.string().max(100).optional(),
+  gst_number: z.string().max(30).optional(),
+});
+
+export const ChangePasswordSchema = z.object({
+  old_password: z.string().min(1),
+  new_password: z.string().min(8),
 });
 
 // --- Student & Enrollment Schemas ---

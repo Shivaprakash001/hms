@@ -47,6 +47,23 @@ export class PropertyService {
     };
   }
 
+  async updateOwnerProfile(userId: string, data: { name?: string; phone?: string }) {
+    const updateData: any = {};
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.phone !== undefined) updateData.phone = data.phone;
+
+    if (Object.keys(updateData).length === 0) {
+      throw new Error("VALIDATION: No valid fields to update");
+    }
+
+    await prisma.profile.update({
+      where: { id: userId },
+      data: updateData,
+    });
+
+    return this.getOwnerProfile(userId);
+  }
+
   async updateHostel(userId: string, data: any) {
     const profile = await prisma.profile.findUnique({
       where: { id: userId },
@@ -57,40 +74,62 @@ export class PropertyService {
 
     const hostel = profile.hostels[0];
 
+    const mapped: any = {};
+    if (data.name ?? data.hostel_name) mapped.name = data.name ?? data.hostel_name;
+    if (data.phone ?? data.hostel_phone) mapped.phone = data.phone ?? data.hostel_phone;
+    if (data.address !== undefined) mapped.address = data.address;
+    if (data.city !== undefined) mapped.city = data.city;
+    if (data.state !== undefined) mapped.state = data.state;
+    if (data.pincode !== undefined) mapped.pincode = data.pincode;
+    if (data.upi_id !== undefined) mapped.upi_id = data.upi_id;
+    if (data.gst_number !== undefined) mapped.gst_number = data.gst_number;
+
     if (hostel) {
-      return prisma.hostel.update({
+      await prisma.hostel.update({
         where: { id: hostel.id },
-        data: {
-          name: data.name ?? data.hostel_name,
-          phone: data.phone ?? data.hostel_phone,
-          address: data.address,
-          city: data.city,
-          state: data.state,
-          pincode: data.pincode,
-          upi_id: data.upi_id,
-          gst_number: data.gst_number,
-          currency: data.currency,
-          rent_cycle: data.rent_cycle,
-          receipt_prefix: data.receipt_prefix,
-          timezone: data.timezone,
-          auto_rent_day: data.auto_rent_day,
-          phonepe_merchant_id: data.phonepe_merchant_id,
-        }
+        data: mapped,
       });
     } else {
-      return prisma.hostel.create({
+      await prisma.hostel.create({
         data: {
           owner_id: userId,
-          name: data.name ?? data.hostel_name ?? "My Hostel",
-          phone: data.phone ?? data.hostel_phone ?? "",
-          address: data.address ?? "",
-          city: data.city,
-          state: data.state,
-          pincode: data.pincode,
-          ...data
-        }
+          name: mapped.name || "My Hostel",
+          phone: mapped.phone || "",
+          address: mapped.address || "",
+          ...mapped,
+        },
       });
     }
+
+    return this.getOwnerProfile(userId);
+  }
+
+  async updatePreferences(userId: string, data: any) {
+    const profile = await prisma.profile.findUnique({
+      where: { id: userId },
+      include: { hostels: { where: { is_active: true }, take: 1 } },
+    });
+
+    if (!profile) throw new Error("NOT_FOUND: Profile not found");
+    const hostel = profile.hostels[0];
+    if (!hostel) throw new Error("VALIDATION: Please complete Hostel Details before setting preferences");
+
+    const allowed = ["currency", "rent_cycle", "receipt_prefix", "timezone", "auto_rent_day", "phonepe_merchant_id"];
+    const updateData: any = {};
+    for (const key of allowed) {
+      if (data[key] !== undefined) updateData[key] = data[key];
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      throw new Error("VALIDATION: No valid preference fields to update");
+    }
+
+    await prisma.hostel.update({
+      where: { id: hostel.id },
+      data: updateData,
+    });
+
+    return this.getOwnerProfile(userId);
   }
 
   async getFloorsWithRooms(ownerId: string) {
@@ -155,6 +194,96 @@ export class PropertyService {
     });
 
     return Array.from(floorsMap.values()).sort((a, b) => a.number - b.number);
+  }
+
+  async getRoomOverview(roomId: string, ownerId: string) {
+    const room = await prisma.room.findFirst({
+      where: { id: roomId, hostel: { owner_id: ownerId } },
+      include: {
+        allocations: {
+          where: { is_active: true, end_date: null },
+          include: {
+            student: {
+              include: {
+                profile: true,
+                obligations: {
+                  where: { status: { not: "WAIVED" } },
+                  include: { payments: true }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!room) throw new Error("NOT_FOUND: Room not found");
+
+    const tenants = room.allocations.map((a: any) => {
+      const student = a.student;
+      const profile = student.profile;
+      const totalAmount = student.obligations.reduce((sum: number, o: any) => sum + Number(o.amount), 0);
+      const totalPaid = student.obligations.reduce((sum: number, o: any) => 
+        sum + o.payments.reduce((pSum: number, p: any) => pSum + Number(p.amount_paid), 0), 0);
+      const pendingDues = totalAmount - totalPaid;
+
+      // Extract last payment info
+      const allPayments = student.obligations.flatMap((o: any) => o.payments);
+      const lastPayment = allPayments.length > 0 
+        ? allPayments.sort((p1: any, p2: any) => new Date(p2.payment_date).getTime() - new Date(p1.payment_date).getTime())[0]
+        : null;
+
+      let paymentStatus = "PENDING";
+      if (pendingDues <= 0) paymentStatus = lastPayment ? "PAID" : "NO_HISTORY";
+      else if (lastPayment) paymentStatus = "PARTIAL";
+
+      return {
+        student_id: student.id,
+        profile_id: profile.id,
+        name: profile.name,
+        email: profile.email,
+        phone: profile.phone,
+        joined_date: a.start_date,
+        rent: Number(student.monthly_rent),
+        payment_status: paymentStatus,
+        last_payment: lastPayment ? lastPayment.payment_date : null,
+        last_payment_amount: lastPayment ? Number(lastPayment.amount_paid) : 0,
+        pending_dues: pendingDues,
+        status: student.status,
+        obligations: student.obligations
+      };
+    });
+
+    const floorNum = room.floor ?? this.extractFloor(room.room_no);
+    const capacity = room.capacity;
+    const occupied = tenants.length;
+
+    // Gather latest payments for the room
+    const payments = tenants
+      .filter(t => t.last_payment)
+      .map(t => ({
+        student_id: t.student_id,
+        student_name: t.name,
+        payment_date: t.last_payment,
+        amount_paid: t.last_payment_amount
+      }))
+      .sort((p1, p2) => new Date(p2.payment_date).getTime() - new Date(p1.payment_date).getTime());
+
+    return {
+      room: {
+        id: room.id,
+        room_id: room.id,
+        room_no: room.room_no,
+        floor: floorNum,
+        capacity: capacity,
+        occupied: occupied,
+        remaining_capacity: Math.max(capacity - occupied, 0),
+        status: occupied === 0 ? "Vacant" : (occupied >= capacity ? "Full" : "Occupied")
+      },
+      tenants,
+      payments,
+      pending_dues: tenants.reduce((sum, t) => sum + t.pending_dues, 0)
+    };
   }
 
   private extractFloor(roomNo: string): number {

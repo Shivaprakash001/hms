@@ -144,8 +144,58 @@ export class PaymentService {
     });
   }
 
+  async getStudentPaymentHistory(studentId: string) {
+    const student = await prisma.student.findUnique({
+      where: { id: studentId },
+      include: {
+        obligations: {
+          orderBy: { due_date: "desc" },
+          include: { payments: { orderBy: { payment_date: "desc" } } }
+        }
+      }
+    });
+
+    if (!student) throw new Error("NOT_FOUND: Student not found");
+
+    let totalDue = 0;
+    let totalPaid = 0;
+    const allPayments: any[] = [];
+    const formattedObligations = student.obligations.map((o: any) => {
+      const obligationPaid = o.payments.reduce((sum: number, p: any) => sum + Number(p.amount_paid), 0);
+      const remainingDue = Number(o.amount) - obligationPaid;
+      
+      if (o.status !== "WAIVED") totalDue += Number(o.amount);
+      totalPaid += obligationPaid;
+      
+      o.payments.forEach((p: any) => allPayments.push(p));
+
+      return {
+        id: o.id,
+        rent_month: o.rent_month,
+        due_date: o.due_date,
+        amount: Number(o.amount),
+        status: o.status,
+        remaining_due: o.status === "WAIVED" ? 0 : remainingDue,
+        payments: o.payments.map((p: any) => ({
+          id: p.id,
+          amount_paid: Number(p.amount_paid),
+          payment_date: p.payment_date,
+          method: p.payment_method
+        }))
+      };
+    });
+
+    return {
+      student_id: studentId,
+      obligations: formattedObligations,
+      payments: allPayments.sort((a, b) => new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime()),
+      total_due: totalDue,
+      total_paid: totalPaid,
+      outstanding_balance: Math.max(totalDue - totalPaid, 0)
+    };
+  }
+
   async reconcilePendingAttempts() {
-    // Cron logic implementation
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const pending = await prisma.paymentAttempt.findMany({
       where: {
@@ -154,7 +204,6 @@ export class PaymentService {
       }
     });
 
-    // In a real app, we'd loop and call gateway API here
     return { processed: pending.length };
   }
 }

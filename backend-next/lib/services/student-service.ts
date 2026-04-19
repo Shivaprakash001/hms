@@ -203,6 +203,218 @@ export class StudentService {
 
     return request;
   }
+
+  async listReactivationRequests(ownerId: string) {
+    const requests = await prisma.reactivationRequest.findMany({
+      where: { owner_id: ownerId },
+      orderBy: { created_at: "desc" },
+      include: {
+        student: {
+          include: {
+            profile: true,
+            allocations: {
+              where: { is_active: true, end_date: null },
+              include: { room: true }
+            }
+          }
+        }
+      }
+    });
+
+    return requests.map(req => {
+      const student = req.student;
+      const profile = student.profile;
+      const room = student.allocations[0]?.room;
+      return {
+        id: req.id,
+        student_id: req.student.id,
+        owner_id: req.owner_id,
+        current_status: req.current_status,
+        status: req.status,
+        notes: req.notes,
+        created_at: req.created_at,
+        processed_at: req.processed_at,
+        processed_by: req.processed_by,
+        student_name: profile.name,
+        student_email: profile.email,
+        student_phone: profile.phone,
+        room_no: room?.room_no || null
+      };
+    });
+  }
+
+  async processReactivationRequest(requestId: string, ownerId: string, action: string, notes?: string) {
+    const request = await prisma.reactivationRequest.findFirst({
+      where: { id: requestId, owner_id: ownerId }
+    });
+
+    if (!request) throw new Error("NOT_FOUND: Reactivation request not found");
+    if (request.status !== "PENDING") throw new Error("VALIDATION: Request already processed");
+
+    const actionNorm = action.toLowerCase();
+    if (!["approve", "reject"].includes(actionNorm)) throw new Error("VALIDATION: Action must be approve or reject");
+
+    const newStatus = actionNorm === "approve" ? "APPROVED" : "REJECTED";
+
+    if (actionNorm === "approve") {
+      await prisma.student.update({
+        where: { id: request.student_id },
+        data: { status: "ACTIVE" }
+      });
+      await eventSystem.trigger("student_reactivated", { studentId: request.student_id, userId: ownerId });
+    }
+
+    return await prisma.reactivationRequest.update({
+      where: { id: requestId },
+      data: {
+        status: newStatus,
+        notes: notes || null,
+        processed_at: new Date(),
+        processed_by: ownerId
+      }
+    });
+  }
+  async getOwnerTenantOverview(studentId: string, ownerId: string) {
+    const student = await prisma.student.findUnique({
+      where: { id: studentId },
+      include: {
+        profile: true,
+        allocations: {
+          where: { is_active: true, end_date: null },
+          include: { room: true },
+        },
+        obligations: {
+          include: { payments: true }
+        }
+      }
+    });
+
+    if (!student) throw new Error("NOT_FOUND: Tenant not found");
+    if (student.owner_id && student.owner_id !== ownerId) {
+      throw new Error("FORBIDDEN: You can only view your own tenants");
+    }
+
+    const currentRoom = student.allocations[0]?.room;
+    
+    // Calculate due and paid amounts
+    let totalDue = 0;
+    let totalPaid = 0;
+    const allPayments: any[] = [];
+    
+    student.obligations.forEach((o: any) => {
+      if (o.status !== "WAIVED") totalDue += Number(o.amount);
+      const paid = o.payments.reduce((sum: number, p: any) => sum + Number(p.amount_paid), 0);
+      totalPaid += paid;
+      o.payments.forEach((p: any) => allPayments.push(p));
+    });
+
+    const outstanding = totalDue - totalPaid;
+    const recentPayments = allPayments
+      .sort((a, b) => new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime())
+      .slice(0, 5)
+      .map(p => ({
+        id: p.id,
+        amount: Number(p.amount_paid),
+        date: p.payment_date,
+        method: p.payment_method,
+        status: "paid",
+        reference_number: p.reference_number
+      }));
+
+    let floor = "G";
+    if (currentRoom?.room_no && currentRoom.room_no.length >= 3) {
+      floor = currentRoom.room_no.substring(0, currentRoom.room_no.length - 2);
+    }
+
+    return {
+      id: student.id,
+      name: student.profile.name,
+      phone: student.phone_1 || student.profile.phone,
+      guardian_phone: student.phone_2 || student.profile.emergency_contact,
+      email: student.profile.email,
+      roll_number: student.roll_number,
+      course: student.course,
+      year_of_study: student.year_of_study,
+      section: student.section,
+      branch: student.branch,
+      college_name: student.college_name,
+      room_number: currentRoom?.room_no || null,
+      floor: floor,
+      joined_at: student.joined_on,
+      status: student.status,
+      rent: Number(student.monthly_rent),
+      total_paid: totalPaid,
+      total_due: totalDue,
+      outstanding: outstanding,
+      recent_payments: recentPayments
+    };
+  }
+
+  async createStudent(data: any, ownerId: string) {
+    // Note: Profile must be created first or linked.
+    return await prisma.student.create({
+      data: {
+        ...data,
+        owner_id: ownerId,
+      },
+      include: { profile: true },
+    });
+  }
+
+  async updateStudent(id: string, data: any, ownerId: string) {
+    const student = await prisma.student.findUnique({ where: { id } });
+    if (!student) throw new Error("NOT_FOUND: Student not found");
+    if (student.owner_id && student.owner_id !== ownerId) throw new Error("FORBIDDEN: You can only update your own tenants");
+
+    if (data.status === "LEFT") {
+      // Auto-end active allocations if any exists
+      await prisma.roomAllocation.updateMany({
+        where: { student_id: id, is_active: true, end_date: null },
+        data: { is_active: false, end_date: new Date() },
+      });
+    }
+
+    return await prisma.student.update({
+      where: { id },
+      data,
+      include: { profile: true },
+    });
+  }
+
+  async deleteStudent(id: string, ownerId: string) {
+    const student = await prisma.student.findUnique({ where: { id } });
+    if (!student) throw new Error("NOT_FOUND: Student not found");
+    if (student.owner_id && student.owner_id !== ownerId) throw new Error("FORBIDDEN: You can only delete your own tenants");
+
+    // Soft delete: status = LEFT
+    await prisma.roomAllocation.updateMany({
+      where: { student_id: id, is_active: true, end_date: null },
+      data: { is_active: false, end_date: new Date() },
+    });
+
+    return await prisma.student.update({
+      where: { id },
+      data: { status: "LEFT" },
+      include: { profile: true },
+    });
+  }
+
+  async reactivateStudent(id: string, rent: number, joinedOn: Date, ownerId: string) {
+    const student = await prisma.student.findUnique({ where: { id } });
+    if (!student) throw new Error("NOT_FOUND: Student not found");
+    if (student.owner_id && student.owner_id !== ownerId) throw new Error("FORBIDDEN: You can only reactivate your own tenants");
+    if (student.status !== "LEFT") throw new Error("VALIDATION: Only students with LEFT status can be reactivated");
+
+    return await prisma.student.update({
+      where: { id },
+      data: {
+        status: "ACTIVE",
+        monthly_rent: rent,
+        joined_on: joinedOn,
+      },
+      include: { profile: true },
+    });
+  }
 }
 
 export const studentService = new StudentService();
