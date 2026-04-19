@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     
     return apiResponse(result, 201);
   } catch (error: any) {
-    if (error.name === "ZodError") return apiError("Validation failed", "VALIDATION_ERROR", 400, error.errors);
+    if (error.name === "ZodError") return apiError("Validation failed", "VALIDATION_ERROR", 400);
     return apiError(error.message || "Failed to send invitation");
   }
 }

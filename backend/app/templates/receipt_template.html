@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Payment Receipt</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            color: #333;
+            padding: 36px;
+            line-height: 1.5;
+        }
+        @page { size: A4; margin: 0; }
+        .header { text-align: center; margin-bottom: 10px; }
+        .logo-wrap { margin-bottom: 8px; }
+        .logo {
+            max-height: 60px;
+            max-width: 220px;
+            object-fit: contain;
+        }
+        .hostel-name { font-size: 18px; font-weight: 700; }
+        .muted { color: #666; }
+        .title { text-align: center; font-size: 16px; font-weight: 700; margin: 8px 0 14px; }
+        .divider { border-top: 1px solid #ccc; margin: 10px 0; }
+        .meta { margin: 8px 0 6px; }
+        .meta-row { display: flex; gap: 10px; }
+        .meta-label { width: 90px; color: #555; }
+        .section { margin-top: 10px; }
+        .section-title { font-weight: 700; margin-bottom: 6px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+        th { text-align: left; border-bottom: 2px solid #ccc; padding: 6px 0; }
+        td { padding: 6px 0; border-bottom: 1px solid #eee; }
+        .right { text-align: right; }
+        .summary { text-align: right; margin-top: 8px; }
+        .summary-row { display: flex; justify-content: flex-end; gap: 20px; }
+        .summary-label { min-width: 120px; color: #555; }
+        .total { font-weight: 700; }
+        .footer { margin-top: 10px; }
+        .verify { margin-top: 8px; word-break: break-all; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        {% if hostel_logo_url %}
+        <div class="logo-wrap">
+            <img src="{{ hostel_logo_url }}" class="logo" alt="Hostel Logo" />
+        </div>
+        {% endif %}
+        <div class="hostel-name">{{ hostel_name }}</div>
+        <div class="muted">{{ hostel_address }}</div>
+        <div class="muted">Phone: {{ hostel_phone }} | Email: {{ hostel_email }}</div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="title">PAYMENT RECEIPT</div>
+
+    <div class="meta">
+        <div class="meta-row"><div class="meta-label">Receipt No</div><div>: {{ receipt_no }}</div></div>
+        <div class="meta-row"><div class="meta-label">Date</div><div>: {{ date }}</div></div>
+        <div class="meta-row"><div class="meta-label">Rent Month</div><div>: {{ rent_month }}</div></div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="section">
+        <div class="section-title">RECEIVED FROM</div>
+        <div class="meta-row"><div class="meta-label">Name</div><div>: {{ student_name }}</div></div>
+        <div class="meta-row"><div class="meta-label">Roll No</div><div>: {{ student_roll_number }}</div></div>
+        <div class="meta-row"><div class="meta-label">Room</div><div>: {{ room_number }}</div></div>
+        <div class="meta-row"><div class="meta-label">Phone</div><div>: {{ student_phone }}</div></div>
+    </div>
+
+    <div class="divider"></div>
+    <table>
+        <thead>
+            <tr>
+                <th>Description</th>
+                <th class="right">Qty</th>
+                <th class="right">Price</th>
+                <th class="right">Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>{{ description }}</td>
+                <td class="right">1</td>
+                <td class="right">₹{{ amount }}</td>
+                <td class="right">₹{{ amount }}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="summary">
+        <div class="summary-row"><div class="summary-label">Subtotal</div><div>₹{{ amount }}</div></div>
+        <div class="summary-row"><div class="summary-label">Discount</div><div>₹0</div></div>
+        <div class="summary-row"><div class="summary-label">Tax</div><div>₹0</div></div>
+        <div class="divider"></div>
+        <div class="summary-row total"><div class="summary-label">TOTAL</div><div>₹{{ amount }}</div></div>
+    </div>
+
+    <div class="section">
+        <div class="meta-row"><div class="meta-label">Payment Method</div><div>: {{ payment_method }}</div></div>
+        <div class="meta-row"><div class="meta-label">Transaction ID</div><div>: {{ transaction_id }}</div></div>
+    </div>
+
+    {% if verification_url %}
+    <div class="section verify">
+        <div class="section-title">Verify Receipt</div>
+        <div>{{ verification_url }}</div>
+    </div>
+    {% endif %}
+
+    <div class="footer">
+        <div class="muted">Generated: {{ generated_on }}</div>
+        <div class="muted">This is a system generated receipt.</div>
+    </div>
+</body>
+</html>
