@@ -183,6 +183,15 @@ export class PaymentService {
     const instance = PaymentProviderFactory.getProvider(provider, config);
 
     const merchantTxnId = `hms_${obligationId.replace(/-/g, "").substring(0, 12)}_${crypto.randomBytes(4).toString("hex")}`;
+
+    console.info("[payments.createIntent] creating attempt", {
+      obligationId,
+      userId,
+      studentId: studentId || null,
+      provider,
+      amount: validationAmount,
+      merchantTxnId,
+    });
     
     const attempt = await prisma.paymentAttempt.create({
         data: {
@@ -222,6 +231,12 @@ export class PaymentService {
             }
         });
     } catch (error) {
+            console.error("[payments.createIntent] provider create failed", {
+              attemptId: attempt.id,
+              provider,
+              merchantTxnId,
+              error: String(error),
+            });
         await prisma.paymentAttempt.update({
             where: { id: attempt.id },
             data: { status: "FAILED", raw_create_response: { error: String(error) } as any }
@@ -300,11 +315,22 @@ export class PaymentService {
         take: 20
     });
 
+    console.info("[payments.webhook] received", {
+      provider: providerStr,
+      pendingCandidates: attempts.length,
+      hasVerifyHeader: Boolean(headers?.["x-verify"] || headers?.["X-VERIFY"]),
+    });
+
     for (const attempt of attempts) {
         const { instance } = await this.getProviderInstance(attempt.owner_id, attempt.provider);
         try {
             const verification = await instance.verifyWebhook(headers, body);
             if (verification.merchant_txn_id === attempt.merchant_txn_id) {
+              console.info("[payments.webhook] matched attempt", {
+                attemptId: attempt.id,
+                merchantTxnId: attempt.merchant_txn_id,
+                status: verification.status,
+              });
                 return await this.finalizePaymentAttempt(
                     attempt.id,
                     verification.status,
@@ -318,6 +344,72 @@ export class PaymentService {
     }
 
     throw new Error("NOT_FOUND: Matching payment attempt not found or verification failed");
+  }
+
+  async verifyPaymentStatus(params: {
+    userId: string;
+    role: string;
+    studentId?: string;
+    attemptId?: string;
+    merchantTxnId?: string;
+    gatewayTxnId?: string;
+  }) {
+    const { userId, role, studentId, attemptId, merchantTxnId, gatewayTxnId } = params;
+
+    if (!attemptId && !merchantTxnId && !gatewayTxnId) {
+      throw new Error("BAD_REQUEST: attempt_id or merchant_txn_id or gateway_txn_id is required");
+    }
+
+    const attempt = await prisma.paymentAttempt.findFirst({
+      where: {
+        OR: [
+          ...(attemptId ? [{ id: attemptId }] : []),
+          ...(merchantTxnId ? [{ merchant_txn_id: merchantTxnId }] : []),
+          ...(gatewayTxnId ? [{ gateway_txn_id: gatewayTxnId }] : []),
+        ]
+      }
+    });
+
+    if (!attempt) throw new Error("NOT_FOUND: Payment attempt not found");
+
+    if (role === "STUDENT" && attempt.student_id !== studentId) {
+      throw new Error("FORBIDDEN: You can only verify your own attempts");
+    }
+    if (role === "OWNER" && attempt.owner_id !== userId) {
+      throw new Error("FORBIDDEN: You can only verify attempts for your hostel");
+    }
+
+    if (attempt.status === "SUCCESS") {
+      return {
+        attempt,
+        status: attempt.status,
+        source: "cached"
+      };
+    }
+
+    const { instance } = await this.getProviderInstance(attempt.owner_id, attempt.provider);
+    const fetched = await instance.fetchStatus(attempt.merchant_txn_id, gatewayTxnId || attempt.gateway_txn_id || undefined);
+
+    console.info("[payments.verify] fetched status", {
+      attemptId: attempt.id,
+      merchantTxnId: attempt.merchant_txn_id,
+      fromStatus: attempt.status,
+      fetchedStatus: fetched.status,
+      provider: attempt.provider,
+    });
+
+    const finalized = await this.finalizePaymentAttempt(
+      attempt.id,
+      fetched.status,
+      fetched.gateway_txn_id || undefined,
+      { source: "verify", payload: fetched.raw_status }
+    );
+
+    return {
+      attempt: finalized,
+      status: finalized.status,
+      source: "provider"
+    };
   }
 
   async waiveObligation(obligationId: string, userId: string) {
@@ -474,16 +566,76 @@ export class PaymentService {
     };
   }
 
-  async reconcilePendingAttempts() {
+  async reconcilePendingAttempts(options?: {
+    ownerId?: string;
+    attemptIds?: string[];
+  }) {
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const pending = await prisma.paymentAttempt.findMany({
       where: {
         status: "PENDING",
-        created_at: { gte: cutoff }
+        created_at: { gte: cutoff },
+        ...(options?.ownerId ? { owner_id: options.ownerId } : {}),
+        ...(options?.attemptIds?.length
+          ? {
+              OR: [
+                { id: { in: options.attemptIds } },
+                { merchant_txn_id: { in: options.attemptIds } },
+                { gateway_txn_id: { in: options.attemptIds } },
+              ]
+            }
+          : {})
       }
     });
 
-    return { processed: pending.length };
+    let success = 0;
+    let failed = 0;
+    let pendingCount = 0;
+    let expired = 0;
+    let cancelled = 0;
+    let errors = 0;
+
+    for (const attempt of pending) {
+      try {
+        const { instance } = await this.getProviderInstance(attempt.owner_id, attempt.provider);
+        const fetched = await instance.fetchStatus(attempt.merchant_txn_id, attempt.gateway_txn_id || undefined);
+
+        let nextStatus = fetched.status;
+        if (nextStatus === "PENDING" && attempt.expires_at && attempt.expires_at < new Date()) {
+          nextStatus = "EXPIRED";
+        }
+
+        const finalized = await this.finalizePaymentAttempt(
+          attempt.id,
+          nextStatus,
+          fetched.gateway_txn_id || undefined,
+          { source: "reconcile", payload: fetched.raw_status }
+        );
+
+        if (finalized.status === "SUCCESS") success++;
+        else if (finalized.status === "FAILED") failed++;
+        else if (finalized.status === "EXPIRED") expired++;
+        else if (finalized.status === "CANCELLED") cancelled++;
+        else pendingCount++;
+      } catch (error) {
+        errors++;
+        console.error("[payments.reconcile] failed to reconcile attempt", {
+          attemptId: attempt.id,
+          merchantTxnId: attempt.merchant_txn_id,
+          error: String(error),
+        });
+      }
+    }
+
+    return {
+      processed: pending.length,
+      success,
+      failed,
+      pending: pendingCount,
+      expired,
+      cancelled,
+      errors,
+    };
   }
 }
 
