@@ -27,6 +27,22 @@ export async function POST(req: NextRequest) {
     
     return apiResponse(result, 201);
   } catch (error: any) {
-    return apiError(error.message || "Failed to send invitation");
+    const rawMessage = String(error?.message || "Failed to send invitation");
+    const [maybeCode, ...rest] = rawMessage.split(":");
+    const normalizedCode = maybeCode?.trim();
+    const normalizedMessage = rest.length > 0 ? rest.join(":").trim() : rawMessage;
+
+    const statusMap: Record<string, number> = {
+      VALIDATION_ERROR: 400,
+      VALIDATION: 400,
+      BAD_REQUEST: 400,
+      FORBIDDEN: 403,
+      NOT_FOUND: 404,
+      ALREADY_EXISTS: 409,
+      INTERNAL_ERROR: 500,
+    };
+
+    const status = statusMap[normalizedCode] || 500;
+    return apiError(normalizedMessage, normalizedCode || "INVITATION_ERROR", status);
   }
 }

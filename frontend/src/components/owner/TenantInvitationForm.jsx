@@ -70,7 +70,7 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
             setSuccessData(response.data);
             if (onInviteSuccess) onInviteSuccess(response.data);
         } catch (err) {
-            const detail = err.response?.data?.detail;
+            const detail = err.response?.data?.detail ?? err.response?.data?.error?.message;
             let message = "Failed to send invitation.";
             if (typeof detail === 'string') {
                 message = detail;
