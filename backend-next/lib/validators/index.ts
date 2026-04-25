@@ -34,12 +34,15 @@ export const StudentProfileUpdateSchema = z.object({
   phone_1: z.string().optional(),
   phone_2: z.string().optional(),
   phone_3: z.string().optional(),
-  aadhaar_number: z.string().length(12).optional(),
-  personal_email: z.string().email().optional().nullable(),
+  aadhaar_number: z.string()
+    .transform((v) => v.replace(/\s+/g, ""))
+    .refine((v) => /^\d{12}$/.test(v), "Aadhaar number must be exactly 12 digits")
+    .optional(),
+  personal_email: z.string().trim().email().optional().nullable(),
   college_name: z.string().optional(),
   roll_number: z.string().optional(),
   course: z.string().optional(),
-  year_of_study: z.number().int().min(1).max(5).optional(),
+  year_of_study: z.coerce.number().int().min(1).max(6).optional(),
   section: z.string().optional(),
   branch: z.string().optional(),
   address: z.string().optional(),

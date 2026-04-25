@@ -159,10 +159,13 @@ const CompleteProfile = () => {
                 window.location.href = '/student/dashboard';
             }, 1200);
         } catch (err) {
+            const apiError = err?.response?.data?.error;
             const detail = err?.response?.data?.detail;
             let msg = 'Submission failed. Please try again.';
             
-            if (typeof detail === 'object') {
+            if (apiError?.message) {
+                msg = apiError.message;
+            } else if (typeof detail === 'object') {
                 msg = detail.message;
                 if (detail.details) {
                     msg = `${msg}: ${detail.details}`;

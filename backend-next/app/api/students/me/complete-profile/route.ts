@@ -32,7 +32,10 @@ export async function POST(req: NextRequest) {
 
     const validated = StudentProfileUpdateSchema.safeParse(parsedData);
     if (!validated.success) {
-      return apiError("Validation error", "VALIDATION_ERROR", 400);
+      const firstIssue = validated.error.issues[0];
+      const issuePath = firstIssue?.path?.join(".") || "profile_data";
+      const issueMessage = firstIssue?.message || "Invalid value";
+      return apiError(`Validation error at ${issuePath}: ${issueMessage}`, "VALIDATION_ERROR", 400);
     }
 
     // Pass data directly to self update method
