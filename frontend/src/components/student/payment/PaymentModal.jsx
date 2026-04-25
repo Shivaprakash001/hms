@@ -80,7 +80,8 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
                 window.location.href = intent.checkout_url;
             }
         } catch (intentError) {
-            const message = intentError?.response?.data?.detail?.message
+            const message = intentError?.response?.data?.error?.message
+                || intentError?.response?.data?.detail?.message
                 || intentError?.response?.data?.detail
                 || 'Unable to start payment right now.';
             setError(message);
