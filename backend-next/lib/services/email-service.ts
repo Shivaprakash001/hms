@@ -1,7 +1,7 @@
 import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const DEFAULT_FROM = process.env.EMAIL_FROM || "noreply@trishul.solutions";
+const DEFAULT_FROM = process.env.EMAIL_FROM || "noreply@mail.trishul.solutions";
 
 export class EmailService {
   private static normalizeProviderError(error: unknown): string {
