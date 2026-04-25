@@ -128,7 +128,6 @@ export class AuthService {
           name: data.name,
           phone: data.phone || null,
           role: "OWNER",
-          is_active: true,
           hostels: {
             create: {
               name: data.hostel_name,
@@ -165,7 +164,7 @@ export class AuthService {
     const { error: supabaseError } = await supabase.auth.admin.updateUserById(userId, {
       password: newPassword,
     });
-    
+
     if (supabaseError) {
       throw new Error(`INTERNAL: Failed to update auth provider password: ${supabaseError.message}`);
     }

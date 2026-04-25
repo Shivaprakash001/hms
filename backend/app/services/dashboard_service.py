@@ -6,6 +6,25 @@ from decimal import Decimal
 
 logger = get_logger(__name__)
 
+
+def _rows(response) -> list:
+    return response.data if response and getattr(response, "data", None) else []
+
+
+def _to_decimal(value) -> Decimal:
+    try:
+        return Decimal(str(value or 0))
+    except Exception:
+        return Decimal(0)
+
+
+def _safe_execute(label: str, fn, default=None):
+    try:
+        return fn()
+    except Exception as exc:
+        logger.error("Dashboard query failed for %s: %s", label, exc)
+        return default
+
 def get_dashboard_stats(user_id: str):
     logger.info(f"ENTERING get_dashboard_stats for user_id: {user_id}")
     # TEMPORARY TEST: If the dashboard shows exactly 123 in Revenue, we know this code is active.
@@ -21,15 +40,27 @@ def get_dashboard_stats(user_id: str):
             next_month = today.replace(month=today.month + 1, day=1)
         
         # 1. Base query for owner's students
-        students_res = supabase.table("students").select("id, status").eq("owner_id", user_id).execute()
-        students_data = students_res.data if students_res and students_res.data else []
+        students_data = _safe_execute(
+            "students",
+            lambda: _rows(
+                supabase.table("students").select("id, status").eq("owner_id", user_id).execute()
+            ),
+            [],
+        )
         all_student_ids = [s.get('id') for s in students_data if s.get('id')]
         total_tenants = len(students_data)
-        active_tenants = len([s for s in students_data if s.get('status') == 'ACTIVE'])
+        active_tenants = len([
+            s for s in students_data if str(s.get('status') or '').upper() == 'ACTIVE'
+        ])
 
         # 2. Total Capacity & Rooms
-        rooms_res = supabase.table("rooms").select("capacity").eq("owner_id", user_id).execute()
-        rooms_data = rooms_res.data if rooms_res and rooms_res.data else []
+        rooms_data = _safe_execute(
+            "rooms",
+            lambda: _rows(
+                supabase.table("rooms").select("capacity").eq("owner_id", user_id).execute()
+            ),
+            [],
+        )
         total_rooms = len(rooms_data)
         total_capacity = sum(int(r.get('capacity') or 0) for r in rooms_data)
         
@@ -39,24 +70,34 @@ def get_dashboard_stats(user_id: str):
         vacant_beds = max(total_capacity - active_tenants, 0)
 
         # 3. Revenue (Current Month Collected)
-        payments_curr_res = supabase.table("payments")\
-            .select("amount_paid")\
-            .gte("payment_date", month_start.isoformat())\
-            .lt("payment_date", next_month.isoformat())\
-            .eq("owner_id", user_id)\
-            .execute()
-        payments_curr_data = payments_curr_res.data if payments_curr_res and payments_curr_res.data else []
-        current_revenue = sum(Decimal(str(p.get('amount_paid') or 0)) for p in payments_curr_data)
+        payments_curr_data = _safe_execute(
+            "current_month_payments",
+            lambda: _rows(
+                supabase.table("payments")
+                .select("amount_paid")
+                .gte("payment_date", month_start.isoformat())
+                .lt("payment_date", next_month.isoformat())
+                .eq("owner_id", user_id)
+                .execute()
+            ),
+            [],
+        )
+        current_revenue = sum(_to_decimal(p.get('amount_paid')) for p in payments_curr_data)
 
         # 4. Expenses (Current Month)
-        expenses_res = supabase.table("expenses")\
-            .select("amount")\
-            .gte("date", month_start.isoformat())\
-            .lt("date", next_month.isoformat())\
-            .eq("owner_id", user_id)\
-            .execute()
-        expenses_data = expenses_res.data if expenses_res and expenses_res.data else []
-        current_expenses = sum(Decimal(str(e.get('amount') or 0)) for e in expenses_data)
+        expenses_data = _safe_execute(
+            "current_month_expenses",
+            lambda: _rows(
+                supabase.table("expenses")
+                .select("amount")
+                .gte("date", month_start.isoformat())
+                .lt("date", next_month.isoformat())
+                .eq("owner_id", user_id)
+                .execute()
+            ),
+            [],
+        )
+        current_expenses = sum(_to_decimal(e.get('amount')) for e in expenses_data)
 
         # Defaults for remaining metrics if no students
         pending_total = Decimal(0)
@@ -66,22 +107,29 @@ def get_dashboard_stats(user_id: str):
         # 5. Pending Dues (Total Unpaid across all time)
         if all_student_ids:
             try:
-                obligations_res = supabase.table("rent_obligations")\
-                    .select("id, amount, due_date, status")\
-                    .in_("student_id", all_student_ids)\
-                    .neq("status", "PAID")\
-                    .neq("status", "WAIVED")\
+                obligations_data = _rows(
+                    supabase.table("rent_obligations")
+                    .select("id, amount, due_date, status")
+                    .in_("student_id", all_student_ids)
+                    .neq("status", "PAID")
+                    .neq("status", "WAIVED")
                     .execute()
-                obligations_data = obligations_res.data if obligations_res and obligations_res.data else []
+                )
                 
                 for ob in obligations_data:
-                    rem = Decimal(str(ob.get('amount') or 0))
+                    rem = _to_decimal(ob.get('amount'))
                     # Check for partial payments
                     ob_id = ob.get('id')
                     if ob_id:
-                        p_res = supabase.table("payments").select("amount_paid").eq("obligation_id", ob_id).execute()
-                        if p_res and p_res.data:
-                            paid = sum(Decimal(str(p.get('amount_paid') or 0)) for p in p_res.data)
+                        p_res = _safe_execute(
+                            f"payments_for_obligation:{ob_id}",
+                            lambda: _rows(
+                                supabase.table("payments").select("amount_paid").eq("obligation_id", ob_id).execute()
+                            ),
+                            [],
+                        )
+                        if p_res:
+                            paid = sum(_to_decimal(p.get('amount_paid')) for p in p_res)
                             rem -= paid
                     
                     if rem > 0:
@@ -128,20 +176,32 @@ def get_monthly_stats(user_id: str, months: int = 6):
         end_date = (today + relativedelta(months=1)).replace(day=1) # up to start of next month
 
         # 1. Fetch payments for those months
-        payments_res = supabase.table("payments")\
-            .select("amount_paid, payment_date")\
-            .gte("payment_date", start_date.isoformat())\
-            .lt("payment_date", end_date.isoformat())\
-            .eq("owner_id", user_id)\
-            .execute()
+        payments_data = _safe_execute(
+            "monthly_payments",
+            lambda: _rows(
+                supabase.table("payments")
+                .select("amount_paid, payment_date")
+                .gte("payment_date", start_date.isoformat())
+                .lt("payment_date", end_date.isoformat())
+                .eq("owner_id", user_id)
+                .execute()
+            ),
+            [],
+        )
             
         # 2. Fetch obligations (due) for those months
-        obligations_res = supabase.table("rent_obligations")\
-            .select("amount, rent_month, status")\
-            .gte("rent_month", start_date.isoformat())\
-            .lt("rent_month", end_date.isoformat())\
-            .eq("owner_id", user_id)\
-            .execute()
+        obligations_data = _safe_execute(
+            "monthly_obligations",
+            lambda: _rows(
+                supabase.table("rent_obligations")
+                .select("amount, rent_month, status")
+                .gte("rent_month", start_date.isoformat())
+                .lt("rent_month", end_date.isoformat())
+                .eq("owner_id", user_id)
+                .execute()
+            ),
+            [],
+        )
 
         # 3. Aggregate by month
         monthly_data = {}
@@ -158,19 +218,22 @@ def get_monthly_stats(user_id: str, months: int = 6):
             }
 
         # Process payments
-        for p in payments_res.data:
-            p_date = date.fromisoformat(p['payment_date'].split('T')[0])
+        for p in payments_data:
+            payment_date_raw = str(p.get('payment_date') or '').split('T')[0]
+            if not payment_date_raw:
+                continue
+            p_date = date.fromisoformat(payment_date_raw)
             month_key = f"{p_date.year}-{p_date.month:02d}"
             if month_key in monthly_data:
-                monthly_data[month_key]['collected'] += Decimal(str(p['amount_paid']))
+                monthly_data[month_key]['collected'] += _to_decimal(p.get('amount_paid'))
 
         # Process obligations (excluding waived)
-        for e in obligations_res.data:
+        for e in obligations_data:
             if str(e.get('status') or '').upper() == 'WAIVED':
                 continue
             month_key = str(e.get('rent_month') or '').split('T')[0][:7]
             if month_key in monthly_data:
-                monthly_data[month_key]['due'] += Decimal(str(e.get('amount') or 0))
+                monthly_data[month_key]['due'] += _to_decimal(e.get('amount'))
 
         # Convert to list and sort chronologically
         result = list(monthly_data.values())
