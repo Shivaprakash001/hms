@@ -312,8 +312,22 @@ export const paymentService = {
         return response.data;
     },
     getStudentHistory: async (studentId) => {
-        const response = await api.get(`/payments/student/${studentId}`);
-        return response.data;
+        try {
+            if (studentId) {
+                const response = await api.get(`/payments/student/${studentId}`);
+                return response.data;
+            }
+            const meResponse = await api.get('/students/me/payments/history');
+            return meResponse.data;
+        } catch (error) {
+            // Backend-next serves student history from /students/me/payments/history.
+            // Keep backward compatibility with legacy /payments/student/:id callers.
+            if (error?.response?.status === 404) {
+                const fallback = await api.get('/students/me/payments/history');
+                return fallback.data;
+            }
+            throw error;
+        }
     },
     recordPayment: async (data) => {
         try {
