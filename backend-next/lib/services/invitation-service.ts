@@ -316,7 +316,14 @@ export class InvitationService {
     });
     if (!emailResult.sent) {
       logger.error(`Failed to resend invitation email to ${normalizedEmail}: ${String(emailResult.error || "unknown")}`);
-      throw new Error("INTERNAL_ERROR: EMAIL_DELIVERY_FAILED");
+      return {
+        message: "Invitation updated, but email delivery failed",
+        action: "RESENT",
+        email: normalizedEmail,
+        activation_link: activationLink,
+        email_sent: false,
+        email_error: String(emailResult.error || "unknown"),
+      };
     }
     
     logger.info(`Successfully resent invitation to ${normalizedEmail}`);
@@ -326,6 +333,7 @@ export class InvitationService {
       action: "RESENT",
       email: normalizedEmail,
       activation_link: activationLink,
+      email_sent: true,
     };
   }
 }
