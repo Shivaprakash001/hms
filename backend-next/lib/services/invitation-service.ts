@@ -114,7 +114,7 @@ export class InvitationService {
 
     // 6. Prepare and Send Email
     const baseUrl = process.env.NEXT_PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || "http://localhost:3000";
-    const activationLink = `${baseUrl}/auth/activate?token=${token}`;
+    const activationLink = `${baseUrl}/activate?token=${token}`;
 
     logger.info(`Attempting to send invitation email to ${normalizedEmail}`);
     const emailResult = await EmailService.sendInvitation({
@@ -295,7 +295,7 @@ export class InvitationService {
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
     const baseUrl = process.env.NEXT_PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || "http://localhost:3000";
-    const activationLink = `${baseUrl}/auth/activate?token=${token}`;
+    const activationLink = `${baseUrl}/activate?token=${token}`;
 
     await prisma.profile.update({
       where: { id: profile.id },
