@@ -37,7 +37,7 @@ const ActivateAccount = () => {
                 navigate('/login');
             }, 3000);
         } catch (err) {
-            setError(err.response?.data?.detail?.message || "Activation failed. The link might be expired.");
+            setError(err.response?.data?.error?.message || err.response?.data?.detail?.message || "Activation failed. The link might be expired.");
         } finally {
             setIsLoading(false);
         }

@@ -79,3 +79,9 @@ export const InvitationSchema = z.object({
   room_id: z.string().uuid(),
   monthly_rent: z.number().positive(),
 });
+
+export const ActivationSchema = z.object({
+  token: z.string().min(1),
+  password: z.string().min(8),
+  confirm_password: z.string().min(8),
+});
