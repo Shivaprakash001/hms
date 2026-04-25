@@ -4,6 +4,28 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const DEFAULT_FROM = process.env.EMAIL_FROM || "noreply@trishul.solutions";
 
 export class EmailService {
+  private static normalizeProviderError(error: unknown): string {
+    if (!error) return "Unknown email provider error";
+    if (typeof error === "string") return error;
+    if (error instanceof Error) return error.message;
+
+    if (typeof error === "object") {
+      const err = error as Record<string, unknown>;
+      const message = typeof err.message === "string" ? err.message : undefined;
+      const name = typeof err.name === "string" ? err.name : undefined;
+      const statusCode = typeof err.statusCode === "number" ? String(err.statusCode) : undefined;
+      const joined = [statusCode, name, message].filter(Boolean).join(" ");
+      if (joined) return joined.trim();
+      try {
+        return JSON.stringify(err);
+      } catch {
+        return String(err);
+      }
+    }
+
+    return String(error);
+  }
+
   static async sendEmail(to: string, subject: string, html: string) {
     if (!process.env.RESEND_API_KEY) {
       console.warn("RESEND_API_KEY not configured. Email simulation mode.");
@@ -21,13 +43,13 @@ export class EmailService {
 
       if (error) {
         console.error(`Resend error sending to ${to}:`, error);
-        return { sent: false, error };
+        return { sent: false, error: this.normalizeProviderError(error) };
       }
 
       return { sent: true, provider_id: data?.id };
     } catch (e: any) {
       console.error(`Email delivery error for ${to}:`, e);
-      return { sent: false, error: e.message };
+      return { sent: false, error: this.normalizeProviderError(e) };
     }
   }
 

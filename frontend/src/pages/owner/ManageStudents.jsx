@@ -127,10 +127,10 @@ export default function ManageStudents() {
         e.stopPropagation();
         if (!window.confirm(`Resend invitation to ${student.email}?`)) return;
         try {
-            await studentService.resendInvitation(student.email);
-            alert("Invitation resent successfully");
+            const res = await studentService.resendInvitation(student.email);
+            alert(res?.message || "Invitation resent successfully");
         } catch (err) {
-            alert("Error resending invitation: " + (err.response?.data?.detail?.message || err.message));
+            alert("Error resending invitation: " + (err.response?.data?.error?.message || err.message));
         }
     };
 

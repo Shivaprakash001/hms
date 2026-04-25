@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { invitationService } from "@/lib/services/invitation-service";
 
@@ -25,6 +25,18 @@ export async function POST(req: NextRequest) {
       id: session.sub,
       role: session.role,
     });
+
+    if (result?.email_sent === false) {
+      return NextResponse.json(
+        {
+          error: {
+            message: result.email_error || result.message || "Email delivery failed",
+            code: "EMAIL_DELIVERY_FAILED",
+          },
+        },
+        { status: 502 }
+      );
+    }
     
     return apiResponse(result, 200);
   } catch (error: any) {
