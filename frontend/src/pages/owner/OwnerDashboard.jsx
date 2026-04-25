@@ -42,6 +42,12 @@ const OwnerDashboard = () => {
             ]);
 
             if (summaryRes) {
+                const revenue = Number(summaryRes.rent_collected_this_month ?? summaryRes.revenue ?? 0);
+                const expensesThisMonth = Number(summaryRes.expenses_this_month ?? 0);
+                const netProfit = Number(
+                    summaryRes.net_profit ?? (revenue - expensesThisMonth)
+                );
+
                 setSummary({
                     total_tenants: summaryRes.total_tenants || 0,
                     active_tenants: summaryRes.active_tenants || 0,
@@ -50,9 +56,9 @@ const OwnerDashboard = () => {
                     pending_dues: summaryRes.pending_dues || 0,
                     overdue_amount: summaryRes.overdue_amount || 0,
                     overdue_count: summaryRes.overdue_count || 0,
-                    rent_collected_this_month: summaryRes.rent_collected_this_month || summaryRes.revenue || 0,
+                    rent_collected_this_month: revenue,
                     occupancy_rate: summaryRes.occupancy_rate || 0,
-                    net_profit: summaryRes.net_profit || 0,
+                    net_profit: netProfit,
                 });
             }
 
@@ -88,6 +94,10 @@ const OwnerDashboard = () => {
     }, [months]);
 
     if (loading) return <div className="p-8 text-center text-slate-400">Loading dashboard...</div>;
+
+    const hasFinancialData = collectionData.some(
+        (item) => Number(item.collected) > 0 || Number(item.due) > 0
+    );
 
     return (
         <div className="space-y-8 relative pb-20">
@@ -149,16 +159,25 @@ const OwnerDashboard = () => {
                         </select>
                     </div>
                     <div className="h-[320px] min-h-[320px] w-full min-w-0">
-                        <ResponsiveContainer width="100%" height="100%" minWidth={280} minHeight={320} debounce={50}>
-                            <BarChart data={collectionData} barGap={10} margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 700, fill: '#94a3b8' }} />
-                                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 700, fill: '#94a3b8' }} tickFormatter={(v) => `₹${Math.round(v / 1000)}k`} width={55} />
-                                <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '1.25rem', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '16px' }} formatter={(v) => `₹${Number(v).toLocaleString()}`} />
-                                <Bar dataKey="due" name="Dues" fill="#e2e8f0" radius={[8, 8, 0, 0]} maxBarSize={40} />
-                                <Bar dataKey="collected" name="Collected" fill="#6366f1" radius={[8, 8, 0, 0]} maxBarSize={40} />
-                            </BarChart>
-                        </ResponsiveContainer>
+                        {!hasFinancialData ? (
+                            <div className="h-full w-full rounded-2xl border-2 border-dashed border-slate-100 bg-slate-50/50 flex items-center justify-center text-center px-6">
+                                <div>
+                                    <p className="text-sm font-extrabold text-slate-500">No financial data yet</p>
+                                    <p className="text-xs font-semibold text-slate-400 mt-1">Add tenants, generate rent, or record payments to see trends.</p>
+                                </div>
+                            </div>
+                        ) : (
+                            <ResponsiveContainer width="100%" height="100%" minWidth={280} minHeight={320} debounce={50}>
+                                <BarChart data={collectionData} barGap={10} margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 700, fill: '#94a3b8' }} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 700, fill: '#94a3b8' }} tickFormatter={(v) => `₹${Math.round(v / 1000)}k`} width={55} />
+                                    <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '1.25rem', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '16px' }} formatter={(v) => `₹${Number(v).toLocaleString()}`} />
+                                    <Bar dataKey="due" name="Dues" fill="#e2e8f0" radius={[8, 8, 0, 0]} maxBarSize={40} />
+                                    <Bar dataKey="collected" name="Collected" fill="#6366f1" radius={[8, 8, 0, 0]} maxBarSize={40} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        )}
                     </div>
                 </div>
             </div>
