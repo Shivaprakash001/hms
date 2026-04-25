@@ -92,6 +92,64 @@ export class PaymentService {
     return { generated, skipped, total: allocations.length };
   }
 
+  async previewMonthlyRent(rentMonth: Date, ownerId?: string) {
+    const targetMonth = new Date(rentMonth.getFullYear(), rentMonth.getMonth(), 1);
+    const lastDay = new Date(targetMonth.getFullYear(), targetMonth.getMonth() + 1, 0).getDate();
+    const monthEndDate = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), lastDay);
+
+    const allocations = await prisma.roomAllocation.findMany({
+      where: {
+        start_date: { lte: monthEndDate },
+        OR: [
+          { end_date: null },
+          { end_date: { gte: targetMonth } }
+        ],
+        ...(ownerId && { student: { owner_id: ownerId } })
+      },
+      include: { student: true }
+    });
+
+    let tenantsToCreate = 0;
+    let tenantsAlreadyGenerated = 0;
+    let totalAmount = 0;
+
+    for (const alloc of allocations) {
+      if (!alloc.student) continue;
+
+      const amount = this.calculateProratedRent(
+        Number(alloc.student.monthly_rent),
+        alloc.start_date,
+        alloc.end_date,
+        targetMonth
+      );
+
+      if (amount <= 0) continue;
+
+      const existing = await prisma.rentObligation.findFirst({
+        where: {
+          student_id: alloc.student_id,
+          rent_month: targetMonth,
+        }
+      });
+
+      if (existing) {
+        tenantsAlreadyGenerated++;
+        continue;
+      }
+
+      tenantsToCreate++;
+      totalAmount += amount;
+    }
+
+    return {
+      tenants: allocations.length,
+      tenants_to_create: tenantsToCreate,
+      tenants_already_generated: tenantsAlreadyGenerated,
+      total_amount: Number(totalAmount.toFixed(2)),
+      rent_month: targetMonth.toISOString().slice(0, 10),
+    };
+  }
+
   async recordPayment(data: {
     obligationId: string;
     amountPaid: number;
@@ -640,4 +698,3 @@ export class PaymentService {
 }
 
 export const paymentService = new PaymentService();
-
