@@ -445,15 +445,15 @@ const requestWithRetry = async (fn, { retries = 2, delayMs = 1500 } = {}) => {
 // --- Dashboard Service ---
 export const dashboardService = {
     getSummary: async () => {
-        const response = await requestWithRetry(() => api.get('/owner/dashboard/summary'));
+        const response = await requestWithRetry(() => api.get('/dashboard/summary'));
         return response.data;
     },
     getStats: async () => {
-        const response = await requestWithRetry(() => api.get('/owner/dashboard/stats'));
+        const response = await requestWithRetry(() => api.get('/dashboard/stats'));
         return response.data;
     },
     getMonthlyStats: async (months = 6) => {
-        const response = await requestWithRetry(() => api.get(`/owner/dashboard/monthly-stats?months=${months}`));
+        const response = await requestWithRetry(() => api.get(`/dashboard/monthly-stats?months=${months}`));
         return response.data;
     }
 };
