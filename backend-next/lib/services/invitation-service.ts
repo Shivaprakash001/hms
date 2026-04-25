@@ -44,37 +44,50 @@ export class InvitationService {
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
 
-    // 4. Create Profile and Student
-    const newProfile = await prisma.profile.create({
-      data: {
-        email,
-        name,
-        phone,
-        role: "STUDENT",
-        is_active: false, // Student is not active until they accept invitation
-        owner_id: ownerId,
-        invitation_token: token,
-        invitation_expires_at: expiresAt,
-        student_details: {
-          create: {
-            id: crypto.randomUUID(),
-            owner_id: ownerId,
-            monthly_rent: Number(monthly_rent),
-            joined_on: new Date(),
-            status: "INVITED",
-          }
-        }
-      },
-      include: {
-        student_details: true
-      }
+    // 4. Create Profile + Student + Allocation atomically
+    const { profile: newProfile, student: newStudent } = await prisma.$transaction(async (tx) => {
+      const profile = await tx.profile.create({
+        data: {
+          email,
+          name,
+          phone,
+          role: "STUDENT",
+          is_active: false, // Student remains inactive until activation
+          owner_id: ownerId,
+          invitation_token: token,
+          invitation_expires_at: expiresAt,
+        },
+      });
+
+      const student = await tx.student.create({
+        data: {
+          id: crypto.randomUUID(),
+          profile_id: profile.id,
+          owner_id: ownerId,
+          monthly_rent: Number(monthly_rent),
+          joined_on: new Date(),
+          status: "INVITED",
+        },
+      });
+
+      // Reserve/track room assignment for invited tenant so resend + lifecycle remain consistent.
+      await tx.roomAllocation.create({
+        data: {
+          student_id: student.id,
+          room_id,
+          start_date: new Date(),
+          is_active: true,
+        },
+      });
+
+      return { profile, student };
     });
 
-    logger.info(`Successfully created profile ${newProfile.id} and student record ${newProfile.student_details?.id} with status INVITED`);
+    logger.info(`Successfully created profile ${newProfile.id} and student record ${newStudent.id} with status INVITED`);
 
     // 5. Log Activity
     await eventSystem.trigger("student_created", {
-      student_id: newProfile.student_details!.id,
+      student_id: newStudent.id,
       email,
       owner_id: ownerId,
       creator_id: ownerId,
@@ -97,7 +110,7 @@ export class InvitationService {
     logger.info(`Successfully queued invitation email for ${email}`);
 
     return {
-      student_id: newProfile.student_details!.id,
+      student_id: newStudent.id,
       email,
       activation_link: activationLink, // For dev/testing purposes
     };
