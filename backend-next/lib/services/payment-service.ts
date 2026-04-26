@@ -222,12 +222,34 @@ export class PaymentService {
     }
 
     const alreadyPaid = await this.getExistingPaidAmount(obligationId);
-    const validationAmount = amount || (Number(obligation.amount) - alreadyPaid);
+    const balance = Number(obligation.amount) - alreadyPaid;
+    const validationAmount = amount || balance;
+
+    // 1️⃣ Fetch Owner Preferences for Payment Rules
+    const hostel = await prisma.hostel.findFirst({
+        where: { owner_id: obligation.owner_id || "" },
+        select: { preferences_config: true } as any
+    });
+    const prefConfig = (hostel?.preferences_config as any) || {};
+
+    const allowPartial = prefConfig.allow_partial_payments ?? false;
+    const minAmount = Number(prefConfig.min_payment_amount) || 0;
 
     if (obligation.status === "WAIVED") throw new Error("BAD_REQUEST: Cannot pay for waived obligation");
     if (validationAmount <= 0) throw new Error("BAD_REQUEST: Obligation is already paid");
-    if (validationAmount > (Number(obligation.amount) - alreadyPaid)) {
-        throw new Error(`BAD_REQUEST: Payment exceeds balance. Remaining: ${Number(obligation.amount) - alreadyPaid}`);
+
+    // 2️⃣ Partial Payment Enforcement
+    if (!allowPartial && validationAmount < balance) {
+        throw new Error(`BAD_REQUEST: Partial payments are disabled by the owner. Full payment of ₹${balance} is required.`);
+    }
+
+    // 3️⃣ Minimum Amount Enforcement
+    if (validationAmount < minAmount && validationAmount < balance) {
+        throw new Error(`BAD_REQUEST: Minimum payment amount allowed is ₹${minAmount}.`);
+    }
+
+    if (validationAmount > balance) {
+        throw new Error(`BAD_REQUEST: Payment (₹${validationAmount}) exceeds outstanding balance (₹${balance}).`);
     }
 
     // Check for existing pending attempt

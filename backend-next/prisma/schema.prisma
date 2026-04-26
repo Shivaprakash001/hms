@@ -476,3 +476,18 @@ enum DocumentStatus {
 
   @@schema("public")
 }
+
+model SystemEventLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  event_type  String   // "RENT_GENERATED", "LATE_FEE_APPLIED", "REMINDER_SENT", "PAYMENT_RECEIVED", "PREFERENCE_CHANGED"
+  owner_id    String?  @db.Uuid
+  student_id  String?  @db.Uuid
+  metadata    Json?    // Structured payload — amounts, counts, trigger type, etc.
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([owner_id])
+  @@index([event_type])
+  @@index([created_at])
+  @@map("system_event_logs")
+  @@schema("public")
+}

@@ -1,7 +1,7 @@
 import { prisma } from "../db";
 import { eventSystem } from "../events";
-
-const LATE_FEE_AMOUNT = 200; // Customizable later per owner/hostel
+import { EmailService } from "./email-service";
+import { eventLog } from "./event-log-service";
 
 export class ReminderService {
 
@@ -32,10 +32,28 @@ export class ReminderService {
       }
     });
 
+    // Optimization: Batch fetch owner preferences
+    const ownerIds = Array.from(new Set(overdueObligations.map(ob => ob.student.owner_id).filter(Boolean))) as string[];
+    const hostelPrefs = await prisma.hostel.findMany({
+      where: { owner_id: { in: ownerIds }, is_active: true },
+      select: { owner_id: true, preferences_config: true } as any
+    });
+    const prefsMap = new Map(hostelPrefs.map(p => [p.owner_id, p]));
+
     let remindersSent = 0;
     let lateFeesAdded = 0;
 
     for (const ob of overdueObligations) {
+      const ownerId = ob.student.owner_id;
+      if (!ownerId) continue;
+
+      const prefs: any = prefsMap.get(ownerId);
+      const config = (prefs?.preferences_config as any) || {};
+
+      // Automation Guards
+      const autoReminders = config.auto_send_reminders ?? true;
+      const autoLateFees = config.auto_apply_late_fees ?? true;
+
       // Calculate age of the debt
       const dueTime = new Date(Date.UTC(ob.due_date.getFullYear(), ob.due_date.getMonth(), ob.due_date.getDate())).getTime();
       const diffTime = Math.abs(todayMid.getTime() - dueTime);
@@ -45,45 +63,74 @@ export class ReminderService {
       const lastReminderType = ob.reminders.length > 0 ? ob.reminders[0].reminder_type : null;
 
       try {
-        if (daysOverdue === 1 && lastReminderType !== "DUE_SOON") {
-          await this.triggerNotification(ob, "DUE_SOON");
-          remindersSent++;
-        } else if (daysOverdue === 5 && lastReminderType !== "WARNING") {
-          await this.triggerNotification(ob, "WARNING");
-          remindersSent++;
-        } else if (daysOverdue === 10 && lastReminderType !== "FINAL_NOTICE") {
-          await this.triggerNotification(ob, "FINAL_NOTICE");
-          remindersSent++;
-        } else if (daysOverdue >= 7) {
-          // Late Fee Engine: Check if a Late Fee already exists for this allocation + month
-          if (ob.allocation_id) {
-            const existingLateFee = await prisma.rentObligation.findUnique({
-              where: {
-                allocation_id_rent_month_obligation_type: {
-                  allocation_id: ob.allocation_id,
-                  rent_month: ob.rent_month,
-                  obligation_type: "LATE_FEE"
-                }
-              }
-            });
+        // 1️⃣ Automated Tiered Reminders
+        if (autoReminders) {
+          const sendGentle = config.reminder_day_1 ?? true;
+          const sendWarning = config.reminder_day_5 ?? true;
+          const sendFinal = config.reminder_day_10 ?? true;
 
-            if (!existingLateFee) {
-              await prisma.rentObligation.create({
-                data: {
-                  student_id: ob.student.id,
-                  allocation_id: ob.allocation_id,
-                  owner_id: ob.owner_id,
-                  rent_month: ob.rent_month,
-                  amount: LATE_FEE_AMOUNT,
-                  due_date: todayMid,
-                  status: "PENDING",
-                  obligation_type: "LATE_FEE"
+          if (daysOverdue === 1 && sendGentle && lastReminderType !== "DUE_SOON") {
+            await this.triggerNotification(ob, "DUE_SOON", config);
+            remindersSent++;
+          } else if (daysOverdue === 5 && sendWarning && lastReminderType !== "WARNING") {
+            await this.triggerNotification(ob, "WARNING", config);
+            remindersSent++;
+          } else if (daysOverdue === 10 && sendFinal && lastReminderType !== "FINAL_NOTICE") {
+            await this.triggerNotification(ob, "FINAL_NOTICE", config);
+            remindersSent++;
+          }
+        }
+
+        // 2️⃣ Organic Late Fee Generation
+        if (autoLateFees && config.late_fee_type && config.late_fee_type !== 'none') {
+          const afterDays = config.late_fee_after_days || 7;
+          
+          if (daysOverdue >= afterDays) {
+            // Check if a Late Fee already exists for this allocation + month
+            if (ob.allocation_id) {
+              const existingLateFee = await prisma.rentObligation.findUnique({
+                where: {
+                  allocation_id_rent_month_obligation_type: {
+                    allocation_id: ob.allocation_id,
+                    rent_month: ob.rent_month,
+                    obligation_type: "LATE_FEE"
+                  }
                 }
               });
-              lateFeesAdded++;
-              // Send a synchronous alert that a late fee was added
-              await this.triggerNotification(ob, "LATE_FEE_ADDED");
-              remindersSent++;
+
+              if (!existingLateFee) {
+                // Calculate Fee: Flat or Percentage
+                let feeAmount = 0;
+                if (config.late_fee_type === 'flat') {
+                  feeAmount = Number(config.late_fee_amount) || 200;
+                } else if (config.late_fee_type === 'percentage') {
+                  const pct = Number(config.late_fee_percentage) || 5;
+                  feeAmount = Math.round(Number(ob.amount) * (pct / 100));
+                }
+
+                // Apply Cap if defined
+                if (config.max_late_fee && feeAmount > Number(config.max_late_fee)) {
+                  feeAmount = Number(config.max_late_fee);
+                }
+
+                if (feeAmount > 0) {
+                  await prisma.rentObligation.create({
+                    data: {
+                      student_id: ob.student.id,
+                      allocation_id: ob.allocation_id,
+                      owner_id: ob.owner_id,
+                      rent_month: ob.rent_month,
+                      amount: feeAmount,
+                      due_date: todayMid,
+                      status: "PENDING",
+                      obligation_type: "LATE_FEE"
+                    }
+                  });
+                  lateFeesAdded++;
+                  await this.triggerNotification(ob, "LATE_FEE_ADDED", config);
+                  remindersSent++;
+                }
+              }
             }
           }
         }
@@ -109,24 +156,59 @@ export class ReminderService {
       late_fees_added: lateFeesAdded
     };
 
+    // Write structured audit events
+    if (remindersSent > 0) {
+      await eventLog.log("REMINDER_SENT", null, {
+        evaluated: overdueObligations.length,
+        reminders_sent: remindersSent
+      });
+    }
+    if (lateFeesAdded > 0) {
+      await eventLog.log("LATE_FEE_APPLIED", null, {
+        count: lateFeesAdded
+      });
+    }
+
     console.log(`[REMINDER] Processing Complete: ${JSON.stringify(summary)}`);
     return summary;
   }
 
-  private async triggerNotification(obligation: any, type: string) {
-    const channel = "IN_APP";
-    // Write Reminder Audit Log entry
-    await prisma.reminderLog.create({
-      data: {
-        obligation_id: obligation.id,
-        student_id: obligation.student_id,
-        reminder_type: type,
-        channel: channel
-      }
-    });
+  private async triggerNotification(obligation: any, type: string, config: any) {
+    const student = obligation.student;
+    const canEmail = config.reminder_email ?? true;
+    const canInApp = config.reminder_in_app ?? true;
 
-    // In future iterations: integrate AWS SES / Resend for Email, Twilio for SMS here
-    console.log(`[NOTIFY] [${type}] to ${obligation.student.profile?.name} (student_id: ${obligation.student.id}) via ${channel}`);
+    // 1️⃣ In-App Notification (Always log an audit entry at minimum)
+    if (canInApp) {
+      await prisma.reminderLog.create({
+        data: {
+          obligation_id: obligation.id,
+          student_id: obligation.student.id,
+          reminder_type: type,
+          channel: "IN_APP"
+        }
+      });
+    }
+
+    // 2️⃣ Email Notification
+    if (canEmail && student.personal_email) {
+      try {
+        const mailData = {
+          toEmail: student.personal_email,
+          name: student.profile?.name || "Tenant",
+          amount: Number(obligation.amount),
+          rentMonth: new Date(obligation.rent_month).toLocaleString('default', { month: 'long', year: 'numeric' }),
+          dueDate: new Date(obligation.due_date).toLocaleDateString(),
+          type: type as any
+        };
+        
+        await EmailService.sendReminderBatch(mailData);
+      } catch (err) {
+        console.error(`[NOTIFY] Email failed for ${student.id}:`, err);
+      }
+    }
+
+    console.log(`[NOTIFY] [${type}] to ${obligation.student.profile?.name} (student_id: ${obligation.student.id}) triggered`);
   }
 }
 

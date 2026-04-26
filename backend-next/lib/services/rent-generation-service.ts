@@ -1,6 +1,7 @@
 import { prisma } from "../db";
 import { eventSystem } from "../events";
 import { invalidateDashboardCache } from "../cache/dashboard-cache";
+import { eventLog } from "./event-log-service";
 
 /**
  * 🏦 Rent Generation Service
@@ -90,6 +91,14 @@ export class RentGenerationService {
         }
       });
 
+      // Optimization: Batch fetch owner preferences to avoid N+1 queries in large systems
+      const ownerIds = Array.from(new Set(allocations.map(a => a.student.owner_id).filter(Boolean))) as string[];
+      const hostelPrefs = await prisma.hostel.findMany({
+        where: { owner_id: { in: ownerIds }, is_active: true },
+        select: { owner_id: true, preferences_config: true, due_day: true, auto_rent_day: true } as any
+      });
+      const prefsMap = new Map(hostelPrefs.map(p => [p.owner_id, p]));
+
       let created = 0;
       let skipped = 0;
       let failed = 0;
@@ -102,6 +111,30 @@ export class RentGenerationService {
           errors.push("TIMEOUT: Generation exceeded Vercel 30s limit");
           break;
         }
+
+        const ownerId = alloc.student.owner_id;
+        if (!ownerId) {
+          console.warn(`[RENT] Skipping allocation ${alloc.id} — missing owner_id`);
+          skipped++;
+          continue;
+        }
+
+        const prefs: any = prefsMap.get(ownerId);
+        const config = (prefs?.preferences_config as any) || {};
+
+        // 1️⃣ Automation Guard: Skip if owner disabled auto-generation (unless manual trigger)
+        if (triggerType === "cron") {
+          const autoGen = config.auto_generate_rent ?? true; // Default to true for backward compat
+          if (!autoGen) {
+            console.info(`[RENT] Skipping owner ${alloc.student.owner_id} — auto_generate_rent disabled`);
+            skipped++;
+            continue;
+          }
+        }
+
+        // 2️⃣ Dynamic Due Date from preferences
+        const dueDay = config.due_day || prefs?.due_day || 5;
+        const studentDueDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), dueDay));
 
         // Rent priority: student.monthly_rent > room.base_rent > skip
         const rentAmount = Number(alloc.student.monthly_rent) || Number(alloc.room.base_rent) || 0;
@@ -119,7 +152,7 @@ export class RentGenerationService {
               owner_id: alloc.student.owner_id,
               rent_month: rentMonth,
               amount: rentAmount,
-              due_date: dueDate,
+              due_date: studentDueDate,
               status: "PENDING"
             }
           });
@@ -189,6 +222,13 @@ export class RentGenerationService {
           });
         }
       }
+
+      // Write structured audit event
+      await eventLog.log("RENT_GENERATED", ownerId || null, {
+        rent_month: rentMonth.toISOString(),
+        trigger_type: triggerType,
+        created, skipped, failed, duration_ms: durationMs
+      });
 
       console.log(`[RENT] Generation complete: ${created} created, ${skipped} skipped, ${failed} failed (${durationMs}ms)`);
       return summary;
