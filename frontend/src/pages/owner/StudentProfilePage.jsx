@@ -213,9 +213,12 @@ export default function StudentProfilePage() {
                       <div className="flex justify-between items-start mb-4">
                         <h4 className="font-bold text-white uppercase tracking-wider text-sm">{doc.doc_type.replace('_', ' ')}</h4>
                         <span className={`px-2.5 py-1 rounded-md text-[10px] font-black tracking-widest uppercase ${
-                          doc.is_verified ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                          doc.document_status === 'APPROVED' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 
+                          doc.document_status === 'REJECTED' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 
+                          'bg-amber-500/20 text-amber-400 border border-amber-500/30'
                         }`}>
-                          {doc.is_verified ? 'Verified' : 'Pending Verification'}
+                          {doc.document_status === 'APPROVED' ? 'Verified' : 
+                           doc.document_status === 'REJECTED' ? 'Rejected' : 'Pending Verification'}
                         </span>
                       </div>
                       
@@ -223,6 +226,13 @@ export default function StudentProfilePage() {
                         <p className="text-slate-400 text-sm font-mono tracking-widest mb-4">
                           {doc.doc_number.replace(/(.{4})/g, '$1 ').trim()}
                         </p>
+                      )}
+
+                      {doc.document_status === 'REJECTED' && doc.rejection_reason && (
+                         <div className="mb-4 p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl">
+                            <p className="text-xs font-black uppercase tracking-widest text-rose-400 mb-1">Reason for Rejection</p>
+                            <p className="text-sm text-slate-300">{doc.rejection_reason}</p>
+                         </div>
                       )}
                       
                       <button 
@@ -233,19 +243,24 @@ export default function StudentProfilePage() {
                       </button>
                     </div>
 
-                    {!doc.is_verified && (
+                    {doc.document_status === 'PENDING' && (
                       <div className="grid grid-cols-2 gap-2 pt-4 border-t border-white/10">
                         <button 
-                          onClick={() => rejectMutation.mutate({ tenantId: id, docId: doc.id, reason: 'Invalid Document' })}
+                          onClick={() => {
+                             const reason = prompt("Enter reason for rejection:");
+                             if (reason !== null && reason.trim() !== "") {
+                                rejectMutation.mutate({ tenantId: id, docId: doc.id, reason });
+                             }
+                          }}
                           disabled={rejectMutation.isPending}
-                          className="py-2.5 bg-white/5 hover:bg-white/10 text-white font-bold text-xs uppercase tracking-widest rounded-xl transition-all border border-white/10 disabled:opacity-50"
+                          className="py-2.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-bold text-xs uppercase tracking-widest rounded-xl transition-all border border-rose-500/20 disabled:opacity-50"
                         >
                           Reject
                         </button>
                         <button 
                           onClick={() => verifyMutation.mutate({ tenantId: id, docId: doc.id })}
                           disabled={verifyMutation.isPending}
-                          className="py-2.5 bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-indigo-500/20 disabled:opacity-50"
+                          className="py-2.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 font-bold text-xs uppercase tracking-widest rounded-xl transition-all border border-emerald-500/30 disabled:opacity-50"
                         >
                           Approve
                         </button>

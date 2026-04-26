@@ -20,6 +20,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         profile: true,
         documents: true,
         allocations: {
+          where: { is_active: true, end_date: null },
           orderBy: { start_date: "desc" },
           take: 1,
           include: { room: true },

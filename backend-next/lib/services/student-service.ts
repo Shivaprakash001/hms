@@ -73,9 +73,13 @@ export class StudentService {
         include: {
           profile: true,
           allocations: {
-            where: { is_active: true },
+            where: { is_active: true, end_date: null },
             include: { room: true },
           },
+          obligations: {
+            where: { status: { not: "WAIVED" } },
+            include: { payments: true }
+          }
         },
         take: limit,
         skip: offset,
@@ -84,7 +88,45 @@ export class StudentService {
       prisma.student.count({ where }),
     ]);
 
-    return { students, total, limit, offset };
+    const mappedStudents = students.map((s: any) => {
+      let totalAmount = 0;
+      let totalPaid = 0;
+      let lastPaymentDate: string | Date | null = null;
+      let lastPaymentAmount = 0;
+
+      if (s.obligations) {
+        s.obligations.forEach((o: any) => {
+          totalAmount += Number(o.amount);
+          o.payments.forEach((p: any) => {
+             totalPaid += Number(p.amount_paid);
+             if (!lastPaymentDate || new Date(p.payment_date) > new Date(lastPaymentDate)) {
+                 lastPaymentDate = p.payment_date;
+                 lastPaymentAmount = p.amount_paid;
+             }
+          });
+        });
+      }
+
+      const pending_amount = totalAmount - totalPaid;
+      let payment_status = "PENDING";
+      if (pending_amount <= 0 && totalAmount > 0) payment_status = "PAID";
+      else if (totalPaid > 0) payment_status = "PARTIAL";
+      else if (totalAmount === 0) payment_status = "NOT_GENERATED";
+
+      return {
+        ...s,
+        payment_summary: {
+           total_amount: totalAmount,
+           total_paid: totalPaid,
+           pending_amount: Math.max(0, pending_amount),
+           last_paid_at: lastPaymentDate,
+           last_payment_amount: lastPaymentAmount,
+           payment_status: payment_status
+        }
+      };
+    });
+
+    return { students: mappedStudents, total, limit, offset };
   }
 
   async updateStudentSelfProfile(profileId: string, data: any, updatedBy: string) {

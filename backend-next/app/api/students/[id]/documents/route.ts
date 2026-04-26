@@ -55,6 +55,7 @@ export async function POST(
       params.id,
       buffer,
       file.name,
+      file.type,
       docType,
       docNumber
     );
@@ -63,6 +64,8 @@ export async function POST(
   } catch (error: any) {
     console.error("Upload error:", error);
     const msg = typeof error?.message === "string" ? error.message : String(error);
+    if (msg.startsWith("VALIDATION")) return apiError(msg.split(": ")[1] ?? msg, "VALIDATION", 400);
+    if (msg.startsWith("NOT_FOUND")) return apiError(msg.split(": ")[1] ?? msg, "NOT_FOUND", 404);
     return apiError(msg || "Failed to upload document");
   }
 }

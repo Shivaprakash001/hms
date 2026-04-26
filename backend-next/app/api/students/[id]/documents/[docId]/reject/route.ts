@@ -1,45 +1,39 @@
-import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { NextRequest } from "next/server";
+import { getSession, apiResponse, apiError } from "@/lib/auth";
+import { documentService } from "@/lib/services/document-service";
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string, docId: string } }) {
+/**
+ * ❌ REJECT DOCUMENT
+ * PATCH /api/students/[id]/documents/[docId]/reject
+ */
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: { id: string; docId: string } }
+) {
+  const session = await getSession(req);
+  if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
+    return apiError("Unauthorized", "UNAUTHORIZED", 401);
+  }
+
   try {
-    const session = await getSession(req);
-    if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
-      return NextResponse.json({ error: { message: "Unauthorized" } }, { status: 401 });
-    }
-
-    const { id, docId } = params;
-    const body = await req.json();
+    const { docId } = params;
+    const body = await req.json().catch(() => ({}));
     const reason = body.reason || "Rejected by owner";
 
-    // First ensure the student actually belongs to this owner
-    const student = await prisma.student.findUnique({
-      where: { id: id, owner_id: session.sub }
-    });
+    const updated = await documentService.rejectDocument(
+      docId,
+      session.sub,
+      reason
+    );
 
-    if (!student) {
-      return NextResponse.json({ error: { message: "Student not found or access denied" } }, { status: 404 });
-    }
-
-    // Now update the document
-    // We could delete it, or set is_verified false and perhaps store the reason 
-    // if the schema supports it. Currently assuming it just sets is_verified: false
-    const updated = await prisma.identificationDocument.update({
-      where: { 
-        id: docId,
-        tenant_id: id 
-      },
-      data: { 
-        is_verified: false,
-      }
-    });
-
-    // Optionally: emit a notification/event to the student that document was rejected
-    
-    return NextResponse.json({ ...updated, action: "REJECTED", reason });
-  } catch (error) {
-    console.error("Document reject error:", error);
-    return NextResponse.json({ error: { message: "Failed to reject document" } }, { status: 500 });
+    return apiResponse({ ...updated, action: "REJECTED", reason });
+  } catch (error: any) {
+    const msg =
+      typeof error?.message === "string" ? error.message : String(error);
+    if (msg.startsWith("NOT_FOUND"))
+      return apiError(msg.split(": ")[1] ?? msg, "NOT_FOUND", 404);
+    if (msg.startsWith("FORBIDDEN"))
+      return apiError(msg.split(": ")[1] ?? msg, "FORBIDDEN", 403);
+    return apiError(msg || "Failed to reject document");
   }
 }

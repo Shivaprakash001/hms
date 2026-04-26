@@ -72,7 +72,7 @@ model Student {
   job_role              String?
   permanent_address     String?
   temporary_address     String?
-  aadhaar_number        String?
+  aadhaar_number        String?                  @unique
   document_verified     Boolean                  @default(false)
   created_at            DateTime                 @default(now()) @db.Timestamptz(6)
   updated_at            DateTime?                @updatedAt @db.Timestamptz(6)
@@ -131,6 +131,7 @@ model Room {
   allocations RoomAllocation[]
   hostel      Hostel           @relation(fields: [hostel_id], references: [id])
 
+  @@index([hostel_id])
   @@map("rooms")
   @@schema("public")
 }
@@ -148,6 +149,8 @@ model RoomAllocation {
   room        Room             @relation(fields: [room_id], references: [id])
   student     Student          @relation(fields: [student_id], references: [id])
 
+  @@index([student_id, is_active, end_date])
+  @@index([room_id, is_active])
   @@map("room_allocations")
   @@schema("public")
 }
@@ -168,6 +171,7 @@ model RentObligation {
   allocation    RoomAllocation?  @relation(fields: [allocation_id], references: [id])
   student       Student          @relation(fields: [student_id], references: [id])
 
+  @@index([student_id, rent_month])
   @@map("rent_obligations")
   @@schema("public")
 }
@@ -194,6 +198,8 @@ model Payment {
   @@index([student_id])
   @@index([created_at])
   @@index([owner_id, created_at])
+  @@index([student_id, payment_date])
+  @@index([student_id, amount_paid])
 }
 
 model PaymentAttempt {
@@ -224,16 +230,20 @@ model PaymentAttempt {
 }
 
 model IdentificationDocument {
-  id          String   @id @default(uuid()) @db.Uuid
-  tenant_id   String   @db.Uuid
-  doc_type    String
-  doc_number  String?
-  file_url    String
-  is_verified Boolean  @default(false)
-  uploaded_by String?  @db.Uuid
-  created_at  DateTime @default(now()) @db.Timestamptz(6)
-  student     Student  @relation(fields: [tenant_id], references: [id])
+  id               String          @id @default(uuid()) @db.Uuid
+  tenant_id        String          @db.Uuid
+  doc_type         String
+  doc_number       String?
+  file_url         String
+  file_id          String?         /// ImageKit fileId for deletion
+  is_verified      Boolean         @default(false)
+  document_status  DocumentStatus  @default(PENDING)
+  rejection_reason String?
+  uploaded_by      String?         @db.Uuid
+  created_at       DateTime        @default(now()) @db.Timestamptz(6)
+  student          Student         @relation(fields: [tenant_id], references: [id])
 
+  @@index([document_status])
   @@map("identification_documents")
   @@schema("public")
 }
@@ -385,6 +395,14 @@ enum AttemptStatus {
   FAILED
   EXPIRED
   CANCELLED
+
+  @@schema("public")
+}
+
+enum DocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
 
   @@schema("public")
 }
