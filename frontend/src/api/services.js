@@ -123,9 +123,10 @@ export const ownerService = {
         const response = await api.delete('/owner/logo');
         return response.data;
     },
-    searchTenants: async (query, limit = 10) => {
+    searchTenants: async (query, limit = 10, signal) => {
         const response = await api.get('/owner/search', {
-            params: { q: query, limit }
+            params: { q: query, limit },
+            signal
         });
         return response.data;
     }

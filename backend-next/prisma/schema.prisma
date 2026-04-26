@@ -40,6 +40,10 @@ model Profile {
   expenses      Expense[]
 
   @@index([owner_id])
+  @@index([name])
+  @@index([phone])
+  @@index([email])
+  @@index([owner_id, created_at])
   @@map("profiles")
   @@schema("public")
 }

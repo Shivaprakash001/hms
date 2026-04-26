@@ -193,9 +193,13 @@ const OwnerLayout = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    const searchCache = useRef(new Map());
+    const abortControllerRef = useRef(null);
+
     useEffect(() => {
         const normalized = searchQuery.trim();
         if (normalized.length < 2) {
+            if (abortControllerRef.current) abortControllerRef.current.abort();
             setSearchResults([]);
             setSearchLoading(false);
             setSearchOpen(false);
@@ -204,36 +208,55 @@ const OwnerLayout = () => {
             return undefined;
         }
 
-        let cancelled = false;
+        // Return from cache instantly
+        if (searchCache.current.has(normalized)) {
+            const cached = searchCache.current.get(normalized);
+            setSearchResults(cached);
+            setSearchOpen(true);
+            setActiveSearchIndex(cached.length ? 0 : -1);
+            setSearchLoading(false);
+            return undefined;
+        }
+
         setSearchLoading(true);
+
+        // Cancel previous flying requests
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+        
+        abortControllerRef.current = new AbortController();
+        const signal = abortControllerRef.current.signal;
 
         const timer = window.setTimeout(async () => {
             try {
-                const results = await ownerService.searchTenants(normalized, 10);
+                const results = await ownerService.searchTenants(normalized, 10, signal);
+                // Prevent state updates if request was cancelled manually
+                if (signal.aborted) return;
+
                 const normalizedResults = Array.isArray(results) ? results : [];
-                if (!cancelled) {
-                    setSearchError(false);
-                    setSearchResults(normalizedResults);
-                    setSearchOpen(true);
-                    setActiveSearchIndex(normalizedResults.length ? 0 : -1);
-                }
+                searchCache.current.set(normalized, normalizedResults);
+                
+                setSearchError(false);
+                setSearchResults(normalizedResults);
+                setSearchOpen(true);
+                setActiveSearchIndex(normalizedResults.length ? 0 : -1);
             } catch (error) {
-                if (!cancelled) {
-                    console.error('Failed to search tenants:', error);
-                    setSearchError(true);
-                    setSearchResults([]);
-                    setSearchOpen(true);
-                    setActiveSearchIndex(-1);
-                }
+                if (error?.name === 'CanceledError') return; // Ignore cancelled requests cleanly
+                console.error('Failed to search tenants:', error);
+                setSearchError(true);
+                setSearchResults([]);
+                setSearchOpen(true);
+                setActiveSearchIndex(-1);
             } finally {
-                if (!cancelled) {
+                // Ensure we only disable loading if this is still the active request
+                if (!signal.aborted) {
                     setSearchLoading(false);
                 }
             }
         }, 300);
 
         return () => {
-            cancelled = true;
             window.clearTimeout(timer);
         };
     }, [searchQuery]);
