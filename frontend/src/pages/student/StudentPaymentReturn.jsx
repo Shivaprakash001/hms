@@ -27,21 +27,35 @@ const StudentPaymentReturn = () => {
         let timer;
         const loadAttempt = async () => {
             try {
-                const result = await paymentService.getAttempt(attemptId);
-                setAttempt(result);
-                if (result.status === 'SUCCESS') {
+                // Use verifyPayment which actively queries PhonePe's status API
+                // instead of getAttempt which only reads the local DB
+                const result = await paymentService.verifyPayment({ attempt_id: attemptId });
+                const attemptData = result.attempt || result;
+                setAttempt(attemptData);
+                if (attemptData.status === 'SUCCESS') {
                     sessionStorage.removeItem('lastPaymentAttemptId');
                     localStorage.removeItem('lastPaymentAttemptId');
                     localStorage.removeItem('lastPaymentMerchantTxnId');
-                }
-                if (!TERMINAL_STATUSES.includes(result.status)) {
-                    timer = window.setTimeout(loadAttempt, 4000);
-                } else {
                     setLoading(false);
+                } else if (TERMINAL_STATUSES.includes(attemptData.status)) {
+                    setLoading(false);
+                } else {
+                    timer = window.setTimeout(loadAttempt, 4000);
                 }
             } catch (attemptError) {
-                setError('Unable to verify payment status right now.');
-                setLoading(false);
+                // If verify fails (e.g. not logged in), fall back to getAttempt
+                try {
+                    const fallback = await paymentService.getAttempt(attemptId);
+                    setAttempt(fallback);
+                    if (TERMINAL_STATUSES.includes(fallback.status)) {
+                        setLoading(false);
+                    } else {
+                        timer = window.setTimeout(loadAttempt, 4000);
+                    }
+                } catch {
+                    setError('Unable to verify payment status right now.');
+                    setLoading(false);
+                }
             }
         };
 
