@@ -26,10 +26,10 @@ export class EmailService {
     return String(error);
   }
 
-  static async sendEmail(to: string, subject: string, html: string) {
+  static async sendEmail(to: string, subject: string, html: string, attachments?: any[]) {
     if (!process.env.RESEND_API_KEY) {
       console.warn("RESEND_API_KEY not configured. Email simulation mode.");
-      console.log(`--- EMAIL SIMULATION ---\nTo: ${to}\nSubject: ${subject}\n------------------------`);
+      console.log(`--- EMAIL SIMULATION ---\nTo: ${to}\nSubject: ${subject}\nAttachments: ${attachments?.length || 0}\n------------------------`);
       return { sent: false, error: "RESEND_API_KEY missing" };
     }
 
@@ -39,6 +39,7 @@ export class EmailService {
         to: [to],
         subject,
         html,
+        attachments,
       });
 
       if (error) {
@@ -87,6 +88,7 @@ export class EmailService {
     amount: number;
     rentMonth: string;
     reference: string;
+    pdfBuffer?: Buffer;
   }) {
     const subject = `Payment Receipt - ${data.rentMonth}`;
     const html = `
@@ -95,8 +97,15 @@ export class EmailService {
         <p>Hi ${data.name},</p>
         <p>We've received your payment of ₹${data.amount} for the month of ${data.rentMonth}.</p>
         <p><strong>Reference:</strong> ${data.reference}</p>
+        ${data.pdfBuffer ? '<p>Please find your payment receipt attached to this email.</p>' : ''}
       </div>
     `;
-    return this.sendEmail(data.toEmail, subject, html);
+    
+    const attachments = data.pdfBuffer ? [{
+      filename: `Receipt_${data.rentMonth.replace(/ /g, '_')}.pdf`,
+      content: data.pdfBuffer
+    }] : undefined;
+    
+    return this.sendEmail(data.toEmail, subject, html, attachments);
   }
 }

@@ -245,7 +245,24 @@ const StudentPayments = () => {
                                         </td>
                                         <td className="px-6 py-4">
                                             {(txn.status === 'paid' || txn.status === 'success') && (
-                                                <button className="text-slate-400 hover:text-indigo-600 transition-colors p-2 hover:bg-indigo-50 rounded-lg">
+                                                <button 
+                                                    onClick={async () => {
+                                                        try {
+                                                            const blob = await paymentService.downloadReceipt(txn.id);
+                                                            const url = window.URL.createObjectURL(blob);
+                                                            const a = document.createElement('a');
+                                                            a.href = url;
+                                                            a.download = `Receipt_${txn.id.substring(0, 8)}.pdf`;
+                                                            a.click();
+                                                            window.URL.revokeObjectURL(url);
+                                                        } catch (error) {
+                                                            console.error("Download failed:", error);
+                                                            alert("Failed to download receipt.");
+                                                        }
+                                                    }}
+                                                    className="text-slate-400 hover:text-indigo-600 transition-colors p-2 hover:bg-indigo-50 rounded-lg"
+                                                    title="Download PDF Receipt"
+                                                >
                                                     <Download size={18} />
                                                 </button>
                                             )}

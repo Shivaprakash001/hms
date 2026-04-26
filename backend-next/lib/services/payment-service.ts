@@ -2,6 +2,8 @@ import { prisma } from "../db";
 import { eventSystem } from "../events";
 import { PaymentProviderFactory } from "./payments/provider-factory";
 import crypto from "crypto";
+import { EmailService } from "./email-service";
+import { receiptService } from "./receipt-service";
 
 export class PaymentService {
   /**
@@ -356,7 +358,7 @@ export class PaymentService {
         });
     }
 
-    await this.recordPayment({
+    const recordResult = await this.recordPayment({
         obligationId: attempt.obligation_id,
         amountPaid: Number(attempt.amount),
         paymentMethod: "UPI",
@@ -366,10 +368,33 @@ export class PaymentService {
         paymentAttemptId: attempt.id
     });
 
-    return await prisma.paymentAttempt.update({
+    // Asynchronously send the receipt email
+    receiptService.generatePdfBuffer(recordResult.payment.id).then(async (pdfBuffer) => {
+        // Fetch student email 
+        const student = await prisma.student.findUnique({
+            where: { id: attempt.student_id },
+            include: { profile: true }
+        });
+        
+        if (student?.profile?.email) {
+            const cycleDate = new Date(recordResult.payment.payment_date); // or from obligation
+            await EmailService.sendReceipt({
+                toEmail: student.profile.email,
+                name: student.profile.name,
+                amount: Number(attempt.amount),
+                rentMonth: cycleDate.toLocaleString('default', { month: 'long', year: 'numeric' }),
+                reference: gatewayTxnId || attempt.merchant_txn_id,
+                pdfBuffer
+            });
+        }
+    }).catch(err => console.error("Failed to generate/send receipt automatically:", err));
+
+    const result = await prisma.paymentAttempt.update({
         where: { id: attemptId },
         data: { status: "SUCCESS", gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null, confirmed_at: new Date() }
     });
+
+    return result;
   }
 
   async handlePaymentWebhook(providerName: string, headers: any, body: any) {
