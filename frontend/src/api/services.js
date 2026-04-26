@@ -296,7 +296,7 @@ export const allocationService = {
         return response.data;
     },
     getAllActive: async () => {
-        const response = await api.get('/allocations/active');
+        const response = await api.get('/allocations');
         return response.data;
     },
     getHistory: async () => {

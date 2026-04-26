@@ -8,7 +8,7 @@ export class RoomAllocationService {
     return await prisma.roomAllocation.findMany({
       where: {
         student: {
-          profile_id: userId
+          owner_id: userId
         },
         end_date: null // active allocations
       },
