@@ -1,5 +1,5 @@
 import { prisma } from "../db";
-import PDFDocument from "pdfkit";
+import { jsPDF } from "jspdf";
 
 export class ReceiptService {
   async getReceiptData(paymentId: string) {
@@ -33,67 +33,112 @@ export class ReceiptService {
 
   async generatePdfBuffer(paymentId: string): Promise<Buffer> {
     const data = await this.getReceiptData(paymentId);
-    
-    return new Promise((resolve, reject) => {
-      try {
-        const doc = new PDFDocument({ margin: 50, size: "A4" });
-        const buffers: Buffer[] = [];
-        
-        doc.on('data', buffers.push.bind(buffers));
-        doc.on('end', () => {
-          resolve(Buffer.concat(buffers));
-        });
 
-        // Header
-        doc.fontSize(24).font('Helvetica-Bold').text(data.hostel_name, { align: 'center' });
-        doc.moveDown(0.5);
-        doc.fontSize(12).font('Helvetica').fillColor('gray').text('Payment Receipt', { align: 'center' });
-        doc.fillColor('black');
-        doc.moveDown(2);
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 20;
+    let y = 25;
 
-        // Receipt Details Box
-        doc.rect(50, doc.y, 495, 120).stroke('#e2e8f0');
-        const startY = doc.y + 15;
-        
-        doc.fontSize(10).font('Helvetica-Bold').text('Receipt No:', 65, startY);
-        doc.font('Helvetica').text(data.receipt_no, 150, startY);
+    // ── Header ──────────────────────────────────────────────
+    doc.setFontSize(22);
+    doc.setFont("helvetica", "bold");
+    doc.text(data.hostel_name, pageWidth / 2, y, { align: "center" });
+    y += 8;
 
-        doc.font('Helvetica-Bold').text('Date:', 320, startY);
-        doc.font('Helvetica').text(new Date(data.date).toLocaleDateString(), 380, startY);
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(120, 120, 120);
+    doc.text("Payment Receipt", pageWidth / 2, y, { align: "center" });
+    doc.setTextColor(0, 0, 0);
+    y += 5;
 
-        doc.font('Helvetica-Bold').text('Tenant Name:', 65, startY + 25);
-        doc.font('Helvetica').text(data.student_name, 150, startY + 25);
+    // Divider line
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.5);
+    doc.line(margin, y, pageWidth - margin, y);
+    y += 12;
 
-        doc.font('Helvetica-Bold').text('Rent Cycle:', 65, startY + 50);
-        const cycleDate = new Date(data.rent_month);
-        doc.font('Helvetica').text(cycleDate.toLocaleString('default', { month: 'long', year: 'numeric' }), 150, startY + 50);
+    // ── Receipt Details ─────────────────────────────────────
+    const labelX = margin + 5;
+    const valueX = margin + 45;
+    const rightLabelX = pageWidth / 2 + 10;
+    const rightValueX = pageWidth / 2 + 40;
+    const rowHeight = 9;
 
-        doc.font('Helvetica-Bold').text('Payment Mode:', 65, startY + 75);
-        doc.font('Helvetica').text(data.method.toUpperCase(), 150, startY + 75);
+    const drawRow = (label: string, value: string, rowY: number, rightLabel?: string, rightValue?: string) => {
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(100, 100, 100);
+      doc.text(label, labelX, rowY);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(30, 30, 30);
+      doc.text(value, valueX, rowY);
 
-        if (data.reference) {
-          doc.font('Helvetica-Bold').text('Reference:', 320, startY + 75);
-          doc.font('Helvetica').text(data.reference, 380, startY + 75);
-        }
-
-        doc.y = startY + 120;
-        doc.moveDown(2);
-
-        // Amount Box
-        doc.rect(50, doc.y, 495, 60).fillAndStroke('#f8fafc', '#e2e8f0');
-        doc.fillColor('#0f172a').fontSize(14).font('Helvetica-Bold').text('Amount Received', 65, doc.y + 22);
-        doc.fontSize(18).text(`Rs. ${data.amount.toLocaleString('en-IN')}`, 0, doc.y - 18, { align: 'right', width: 525 });
-
-        doc.moveDown(4);
-        
-        // Footer
-        doc.fontSize(10).font('Helvetica').fillColor('gray').text('This is a computer generated receipt and does not require a physical signature.', 50, doc.y, { align: 'center' });
-
-        doc.end();
-      } catch (err) {
-        reject(err);
+      if (rightLabel && rightValue) {
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(100, 100, 100);
+        doc.text(rightLabel, rightLabelX, rowY);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(30, 30, 30);
+        doc.text(rightValue, rightValueX, rowY);
       }
-    });
+    };
+
+    // Rounded-ish box
+    doc.setDrawColor(226, 232, 240);
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(margin, y - 5, pageWidth - 2 * margin, rowHeight * 5 + 10, 3, 3, "FD");
+    y += 4;
+
+    const dateStr = data.date ? new Date(data.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "N/A";
+    drawRow("Receipt No:", data.receipt_no, y, "Date:", dateStr);
+    y += rowHeight;
+
+    drawRow("Tenant:", data.student_name, y);
+    y += rowHeight;
+
+    const cycleDate = new Date(data.rent_month);
+    const cycleName = cycleDate.toLocaleString("default", { month: "long", year: "numeric" });
+    drawRow("Rent Cycle:", cycleName, y);
+    y += rowHeight;
+
+    drawRow("Method:", (data.method || "N/A").toUpperCase(), y);
+    y += rowHeight;
+
+    if (data.reference) {
+      drawRow("Reference:", data.reference, y);
+    }
+
+    y += rowHeight + 10;
+
+    // ── Amount Box ──────────────────────────────────────────
+    doc.setDrawColor(99, 102, 241); // indigo border
+    doc.setFillColor(238, 242, 255); // light indigo fill
+    doc.roundedRect(margin, y, pageWidth - 2 * margin, 22, 3, 3, "FD");
+
+    doc.setFontSize(13);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(30, 41, 59);
+    doc.text("Amount Received", labelX, y + 14);
+
+    doc.setFontSize(16);
+    doc.setTextColor(67, 56, 202); // indigo-700
+    doc.text(`Rs. ${data.amount.toLocaleString("en-IN")}`, pageWidth - margin - 5, y + 14, { align: "right" });
+
+    y += 38;
+
+    // ── Footer ──────────────────────────────────────────────
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(150, 150, 150);
+    doc.text(
+      "This is a computer generated receipt and does not require a physical signature.",
+      pageWidth / 2, y, { align: "center" }
+    );
+
+    // Convert to Node Buffer
+    const arrayBuf = doc.output("arraybuffer");
+    return Buffer.from(arrayBuf);
   }
 }
 
