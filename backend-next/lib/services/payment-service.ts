@@ -368,26 +368,33 @@ export class PaymentService {
         paymentAttemptId: attempt.id
     });
 
-    // Asynchronously send the receipt email
-    receiptService.generatePdfBuffer(recordResult.payment.id).then(async (pdfBuffer) => {
-        // Fetch student email 
-        const student = await prisma.student.findUnique({
-            where: { id: attempt.student_id },
-            include: { profile: true }
-        });
-        
-        if (student?.profile?.email) {
-            const cycleDate = new Date(recordResult.payment.payment_date); // or from obligation
-            await EmailService.sendReceipt({
-                toEmail: student.profile.email,
-                name: student.profile.name,
-                amount: Number(attempt.amount),
-                rentMonth: cycleDate.toLocaleString('default', { month: 'long', year: 'numeric' }),
-                reference: gatewayTxnId || attempt.merchant_txn_id,
-                pdfBuffer
+    // Create receipt record in DB (idempotent — won't duplicate)
+    // Then asynchronously generate PDF and email it
+    receiptService.createReceipt(recordResult.payment.id).then(async (receipt) => {
+        try {
+            const pdfBuffer = receiptService.renderReceiptPdf(receipt);
+            const student = await prisma.student.findUnique({
+                where: { id: attempt.student_id },
+                include: { profile: true }
             });
+            
+            if (student?.profile?.email) {
+                const rentMonth = receipt.rent_month
+                    ? new Date(receipt.rent_month).toLocaleString('default', { month: 'long', year: 'numeric' })
+                    : 'N/A';
+                await EmailService.sendReceipt({
+                    toEmail: student.profile.email,
+                    name: student.profile.name,
+                    amount: Number(attempt.amount),
+                    rentMonth,
+                    reference: receipt.receipt_number,
+                    pdfBuffer
+                });
+            }
+        } catch (emailErr) {
+            console.error("Failed to generate/send receipt email:", emailErr);
         }
-    }).catch(err => console.error("Failed to generate/send receipt automatically:", err));
+    }).catch(err => console.error("Failed to create receipt record:", err));
 
     const result = await prisma.paymentAttempt.update({
         where: { id: attemptId },

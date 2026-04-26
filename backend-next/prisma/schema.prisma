@@ -76,6 +76,7 @@ model Student {
   documents             IdentificationDocument[]
   payment_attempts      PaymentAttempt[]
   payments              Payment[]
+  receipts              Receipt[]
   reactivation_requests ReactivationRequest[]
   obligations           RentObligation[]
   allocations           RoomAllocation[]
@@ -177,6 +178,7 @@ model Payment {
   payment_date       DateTime        @db.Date
   payment_attempt_id String?         @db.Uuid
   created_at         DateTime        @default(now()) @db.Timestamptz(6)
+  receipts           Receipt[]
   obligation         RentObligation  @relation(fields: [obligation_id], references: [id])
   attempt            PaymentAttempt? @relation(fields: [payment_attempt_id], references: [id])
   student            Student         @relation(fields: [student_id], references: [id])
@@ -313,6 +315,27 @@ model Complaint {
   student     Student   @relation(fields: [student_id], references: [id])
 
   @@map("complaints")
+  @@schema("public")
+}
+
+model Receipt {
+  id                 String   @id @default(uuid()) @db.Uuid
+  receipt_number     String   @unique
+  payment_id         String   @db.Uuid
+  student_id         String   @db.Uuid
+  owner_id           String?  @db.Uuid
+  amount             Decimal  @db.Decimal(10, 2)
+  payment_method     String
+  transaction_id     String?
+  hostel_name        String?
+  tenant_name        String?
+  rent_month         DateTime? @db.Date
+  issued_at          DateTime @default(now()) @db.Timestamptz(6)
+
+  payment            Payment  @relation(fields: [payment_id], references: [id])
+  student            Student  @relation(fields: [student_id], references: [id])
+
+  @@map("receipts")
   @@schema("public")
 }
 
