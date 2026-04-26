@@ -1,4 +1,5 @@
-import puppeteer from "puppeteer";
+import puppeteer from "puppeteer-core";
+import chromium from "@sparticuz/chromium";
 import ejs from "ejs";
 import path from "path";
 import fs from "fs/promises";
@@ -115,8 +116,10 @@ export class InvoiceService {
 
     // 4. Convert HTML -> PDF
     const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+      args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox', '--font-render-hinting=none'],
+      defaultViewport: { width: 1280, height: 800 },
+      executablePath: await chromium.executablePath(),
+      headless: true, // enforce true for vercel
     });
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "networkidle0" });
