@@ -22,8 +22,34 @@ export async function POST(req: Request) {
       headers[key] = value;
     });
 
-    // Parse body as JSON (PhonePe v2 sends JSON directly)
-    const body = await req.json();
+    const authHeader = headers["authorization"] || headers["Authorization"];
+    const webhookUsername = process.env.PHONEPE_WEBHOOK_USERNAME;
+    const webhookPassword = process.env.PHONEPE_WEBHOOK_PASSWORD;
+
+    // 1. PhonePe Basic Auth Validation (happens before checking body)
+    if (webhookUsername && webhookPassword && authHeader && authHeader.startsWith("Basic ")) {
+      const encoded = authHeader.substring(6);
+      const decoded = Buffer.from(encoded, "base64").toString("utf-8");
+      const [username, password] = decoded.split(":");
+
+      // Return 401 if credentials don't match (PhonePe will see "Unauthorized")
+      if (username !== webhookUsername || password !== webhookPassword) {
+        console.warn("[webhook.phonepe] Invalid Basic Auth credentials");
+        return new Response("Unauthorized", { status: 401 });
+      }
+    }
+
+    // 2. Read raw body text first
+    const rawBody = await req.text();
+
+    // 3. Handle PhonePe dashboard validation ping (empty or very short body)
+    if (!rawBody || rawBody.trim().length === 0) {
+      console.info("[webhook.phonepe] Received empty validation ping from PhonePe");
+      return new Response("Webhook verified", { status: 200 });
+    }
+
+    // 4. Parse JSON for actual payment events
+    const body = JSON.parse(rawBody);
 
     console.info("[webhook.phonepe] received event:", {
       event: body.event,
@@ -45,6 +71,7 @@ export async function POST(req: Request) {
     );
   }
 }
+
 
 /**
  * Handle browser GET requests gracefully.
