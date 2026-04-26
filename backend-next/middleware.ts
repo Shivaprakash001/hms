@@ -7,6 +7,8 @@ const PUBLIC_ROUTES = [
   "/api/auth/register",
   "/api/auth/refresh",
   "/api/auth/google-callback",
+  "/api/webhooks/payments/phonepe",
+  "/api/plans",
 ];
 
 /**

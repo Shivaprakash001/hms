@@ -1,149 +1,262 @@
 import { PaymentProvider, CreateIntentResult, WebhookVerificationResult, FetchStatusResult } from "../provider-base";
 import crypto from "crypto";
 
+/**
+ * PhonePe Payment Gateway — Checkout v2 (OAuth-based)
+ *
+ * API Flow:
+ *   1. Get OAuth access_token via client_id + client_secret
+ *   2. Create order via POST /checkout/v2/pay with O-Bearer token
+ *   3. Webhook receives pg.order.completed / pg.order.failed
+ *   4. Status polling via GET /checkout/v2/order/{merchantOrderId}/status
+ *
+ * Webhook security: SHA256(username:password) in Authorization header
+ */
 export class PhonePeProvider extends PaymentProvider {
+
+  // ─── Environment helpers ───────────────────────────────────────
+  private get isProduction() {
+    return process.env.PHONEPE_ENV === "production";
+  }
+
   private get baseUrl() {
-    return process.env.PHONEPE_ENV === "production"
-      ? "https://api.phonepe.com/apis/hermes"
+    return this.isProduction
+      ? "https://api.phonepe.com/apis/pg"
       : "https://api-preprod.phonepe.com/apis/pg-sandbox";
   }
 
-  private get merchantId() {
-    return process.env.PHONEPE_MERCHANT_ID || this.config.merchant_id || "PGTESTPAYUAT";
+  private get authBaseUrl() {
+    return this.isProduction
+      ? "https://api.phonepe.com/apis/identity-manager"
+      : "https://api-preprod.phonepe.com/apis/pg-sandbox";
   }
 
-  private get saltKey() {
-    return process.env.PHONEPE_SALT_KEY || this.config.salt_key || "099eb0cd-02cf-4e2a-8aca-3e6c6aff0399";
+  private get clientId() {
+    return process.env.PHONEPE_CLIENT_ID || "";
   }
 
-  private get saltIndex() {
-    return process.env.PHONEPE_SALT_INDEX || this.config.salt_index || "1";
+  private get clientSecret() {
+    return process.env.PHONEPE_CLIENT_SECRET || "";
   }
 
-  private generateChecksum(payloadBase64: string, endpoint: string) {
-    const stringToHash = payloadBase64 + endpoint + this.saltKey;
-    const sha256 = crypto.createHash("sha256").update(stringToHash).digest("hex");
-    return `${sha256}###${this.saltIndex}`;
+  private get clientVersion() {
+    return process.env.PHONEPE_CLIENT_VERSION || "1";
   }
 
+  // ─── OAuth Token ───────────────────────────────────────────────
+  private cachedToken: { token: string; expiresAt: number } | null = null;
+
+  private async getAccessToken(): Promise<string> {
+    // Return cached token if still valid (with 60s buffer)
+    if (this.cachedToken && this.cachedToken.expiresAt > Date.now() + 60_000) {
+      return this.cachedToken.token;
+    }
+
+    const url = `${this.authBaseUrl}/v1/oauth/token`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: this.clientId,
+        client_secret: this.clientSecret,
+        client_version: this.clientVersion,
+        grant_type: "client_credentials",
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.access_token) {
+      console.error("[PhonePe] OAuth token error:", data);
+      throw new Error(`PhonePe OAuth failed: ${data.message || response.statusText}`);
+    }
+
+    // Cache the token (default 20 min expiry if not provided)
+    this.cachedToken = {
+      token: data.access_token,
+      expiresAt: Date.now() + (data.expires_in ? data.expires_in * 1000 : 20 * 60 * 1000),
+    };
+
+    return data.access_token;
+  }
+
+  // ─── Create Order ──────────────────────────────────────────────
   async createIntent(data: any): Promise<CreateIntentResult> {
+    const accessToken = await this.getAccessToken();
     const amountInPaise = Math.round(data.amount * 100);
-    const redirectUrl = process.env.PHONEPE_REDIRECT_URL || `${process.env.NEXT_PUBLIC_FRONTEND_URL}/payment-return`;
-    const callbackUrl = process.env.PHONEPE_CALLBACK_URL || `${process.env.VITE_API_URL}/webhooks/payments/phonepe`;
 
-    const payload = {
-      merchantId: this.merchantId,
-      merchantTransactionId: data.merchant_txn_id,
-      merchantUserId: data.metadata?.student_id || "user_1",
+    const redirectUrl =
+      process.env.PHONEPE_REDIRECT_URL ||
+      `${process.env.NEXT_PUBLIC_FRONTEND_URL || "https://trishul.solutions"}/payment-return`;
+
+    const payload: any = {
+      merchantOrderId: data.merchant_txn_id,
       amount: amountInPaise,
-      redirectUrl,
-      redirectMode: "POST",
-      callbackUrl,
-      mobileNumber: data.student_phone || undefined,
-      paymentInstrument: {
-        type: "PAY_PAGE", // Use PAY_PAGE for web links
+      expireAfter: 1800, // 30 min
+      paymentFlow: {
+        type: "PG_CHECKOUT",
+        message: `Rent payment - ${data.student_name || "Tenant"}`,
+        merchantUrls: {
+          redirectUrl,
+        },
       },
     };
 
-    const payloadBase64 = Buffer.from(JSON.stringify(payload)).toString("base64");
-    const endpoint = "/pg/v1/pay";
-    const checksum = this.generateChecksum(payloadBase64, endpoint);
+    // Pass metadata as UDF fields if available
+    if (data.metadata) {
+      payload.metaInfo = {
+        udf1: data.metadata.obligation_id || "",
+        udf2: data.metadata.student_id || "",
+        udf3: data.metadata.attempt_id || "",
+      };
+    }
 
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+    const url = `${this.baseUrl}/checkout/v2/pay`;
+
+    console.info("[PhonePe] Creating order:", {
+      merchantOrderId: data.merchant_txn_id,
+      amount: data.amount,
+      amountInPaise,
+      url,
+    });
+
+    const response = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-VERIFY": checksum,
+        Authorization: `O-Bearer ${accessToken}`,
       },
-      body: JSON.stringify({ request: payloadBase64 }),
+      body: JSON.stringify(payload),
     });
 
     const responseData = await response.json();
 
-    if (!response.ok || !responseData.success) {
-      console.error("PhonePe Create Intent Error:", responseData);
-      throw new Error(`PhonePe Payment Creation Failed: ${responseData.message}`);
+    if (!response.ok) {
+      console.error("[PhonePe] Create order error:", responseData);
+      throw new Error(`PhonePe order creation failed: ${responseData.message || response.statusText}`);
     }
 
-    const instrumentResponse = responseData.data.instrumentResponse;
-    const checkoutUrl = instrumentResponse?.redirectInfo?.url;
-    // PhonePe might return intent url depending on instrument type configured
-    const upiIntentUrl = instrumentResponse?.intentUrl || null;
+    // Response contains orderId and redirectUrl for the checkout page
+    const checkoutUrl = responseData.redirectUrl || responseData.data?.redirectUrl || null;
+    const orderId = responseData.orderId || responseData.data?.orderId || null;
 
     return {
       provider: "PHONEPE",
       merchant_txn_id: data.merchant_txn_id,
-      checkout_url: checkoutUrl || null,
-      upi_intent_url: upiIntentUrl,
+      checkout_url: checkoutUrl,
+      upi_intent_url: null,
       qr_payload: null,
-      expires_at: new Date(Date.now() + 30 * 60 * 1000), // 30 min expiration
-      gateway_txn_id: null,
+      expires_at: new Date(Date.now() + 30 * 60 * 1000),
+      gateway_txn_id: orderId,
       raw_response: responseData,
     };
   }
 
+  // ─── Verify Webhook ────────────────────────────────────────────
+  /**
+   * PhonePe Checkout v2 webhook payload format:
+   * {
+   *   "event": "checkout.order.completed",  // or "checkout.order.failed"
+   *   "payload": {
+   *     "orderId": "PHONEPE_ORDER_ID",
+   *     "merchantId": "...",
+   *     "merchantOrderId": "YOUR_MERCHANT_TXN_ID",
+   *     "state": "COMPLETED",
+   *     "amount": 500000,  // in paise
+   *     "paymentDetails": [{
+   *       "paymentMode": "UPI_QR",
+   *       "transactionId": "TXN_ID",
+   *       "amount": 500000,
+   *       "state": "COMPLETED"
+   *     }]
+   *   }
+   * }
+   *
+   * Security: PhonePe sends Authorization header = SHA256(username:password)
+   */
   async verifyWebhook(headers: any, body: any): Promise<WebhookVerificationResult> {
-    const checksumHeader = headers["x-verify"] || headers["X-VERIFY"];
-    if (!checksumHeader) {
-      throw new Error("Missing X-VERIFY header");
+    // 1. Verify Basic Auth (SHA256 of username:password)
+    const authHeader = headers["authorization"] || headers["Authorization"];
+    const webhookUsername = process.env.PHONEPE_WEBHOOK_USERNAME || "";
+    const webhookPassword = process.env.PHONEPE_WEBHOOK_PASSWORD || "";
+
+    if (webhookUsername && webhookPassword && authHeader) {
+      const expectedHash = crypto
+        .createHash("sha256")
+        .update(`${webhookUsername}:${webhookPassword}`)
+        .digest("hex");
+
+      if (authHeader !== expectedHash) {
+        throw new Error("Invalid webhook authorization");
+      }
     }
 
-    // PhonePe sends { response: "base64EncodedString" }
-    const rawBodyString = body.toString("utf-8");
-    const parsedBody = JSON.parse(rawBodyString);
-    const responseBase64 = parsedBody.response;
-
-    // Verify signature
-    const calculatedChecksum = this.generateChecksum(responseBase64, "");
-    if (calculatedChecksum !== checksumHeader) {
-      throw new Error("Invalid signature in PhonePe webhook");
+    // 2. Parse payload
+    let parsed: any;
+    if (typeof body === "string") {
+      parsed = JSON.parse(body);
+    } else if (Buffer.isBuffer(body)) {
+      parsed = JSON.parse(body.toString("utf-8"));
+    } else {
+      parsed = body;
     }
 
-    const decodedResponse = JSON.parse(Buffer.from(responseBase64, "base64").toString("utf-8"));
-    const merchantTxnId = decodedResponse.data.merchantTransactionId;
-    const gatewayTxnId = decodedResponse.data.transactionId;
-    const amount = decodedResponse.data.amount / 100;
-    const code = decodedResponse.code;
+    const event = parsed.event; // "checkout.order.completed" | "checkout.order.failed"
+    const payload = parsed.payload;
 
+    if (!payload || !payload.merchantOrderId) {
+      throw new Error("Invalid webhook payload: missing merchantOrderId");
+    }
+
+    // 3. Map PhonePe state to our status
     let status: "SUCCESS" | "FAILED" | "PENDING" = "PENDING";
-    if (code === "PAYMENT_SUCCESS") status = "SUCCESS";
-    else if (code === "PAYMENT_ERROR" || code === "PAYMENT_DECLINED") status = "FAILED";
+    const state = (payload.state || "").toUpperCase();
+
+    if (state === "COMPLETED" || event === "checkout.order.completed" || event === "pg.order.completed") {
+      status = "SUCCESS";
+    } else if (state === "FAILED" || event === "checkout.order.failed" || event === "pg.order.failed") {
+      status = "FAILED";
+    }
+
+    // 4. Extract payment details
+    const paymentDetail = payload.paymentDetails?.[0];
+    const gatewayTxnId = paymentDetail?.transactionId || payload.orderId || null;
+    const amountInPaise = payload.amount || paymentDetail?.amount || 0;
 
     return {
-      merchant_txn_id: merchantTxnId,
+      merchant_txn_id: payload.merchantOrderId,
       gateway_txn_id: gatewayTxnId,
       status,
-      amount,
-      raw_event: decodedResponse,
+      amount: amountInPaise / 100,
+      raw_event: parsed,
     };
   }
 
+  // ─── Fetch Status ──────────────────────────────────────────────
   async fetchStatus(merchant_txn_id: string, gateway_txn_id?: string): Promise<FetchStatusResult> {
-    const endpoint = `/pg/v1/status/${this.merchantId}/${merchant_txn_id}`;
-    
-    // Checksum for status API doesn't include a payload base64 part, just the endpoint
-    const stringToHash = endpoint + this.saltKey;
-    const sha256 = crypto.createHash("sha256").update(stringToHash).digest("hex");
-    const checksum = `${sha256}###${this.saltIndex}`;
+    const accessToken = await this.getAccessToken();
+    const url = `${this.baseUrl}/checkout/v2/order/${merchant_txn_id}/status`;
 
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+    const response = await fetch(url, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
-        "X-VERIFY": checksum,
-        "X-MERCHANT-ID": this.merchantId,
+        Authorization: `O-Bearer ${accessToken}`,
       },
     });
 
     const responseData = await response.json();
 
     let status: "SUCCESS" | "FAILED" | "PENDING" = "PENDING";
-    if (responseData.code === "PAYMENT_SUCCESS") status = "SUCCESS";
-    else if (responseData.code === "PAYMENT_ERROR" || responseData.code === "PAYMENT_DECLINED") status = "FAILED";
+    const state = (responseData.state || responseData.payload?.state || "").toUpperCase();
+
+    if (state === "COMPLETED") status = "SUCCESS";
+    else if (state === "FAILED") status = "FAILED";
 
     return {
       status,
-      gateway_txn_id: responseData.data?.transactionId || gateway_txn_id || null,
+      gateway_txn_id: responseData.orderId || responseData.payload?.orderId || gateway_txn_id || null,
       raw_status: responseData,
     };
   }

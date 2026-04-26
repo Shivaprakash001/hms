@@ -1,21 +1,45 @@
 import { NextResponse } from "next/server";
 import { paymentService } from "@/lib/services/payment-service";
-import { apiError } from "@/lib/utils/api-utils";
 
+export const runtime = "nodejs";
+
+/**
+ * 🔔 PhonePe Webhook (Checkout v2)
+ * POST /api/webhooks/payments/phonepe
+ * 
+ * Events: pg.order.completed, pg.order.failed
+ * Auth: SHA256(username:password) in Authorization header
+ * 
+ * This endpoint is PUBLIC (no JWT auth) — PhonePe calls it server-to-server.
+ */
 export async function POST(req: Request) {
   try {
+    // Collect all headers
     const headers: Record<string, string> = {};
     req.headers.forEach((value, key) => {
       headers[key] = value;
     });
 
-    const body = await req.arrayBuffer();
-    const result = await paymentService.handlePaymentWebhook("PHONEPE", headers, Buffer.from(body));
+    // Parse body as JSON (PhonePe v2 sends JSON directly)
+    const body = await req.json();
 
-    return NextResponse.json(result);
+    console.info("[webhook.phonepe] received event:", {
+      event: body.event,
+      merchantOrderId: body.payload?.merchantOrderId,
+      state: body.payload?.state,
+    });
+
+    const result = await paymentService.handlePaymentWebhook("PHONEPE", headers, body);
+
+    return NextResponse.json({ success: true, data: result }, { status: 200 });
   } catch (error: any) {
-    console.error("PhonePe Webhook Error:", error);
+    console.error("[webhook.phonepe] Error:", error);
     const message = String(error?.message ?? error);
-    return apiError(message, "BAD_REQUEST", 400);
+    // Always return 200 to prevent PhonePe retries for handled errors
+    // Return 400 only for truly invalid requests
+    return NextResponse.json(
+      { success: false, error: message },
+      { status: 400 }
+    );
   }
 }
