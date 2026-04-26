@@ -84,7 +84,11 @@ export class ReceiptService {
       receipt = await this.createReceipt(paymentId);
     }
 
-    return this.renderReceiptPdf(receipt);
+    if (!receipt) {
+      throw new Error("Failed to create or retrieve receipt");
+    }
+
+    return this.renderReceiptPdf(receipt as any);
   }
 
   /**
