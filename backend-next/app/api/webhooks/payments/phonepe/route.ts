@@ -45,3 +45,13 @@ export async function POST(req: Request) {
     );
   }
 }
+
+/**
+ * Handle browser GET requests gracefully.
+ */
+export async function GET() {
+  return NextResponse.json(
+    { success: true, message: "PhonePe webhook endpoint is active and listening for POST requests." },
+    { status: 200 }
+  );
+}
