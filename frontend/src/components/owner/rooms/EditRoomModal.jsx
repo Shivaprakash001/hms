@@ -104,15 +104,16 @@ const EditRoomModal = ({ room, onClose, onSave }) => {
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                                <Users size={14} /> Capacity *
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center justify-between">
+                                <span className="flex items-center gap-2"><Users size={14} /> Capacity *</span>
+                                <span className="text-indigo-600">Occupants: {room.occupants || room.tenants?.length || 0}</span>
                             </label>
                             <input
                                 type="number"
                                 name="capacity"
                                 value={formData.capacity}
                                 onChange={handleChange}
-                                min="1"
+                                min={room.occupants || room.tenants?.length || 1}
                                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-100 outline-none font-bold text-slate-900"
                                 required
                             />

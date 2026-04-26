@@ -130,10 +130,28 @@ model Room {
   created_at  DateTime         @default(now()) @db.Timestamptz(6)
   updated_at  DateTime?        @updatedAt @db.Timestamptz(6)
   allocations RoomAllocation[]
+  activity    RoomActivityLog[]
   hostel      Hostel           @relation(fields: [hostel_id], references: [id])
 
   @@index([hostel_id])
   @@map("rooms")
+  @@schema("public")
+}
+
+model RoomActivityLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  room_id        String   @db.Uuid
+  owner_id       String   @db.Uuid
+  action         String   // e.g. "capacity_changed", "rent_changed", "name_changed"
+  previous_value String?
+  new_value      String?
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+  
+  room           Room     @relation(fields: [room_id], references: [id])
+
+  @@index([room_id])
+  @@index([owner_id])
+  @@map("room_activity_logs")
   @@schema("public")
 }
 

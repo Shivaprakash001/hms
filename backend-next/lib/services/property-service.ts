@@ -304,20 +304,51 @@ export class PropertyService {
       }
     });
 
-    if (data.capacity && occupants > data.capacity) {
-      throw new Error(`VALIDATION: Capacity (${data.capacity}) cannot be less than current occupants (${occupants})`);
+    if (data.capacity !== undefined) {
+      if (data.capacity < occupants) {
+        throw new Error(`VALIDATION: Capacity (${data.capacity}) cannot be less than current occupants (${occupants})`);
+      }
+      if (data.capacity > 20) {
+        throw new Error(`VALIDATION: Capacity cannot exceed 20`);
+      }
+    }
+
+    if (data.room_no !== undefined && data.room_no !== room.room_no) {
+      const duplicate = await prisma.room.findFirst({
+        where: { hostel_id: room.hostel_id, room_no: data.room_no }
+      });
+      if (duplicate) throw new Error(`VALIDATION: Room ${data.room_no} already exists`);
     }
 
     const { capacity, floor, room_no, base_rent } = data;
-    
-    return await prisma.room.update({
-      where: { id: roomId },
-      data: {
-        ...(capacity !== undefined && { capacity: Number(capacity) }),
-        ...(floor !== undefined && { floor: Number(floor) }),
-        ...(room_no !== undefined && { room_no }),
-        ...(base_rent !== undefined && { base_rent: Number(base_rent) })
-      }
+    const updateData: any = {
+      ...(capacity !== undefined && { capacity: Number(capacity) }),
+      ...(floor !== undefined && { floor: Number(floor) }),
+      ...(room_no !== undefined && { room_no }),
+      ...(base_rent !== undefined && { base_rent: Number(base_rent) })
+    };
+
+    if (Object.keys(updateData).length === 0) return room;
+
+    const logEntry = `Fields updated: ${Object.keys(updateData).join(", ")}`;
+
+    return await prisma.$transaction(async (tx) => {
+      const updated = await tx.room.update({
+        where: { id: roomId },
+        data: updateData
+      });
+
+      await tx.roomActivityLog.create({
+        data: {
+          room_id: roomId,
+          owner_id: ownerId,
+          action: "ROOM_EDITED",
+          previous_value: JSON.stringify({ room_no: room.room_no, capacity: room.capacity, floor: room.floor, base_rent: room.base_rent }),
+          new_value: JSON.stringify(updateData)
+        }
+      });
+
+      return updated;
     });
   }
 
