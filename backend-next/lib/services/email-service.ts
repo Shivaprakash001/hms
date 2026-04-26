@@ -160,9 +160,14 @@ export class EmailService {
             <p style="margin: 4px 0 0; font-size: 24px; font-weight: bold; color: #0f172a;">₹${data.amount}</p>
             <p style="margin: 12px 0 0; font-size: 14px; color: #64748b;">Due Date: ${data.dueDate}</p>
           </div>
-          <p style="font-size: 14px; color: #64748b; margin-top: 24px;">
+          <p style="font-size: 14px; color: #64748b; margin-top: 24px; margin-bottom: 24px;">
             You can pay directly via the student dashboard or using the hostel UPI ID.
           </p>
+          <div style="text-align: center; margin-top: 10px; margin-bottom: 10px;">
+            <a href="https://trishul.solutions/login" style="display: inline-block; padding: 12px 24px; background-color: ${color}; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
+              Pay Now
+            </a>
+          </div>
         </div>
         <div style="background: #f1f5f9; padding: 12px; text-align: center; font-size: 12px; color: #94a3b8;">
           This is an automated notification from your Hostel Management System.
