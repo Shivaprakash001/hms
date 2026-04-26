@@ -69,6 +69,9 @@ const OnlinePaymentTestModal = ({ isOpen, onClose, obligation, onSettled }) => {
 
             // ✅ If direct checkout URL is present, redirect immediately for better UX
             if (intent.checkout_url) {
+                localStorage.setItem('lastPaymentAttemptId', intent.id);
+                localStorage.setItem('lastPaymentMerchantTxnId', intent.merchant_txn_id);
+                sessionStorage.setItem('lastPaymentAttemptId', intent.id);
                 window.location.href = intent.checkout_url;
                 return;
             }

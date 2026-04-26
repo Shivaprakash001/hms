@@ -12,7 +12,10 @@ const StudentPaymentReturn = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
-    const attemptId = searchParams.get('attempt_id') || sessionStorage.getItem('lastPaymentAttemptId');
+    const attemptId = searchParams.get('attempt_id')
+        || searchParams.get('merchantOrderId')
+        || sessionStorage.getItem('lastPaymentAttemptId')
+        || localStorage.getItem('lastPaymentAttemptId');
 
     useEffect(() => {
         if (!attemptId) {
@@ -28,6 +31,8 @@ const StudentPaymentReturn = () => {
                 setAttempt(result);
                 if (result.status === 'SUCCESS') {
                     sessionStorage.removeItem('lastPaymentAttemptId');
+                    localStorage.removeItem('lastPaymentAttemptId');
+                    localStorage.removeItem('lastPaymentMerchantTxnId');
                 }
                 if (!TERMINAL_STATUSES.includes(result.status)) {
                     timer = window.setTimeout(loadAttempt, 4000);

@@ -82,6 +82,10 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
 
             // ✅ If gateway (like PhonePe v2) returns a hosted checkout URL, redirect immediately!
             if (intent.checkout_url) {
+                // Persist attempt info so /payment-return can find it after cross-domain redirect
+                localStorage.setItem('lastPaymentAttemptId', intent.id);
+                localStorage.setItem('lastPaymentMerchantTxnId', intent.merchant_txn_id);
+                sessionStorage.setItem('lastPaymentAttemptId', intent.id);
                 window.location.href = intent.checkout_url;
                 return; // Do not unset loading or change state, page is unloading
             }
