@@ -189,6 +189,7 @@ model Payment {
   @@index([owner_id])
   @@index([student_id])
   @@index([created_at])
+  @@index([owner_id, created_at])
 }
 
 model PaymentAttempt {
@@ -303,6 +304,7 @@ model Expense {
   @@schema("public")
   @@index([owner_id])
   @@index([date])
+  @@index([owner_id, date])
 }
 
 model Complaint {

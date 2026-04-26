@@ -5,6 +5,7 @@ import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { dashboardService } from "@/lib/services/dashboard-service";
 import { activityService } from "@/lib/services/activity-service";
+import { getCachedDashboard, setDashboardCache } from "@/lib/cache/dashboard-cache";
 
 export async function GET(req: NextRequest) {
   const session = await getSession(req);
@@ -15,6 +16,12 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const monthsStr = searchParams.get("months");
   const months = monthsStr ? parseInt(monthsStr, 10) : 6;
+  const cacheKey = `${session.sub}_${months}`;
+
+  const cachedResult = getCachedDashboard(cacheKey);
+  if (cachedResult) {
+    return apiResponse(cachedResult);
+  }
 
   try {
     // Run everything in parallel! The real secret to production performance
@@ -24,11 +31,15 @@ export async function GET(req: NextRequest) {
       activityService.getOwnerActivity({ userId: session.sub, limit: 5, offset: 0 }).catch(() => ({ items: [], total: 0 }))
     ]);
 
-    return apiResponse({
+    const finalResponse = {
       stats: summary,
       collectionData: monthlyStats,
       recentActivity: activityRes?.items || []
-    });
+    };
+
+    setDashboardCache(cacheKey, finalResponse);
+
+    return apiResponse(finalResponse);
   } catch (error: any) {
     return apiError(error.message || "Failed to fetch dashboard");
   }
