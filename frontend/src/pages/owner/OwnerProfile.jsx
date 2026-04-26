@@ -490,14 +490,22 @@ function NotificationsModule({ prefs, updatePref }) {
     const [testSending, setTestSending] = useState(false);
     const [testSent, setTestSent] = useState(false);
 
-    // ELITE #2: Test reminder button
+    // ELITE #2: Test reminder button — wired to real backend
+    const [testResult, setTestResult] = useState('');
     const sendTestReminder = async () => {
         setTestSending(true);
-        // Simulate sending — will be wired to real endpoint later
-        await new Promise(r => setTimeout(r, 1200));
-        setTestSending(false);
-        setTestSent(true);
-        setTimeout(() => setTestSent(false), 3000);
+        setTestResult('');
+        try {
+            const res = await ownerService.sendTestReminder('DUE_SOON');
+            setTestSent(true);
+            setTestResult(res?.message || 'Test reminder sent!');
+        } catch (e) {
+            const detail = e?.response?.data?.detail;
+            setTestResult(typeof detail === 'string' ? detail : (detail?.message || 'Failed to send test reminder'));
+        } finally {
+            setTestSending(false);
+            setTimeout(() => { setTestSent(false); setTestResult(''); }, 5000);
+        }
     };
 
     return (
@@ -530,7 +538,7 @@ function NotificationsModule({ prefs, updatePref }) {
                 onChange={(v) => updatePref('owner_daily_summary', v)} />
 
             {/* ELITE #2: Test Reminder Button */}
-            <div className="pt-1">
+            <div className="pt-1 space-y-2">
                 <button type="button" onClick={sendTestReminder} disabled={testSending || testSent}
                     className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-medium transition-all ${testSent
                         ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
@@ -539,8 +547,11 @@ function NotificationsModule({ prefs, updatePref }) {
                     {testSending ? <Loader2 size={14} className="animate-spin" />
                         : testSent ? <CheckCircle2 size={14} />
                             : <Send size={14} />}
-                    {testSending ? 'Sending...' : testSent ? 'Test reminder sent to you!' : 'Send Test Reminder to Myself'}
+                    {testSending ? 'Sending...' : testSent ? (testResult || 'Sent!') : 'Send Test Reminder to Myself'}
                 </button>
+                {testResult && !testSent && (
+                    <p className="text-xs text-rose-600 text-center">{testResult}</p>
+                )}
             </div>
         </div>
     );

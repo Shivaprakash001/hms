@@ -129,6 +129,10 @@ export const ownerService = {
             signal
         });
         return response.data;
+    },
+    sendTestReminder: async (type = 'DUE_SOON') => {
+        const response = await api.post('/notifications/test-reminder', { type });
+        return response.data;
     }
 };
 
