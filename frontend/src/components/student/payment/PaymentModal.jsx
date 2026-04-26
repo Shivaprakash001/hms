@@ -79,6 +79,14 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
                 obligation_id: obligationId,
                 amount
             });
+
+            // ✅ If gateway (like PhonePe v2) returns a hosted checkout URL, redirect immediately!
+            if (intent.checkout_url) {
+                window.location.href = intent.checkout_url;
+                return; // Do not unset loading or change state, page is unloading
+            }
+
+            // Fallback for manual Direct UPI implementations
             setAttempt(intent);
             setStatus(intent.status);
             setStep('pay');
