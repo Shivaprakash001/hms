@@ -474,6 +474,10 @@ const requestWithRetry = async (fn, { retries = 2, delayMs = 1500 } = {}) => {
 
 // --- Dashboard Service ---
 export const dashboardService = {
+    getUnified: async (months = 6) => {
+        const response = await api.get('/dashboard', { params: { months } });
+        return response.data;
+    },
     getSummary: async () => {
         const response = await requestWithRetry(() => api.get('/dashboard/summary'));
         return response.data;

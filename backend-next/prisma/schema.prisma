@@ -84,6 +84,7 @@ model Student {
 
   @@map("students")
   @@schema("public")
+  @@index([owner_id])
 }
 
 model Hostel {
@@ -185,6 +186,9 @@ model Payment {
 
   @@map("payments")
   @@schema("public")
+  @@index([owner_id])
+  @@index([student_id])
+  @@index([created_at])
 }
 
 model PaymentAttempt {
@@ -297,6 +301,8 @@ model Expense {
 
   @@map("expenses")
   @@schema("public")
+  @@index([owner_id])
+  @@index([date])
 }
 
 model Complaint {

@@ -97,7 +97,7 @@ const OwnerLayout = () => {
             mounted = false;
             window.removeEventListener('owner-branding-updated', handleBrandingUpdate);
         };
-    }, [location.pathname, location.search]);
+    }, []);
 
     const handleMarkAllRead = async () => {
         try {
