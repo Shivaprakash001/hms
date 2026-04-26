@@ -48,25 +48,33 @@ export async function POST(req: Request) {
       return new Response("Webhook verified", { status: 200 });
     }
 
-    // 4. Parse JSON for actual payment events
+    // 4. Parse JSON
     const body = JSON.parse(rawBody);
 
-    console.info("[webhook.phonepe] received event:", {
+    // 5. Short-circuit validation pings that contain JSON but aren't real events
+    // PhonePe dashboard sends dummy payloads during webhook creation
+    if (body.test || !body.payload || !body.payload.merchantOrderId) {
+      console.info("[webhook.phonepe] Received non-payment validation ping from PhonePe");
+      return NextResponse.json({ success: true, message: "Webhook verified" }, { status: 200 });
+    }
+
+    console.info("[webhook.phonepe] received real event:", {
       event: body.event,
-      merchantOrderId: body.payload?.merchantOrderId,
-      state: body.payload?.state,
+      merchantOrderId: body.payload.merchantOrderId,
+      state: body.payload.state,
     });
 
     const result = await paymentService.handlePaymentWebhook("PHONEPE", headers, body);
 
     return NextResponse.json({ success: true, data: result }, { status: 200 });
   } catch (error: any) {
-    console.error("[webhook.phonepe] Error:", error);
-    const message = String(error?.message ?? error);
-    // Always return 200 to acknowledge receipt — prevents PhonePe from retrying
-    // Errors are logged server-side for debugging
+    console.error("[webhook.phonepe] Error inside webhook:", error);
+    
+    // ALWAYS return success:true and 200 to PhonePe to acknowledge receipt safely.
+    // If we return success:false, PhonePe's dashboard validator assumes the URL is broken.
+    // We already log the real error above internally.
     return NextResponse.json(
-      { success: false, error: message },
+      { success: true, status: "acknowledged_with_internal_error" },
       { status: 200 }
     );
   }
