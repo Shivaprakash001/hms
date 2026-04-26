@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { paymentService } from "@/lib/services/payment-service";
 import { authService } from "@/lib/services/auth-service";
 import { apiError } from "@/lib/utils/api-utils";
+import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -17,11 +18,22 @@ export async function GET(
       return apiError("Unauthorized", "UNAUTHORIZED", 401);
     }
 
+    // user.id is profile_id, but payment attempts store student_id (students table PK).
+    // Look up the real student ID for STUDENT role.
+    let studentId: string | undefined;
+    if (user.role === "STUDENT") {
+      const student = await prisma.student.findUnique({
+        where: { profile_id: user.id },
+        select: { id: true },
+      });
+      studentId = student?.id;
+    }
+
     const result = await paymentService.getPaymentAttempt(
       params.id,
       user.id,
       user.role,
-      user.role === "STUDENT" ? user.id : undefined
+      studentId
     );
 
     return NextResponse.json(result);

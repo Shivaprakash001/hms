@@ -492,7 +492,8 @@ export class PaymentService {
         },
         include: {
             student: { include: { profile: true } },
-            allocation: { include: { room: true } }
+            allocation: { include: { room: true } },
+            payments: true
         },
         orderBy: { rent_month: "desc" }
     });
@@ -546,21 +547,26 @@ export class PaymentService {
   }
 
   private async getProviderForOwner(ownerId: string) {
-    // For now, defaulting to PhonePe as requested, using env vars if db config missing
-    // In production, we'd fetch this from a table
-    const hostel = await prisma.hostel.findFirst({ where: { owner_id: ownerId } });
-    
-    // Mocking config resolution similar to Python
+    const hostel = await prisma.hostel.findFirst({
+      where: { owner_id: ownerId },
+      include: { owner: true },
+    });
+
+    if (!hostel) {
+      throw new Error("CONFIG_ERROR: No hostel found for this owner. Please set up your hostel first.");
+    }
+
+    if (!hostel.upi_id) {
+      throw new Error("CONFIG_ERROR: Owner UPI ID is not configured. Please set your UPI ID in hostel settings.");
+    }
+
+    // UPI Direct provider — tenant pays owner directly via UPI intent link
     return {
-        provider: "PHONEPE",
+        provider: "PHONEPE", // Provider class name kept for backward compat with existing attempts table
         config: {
-            base_url: process.env.PHONEPE_BASE_URL || "https://api.phonepe.com/apis/pg",
-            bearer_token: process.env.PHONEPE_BEARER_TOKEN,
-            salt_key: process.env.PHONEPE_SALT_KEY,
-            salt_index: process.env.PHONEPE_SALT_INDEX,
-            merchant_id: hostel?.phonepe_merchant_id || process.env.PHONEPE_MERCHANT_ID,
-            redirect_url: process.env.PHONEPE_REDIRECT_URL,
-            callback_url: process.env.PHONEPE_CALLBACK_URL,
+            owner_upi_id: hostel.upi_id,
+            owner_name: hostel.name || hostel.owner?.name || "Hostel",
+            hostel_id: hostel.id,
         }
     };
   }

@@ -192,7 +192,7 @@ model PaymentAttempt {
   owner_id            String         @db.Uuid
   provider            String
   merchant_txn_id     String         @unique
-  gateway_txn_id      String?
+  gateway_txn_id      String?        @unique
   amount              Decimal        @db.Decimal(10, 2)
   status              AttemptStatus  @default(CREATED)
   upi_intent_url      String?
@@ -344,6 +344,7 @@ enum PaymentStatus {
 enum AttemptStatus {
   CREATED
   PENDING
+  PENDING_VERIFICATION
   SUCCESS
   FAILED
   EXPIRED

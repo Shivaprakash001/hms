@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { paymentService } from "@/lib/services/payment-service";
 import { authService } from "@/lib/services/auth-service";
 import { apiError } from "@/lib/utils/api-utils";
+import { prisma } from "@/lib/db";
 
 export async function POST(req: Request) {
   try {
@@ -10,11 +11,21 @@ export async function POST(req: Request) {
       return apiError("Unauthorized", "UNAUTHORIZED", 401);
     }
 
+    // user.id is profile_id, but payment attempts store student_id (students table PK).
+    let studentId: string | undefined;
+    if (user.role === "STUDENT") {
+      const student = await prisma.student.findUnique({
+        where: { profile_id: user.id },
+        select: { id: true },
+      });
+      studentId = student?.id;
+    }
+
     const body = await req.json();
     const result = await paymentService.verifyPaymentStatus({
       userId: user.id,
       role: user.role,
-      studentId: user.role === "STUDENT" ? user.id : undefined,
+      studentId,
       attemptId: body?.attempt_id,
       merchantTxnId: body?.merchant_txn_id || body?.merchantTransactionId,
       gatewayTxnId: body?.gateway_txn_id || body?.transactionId || body?.gateway_transaction_id,
@@ -27,6 +38,7 @@ export async function POST(req: Request) {
     if (message.includes("FORBIDDEN")) return apiError(message, "FORBIDDEN", 403);
     if (message.includes("NOT_FOUND")) return apiError(message, "NOT_FOUND", 404);
     if (message.includes("BAD_REQUEST")) return apiError(message, "VALIDATION_ERROR", 400);
+    if (message.includes("CONFIG_ERROR")) return apiError(message, "CONFIG_ERROR", 422);
     return apiError(message, "INTERNAL_ERROR", 500);
   }
 }

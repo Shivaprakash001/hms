@@ -52,14 +52,14 @@ const StudentPaymentReturn = () => {
                 <p className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-500">Payment Return</p>
                 <h1 className="mt-3 text-3xl font-black text-slate-900">Checking your payment status</h1>
                 <p className="mt-2 text-sm text-slate-500">
-                    HMS will confirm the payment only after webhook or reconciliation updates the attempt.
+                    We're verifying your UPI payment. This may take a moment.
                 </p>
 
                 <div className="mt-8 rounded-2xl border border-slate-200 bg-slate-50 p-5">
                     {loading && (
                         <div className="flex items-center gap-3 text-slate-700">
                             <Loader2 className="animate-spin" size={18} />
-                            <span>Waiting for confirmation from PhonePe…</span>
+                            <span>Verifying payment status…</span>
                         </div>
                     )}
 
@@ -79,9 +79,9 @@ const StudentPaymentReturn = () => {
 
                     {attempt && (
                         <div className="mt-4 space-y-2 text-sm text-slate-600">
-                            <p><span className="font-semibold text-slate-800">Attempt:</span> {attempt.attempt_id}</p>
-                            <p><span className="font-semibold text-slate-800">Merchant Transaction:</span> {attempt.merchant_txn_id || 'N/A'}</p>
-                            <p><span className="font-semibold text-slate-800">Provider:</span> {attempt.provider}</p>
+                            <p><span className="font-semibold text-slate-800">Attempt:</span> {attempt.id}</p>
+                            <p><span className="font-semibold text-slate-800">Reference:</span> {attempt.gateway_txn_id || attempt.merchant_txn_id || 'N/A'}</p>
+                            <p><span className="font-semibold text-slate-800">Provider:</span> UPI Direct</p>
                         </div>
                     )}
 
@@ -95,14 +95,6 @@ const StudentPaymentReturn = () => {
                     >
                         Back To Payments
                     </Link>
-                    {attempt?.checkout_url && status !== 'SUCCESS' && (
-                        <a
-                            href={attempt.checkout_url}
-                            className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
-                        >
-                            Reopen Checkout
-                        </a>
-                    )}
                 </div>
             </div>
         </div>

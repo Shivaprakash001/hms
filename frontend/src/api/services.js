@@ -370,6 +370,22 @@ export const paymentService = {
         const response = await api.get(`/payments/attempts/${attemptId}`);
         return response.data;
     },
+    submitUpiReference: async (data) => {
+        const response = await api.post('/payments/submit-reference', data);
+        return response.data;
+    },
+    confirmPayment: async (attemptId) => {
+        const response = await api.post('/payments/confirm', { attempt_id: attemptId, action: 'confirm' });
+        return response.data;
+    },
+    rejectPayment: async (attemptId) => {
+        const response = await api.post('/payments/confirm', { attempt_id: attemptId, action: 'reject' });
+        return response.data;
+    },
+    getPendingVerifications: async () => {
+        const response = await api.get('/payments/pending-verification');
+        return response.data;
+    },
     generateRent: async (month) => {
         const response = await api.post('/payments/generate-monthly', { rent_month: month });
         return response.data;
