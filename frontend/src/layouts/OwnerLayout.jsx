@@ -78,8 +78,8 @@ const OwnerLayout = () => {
         const token = ownerData ? JSON.parse(ownerData).token : null;
         if (!token) return;
 
-        const apiBase = import.meta.env.VITE_API_URL || 'https://hms-r68g.vercel.app/api';
-        const es = new EventSource(`${apiBase}/events?token=${encodeURIComponent(token)}`);
+        // Use relative path so the frontend's Vercel rewrite proxy handles routing
+        const es = new EventSource(`/api/events?token=${encodeURIComponent(token)}`);
 
         es.onmessage = (event) => {
             try {
