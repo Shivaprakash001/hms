@@ -110,6 +110,8 @@ model Hostel {
   timezone            String    @default("UTC")
   auto_rent_day       Int       @default(1)
   phonepe_merchant_id String?
+  preferences_config  Json?     // Extended preferences (billing, notifications, automation, etc.)
+  logo_url            String?
   created_at          DateTime  @default(now()) @db.Timestamptz(6)
   updated_at          DateTime? @updatedAt @db.Timestamptz(6)
   owner               Profile   @relation(fields: [owner_id], references: [id])

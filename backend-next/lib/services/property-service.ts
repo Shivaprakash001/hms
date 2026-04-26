@@ -43,6 +43,8 @@ export class PropertyService {
         timezone: (hostel as any).timezone || "Asia/Kolkata",
         auto_rent_day: (hostel as any).auto_rent_day || 1,
         phonepe_merchant_id: (hostel as any).phonepe_merchant_id || "",
+        // Spread extended config from JSON blob
+        ...((hostel as any).preferences_config || {}),
       }
     };
   }
@@ -114,10 +116,61 @@ export class PropertyService {
     const hostel = profile.hostels[0];
     if (!hostel) throw new Error("VALIDATION: Please complete Hostel Details before setting preferences");
 
-    const allowed = ["currency", "rent_cycle", "receipt_prefix", "timezone", "auto_rent_day", "phonepe_merchant_id"];
+    // ── Typed columns (backward compat) ──
+    const typedColumns = ["currency", "rent_cycle", "receipt_prefix", "timezone", "auto_rent_day", "phonepe_merchant_id"];
     const updateData: any = {};
-    for (const key of allowed) {
+    for (const key of typedColumns) {
       if (data[key] !== undefined) updateData[key] = data[key];
+    }
+
+    // ── Server-side validation ──
+    if (updateData.auto_rent_day !== undefined) {
+      const day = Number(updateData.auto_rent_day);
+      if (isNaN(day) || day < 1 || day > 28) throw new Error("VALIDATION: Rent generation day must be 1–28");
+      updateData.auto_rent_day = day;
+    }
+
+    // ── Extended config (JSON blob) ──
+    const extendedKeys = [
+      "due_day", "late_fee_type", "late_fee_amount", "late_fee_percentage",
+      "late_fee_after_days", "max_late_fee",
+      "allow_partial_payments", "min_payment_amount",
+      "reminder_email", "reminder_in_app", "reminder_whatsapp",
+      "reminder_day_1", "reminder_day_5", "reminder_day_10",
+      "late_fee_notification", "owner_daily_summary",
+      "auto_generate_rent", "auto_apply_late_fees", "auto_send_reminders", "auto_deactivate_days",
+      "auto_email_receipt", "receipt_format", "receipt_footer",
+      "require_doc_approval", "allow_tenant_edits", "data_retention_months",
+      "date_format", "language",
+    ];
+
+    const existingConfig = (hostel as any).preferences_config || {};
+    const newConfig = { ...existingConfig };
+    let hasExtended = false;
+
+    for (const key of extendedKeys) {
+      if (data[key] !== undefined) {
+        newConfig[key] = data[key];
+        hasExtended = true;
+      }
+    }
+
+    // Financial safety validations
+    if (newConfig.late_fee_amount !== undefined && Number(newConfig.late_fee_amount) > 10000) {
+      throw new Error("VALIDATION: Late fee amount cannot exceed ₹10,000");
+    }
+    if (newConfig.late_fee_percentage !== undefined && (Number(newConfig.late_fee_percentage) < 0 || Number(newConfig.late_fee_percentage) > 50)) {
+      throw new Error("VALIDATION: Late fee percentage must be 0–50%");
+    }
+    if (newConfig.max_late_fee !== undefined && Number(newConfig.max_late_fee) > 50000) {
+      throw new Error("VALIDATION: Maximum late fee cannot exceed ₹50,000");
+    }
+    if (newConfig.min_payment_amount !== undefined && Number(newConfig.min_payment_amount) < 0) {
+      throw new Error("VALIDATION: Minimum payment must be positive");
+    }
+
+    if (hasExtended) {
+      updateData.preferences_config = newConfig;
     }
 
     if (Object.keys(updateData).length === 0) {
