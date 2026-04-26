@@ -176,19 +176,36 @@ export class PhonePeProvider extends PaymentProvider {
    * Security: PhonePe sends Authorization header = SHA256(username:password)
    */
   async verifyWebhook(headers: any, body: any): Promise<WebhookVerificationResult> {
-    // 1. Verify Basic Auth (SHA256 of username:password)
+    // 1. Verify Basic Auth (Authorization: Basic base64(username:password))
     const authHeader = headers["authorization"] || headers["Authorization"];
     const webhookUsername = process.env.PHONEPE_WEBHOOK_USERNAME || "";
     const webhookPassword = process.env.PHONEPE_WEBHOOK_PASSWORD || "";
 
     if (webhookUsername && webhookPassword && authHeader) {
-      const expectedHash = crypto
-        .createHash("sha256")
-        .update(`${webhookUsername}:${webhookPassword}`)
-        .digest("hex");
+      let isValid = false;
 
-      if (authHeader !== expectedHash) {
-        throw new Error("Invalid webhook authorization");
+      // Handle traditional Basic Auth approach (sent by PhonePe sandbox / dashboard UI)
+      if (authHeader.startsWith("Basic ")) {
+        const encoded = authHeader.substring(6);
+        const decoded = Buffer.from(encoded, "base64").toString("utf-8");
+        const [username, password] = decoded.split(":");
+        if (username === webhookUsername && password === webhookPassword) {
+          isValid = true;
+        }
+      } 
+      // Fallback for SHA256 approach if PhonePe sends raw hash matching legacy docs
+      else {
+        const expectedHash = crypto
+          .createHash("sha256")
+          .update(`${webhookUsername}:${webhookPassword}`)
+          .digest("hex");
+        if (authHeader === expectedHash) {
+          isValid = true;
+        }
+      }
+
+      if (!isValid) {
+        throw new Error("Invalid webhook authorization credentials");
       }
     }
 
