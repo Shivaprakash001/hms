@@ -47,11 +47,13 @@ export async function middleware(req: NextRequest) {
     return response;
   }
 
-  // 3. Extract Token (Priority: Cookie -> Header)
+  // 3. Extract Token (Priority: Cookie -> Header -> Query param for SSE)
   const cookieToken = req.cookies.get("hms_session")?.value;
   const authHeader = req.headers.get("authorization");
   const headerToken = authHeader?.startsWith("Bearer ") ? authHeader.substring(7) : null;
-  const token = cookieToken || headerToken;
+  // EventSource (SSE) cannot send custom headers, so accept token via query param
+  const queryToken = pathname === "/api/events" ? req.nextUrl.searchParams.get("token") : null;
+  const token = cookieToken || headerToken || queryToken;
 
   if (!token) {
     return NextResponse.json(
