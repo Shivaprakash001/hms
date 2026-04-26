@@ -52,12 +52,9 @@ export class PaymentService {
       // Fallback to 0 if monthly rent is null to prevent NaN Prisma crashes
       const monthlyRent = Number(alloc.student.monthly_rent || 0);
       
-      const amount = this.calculateProratedRent(
-        monthlyRent,
-        alloc.start_date,
-        alloc.end_date,
-        targetMonth
-      );
+      // Use the full monthly rent instead of prorating based on joining dates
+      // to ensure consistency between the tenant profile and ledger.
+      const amount = monthlyRent;
 
       if (isNaN(amount) || amount <= 0) continue;
 
