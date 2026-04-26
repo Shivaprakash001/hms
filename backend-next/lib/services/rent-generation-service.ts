@@ -37,23 +37,28 @@ export class RentGenerationService {
     const LOCK_TTL_MS = 60_000; // 60 seconds
 
     try {
-      // Clean up dead locks first
-      await prisma.systemLock.deleteMany({
-        where: { key: lockKey, expires_at: { lt: new Date() } }
-      });
+      // Atomic Lock Acquisition (Handles fresh insertion + overwriting expired locks inside ONE query window)
+      const lockAcquired = await prisma.$executeRaw`
+        INSERT INTO system_locks (key, locked_at, expires_at)
+        VALUES (${lockKey}, NOW(), NOW() + interval '60 seconds')
+        ON CONFLICT (key) DO UPDATE
+        SET locked_at = NOW(), expires_at = NOW() + interval '60 seconds'
+        WHERE system_locks.expires_at < NOW()
+      `;
 
-      // Attempt to acquire lock atomically
-      await prisma.systemLock.create({
-        data: {
-          key: lockKey,
-          expires_at: new Date(Date.now() + LOCK_TTL_MS)
-        }
-      });
+      if (lockAcquired === 0) {
+        // Zero rows affected = constraint fired AND the existing lock has NOT expired
+        return {
+          rent_month: rentMonth.toISOString(),
+          error: "Rent generation already in progress. Please wait.",
+          locked: true
+        };
+      }
     } catch (e: any) {
-      // P2002 means lock already exists
+      console.error("[RENT] Critical DB lock failure:", e);
       return {
         rent_month: rentMonth.toISOString(),
-        error: "Rent generation already in progress. Please wait.",
+        error: "Failed to acquire generation lock.",
         locked: true
       };
     }
