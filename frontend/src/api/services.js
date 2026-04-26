@@ -421,6 +421,14 @@ export const paymentService = {
 
         return blob;
     },
+
+    downloadInvoice: async (paymentId) => {
+        const response = await api.get(`/invoices/${paymentId}`);
+        if (response.data && response.data.url) {
+            window.open(response.data.url, '_blank');
+        }
+        return true;
+    },
     exportReport: async (params = {}) => {
         const response = await api.get('/payments/export', {
             params,

@@ -415,12 +415,13 @@ model Receipt {
   amount         Decimal   @db.Decimal(10, 2)
   payment_method String
   transaction_id String?
-  hostel_name    String?
-  tenant_name    String?
-  rent_month     DateTime? @db.Date
-  issued_at      DateTime  @default(now()) @db.Timestamptz(6)
-  payment        Payment   @relation(fields: [payment_id], references: [id])
-  student        Student   @relation(fields: [student_id], references: [id])
+  hostel_name     String?
+  tenant_name     String?
+  rent_month      DateTime? @db.Date
+  issued_at       DateTime  @default(now()) @db.Timestamptz(6)
+  invoice_pdf_url String?   // ✅ Final PDF storage
+  payment         Payment   @relation(fields: [payment_id], references: [id])
+  student         Student   @relation(fields: [student_id], references: [id])
 
   @@map("receipts")
   @@schema("public")

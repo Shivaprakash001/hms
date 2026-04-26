@@ -268,6 +268,15 @@ const Payments = () => {
         }
     };
 
+    const handleDownloadInvoice = async (paymentId) => {
+        try {
+            await paymentService.downloadInvoice(paymentId);
+        } catch (error) {
+            console.error("Failed to fetch invoice:", error);
+            alert(error.response?.data?.detail || "Failed to download invoice");
+        }
+    };
+
     const handleDownloadFromSelection = async (payment) => {
         if (!payment?.isReceiptAvailable || !payment?.latestPaymentId) {
             alert('Receipt is only available for recorded transactions.');
@@ -724,6 +733,7 @@ const Payments = () => {
                 payment={selectedPaymentWithContext}
                 onMarkPaid={handleMarkAsPaid}
                 onDownloadReceipt={handleDownloadFromSelection}
+                onDownloadInvoice={handleDownloadInvoice}
                 onViewTenant={handleViewTenant}
                 onViewHistory={setHistoryTenant}
                 onStartOnlineTest={handleOpenOnlineTest}
