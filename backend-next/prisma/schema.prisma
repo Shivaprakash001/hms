@@ -197,6 +197,7 @@ model PaymentAttempt {
   status              AttemptStatus  @default(CREATED)
   upi_intent_url      String?
   qr_payload          String?
+  checkout_url        String?
   expires_at          DateTime?      @db.Timestamptz(6)
   confirmed_at        DateTime?      @db.Timestamptz(6)
   raw_create_response Json?

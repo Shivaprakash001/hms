@@ -28,13 +28,13 @@ const OnlinePaymentTestModal = ({ isOpen, onClose, obligation, onSettled }) => {
     }, [isOpen]);
 
     useEffect(() => {
-        if (!isOpen || !attempt?.attempt_id || TERMINAL_STATUSES.includes(status)) {
+        if (!isOpen || !attempt?.id || TERMINAL_STATUSES.includes(status)) {
             return undefined;
         }
 
         const timer = window.setInterval(async () => {
             try {
-                const latest = await paymentService.getAttempt(attempt.attempt_id);
+                const latest = await paymentService.getAttempt(attempt.id);
                 setAttempt(prev => ({ ...prev, ...latest }));
                 setStatus(latest.status || 'PENDING');
                 if (latest.status === 'SUCCESS') {
@@ -46,7 +46,7 @@ const OnlinePaymentTestModal = ({ isOpen, onClose, obligation, onSettled }) => {
         }, POLL_INTERVAL_MS);
 
         return () => window.clearInterval(timer);
-    }, [attempt?.attempt_id, isOpen, onSettled, status]);
+    }, [attempt?.id, isOpen, onSettled, status]);
 
     const handleCreateIntent = async () => {
         if (!obligation?.obligationId) {
@@ -66,6 +66,13 @@ const OnlinePaymentTestModal = ({ isOpen, onClose, obligation, onSettled }) => {
                 obligation_id: obligation.obligationId,
                 amount,
             });
+
+            // ✅ If direct checkout URL is present, redirect immediately for better UX
+            if (intent.checkout_url) {
+                window.location.href = intent.checkout_url;
+                return;
+            }
+
             setAttempt(intent);
             setStatus(intent.status || 'PENDING');
         } catch (intentError) {
@@ -215,7 +222,7 @@ const OnlinePaymentTestModal = ({ isOpen, onClose, obligation, onSettled }) => {
 
                                     <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
                                         <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Merchant Transaction ID</p>
-                                        <p className="mt-2 break-all font-mono text-sm text-slate-700">{attempt.merchant_txn_id || attempt.attempt_id}</p>
+                                        <p className="mt-2 break-all font-mono text-sm text-slate-700">{attempt.merchant_txn_id || attempt.id}</p>
                                     </div>
                                 </div>
                             )}

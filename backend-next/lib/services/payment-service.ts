@@ -284,6 +284,7 @@ export class PaymentService {
                 gateway_txn_id: result.gateway_txn_id,
                 upi_intent_url: result.upi_intent_url,
                 qr_payload: result.qr_payload,
+                checkout_url: result.checkout_url,
                 expires_at: result.expires_at,
                 raw_create_response: result.raw_response as any
             }
