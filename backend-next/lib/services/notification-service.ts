@@ -4,7 +4,8 @@ export class NotificationService {
   async getUserNotifications(userId: string) {
     return prisma.notification.findMany({
       where: { profile_id: userId },
-      orderBy: { created_at: "desc" }
+      orderBy: { created_at: "desc" },
+      take: 50
     });
   }
 

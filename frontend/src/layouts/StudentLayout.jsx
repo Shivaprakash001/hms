@@ -30,7 +30,7 @@ const StudentLayout = () => {
         };
 
         fetchNotifications();
-        const interval = setInterval(fetchNotifications, 30000);
+        const interval = setInterval(fetchNotifications, 300000); // Poll every 5 minutes instead of 30 seconds
         return () => {
             mounted = false;
             clearInterval(interval);

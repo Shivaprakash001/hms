@@ -62,7 +62,7 @@ const OwnerLayout = () => {
 
     useEffect(() => {
         fetchNotifications();
-        const interval = setInterval(fetchNotifications, 30000); // Poll every 30s
+        const interval = setInterval(fetchNotifications, 300000); // Poll every 5 minutes instead of 30s
         return () => clearInterval(interval);
     }, []);
 
