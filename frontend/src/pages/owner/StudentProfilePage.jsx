@@ -73,7 +73,7 @@ export default function StudentProfilePage() {
   }
 
   const profile = student.profile || {};
-  const roomAllocation = student.allocations?.find(a => a.is_active);
+  const roomAllocation = student.allocations?.[0];
   const currentRoom = roomAllocation?.room?.room_no || 'Unassigned';
   const documents = student.documents || [];
   const latestPayment = student.payments?.[0];

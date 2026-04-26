@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { studentService } from "@/lib/services/student-service";
+import { prisma } from "@/lib/db";
 import { StudentProfileUpdateSchema } from "@/lib/validators";
 
 
@@ -43,8 +44,30 @@ export async function POST(req: NextRequest) {
     // Pass data directly to self update method
     const updated = await studentService.updateStudentSelfProfile(session.sub, validated.data, session.sub);
     
-    // Note: Aadhaar file processing should be integrated here or via separate document_service
-    // For now we accept and update fields 
+    // Process Aadhaar Document
+    const aadhaarFile = formData.get("aadhaar_file") as File | null;
+    if (aadhaarFile) {
+      try {
+        const buffer = await aadhaarFile.arrayBuffer();
+        const base64Str = Buffer.from(buffer).toString("base64");
+        const mimeType = aadhaarFile.type || "image/jpeg";
+        const fileUrl = `data:${mimeType};base64,${base64Str}`;
+        
+        await prisma.identificationDocument.create({
+          data: {
+             tenant_id: updated.id,
+             doc_type: "AADHAAR",
+             doc_number: validated.data.aadhaar_number || null,
+             file_url: fileUrl,
+             uploaded_by: session.sub,
+             is_verified: false
+          }
+        });
+      } catch (fileErr) {
+        console.error("Failed to upload aadhaar file:", fileErr);
+        // Continue, profile was created successfully. Document can be retried later.
+      }
+    }
     
     return apiResponse(updated, 201);
   } catch (error: any) {

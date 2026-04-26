@@ -86,3 +86,13 @@ eventSystem.on("document_uploaded", async (data) => {
     metadata: { type: data.doc_type }
   });
 });
+eventSystem.on("document_verified", async (data) => {
+  await activityService.log({
+    userId: data.owner_id,
+    ownerId: data.owner_id,
+    actionType: data.is_verified ? "VERIFY" : "UNVERIFY",
+    entityType: "DOCUMENT",
+    entityId: data.doc_id,
+    metadata: { student_id: data.student_id }
+  });
+});
