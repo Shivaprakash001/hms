@@ -18,33 +18,8 @@ import { invalidateDashboardCache } from "../cache/dashboard-cache";
  * - Full audit trail via RentGenerationLog
  */
 
-// In-memory lock to prevent concurrent generation runs
-const generationLocks = new Map<string, number>();
-const LOCK_TTL_MS = 30_000; // 30 seconds
-
-function acquireLock(key: string): boolean {
-  const existing = generationLocks.get(key);
-  if (existing && Date.now() - existing < LOCK_TTL_MS) {
-    return false; // Lock is held
-  }
-  generationLocks.set(key, Date.now());
-  return true;
-}
-
-function releaseLock(key: string) {
-  generationLocks.delete(key);
-}
-
 export class RentGenerationService {
 
-  /**
-   * Generate rent obligations for a specific month.
-   * 
-   * @param targetDate - defaults to current month's 1st day
-   * @param ownerId - optional, scope to a single owner (manual trigger)
-   * @param triggerType - "cron" or "manual"
-   * @returns Summary of what was generated
-   */
   async generateMonthlyRent(
     targetDate?: Date,
     ownerId?: string,
@@ -57,9 +32,25 @@ export class RentGenerationService {
     // Due date = 5th of the month
     const dueDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 5));
 
-    // Rate-limit lock
-    const lockKey = ownerId || "global";
-    if (!acquireLock(lockKey)) {
+    // Persistent Database Lock
+    const lockKey = `rent_gen_${rentMonth.toISOString()}_${ownerId || "global"}`;
+    const LOCK_TTL_MS = 60_000; // 60 seconds
+
+    try {
+      // Clean up dead locks first
+      await prisma.systemLock.deleteMany({
+        where: { key: lockKey, expires_at: { lt: new Date() } }
+      });
+
+      // Attempt to acquire lock atomically
+      await prisma.systemLock.create({
+        data: {
+          key: lockKey,
+          expires_at: new Date(Date.now() + LOCK_TTL_MS)
+        }
+      });
+    } catch (e: any) {
+      // P2002 means lock already exists
       return {
         rent_month: rentMonth.toISOString(),
         error: "Rent generation already in progress. Please wait.",
@@ -100,6 +91,13 @@ export class RentGenerationService {
       const errors: string[] = [];
 
       for (const alloc of allocations) {
+        // Runaway generation timeout guard
+        if (Date.now() - startTime > 30_000) {
+          console.warn("[RENT] Runaway generation detected — safety aborting at 30,000ms");
+          errors.push("TIMEOUT: Generation exceeded Vercel 30s limit");
+          break;
+        }
+
         // Rent priority: student.monthly_rent > room.base_rent > skip
         const rentAmount = Number(alloc.student.monthly_rent) || Number(alloc.room.base_rent) || 0;
         if (rentAmount <= 0) {
@@ -191,7 +189,9 @@ export class RentGenerationService {
       return summary;
 
     } finally {
-      releaseLock(lockKey);
+      await prisma.systemLock.deleteMany({
+        where: { key: lockKey }
+      }).catch(e => console.error("[RENT] Failed to release DB lock:", e));
     }
   }
 

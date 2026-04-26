@@ -215,6 +215,15 @@ model RentGenerationLog {
   @@schema("public")
 }
 
+model SystemLock {
+  key        String   @id
+  locked_at  DateTime @default(now()) @db.Timestamptz(6)
+  expires_at DateTime @db.Timestamptz(6)
+
+  @@map("system_locks")
+  @@schema("public")
+}
+
 model Payment {
   id                 String          @id @default(uuid()) @db.Uuid
   obligation_id      String          @db.Uuid
