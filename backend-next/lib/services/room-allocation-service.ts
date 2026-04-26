@@ -85,28 +85,59 @@ export class RoomAllocationService {
   // ✅ Shift Room
   async shiftRoom(studentId: string, newRoomId: string, shiftDate: string, ownerId: string) {
 
-    // 1. Find active allocation
-    const active = await prisma.roomAllocation.findFirst({
-      where: { student_id: studentId, end_date: null },
-      orderBy: { start_date: "desc" }
+    const shiftData = await prisma.$transaction(async (tx) => {
+      // 1. Find active allocation
+      const active = await tx.roomAllocation.findFirst({
+        where: { student_id: studentId, end_date: null },
+        orderBy: { start_date: "desc" }
+      });
+
+      if (!active) {
+        throw new Error("NOT_FOUND: No active allocation found for student");
+      }
+
+      // 2. End old allocation
+      await tx.roomAllocation.update({
+        where: { id: active.id },
+        data: { end_date: new Date(shiftDate) }
+      });
+
+      // 3. Check new room capacity
+      const room = await tx.room.findUnique({
+        where: { id: newRoomId },
+        include: {
+          allocations: {
+            where: { end_date: null }
+          }
+        }
+      });
+      
+      if (!room) {
+        throw new Error("VALIDATION_ERROR: Target room not found");
+      }
+      if (room.allocations.length >= room.capacity) {
+        throw new Error("VALIDATION_ERROR: Target room is at maximum capacity");
+      }
+
+      // 4. Create new allocation
+      return await tx.roomAllocation.create({
+        data: {
+          student_id: studentId,
+          room_id: newRoomId,
+          start_date: new Date(shiftDate)
+        }
+      });
     });
 
-    if (!active) {
-      throw new Error("NOT_FOUND: No active allocation found for student");
-    }
-
-    // 2. Allocate new room (atomic)
-    await this.allocateRoom({
-      studentId,
-      roomId: newRoomId,
-      startDate: shiftDate,
-      ownerId
+    // ✅ Trigger Events
+    await eventSystem.trigger("student_allocated_room", {
+      student_id: studentId,
+      room_id: newRoomId,
+      allocation_id: shiftData.id,
+      owner_id: ownerId
     });
 
-    // 3. End old allocation
-    await this.endAllocation(active.id, shiftDate);
-
-    return { success: true };
+    return { success: true, new_allocation: shiftData };
   }
 }
 
