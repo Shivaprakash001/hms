@@ -37,11 +37,11 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("[webhook.phonepe] Error:", error);
     const message = String(error?.message ?? error);
-    // Always return 200 to prevent PhonePe retries for handled errors
-    // Return 400 only for truly invalid requests
+    // Always return 200 to acknowledge receipt — prevents PhonePe from retrying
+    // Errors are logged server-side for debugging
     return NextResponse.json(
       { success: false, error: message },
-      { status: 400 }
+      { status: 200 }
     );
   }
 }
