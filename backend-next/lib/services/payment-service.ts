@@ -235,7 +235,17 @@ export class PaymentService {
         orderBy: { created_at: "desc" }
     });
 
-    if (existingAttempt) return existingAttempt;
+    if (existingAttempt) {
+      // If the attempt has a valid checkout_url, reuse it
+      if (existingAttempt.checkout_url) {
+        return existingAttempt;
+      }
+      // Otherwise expire the stale attempt so we create a fresh one with checkout_url
+      await prisma.paymentAttempt.update({
+        where: { id: existingAttempt.id },
+        data: { status: "EXPIRED" }
+      });
+    }
 
     const { provider, config } = await this.getProviderForOwner(obligation.owner_id || "");
     const instance = PaymentProviderFactory.getProvider(provider, config);
