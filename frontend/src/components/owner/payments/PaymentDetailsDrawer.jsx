@@ -257,7 +257,7 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, onMarkPaid, onDownload
                                 </div>
                                 <div className="mb-4">
                                     <button
-                                        onClick={() => onDownloadInvoice?.(payment.id)}
+                                        onClick={() => onDownloadInvoice?.(payment.latestPaymentId)}
                                         disabled={!payment.isReceiptAvailable}
                                         className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-50 border border-indigo-200 px-4 py-3 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400 disabled:border-slate-200"
                                     >
