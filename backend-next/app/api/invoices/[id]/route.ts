@@ -15,17 +15,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   try {
     const { id: paymentId } = params;
     
-    // Resolve receipt from payment ID since ledger only carries payment
-    const receipt = await prisma.receipt.findFirst({
-        where: { payment_id: paymentId }
-    });
-
-    if (!receipt) {
-        return apiError("Receipt has not been generated for this transaction yet.", "NOT_FOUND", 404);
-    }
-    
     // Generates or fetches cached PDF URL
-    const result = await invoiceService.generateInvoicePDF(receipt.id);
+    const result = await invoiceService.generateInvoicePDF(paymentId);
     
     // Return standard JSON so frontend handles secure redirect
     return NextResponse.json({ url: result.url });

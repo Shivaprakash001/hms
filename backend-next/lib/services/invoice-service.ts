@@ -6,10 +6,10 @@ import { prisma } from "../db";
 import { imagekit } from "../imagekit";
 
 export class InvoiceService {
-  async generateInvoicePDF(receiptId: string) {
+  async generateInvoicePDF(paymentId: string) {
     // 1. Fetch data
-    const receipt = await prisma.receipt.findUnique({
-      where: { id: receiptId },
+    let receipt = await prisma.receipt.findFirst({
+      where: { payment_id: paymentId },
       include: {
         payment: true,
         student: {
@@ -18,7 +18,33 @@ export class InvoiceService {
       }
     });
 
-    if (!receipt) throw new Error("Receipt not found");
+    if (!receipt) {
+       // Auto-generate missing receipt seamlessly
+       const payment = await prisma.payment.findUnique({
+         where: { id: paymentId },
+         include: { obligation: true, student: { include: { profile: true } } }
+       });
+
+       if (!payment) throw new Error("Valid transaction payment not found");
+
+       receipt = await prisma.receipt.create({
+         data: {
+           payment_id: payment.id,
+           student_id: payment.student_id,
+           amount: payment.amount_paid,
+           payment_method: payment.payment_method,
+           transaction_id: payment.reference_number || undefined,
+           receipt_number: `RCP-${new Date().getTime().toString().slice(-6)}`,
+           rent_month: payment.obligation?.rent_month || undefined,
+           tenant_name: payment.student?.profile?.name || '-',
+           owner_id: payment.owner_id
+         },
+         include: {
+           payment: true,
+           student: { include: { profile: true } }
+         }
+       });
+    }
 
     // Avoid regenerating if we already have it
     if ((receipt as any).invoice_pdf_url) {
