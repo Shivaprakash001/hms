@@ -22,36 +22,52 @@ export class RoomAllocationService {
     });
   }
 
-  // ✅ Allocate Room (RPC based)
+  // ✅ Allocate Room (Prisma Transaction based)
   async allocateRoom(data: { studentId: string; roomId: string; startDate: string; ownerId: string }) {
     const { studentId, roomId, startDate, ownerId } = data;
 
-    /**
-     * DATABASE-LEVEL ATOMICITY
-     */
-    const { data: result, error } = await supabase.rpc("allocate_room_safely", {
-      p_student_id: studentId,
-      p_room_id: roomId,
-      p_start_date: startDate,
+    const allocationData = await prisma.$transaction(async (tx) => {
+      // 1. Check if student already has an active allocation
+      const existing = await tx.roomAllocation.findFirst({
+        where: { student_id: studentId, end_date: null }
+      });
+      
+      if (existing) {
+        throw new Error("VALIDATION_ERROR: Student is already allocated to a room and checking out is required first");
+      }
+
+      // 2. Check room capacity
+      const room = await tx.room.findUnique({
+        where: { id: roomId },
+        include: {
+          allocations: {
+            where: { end_date: null }
+          }
+        }
+      });
+      
+      if (!room) {
+        throw new Error("VALIDATION_ERROR: Room not found");
+      }
+      if (room.allocations.length >= room.capacity) {
+        throw new Error("VALIDATION_ERROR: Room is at maximum capacity");
+      }
+
+      // 3. Create allocation
+      return await tx.roomAllocation.create({
+        data: {
+          student_id: studentId,
+          room_id: roomId,
+          start_date: new Date(startDate)
+        }
+      });
     });
-
-    if (error) {
-      console.error("RPC execution error:", error);
-      throw new Error(`RPC_ERROR: ${error.message}`);
-    }
-
-    if (!result?.success) {
-      const msg = result?.message || "Room allocation failed";
-      throw new Error(`VALIDATION_ERROR: ${msg}`);
-    }
-
-    const allocationData = result.data;
 
     // ✅ Trigger Events
     await eventSystem.trigger("student_allocated_room", {
       student_id: studentId,
       room_id: roomId,
-      allocation_id: allocationData.allocation_id,
+      allocation_id: allocationData.id,
       owner_id: ownerId
     });
 

@@ -11,33 +11,30 @@ datasource db {
 }
 
 model Profile {
-  id                   String    @id @default(uuid()) @db.Uuid
-  email                String    @unique
-  name                 String
-  phone                String?
-  password_hash        String?
-  role                 Role
-  is_active            Boolean   @default(false)
-  is_profile_completed Boolean   @default(false)
-  address              String?
-  city                 String?
-  state                String?
-  pincode              String?
-  owner_id             String?   @db.Uuid
-  emergency_contact    String?
-  created_at           DateTime  @default(now())
-  updated_at           DateTime? @updatedAt
-
-  invitation_token      String?   @unique
+  email                 String         @unique
+  name                  String
+  phone                 String?
+  password_hash         String?
+  role                  Role
+  is_active             Boolean        @default(false)
+  is_profile_completed  Boolean        @default(false)
+  address               String?
+  city                  String?
+  state                 String?
+  pincode               String?
+  created_at            DateTime       @default(now())
+  updated_at            DateTime?      @updatedAt
+  invitation_token      String?        @unique
   invitation_expires_at DateTime?
-
-  owner           Profile?  @relation("OwnerStudent", fields: [owner_id], references: [id])
-  students        Profile[] @relation("OwnerStudent")
-  student_details Student?  @relation("StudentToProfile")
-
-  hostels       Hostel[]
-  notifications Notification[]
-  expenses      Expense[]
+  id                    String         @id @default(uuid()) @db.Uuid
+  owner_id              String?        @db.Uuid
+  emergency_contact     String?
+  expenses              Expense[]
+  hostels               Hostel[]
+  notifications         Notification[]
+  owner                 Profile?       @relation("OwnerStudent", fields: [owner_id], references: [id])
+  students              Profile[]      @relation("OwnerStudent")
+  student_details       Student?       @relation("StudentToProfile")
 
   @@index([owner_id])
   @@index([name])
@@ -80,16 +77,16 @@ model Student {
   documents             IdentificationDocument[]
   payment_attempts      PaymentAttempt[]
   payments              Payment[]
-  receipts              Receipt[]
   reactivation_requests ReactivationRequest[]
+  receipts              Receipt[]
+  reminders             ReminderLog[]
   obligations           RentObligation[]
   allocations           RoomAllocation[]
-  reminders             ReminderLog[]
-  profile               Profile                  @relation(fields: [profile_id], references: [id], name: "StudentToProfile")
+  profile               Profile                  @relation("StudentToProfile", fields: [profile_id], references: [id])
 
+  @@index([owner_id])
   @@map("students")
   @@schema("public")
-  @@index([owner_id])
 }
 
 model Hostel {
@@ -110,10 +107,10 @@ model Hostel {
   timezone            String    @default("UTC")
   auto_rent_day       Int       @default(1)
   phonepe_merchant_id String?
-  preferences_config  Json?     // Extended preferences (billing, notifications, automation, etc.)
-  logo_url            String?
   created_at          DateTime  @default(now()) @db.Timestamptz(6)
   updated_at          DateTime? @updatedAt @db.Timestamptz(6)
+  logo_url            String?
+  preferences_config  Json?
   owner               Profile   @relation(fields: [owner_id], references: [id])
   rooms               Room[]
 
@@ -122,19 +119,19 @@ model Hostel {
 }
 
 model Room {
-  id          String           @id @default(uuid()) @db.Uuid
-  hostel_id   String           @db.Uuid
+  id          String            @id @default(uuid()) @db.Uuid
+  hostel_id   String            @db.Uuid
   room_no     String
   floor       Int?
   capacity    Int
-  base_rent   Int?
   room_type   String?
-  is_active   Boolean          @default(true)
-  created_at  DateTime         @default(now()) @db.Timestamptz(6)
-  updated_at  DateTime?        @updatedAt @db.Timestamptz(6)
-  allocations RoomAllocation[]
+  is_active   Boolean           @default(true)
+  created_at  DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime?         @updatedAt @db.Timestamptz(6)
+  base_rent   Int?
   activity    RoomActivityLog[]
-  hostel      Hostel           @relation(fields: [hostel_id], references: [id])
+  allocations RoomAllocation[]
+  hostel      Hostel            @relation(fields: [hostel_id], references: [id])
 
   @@index([hostel_id])
   @@map("rooms")
@@ -145,11 +142,10 @@ model RoomActivityLog {
   id             String   @id @default(uuid()) @db.Uuid
   room_id        String   @db.Uuid
   owner_id       String   @db.Uuid
-  action         String   // e.g. "capacity_changed", "rent_changed", "name_changed"
+  action         String
   previous_value String?
   new_value      String?
   created_at     DateTime @default(now()) @db.Timestamptz(6)
-  
   room           Room     @relation(fields: [room_id], references: [id])
 
   @@index([room_id])
@@ -178,25 +174,25 @@ model RoomAllocation {
 }
 
 model RentObligation {
-  id            String           @id @default(uuid()) @db.Uuid
-  student_id    String           @db.Uuid
-  allocation_id String?          @db.Uuid
-  owner_id      String?          @db.Uuid
-  rent_month    DateTime         @db.Date
-  amount        Decimal          @db.Decimal(10, 2)
+  id              String           @id @default(uuid()) @db.Uuid
+  student_id      String           @db.Uuid
+  allocation_id   String?          @db.Uuid
+  owner_id        String?          @db.Uuid
+  rent_month      DateTime         @db.Date
+  amount          Decimal          @db.Decimal(10, 2)
   due_date        DateTime         @db.Date
   status          PaymentStatus    @default(PENDING)
-  obligation_type String           @default("RENT") // "RENT" or "LATE_FEE"
   created_at      DateTime         @default(now()) @db.Timestamptz(6)
   updated_at      DateTime?        @updatedAt @db.Timestamptz(6)
+  obligation_type String           @default("RENT")
   attempts        PaymentAttempt[]
   payments        Payment[]
   reminders       ReminderLog[]
   allocation      RoomAllocation?  @relation(fields: [allocation_id], references: [id])
   student         Student          @relation(fields: [student_id], references: [id])
 
-  @@index([student_id, rent_month])
   @@unique([allocation_id, rent_month, obligation_type])
+  @@index([student_id, rent_month])
   @@map("rent_obligations")
   @@schema("public")
 }
@@ -205,10 +201,9 @@ model ReminderLog {
   id            String         @id @default(uuid()) @db.Uuid
   obligation_id String         @db.Uuid
   student_id    String         @db.Uuid
-  reminder_type String         // "DUE_SOON", "OVERDUE", "WARNING", "FINAL_NOTICE"
-  channel       String         @default("IN_APP") // "IN_APP", "EMAIL", "WHATSAPP"
+  reminder_type String
+  channel       String         @default("IN_APP")
   sent_at       DateTime       @default(now()) @db.Timestamptz(6)
-
   obligation    RentObligation @relation(fields: [obligation_id], references: [id], onDelete: Cascade)
   student       Student        @relation(fields: [student_id], references: [id], onDelete: Cascade)
 
@@ -221,8 +216,8 @@ model ReminderLog {
 model RentGenerationLog {
   id                  String   @id @default(uuid()) @db.Uuid
   rent_month          DateTime @db.Date
-  trigger_type        String   // "cron" or "manual"
-  triggered_by        String?  @db.Uuid // owner profile_id for manual, null for cron
+  trigger_type        String
+  triggered_by        String?  @db.Uuid
   total_allocations   Int      @default(0)
   obligations_created Int      @default(0)
   obligations_skipped Int      @default(0)
@@ -257,19 +252,19 @@ model Payment {
   payment_date       DateTime        @db.Date
   payment_attempt_id String?         @db.Uuid
   created_at         DateTime        @default(now()) @db.Timestamptz(6)
-  receipts           Receipt[]
   obligation         RentObligation  @relation(fields: [obligation_id], references: [id])
   attempt            PaymentAttempt? @relation(fields: [payment_attempt_id], references: [id])
   student            Student         @relation(fields: [student_id], references: [id])
+  receipts           Receipt[]
 
-  @@map("payments")
-  @@schema("public")
   @@index([owner_id])
   @@index([student_id])
   @@index([created_at])
   @@index([owner_id, created_at])
   @@index([student_id, payment_date])
   @@index([student_id, amount_paid])
+  @@map("payments")
+  @@schema("public")
 }
 
 model PaymentAttempt {
@@ -284,13 +279,13 @@ model PaymentAttempt {
   status              AttemptStatus  @default(CREATED)
   upi_intent_url      String?
   qr_payload          String?
-  checkout_url        String?
   expires_at          DateTime?      @db.Timestamptz(6)
   confirmed_at        DateTime?      @db.Timestamptz(6)
   raw_create_response Json?
   raw_webhook_payload Json?
   created_at          DateTime       @default(now()) @db.Timestamptz(6)
   updated_at          DateTime?      @updatedAt @db.Timestamptz(6)
+  checkout_url        String?
   obligation          RentObligation @relation(fields: [obligation_id], references: [id])
   student             Student        @relation(fields: [student_id], references: [id])
   payments            Payment[]
@@ -300,18 +295,19 @@ model PaymentAttempt {
 }
 
 model IdentificationDocument {
-  id               String          @id @default(uuid()) @db.Uuid
-  tenant_id        String          @db.Uuid
+  id               String         @id @default(uuid()) @db.Uuid
+  tenant_id        String         @db.Uuid
   doc_type         String
   doc_number       String?
   file_url         String
-  file_id          String?         /// ImageKit fileId for deletion
-  is_verified      Boolean         @default(false)
-  document_status  DocumentStatus  @default(PENDING)
+  is_verified      Boolean        @default(false)
+  uploaded_by      String?        @db.Uuid
+  created_at       DateTime       @default(now()) @db.Timestamptz(6)
+  document_status  DocumentStatus @default(PENDING)
+  /// ImageKit fileId for deletion
+  file_id          String?
   rejection_reason String?
-  uploaded_by      String?         @db.Uuid
-  created_at       DateTime        @default(now()) @db.Timestamptz(6)
-  student          Student         @relation(fields: [tenant_id], references: [id])
+  student          Student        @relation(fields: [tenant_id], references: [id])
 
   @@index([document_status])
   @@map("identification_documents")
@@ -384,11 +380,11 @@ model Expense {
   created_at DateTime @default(now()) @db.Timestamptz(6)
   owner      Profile  @relation(fields: [owner_id], references: [id])
 
-  @@map("expenses")
-  @@schema("public")
   @@index([owner_id])
   @@index([date])
   @@index([owner_id, date])
+  @@map("expenses")
+  @@schema("public")
 }
 
 model Complaint {
@@ -411,23 +407,37 @@ model Complaint {
 }
 
 model Receipt {
-  id                 String   @id @default(uuid()) @db.Uuid
-  receipt_number     String   @unique
-  payment_id         String   @db.Uuid
-  student_id         String   @db.Uuid
-  owner_id           String?  @db.Uuid
-  amount             Decimal  @db.Decimal(10, 2)
-  payment_method     String
-  transaction_id     String?
-  hostel_name        String?
-  tenant_name        String?
-  rent_month         DateTime? @db.Date
-  issued_at          DateTime @default(now()) @db.Timestamptz(6)
-
-  payment            Payment  @relation(fields: [payment_id], references: [id])
-  student            Student  @relation(fields: [student_id], references: [id])
+  id             String    @id @default(uuid()) @db.Uuid
+  receipt_number String    @unique
+  payment_id     String    @db.Uuid
+  student_id     String    @db.Uuid
+  owner_id       String?   @db.Uuid
+  amount         Decimal   @db.Decimal(10, 2)
+  payment_method String
+  transaction_id String?
+  hostel_name    String?
+  tenant_name    String?
+  rent_month     DateTime? @db.Date
+  issued_at      DateTime  @default(now()) @db.Timestamptz(6)
+  payment        Payment   @relation(fields: [payment_id], references: [id])
+  student        Student   @relation(fields: [student_id], references: [id])
 
   @@map("receipts")
+  @@schema("public")
+}
+
+model SystemEventLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  event_type String
+  owner_id   String?  @db.Uuid
+  student_id String?  @db.Uuid
+  metadata   Json?
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([owner_id])
+  @@index([event_type])
+  @@index([created_at])
+  @@map("system_event_logs")
   @@schema("public")
 }
 
@@ -460,11 +470,11 @@ enum PaymentStatus {
 enum AttemptStatus {
   CREATED
   PENDING
-  PENDING_VERIFICATION
   SUCCESS
   FAILED
   EXPIRED
   CANCELLED
+  PENDING_VERIFICATION
 
   @@schema("public")
 }
@@ -474,20 +484,5 @@ enum DocumentStatus {
   APPROVED
   REJECTED
 
-  @@schema("public")
-}
-
-model SystemEventLog {
-  id          String   @id @default(uuid()) @db.Uuid
-  event_type  String   // "RENT_GENERATED", "LATE_FEE_APPLIED", "REMINDER_SENT", "PAYMENT_RECEIVED", "PREFERENCE_CHANGED"
-  owner_id    String?  @db.Uuid
-  student_id  String?  @db.Uuid
-  metadata    Json?    // Structured payload — amounts, counts, trigger type, etc.
-  created_at  DateTime @default(now()) @db.Timestamptz(6)
-
-  @@index([owner_id])
-  @@index([event_type])
-  @@index([created_at])
-  @@map("system_event_logs")
   @@schema("public")
 }
