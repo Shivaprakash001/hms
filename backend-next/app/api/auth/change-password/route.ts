@@ -1,9 +1,11 @@
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { authService } from "@/lib/services/auth-service";
 import { ChangePasswordSchema } from "@/lib/validators";
 
-export const runtime = "nodejs";
 
 /**
  * 🔒 AUTH CHANGE PASSWORD

@@ -1,7 +1,9 @@
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 import { NextRequest } from "next/server";
 import { GET as getRoom } from "@/app/api/students/me/room/route";
 
-export const runtime = "nodejs";
 
 /**
  * 🔗 ALIAS for /api/students/me/room

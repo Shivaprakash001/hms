@@ -1,8 +1,10 @@
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { userService } from "@/lib/services/user-service";
 
-export const runtime = "nodejs";
 
 /**
  * 👤 PROFILE BY ID

@@ -1,7 +1,9 @@
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 import { NextResponse } from "next/server";
 import { paymentService } from "@/lib/services/payment-service";
 
-export const runtime = "nodejs";
 
 /**
  * 🔔 PhonePe Webhook (Checkout v2)

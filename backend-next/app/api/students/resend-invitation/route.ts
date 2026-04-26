@@ -1,8 +1,10 @@
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { invitationService } from "@/lib/services/invitation-service";
 
-export const runtime = "nodejs";
 
 /**
  * 📧 RESEND INVITATION

@@ -1,9 +1,11 @@
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { studentService } from "@/lib/services/student-service";
 import { StudentProfileUpdateSchema } from "@/lib/validators";
 
-export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
   const session = await getSession(req);

@@ -1,8 +1,10 @@
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 import { NextRequest } from "next/server";
 import { getSession, apiError, apiResponse } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
-export const runtime = "nodejs";
 
 /**
  * GET /api/profiles/unassigned/students

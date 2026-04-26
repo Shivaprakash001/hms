@@ -1,9 +1,11 @@
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 import { NextRequest } from "next/server";
 import { apiError, apiResponse } from "@/lib/auth";
 import { invitationService } from "@/lib/services/invitation-service";
 import { ActivationSchema } from "@/lib/validators";
 
-export const runtime = "nodejs";
 
 /**
  * 🔐 Tenant Activation

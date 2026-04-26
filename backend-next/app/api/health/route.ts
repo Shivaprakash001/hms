@@ -1,7 +1,9 @@
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 import { apiError, apiResponse } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
-export const runtime = "nodejs";
 
 /**
  * 🩺 HEALTH CHECK

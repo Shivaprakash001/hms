@@ -1,8 +1,10 @@
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { billingService } from "@/lib/services/billing-service";
 
-export const runtime = "nodejs";
 
 /**
  * 💰 Billing & Subscription Center

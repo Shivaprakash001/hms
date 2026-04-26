@@ -1,7 +1,9 @@
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 import { NextRequest } from "next/server";
 import { apiResponse } from "@/lib/auth";
 
-export const runtime = "nodejs";
 
 export async function GET() {
   // Simple static plans for now

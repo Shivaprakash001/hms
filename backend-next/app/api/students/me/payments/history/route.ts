@@ -1,9 +1,11 @@
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { paymentService } from "@/lib/services/payment-service";
 import { prisma } from "@/lib/db";
 
-export const runtime = "nodejs";
 
 /**
  * 👨‍🎓 STUDENT ME PAYMENT HISTORY

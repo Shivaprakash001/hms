@@ -1,10 +1,12 @@
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { RoomCreateSchema } from "@/lib/validators";
 import { propertyService } from "@/lib/services/property-service";
 
-export const runtime = "nodejs";
 
 /**
  * 🏠 ROOMS — List & Create
