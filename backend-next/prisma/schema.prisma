@@ -196,6 +196,25 @@ model RentObligation {
   @@schema("public")
 }
 
+model RentGenerationLog {
+  id                  String   @id @default(uuid()) @db.Uuid
+  rent_month          DateTime @db.Date
+  trigger_type        String   // "cron" or "manual"
+  triggered_by        String?  @db.Uuid // owner profile_id for manual, null for cron
+  total_allocations   Int      @default(0)
+  obligations_created Int      @default(0)
+  obligations_skipped Int      @default(0)
+  obligations_failed  Int      @default(0)
+  duration_ms         Int?
+  errors              String?
+  created_at          DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([rent_month])
+  @@index([triggered_by])
+  @@map("rent_generation_logs")
+  @@schema("public")
+}
+
 model Payment {
   id                 String          @id @default(uuid()) @db.Uuid
   obligation_id      String          @db.Uuid

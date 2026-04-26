@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/generate-rent",
-      "schedule": "0 0 1 * *"
+      "schedule": "30 18 28-31 * *"
     }
   ]
 }

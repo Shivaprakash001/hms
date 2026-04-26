@@ -51,10 +51,7 @@ export async function POST(req: NextRequest) {
       targetDate = new Date(Date.UTC(year, month - 1, 1));
     }
 
-    const summary = await rentGenerationService.generateMonthlyRent(targetDate, session.sub);
-
-    // Invalidate dashboard cache so next load reflects new obligations
-    invalidateDashboardCache(session.sub);
+    const summary = await rentGenerationService.generateMonthlyRent(targetDate, session.sub, "manual");
 
     return apiResponse(summary, 201);
   } catch (error: any) {

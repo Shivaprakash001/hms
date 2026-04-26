@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const summary = await rentGenerationService.generateMonthlyRent();
+    const summary = await rentGenerationService.generateMonthlyRent(undefined, undefined, "cron");
 
     console.log("[CRON] Monthly rent generation complete:", summary);
 
