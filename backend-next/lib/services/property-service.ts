@@ -285,6 +285,41 @@ export class PropertyService {
       pending_dues: tenants.reduce((sum: number, t: any) => sum + t.pending_dues, 0)
     };
   }
+  
+  async updateRoom(roomId: string, data: any, ownerId: string) {
+    const room = await prisma.room.findFirst({
+      where: {
+        id: roomId,
+        hostel: { owner_id: ownerId }
+      }
+    });
+
+    if (!room) throw new Error("NOT_FOUND: Room not found");
+
+    const occupants = await prisma.roomAllocation.count({
+      where: {
+        room_id: roomId,
+        is_active: true,
+        end_date: null
+      }
+    });
+
+    if (data.capacity && occupants > data.capacity) {
+      throw new Error(`VALIDATION: Capacity (${data.capacity}) cannot be less than current occupants (${occupants})`);
+    }
+
+    const { capacity, floor, room_no, base_rent } = data;
+    
+    return await prisma.room.update({
+      where: { id: roomId },
+      data: {
+        ...(capacity !== undefined && { capacity: Number(capacity) }),
+        ...(floor !== undefined && { floor: Number(floor) }),
+        ...(room_no !== undefined && { room_no }),
+        ...(base_rent !== undefined && { base_rent: Number(base_rent) })
+      }
+    });
+  }
 
   private extractFloor(roomNo: string): number {
     try {

@@ -264,7 +264,7 @@ export const roomService = {
         return response.data;
     },
     update: async (id, data) => {
-        const response = await api.put(`/rooms/${id}`, data);
+        const response = await api.patch(`/rooms/${id}`, data);
         return response.data;
     },
     delete: async (id) => {

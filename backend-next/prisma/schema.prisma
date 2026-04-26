@@ -124,6 +124,7 @@ model Room {
   room_no     String
   floor       Int?
   capacity    Int
+  base_rent   Int?
   room_type   String?
   is_active   Boolean          @default(true)
   created_at  DateTime         @default(now()) @db.Timestamptz(6)

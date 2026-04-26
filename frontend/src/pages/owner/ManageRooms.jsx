@@ -4,6 +4,7 @@ import { Plus, Layers, LayoutGrid, Users, DoorOpen, BedDouble, Trash2, ArrowRigh
 import AddRoomModal from '../../components/owner/rooms/AddRoomModal';
 import AddTenantModal from '../../components/owner/rooms/AddTenantModal';
 import ShiftTenantModal from '../../components/owner/rooms/ShiftTenantModal';
+import EditRoomModal from '../../components/owner/rooms/EditRoomModal';
 import { roomService, allocationService, studentService, paymentService } from '../../api/services';
 
 const ManageRooms = () => {
@@ -15,6 +16,7 @@ const ManageRooms = () => {
     const [showAddRoomModal, setShowAddRoomModal] = useState(false);
     const [showAddFloorModal, setShowAddFloorModal] = useState(false); // We'll reuse AddRoomModal for this
     const [showAddTenantModal, setShowAddTenantModal] = useState(false);
+    const [showEditRoomModal, setShowEditRoomModal] = useState(false);
     const [showShiftTenantModal, setShowShiftTenantModal] = useState(false);
     const [selectedTenantForShift, setSelectedTenantForShift] = useState(null);
     const [selectedTenant, setSelectedTenant] = useState(null);
@@ -393,6 +395,7 @@ const ManageRooms = () => {
                     <RoomDetailSidebar
                         room={selectedRoom}
                         onClose={() => setSelectedRoom(null)}
+                        onEditRoom={() => setShowEditRoomModal(true)}
                         onAddTenant={() => setShowAddTenantModal(true)}
                         onRemoveTenant={handleRemoveTenant}
                         onShiftTenant={(tenant) => {
@@ -421,6 +424,13 @@ const ManageRooms = () => {
                         selectedRoom={selectedRoom}
                         onClose={() => setShowAddTenantModal(false)}
                         onAdd={handleAddTenant}
+                    />
+                )}
+                {showEditRoomModal && selectedRoom && (
+                    <EditRoomModal
+                        room={selectedRoom.room || selectedRoom}
+                        onClose={() => setShowEditRoomModal(false)}
+                        onSave={() => fetchData(selectedRoom?.id)}
                     />
                 )}
                 {showShiftTenantModal && selectedTenantForShift && (
@@ -539,7 +549,7 @@ const RoomCard = ({ room, onClick }) => {
     );
 }
 
-const RoomDetailSidebar = ({ room, onClose, onAddTenant, onRemoveTenant, onShiftTenant, onOpenTenant }) => {
+const RoomDetailSidebar = ({ room, onClose, onEditRoom, onAddTenant, onRemoveTenant, onShiftTenant, onOpenTenant }) => {
     const roomInfo = room?.room || room;
     const occupants = room?.tenants || room?.occupants || roomInfo?.tenants || [];
     const capacity = roomInfo?.capacity || 0;
@@ -581,9 +591,14 @@ const RoomDetailSidebar = ({ room, onClose, onAddTenant, onRemoveTenant, onShift
                             <h2 className="text-3xl font-black text-slate-900">Room {roomNo}</h2>
                             <p className="text-slate-400 font-bold mt-1">Floor {floor}</p>
                         </div>
-                        <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-900 transition-colors">
-                            <ArrowRightLeft size={24} />
-                        </button>
+                        <div className="flex gap-2">
+                            <button onClick={onEditRoom} className="p-2 hover:bg-slate-100 rounded-xl font-bold text-slate-500 hover:text-indigo-600 transition-colors text-sm flex items-center gap-1">
+                                Edit 
+                            </button>
+                            <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-900 transition-colors">
+                                <X size={24} />
+                            </button>
+                        </div>
                     </div>
 
                     <div className="space-y-8">

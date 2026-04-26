@@ -33,7 +33,10 @@ export async function GET(
   }
 }
 
-export async function PUT(
+import { propertyService } from "@/lib/services/property-service";
+import { eventSystem } from "@/lib/events";
+
+export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
@@ -45,26 +48,33 @@ export async function PUT(
   try {
     const body = await req.json();
 
-    // Verify ownership
-    const existing = await prisma.room.findFirst({
-      where: { id: params.id, hostel: { owner_id: session.sub } },
-    });
-    if (!existing) return apiError("Room not found", "NOT_FOUND", 404);
+    const updatedRoom = await propertyService.updateRoom(
+      params.id,
+      body,
+      session.sub
+    );
 
-    const updateData: any = {};
-    if (body.room_no !== undefined) updateData.room_no = body.room_no;
-    if (body.capacity !== undefined) updateData.capacity = body.capacity;
-    if (body.floor !== undefined) updateData.floor = body.floor;
-    if (body.room_type !== undefined) updateData.room_type = body.room_type;
-
-    const room = await prisma.room.update({
-      where: { id: params.id },
-      data: updateData,
+    // Broadcast Server-Sent Event so owner dashboards refresh automatically
+    await eventSystem.trigger("room_updated", {
+      roomId: params.id,
+      ownerId: session.sub
     });
 
-    return apiResponse(room);
+    return apiResponse(updatedRoom);
   } catch (error: any) {
-    return apiError(error.message || "Failed to update room");
+    const rawMessage = String(error?.message || "Failed to update room");
+    const [maybeCode, ...rest] = rawMessage.split(":");
+    const normalizedCode = maybeCode?.trim();
+    const normalizedMessage = rest.length > 0 ? rest.join(":").trim() : rawMessage;
+
+    const statusMap: Record<string, number> = {
+      VALIDATION: 400,
+      NOT_FOUND: 404,
+      FORBIDDEN: 403
+    };
+
+    const status = statusMap[normalizedCode] || 500;
+    return apiError(normalizedMessage, normalizedCode || "UPDATE_ERROR", status);
   }
 }
 
