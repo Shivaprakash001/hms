@@ -267,7 +267,7 @@ const OwnerLayout = () => {
         setSearchOpen(false);
         setActiveSearchIndex(-1);
         setSearchError(false);
-        navigate('/owner/students', { state: { selectedTenantId: tenant.id } });
+        navigate(`/owner/students/${tenant.id}`);
     };
 
     const handleSearchKeyDown = (event) => {

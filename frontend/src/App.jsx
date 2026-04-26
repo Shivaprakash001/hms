@@ -15,6 +15,7 @@ import Expenses from './pages/owner/Expenses.jsx';
 import ActivityHistory from './pages/owner/ActivityHistory.jsx';
 import BillingPlans from './pages/owner/BillingPlans.jsx';
 import OwnerProfile from './pages/owner/OwnerProfile.jsx';
+import StudentProfilePage from './pages/owner/StudentProfilePage.jsx';
 
 // Student Imports
 
@@ -62,6 +63,7 @@ function App() {
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<OwnerDashboard />} />
             <Route path="students" element={<ManageStudents />} />
+            <Route path="students/:id" element={<StudentProfilePage />} />
             <Route path="rooms" element={<ManageRooms />} />
             <Route path="payments" element={<Payments />} />
             <Route path="complaints" element={<Complaints />} />

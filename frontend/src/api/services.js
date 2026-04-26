@@ -534,11 +534,11 @@ export const tenantDocumentService = {
         return response.data;
     },
     verify: async (tenantId, docId) => {
-        const response = await api.patch(`/tenants/${tenantId}/documents/${docId}/verify`);
+        const response = await api.patch(`/students/${tenantId}/documents/${docId}/verify`);
         return response.data;
     },
     reject: async (tenantId, docId, reason) => {
-        const response = await api.patch(`/tenants/${tenantId}/documents/${docId}/reject`, { reason });
+        const response = await api.patch(`/students/${tenantId}/documents/${docId}/reject`, { reason });
         return response.data;
     }
 };
