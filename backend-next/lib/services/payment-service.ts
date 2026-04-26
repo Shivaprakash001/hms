@@ -226,9 +226,8 @@ export class PaymentService {
     const validationAmount = amount || balance;
 
     // 1️⃣ Fetch Owner Preferences for Payment Rules
-    const hostel = await prisma.hostel.findFirst({
+    const hostel: any = await prisma.hostel.findFirst({
         where: { owner_id: obligation.owner_id || "" },
-        select: { preferences_config: true } as any
     });
     const prefConfig = (hostel?.preferences_config as any) || {};
 

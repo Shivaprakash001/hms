@@ -34,11 +34,10 @@ export class ReminderService {
 
     // Optimization: Batch fetch owner preferences
     const ownerIds = Array.from(new Set(overdueObligations.map(ob => ob.student.owner_id).filter(Boolean))) as string[];
-    const hostelPrefs = await prisma.hostel.findMany({
+    const hostelPrefs: any[] = await prisma.hostel.findMany({
       where: { owner_id: { in: ownerIds }, is_active: true },
-      select: { owner_id: true, preferences_config: true } as any
     });
-    const prefsMap = new Map(hostelPrefs.map(p => [p.owner_id, p]));
+    const prefsMap = new Map(hostelPrefs.map((p: any) => [p.owner_id, p]));
 
     let remindersSent = 0;
     let lateFeesAdded = 0;
