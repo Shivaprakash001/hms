@@ -191,6 +191,7 @@ model RentObligation {
   student       Student          @relation(fields: [student_id], references: [id])
 
   @@index([student_id, rent_month])
+  @@unique([allocation_id, rent_month])
   @@map("rent_obligations")
   @@schema("public")
 }

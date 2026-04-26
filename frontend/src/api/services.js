@@ -493,6 +493,19 @@ export const dashboardService = {
     }
 };
 
+// --- Rent Generation Service ---
+export const rentService = {
+    preview: async (month) => {
+        const params = month ? { month } : {};
+        const response = await api.get('/rent/generate', { params });
+        return response.data;
+    },
+    generate: async (month) => {
+        const response = await api.post('/rent/generate', month ? { month } : {});
+        return response.data;
+    }
+};
+
 // --- Activity Service ---
 export const activityService = {
     getAll: async (params = {}) => {
