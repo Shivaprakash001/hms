@@ -62,7 +62,11 @@ const OwnerLayout = () => {
 
     useEffect(() => {
         fetchNotifications();
-        const interval = setInterval(fetchNotifications, 300000); // Poll every 5 minutes instead of 30s
+        const interval = setInterval(() => {
+            if (document.visibilityState === "visible") {
+                fetchNotifications();
+            }
+        }, 300000); // Poll every 5 minutes only when tab is active
         return () => clearInterval(interval);
     }, []);
 
