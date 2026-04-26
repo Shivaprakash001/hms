@@ -49,14 +49,17 @@ export class PaymentService {
     for (const alloc of allocations) {
       if (!alloc.student) continue;
 
+      // Fallback to 0 if monthly rent is null to prevent NaN Prisma crashes
+      const monthlyRent = Number(alloc.student.monthly_rent || 0);
+      
       const amount = this.calculateProratedRent(
-        Number(alloc.student.monthly_rent),
+        monthlyRent,
         alloc.start_date,
         alloc.end_date,
         targetMonth
       );
 
-      if (amount <= 0) continue;
+      if (isNaN(amount) || amount <= 0) continue;
 
       // Check for existing
       const existing = await prisma.rentObligation.findFirst({
@@ -531,7 +534,7 @@ export class PaymentService {
         where: {
             owner_id: ownerId,
             ...(rentMonth && { rent_month: rentMonth }),
-            ...(status ? { status: status as any } : { status: { not: "PAID" } })
+            ...(status ? { status: status as any } : {})
         },
         include: {
             student: { include: { profile: true } },
