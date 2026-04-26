@@ -35,6 +35,9 @@ export default function OwnerProfile() {
         name: '', phone: '', address: '', city: '', state: '', pincode: '', upi_id: '', gst_number: '', logo_url: ''
     });
 
+    const [isEditingOwner, setIsEditingOwner] = useState(false);
+    const [isEditingHostel, setIsEditingHostel] = useState(false);
+
     const [preferences, setPreferences] = useState({
         currency: 'INR', rent_cycle: 'MONTHLY', auto_rent_day: 1, due_day: 5,
         late_fee_type: 'none', late_fee_amount: 200, late_fee_percentage: 5,
@@ -138,6 +141,7 @@ export default function OwnerProfile() {
             const data = await ownerService.updateOwner({ name: ownerForm.name, phone: ownerForm.phone });
             const owner = data?.owner || {};
             setOwnerForm(prev => ({ ...prev, name: owner.name || prev.name, phone: owner.phone || prev.phone, email: owner.email || prev.email }));
+            setIsEditingOwner(false);
             showTempSuccess('Owner profile updated');
         } catch (e) {
             const detail = e?.response?.data?.detail;
@@ -155,6 +159,7 @@ export default function OwnerProfile() {
                 city: hostel.city || '', state: hostel.state || '', pincode: hostel.pincode || '',
                 upi_id: hostel.upi_id || '', gst_number: hostel.gst_number || '', logo_url: hostel.logo_url || ''
             });
+            setIsEditingHostel(false);
             showTempSuccess('Hostel details updated');
         } catch (e) {
             const detail = e?.response?.data?.detail;
@@ -286,32 +291,66 @@ export default function OwnerProfile() {
             {/* ─── Owner Profile Tab ─── */}
             {activeTab === 'owner' && (
                 <form onSubmit={saveOwner} className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm space-y-4">
-                    <Field label="Full Name" value={ownerForm.name} onChange={(v) => setOwnerForm({ ...ownerForm, name: v })} required />
+                    <div className="flex justify-between items-center mb-2">
+                        <h3 className="font-semibold text-slate-800">Personal Information</h3>
+                        {!isEditingOwner && (
+                            <button type="button" onClick={() => setIsEditingOwner(true)} className="text-sm text-indigo-600 font-semibold hover:text-indigo-700 transition px-3 py-1 bg-indigo-50 hover:bg-indigo-100 rounded-lg">
+                                Edit Profile
+                            </button>
+                        )}
+                    </div>
+                    <Field label="Full Name" value={ownerForm.name} onChange={(v) => setOwnerForm({ ...ownerForm, name: v })} disabled={!isEditingOwner} required />
                     <Field label="Email (read-only)" value={ownerForm.email} onChange={() => { }} disabled />
-                    <Field label="Phone" value={ownerForm.phone} onChange={(v) => setOwnerForm({ ...ownerForm, phone: v })} />
-                    <SaveButton saving={saving} />
+                    <Field label="Phone" value={ownerForm.phone} onChange={(v) => setOwnerForm({ ...ownerForm, phone: v })} disabled={!isEditingOwner} />
+                    
+                    {isEditingOwner && (
+                        <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-50 mt-4">
+                            <button type="button" onClick={() => setIsEditingOwner(false)} className="px-4 py-2 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition">
+                                Cancel
+                            </button>
+                            <SaveButton saving={saving} />
+                        </div>
+                    )}
                 </form>
             )}
 
             {/* ─── Hostel Details Tab ─── */}
             {activeTab === 'hostel' && (
                 <form onSubmit={saveHostel} className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm space-y-4">
-                    <ProfileLogoUploader logoUrl={hostelForm.logo_url} onUpload={uploadLogo} onRemove={removeLogo} disabled={saving} />
-                    <Field label="Hostel Name" value={hostelForm.name} onChange={(v) => setHostelForm({ ...hostelForm, name: v })} required />
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <Field label="Hostel Phone" value={hostelForm.phone} onChange={(v) => setHostelForm({ ...hostelForm, phone: v })} required />
-                        <Field label="Pincode" value={hostelForm.pincode} onChange={(v) => setHostelForm({ ...hostelForm, pincode: v })} required />
+                    <div className="flex justify-between items-center mb-2">
+                        <h3 className="font-semibold text-slate-800">Property Information</h3>
+                        {!isEditingHostel && (
+                            <button type="button" onClick={() => setIsEditingHostel(true)} className="text-sm text-indigo-600 font-semibold hover:text-indigo-700 transition px-3 py-1 bg-indigo-50 hover:bg-indigo-100 rounded-lg">
+                                Edit Details
+                            </button>
+                        )}
                     </div>
-                    <Field label="Address" value={hostelForm.address} onChange={(v) => setHostelForm({ ...hostelForm, address: v })} required />
+                    
+                    <ProfileLogoUploader logoUrl={hostelForm.logo_url} onUpload={uploadLogo} onRemove={removeLogo} disabled={saving || (!isEditingHostel && !!hostelForm.logo_url)} />
+                    
+                    <Field label="Hostel Name" value={hostelForm.name} onChange={(v) => setHostelForm({ ...hostelForm, name: v })} disabled={!isEditingHostel} required />
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <Field label="City" value={hostelForm.city} onChange={(v) => setHostelForm({ ...hostelForm, city: v })} required />
-                        <Field label="State" value={hostelForm.state} onChange={(v) => setHostelForm({ ...hostelForm, state: v })} required />
+                        <Field label="Hostel Phone" value={hostelForm.phone} onChange={(v) => setHostelForm({ ...hostelForm, phone: v })} disabled={!isEditingHostel} required />
+                        <Field label="Pincode" value={hostelForm.pincode} onChange={(v) => setHostelForm({ ...hostelForm, pincode: v })} disabled={!isEditingHostel} required />
+                    </div>
+                    <Field label="Address" value={hostelForm.address} onChange={(v) => setHostelForm({ ...hostelForm, address: v })} disabled={!isEditingHostel} required />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <Field label="City" value={hostelForm.city} onChange={(v) => setHostelForm({ ...hostelForm, city: v })} disabled={!isEditingHostel} required />
+                        <Field label="State" value={hostelForm.state} onChange={(v) => setHostelForm({ ...hostelForm, state: v })} disabled={!isEditingHostel} required />
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <Field label="UPI ID" value={hostelForm.upi_id} onChange={(v) => setHostelForm({ ...hostelForm, upi_id: v })} />
-                        <Field label="GST Number" value={hostelForm.gst_number} onChange={(v) => setHostelForm({ ...hostelForm, gst_number: v })} />
+                        <Field label="UPI ID" value={hostelForm.upi_id} onChange={(v) => setHostelForm({ ...hostelForm, upi_id: v })} disabled={!isEditingHostel} />
+                        <Field label="GST Number" value={hostelForm.gst_number} onChange={(v) => setHostelForm({ ...hostelForm, gst_number: v })} disabled={!isEditingHostel} />
                     </div>
-                    <SaveButton saving={saving} />
+
+                    {isEditingHostel && (
+                        <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-50 mt-4">
+                            <button type="button" onClick={() => setIsEditingHostel(false)} className="px-4 py-2 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition">
+                                Cancel
+                            </button>
+                            <SaveButton saving={saving} />
+                        </div>
+                    )}
                 </form>
             )}
 
