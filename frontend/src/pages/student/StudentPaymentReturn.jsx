@@ -19,8 +19,12 @@ const StudentPaymentReturn = () => {
 
     useEffect(() => {
         if (!attemptId) {
-            setError('No payment attempt was found to verify.');
+            // Only show the missing ID error if we haven't already successfully verified
+            // (since we delete the ID from localStorage on success, triggering a re-render)
             setLoading(false);
+            if (!attempt) {
+                setError('No payment attempt was found to verify.');
+            }
             return undefined;
         }
 
@@ -32,10 +36,10 @@ const StudentPaymentReturn = () => {
                 const result = await paymentService.verifyPayment({ attempt_id: attemptId });
                 const attemptData = result.attempt || result;
                 setAttempt(attemptData);
+                setError(''); // successfully talked to DB, clear any old errors
                 if (attemptData.status === 'SUCCESS') {
-                    sessionStorage.removeItem('lastPaymentAttemptId');
-                    localStorage.removeItem('lastPaymentAttemptId');
-                    localStorage.removeItem('lastPaymentMerchantTxnId');
+                    // We purposefully leave localStorage intact so that if the user 
+                    // refreshes the success page, it still finds the attempt and shows SUCCESS
                     setLoading(false);
                 } else if (TERMINAL_STATUSES.includes(attemptData.status)) {
                     setLoading(false);
