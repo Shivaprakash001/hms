@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { eventLog } from "./event-log-service";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const DEFAULT_FROM = process.env.EMAIL_FROM || "noreply@mail.trishul.solutions";
@@ -175,6 +176,16 @@ export class EmailService {
       </div>
     `;
 
-    return this.sendEmail(data.toEmail, subject, html);
+    const result = await this.sendEmail(data.toEmail, subject, html);
+    
+    // Write explicit audit log for email delivery attempt
+    await eventLog.log("EMAIL_SENT", null, {
+      template: data.type,
+      tenant: data.name,
+      email: data.toEmail,
+      success: result.sent
+    });
+
+    return result;
   }
 }
