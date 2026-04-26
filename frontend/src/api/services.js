@@ -541,3 +541,11 @@ export const tenantDocumentService = {
         return response.data;
     }
 };
+
+// --- SSE Token Service ---
+export const sseService = {
+    getToken: async () => {
+        const response = await api.get('/events-token');
+        return response.data.token;
+    }
+};

@@ -9,6 +9,7 @@ import bcrypt from "bcryptjs";
 export {
   verifyToken,
   generateToken,
+  generateShortToken,
   getSession,
   apiResponse,
   apiError,

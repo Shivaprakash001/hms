@@ -25,6 +25,18 @@ export async function generateToken(payload: AuthPayload) {
 }
 
 /**
+ * Generate a short-lived token (60s) for SSE connections.
+ * Even if URL-logged, it expires almost immediately.
+ */
+export async function generateShortToken(payload: AuthPayload) {
+  return new SignJWT(payload as any)
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("60s")
+    .sign(JWT_SECRET);
+}
+
+/**
  * Verify JWT token without DB checks (Edge compatible)
  */
 export async function verifyToken(token: string): Promise<AuthPayload | null> {

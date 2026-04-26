@@ -20,6 +20,11 @@ export async function GET(req: NextRequest) {
     return new Response("Unauthorized", { status: 401 });
   }
 
+  // Only owners/admins can subscribe to the event stream
+  if (!["OWNER", "ADMIN"].includes(session.role)) {
+    return new Response("Forbidden", { status: 403 });
+  }
+
   const stream = new ReadableStream({
     start(controller) {
       const encoder = new TextEncoder();
@@ -28,22 +33,30 @@ export async function GET(req: NextRequest) {
         try {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
         } catch (e) {
-          console.error("SSE enqueue error", e);
+          // Stream closed — silently ignore to prevent crash
         }
       };
 
       const client = {
-        ownerId: session.sub,
+        ownerId: session!.sub, // Strict owner binding for multi-tenant isolation
         send
       };
 
       addClient(client);
 
-      // Heartbeat every 30 seconds to keep connection alive
+      // Comment-frame heartbeat — keeps connection alive without triggering frontend handlers
+      // Proxies (Cloudflare, Vercel) and browsers drop idle connections after ~60s
       const interval = setInterval(() => {
-        send({ type: "heartbeat" });
+        try {
+          controller.enqueue(encoder.encode(`: heartbeat\n\n`));
+        } catch (e) {
+          // Stream already closed
+          clearInterval(interval);
+          removeClient(client);
+        }
       }, 30000);
 
+      // Critical: clean up on disconnect to prevent memory leaks
       req.signal.addEventListener("abort", () => {
         clearInterval(interval);
         removeClient(client);

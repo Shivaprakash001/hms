@@ -73,49 +73,57 @@ const OwnerLayout = () => {
     }, []);
 
     useEffect(() => {
-        // Extract token for SSE – EventSource can't send Authorization headers
-        const ownerData = localStorage.getItem('ownerUser');
-        const token = ownerData ? JSON.parse(ownerData).token : null;
-        if (!token) return;
+        let es = null;
+        let mounted = true;
 
-        // Use relative path so the frontend's Vercel rewrite proxy handles routing
-        const es = new EventSource(`/api/events?token=${encodeURIComponent(token)}`);
-
-        es.onmessage = (event) => {
+        const connectSSE = async () => {
             try {
-                const data = JSON.parse(event.data);
-                if (data.type === 'heartbeat') return;
+                // Fetch a short-lived (60s) token — never exposes the main JWT in URLs
+                const { sseService } = await import('../api/services');
+                const shortToken = await sseService.getToken();
+                if (!mounted) return;
 
-                console.log('[SSE Event Received]:', data);
+                es = new EventSource(`/api/events?token=${encodeURIComponent(shortToken)}`);
 
-                // React Query targeted cache invalidation
-                if (data.type === 'payment_recorded') {
-                    queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-                    queryClient.invalidateQueries({ queryKey: ['payments'] });
-                    fetchNotifications();
-                } else if (data.type === 'expense_created') {
-                    queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-                    queryClient.invalidateQueries({ queryKey: ['expenses'] });
-                    fetchNotifications();
-                } else if (data.type === 'student_created' || data.type === 'student_allocated_room') {
-                    queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-                    queryClient.invalidateQueries({ queryKey: ['students'] });
-                    fetchNotifications();
-                } else if (data.type === 'reactivation_requested') {
-                    fetchNotifications();
-                }
+                es.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+
+                        // React Query targeted cache invalidation
+                        if (data.type === 'payment_recorded') {
+                            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+                            queryClient.invalidateQueries({ queryKey: ['payments'] });
+                            fetchNotifications();
+                        } else if (data.type === 'expense_created') {
+                            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+                            queryClient.invalidateQueries({ queryKey: ['expenses'] });
+                            fetchNotifications();
+                        } else if (data.type === 'student_created' || data.type === 'student_allocated_room') {
+                            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+                            queryClient.invalidateQueries({ queryKey: ['students'] });
+                            fetchNotifications();
+                        } else if (data.type === 'reactivation_requested') {
+                            fetchNotifications();
+                        }
+                    } catch (err) {
+                        console.error('SSE message parse error', err);
+                    }
+                };
+
+                es.onerror = () => {
+                    // Connection dropped — close and don't retry to avoid hammering
+                    if (es) es.close();
+                };
             } catch (err) {
-                console.error('SSE message parse error', err);
+                console.error('Failed to get SSE token:', err);
             }
         };
 
-        es.onerror = (err) => {
-            console.error('SSE connection error', err);
-            es.close();
-        };
+        connectSSE();
 
         return () => {
-            es.close();
+            mounted = false;
+            if (es) es.close();
         };
     }, []);
 
