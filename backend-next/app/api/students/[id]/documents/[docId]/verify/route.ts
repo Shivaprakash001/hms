@@ -2,18 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 
-export async function PATCH(req: NextRequest, { params }: { params: { tenantId: string, docId: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: { id: string, docId: string } }) {
   try {
     const session = await getSession(req);
     if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
       return NextResponse.json({ error: { message: "Unauthorized" } }, { status: 401 });
     }
 
-    const { tenantId, docId } = params;
+    const { id, docId } = params;
 
     // First ensure the student actually belongs to this owner
     const student = await prisma.student.findUnique({
-      where: { id: tenantId, owner_id: session.sub }
+      where: { id: id, owner_id: session.sub }
     });
 
     if (!student) {
@@ -24,7 +24,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { tenantId: 
     const updated = await prisma.identificationDocument.update({
       where: { 
         id: docId,
-        tenant_id: tenantId 
+        tenant_id: id 
       },
       data: { 
         is_verified: true,
