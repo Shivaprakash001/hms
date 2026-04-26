@@ -88,8 +88,35 @@ const Payments = () => {
                 return acc;
             }, {});
 
-            const rows = (dues || []).map((item) => {
-                const obligationPayments = paymentsByObligation[item.obligation_id] || [];
+            // Create a map of all unique obligations from both dues and payments
+            const combinedObligationsMap = new Map();
+
+            // First add all dues explicitly returned by the dues API
+            (dues || []).forEach(due => {
+                combinedObligationsMap.set(due.obligation_id || due.id, due);
+            });
+
+            // Then add any obligations from the completed payments that might be missing from dues
+            paymentsData.forEach(p => {
+                if (p.obligation_id && !combinedObligationsMap.has(p.obligation_id)) {
+                    combinedObligationsMap.set(p.obligation_id, {
+                        ...p.obligation,
+                        obligation_id: p.obligation_id,
+                        student_id: p.student_id,
+                        student_name: p.student_name,
+                        student_phone: p.student?.profile?.phone,
+                        student_email: p.student?.profile?.email,
+                        room_no: p.student?.allocations?.[0]?.room?.room_no || 'N/A',
+                        rent_month: p.rent_month,
+                        due_date: p.obligation?.due_date,
+                        amount: p.obligation?.amount || p.amount_paid,
+                        status: p.obligation?.status || 'PAID',
+                    });
+                }
+            });
+
+            const rows = Array.from(combinedObligationsMap.values()).map((item) => {
+                const obligationPayments = paymentsByObligation[item.obligation_id || item.id] || [];
                 const paidAmount = obligationPayments.reduce((sum, p) => sum + Number(p.amount_paid || 0), 0);
                 const rentAmount = Number(item.amount || 0);
                 const balance = Math.max(0, rentAmount - paidAmount);
@@ -97,18 +124,18 @@ const Payments = () => {
                     .slice()
                     .sort((a, b) => new Date(b.payment_date || b.created_at || 0) - new Date(a.payment_date || a.created_at || 0))[0];
 
-                const status = normalizeStatus(item.status, item.due_date, balance);
+                const status = normalizeStatus(item.status, item.due_date || item.dueDate, balance);
 
                 return {
-                    id: item.obligation_id,
-                    obligationId: item.obligation_id,
+                    id: item.obligation_id || item.id,
+                    obligationId: item.obligation_id || item.id,
                     tenantId: item.student_id,
-                    tenantName: item.student_name,
+                    tenantName: item.student_name || 'Unknown',
                     tenantPhone: item.student_phone || null,
                     tenantEmail: item.student_email || null,
-                    room: item.room_no || 'N/A',
-                    month: item.rent_month,
-                    dueDate: item.due_date,
+                    room: item.room_no || item.room || 'N/A',
+                    month: item.rent_month || item.month,
+                    dueDate: item.due_date || item.dueDate,
                     rentAmount,
                     paidAmount,
                     balance,
@@ -127,7 +154,13 @@ const Payments = () => {
                 };
             });
 
-            setLedgerRows(rows);
+            // Sort rows descending by month/date so newest appear first
+            const sortedRows = rows.sort((a, b) => {
+                if (b.month && a.month) return new Date(b.month) - new Date(a.month);
+                return 0;
+            });
+
+            setLedgerRows(sortedRows);
         } catch (error) {
             console.error('Failed to load ledger:', error);
         } finally {
