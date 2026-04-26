@@ -199,9 +199,12 @@ export class PaymentService {
       return { payment, newStatus };
     }).then(async (res: any) => {
       await eventSystem.trigger("payment_recorded", {
-        paymentId: res.payment.id,
-        obligationId: data.obligationId,
-        amount: data.amountPaid
+        payment_id: res.payment.id,
+        obligation_id: data.obligationId,
+        student_id: res.payment.student_id,
+        owner_id: res.payment.owner_id,
+        amount: data.amountPaid,
+        method: data.paymentMethod
       });
       return res;
     });

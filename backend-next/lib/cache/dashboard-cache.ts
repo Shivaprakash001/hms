@@ -1,5 +1,13 @@
 const dashboardCache = new Map<string, { data: any, timestamp: number }>();
 
+export function invalidateDashboardCache(ownerId: string) {
+  for (const key of Array.from(dashboardCache.keys())) {
+    if (key.startsWith(`${ownerId}_`)) {
+      dashboardCache.delete(key);
+    }
+  }
+}
+
 export function getCachedDashboard(ownerId: string) {
   const entry = dashboardCache.get(ownerId);
 

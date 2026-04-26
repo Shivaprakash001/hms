@@ -1,4 +1,5 @@
 import { prisma } from "../db";
+import { eventSystem } from "../events";
 
 export class ExpenseService {
   async getAllExpenses(ownerId: string) {
@@ -29,7 +30,7 @@ export class ExpenseService {
       throw new Error("VALIDATION: Invalid date provided");
     }
 
-    return prisma.expense.create({
+    const expense = await prisma.expense.create({
       data: {
         owner_id: data.owner_id,
         title: data.title,
@@ -39,6 +40,15 @@ export class ExpenseService {
         status: data.status || "paid",
       }
     });
+
+    await eventSystem.trigger("expense_created", {
+      expense_id: expense.id,
+      owner_id: data.owner_id,
+      title: data.title,
+      amount: data.amount,
+    });
+
+    return expense;
   }
 
   async updateExpense(expenseId: string, ownerId: string, data: any) {

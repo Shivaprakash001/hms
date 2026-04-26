@@ -71,6 +71,47 @@ const OwnerLayout = () => {
     }, []);
 
     useEffect(() => {
+        const es = new EventSource('/api/events');
+
+        es.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === 'heartbeat') return;
+
+                console.log('[SSE Event Received]:', data);
+
+                // For specialized updates, we can trigger reloads
+                const refreshTypes = [
+                    'payment_recorded', 
+                    'expense_created', 
+                    'student_created', 
+                    'student_allocated_room',
+                    'reactivation_requested'
+                ];
+
+                if (refreshTypes.includes(data.type)) {
+                    // Refetch global notifications in layout
+                    fetchNotifications();
+                    
+                    // Dispatch custom event so the Dashboard (if open) can refetch selectively
+                    window.dispatchEvent(new CustomEvent('hms-data-updated', { detail: data }));
+                }
+            } catch (err) {
+                console.error('SSE message parse error', err);
+            }
+        };
+
+        es.onerror = (err) => {
+            console.error('SSE connection error', err);
+            es.close();
+        };
+
+        return () => {
+            es.close();
+        };
+    }, []);
+
+    useEffect(() => {
         let mounted = true;
         const loadHostelBranding = async () => {
             try {

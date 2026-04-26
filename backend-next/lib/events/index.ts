@@ -1,5 +1,7 @@
 import { EventEmitter } from "events";
 import { activityService } from "../services/activity.service";
+import { broadcast } from "./event-bus";
+import { invalidateDashboardCache } from "../cache/dashboard-cache";
 
 class HMSEventEmitter extends EventEmitter {
   /**
@@ -7,6 +9,18 @@ class HMSEventEmitter extends EventEmitter {
    */
   async trigger(eventName: string, data: any) {
     console.log(`[Event Triggered]: ${eventName}`, data);
+    
+    // Auto-invalidate cache if owner_id is present
+    if (data.owner_id) {
+      invalidateDashboardCache(data.owner_id);
+      
+      // Auto-broadcast to SSE clients
+      broadcast(data.owner_id, {
+        type: eventName,
+        data
+      });
+    }
+
     this.emit(eventName, data);
   }
 }
@@ -42,12 +56,23 @@ eventSystem.on("student_allocated_room", async (data) => {
 
 eventSystem.on("payment_recorded", async (data) => {
   await activityService.log({
-    userId: data.student_id,
+    userId: data.student_id || data.owner_id,
     ownerId: data.owner_id,
     actionType: "PAYMENT",
     entityType: "PAYMENT",
     entityId: data.payment_id,
     metadata: { amount: data.amount, method: data.method }
+  });
+});
+
+eventSystem.on("expense_created", async (data) => {
+  await activityService.log({
+    userId: data.owner_id,
+    ownerId: data.owner_id,
+    actionType: "CREATE",
+    entityType: "EXPENSE",
+    entityId: data.expense_id,
+    metadata: { title: data.title, amount: data.amount }
   });
 });
 

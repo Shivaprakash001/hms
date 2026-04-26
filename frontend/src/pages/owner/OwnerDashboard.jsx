@@ -80,9 +80,15 @@ const OwnerDashboard = () => {
 
     useEffect(() => {
         updateDashboard();
-        // Reduced polling from 20s to 5m to prevent DB hammering
-        const interval = setInterval(updateDashboard, 300000);
-        return () => clearInterval(interval);
+
+        // Listen for real-time SSE updates from the Layout
+        const handleUpdate = () => {
+            console.log('[Dashboard] Real-time update triggered');
+            updateDashboard();
+        };
+
+        window.addEventListener('hms-data-updated', handleUpdate);
+        return () => window.removeEventListener('hms-data-updated', handleUpdate);
     }, [months]);
 
     if (loading) return <div className="p-8 text-center text-slate-400">Loading dashboard...</div>;
