@@ -84,6 +84,7 @@ model Student {
   reactivation_requests ReactivationRequest[]
   obligations           RentObligation[]
   allocations           RoomAllocation[]
+  reminders             ReminderLog[]
   profile               Profile                  @relation(fields: [profile_id], references: [id], name: "StudentToProfile")
 
   @@map("students")
@@ -181,18 +182,37 @@ model RentObligation {
   owner_id      String?          @db.Uuid
   rent_month    DateTime         @db.Date
   amount        Decimal          @db.Decimal(10, 2)
-  due_date      DateTime         @db.Date
-  status        PaymentStatus    @default(PENDING)
-  created_at    DateTime         @default(now()) @db.Timestamptz(6)
-  updated_at    DateTime?        @updatedAt @db.Timestamptz(6)
-  attempts      PaymentAttempt[]
-  payments      Payment[]
-  allocation    RoomAllocation?  @relation(fields: [allocation_id], references: [id])
-  student       Student          @relation(fields: [student_id], references: [id])
+  due_date        DateTime         @db.Date
+  status          PaymentStatus    @default(PENDING)
+  obligation_type String           @default("RENT") // "RENT" or "LATE_FEE"
+  created_at      DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime?        @updatedAt @db.Timestamptz(6)
+  attempts        PaymentAttempt[]
+  payments        Payment[]
+  reminders       ReminderLog[]
+  allocation      RoomAllocation?  @relation(fields: [allocation_id], references: [id])
+  student         Student          @relation(fields: [student_id], references: [id])
 
   @@index([student_id, rent_month])
-  @@unique([allocation_id, rent_month])
+  @@unique([allocation_id, rent_month, obligation_type])
   @@map("rent_obligations")
+  @@schema("public")
+}
+
+model ReminderLog {
+  id            String         @id @default(uuid()) @db.Uuid
+  obligation_id String         @db.Uuid
+  student_id    String         @db.Uuid
+  reminder_type String         // "DUE_SOON", "OVERDUE", "WARNING", "FINAL_NOTICE"
+  channel       String         @default("IN_APP") // "IN_APP", "EMAIL", "WHATSAPP"
+  sent_at       DateTime       @default(now()) @db.Timestamptz(6)
+
+  obligation    RentObligation @relation(fields: [obligation_id], references: [id], onDelete: Cascade)
+  student       Student        @relation(fields: [student_id], references: [id], onDelete: Cascade)
+
+  @@index([obligation_id])
+  @@index([student_id])
+  @@map("reminder_logs")
   @@schema("public")
 }
 
