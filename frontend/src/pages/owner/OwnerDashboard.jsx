@@ -1,95 +1,61 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip
 } from 'recharts';
 import {
     Users, BedDouble, Bed, Clock, ArrowUpRight, LayoutGrid, CreditCard
 } from 'lucide-react';
-import { activityService, dashboardService } from '../../api/services';
+import { dashboardService } from '../../api/services';
 
 const OwnerDashboard = () => {
     const navigate = useNavigate();
     const [months, setMonths] = useState(6);
-    const [summary, setSummary] = useState({
-        total_tenants: 0,
-        active_tenants: 0,
-        total_capacity: 0,
-        vacant_beds: 0,
-        pending_dues: 0,
-        overdue_amount: 0,
-        overdue_count: 0,
-        rent_collected_this_month: 0,
-        occupancy_rate: 0,
-        net_profit: 0,
+
+    const { data: unifiedRes, isLoading: loading } = useQuery({
+        queryKey: ['dashboard', months],
+        queryFn: () => dashboardService.getUnified(months),
+        staleTime: 5 * 60 * 1000, // 5 minutes — page switches are instant
     });
-    const [collectionData, setCollectionData] = useState([]);
-    const [recentActivity, setRecentActivity] = useState([]);
-    const [loading, setLoading] = useState(true);
 
-    const updateDashboard = async () => {
-        try {
-            const unifiedRes = await dashboardService.getUnified(months).catch(err => {
-                console.error('Unified dashboard fetch failed:', err);
-                return null;
-            });
-
-            if (unifiedRes) {
-                const { stats: summaryRes, collectionData: monthlyRes, recentActivity: items } = unifiedRes;
-
-                if (summaryRes) {
-                    const revenue = Number(summaryRes.rent_collected_this_month ?? summaryRes.revenue ?? 0);
-                    const expensesThisMonth = Number(summaryRes.expenses_this_month ?? 0);
-                    const netProfit = Number(
-                        summaryRes.net_profit ?? (revenue - expensesThisMonth)
-                    );
-
-                    setSummary({
-                        total_tenants: summaryRes.total_tenants || 0,
-                        active_tenants: summaryRes.active_tenants || 0,
-                        total_capacity: summaryRes.total_capacity || 0,
-                        vacant_beds: summaryRes.vacant_beds || 0,
-                        pending_dues: summaryRes.pending_dues || 0,
-                        overdue_amount: summaryRes.overdue_amount || 0,
-                        overdue_count: summaryRes.overdue_count || 0,
-                        rent_collected_this_month: revenue,
-                        occupancy_rate: summaryRes.occupancy_rate || 0,
-                        net_profit: netProfit,
-                    });
-                }
-
-                if (Array.isArray(monthlyRes)) {
-                    const normalizedMonthly = monthlyRes.map((item) => ({
-                        month: item.month,
-                        collected: Number(item.collected ?? item.income ?? 0),
-                        due: Number(item.due ?? item.expenses ?? 0),
-                    }));
-                    setCollectionData(normalizedMonthly);
-                } else {
-                    setCollectionData([]);
-                }
-
-                setRecentActivity(Array.isArray(items) ? items : []);
-            }
-        } catch (error) {
-            console.error('Dashboard logic error:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        updateDashboard();
-
-        // Listen for real-time SSE updates from the Layout
-        const handleUpdate = () => {
-            console.log('[Dashboard] Real-time update triggered');
-            updateDashboard();
+    const summary = useMemo(() => {
+        const s = unifiedRes?.stats;
+        if (!s) return {
+            total_tenants: 0, active_tenants: 0, total_capacity: 0, vacant_beds: 0,
+            pending_dues: 0, overdue_amount: 0, overdue_count: 0,
+            rent_collected_this_month: 0, occupancy_rate: 0, net_profit: 0,
         };
+        const revenue = Number(s.rent_collected_this_month ?? s.revenue ?? 0);
+        const expensesThisMonth = Number(s.expenses_this_month ?? 0);
+        return {
+            total_tenants: s.total_tenants || 0,
+            active_tenants: s.active_tenants || 0,
+            total_capacity: s.total_capacity || 0,
+            vacant_beds: s.vacant_beds || 0,
+            pending_dues: s.pending_dues || 0,
+            overdue_amount: s.overdue_amount || 0,
+            overdue_count: s.overdue_count || 0,
+            rent_collected_this_month: revenue,
+            occupancy_rate: s.occupancy_rate || 0,
+            net_profit: Number(s.net_profit ?? (revenue - expensesThisMonth)),
+        };
+    }, [unifiedRes]);
 
-        window.addEventListener('hms-data-updated', handleUpdate);
-        return () => window.removeEventListener('hms-data-updated', handleUpdate);
-    }, [months]);
+    const collectionData = useMemo(() => {
+        const m = unifiedRes?.collectionData;
+        if (!Array.isArray(m)) return [];
+        return m.map((item) => ({
+            month: item.month,
+            collected: Number(item.collected ?? item.income ?? 0),
+            due: Number(item.due ?? item.expenses ?? 0),
+        }));
+    }, [unifiedRes]);
+
+    const recentActivity = useMemo(() => {
+        const a = unifiedRes?.recentActivity;
+        return Array.isArray(a) ? a : [];
+    }, [unifiedRes]);
 
     if (loading) return <div className="p-8 text-center text-slate-400">Loading dashboard...</div>;
 

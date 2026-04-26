@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
+import { useQueryClient } from '@tanstack/react-query';
 import { notificationService, ownerService } from '../api/services';
 import SearchResultsDropdown from '../components/owner/SearchResultsDropdown';
 import ProfileMenu from '../components/owner/ProfileMenu';
@@ -39,6 +40,7 @@ const OwnerLayout = () => {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
+    const queryClient = useQueryClient();
     const [hostelLogoUrl, setHostelLogoUrl] = useState('');
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -71,7 +73,13 @@ const OwnerLayout = () => {
     }, []);
 
     useEffect(() => {
-        const es = new EventSource('/api/events');
+        // Extract token for SSE – EventSource can't send Authorization headers
+        const ownerData = localStorage.getItem('ownerUser');
+        const token = ownerData ? JSON.parse(ownerData).token : null;
+        if (!token) return;
+
+        const apiBase = import.meta.env.VITE_API_URL || 'https://hms-r68g.vercel.app/api';
+        const es = new EventSource(`${apiBase}/events?token=${encodeURIComponent(token)}`);
 
         es.onmessage = (event) => {
             try {
@@ -80,21 +88,21 @@ const OwnerLayout = () => {
 
                 console.log('[SSE Event Received]:', data);
 
-                // For specialized updates, we can trigger reloads
-                const refreshTypes = [
-                    'payment_recorded', 
-                    'expense_created', 
-                    'student_created', 
-                    'student_allocated_room',
-                    'reactivation_requested'
-                ];
-
-                if (refreshTypes.includes(data.type)) {
-                    // Refetch global notifications in layout
+                // React Query targeted cache invalidation
+                if (data.type === 'payment_recorded') {
+                    queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+                    queryClient.invalidateQueries({ queryKey: ['payments'] });
                     fetchNotifications();
-                    
-                    // Dispatch custom event so the Dashboard (if open) can refetch selectively
-                    window.dispatchEvent(new CustomEvent('hms-data-updated', { detail: data }));
+                } else if (data.type === 'expense_created') {
+                    queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+                    queryClient.invalidateQueries({ queryKey: ['expenses'] });
+                    fetchNotifications();
+                } else if (data.type === 'student_created' || data.type === 'student_allocated_room') {
+                    queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+                    queryClient.invalidateQueries({ queryKey: ['students'] });
+                    fetchNotifications();
+                } else if (data.type === 'reactivation_requested') {
+                    fetchNotifications();
                 }
             } catch (err) {
                 console.error('SSE message parse error', err);
