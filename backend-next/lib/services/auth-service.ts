@@ -46,6 +46,11 @@ export class AuthService {
     if (profile.role === "STUDENT") {
       const student = await prisma.student.findUnique({
         where: { profile_id: profile.id },
+        select: {
+          id: true,
+          profile_completed: true,
+          status: true,
+        }
       });
       if (student) {
         studentId = student.id;
@@ -276,5 +281,4 @@ export class AuthService {
 }
 
 export const authService = new AuthService();
-
 

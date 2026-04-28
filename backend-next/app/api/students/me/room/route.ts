@@ -19,7 +19,8 @@ export async function GET(req: NextRequest) {
   try {
     const student = await prisma.student.findUnique({
       where: { profile_id: session.sub },
-      include: {
+      select: {
+        id: true,
         allocations: {
           where: { is_active: true, end_date: null },
           include: { room: true }
@@ -47,7 +48,15 @@ export async function GET(req: NextRequest) {
         student_id: { not: student.id }
       },
       include: {
-        student: { include: { profile: true } }
+        student: {
+          select: {
+            profile: {
+              select: {
+                name: true
+              }
+            }
+          }
+        }
       }
     });
 

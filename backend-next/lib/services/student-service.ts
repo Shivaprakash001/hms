@@ -6,13 +6,40 @@ export class StudentService {
   async getStudentById(id: string, requestingUser: { sub: string; role: string }) {
     const student = await prisma.student.findUnique({
       where: { id },
-      include: {
+      select: {
+        id: true,
+        profile_id: true,
+        monthly_rent: true,
+        joined_on: true,
+        status: true,
+        owner_id: true,
+        profile_completed: true,
+        photo_url: true,
+        phone_1: true,
+        phone_2: true,
+        phone_3: true,
+        personal_email: true,
+        college_name: true,
+        roll_number: true,
+        course: true,
+        year_of_study: true,
+        section: true,
+        branch: true,
+        office_name: true,
+        office_location: true,
+        job_role: true,
+        permanent_address: true,
+        temporary_address: true,
+        aadhaar_number: true,
+        document_verified: true,
+        created_at: true,
+        updated_at: true,
         profile: true,
         allocations: {
           where: { is_active: true },
           include: { room: true },
         },
-      },
+      }
     });
 
     if (!student) throw new Error("NOT_FOUND: Student record not found");
@@ -27,13 +54,40 @@ export class StudentService {
   async getStudentByProfile(profileId: string, requestingUser: { sub: string; role: string }) {
     const student = await prisma.student.findUnique({
       where: { profile_id: profileId },
-      include: {
+      select: {
+        id: true,
+        profile_id: true,
+        monthly_rent: true,
+        joined_on: true,
+        status: true,
+        owner_id: true,
+        profile_completed: true,
+        photo_url: true,
+        phone_1: true,
+        phone_2: true,
+        phone_3: true,
+        personal_email: true,
+        college_name: true,
+        roll_number: true,
+        course: true,
+        year_of_study: true,
+        section: true,
+        branch: true,
+        office_name: true,
+        office_location: true,
+        job_role: true,
+        permanent_address: true,
+        temporary_address: true,
+        aadhaar_number: true,
+        document_verified: true,
+        created_at: true,
+        updated_at: true,
         profile: true,
         allocations: {
           where: { is_active: true },
           include: { room: true },
         },
-      },
+      }
     });
 
     if (!student) throw new Error("NOT_FOUND: Student record not found");
@@ -417,7 +471,10 @@ export class StudentService {
   }
 
   async updateStudent(id: string, data: any, ownerId: string) {
-    const student = await prisma.student.findUnique({ where: { id } });
+    const student = await prisma.student.findUnique({
+      where: { id },
+      select: { id: true, owner_id: true, status: true },
+    });
     if (!student) throw new Error("NOT_FOUND: Student not found");
     if (student.owner_id !== ownerId) throw new Error("FORBIDDEN: You can only update your own tenants");
 
@@ -437,7 +494,10 @@ export class StudentService {
   }
 
   async deleteStudent(id: string, ownerId: string) {
-    const student = await prisma.student.findUnique({ where: { id } });
+    const student = await prisma.student.findUnique({
+      where: { id },
+      select: { id: true, owner_id: true, status: true },
+    });
     if (!student) throw new Error("NOT_FOUND: Student not found");
     if (student.owner_id !== ownerId) throw new Error("FORBIDDEN: You can only delete your own tenants");
 
@@ -455,7 +515,10 @@ export class StudentService {
   }
 
   async reactivateStudent(id: string, rent: number, joinedOn: Date, ownerId: string) {
-    const student = await prisma.student.findUnique({ where: { id } });
+    const student = await prisma.student.findUnique({
+      where: { id },
+      select: { id: true, owner_id: true, status: true },
+    });
     if (!student) throw new Error("NOT_FOUND: Student not found");
     if (student.owner_id !== ownerId) throw new Error("FORBIDDEN: You can only reactivate your own tenants");
     if (student.status !== "LEFT") throw new Error("VALIDATION: Only students with LEFT status can be reactivated");
