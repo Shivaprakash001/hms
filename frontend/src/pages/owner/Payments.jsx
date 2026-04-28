@@ -227,32 +227,15 @@ const Payments = () => {
         }
     };
 
-    const handleDownloadReceipt = async (paymentId, fallbackReferenceNumber = null) => {
+    const handleDownloadReceipt = async (paymentId) => {
         try {
             if (!paymentId) {
                 alert('Invalid payment ID');
                 return;
             }
-            
-            const blob = await paymentService.downloadReceipt(paymentId, fallbackReferenceNumber);
-            
-            // Validate blob
-            if (!blob || blob.size === 0) {
-                throw new Error('Empty receipt file received');
-            }
-            
-            const url = window.URL.createObjectURL(new Blob([blob]));
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', `receipt_${paymentId}.pdf`);
-            document.body.appendChild(link);
-            link.click();
-            link.parentNode.removeChild(link);
-            window.URL.revokeObjectURL(url);
+            await paymentService.downloadInvoice(paymentId);
         } catch (error) {
             console.error("Failed to download receipt:", error?.response?.data || error);
-            
-            // Better error messages
             let errorMessage = 'Failed to download receipt';
             if (error?.response?.status === 404) {
                 errorMessage = 'Receipt not found';
@@ -260,20 +243,8 @@ const Payments = () => {
                 errorMessage = 'Unauthorized access';
             } else if (error?.response?.status === 500) {
                 errorMessage = 'Server error - please try again';
-            } else if (error?.message?.includes('Empty')) {
-                errorMessage = 'Receipt file is empty';
             }
-            
             alert(errorMessage);
-        }
-    };
-
-    const handleDownloadInvoice = async (paymentId) => {
-        try {
-            await paymentService.downloadInvoice(paymentId);
-        } catch (error) {
-            console.error("Failed to fetch invoice:", error);
-            alert(error.response?.data?.detail || "Failed to download invoice");
         }
     };
 
@@ -282,7 +253,7 @@ const Payments = () => {
             alert('Receipt is only available for recorded transactions.');
             return;
         }
-        await handleDownloadReceipt(payment.latestPaymentId, payment.reference_number);
+        await handleDownloadReceipt(payment.latestPaymentId);
     };
 
     const handleExportReport = async () => {
@@ -733,7 +704,6 @@ const Payments = () => {
                 payment={selectedPaymentWithContext}
                 onMarkPaid={handleMarkAsPaid}
                 onDownloadReceipt={handleDownloadFromSelection}
-                onDownloadInvoice={handleDownloadInvoice}
                 onViewTenant={handleViewTenant}
                 onViewHistory={setHistoryTenant}
                 onStartOnlineTest={handleOpenOnlineTest}
