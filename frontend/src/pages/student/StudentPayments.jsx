@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { CreditCard, Calendar, Download, CheckCircle2, Clock, Smartphone, ChevronRight, ChevronDown } from 'lucide-react';
+import { CreditCard, Calendar, Download, CheckCircle2, Clock, Smartphone, ChevronRight, ChevronDown, Loader2 } from 'lucide-react';
 
 import { useAuth } from '../../context/AuthContext';
 import { paymentService } from '../../api/services';
@@ -9,6 +9,8 @@ const StudentPayments = () => {
     const { user } = useAuth();
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [expandedRows, setExpandedRows] = useState({});
+    const [downloadingId, setDownloadingId] = useState(null);
+    const [downloadedId, setDownloadedId] = useState(null);
 
     const [history, setHistory] = useState({ payments: [], obligations: [] });
 
@@ -73,6 +75,28 @@ const StudentPayments = () => {
             console.error("Payment failed", error);
         } finally {
             setShowPaymentModal(false);
+        }
+    };
+
+    const handleDownloadReceipt = async (txn) => {
+        if (!txn?.id) return;
+        try {
+            setDownloadingId(txn.id);
+            setDownloadedId(null);
+            const blob = await paymentService.downloadReceipt(txn.id);
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Receipt_${txn.id.substring(0, 8)}.pdf`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+            setDownloadedId(txn.id);
+            setTimeout(() => setDownloadedId((prev) => (prev === txn.id ? null : prev)), 3000);
+        } catch (error) {
+            console.error("Download failed:", error);
+            alert("Failed to download receipt.");
+        } finally {
+            setDownloadingId((prev) => (prev === txn.id ? null : prev));
         }
     };
 
@@ -216,24 +240,18 @@ const StudentPayments = () => {
                                         <td className="px-6 py-4">
                                             {(txn.status === 'paid' || txn.status === 'success') && (
                                                 <button 
-                                                    onClick={async () => {
-                                                        try {
-                                                            const blob = await paymentService.downloadReceipt(txn.id);
-                                                            const url = window.URL.createObjectURL(blob);
-                                                            const a = document.createElement('a');
-                                                            a.href = url;
-                                                            a.download = `Receipt_${txn.id.substring(0, 8)}.pdf`;
-                                                            a.click();
-                                                            window.URL.revokeObjectURL(url);
-                                                        } catch (error) {
-                                                            console.error("Download failed:", error);
-                                                            alert("Failed to download receipt.");
-                                                        }
-                                                    }}
+                                                    onClick={() => handleDownloadReceipt(txn)}
+                                                    disabled={downloadingId === txn.id}
                                                     className="text-slate-400 hover:text-indigo-600 transition-colors p-2 hover:bg-indigo-50 rounded-lg"
                                                     title="Download PDF Receipt"
                                                 >
-                                                    <Download size={18} />
+                                                    {downloadingId === txn.id ? (
+                                                        <Loader2 size={18} className="animate-spin" />
+                                                    ) : downloadedId === txn.id ? (
+                                                        <CheckCircle2 size={18} className="text-emerald-600" />
+                                                    ) : (
+                                                        <Download size={18} />
+                                                    )}
                                                 </button>
                                             )}
                                         </td>
@@ -283,24 +301,26 @@ const StudentPayments = () => {
                                             <p><span className="text-slate-400">Month Paid:</span> <span className="font-semibold text-slate-700">{txn.month_paid ? new Date(txn.month_paid).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : '---'}</span></p>
                                             {(txn.status === 'paid' || txn.status === 'success') && (
                                                 <button
-                                                    onClick={async () => {
-                                                        try {
-                                                            const blob = await paymentService.downloadReceipt(txn.id);
-                                                            const url = window.URL.createObjectURL(blob);
-                                                            const a = document.createElement('a');
-                                                            a.href = url;
-                                                            a.download = `Receipt_${txn.id.substring(0, 8)}.pdf`;
-                                                            a.click();
-                                                            window.URL.revokeObjectURL(url);
-                                                        } catch (error) {
-                                                            console.error("Download failed:", error);
-                                                            alert("Failed to download receipt.");
-                                                        }
-                                                    }}
+                                                    onClick={() => handleDownloadReceipt(txn)}
+                                                    disabled={downloadingId === txn.id}
                                                     className="w-full mt-1 inline-flex items-center justify-center gap-2 rounded-lg bg-white border border-slate-200 px-3 py-2 text-slate-700 font-semibold"
                                                 >
-                                                    <Download size={14} />
-                                                    Receipt Download
+                                                    {downloadingId === txn.id ? (
+                                                        <>
+                                                            <Loader2 size={14} className="animate-spin" />
+                                                            Downloading...
+                                                        </>
+                                                    ) : downloadedId === txn.id ? (
+                                                        <>
+                                                            <CheckCircle2 size={14} className="text-emerald-600" />
+                                                            Downloaded
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Download size={14} />
+                                                            Download Receipt
+                                                        </>
+                                                    )}
                                                 </button>
                                             )}
                                         </div>

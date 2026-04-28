@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { AnimatePresence } from 'framer-motion';
 import {
     Upload, X, FileText, CheckCircle2, AlertCircle, Loader2,
     Trash2, Shield, Eye
 } from 'lucide-react';
-import { tenantDocumentService } from '../../api/services';
+import { tenantDocumentService, studentService } from '../../api/services';
 
 const DOC_TYPES = [
     { key: 'AADHAR', label: 'Aadhar Card', color: 'indigo' },
@@ -36,15 +36,13 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true, onDocum
         setFailedBlobDocIds(new Set());
     };
 
-    useEffect(() => {
-        if (tenantId) fetchDocuments();
-    }, [tenantId]);
-
-    const fetchDocuments = async () => {
+    const fetchDocuments = useCallback(async () => {
         try {
             setLoading(true);
             clearBlobUrls();
-            const data = await tenantDocumentService.getAll(tenantId);
+            const data = isOwner
+                ? await tenantDocumentService.getAll(tenantId)
+                : await studentService.getMyDocuments();
             const normalized = Array.isArray(data) ? data : [];
             setDocuments(normalized);
             if (typeof onDocumentsChange === 'function') {
@@ -57,12 +55,16 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true, onDocum
                 if (doc.document_number) nums[doc.doc_type] = doc.document_number;
             });
             setDocNumbers(nums);
-        } catch (err) {
-            console.error('Failed to fetch documents:', err);
+        } catch (_err) {
+            console.error('Failed to fetch documents:', _err);
         } finally {
             setLoading(false);
         }
-    };
+    }, [isOwner, onDocumentsChange, tenantId]);
+
+    useEffect(() => {
+        if (tenantId || !isOwner) fetchDocuments();
+    }, [tenantId, isOwner, fetchDocuments]);
 
     const handleUpload = async (file) => {
         if (!file) return;
@@ -101,7 +103,7 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true, onDocum
             setSuccess('Document deleted');
             setTimeout(() => setSuccess(''), 2000);
             fetchDocuments();
-        } catch (err) {
+        } catch {
             setError('Failed to delete document');
         }
     };
@@ -112,7 +114,7 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true, onDocum
             setSuccess('Document verified!');
             setTimeout(() => setSuccess(''), 2000);
             fetchDocuments();
-        } catch (err) {
+        } catch {
             setError('Failed to verify document');
         }
     };
@@ -125,7 +127,7 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true, onDocum
             setSuccess('Document rejected. Tenant has been notified.');
             setTimeout(() => setSuccess(''), 2500);
             fetchDocuments();
-        } catch (err) {
+        } catch {
             setError('Failed to reject document');
         }
     };
@@ -231,17 +233,15 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true, onDocum
             {/* Alerts */}
             <AnimatePresence>
                 {error && (
-                    <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                        className="bg-red-50 text-red-600 border border-red-200 px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2">
+                    <div className="bg-red-50 text-red-600 border border-red-200 px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2">
                         <AlertCircle size={14} /> {error}
                         <button onClick={() => setError('')} className="ml-auto"><X size={14} /></button>
-                    </motion.div>
+                    </div>
                 )}
                 {success && (
-                    <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                        className="bg-emerald-50 text-emerald-600 border border-emerald-200 px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2">
+                    <div className="bg-emerald-50 text-emerald-600 border border-emerald-200 px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2">
                         <CheckCircle2 size={14} /> {success}
-                    </motion.div>
+                    </div>
                 )}
             </AnimatePresence>
 

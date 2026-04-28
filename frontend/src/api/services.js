@@ -201,7 +201,7 @@ export const studentService = {
     },
     getMyDocuments: async () => {
         const response = await api.get('/students/me/documents');
-        return response.data;
+        return response.data?.documents || response.data || [];
     },
     getMyPaymentHistory: async () => {
         const response = await api.get('/students/me/payments/history');
@@ -551,20 +551,24 @@ export const notificationService = {
 export const tenantDocumentService = {
     upload: async (tenantId, docType, documentNumber, file) => {
         const formData = new FormData();
-        formData.append('doc_type', docType);
-        if (documentNumber) formData.append('document_number', documentNumber);
+        formData.append('docType', docType);
+        if (documentNumber) formData.append('docNumber', documentNumber);
         formData.append('file', file);
-        const response = await api.post(`/tenants/${tenantId}/documents`, formData, {
+        const response = await api.post(`/students/${tenantId}/documents`, formData, {
             headers: { 'Content-Type': 'multipart/form-data' }
         });
         return response.data;
     },
     getAll: async (tenantId) => {
-        const response = await api.get(`/tenants/${tenantId}/documents`);
-        return response.data;
+        if (!tenantId) {
+            const response = await api.get('/students/me/documents');
+            return response.data?.documents || response.data || [];
+        }
+        const response = await api.get(`/students/${tenantId}/documents`);
+        return response.data?.documents || response.data || [];
     },
     delete: async (tenantId, docId) => {
-        const response = await api.delete(`/tenants/${tenantId}/documents/${docId}`);
+        const response = await api.delete(`/students/${tenantId}/documents/${docId}`);
         return response.data;
     },
     verify: async (tenantId, docId) => {

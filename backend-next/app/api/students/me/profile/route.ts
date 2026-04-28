@@ -93,6 +93,7 @@ export async function GET(req: NextRequest) {
       ...student,
       student_details: student,
       room_no: allocation?.room?.room_no || null,
+      floor: allocation?.room?.floor ?? null,
       status: student.status
     });
   } catch (error: any) {

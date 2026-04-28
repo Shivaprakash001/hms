@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { documentService } from "@/lib/services/document-service";
+import { prisma } from "@/lib/db";
 
 /**
  * 📄 DOCUMENTS — Get and Upload
@@ -36,8 +37,14 @@ export async function POST(
   if (!session) return apiError("Unauthorized", "UNAUTHORIZED", 401);
 
   // For students, they can only upload to their own account
-  if (session.role === "STUDENT" && session.sub !== params.id) {
-    return apiError("Forbidden", "FORBIDDEN", 403);
+  if (session.role === "STUDENT") {
+    const me = await prisma.student.findUnique({
+      where: { profile_id: session.sub },
+      select: { id: true }
+    });
+    if (!me || me.id !== params.id) {
+      return apiError("Forbidden", "FORBIDDEN", 403);
+    }
   }
 
   try {

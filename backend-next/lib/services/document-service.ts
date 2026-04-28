@@ -12,6 +12,14 @@ const ALLOWED_MIME_TYPES = [
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 
 export class DocumentService {
+  private async resolveStudentIdFromProfile(profileId: string) {
+    const student = await prisma.student.findUnique({
+      where: { profile_id: profileId },
+      select: { id: true },
+    });
+    return student?.id || null;
+  }
+
   // ── Get Documents (with signed URLs) ──────────────────────
   async getTenantDocuments(
     tenantId: string,
@@ -237,11 +245,11 @@ export class DocumentService {
 
     if (!doc) throw new Error("NOT_FOUND: Document not found");
 
-    if (
-      requestingUser.role === "STUDENT" &&
-      doc.tenant_id !== requestingUser.sub
-    ) {
-      throw new Error("FORBIDDEN: Access denied");
+    if (requestingUser.role === "STUDENT") {
+      const studentId = await this.resolveStudentIdFromProfile(requestingUser.sub);
+      if (!studentId || doc.tenant_id !== studentId) {
+        throw new Error("FORBIDDEN: Access denied");
+      }
     }
 
     if (
