@@ -102,22 +102,22 @@ const TenantProfile = () => {
             return Boolean(val);
         };
 
-        const checks = [
-            isFilled(formData.name),
-            isFilled(formData.email),
-            isFilled(formData.phone),
-            isFilled(formData.emergency_contact),
-            isFilled(formData.personal_email),
-            isFilled(formData.permanent_address),
-            isFilled(formData.temporary_address),
-            isFilled(formData.gender),
-        ];
-        const completed = checks.filter(Boolean).length;
-        const total = checks.length;
-        const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+        const hasBasic = isFilled(formData.name) && isFilled(formData.phone) && isFilled(formData.emergency_contact);
+        const hasType = formData.profile_type === 'work' 
+            ? isFilled(formData.office_name) 
+            : (isFilled(formData.college_name) || isFilled(formData.course) || isFilled(formData.roll_number));
+        const hasVerification = tenantInfo?.document_verified || (tenantInfo?.documents?.length > 0);
+        const hasRoom = tenantInfo?.current_room || user?.room_no;
 
-        return { completed, total, percent };
-    }, [formData]);
+        const stages = [
+            { label: 'Basic Info', done: hasBasic },
+            { label: 'Profile Type', done: hasType },
+            { label: 'Verification', done: hasVerification },
+            { label: 'Room Assigned', done: hasRoom }
+        ];
+
+        return { stages };
+    }, [formData, tenantInfo, user]);
 
     const handleSave = async () => {
         setSaveLoading(true);
@@ -279,20 +279,13 @@ const TenantProfile = () => {
                         <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 text-xs font-semibold">{tenantInfo?.status || 'Resident'}</span>
                     </div>
 
-                    <div className="mt-3">
-                        <div className="flex items-center justify-between mb-1">
-                            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Profile Completion</p>
-                            <p className="text-xs font-bold text-indigo-600">{profileCompletion.percent}%</p>
-                        </div>
-                        <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
-                            <div
-                                className="h-full bg-indigo-600 transition-all duration-500"
-                                style={{ width: `${profileCompletion.percent}%` }}
-                            />
-                        </div>
-                        <p className="text-[11px] text-slate-400 mt-1">
-                            {profileCompletion.completed} of {profileCompletion.total} profile sections completed
-                        </p>
+                    <div className="mt-4 flex flex-wrap gap-2 justify-center sm:justify-start">
+                        {profileCompletion.stages?.map(stage => (
+                            <span key={stage.label} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold border ${stage.done ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>
+                                {stage.done ? <CheckCircle2 size={12} className="text-emerald-500"/> : <div className="w-1.5 h-1.5 rounded-full bg-slate-300"/>}
+                                {stage.label}
+                            </span>
+                        ))}
                     </div>
                 </div>
 

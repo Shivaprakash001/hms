@@ -80,7 +80,16 @@ export default function TenantProfileCard({ tenantId, onEdit, isOwner = true }) 
                         <div>
                             <h3 className="text-lg font-bold text-slate-800">{profile.name || 'Unknown'}</h3>
                             <p className="text-xs text-slate-400 font-medium">{profile.email}</p>
-                            <div className="flex items-center gap-2 mt-1.5">
+                            <div className="flex items-center flex-wrap gap-2 mt-1.5">
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                    tenant.profile_type === 'WORKING_PROFESSIONAL' 
+                                        ? 'bg-purple-50 text-purple-700 border-purple-100'
+                                        : 'bg-indigo-50 text-indigo-700 border-indigo-100'
+                                }`}>
+                                    {tenant.profile_type === 'WORKING_PROFESSIONAL' ? <Briefcase size={10} /> : <GraduationCap size={10} />}
+                                    {tenant.profile_type === 'WORKING_PROFESSIONAL' ? 'Working Professional' : 'Student'}
+                                </span>
+
                                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                                     tenant.status === 'ACTIVE'
                                         ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
@@ -114,20 +123,33 @@ export default function TenantProfileCard({ tenantId, onEdit, isOwner = true }) 
 
             {/* Tabs */}
             <div className="px-6 pt-3 border-b border-slate-100 flex gap-1 overflow-x-auto">
-                {TABS.map(tab => (
-                    <button
-                        key={tab.key}
-                        onClick={() => setActiveTab(tab.key)}
-                        className={`flex items-center gap-1.5 px-3 py-2 rounded-t-lg text-[11px] font-bold transition-all whitespace-nowrap ${
-                            activeTab === tab.key
-                                ? 'bg-indigo-50 text-indigo-600 border-b-2 border-indigo-500'
-                                : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
-                        }`}
-                    >
-                        <tab.icon size={12} />
-                        {tab.label}
-                    </button>
-                ))}
+                {TABS.map(tab => {
+                    let label = tab.label;
+                    let Icon = tab.icon;
+                    if (tab.key === 'education') {
+                        if (tenant.profile_type === 'WORKING_PROFESSIONAL') {
+                            label = 'Work';
+                            Icon = Briefcase;
+                        } else {
+                            label = 'Education';
+                            Icon = GraduationCap;
+                        }
+                    }
+                    return (
+                        <button
+                            key={tab.key}
+                            onClick={() => setActiveTab(tab.key)}
+                            className={`flex items-center gap-1.5 px-3 py-2 rounded-t-lg text-[11px] font-bold transition-all whitespace-nowrap ${
+                                activeTab === tab.key
+                                    ? 'bg-indigo-50 text-indigo-600 border-b-2 border-indigo-500'
+                                    : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
+                            }`}
+                        >
+                            <Icon size={12} />
+                            {label}
+                        </button>
+                    )
+                })}
             </div>
 
             {/* Tab Content */}
@@ -152,13 +174,21 @@ export default function TenantProfileCard({ tenantId, onEdit, isOwner = true }) 
                     </div>
                 )}
 
-                {activeTab === 'education' && (
+                {activeTab === 'education' && tenant.profile_type === 'WORKING_PROFESSIONAL' && (
                     <div className="grid grid-cols-2 gap-4">
-                        <InfoItem label="College" value={tenant.college_name} icon={GraduationCap} />
-                        <InfoItem label="Branch" value={tenant.branch} icon={GraduationCap} />
-                        <InfoItem label="Office" value={tenant.office_name} icon={Building2} />
-                        <InfoItem label="Office Location" value={tenant.office_location} icon={MapPin} />
+                        <InfoItem label="Company Name" value={tenant.office_name} icon={Building2} />
                         <InfoItem label="Job Role" value={tenant.job_role} icon={Briefcase} />
+                        <InfoItem label="Office Location" value={tenant.office_location} icon={MapPin} fullWidth />
+                    </div>
+                )}
+
+                {activeTab === 'education' && tenant.profile_type !== 'WORKING_PROFESSIONAL' && (
+                    <div className="grid grid-cols-2 gap-4">
+                        <InfoItem label="College Name" value={tenant.college_name} icon={GraduationCap} fullWidth />
+                        <InfoItem label="Roll Number" value={tenant.roll_number} icon={FileText} />
+                        <InfoItem label="Course" value={tenant.course} icon={GraduationCap} />
+                        <InfoItem label="Branch" value={tenant.branch} icon={GraduationCap} />
+                        <InfoItem label="Year of Study" value={tenant.year_of_study ? `Year ${tenant.year_of_study}` : null} icon={Calendar} />
                     </div>
                 )}
 
