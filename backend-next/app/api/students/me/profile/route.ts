@@ -21,23 +21,60 @@ export async function GET(req: NextRequest) {
   try {
     const profile = await prisma.profile.findUnique({
       where: { id: session.sub },
-      include: {
-        student_details: {
-          include: {
-            allocations: {
-              where: { is_active: true, end_date: null },
-              include: { room: true }
-            }
-          }
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        emergency_contact: true
+      }
+    });
+
+    if (!profile) {
+      return apiError("Student profile not found", "NOT_FOUND", 404);
+    }
+
+    const student = await prisma.student.findUnique({
+      where: { profile_id: session.sub },
+      select: {
+        id: true,
+        profile_id: true,
+        monthly_rent: true,
+        joined_on: true,
+        status: true,
+        owner_id: true,
+        profile_completed: true,
+        photo_url: true,
+        phone_1: true,
+        phone_2: true,
+        phone_3: true,
+        personal_email: true,
+        college_name: true,
+        roll_number: true,
+        course: true,
+        year_of_study: true,
+        section: true,
+        branch: true,
+        office_name: true,
+        office_location: true,
+        job_role: true,
+        permanent_address: true,
+        temporary_address: true,
+        aadhaar_number: true,
+        document_verified: true,
+        created_at: true,
+        updated_at: true,
+        allocations: {
+          where: { is_active: true, end_date: null },
+          include: { room: true }
         }
       }
     });
 
-    if (!profile || !profile.student_details) {
+    if (!student) {
       return apiError("Student profile not found", "NOT_FOUND", 404);
     }
 
-    const student = profile.student_details;
     const allocation = student.allocations[0];
 
     return apiResponse({
@@ -51,7 +88,7 @@ export async function GET(req: NextRequest) {
         personal_email: student.personal_email,
         permanent_address: student.permanent_address,
         temporary_address: student.temporary_address,
-        gender: student.gender
+        gender: null
       },
       ...student,
       student_details: student,

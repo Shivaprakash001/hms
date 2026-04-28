@@ -166,10 +166,23 @@ export class StudentService {
     }
 
     if (Object.keys(studentUpdate).length > 0) {
-      await prisma.student.update({
-        where: { profile_id: profileId },
-        data: studentUpdate,
-      });
+      try {
+        await prisma.student.update({
+          where: { profile_id: profileId },
+          data: studentUpdate,
+        });
+      } catch (error: any) {
+        const msg = String(error?.message || error);
+        if (msg.includes("students.gender") && Object.prototype.hasOwnProperty.call(studentUpdate, "gender")) {
+          delete studentUpdate.gender;
+          await prisma.student.update({
+            where: { profile_id: profileId },
+            data: studentUpdate,
+          });
+        } else {
+          throw error;
+        }
+      }
     }
 
     // Completion check
