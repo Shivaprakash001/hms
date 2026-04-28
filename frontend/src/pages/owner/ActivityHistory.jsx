@@ -12,8 +12,11 @@ import {
     X
 } from 'lucide-react';
 import { activityService } from '../../api/services';
+import { useAppPreferences } from '../../context/AppPreferencesContext';
+import { formatDate } from '../../utils/format';
 
 const ActivityHistory = () => {
+    const { preferences } = useAppPreferences();
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [activities, setActivities] = useState([]);
@@ -164,7 +167,7 @@ const ActivityHistory = () => {
                                 <div className="flex justify-between items-start mb-0.5">
                                     <h4 className="font-bold text-slate-900 truncate">{act.tenant_name || 'Tenant'}</h4>
                                     <span className="text-[10px] sm:text-xs font-medium text-slate-400 whitespace-nowrap bg-slate-50 px-2 py-0.5 rounded-full border border-slate-100">
-                                        {act.event_at ? new Date(act.event_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''}
+                                        {formatDate(act.event_at, preferences, '')}
                                     </span>
                                 </div>
                                 <p className="text-sm text-indigo-600 font-semibold mb-1 flex items-center gap-1.5">

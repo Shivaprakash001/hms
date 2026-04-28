@@ -7,6 +7,8 @@ import {
   Check, Download, ZoomIn
 } from 'lucide-react';
 import api from '../../api/axios'; // Or use services
+import { useAppPreferences } from '../../context/AppPreferencesContext';
+import { formatCurrency, formatDate } from '../../utils/format';
 
 // --- Local Service Helper ---
 const fetchTenantFull = async (id) => {
@@ -25,6 +27,7 @@ const rejectDocument = async ({ tenantId, docId, reason }) => {
 };
 
 export default function TenantProfilePage() {
+  const { preferences } = useAppPreferences();
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -79,12 +82,6 @@ export default function TenantProfilePage() {
   const latestPayment = tenant.payments?.[0];
   
   // Formatters
-  const formatCurrency = (val) => `₹${Number(val || 0).toLocaleString('en-IN')}`;
-  const formatDate = (dateStr) => {
-      if (!dateStr) return 'N/A';
-      return new Date(dateStr).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
-  };
-
   const getInitials = (name) => {
     return name ? name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : '??';
   };
@@ -138,7 +135,7 @@ export default function TenantProfilePage() {
                 </div>
                 <div>
                   <p className="text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Monthly Rent</p>
-                  <p className="font-bold border-slate-800 bg-indigo-50 text-indigo-700 w-fit px-2 py-0.5 rounded-lg">{formatCurrency(tenant.monthly_rent)}</p>
+                  <p className="font-bold border-slate-800 bg-indigo-50 text-indigo-700 w-fit px-2 py-0.5 rounded-lg">{formatCurrency(tenant.monthly_rent, preferences)}</p>
                 </div>
                 <div>
                   <p className="text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Roll No.</p>
@@ -146,7 +143,7 @@ export default function TenantProfilePage() {
                 </div>
                 <div>
                   <p className="text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Joined Date</p>
-                  <p className="font-bold text-slate-800">{formatDate(tenant.joined_on)}</p>
+                  <p className="font-bold text-slate-800">{formatDate(tenant.joined_on, preferences, 'N/A')}</p>
                 </div>
               </div>
             </div>
@@ -286,7 +283,7 @@ export default function TenantProfilePage() {
              <div className="p-5 bg-slate-50 border border-slate-100 rounded-2xl">
                 <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-1">Monthly Rent</p>
                 <div className="flex items-baseline gap-1">
-                   <p className="text-3xl font-black text-slate-800">{formatCurrency(tenant.monthly_rent)}</p>
+                   <p className="text-3xl font-black text-slate-800">{formatCurrency(tenant.monthly_rent, preferences)}</p>
                    <span className="text-slate-500 font-bold text-sm">/mo</span>
                 </div>
              </div>
@@ -294,8 +291,8 @@ export default function TenantProfilePage() {
                 <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-1">Last Payment</p>
                 {latestPayment ? (
                   <div>
-                    <p className="text-3xl font-black text-slate-800">{formatCurrency(latestPayment.amount_paid)}</p>
-                    <p className="text-slate-500 font-medium text-sm mt-1">{formatDate(latestPayment.payment_date)} • {latestPayment.payment_method}</p>
+                    <p className="text-3xl font-black text-slate-800">{formatCurrency(latestPayment.amount_paid, preferences)}</p>
+                    <p className="text-slate-500 font-medium text-sm mt-1">{formatDate(latestPayment.payment_date, preferences, 'N/A')} • {latestPayment.payment_method}</p>
                   </div>
                 ) : (
                   <p className="text-slate-400 font-bold mt-2">No payments yet</p>

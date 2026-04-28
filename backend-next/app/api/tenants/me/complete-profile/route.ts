@@ -41,39 +41,87 @@ export async function POST(req: NextRequest) {
       return apiError(`Validation error at ${issuePath}: ${issueMessage}`, "VALIDATION_ERROR", 400);
     }
 
-    // Pass data directly to self update method
-    const updated = await tenantService.updateTenantSelfProfile(session.sub, validated.data, session.sub);
+    const payload = validated.data;
     
-    // Process Aadhaar Document
+    // Default mapped values
+    let gender = payload.gender;
+    if (gender === "Prefer not to say") gender = null;
+    
+    // Address backwards compatibility
+    const tempAddr = payload.temporary_address || payload.address || null;
+    const permAddr = payload.permanent_address || payload.address || null;
+
+    // Aadhaar File Handling before transaction to avoid holding locks during buffer read
+    let fileUrl: string | undefined = undefined;
     const aadhaarFile = formData.get("aadhaar_file") as File | null;
     if (aadhaarFile) {
-      try {
         const buffer = await aadhaarFile.arrayBuffer();
         const base64Str = Buffer.from(buffer).toString("base64");
         const mimeType = aadhaarFile.type || "image/jpeg";
-        const fileUrl = `data:${mimeType};base64,${base64Str}`;
-        
-        await prisma.identificationDocument.create({
+        fileUrl = `data:${mimeType};base64,${base64Str}`;
+    }
+
+    // 🔥 Atomic Database Transaction 🔥
+    const updated = await prisma.$transaction(async (tx) => {
+      // 1. Update Profile Layer
+      await tx.profile.update({
+        where: { id: session.sub },
+        data: {
+          name: payload.name || undefined,
+          email: payload.personal_email || undefined,
+          phone: payload.phone || undefined,
+          is_profile_completed: true,
+        }
+      });
+
+      // 2. Update Tenant Layer
+      const tenantUpdate = await tx.tenant.update({
+        where: { profile_id: session.sub },
+        data: {
+          phone_1: payload.phone || undefined,
+          phone_2: payload.emergency_contact || undefined,
+          personal_email: payload.personal_email || undefined,
+          gender: gender || undefined,
+          temporary_address: tempAddr || undefined,
+          permanent_address: permAddr || undefined,
+          profile_type: payload.profile_type || "STUDENT",
+          
+          college_name: payload.college_name || null,
+          roll_number: payload.roll_number || null,
+          course: payload.course || null,
+          year_of_study: payload.year_of_study || null,
+          branch: payload.branch || null,
+          section: payload.section || null,
+          
+          office_name: payload.office_name || null,
+          office_location: payload.office_location || null,
+          job_role: payload.job_role || null,
+          
+          aadhaar_number: payload.aadhaar_number || null,
+          profile_completed: true,
+        }
+      });
+
+      // 3. Identification Document Layer
+      if (fileUrl) {
+        await tx.identificationDocument.create({
           data: {
-             tenant_id: updated.id,
+             tenant_id: tenantUpdate.id,
              doc_type: "AADHAAR",
-             doc_number: validated.data.aadhaar_number || null,
+             doc_number: payload.aadhaar_number || null,
              file_url: fileUrl,
              uploaded_by: session.sub,
              is_verified: false
           }
         });
-      } catch (fileErr) {
-        console.error("Failed to upload aadhaar file:", fileErr);
-        // Continue, profile was created successfully. Document can be retried later.
       }
-    }
-    
+
+      return tenantUpdate;
+    });
+
     return apiResponse(updated, 201);
   } catch (error: any) {
-    if (error && typeof error.message === "string" && error.message.startsWith("NOT_FOUND")) {
-      return apiError(error.message.split(": ")[1] ?? error.message, "NOT_FOUND", 404);
-    }
+    console.error(error);
     return apiError(error?.message || "Failed to complete profile");
   }
 }

@@ -11,9 +11,12 @@ import PaymentDetailsDrawer from '../../components/owner/payments/PaymentDetails
 import TenantHistoryModal from '../../components/owner/payments/TenantHistoryModal';
 import OnlinePaymentTestModal from '../../components/owner/payments/OnlinePaymentTestModal';
 import { paymentService } from '../../api/services';
+import { useAppPreferences } from '../../context/AppPreferencesContext';
+import { formatCurrency, formatMonthYear } from '../../utils/format';
 
 const Payments = () => {
     const navigate = useNavigate();
+    const { preferences } = useAppPreferences();
     const [ledgerRows, setLedgerRows] = useState([]);
     const [paymentRecords, setPaymentRecords] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -421,21 +424,21 @@ const Payments = () => {
             <div className="grid grid-cols-2 gap-4 sm:gap-6">
                 <PaymentStatsCard
                     title="Total Collected"
-                    value={`₹${stats.totalCollected.toLocaleString()}`}
+                    value={formatCurrency(stats.totalCollected, preferences)}
                     type="success"
                     icon={TrendingUp}
                     subtext={<span className="text-emerald-600 flex items-center gap-1"><TrendingUp size={12} /> This month</span>}
                 />
                 <PaymentStatsCard
                     title="Pending Dues"
-                    value={`₹${stats.totalPending.toLocaleString()}`}
+                    value={formatCurrency(stats.totalPending, preferences)}
                     type="warning"
                     icon={TrendingDown}
                     subtext={<span className="text-amber-600 flex items-center gap-1">{ledgerRows.filter(p => ['pending', 'partial', 'overdue'].includes(p.status)).length} due rows</span>}
                 />
                 <PaymentStatsCard
                     title="Overdue Amount"
-                    value={`₹${stats.overdueAmount.toLocaleString()}`}
+                    value={formatCurrency(stats.overdueAmount, preferences)}
                     type="danger"
                     icon={AlertCircle}
                     subtext={<span className="text-rose-600 flex items-center gap-1">{ledgerRows.filter(p => p.status === 'overdue').length} overdue</span>}
@@ -509,7 +512,7 @@ const Payments = () => {
                             <option value="all">All Months</option>
                             {availableMonths.map(m => (
                                 <option key={m} value={m}>
-                                    {new Date(m + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}
+                                    {formatMonthYear(`${m}-01`, preferences)}
                                 </option>
                             ))}
                         </select>
@@ -603,7 +606,7 @@ const Payments = () => {
                                                     className="w-full px-4 py-3 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all"
                                                 />
                                                 <p className="text-xs text-slate-400 mt-2">
-                                                    This will create pending rent obligations for all tenants who had an active allocation in {new Date(genMonth).toLocaleString('default', { month: 'long', year: 'numeric' })}.
+                                                    This will create pending rent obligations for all tenants who had an active allocation in {formatMonthYear(genMonth, preferences)}.
                                                 </p>
                                             </div>
 
@@ -623,7 +626,7 @@ const Payments = () => {
                                                     <p>Active tenants: <span className="font-semibold">{previewData.tenants || 0}</span></p>
                                                     <p>To generate: <span className="font-semibold">{previewData.tenants_to_create || 0}</span></p>
                                                     <p>Already generated: <span className="font-semibold">{previewData.tenants_already_generated || 0}</span></p>
-                                                    <p>Total expected: <span className="font-semibold">₹{Number(previewData.total_amount || 0).toLocaleString()}</span></p>
+                                                    <p>Total expected: <span className="font-semibold">{formatCurrency(previewData.total_amount || 0, preferences)}</span></p>
                                                 </div>
                                             )}
 

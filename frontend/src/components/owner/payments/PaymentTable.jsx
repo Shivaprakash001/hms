@@ -1,8 +1,11 @@
 
 import React from 'react';
 import { CheckCircle, Clock, AlertCircle, Eye, History, Download, Landmark, Smartphone, Phone } from 'lucide-react';
+import { useAppPreferences } from '../../../context/AppPreferencesContext';
+import { formatCurrency, formatMonthYear } from '../../../utils/format';
 
 const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadReceipt, onStartOnlineTest }) => {
+    const { preferences } = useAppPreferences();
     const handleCallTenant = async (phone) => {
         if (!phone) {
             alert('Phone number not available');
@@ -72,10 +75,10 @@ const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadRece
                                         {payment.room}
                                     </span>
                                 </td>
-                                <td className="py-4 px-6 text-sm text-slate-600 font-medium">{payment.month}</td>
-                                <td className="py-4 px-6 text-sm font-bold text-slate-900">₹{Number(payment.rentAmount || 0).toLocaleString()}</td>
-                                <td className="py-4 px-6 text-sm font-semibold text-emerald-700">₹{Number(payment.paidAmount || 0).toLocaleString()}</td>
-                                <td className="py-4 px-6 text-sm font-semibold text-amber-700">₹{Number(payment.balance || 0).toLocaleString()}</td>
+                                <td className="py-4 px-6 text-sm text-slate-600 font-medium">{formatMonthYear(payment.month, preferences)}</td>
+                                <td className="py-4 px-6 text-sm font-bold text-slate-900">{formatCurrency(payment.rentAmount || 0, preferences)}</td>
+                                <td className="py-4 px-6 text-sm font-semibold text-emerald-700">{formatCurrency(payment.paidAmount || 0, preferences)}</td>
+                                <td className="py-4 px-6 text-sm font-semibold text-amber-700">{formatCurrency(payment.balance || 0, preferences)}</td>
                                 <td className="py-4 px-6">
                                     <StatusBadge status={payment.status} />
                                 </td>
@@ -166,11 +169,11 @@ const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadRece
                                         <p className="text-xs text-slate-500 font-medium">Room {payment.room}</p>
                                     </div>
                                 </div>
-                                <span className="text-sm font-bold text-slate-900">₹{Number(payment.balance || 0).toLocaleString()}</span>
+                                <span className="text-sm font-bold text-slate-900">{formatCurrency(payment.balance || 0, preferences)}</span>
                             </div>
 
                             <div className="flex items-center justify-between pt-2 border-t border-slate-50 text-xs">
-                                <span className="text-slate-500 bg-slate-50 px-2 py-1 rounded-md">{payment.month}</span>
+                                <span className="text-slate-500 bg-slate-50 px-2 py-1 rounded-md">{formatMonthYear(payment.month, preferences)}</span>
                                 <StatusBadge status={payment.status} />
                             </div>
 

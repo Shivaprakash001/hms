@@ -3,6 +3,8 @@ import { User, Building2, Settings, Save, Loader2, ChevronDown, ChevronRight, Re
 import { useSearchParams } from 'react-router-dom';
 import { ownerService } from '../../api/services';
 import ProfileLogoUploader from '../../components/owner/ProfileLogoUploader';
+import { useAppPreferences } from '../../context/AppPreferencesContext';
+import { formatDateTime } from '../../utils/format';
 
 const tabs = [
     { key: 'owner', label: 'Owner Profile', icon: User },
@@ -21,6 +23,7 @@ const prefModules = [
 ];
 
 export default function OwnerProfile() {
+    const { updatePreferencesLocal } = useAppPreferences();
     const [searchParams, setSearchParams] = useSearchParams();
     const tabFromUrl = searchParams.get('tab');
     const [activeTab, setActiveTab] = useState(tabFromUrl && tabs.some(t => t.key === tabFromUrl) ? tabFromUrl : 'owner');
@@ -49,7 +52,7 @@ export default function OwnerProfile() {
         auto_generate_rent: true, auto_apply_late_fees: true, auto_send_reminders: true, auto_deactivate_days: 0,
         receipt_prefix: 'HMS', receipt_format: 'PREFIX-YEAR-SEQ', auto_email_receipt: false, receipt_footer: '',
         require_doc_approval: false, require_aadhaar: false, allow_tenant_edits: true, data_retention_months: 0,
-        timezone: 'Asia/Kolkata', date_format: 'DD/MM/YYYY', language: 'en',
+        timezone: 'Asia/Kolkata', date_format: 'DD/MM/YYYY', time_format: '12h', language: 'en',
     });
 
     // FIX #1: Multiple modules open simultaneously (Set instead of single key)
@@ -107,6 +110,7 @@ export default function OwnerProfile() {
                     ...(prefs.allow_tenant_edits !== undefined && { allow_tenant_edits: prefs.allow_tenant_edits }),
                     ...(prefs.data_retention_months !== undefined && { data_retention_months: prefs.data_retention_months }),
                     ...(prefs.date_format !== undefined && { date_format: prefs.date_format }),
+                    ...(prefs.time_format !== undefined && { time_format: prefs.time_format }),
                     ...(prefs.language !== undefined && { language: prefs.language }),
                 };
                 setPreferences(merged);
@@ -187,7 +191,7 @@ export default function OwnerProfile() {
                 auto_email_receipt: preferences.auto_email_receipt, receipt_format: preferences.receipt_format,
                 receipt_footer: preferences.receipt_footer, require_doc_approval: preferences.require_doc_approval,
                 allow_tenant_edits: preferences.allow_tenant_edits, data_retention_months: preferences.data_retention_months,
-                date_format: preferences.date_format, language: preferences.language,
+                date_format: preferences.date_format, time_format: preferences.time_format, language: preferences.language,
                 reminder_email: preferences.reminder_email, reminder_in_app: preferences.reminder_in_app,
                 reminder_whatsapp: preferences.reminder_whatsapp, reminder_day_1: preferences.reminder_day_1,
                 reminder_day_5: preferences.reminder_day_5, reminder_day_10: preferences.reminder_day_10,
@@ -196,6 +200,7 @@ export default function OwnerProfile() {
             };
             await ownerService.updatePreferences(preferencePayload);
             setSavedPreferences({ ...preferences });
+            updatePreferencesLocal({ ...preferences });
             setDirtyModules(new Set());
             showTempSuccess('All preferences saved');
         } catch (e) {
@@ -663,6 +668,11 @@ function SecurityModule({ prefs, updatePref }) {
 }
 
 function SystemModule({ prefs, updatePref }) {
+    const previewValue = useMemo(
+        () => formatDateTime(new Date(), prefs),
+        [prefs]
+    );
+
     return (
         <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
@@ -679,9 +689,16 @@ function SystemModule({ prefs, updatePref }) {
             <SelectField label="Date Format" value={prefs.date_format}
                 options={[{ value: 'DD/MM/YYYY', label: 'DD/MM/YYYY' }, { value: 'MM/DD/YYYY', label: 'MM/DD/YYYY' }, { value: 'YYYY-MM-DD', label: 'YYYY-MM-DD' }]}
                 onChange={(v) => updatePref('date_format', v)} />
+            <SelectField label="Time Format" value={prefs.time_format}
+                options={[{ value: '12h', label: '12 Hour (02:30 PM)' }, { value: '24h', label: '24 Hour (14:30)' }]}
+                onChange={(v) => updatePref('time_format', v)} />
             <SelectField label="Language" value={prefs.language}
                 options={[{ value: 'en', label: 'English' }, { value: 'hi', label: 'Hindi' }]}
                 onChange={(v) => updatePref('language', v)} />
+            <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Preview</p>
+                <p className="text-sm font-semibold text-slate-700 mt-1">{previewValue}</p>
+            </div>
         </div>
     );
 }

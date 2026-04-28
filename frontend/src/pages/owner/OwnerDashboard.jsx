@@ -8,9 +8,12 @@ import {
     Users, BedDouble, Bed, Clock, ArrowUpRight, LayoutGrid, CreditCard
 } from 'lucide-react';
 import { dashboardService } from '../../api/services';
+import { useAppPreferences } from '../../context/AppPreferencesContext';
+import { formatCurrency, formatDate } from '../../utils/format';
 
 const OwnerDashboard = () => {
     const navigate = useNavigate();
+    const { preferences } = useAppPreferences();
     const [months, setMonths] = useState(6);
 
     const { data: unifiedRes, isLoading: loading } = useQuery({
@@ -77,7 +80,7 @@ const OwnerDashboard = () => {
                 <StatCard 
                     icon={<ArrowUpRight />} 
                     label="Total Revenue" 
-                    value={`₹${summary.rent_collected_this_month.toLocaleString()}`} 
+                    value={formatCurrency(summary.rent_collected_this_month, preferences)} 
                     color="emerald" 
                     badge={{ text: '+0%', type: 'success' }}
                 />
@@ -91,14 +94,14 @@ const OwnerDashboard = () => {
                 <StatCard 
                     icon={<Clock />} 
                     label="Pending Dues" 
-                    value={`₹${summary.pending_dues.toLocaleString()}`} 
+                    value={formatCurrency(summary.pending_dues, preferences)} 
                     color="rose" 
                     badge={{ text: '0%', type: 'danger' }}
                 />
                 <StatCard 
                     icon={<LayoutGrid />} 
                     label="Net Profit" 
-                    value={`₹${(summary.net_profit || 0).toLocaleString()}`} 
+                    value={formatCurrency(summary.net_profit || 0, preferences)} 
                     color="pink" 
                     badge={{ text: '0%', type: 'info' }}
                 />
@@ -135,8 +138,8 @@ const OwnerDashboard = () => {
                                 <BarChart data={collectionData} barGap={10} margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                     <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 700, fill: '#94a3b8' }} />
-                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 700, fill: '#94a3b8' }} tickFormatter={(v) => `₹${Math.round(v / 1000)}k`} width={55} />
-                                    <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '1.25rem', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '16px' }} formatter={(v) => `₹${Number(v).toLocaleString()}`} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 700, fill: '#94a3b8' }} tickFormatter={(v) => formatCurrency(Math.round(v / 1000) * 1000, preferences)} width={120} />
+                                    <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '1.25rem', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '16px' }} formatter={(v) => formatCurrency(v, preferences)} />
                                     <Bar dataKey="due" name="Dues" fill="#e2e8f0" radius={[8, 8, 0, 0]} maxBarSize={40} />
                                     <Bar dataKey="collected" name="Collected" fill="#6366f1" radius={[8, 8, 0, 0]} maxBarSize={40} />
                                 </BarChart>
@@ -176,7 +179,7 @@ const OwnerDashboard = () => {
                                 <div className="flex justify-between items-start mb-0.5">
                                     <p className="text-sm font-extrabold text-slate-900">{activity.title || activity.event_type}</p>
                                     <span className="text-[10px] font-black text-slate-400 bg-white px-2 py-0.5 rounded-full border border-slate-100">
-                                        {activity.event_at ? new Date(activity.event_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''}
+                                        {formatDate(activity.event_at, preferences, '')}
                                     </span>
                                 </div>
                                 <p className="text-xs font-medium text-slate-500">{activity.detail}</p>

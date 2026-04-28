@@ -2,22 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Calendar, DollarSign, CreditCard, User, Home, Download, CheckCircle, Phone, Mail, Receipt, ArrowUpRight, FileClock, Landmark, Smartphone } from 'lucide-react';
-
-const formatCurrency = (value) => `₹${Number(value || 0).toLocaleString('en-IN')}`;
-
-const formatDate = (value, fallback = 'Not available') => {
-    if (!value) return fallback;
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return fallback;
-    return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-};
-
-const formatMonth = (value) => {
-    if (!value) return 'Not available';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return value;
-    return date.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
-};
+import { useAppPreferences } from '../../../context/AppPreferencesContext';
+import { formatCurrency, formatDate, formatMonthYear } from '../../../utils/format';
 
 const labelMethod = (method) => {
     if (!method) return 'Not recorded';
@@ -54,6 +40,7 @@ const SectionCard = ({ title, children }) => (
 );
 
 const PaymentDetailsDrawer = ({ isOpen, onClose, payment, onMarkPaid, onDownloadReceipt, onViewTenant, onViewHistory, onStartOnlineTest }) => {
+    const { preferences } = useAppPreferences();
     const [showForm, setShowForm] = useState(false);
     const [payAmount, setPayAmount] = useState('');
     const [payMethod, setPayMethod] = useState('CASH');
@@ -81,12 +68,12 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, onMarkPaid, onDownload
     const timeline = [
         {
             label: 'Payment Created',
-            value: formatDate(createdDate),
+            value: formatDate(createdDate, preferences, 'Not available'),
             complete: Boolean(createdDate)
         },
         {
             label: payment.method === 'UPI' ? 'Razorpay Checkout' : 'Payment Captured',
-            value: payment.status === 'paid' ? formatDate(paidDate) : 'Awaiting payment',
+            value: payment.status === 'paid' ? formatDate(paidDate, preferences, 'Not available') : 'Awaiting payment',
             complete: payment.status === 'paid'
         },
         {
@@ -150,8 +137,8 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, onMarkPaid, onDownload
                                         <DollarSign size={84} />
                                     </div>
                                     <p className="text-sm font-medium text-slate-400">Amount Paid</p>
-                                    <div className="mt-2 text-4xl font-bold tracking-tight">{formatCurrency(payment.amount)}</div>
-                                    <p className="mt-2 text-sm text-slate-400">Rent for {formatMonth(payment.month || payment.date)}</p>
+                                    <div className="mt-2 text-4xl font-bold tracking-tight">{formatCurrency(payment.amount, preferences)}</div>
+                                    <p className="mt-2 text-sm text-slate-400">Rent for {formatMonthYear(payment.month || payment.date, preferences, 'Not available')}</p>
                                     <div className="mt-5 flex flex-wrap items-center gap-2">
                                         <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold ${payment.status === 'paid' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
                                             }`}>
@@ -167,17 +154,17 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, onMarkPaid, onDownload
                                 </div>
 
                                 <SectionCard title="Payment Summary">
-                                    <DetailRow label="Amount Paid" value={formatCurrency(payment.amount)} icon={DollarSign} />
+                                    <DetailRow label="Amount Paid" value={formatCurrency(payment.amount, preferences)} icon={DollarSign} />
                                     <DetailRow label="Status" value={payment.status?.toUpperCase() || 'PENDING'} icon={CheckCircle} valueClassName={payment.status === 'paid' ? 'text-emerald-700' : 'text-amber-700'} />
                                     <DetailRow label="Payment Method" value={paymentMethodLabel} icon={CreditCard} />
                                     <DetailRow label="Transaction ID" value={payment.transactionId || payment.reference_number || payment.id} icon={Receipt} />
-                                    <DetailRow label="Payment Date" value={formatDate(payment.paymentDate || payment.date)} icon={Calendar} />
+                                    <DetailRow label="Payment Date" value={formatDate(payment.paymentDate || payment.date, preferences, 'Not available')} icon={Calendar} />
                                 </SectionCard>
 
                                 <SectionCard title="Rent Details">
-                                    <DetailRow label="Rent Month" value={formatMonth(payment.month || payment.date)} icon={Calendar} />
+                                    <DetailRow label="Rent Month" value={formatMonthYear(payment.month || payment.date, preferences, 'Not available')} icon={Calendar} />
                                     <DetailRow label="Room" value={payment.room || 'Not assigned'} icon={Home} />
-                                    <DetailRow label="Due Date" value={formatDate(payment.dueDate)} icon={FileClock} />
+                                    <DetailRow label="Due Date" value={formatDate(payment.dueDate, preferences, 'Not available')} icon={FileClock} />
                                     <DetailRow label="Obligation ID" value={payment.obligationId || payment.id} icon={Landmark} />
                                 </SectionCard>
 
@@ -204,11 +191,11 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, onMarkPaid, onDownload
                                             {payment.recentPayments.map(item => (
                                                 <div key={item.id} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
                                                     <div>
-                                                        <p className="text-sm font-semibold text-slate-900">{formatMonth(item.month || item.date)}</p>
+                                                        <p className="text-sm font-semibold text-slate-900">{formatMonthYear(item.month || item.date, preferences, 'Not available')}</p>
                                                         <p className="text-xs text-slate-500">{labelMethod(item.method)}</p>
                                                     </div>
                                                     <div className="text-right">
-                                                        <p className="text-sm font-bold text-slate-900">{formatCurrency(item.amount)}</p>
+                                                        <p className="text-sm font-bold text-slate-900">{formatCurrency(item.amount, preferences)}</p>
                                                         <p className="text-xs font-semibold uppercase text-emerald-600">{item.status}</p>
                                                     </div>
                                                 </div>

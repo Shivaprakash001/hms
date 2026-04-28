@@ -27,12 +27,14 @@ import TenantComplaints from './pages/tenant/TenantComplaints.jsx';
 import TenantProfile from './pages/tenant/TenantProfile.jsx';
 import TenantSettings from './pages/tenant/TenantSettings.jsx';
 import { AuthProvider } from './context/AuthContext';
+import { AppPreferencesProvider } from './context/AppPreferencesContext';
 import ProtectedTenantRoute from './components/ProtectedTenantRoute';
 import ProtectedOwnerRoute from './components/ProtectedOwnerRoute';
 
 function App() {
   return (
     <AuthProvider>
+      <AppPreferencesProvider>
       <Routes>
         <Route path="/" element={<Login />} />
         <Route path="/login" element={<Login />} />
@@ -77,6 +79,7 @@ function App() {
         {/* Global Redirects */}
         <Route path="/dashboard" element={<Navigate to="/owner/dashboard" replace />} />
       </Routes>
+      </AppPreferencesProvider>
     </AuthProvider>
   );
 }

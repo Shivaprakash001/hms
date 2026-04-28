@@ -141,7 +141,7 @@ export class PropertyService {
       "auto_generate_rent", "auto_apply_late_fees", "auto_send_reminders", "auto_deactivate_days",
       "auto_email_receipt", "receipt_format", "receipt_footer",
       "require_doc_approval", "allow_tenant_edits", "data_retention_months",
-      "date_format", "language",
+      "date_format", "time_format", "language",
     ];
 
     const existingConfig = (hostel as any).preferences_config || {};

@@ -14,6 +14,8 @@ import SearchResultsDropdown from '../components/owner/SearchResultsDropdown';
 import ProfileMenu from '../components/owner/ProfileMenu';
 import Avatar from '../components/common/Avatar';
 import logoPng from '/favicon-32x32.png';
+import { useAppPreferences } from '../context/AppPreferencesContext';
+import { formatDate } from '../utils/format';
 
 
 const LogoImage = ({ src }) => {
@@ -38,6 +40,7 @@ const LogoImage = ({ src }) => {
 
 const OwnerLayout = () => {
     const { user, logout } = useAuth();
+    const { preferences } = useAppPreferences();
     const navigate = useNavigate();
     const location = useLocation();
     const queryClient = useQueryClient();
@@ -324,7 +327,7 @@ const OwnerLayout = () => {
         }
     };
 
-    const formatTime = (dateStr) => {
+    const formatRelativeTime = (dateStr) => {
         const now = new Date();
         const past = new Date(dateStr);
         const diff = Math.floor((now - past) / 1000); // seconds
@@ -332,7 +335,7 @@ const OwnerLayout = () => {
         if (diff < 60) return 'Just now';
         if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
         if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-        return past.toLocaleDateString();
+        return formatDate(past, preferences, '');
     };
 
     return (
@@ -589,7 +592,7 @@ const OwnerLayout = () => {
                                                                     {notification.title}
                                                                 </p>
                                                                 <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap ml-2">
-                                                                    {formatTime(notification.created_at)}
+                                                                    {formatRelativeTime(notification.created_at)}
                                                                 </span>
                                                             </div>
                                                             <p className="text-xs text-slate-500 line-clamp-2">{notification.message}</p>

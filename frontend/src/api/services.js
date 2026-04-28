@@ -64,6 +64,7 @@ export const ownerService = {
                             rent_cycle: 'MONTHLY',
                             receipt_prefix: 'HMS',
                             timezone: 'Asia/Kolkata',
+                            time_format: '12h',
                             auto_rent_day: 1,
                             phonepe_merchant_id: ''
                         }
@@ -94,6 +95,7 @@ export const ownerService = {
                             rent_cycle: 'MONTHLY',
                             receipt_prefix: 'HMS',
                             timezone: 'Asia/Kolkata',
+                            time_format: '12h',
                             auto_rent_day: 1,
                             phonepe_merchant_id: ''
                         }

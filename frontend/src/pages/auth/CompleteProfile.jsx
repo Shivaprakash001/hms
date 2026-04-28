@@ -182,6 +182,43 @@ const CompleteProfile = () => {
         }
     };
 
+    // Upload state UX resolver
+    const getUploadContent = () => {
+        if (isLoading) {
+            return (
+                <div className="flex flex-col items-center justify-center py-6 gap-3">
+                    <Loader2 className="w-10 h-10 text-indigo-500 animate-spin" />
+                    <span className="font-bold text-indigo-700 animate-pulse">Uploading Document...</span>
+                </div>
+            );
+        }
+        if (previewUrl) {
+            return (
+                <div className="relative group p-2">
+                    <div className="flex flex-col items-center justify-center gap-3">
+                        <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center shadow-sm">
+                            <CheckCircle2 size={24} />
+                        </div>
+                        <span className="font-bold text-green-700">Document Uploaded Successfully</span>
+                        <span className="text-xs text-slate-500">{aadhaarFile?.name}</span>
+                    </div>
+                    <div className="absolute inset-0 bg-white/80 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-indigo-600 font-bold backdrop-blur-sm rounded-xl">Click to replace</div>
+                </div>
+            );
+        }
+        return (
+            <>
+                <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center shadow-sm border border-slate-100 text-indigo-500">
+                    <Upload size={24} />
+                </div>
+                <div>
+                    <span className="block font-bold text-indigo-700 text-sm mb-1">Click to browse your device</span>
+                    <span className="block text-xs text-slate-400 font-medium">JPEG, PNG, PDF (Max 5MB)</span>
+                </div>
+            </>
+        );
+    };
+
     return (
         <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 relative font-sans">
             {/* Soft decorative background */}
@@ -371,26 +408,9 @@ const CompleteProfile = () => {
 
                                                 <div>
                                                     <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 block">Upload ID Document *</Label>
-                                                    <label className="block w-full cursor-pointer bg-indigo-50/30 border-2 border-dashed border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50/50 rounded-[16px] p-8 transition-all text-center">
+                                                    <label className={`block w-full cursor-pointer bg-indigo-50/30 border-2 border-dashed ${previewUrl ? 'border-green-400 bg-green-50/20' : 'border-indigo-200'} hover:border-indigo-400 hover:bg-indigo-50/50 rounded-[16px] p-8 transition-all text-center`}>
                                                         <input type="file" className="hidden" accept="image/*,.pdf" onChange={handleFileChange} />
-                                                        <div className="flex flex-col items-center justify-center gap-3">
-                                                            {previewUrl ? (
-                                                                <div className="relative group">
-                                                                    <img src={previewUrl} alt="Preview" className="h-32 rounded-xl object-contain shadow-sm bg-white" />
-                                                                    <div className="absolute inset-0 bg-black/40 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-medium text-sm backdrop-blur-sm">Change Image</div>
-                                                                </div>
-                                                            ) : (
-                                                                <>
-                                                                    <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center shadow-sm border border-slate-100 text-indigo-500">
-                                                                        <Upload size={24} />
-                                                                    </div>
-                                                                    <div>
-                                                                        <span className="block font-bold text-indigo-700 text-sm mb-1">Click to browse your device</span>
-                                                                        <span className="block text-xs text-slate-400 font-medium">JPEG, PNG, PDF (Max 5MB)</span>
-                                                                    </div>
-                                                                </>
-                                                            )}
-                                                        </div>
+                                                        {getUploadContent()}
                                                     </label>
                                                 </div>
                                             </div>
