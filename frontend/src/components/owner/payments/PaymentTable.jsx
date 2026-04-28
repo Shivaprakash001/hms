@@ -1,9 +1,28 @@
 
 import React from 'react';
-import { motion } from 'framer-motion';
-import { CheckCircle, Clock, AlertCircle, Eye, History, Download, Landmark, Smartphone } from 'lucide-react';
+import { CheckCircle, Clock, AlertCircle, Eye, History, Download, Landmark, Smartphone, Phone } from 'lucide-react';
 
 const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadReceipt, onStartOnlineTest }) => {
+    const handleCallTenant = async (phone) => {
+        if (!phone) {
+            alert('Phone number not available');
+            return;
+        }
+
+        try {
+            await navigator.clipboard.writeText(phone);
+        } catch (error) {
+            console.error('Clipboard copy failed:', error);
+        }
+
+        const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        if (isMobile) {
+            window.open(`tel:${phone}`, '_self');
+        } else {
+            alert('Phone number copied to clipboard');
+        }
+    };
+
     return (
         <div className="overflow-x-auto">
             {/* Desktop Table View */}
@@ -33,11 +52,8 @@ const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadRece
                         </tr>
                     ) : (
                         payments.map((payment) => (
-                            <motion.tr
+                            <tr
                                 key={payment.id}
-                                layoutId={`row-${payment.id}`}
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
                                 className="hover:bg-slate-50/80 transition-colors group cursor-pointer"
                                 onClick={() => onSelectPayment(payment)}
                             >
@@ -120,7 +136,7 @@ const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadRece
                                         </button>
                                     )}
                                 </td>
-                            </motion.tr>
+                            </tr>
                         ))
                     )}
                 </tbody>
@@ -135,11 +151,8 @@ const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadRece
                     </div>
                 ) : (
                     payments.map((payment) => (
-                        <motion.div
+                        <div
                             key={payment.id}
-                            layoutId={`card-${payment.id}`}
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
                             className="bg-white border border-slate-100 rounded-xl p-4 shadow-sm space-y-3"
                             onClick={() => onSelectPayment(payment)}
                         >
@@ -160,7 +173,38 @@ const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadRece
                                 <span className="text-slate-500 bg-slate-50 px-2 py-1 rounded-md">{payment.month}</span>
                                 <StatusBadge status={payment.status} />
                             </div>
-                        </motion.div>
+
+                            <div className="pt-1 flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleCallTenant(payment.tenantPhone);
+                                    }}
+                                    disabled={!payment.tenantPhone}
+                                    title={payment.tenantPhone ? `Call ${payment.tenantName}` : 'Phone number not available'}
+                                    className={`flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all ${
+                                        payment.tenantPhone
+                                            ? 'bg-green-500 text-white hover:bg-green-600'
+                                            : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                    }`}
+                                >
+                                    <Phone size={14} />
+                                    <span>Call</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onSelectPayment(payment);
+                                    }}
+                                    className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-all"
+                                >
+                                    <Eye size={14} />
+                                    <span>View Details</span>
+                                </button>
+                            </div>
+                        </div>
                     ))
                 )}
             </div>
