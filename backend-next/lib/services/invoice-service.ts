@@ -3,7 +3,7 @@ import { prisma } from "../db";
 import { imagekit } from "../imagekit";
 
 // ── Template Version (bump this when the PDF layout changes) ──
-const INVOICE_TEMPLATE_VERSION = 2;
+const INVOICE_TEMPLATE_VERSION = 3;
 
 // ── Color Palette (Slate Design System) ──
 const COLORS = {
@@ -139,7 +139,7 @@ export class InvoiceService {
     page.drawText("STATUS", { x: LEFT + 320, y: Y, size: 8, font: fontBold, color: COLORS.light });
     // Green badge background
     drawRect(page, LEFT + 320, Y - 20, 52, 18, rgb(0.93, 0.99, 0.96));
-    page.drawText("● PAID", { x: LEFT + 326, y: Y - 15, size: 9, font: fontBold, color: COLORS.green });
+    page.drawText("PAID", { x: LEFT + 332, y: Y - 15, size: 9, font: fontBold, color: COLORS.green });
 
     // Divider line
     Y -= 40;
