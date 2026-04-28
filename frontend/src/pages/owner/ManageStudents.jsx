@@ -22,6 +22,27 @@ export default function ManageStudents() {
     const [showLeftTenants, setShowLeftTenants] = useState(false);
     const [extendedProfileStudent, setExtendedProfileStudent] = useState(null);
 
+    const handleCallTenant = async (phone, e) => {
+        e?.stopPropagation?.();
+        if (!phone || phone === 'N/A') {
+            alert('Phone number unavailable');
+            return;
+        }
+
+        try {
+            await navigator.clipboard.writeText(phone);
+        } catch (err) {
+            console.error('Clipboard copy failed:', err);
+        }
+
+        const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        if (isMobile) {
+            window.open(`tel:${phone}`, '_self');
+        } else {
+            alert('Phone number copied to clipboard');
+        }
+    };
+
     const fetchStudents = async () => {
         try {
             setLoading(true);
@@ -443,8 +464,22 @@ export default function ManageStudents() {
                                 >
                                     <div className="flex justify-between items-center">
                                         <div className="font-black text-slate-900">{student.name}</div>
-                                        <div className="px-2.5 py-1 bg-slate-50 rounded-lg text-[11px] font-black text-slate-500 border border-slate-100 uppercase tracking-wider">
-                                            Room {student.room}
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={(e) => handleCallTenant(student.phone, e)}
+                                                disabled={!student.phone || student.phone === 'N/A'}
+                                                title={student.phone && student.phone !== 'N/A' ? `Call ${student.name}` : 'Phone number unavailable'}
+                                                className={`p-2 rounded-lg border transition-all ${
+                                                    student.phone && student.phone !== 'N/A'
+                                                        ? 'bg-green-50 text-green-600 border-green-100 hover:bg-green-100'
+                                                        : 'bg-slate-100 text-slate-300 border-slate-100 cursor-not-allowed'
+                                                }`}
+                                            >
+                                                <Phone size={14} />
+                                            </button>
+                                            <div className="px-2.5 py-1 bg-slate-50 rounded-lg text-[11px] font-black text-slate-500 border border-slate-100 uppercase tracking-wider">
+                                                Room {student.room}
+                                            </div>
                                         </div>
                                     </div>
                                     <div className="mt-4 grid grid-cols-2 gap-4 text-sm">

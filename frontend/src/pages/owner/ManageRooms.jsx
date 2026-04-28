@@ -24,6 +24,26 @@ const ManageRooms = () => {
     const [tenantProfileLoading, setTenantProfileLoading] = useState(false);
     const [filterStatus, setFilterStatus] = useState('All');
 
+    const handleCallTenant = async (phone) => {
+        if (!phone || phone === 'No phone') {
+            alert('Phone number unavailable');
+            return;
+        }
+
+        try {
+            await navigator.clipboard.writeText(phone);
+        } catch (err) {
+            console.error('Clipboard copy failed:', err);
+        }
+
+        const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        if (isMobile) {
+            window.open(`tel:${phone}`, '_self');
+        } else {
+            alert('Phone number copied to clipboard');
+        }
+    };
+
     const normalizeFloors = (floorsData) => (
         (floorsData || []).map(floor => ({
             ...floor,
@@ -398,6 +418,7 @@ const ManageRooms = () => {
                         onEditRoom={() => setShowEditRoomModal(true)}
                         onAddTenant={() => setShowAddTenantModal(true)}
                         onRemoveTenant={handleRemoveTenant}
+                        onCallTenant={handleCallTenant}
                         onShiftTenant={(tenant) => {
                             setSelectedTenantForShift({
                                 ...tenant,
@@ -549,7 +570,7 @@ const RoomCard = ({ room, onClick }) => {
     );
 }
 
-const RoomDetailSidebar = ({ room, onClose, onEditRoom, onAddTenant, onRemoveTenant, onShiftTenant, onOpenTenant }) => {
+const RoomDetailSidebar = ({ room, onClose, onEditRoom, onAddTenant, onRemoveTenant, onShiftTenant, onOpenTenant, onCallTenant }) => {
     const roomInfo = room?.room || room;
     const occupants = room?.tenants || room?.occupants || roomInfo?.tenants || [];
     const capacity = roomInfo?.capacity || 0;
@@ -675,6 +696,18 @@ const RoomDetailSidebar = ({ room, onClose, onEditRoom, onAddTenant, onRemoveTen
                                             </div>
                                         </div>
                                         <div className="flex gap-1">
+                                            <button
+                                                onClick={() => onCallTenant?.(tenant.phone)}
+                                                disabled={!tenant.phone || tenant.phone === 'No phone'}
+                                                className={`p-2 rounded-xl transition-all ${
+                                                    tenant.phone && tenant.phone !== 'No phone'
+                                                        ? 'text-green-600 hover:bg-green-50'
+                                                        : 'text-slate-300 cursor-not-allowed'
+                                                }`}
+                                                title={tenant.phone && tenant.phone !== 'No phone' ? 'Call Tenant' : 'Phone number unavailable'}
+                                            >
+                                                <Phone size={18} />
+                                            </button>
                                             <button
                                                 onClick={() => onShiftTenant(tenant)}
                                                 className="p-2 text-slate-300 hover:text-indigo-500 hover:bg-indigo-50 rounded-xl transition-all"

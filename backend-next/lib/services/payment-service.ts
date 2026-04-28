@@ -580,10 +580,15 @@ export class PaymentService {
     }));
   }
 
-  async getAllPayments(ownerId: string, limit: number = 50, offset: number = 0) {
+  async getAllPayments(ownerId: string, limit: number = 50, offset: number = 0, studentId?: string) {
+    const where: any = {
+      owner_id: ownerId,
+      ...(studentId ? { student_id: studentId } : {})
+    };
+
     const [payments, total] = await Promise.all([
         prisma.payment.findMany({
-            where: { owner_id: ownerId },
+            where,
             include: {
                 student: { include: { profile: true } },
                 obligation: true
@@ -592,7 +597,7 @@ export class PaymentService {
             take: limit,
             skip: offset
         }),
-        prisma.payment.count({ where: { owner_id: ownerId } })
+        prisma.payment.count({ where })
     ]);
 
     return {

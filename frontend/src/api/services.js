@@ -328,9 +328,51 @@ export const paymentService = {
             }
 
             if (studentId) {
-                // If owner fetches history for a student:
-                const response = await api.get(`/students/${studentId}/payments`);
-                return response.data;
+                // Owner fetches a student-scoped ledger from payments service
+                const [dues, paymentsResult] = await Promise.all([
+                    api.get('/payments/dues', { params: { student_id: studentId } }),
+                    api.get('/payments', { params: { student_id: studentId, limit: 500 } })
+                ]);
+
+                const obligations = (dues.data || []).filter((o) => o.student_id === studentId);
+                const payments = (paymentsResult.data?.payments || []).map((p) => ({
+                    id: p.id,
+                    obligation_id: p.obligation_id,
+                    amount_paid: Number(p.amount_paid || 0),
+                    payment_date: p.payment_date,
+                    payment_method: p.payment_method,
+                    reference_number: p.reference_number,
+                    transaction_id: p.reference_number || p.id,
+                    rent_month: p.rent_month
+                }));
+
+                const totalDue = obligations.reduce((sum, o) => sum + Number(o.amount || 0), 0);
+                const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount_paid || 0), 0);
+
+                return {
+                    student_id: studentId,
+                    obligations: obligations.map((o) => ({
+                        id: o.obligation_id || o.id,
+                        rent_month: o.rent_month,
+                        due_date: o.due_date,
+                        amount: Number(o.amount || 0),
+                        status: o.status,
+                        remaining_due: Number(o.outstanding || 0),
+                        payments: payments
+                            .filter((p) => p.obligation_id === (o.obligation_id || o.id))
+                            .map((p) => ({
+                                id: p.id,
+                                amount_paid: Number(p.amount_paid || 0),
+                                payment_date: p.payment_date,
+                                method: p.payment_method,
+                                transaction_id: p.transaction_id
+                            }))
+                    })),
+                    payments: payments.sort((a, b) => new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime()),
+                    total_due: totalDue,
+                    total_paid: totalPaid,
+                    outstanding_balance: Math.max(totalDue - totalPaid, 0)
+                };
             }
 
             const fallbackMe = await api.get('/students/me/payments/history');
