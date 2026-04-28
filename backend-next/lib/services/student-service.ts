@@ -206,6 +206,10 @@ export class StudentService {
       else if (studentFields.includes(key)) studentUpdate[key] = value;
     }
 
+    if (studentUpdate.gender === "Prefer not to say") {
+      studentUpdate.gender = null;
+    }
+
     // Legacy address mapping
     if (data.address) {
       studentUpdate.temporary_address = data.address;

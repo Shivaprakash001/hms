@@ -152,7 +152,7 @@ const StudentProfile = () => {
                 job_role: optional(formData.profile_type === 'work' ? formData.job_role : null),
                 permanent_address: optional(formData.permanent_address),
                 temporary_address: optional(formData.temporary_address),
-                gender: formData.gender === 'Prefer not to say' ? null : optional(formData.gender),
+                gender: formData.gender || null,
                 photo_url: optional(formData.photo_url)
             };
             const updated = await studentService.updateMyProfile(payload);
@@ -326,7 +326,8 @@ const StudentProfile = () => {
                         icon={User}
                         isEditable={isEditing}
                         type="select"
-                        options={['Male', 'Female', 'Other', 'Prefer not to say']}
+                        selectPlaceholder="Prefer not to say"
+                        options={['Male', 'Female', 'Other']}
                         onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
                     />
                     <InfoField label="Personal Email" value={formData.personal_email} icon={Mail} isEditable={isEditing} type="email" onChange={(e) => setFormData({ ...formData, personal_email: e.target.value })} />
@@ -418,7 +419,7 @@ const StudentProfile = () => {
     );
 };
 
-const InfoField = ({ label, value, icon, isEditable, onChange, type = "text", options = [] }) => (
+const InfoField = ({ label, value, icon, isEditable, onChange, type = "text", options = [], selectPlaceholder = "Select" }) => (
     <div className="space-y-1.5">
         <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide ml-1">{label}</label>
         {isEditable ? (
@@ -432,7 +433,7 @@ const InfoField = ({ label, value, icon, isEditable, onChange, type = "text", op
                         onChange={onChange}
                         className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all text-sm font-medium text-slate-900"
                     >
-                        <option value="">Select</option>
+                        <option value="">{selectPlaceholder}</option>
                         {options.map((option) => (
                             <option key={option} value={option}>
                                 {option}
