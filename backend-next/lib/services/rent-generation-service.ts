@@ -69,20 +69,20 @@ export class RentGenerationService {
       const whereClause: any = {
         is_active: true,
         start_date: { lte: rentMonth },
-        student: { status: "ACTIVE" },
+        tenant: { status: "ACTIVE" },
         OR: [
           { end_date: null },
           { end_date: { gte: rentMonth } }
         ]
       };
       if (ownerId) {
-        whereClause.student.owner_id = ownerId;
+        whereClause.tenant.owner_id = ownerId;
       }
 
       const allocations = await prisma.roomAllocation.findMany({
         where: whereClause,
         include: {
-          student: {
+          tenant: {
             select: { id: true, monthly_rent: true, owner_id: true }
           },
           room: {
@@ -92,7 +92,7 @@ export class RentGenerationService {
       });
 
       // Optimization: Batch fetch owner preferences to avoid N+1 queries in large systems
-      const ownerIds = Array.from(new Set(allocations.map(a => a.student.owner_id).filter(Boolean))) as string[];
+      const ownerIds = Array.from(new Set(allocations.map(a => a.tenant.owner_id).filter(Boolean))) as string[];
       const hostelPrefs: any[] = await prisma.hostel.findMany({
         where: { owner_id: { in: ownerIds }, is_active: true },
       });
@@ -111,7 +111,7 @@ export class RentGenerationService {
           break;
         }
 
-        const ownerId = alloc.student.owner_id;
+        const ownerId = alloc.tenant.owner_id;
         if (!ownerId) {
           console.warn(`[RENT] Skipping allocation ${alloc.id} — missing owner_id`);
           skipped++;
@@ -125,7 +125,7 @@ export class RentGenerationService {
         if (triggerType === "cron") {
           const autoGen = config.auto_generate_rent ?? true; // Default to true for backward compat
           if (!autoGen) {
-            console.info(`[RENT] Skipping owner ${alloc.student.owner_id} — auto_generate_rent disabled`);
+            console.info(`[RENT] Skipping owner ${alloc.tenant.owner_id} — auto_generate_rent disabled`);
             skipped++;
             continue;
           }
@@ -135,8 +135,8 @@ export class RentGenerationService {
         const dueDay = config.due_day || prefs?.due_day || 5;
         const studentDueDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), dueDay));
 
-        // Rent priority: student.monthly_rent > room.base_rent > skip
-        const rentAmount = Number(alloc.student.monthly_rent) || Number(alloc.room.base_rent) || 0;
+        // Rent priority: tenant.monthly_rent > room.base_rent > skip
+        const rentAmount = Number(alloc.tenant.monthly_rent) || Number(alloc.room.base_rent) || 0;
         if (rentAmount <= 0) {
           console.info(`[RENT] Skipping allocation ${alloc.id} — zero rent`);
           skipped++;
@@ -146,9 +146,9 @@ export class RentGenerationService {
         try {
           await prisma.rentObligation.create({
             data: {
-              student_id: alloc.student.id,
+              tenant_id: alloc.tenant.id,
               allocation_id: alloc.id,
-              owner_id: alloc.student.owner_id,
+              owner_id: alloc.tenant.owner_id,
               rent_month: rentMonth,
               amount: rentAmount,
               due_date: studentDueDate,
@@ -215,7 +215,7 @@ export class RentGenerationService {
           invalidateDashboardCache(ownerId);
         } else {
           // For cron runs, get distinct owner IDs
-          const ownerIds = Array.from(new Set(allocations.map(a => a.student.owner_id).filter(Boolean)));
+          const ownerIds = Array.from(new Set(allocations.map(a => a.tenant.owner_id).filter(Boolean)));
           ownerIds.forEach(id => {
             if (id) invalidateDashboardCache(id);
           });
@@ -250,20 +250,20 @@ export class RentGenerationService {
     const whereClause: any = {
       is_active: true,
       start_date: { lte: rentMonth },
-      student: { status: "ACTIVE" },
+      tenant: { status: "ACTIVE" },
       OR: [
         { end_date: null },
         { end_date: { gte: rentMonth } }
       ]
     };
     if (ownerId) {
-      whereClause.student.owner_id = ownerId;
+      whereClause.tenant.owner_id = ownerId;
     }
 
     const allocations = await prisma.roomAllocation.findMany({
       where: whereClause,
       include: {
-        student: {
+        tenant: {
           select: { id: true, monthly_rent: true, owner_id: true, profile: { select: { name: true } } }
         },
         room: {
@@ -284,10 +284,10 @@ export class RentGenerationService {
     const existingSet = new Set(existingObligations.map(o => o.allocation_id));
 
     const preview = allocations.map(alloc => {
-      const rentAmount = Number(alloc.student.monthly_rent) || Number(alloc.room.base_rent) || 0;
+      const rentAmount = Number(alloc.tenant.monthly_rent) || Number(alloc.room.base_rent) || 0;
       return {
         allocation_id: alloc.id,
-        student_name: alloc.student.profile?.name || "Unknown",
+        student_name: alloc.tenant.profile?.name || "Unknown",
         room_no: alloc.room.room_no,
         rent_amount: rentAmount,
         already_generated: existingSet.has(alloc.id),

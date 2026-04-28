@@ -5,7 +5,7 @@ import AddRoomModal from '../../components/owner/rooms/AddRoomModal';
 import AddTenantModal from '../../components/owner/rooms/AddTenantModal';
 import ShiftTenantModal from '../../components/owner/rooms/ShiftTenantModal';
 import EditRoomModal from '../../components/owner/rooms/EditRoomModal';
-import { roomService, allocationService, studentService, paymentService } from '../../api/services';
+import { roomService, allocationService, tenantService, paymentService } from '../../api/services';
 
 const ManageRooms = () => {
     // State
@@ -97,16 +97,16 @@ const ManageRooms = () => {
     };
 
     const openTenantProfile = async (tenant) => {
-        if (!tenant?.student_id && !tenant?.id) return;
+        if (!tenant?.tenant_id && !tenant?.id) return;
 
-        const tenantId = tenant.student_id || tenant.id;
+        const tenantId = tenant.tenant_id || tenant.id;
         setSelectedTenant({ id: tenantId, name: tenant.name });
         setSelectedTenantProfile(null);
         setTenantProfileLoading(true);
 
         try {
             const [studentRes, paymentHistoryRes] = await Promise.all([
-                studentService.getById(tenantId),
+                tenantService.getById(tenantId),
                 paymentService.getStudentHistory(tenantId)
             ]);
 
@@ -172,23 +172,23 @@ const ManageRooms = () => {
 
     const handleAddTenant = async (room, tenantData) => {
         try {
-            let studentId;
+            let tenantId;
 
-            // 1. Get or Create Student Record
+            // 1. Get or Create Tenant Record
             try {
-                // Check if student already has a record by profile_id
-                const existingStudent = await studentService.getByProfileId(tenantData.profile_id);
-                studentId = existingStudent.id;
+                // Check if tenant already has a record by profile_id
+                const existingStudent = await tenantService.getByProfileId(tenantData.profile_id);
+                tenantId = existingStudent.id;
 
-                // If student exists but is LEFT, we must reactivate them
+                // If tenant exists but is LEFT, we must reactivate them
                 if (existingStudent.status === 'LEFT') {
-                    await studentService.reactivate(studentId, {
+                    await tenantService.reactivate(tenantId, {
                         monthly_rent: parseFloat(tenantData.rent) || 0,
                         joined_on: tenantData.joinDate || new Date().toISOString().split('T')[0]
                     });
                 }
             } catch (err) {
-                // If 404, student doesn't exist, create it
+                // If 404, tenant doesn't exist, create it
                 if (err.response?.status === 404) {
                     const studentData = {
                         profile_id: tenantData.profile_id,
@@ -196,8 +196,8 @@ const ManageRooms = () => {
                         joined_on: tenantData.joinDate || new Date().toISOString().split('T')[0],
                         status: 'ACTIVE'
                     };
-                    const studentResponse = await studentService.create(studentData);
-                    studentId = studentResponse.id;
+                    const studentResponse = await tenantService.create(studentData);
+                    tenantId = studentResponse.id;
                 } else {
                     throw err;
                 }
@@ -208,7 +208,7 @@ const ManageRooms = () => {
                 const today = new Date();
                 const localDate = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
                 await allocationService.allocate({
-                    student_id: studentId,
+                    tenant_id: tenantId,
                     room_id: room.id,
                     start_date: localDate
                 });
@@ -221,7 +221,7 @@ const ManageRooms = () => {
                         const today = new Date();
                         const localDate = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
                         await allocationService.shift({
-                            student_id: studentId,
+                            tenant_id: tenantId,
                             new_room_id: room.id,
                             shift_date: tenantData.joinDate || localDate
                         });
@@ -247,20 +247,20 @@ const ManageRooms = () => {
         if (!window.confirm("Are you sure you want to remove this tenant? This will mark them as LEFT.")) return;
 
         try {
-            // Soft delete student -> triggers auto-end allocation
-            await studentService.delete(tenantId);
+            // Soft delete tenant -> triggers auto-end allocation
+            await tenantService.delete(tenantId);
             await fetchData(selectedRoom?.id);
         } catch (err) {
             alert("Failed to remove tenant: " + err.message);
         }
     };
 
-    const handleShiftTenant = async (studentId, newRoomId) => {
+    const handleShiftTenant = async (tenantId, newRoomId) => {
         try {
             const today = new Date();
             const localDate = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
             await allocationService.shift({
-                student_id: studentId,
+                tenant_id: tenantId,
                 new_room_id: newRoomId,
                 shift_date: localDate
             });
@@ -422,7 +422,7 @@ const ManageRooms = () => {
                         onShiftTenant={(tenant) => {
                             setSelectedTenantForShift({
                                 ...tenant,
-                                id: tenant.student_id || tenant.id
+                                id: tenant.tenant_id || tenant.id
                             });
                             setShowShiftTenantModal(true);
                         }}
@@ -655,7 +655,7 @@ const RoomDetailSidebar = ({ room, onClose, onEditRoom, onAddTenant, onRemoveTen
                             <div className="space-y-3">
                                 {occupants.map(tenant => (
                                     <div
-                                        key={tenant.student_id || tenant.id}
+                                        key={tenant.tenant_id || tenant.id}
                                         className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex justify-between items-center group"
                                     >
                                         <div className="flex items-center gap-3">
@@ -716,7 +716,7 @@ const RoomDetailSidebar = ({ room, onClose, onEditRoom, onAddTenant, onRemoveTen
                                                 <ArrowRightLeft size={18} />
                                             </button>
                                             <button
-                                                onClick={() => onRemoveTenant(tenant.student_id || tenant.id)}
+                                                onClick={() => onRemoveTenant(tenant.tenant_id || tenant.id)}
                                                 className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
                                                 title="Remove Tenant"
                                             >

@@ -17,14 +17,14 @@ export class InvitationService {
     // 1. Duplicate check
     const existingProfile = await prisma.profile.findUnique({
       where: { email: normalizedEmail },
-      include: { student_details: true },
+      include: { tenant_details: true },
     });
     if (existingProfile) {
       // If a tenant is still invited, treat repeated invite as a resend action.
       if (
-        existingProfile.role === "STUDENT" &&
+        existingProfile.role === "TENANT" &&
         existingProfile.owner_id === ownerId &&
-        existingProfile.student_details?.status === "INVITED"
+        existingProfile.tenant_details?.status === "INVITED"
       ) {
         logger.info(`Existing INVITED tenant found for ${normalizedEmail}; converting invite to resend.`);
         return this.resendInvitation(normalizedEmail, { id: ownerId, role: "OWNER" }, {
@@ -63,22 +63,22 @@ export class InvitationService {
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
 
-    // 4. Create Profile + Student + Allocation atomically
-    const { profile: newProfile, student: newStudent } = await prisma.$transaction(async (tx) => {
+    // 4. Create Profile + Tenant + Allocation atomically
+    const { profile: newProfile, tenant: newStudent } = await prisma.$transaction(async (tx) => {
       const profile = await tx.profile.create({
         data: {
           email: normalizedEmail,
           name,
           phone,
-          role: "STUDENT",
-          is_active: false, // Student remains inactive until activation
+          role: "TENANT",
+          is_active: false, // Tenant remains inactive until activation
           owner_id: ownerId,
           invitation_token: token,
           invitation_expires_at: expiresAt,
         },
       });
 
-      const student = await tx.student.create({
+      const tenant = await tx.tenant.create({
         data: {
           id: crypto.randomUUID(),
           profile_id: profile.id,
@@ -92,21 +92,21 @@ export class InvitationService {
       // Reserve/track room assignment for invited tenant so resend + lifecycle remain consistent.
       await tx.roomAllocation.create({
         data: {
-          student_id: student.id,
+          tenant_id: tenant.id,
           room_id,
           start_date: new Date(),
           is_active: true,
         },
       });
 
-      return { profile, student };
+      return { profile, tenant };
     });
 
-    logger.info(`Successfully created profile ${newProfile.id} and student record ${newStudent.id} with status INVITED`);
+    logger.info(`Successfully created profile ${newProfile.id} and tenant record ${newStudent.id} with status INVITED`);
 
     // 5. Log Activity
     await eventSystem.trigger("student_created", {
-      student_id: newStudent.id,
+      tenant_id: newStudent.id,
       email: normalizedEmail,
       owner_id: ownerId,
       creator_id: ownerId,
@@ -133,7 +133,7 @@ export class InvitationService {
     logger.info(`Successfully queued invitation email for ${normalizedEmail}`);
 
     return {
-      student_id: newStudent.id,
+      tenant_id: newStudent.id,
       email: normalizedEmail,
       activation_link: activationLink, // For dev/testing purposes
       action: "INVITED",
@@ -142,7 +142,7 @@ export class InvitationService {
 
   async activateTenant(token: string, password: string) {
     logger.info(`Attempting to activate account with token: ${token}`);
-    // 1. Resolve student by invitation token
+    // 1. Resolve tenant by invitation token
     const profile = await prisma.profile.findFirst({
       where: {
         invitation_token: token,
@@ -155,13 +155,13 @@ export class InvitationService {
       throw new Error("INVALID: Token expired or invalid");
     }
 
-    const student = await prisma.student.findUnique({
+    const tenant = await prisma.tenant.findUnique({
         where: { profile_id: profile.id }
     });
 
-    if (!student) {
-        logger.error(`No student record found for profile ${profile.id} during activation.`);
-        throw new Error("INTERNAL_ERROR: Could not find associated student record.");
+    if (!tenant) {
+        logger.error(`No tenant record found for profile ${profile.id} during activation.`);
+        throw new Error("INTERNAL_ERROR: Could not find associated tenant record.");
     }
 
     const hashedPassword = await hashPassword(password);
@@ -176,8 +176,8 @@ export class InvitationService {
       },
     });
 
-    await prisma.student.update({
-      where: { id: student.id },
+    await prisma.tenant.update({
+      where: { id: tenant.id },
       data: { status: "ACTIVE" },
     });
     
@@ -198,12 +198,12 @@ export class InvitationService {
   ) {
     const normalizedEmail = String(email || "").trim().toLowerCase();
     logger.info(`Resending invitation for email: ${normalizedEmail}`);
-    // 1. Find the student by email
+    // 1. Find the tenant by email
     const profile = await prisma.profile.findUnique({
       where: { email: normalizedEmail },
-      include: { student_details: true },
+      include: { tenant_details: true },
     });
-    if (!profile || !profile.student_details) {
+    if (!profile || !profile.tenant_details) {
       logger.warn(`Resend failed: User not found for email ${normalizedEmail}`);
       throw new Error("NOT_FOUND: User not found");
     }
@@ -213,9 +213,9 @@ export class InvitationService {
       throw new Error("FORBIDDEN: You can only resend invitations for your own tenants");
     }
 
-    if (profile.student_details.status !== "INVITED") {
-      logger.warn(`Resend failed: Student ${normalizedEmail} is not in INVITED state.`);
-      throw new Error("BAD_REQUEST: Student is already active or left");
+    if (profile.tenant_details.status !== "INVITED") {
+      logger.warn(`Resend failed: Tenant ${normalizedEmail} is not in INVITED state.`);
+      throw new Error("BAD_REQUEST: Tenant is already active or left");
     }
 
     // Optional metadata updates when resend is triggered from invite flow.
@@ -233,8 +233,8 @@ export class InvitationService {
         }
 
         if (typeof overrides?.monthly_rent !== "undefined") {
-          await tx.student.update({
-            where: { id: profile.student_details!.id },
+          await tx.tenant.update({
+            where: { id: profile.tenant_details!.id },
             data: { monthly_rent: Number(overrides.monthly_rent) },
           });
         }
@@ -252,7 +252,7 @@ export class InvitationService {
           }
 
           const activeAllocation = await tx.roomAllocation.findFirst({
-            where: { student_id: profile.student_details!.id, is_active: true },
+            where: { tenant_id: profile.tenant_details!.id, is_active: true },
           });
 
           if (activeAllocation) {
@@ -263,7 +263,7 @@ export class InvitationService {
           } else {
             await tx.roomAllocation.create({
               data: {
-                student_id: profile.student_details!.id,
+                tenant_id: profile.tenant_details!.id,
                 room_id: roomIdOverride,
                 start_date: new Date(),
                 is_active: true,
@@ -276,7 +276,7 @@ export class InvitationService {
 
     // Additional details needed for email
     const allocation = await prisma.roomAllocation.findFirst({
-      where: { student_id: profile.student_details.id, is_active: true },
+      where: { tenant_id: profile.tenant_details.id, is_active: true },
       include: { room: { include: { hostel: true } } },
     });
 
@@ -311,7 +311,7 @@ export class InvitationService {
       ownerName: owner.name,
       hostelName: allocation.room.hostel.name,
       roomNumber: allocation.room.room_no,
-      roomRent: Number(profile.student_details.monthly_rent),
+      roomRent: Number(profile.tenant_details.monthly_rent),
       activationLink,
     });
     if (!emailResult.sent) {

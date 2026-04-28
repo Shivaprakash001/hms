@@ -35,9 +35,9 @@ export const AuthProvider = ({ children }) => {
                 if (!location.pathname.startsWith('/owner')) {
                     navigate('/owner/dashboard', { replace: true });
                 }
-            } else if (role === 'student') {
-                if (!location.pathname.startsWith('/student')) {
-                    navigate('/student/dashboard', { replace: true });
+            } else if (role === 'tenant') {
+                if (!location.pathname.startsWith('/tenant')) {
+                    navigate('/tenant/dashboard', { replace: true });
                 }
             }
         }
@@ -51,14 +51,14 @@ export const AuthProvider = ({ children }) => {
 
             if (storedData?.token) {
                 try {
-                    // Force refresh user info from backend to ensure student_id and other fields are present
+                    // Force refresh user info from backend to ensure tenant_id and other fields are present
                     const response = await api.get('/auth/me');
                     const updatedUser = {
                         ...storedData,
                         ...response.data,
                         role: normalizeRole(response.data.role ?? storedData.role),
                         id: response.data.user_id,
-                        student_id: response.data.student_id,
+                        tenant_id: response.data.tenant_id,
                         due_day: response.data.due_day,
                         room_no: response.data.room_no,
                         monthly_rent: response.data.monthly_rent,
@@ -92,9 +92,9 @@ export const AuthProvider = ({ children }) => {
         try {
             const normalizedEmail = (email || '').trim().toLowerCase();
             const response = await api.post('/auth/login', { email: normalizedEmail, password });
-            const { access_token, role, name, user_id, student_id, is_profile_completed } = response.data;
+            const { access_token, role, name, user_id, tenant_id, is_profile_completed } = response.data;
             const normalizedRole = normalizeRole(role);
-            const userData = { email: normalizedEmail, role: normalizedRole, name, id: user_id, student_id, is_profile_completed, token: access_token };
+            const userData = { email: normalizedEmail, role: normalizedRole, name, id: user_id, tenant_id, is_profile_completed, token: access_token };
             setUser(userData);
 
             if (normalizedRole === 'owner' || normalizedRole === 'admin') {
@@ -122,9 +122,9 @@ export const AuthProvider = ({ children }) => {
         try {
             // Pass the redirect_uri so the backend can use the same value when exchanging the code with Google
             const response = await api.post('/auth/google-callback', { code, redirect_uri: redirectUri });
-            const { access_token, role, name, user_id, student_id, is_profile_completed } = response.data;
+            const { access_token, role, name, user_id, tenant_id, is_profile_completed } = response.data;
             const normalizedRole = normalizeRole(role);
-            const userData = { role: normalizedRole, name, id: user_id, student_id, is_profile_completed, token: access_token };
+            const userData = { role: normalizedRole, name, id: user_id, tenant_id, is_profile_completed, token: access_token };
             setUser(userData);
 
             if (normalizedRole === 'owner' || normalizedRole === 'admin') {

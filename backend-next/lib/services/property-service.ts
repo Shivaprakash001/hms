@@ -192,7 +192,7 @@ export class PropertyService {
         allocations: {
           where: { is_active: true, end_date: null },
           include: {
-            student: {
+            tenant: {
               include: {
                 profile: true,
                 obligations: {
@@ -216,22 +216,22 @@ export class PropertyService {
       }
 
       const tenants = room.allocations.map((a: any) => {
-        const student = a.student;
-        const profile = student.profile;
-        const totalAmount = student.obligations.reduce((sum: number, o: any) => sum + Number(o.amount), 0);
-        const totalPaid = student.obligations.reduce((sum: number, o: any) => 
+        const tenant = a.tenant;
+        const profile = tenant.profile;
+        const totalAmount = tenant.obligations.reduce((sum: number, o: any) => sum + Number(o.amount), 0);
+        const totalPaid = tenant.obligations.reduce((sum: number, o: any) => 
           sum + o.payments.reduce((pSum: number, p: any) => pSum + Number(p.amount_paid), 0), 0);
         const pendingDues = totalAmount - totalPaid;
 
         return {
-          student_id: student.id,
+          tenant_id: tenant.id,
           name: profile.name,
           email: profile.email,
           phone: profile.phone,
           joined_date: a.start_date,
-          rent: Number(student.monthly_rent),
+          rent: Number(tenant.monthly_rent),
           pending_dues: pendingDues,
-          status: student.status
+          status: tenant.status
         };
       });
 
@@ -256,7 +256,7 @@ export class PropertyService {
         allocations: {
           where: { is_active: true, end_date: null },
           include: {
-            student: {
+            tenant: {
               include: {
                 profile: true,
                 obligations: {
@@ -273,15 +273,15 @@ export class PropertyService {
     if (!room) throw new Error("NOT_FOUND: Room not found");
 
     const tenants = room.allocations.map((a: any) => {
-      const student = a.student;
-      const profile = student.profile;
-      const totalAmount = student.obligations.reduce((sum: number, o: any) => sum + Number(o.amount), 0);
-      const totalPaid = student.obligations.reduce((sum: number, o: any) => 
+      const tenant = a.tenant;
+      const profile = tenant.profile;
+      const totalAmount = tenant.obligations.reduce((sum: number, o: any) => sum + Number(o.amount), 0);
+      const totalPaid = tenant.obligations.reduce((sum: number, o: any) => 
         sum + o.payments.reduce((pSum: number, p: any) => pSum + Number(p.amount_paid), 0), 0);
       const pendingDues = totalAmount - totalPaid;
 
       // Extract last payment info
-      const allPayments = student.obligations.flatMap((o: any) => o.payments);
+      const allPayments = tenant.obligations.flatMap((o: any) => o.payments);
       const lastPayment = allPayments.length > 0 
         ? allPayments.sort((p1: any, p2: any) => new Date(p2.payment_date).getTime() - new Date(p1.payment_date).getTime())[0]
         : null;
@@ -291,19 +291,19 @@ export class PropertyService {
       else if (lastPayment) paymentStatus = "PARTIAL";
 
       return {
-        student_id: student.id,
+        tenant_id: tenant.id,
         profile_id: profile.id,
         name: profile.name,
         email: profile.email,
         phone: profile.phone,
         joined_date: a.start_date,
-        rent: Number(student.monthly_rent),
+        rent: Number(tenant.monthly_rent),
         payment_status: paymentStatus,
         last_payment: lastPayment ? lastPayment.payment_date : null,
         last_payment_amount: lastPayment ? Number(lastPayment.amount_paid) : 0,
         pending_dues: pendingDues,
-        status: student.status,
-        obligations: student.obligations
+        status: tenant.status,
+        obligations: tenant.obligations
       };
     });
 
@@ -315,7 +315,7 @@ export class PropertyService {
     const payments = tenants
       .filter((t: any) => t.last_payment)
       .map((t: any) => ({
-        student_id: t.student_id,
+        tenant_id: t.tenant_id,
         student_name: t.name,
         payment_date: t.last_payment,
         amount_paid: t.last_payment_amount

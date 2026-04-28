@@ -31,13 +31,13 @@ export async function GET(req: NextRequest) {
     }
 
     // 2. Perform highly indexed lookup across active tenants
-    // We search the Profile model (which acts as the user details table) connected to students 
+    // We search the Profile model (which acts as the user details table) connected to tenants 
     // owned by this owner.
     const profiles = await prisma.profile.findMany({
       where: {
         owner_id: session.sub, // MUST restrict by owner!
-        // We only want student profiles
-        role: "STUDENT", 
+        // We only want tenant profiles
+        role: "TENANT", 
         OR: [
           { name: { contains: q, mode: "insensitive" } },
           { phone: { contains: q } },
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
         name: true,
         phone: true,
         email: true,
-        student_details: {
+        tenant_details: {
           select: {
             id: true,
             status: true,
@@ -64,14 +64,14 @@ export async function GET(req: NextRequest) {
     // 3. Format response for frontend 
     // Usually the frontend expects an array of tenant objects.
     const results = profiles.map(p => ({
-      id: p.student_details?.id, // Student ID
+      id: p.tenant_details?.id, // Tenant ID
       profile_id: p.id,
       name: p.name,
       phone: p.phone,
       email: p.email,
-      status: p.student_details?.status,
-      photo_url: p.student_details?.photo_url,
-    })).filter(p => p.id); // Valid students only
+      status: p.tenant_details?.status,
+      photo_url: p.tenant_details?.photo_url,
+    })).filter(p => p.id); // Valid tenants only
 
     return NextResponse.json(results);
   } catch (error) {

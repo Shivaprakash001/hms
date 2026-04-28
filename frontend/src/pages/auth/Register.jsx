@@ -412,7 +412,7 @@ const Register = () => {
                         <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-xl">
                             <p className="text-[11px] text-indigo-700 font-bold leading-relaxed">
                                 <span className="uppercase mr-1">Note:</span> This registration is for Property Owners only.
-                                Students/Tenants will be created and invited by the Property Owner.
+                                Tenants/Tenants will be created and invited by the Property Owner.
                             </p>
                         </div>
 

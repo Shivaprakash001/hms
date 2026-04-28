@@ -5,7 +5,7 @@ import {
     FileText, CheckCircle2, AlertCircle, Calendar, Edit2, Shield, X,
     Camera
 } from 'lucide-react';
-import { studentService, tenantDocumentService } from '../../api/services';
+import { tenantService, tenantDocumentService } from '../../api/services';
 import DocumentUploadWidget from './DocumentUploadWidget';
 
 const TABS = [
@@ -16,22 +16,22 @@ const TABS = [
     { key: 'documents', label: 'Documents', icon: FileText },
 ];
 
-export default function TenantProfileCard({ studentId, onEdit, isOwner = true }) {
-    const [student, setStudent] = useState(null);
+export default function TenantProfileCard({ tenantId, onEdit, isOwner = true }) {
+    const [tenant, setStudent] = useState(null);
     const [documents, setDocuments] = useState([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('personal');
 
     useEffect(() => {
-        if (studentId) fetchData();
-    }, [studentId]);
+        if (tenantId) fetchData();
+    }, [tenantId]);
 
     const fetchData = async () => {
         try {
             setLoading(true);
             const [studentData, docsData] = await Promise.all([
-                studentService.getById(studentId),
-                tenantDocumentService.getAll(studentId).catch(() => [])
+                tenantService.getById(tenantId),
+                tenantDocumentService.getAll(tenantId).catch(() => [])
             ]);
             setStudent(studentData);
             setDocuments(Array.isArray(docsData) ? docsData : []);
@@ -56,9 +56,9 @@ export default function TenantProfileCard({ studentId, onEdit, isOwner = true })
         );
     }
 
-    if (!student) return null;
+    if (!tenant) return null;
 
-    const profile = student.profile || student.profiles || {};
+    const profile = tenant.profile || tenant.profiles || {};
     const docCount = documents.length;
     const verifiedCount = documents.filter(d => d.verified).length;
 
@@ -69,8 +69,8 @@ export default function TenantProfileCard({ studentId, onEdit, isOwner = true })
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
                         <div className="w-16 h-16 rounded-2xl bg-white overflow-hidden border-2 border-white shadow-lg">
-                            {student.photo_url ? (
-                                <img src={student.photo_url} alt="Photo" className="w-full h-full object-cover" />
+                            {tenant.photo_url ? (
+                                <img src={tenant.photo_url} alt="Photo" className="w-full h-full object-cover" />
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-indigo-500 to-purple-600 text-white font-black text-lg">
                                     {(profile.name || '??').substring(0, 2).toUpperCase()}
@@ -82,14 +82,14 @@ export default function TenantProfileCard({ studentId, onEdit, isOwner = true })
                             <p className="text-xs text-slate-400 font-medium">{profile.email}</p>
                             <div className="flex items-center gap-2 mt-1.5">
                                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                                    student.status === 'ACTIVE'
+                                    tenant.status === 'ACTIVE'
                                         ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
                                         : 'bg-slate-50 text-slate-500 border-slate-100'
                                 }`}>
-                                    <div className={`w-1.5 h-1.5 rounded-full ${student.status === 'ACTIVE' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
-                                    {student.status}
+                                    <div className={`w-1.5 h-1.5 rounded-full ${tenant.status === 'ACTIVE' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
+                                    {tenant.status}
                                 </span>
-                                {student.document_verified ? (
+                                {tenant.document_verified ? (
                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-bold border border-emerald-100">
                                         <Shield size={9} /> Verified
                                     </span>
@@ -103,7 +103,7 @@ export default function TenantProfileCard({ studentId, onEdit, isOwner = true })
                     </div>
                     {onEdit && (
                         <button
-                            onClick={() => onEdit(student)}
+                            onClick={() => onEdit(tenant)}
                             className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 flex items-center gap-1.5 transition-colors shadow-sm"
                         >
                             <Edit2 size={12} /> Edit
@@ -136,42 +136,42 @@ export default function TenantProfileCard({ studentId, onEdit, isOwner = true })
                     <div className="grid grid-cols-2 gap-4">
                         <InfoItem label="Full Name" value={profile.name} icon={User} />
                         <InfoItem label="Email" value={profile.email} icon={Mail} />
-                        <InfoItem label="Personal Email" value={student.personal_email} icon={Mail} />
-                        <InfoItem label="Joined On" value={student.joined_on} icon={Calendar} />
-                        <InfoItem label="Monthly Rent" value={student.monthly_rent ? `₹${Number(student.monthly_rent).toLocaleString()}` : null} icon={Building2} />
+                        <InfoItem label="Personal Email" value={tenant.personal_email} icon={Mail} />
+                        <InfoItem label="Joined On" value={tenant.joined_on} icon={Calendar} />
+                        <InfoItem label="Monthly Rent" value={tenant.monthly_rent ? `₹${Number(tenant.monthly_rent).toLocaleString()}` : null} icon={Building2} />
                     </div>
                 )}
 
                 {activeTab === 'contact' && (
                     <div className="grid grid-cols-2 gap-4">
-                        <InfoItem label="Primary Phone" value={profile.phone || student.phone_1} icon={Phone} />
-                        <InfoItem label="Phone 1" value={student.phone_1} icon={Phone} />
-                        <InfoItem label="Phone 2 (Parent)" value={student.phone_2} icon={Phone} />
-                        <InfoItem label="Phone 3" value={student.phone_3} icon={Phone} />
+                        <InfoItem label="Primary Phone" value={profile.phone || tenant.phone_1} icon={Phone} />
+                        <InfoItem label="Phone 1" value={tenant.phone_1} icon={Phone} />
+                        <InfoItem label="Phone 2 (Parent)" value={tenant.phone_2} icon={Phone} />
+                        <InfoItem label="Phone 3" value={tenant.phone_3} icon={Phone} />
                         <InfoItem label="Emergency" value={profile.emergency_contact} icon={Phone} />
                     </div>
                 )}
 
                 {activeTab === 'education' && (
                     <div className="grid grid-cols-2 gap-4">
-                        <InfoItem label="College" value={student.college_name} icon={GraduationCap} />
-                        <InfoItem label="Branch" value={student.branch} icon={GraduationCap} />
-                        <InfoItem label="Office" value={student.office_name} icon={Building2} />
-                        <InfoItem label="Office Location" value={student.office_location} icon={MapPin} />
-                        <InfoItem label="Job Role" value={student.job_role} icon={Briefcase} />
+                        <InfoItem label="College" value={tenant.college_name} icon={GraduationCap} />
+                        <InfoItem label="Branch" value={tenant.branch} icon={GraduationCap} />
+                        <InfoItem label="Office" value={tenant.office_name} icon={Building2} />
+                        <InfoItem label="Office Location" value={tenant.office_location} icon={MapPin} />
+                        <InfoItem label="Job Role" value={tenant.job_role} icon={Briefcase} />
                     </div>
                 )}
 
                 {activeTab === 'address' && (
                     <div className="space-y-4">
-                        <InfoItem label="Permanent Address" value={student.permanent_address} icon={MapPin} fullWidth />
-                        <InfoItem label="Temporary Address" value={student.temporary_address} icon={MapPin} fullWidth />
+                        <InfoItem label="Permanent Address" value={tenant.permanent_address} icon={MapPin} fullWidth />
+                        <InfoItem label="Temporary Address" value={tenant.temporary_address} icon={MapPin} fullWidth />
                         <InfoItem label="Profile Address" value={profile.address} icon={MapPin} fullWidth />
                     </div>
                 )}
 
                 {activeTab === 'documents' && (
-                    <DocumentUploadWidget tenantId={studentId} isOwner={isOwner} />
+                    <DocumentUploadWidget tenantId={tenantId} isOwner={isOwner} />
                 )}
             </div>
         </div>

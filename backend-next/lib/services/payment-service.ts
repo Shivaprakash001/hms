@@ -38,19 +38,19 @@ export class PaymentService {
           { end_date: null },
           { end_date: { gte: targetMonth } }
         ],
-        ...(ownerId && { student: { owner_id: ownerId } })
+        ...(ownerId && { tenant: { owner_id: ownerId } })
       },
-      include: { student: true }
+      include: { tenant: true }
     });
 
     let generated = 0;
     let skipped = 0;
 
     for (const alloc of allocations) {
-      if (!alloc.student) continue;
+      if (!alloc.tenant) continue;
 
       // Fallback to 0 if monthly rent is null to prevent NaN Prisma crashes
-      const monthlyRent = Number(alloc.student.monthly_rent || 0);
+      const monthlyRent = Number(alloc.tenant.monthly_rent || 0);
       
       // Use the full monthly rent instead of prorating based on joining dates
       // to ensure consistency between the tenant profile and ledger.
@@ -61,7 +61,7 @@ export class PaymentService {
       // Check for existing
       const existing = await prisma.rentObligation.findFirst({
         where: {
-          student_id: alloc.student_id,
+          tenant_id: alloc.tenant_id,
           rent_month: targetMonth,
         }
       });
@@ -73,9 +73,9 @@ export class PaymentService {
 
       const obligation = await prisma.rentObligation.create({
         data: {
-          student_id: alloc.student_id,
+          tenant_id: alloc.tenant_id,
           allocation_id: alloc.id,
-          owner_id: ownerId || alloc.student.owner_id,
+          owner_id: ownerId || alloc.tenant.owner_id,
           rent_month: targetMonth,
           amount: amount,
           due_date: new Date(targetMonth.getFullYear(), targetMonth.getMonth(), 10), // Default 10th
@@ -86,7 +86,7 @@ export class PaymentService {
       generated++;
       await eventSystem.trigger("rent_obligation_created", {
         obligationId: obligation.id,
-        studentId: alloc.student_id,
+        tenantId: alloc.tenant_id,
         amount
       });
     }
@@ -106,9 +106,9 @@ export class PaymentService {
           { end_date: null },
           { end_date: { gte: targetMonth } }
         ],
-        ...(ownerId && { student: { owner_id: ownerId } })
+        ...(ownerId && { tenant: { owner_id: ownerId } })
       },
-      include: { student: true }
+      include: { tenant: true }
     });
 
     let tenantsToCreate = 0;
@@ -116,10 +116,10 @@ export class PaymentService {
     let totalAmount = 0;
 
     for (const alloc of allocations) {
-      if (!alloc.student) continue;
+      if (!alloc.tenant) continue;
 
       const amount = this.calculateProratedRent(
-        Number(alloc.student.monthly_rent),
+        Number(alloc.tenant.monthly_rent),
         alloc.start_date,
         alloc.end_date,
         targetMonth
@@ -129,7 +129,7 @@ export class PaymentService {
 
       const existing = await prisma.rentObligation.findFirst({
         where: {
-          student_id: alloc.student_id,
+          tenant_id: alloc.tenant_id,
           rent_month: targetMonth,
         }
       });
@@ -178,7 +178,7 @@ export class PaymentService {
       const payment = await tx.payment.create({
         data: {
           obligation_id: data.obligationId,
-          student_id: obligation.student_id,
+          tenant_id: obligation.tenant_id,
           owner_id: obligation.owner_id,
           amount_paid: data.amountPaid,
           payment_method: data.paymentMethod,
@@ -201,7 +201,7 @@ export class PaymentService {
       await eventSystem.trigger("payment_recorded", {
         payment_id: res.payment.id,
         obligation_id: data.obligationId,
-        student_id: res.payment.student_id,
+        tenant_id: res.payment.tenant_id,
         owner_id: res.payment.owner_id,
         amount: data.amountPaid,
         method: data.paymentMethod
@@ -210,14 +210,14 @@ export class PaymentService {
     });
   }
 
-  async createPaymentIntent(obligationId: string, amount: number | null, userId: string, studentId?: string) {
+  async createPaymentIntent(obligationId: string, amount: number | null, userId: string, tenantId?: string) {
     const obligation = await prisma.rentObligation.findUnique({
       where: { id: obligationId },
-      include: { student: { include: { profile: true } } }
+      include: { tenant: { include: { profile: true } } }
     });
 
     if (!obligation) throw new Error("NOT_FOUND: Obligation not found");
-    if (studentId && obligation.student_id !== studentId) {
+    if (tenantId && obligation.tenant_id !== tenantId) {
       throw new Error("FORBIDDEN: You can only pay your own obligations");
     }
 
@@ -281,7 +281,7 @@ export class PaymentService {
     console.info("[payments.createIntent] creating attempt", {
       obligationId,
       userId,
-      studentId: studentId || null,
+      tenantId: tenantId || null,
       provider,
       amount: validationAmount,
       merchantTxnId,
@@ -290,7 +290,7 @@ export class PaymentService {
     const attempt = await prisma.paymentAttempt.create({
         data: {
             obligation_id: obligationId,
-            student_id: obligation.student_id,
+            tenant_id: obligation.tenant_id,
             owner_id: obligation.owner_id || "",
             provider: provider,
             merchant_txn_id: merchantTxnId,
@@ -303,12 +303,12 @@ export class PaymentService {
         const result = await instance.createIntent({
             amount: validationAmount,
             merchant_txn_id: merchantTxnId,
-            student_name: obligation.student.profile.name,
-            student_email: obligation.student.profile.email,
-            student_phone: obligation.student.profile.phone || "",
+            student_name: obligation.tenant.profile.name,
+            student_email: obligation.tenant.profile.email,
+            student_phone: obligation.tenant.profile.phone || "",
             metadata: {
                 obligation_id: obligationId,
-                student_id: obligation.student_id,
+                tenant_id: obligation.tenant_id,
                 attempt_id: attempt.id
             }
         });
@@ -340,11 +340,11 @@ export class PaymentService {
     }
   }
 
-  async getPaymentAttempt(attemptId: string, userId: string, role: string, studentId?: string) {
+  async getPaymentAttempt(attemptId: string, userId: string, role: string, tenantId?: string) {
     const attempt = await prisma.paymentAttempt.findUnique({ where: { id: attemptId } });
     if (!attempt) throw new Error("NOT_FOUND: Payment attempt not found");
 
-    if (role === "STUDENT" && attempt.student_id !== studentId) {
+    if (role === "TENANT" && attempt.tenant_id !== tenantId) {
       throw new Error("FORBIDDEN: You can only view your own attempts");
     }
     if (role === "OWNER" && attempt.owner_id !== userId) {
@@ -397,18 +397,18 @@ export class PaymentService {
     receiptService.createReceipt(recordResult.payment.id).then(async (receipt) => {
         try {
             const pdfBuffer = receiptService.renderReceiptPdf(receipt);
-            const student = await prisma.student.findUnique({
-                where: { id: attempt.student_id },
+            const tenant = await prisma.tenant.findUnique({
+                where: { id: attempt.tenant_id },
                 include: { profile: true }
             });
             
-            if (student?.profile?.email) {
+            if (tenant?.profile?.email) {
                 const rentMonth = receipt.rent_month
                     ? new Date(receipt.rent_month).toLocaleString('default', { month: 'long', year: 'numeric' })
                     : 'N/A';
                 await EmailService.sendReceipt({
-                    toEmail: student.profile.email,
-                    name: student.profile.name,
+                    toEmail: tenant.profile.email,
+                    name: tenant.profile.name,
                     amount: Number(attempt.amount),
                     rentMonth,
                     reference: receipt.receipt_number,
@@ -474,12 +474,12 @@ export class PaymentService {
   async verifyPaymentStatus(params: {
     userId: string;
     role: string;
-    studentId?: string;
+    tenantId?: string;
     attemptId?: string;
     merchantTxnId?: string;
     gatewayTxnId?: string;
   }) {
-    const { userId, role, studentId, attemptId, merchantTxnId, gatewayTxnId } = params;
+    const { userId, role, tenantId, attemptId, merchantTxnId, gatewayTxnId } = params;
 
     if (!attemptId && !merchantTxnId && !gatewayTxnId) {
       throw new Error("BAD_REQUEST: attempt_id or merchant_txn_id or gateway_txn_id is required");
@@ -497,7 +497,7 @@ export class PaymentService {
 
     if (!attempt) throw new Error("NOT_FOUND: Payment attempt not found");
 
-    if (role === "STUDENT" && attempt.student_id !== studentId) {
+    if (role === "TENANT" && attempt.tenant_id !== tenantId) {
       throw new Error("FORBIDDEN: You can only verify your own attempts");
     }
     if (role === "OWNER" && attempt.owner_id !== userId) {
@@ -558,7 +558,7 @@ export class PaymentService {
             ...(status ? { status: status as any } : {})
         },
         include: {
-            student: { include: { profile: true } },
+            tenant: { include: { profile: true } },
             allocation: { include: { room: true } },
             payments: true
         },
@@ -567,10 +567,10 @@ export class PaymentService {
 
     return dues.map((d: any) => ({
         obligation_id: d.id,
-        student_id: d.student_id,
-        student_name: d.student.profile.name,
-        student_email: d.student.profile.email,
-        student_phone: d.student.profile.phone,
+        tenant_id: d.tenant_id,
+        student_name: d.tenant.profile.name,
+        student_email: d.tenant.profile.email,
+        student_phone: d.tenant.profile.phone,
         room_no: d.allocation?.room?.room_no || "N/A",
         rent_month: d.rent_month,
         due_date: d.due_date,
@@ -580,17 +580,17 @@ export class PaymentService {
     }));
   }
 
-  async getAllPayments(ownerId: string, limit: number = 50, offset: number = 0, studentId?: string) {
+  async getAllPayments(ownerId: string, limit: number = 50, offset: number = 0, tenantId?: string) {
     const where: any = {
       owner_id: ownerId,
-      ...(studentId ? { student_id: studentId } : {})
+      ...(tenantId ? { tenant_id: tenantId } : {})
     };
 
     const [payments, total] = await Promise.all([
         prisma.payment.findMany({
             where,
             include: {
-                student: { include: { profile: true } },
+                tenant: { include: { profile: true } },
                 obligation: true
             },
             orderBy: { payment_date: "desc" },
@@ -603,7 +603,7 @@ export class PaymentService {
     return {
         payments: payments.map((p: any) => ({
             ...p,
-            student_name: p.student.profile.name,
+            student_name: p.tenant.profile.name,
             rent_month: p.obligation.rent_month
         })),
         total
@@ -651,9 +651,9 @@ export class PaymentService {
     };
   }
 
-  async getStudentPaymentHistory(studentId: string) {
-    const student = await prisma.student.findUnique({
-      where: { id: studentId },
+  async getStudentPaymentHistory(tenantId: string) {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
       include: {
         allocations: {
           where: { is_active: true, end_date: null },
@@ -672,18 +672,18 @@ export class PaymentService {
       }
     });
 
-    if (!student) throw new Error("NOT_FOUND: Student not found");
+    if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
 
     let totalDue = 0;
     let totalPaid = 0;
     const allPayments: any[] = [];
     
     // Sort obligations to find earliest unpaid reliably
-    const latestUnpaidDueDate = student.obligations
+    const latestUnpaidDueDate = tenant.obligations
       .filter((o: any) => o.status === "PENDING" || o.status === "PARTIAL")
       .sort((a: any, b: any) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())[0]?.due_date || null;
 
-    const formattedObligations = student.obligations.map((o: any) => {
+    const formattedObligations = tenant.obligations.map((o: any) => {
       const obligationPaid = o.payments.reduce((sum: number, p: any) => sum + Number(p.amount_paid), 0);
       const remainingDue = Math.max(0, Number(o.amount) - obligationPaid);
       
@@ -721,16 +721,16 @@ export class PaymentService {
 
     const outstandingBalance = Math.max(totalDue - totalPaid, 0);
     const paymentStatus = outstandingBalance <= 0 ? "PAID" : totalPaid > 0 ? "PARTIAL" : "PENDING";
-    const allocationRent = Number(student.allocations?.[0]?.room?.base_rent || 0);
-    const fallbackObligationRent = Number(student.obligations?.[0]?.amount || 0);
-    const studentRent = Number(student.monthly_rent || 0);
+    const allocationRent = Number(tenant.allocations?.[0]?.room?.base_rent || 0);
+    const fallbackObligationRent = Number(tenant.obligations?.[0]?.amount || 0);
+    const studentRent = Number(tenant.monthly_rent || 0);
     const monthlyRent =
       (allocationRent > 0 ? allocationRent : 0) ||
       (studentRent > 0 ? studentRent : 0) ||
       (fallbackObligationRent > 0 ? fallbackObligationRent : 0);
 
     return {
-      student_id: studentId,
+      tenant_id: tenantId,
       obligations: formattedObligations,
       payments: allPayments.sort((a, b) => new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime()),
       monthly_rent: monthlyRent,

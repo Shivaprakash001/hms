@@ -42,10 +42,10 @@ const StudentLayout = () => {
     }, []);
 
     const menuItems = [
-        { icon: LayoutDashboard, label: 'Dashboard', path: '/student/dashboard' },
-        { icon: CreditCard, label: 'Payments', path: '/student/payments' },
-        { icon: User, label: 'Profile', path: '/student/profile' },
-        { icon: Settings, label: 'Settings', path: '/student/settings' },
+        { icon: LayoutDashboard, label: 'Dashboard', path: '/tenant/dashboard' },
+        { icon: CreditCard, label: 'Payments', path: '/tenant/payments' },
+        { icon: User, label: 'Profile', path: '/tenant/profile' },
+        { icon: Settings, label: 'Settings', path: '/tenant/settings' },
     ];
 
     const handleLogout = () => {
@@ -73,7 +73,7 @@ const StudentLayout = () => {
                                 exit={{ opacity: 0, width: 0 }}
                                 className="font-bold text-lg tracking-tight whitespace-nowrap overflow-hidden"
                             >
-                                Student Portal
+                                Tenant Portal
                             </motion.span>
                         )}
                     </AnimatePresence>
@@ -129,7 +129,7 @@ const StudentLayout = () => {
                         <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
                             <span className="font-bold text-white text-lg">S</span>
                         </div>
-                        <span className="font-bold text-lg tracking-tight text-white">Student Portal</span>
+                        <span className="font-bold text-lg tracking-tight text-white">Tenant Portal</span>
                     </div>
                     <button onClick={() => setMobileMenuOpen(false)} className="text-slate-400 hover:text-white">
                         <X size={24} />
@@ -160,7 +160,7 @@ const StudentLayout = () => {
 
                 <div className="mt-auto p-4 border-t border-slate-800">
                     <div className="mb-3 px-2">
-                        <p className="text-sm font-semibold text-white truncate">{user?.name || 'Student'}</p>
+                        <p className="text-sm font-semibold text-white truncate">{user?.name || 'Tenant'}</p>
                         <p className="text-xs text-slate-400 truncate">{user?.email || ''}</p>
                     </div>
                     <button
@@ -193,7 +193,7 @@ const StudentLayout = () => {
                     </div>
                     <div className="flex items-center gap-4">
                         <button
-                            onClick={() => navigate('/student/dashboard#announcements')}
+                            onClick={() => navigate('/tenant/dashboard#announcements')}
                             className="p-2 relative hover:bg-slate-100 rounded-full text-slate-500 transition-colors"
                             title="View announcements"
                         >

@@ -162,7 +162,7 @@ export class EmailService {
             <p style="margin: 12px 0 0; font-size: 14px; color: #64748b;">Due Date: ${data.dueDate}</p>
           </div>
           <p style="font-size: 14px; color: #64748b; margin-top: 24px; margin-bottom: 24px;">
-            You can pay directly via the student dashboard or using the hostel UPI ID.
+            You can pay directly via the tenant dashboard or using the hostel UPI ID.
           </p>
           <div style="text-align: center; margin-top: 10px; margin-bottom: 10px;">
             <a href="https://trishul.solutions/login" style="display: inline-block; padding: 12px 24px; background-color: ${color}; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">

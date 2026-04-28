@@ -8,7 +8,7 @@ import { prisma } from "@/lib/db";
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession(req);
-  if (!session || session.role === "STUDENT") return apiError("Forbidden", "FORBIDDEN", 403);
+  if (!session || session.role === "TENANT") return apiError("Forbidden", "FORBIDDEN", 403);
 
   try {
     const { id: allocationId } = params;
@@ -18,14 +18,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     // Verify ownership
     const allocation = await prisma.roomAllocation.findUnique({
       where: { id: allocationId },
-      include: { student: true }
+      include: { tenant: true }
     });
 
     if (!allocation) {
       return apiError("Allocation not found", "NOT_FOUND", 404);
     }
 
-    if (allocation.student.owner_id !== session.sub) {
+    if (allocation.tenant.owner_id !== session.sub) {
       return apiError("Forbidden", "FORBIDDEN", 403);
     }
 

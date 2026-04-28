@@ -12,12 +12,12 @@ const ALLOWED_MIME_TYPES = [
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 
 export class DocumentService {
-  private async resolveStudentIdFromProfile(profileId: string) {
-    const student = await prisma.student.findUnique({
+  private async resolveTenantIdFromProfile(profileId: string) {
+    const tenant = await prisma.tenant.findUnique({
       where: { profile_id: profileId },
       select: { id: true },
     });
-    return student?.id || null;
+    return tenant?.id || null;
   }
 
   // ── Get Documents (with signed URLs) ──────────────────────
@@ -25,23 +25,23 @@ export class DocumentService {
     tenantId: string,
     requestingUser: { sub: string; role: string }
   ) {
-    const student = await prisma.student.findUnique({
+    const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId },
       select: { profile_id: true, owner_id: true },
     });
 
-    if (!student) throw new Error("NOT_FOUND: Student record not found");
+    if (!tenant) throw new Error("NOT_FOUND: Tenant record not found");
 
     if (
-      requestingUser.role === "STUDENT" &&
-      student.profile_id !== requestingUser.sub
+      requestingUser.role === "TENANT" &&
+      tenant.profile_id !== requestingUser.sub
     ) {
       throw new Error("FORBIDDEN: You can only view your own documents");
     }
 
     if (
       requestingUser.role === "OWNER" &&
-      student.owner_id !== requestingUser.sub
+      tenant.owner_id !== requestingUser.sub
     ) {
       throw new Error("FORBIDDEN: Access denied");
     }
@@ -74,7 +74,7 @@ export class DocumentService {
 
   // ── Upload Document ───────────────────────────────────────
   async uploadDocument(
-    studentId: string,
+    tenantId: string,
     fileBuffer: Buffer,
     fileName: string,
     mimeType: string,
@@ -84,12 +84,12 @@ export class DocumentService {
     // ─ Validate file ─
     this.validateFile(fileBuffer, mimeType, fileName);
 
-    const student = await prisma.student.findUnique({
-      where: { id: studentId },
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
       select: { owner_id: true },
     });
 
-    if (!student) throw new Error("NOT_FOUND: Student not found");
+    if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
 
     // ─ Duplicate Aadhaar check ─
     if (docType === "AADHAAR" && docNumber) {
@@ -97,18 +97,18 @@ export class DocumentService {
         where: {
           doc_type: "AADHAAR",
           doc_number: docNumber,
-          tenant_id: { not: studentId },
+          tenant_id: { not: tenantId },
         },
       });
       if (existing) {
         throw new Error(
-          "VALIDATION: This Aadhaar number is already registered with another student"
+          "VALIDATION: This Aadhaar number is already registered with another tenant"
         );
       }
     }
 
-    // ─ Folder structure: tenant-documents/{ownerId}/{studentId}/ ─
-    const folder = `tenant-documents/${student.owner_id}/${studentId}`;
+    // ─ Folder structure: tenant-documents/{ownerId}/{tenantId}/ ─
+    const folder = `tenant-documents/${tenant.owner_id}/${tenantId}`;
 
     // Convert Buffer to base64 for the v7.x SDK upload API
     const base64File = fileBuffer.toString("base64");
@@ -118,25 +118,25 @@ export class DocumentService {
       fileName: fileName,
       folder: folder,
       useUniqueFileName: true,
-      tags: [docType, studentId],
+      tags: [docType, tenantId],
     });
 
     const document = await prisma.identificationDocument.create({
       data: {
-        tenant_id: studentId,
+        tenant_id: tenantId,
         doc_type: docType,
         doc_number: docNumber,
         file_url: upload.url || "",
         file_id: upload.fileId || null,
         document_status: "PENDING",
         is_verified: false,
-        uploaded_by: studentId,
+        uploaded_by: tenantId,
       },
     });
 
     await eventSystem.trigger("document_uploaded", {
-      student_id: studentId,
-      owner_id: student.owner_id,
+      tenant_id: tenantId,
+      owner_id: tenant.owner_id,
       doc_id: document.id,
       doc_type: docType,
     });
@@ -148,11 +148,11 @@ export class DocumentService {
   async verifyDocument(docId: string, ownerId: string, isVerified: boolean) {
     const doc = await prisma.identificationDocument.findUnique({
       where: { id: docId },
-      include: { student: true },
+      include: { tenant: true },
     });
 
     if (!doc) throw new Error("NOT_FOUND: Document not found");
-    if (doc.student.owner_id !== ownerId)
+    if (doc.tenant.owner_id !== ownerId)
       throw new Error("FORBIDDEN: Access denied");
 
     const newStatus = isVerified ? "APPROVED" : "PENDING";
@@ -166,7 +166,7 @@ export class DocumentService {
       },
     });
 
-    // Update student's overall verification status
+    // Update tenant's overall verification status
     if (isVerified) {
       const allDocs = await prisma.identificationDocument.findMany({
         where: { tenant_id: doc.tenant_id },
@@ -174,13 +174,13 @@ export class DocumentService {
       const allVerified =
         allDocs.length > 0 && allDocs.every((d) => d.document_status === "APPROVED");
       if (allVerified) {
-        await prisma.student.update({
+        await prisma.tenant.update({
           where: { id: doc.tenant_id },
           data: { document_verified: true },
         });
       }
     } else {
-      await prisma.student.update({
+      await prisma.tenant.update({
         where: { id: doc.tenant_id },
         data: { document_verified: false },
       });
@@ -188,7 +188,7 @@ export class DocumentService {
 
     await eventSystem.trigger("document_verified", {
       doc_id: docId,
-      student_id: doc.tenant_id,
+      tenant_id: doc.tenant_id,
       owner_id: ownerId,
       is_verified: isVerified,
       status: newStatus,
@@ -201,11 +201,11 @@ export class DocumentService {
   async rejectDocument(docId: string, ownerId: string, reason?: string) {
     const doc = await prisma.identificationDocument.findUnique({
       where: { id: docId },
-      include: { student: true },
+      include: { tenant: true },
     });
 
     if (!doc) throw new Error("NOT_FOUND: Document not found");
-    if (doc.student.owner_id !== ownerId)
+    if (doc.tenant.owner_id !== ownerId)
       throw new Error("FORBIDDEN: Access denied");
 
     const updated = await prisma.identificationDocument.update({
@@ -217,15 +217,15 @@ export class DocumentService {
       },
     });
 
-    // Student's overall verification is now false
-    await prisma.student.update({
+    // Tenant's overall verification is now false
+    await prisma.tenant.update({
       where: { id: doc.tenant_id },
       data: { document_verified: false },
     });
 
     await eventSystem.trigger("document_rejected", {
       doc_id: docId,
-      student_id: doc.tenant_id,
+      tenant_id: doc.tenant_id,
       owner_id: ownerId,
       reason: reason || "Rejected by owner",
     });
@@ -240,21 +240,21 @@ export class DocumentService {
   ) {
     const doc = await prisma.identificationDocument.findUnique({
       where: { id: docId },
-      include: { student: true },
+      include: { tenant: true },
     });
 
     if (!doc) throw new Error("NOT_FOUND: Document not found");
 
-    if (requestingUser.role === "STUDENT") {
-      const studentId = await this.resolveStudentIdFromProfile(requestingUser.sub);
-      if (!studentId || doc.tenant_id !== studentId) {
+    if (requestingUser.role === "TENANT") {
+      const tenantId = await this.resolveTenantIdFromProfile(requestingUser.sub);
+      if (!tenantId || doc.tenant_id !== tenantId) {
         throw new Error("FORBIDDEN: Access denied");
       }
     }
 
     if (
       requestingUser.role === "OWNER" &&
-      doc.student.owner_id !== requestingUser.sub
+      doc.tenant.owner_id !== requestingUser.sub
     ) {
       throw new Error("FORBIDDEN: Access denied");
     }
@@ -278,18 +278,18 @@ export class DocumentService {
 
     await eventSystem.trigger("document_deleted", {
       doc_id: docId,
-      student_id: doc.tenant_id,
-      owner_id: doc.student.owner_id,
+      tenant_id: doc.tenant_id,
+      owner_id: doc.tenant.owner_id,
       doc_type: doc.doc_type,
     });
 
     return { success: true };
   }
 
-  // ── Delete ALL documents for a student (cascade on removal) ─
-  async deleteAllStudentDocuments(studentId: string) {
+  // ── Delete ALL documents for a tenant (cascade on removal) ─
+  async deleteAllStudentDocuments(tenantId: string) {
     const docs = await prisma.identificationDocument.findMany({
-      where: { tenant_id: studentId },
+      where: { tenant_id: tenantId },
       select: { id: true, file_id: true },
     });
 
@@ -309,7 +309,7 @@ export class DocumentService {
 
     // Delete all DB records
     await prisma.identificationDocument.deleteMany({
-      where: { tenant_id: studentId },
+      where: { tenant_id: tenantId },
     });
 
     return { success: true, deletedCount: docs.length };

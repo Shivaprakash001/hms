@@ -1,14 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { studentService } from '../api/services';
+import { tenantService } from '../api/services';
 
 /**
- * Fetch all students with optional filtering
+ * Fetch all tenants with optional filtering
  */
-export const useStudents = (options = {}) => {
+export const useTenants = (options = {}) => {
   return useQuery({
-    queryKey: ['students', options],
+    queryKey: ['tenants', options],
     queryFn: async () => {
-      return await studentService.getAll(options);
+      return await tenantService.getAll(options);
     },
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
@@ -16,68 +16,68 @@ export const useStudents = (options = {}) => {
 };
 
 /**
- * Fetch single student by ID
+ * Fetch single tenant by ID
  */
-export const useStudent = (studentId) => {
+export const useStudent = (tenantId) => {
   return useQuery({
-    queryKey: ['students', studentId],
+    queryKey: ['tenants', tenantId],
     queryFn: async () => {
-      if (!studentId) return null;
-      return await studentService.getById(studentId);
+      if (!tenantId) return null;
+      return await tenantService.getById(tenantId);
     },
-    enabled: !!studentId,
+    enabled: !!tenantId,
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
   });
 };
 
 /**
- * Mutate: Create new student
+ * Mutate: Create new tenant
  */
 export const useCreateStudent = () => {
   const queryClient = useQueryClient();
   
   return useMutation({
     mutationFn: async (data) => {
-      return await studentService.create(data);
+      return await tenantService.create(data);
     },
     onSuccess: (newStudent) => {
-      queryClient.invalidateQueries({ queryKey: ['students'] });
-      queryClient.setQueryData(['students', newStudent.id], newStudent);
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+      queryClient.setQueryData(['tenants', newStudent.id], newStudent);
     },
   });
 };
 
 /**
- * Mutate: Update student
+ * Mutate: Update tenant
  */
-export const useUpdateStudent = (studentId) => {
+export const useUpdateStudent = (tenantId) => {
   const queryClient = useQueryClient();
   
   return useMutation({
     mutationFn: async (data) => {
-      return await studentService.update(studentId, data);
+      return await tenantService.update(tenantId, data);
     },
     onSuccess: (updatedStudent) => {
-      queryClient.setQueryData(['students', studentId], updatedStudent);
-      queryClient.invalidateQueries({ queryKey: ['students'] });
+      queryClient.setQueryData(['tenants', tenantId], updatedStudent);
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
     },
   });
 };
 
 /**
- * Mutate: Delete student
+ * Mutate: Delete tenant
  */
 export const useDeleteStudent = () => {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async (studentId) => {
-      return await studentService.delete(studentId);
+    mutationFn: async (tenantId) => {
+      return await tenantService.delete(tenantId);
     },
-    onSuccess: (_data, studentId) => {
-      queryClient.removeQueries({ queryKey: ['students', studentId] });
-      queryClient.invalidateQueries({ queryKey: ['students'] });
+    onSuccess: (_data, tenantId) => {
+      queryClient.removeQueries({ queryKey: ['tenants', tenantId] });
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
     },
   });
 };

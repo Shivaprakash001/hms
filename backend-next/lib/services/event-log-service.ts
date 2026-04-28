@@ -9,21 +9,21 @@ import { prisma } from "../db";
  * 
  * Usage:
  *   await eventLog.log("RENT_GENERATED", ownerId, { count: 5, month: "2026-05" });
- *   await eventLog.log("LATE_FEE_APPLIED", ownerId, { studentId, amount: 200 });
+ *   await eventLog.log("LATE_FEE_APPLIED", ownerId, { tenantId, amount: 200 });
  */
 class EventLogService {
   async log(
     eventType: string,
     ownerId?: string | null,
     metadata?: Record<string, any>,
-    studentId?: string | null
+    tenantId?: string | null
   ) {
     try {
       await (prisma as any).systemEventLog.create({
         data: {
           event_type: eventType,
           owner_id: ownerId || null,
-          student_id: studentId || null,
+          tenant_id: tenantId || null,
           metadata: metadata || null,
         }
       });

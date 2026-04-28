@@ -29,7 +29,7 @@ export class RazorpayProvider extends PaymentProvider {
       notify: { sms: false, email: false },
       notes: data.metadata,
       customer: {
-        name: data.student_name || "Student",
+        name: data.student_name || "Tenant",
         email: data.student_email || "",
         contact: data.student_phone || "",
       },

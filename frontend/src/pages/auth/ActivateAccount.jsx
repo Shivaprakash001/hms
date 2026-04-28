@@ -31,7 +31,7 @@ const ActivateAccount = () => {
         setError('');
 
         try {
-            await api.post('/students/activate', { token, password, confirm_password: confirmPassword });
+            await api.post('/tenants/activate', { token, password, confirm_password: confirmPassword });
             setIsSuccess(true);
             setTimeout(() => {
                 navigate('/login');

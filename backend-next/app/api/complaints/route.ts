@@ -17,8 +17,8 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status") || undefined;
 
-    if (session.role === "STUDENT") {
-      // Students only see their own complaints
+    if (session.role === "TENANT") {
+      // Tenants only see their own complaints
       const complaints = await complaintService.getStudentComplaints(session.sub);
       return apiResponse(complaints);
     } else {
@@ -37,17 +37,17 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    if (session.role !== "STUDENT") {
-      return apiError("Only students can create complaints", "FORBIDDEN", 403);
+    if (session.role !== "TENANT") {
+      return apiError("Only tenants can create complaints", "FORBIDDEN", 403);
     }
 
-    // We need the owner_id for the student.
+    // We need the owner_id for the tenant.
     // Assuming it's in the session or we fetch it.
-    // For now, assume it's passed or student is linked to owner in session.
+    // For now, assume it's passed or tenant is linked to owner in session.
     // If not in session, we look it up.
     const complaint = await complaintService.createComplaint({
       ...body,
-      student_id: session.sub
+      tenant_id: session.sub
     });
 
     return apiResponse(complaint, 201);

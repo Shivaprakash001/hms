@@ -7,14 +7,14 @@ export class RoomAllocationService {
   async getActiveAllocations(userId: string) {
     return await prisma.roomAllocation.findMany({
       where: {
-        student: {
+        tenant: {
           owner_id: userId
         },
         end_date: null // active allocations
       },
       include: {
         room: true,
-        student: true
+        tenant: true
       },
       orderBy: {
         start_date: "desc"
@@ -23,17 +23,17 @@ export class RoomAllocationService {
   }
 
   // ✅ Allocate Room (Prisma Transaction based)
-  async allocateRoom(data: { studentId: string; roomId: string; startDate: string; ownerId: string }) {
-    const { studentId, roomId, startDate, ownerId } = data;
+  async allocateRoom(data: { tenantId: string; roomId: string; startDate: string; ownerId: string }) {
+    const { tenantId, roomId, startDate, ownerId } = data;
 
     const allocationData = await prisma.$transaction(async (tx) => {
-      // 1. Check if student already has an active allocation
+      // 1. Check if tenant already has an active allocation
       const existing = await tx.roomAllocation.findFirst({
-        where: { student_id: studentId, end_date: null }
+        where: { tenant_id: tenantId, end_date: null }
       });
       
       if (existing) {
-        throw new Error("VALIDATION_ERROR: Student is already allocated to a room and checking out is required first");
+        throw new Error("VALIDATION_ERROR: Tenant is already allocated to a room and checking out is required first");
       }
 
       // 2. Check room capacity
@@ -56,7 +56,7 @@ export class RoomAllocationService {
       // 3. Create allocation
       return await tx.roomAllocation.create({
         data: {
-          student_id: studentId,
+          tenant_id: tenantId,
           room_id: roomId,
           start_date: new Date(startDate)
         }
@@ -65,7 +65,7 @@ export class RoomAllocationService {
 
     // ✅ Trigger Events
     await eventSystem.trigger("student_allocated_room", {
-      student_id: studentId,
+      tenant_id: tenantId,
       room_id: roomId,
       allocation_id: allocationData.id,
       owner_id: ownerId
@@ -83,17 +83,17 @@ export class RoomAllocationService {
   }
 
   // ✅ Shift Room
-  async shiftRoom(studentId: string, newRoomId: string, shiftDate: string, ownerId: string) {
+  async shiftRoom(tenantId: string, newRoomId: string, shiftDate: string, ownerId: string) {
 
     const shiftData = await prisma.$transaction(async (tx) => {
       // 1. Find active allocation
       const active = await tx.roomAllocation.findFirst({
-        where: { student_id: studentId, end_date: null },
+        where: { tenant_id: tenantId, end_date: null },
         orderBy: { start_date: "desc" }
       });
 
       if (!active) {
-        throw new Error("NOT_FOUND: No active allocation found for student");
+        throw new Error("NOT_FOUND: No active allocation found for tenant");
       }
 
       // 2. End old allocation
@@ -122,7 +122,7 @@ export class RoomAllocationService {
       // 4. Create new allocation
       return await tx.roomAllocation.create({
         data: {
-          student_id: studentId,
+          tenant_id: tenantId,
           room_id: newRoomId,
           start_date: new Date(shiftDate)
         }
@@ -131,7 +131,7 @@ export class RoomAllocationService {
 
     // ✅ Trigger Events
     await eventSystem.trigger("student_allocated_room", {
-      student_id: studentId,
+      tenant_id: tenantId,
       room_id: newRoomId,
       allocation_id: shiftData.id,
       owner_id: ownerId

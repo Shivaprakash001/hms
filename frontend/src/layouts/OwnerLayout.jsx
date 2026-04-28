@@ -100,7 +100,7 @@ const OwnerLayout = () => {
                             fetchNotifications();
                         } else if (data.type === 'student_created' || data.type === 'student_allocated_room') {
                             queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-                            queryClient.invalidateQueries({ queryKey: ['students'] });
+                            queryClient.invalidateQueries({ queryKey: ['tenants'] });
                             fetchNotifications();
                         } else if (data.type === 'reactivation_requested') {
                             fetchNotifications();
@@ -267,7 +267,7 @@ const OwnerLayout = () => {
         setSearchOpen(false);
         setActiveSearchIndex(-1);
         setSearchError(false);
-        navigate(`/owner/students/${tenant.id}`);
+        navigate(`/owner/tenants/${tenant.id}`);
     };
 
     const handleSearchKeyDown = (event) => {
@@ -304,7 +304,7 @@ const OwnerLayout = () => {
     const menuItems = [
         { name: 'Dashboard', icon: Home, path: '/owner/dashboard' },
         { name: 'Rooms', icon: Bed, path: '/owner/rooms' },
-        { name: 'Tenants', icon: Users, path: '/owner/students' },
+        { name: 'Tenants', icon: Users, path: '/owner/tenants' },
         { name: 'Payments', icon: CreditCard, path: '/owner/payments' },
         { name: 'Expenses', icon: Receipt, path: '/owner/expenses' },
         { name: 'Activity Log', icon: Clock, path: '/owner/activities' },

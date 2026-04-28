@@ -9,7 +9,7 @@ const ProtectedStudentRoute = () => {
         return <div>Loading...</div>; // Or a proper loading spinner
     }
 
-    if (!user || user.role?.toLowerCase() !== 'student') {
+    if (!user || user.role?.toLowerCase() !== 'tenant') {
         return <Navigate to="/" replace />;
     }
 

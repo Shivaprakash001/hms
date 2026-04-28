@@ -2,9 +2,9 @@ import { prisma } from "../db";
 import { eventSystem } from "../events";
 
 export class ComplaintService {
-  async getStudentComplaints(studentId: string) {
+  async getStudentComplaints(tenantId: string) {
     return prisma.complaint.findMany({
-      where: { student_id: studentId },
+      where: { tenant_id: tenantId },
       orderBy: { created_at: "desc" }
     });
   }
@@ -16,7 +16,7 @@ export class ComplaintService {
         ...(status && { status })
       },
       include: {
-        student: {
+        tenant: {
           include: { profile: true }
         }
       },
@@ -25,34 +25,34 @@ export class ComplaintService {
   }
 
   async createComplaint(data: {
-    student_id: string;
+    tenant_id: string;
     title: string;
     description: string;
     category: string;
     priority?: string;
   }) {
-    // Security: Fetch the correct owner_id for this student from DB
-    const student = await prisma.student.findUnique({
-      where: { id: data.student_id },
+    // Security: Fetch the correct owner_id for this tenant from DB
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: data.tenant_id },
       select: { owner_id: true }
     });
 
-    if (!student || !student.owner_id) {
-      throw new Error("UNAUTHORIZED: Student not found or has no owner linked");
+    if (!tenant || !tenant.owner_id) {
+      throw new Error("UNAUTHORIZED: Tenant not found or has no owner linked");
     }
 
     const complaint = await prisma.complaint.create({
       data: {
         ...data,
-        owner_id: student.owner_id,
+        owner_id: tenant.owner_id,
         status: "PENDING"
       }
     });
 
     await eventSystem.trigger("complaint_created", {
       complaint_id: complaint.id,
-      student_id: data.student_id,
-      owner_id: student.owner_id
+      tenant_id: data.tenant_id,
+      owner_id: tenant.owner_id
     });
 
     return complaint;

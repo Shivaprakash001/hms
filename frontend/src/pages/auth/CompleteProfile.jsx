@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, MapPin, Phone, GraduationCap, Loader2, CheckCircle2, Upload, Mail, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { studentService } from '../../api/services';
+import { tenantService } from '../../api/services';
 
 // Shadcn UI Components
 import { Button } from "@/components/ui/Button";
@@ -41,7 +41,7 @@ const CompleteProfile = () => {
         if (!user) {
             navigate('/', { replace: true });
         } else if (user.is_profile_completed) {
-            navigate('/student/dashboard', { replace: true });
+            navigate('/tenant/dashboard', { replace: true });
         }
     }, [user, loading, navigate]);
 
@@ -152,11 +152,11 @@ const CompleteProfile = () => {
                 address: formData.address.trim()
             };
 
-            await studentService.completeMyProfile(payload, aadhaarFile);
+            await tenantService.completeMyProfile(payload, aadhaarFile);
 
             setIsSuccess(true);
             setTimeout(() => {
-                window.location.href = '/student/dashboard';
+                window.location.href = '/tenant/dashboard';
             }, 1200);
         } catch (err) {
             const apiError = err?.response?.data?.error;

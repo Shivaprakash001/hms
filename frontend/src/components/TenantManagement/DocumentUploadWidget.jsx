@@ -4,7 +4,7 @@ import {
     Upload, X, FileText, CheckCircle2, AlertCircle, Loader2,
     Trash2, Shield, Eye
 } from 'lucide-react';
-import { tenantDocumentService, studentService } from '../../api/services';
+import { tenantDocumentService, tenantService } from '../../api/services';
 
 const DOC_TYPES = [
     { key: 'AADHAR', label: 'Aadhar Card', color: 'indigo' },
@@ -42,7 +42,7 @@ export default function DocumentUploadWidget({ tenantId, isOwner = true, onDocum
             clearBlobUrls();
             const data = isOwner
                 ? await tenantDocumentService.getAll(tenantId)
-                : await studentService.getMyDocuments();
+                : await tenantService.getMyDocuments();
             const normalized = Array.isArray(data) ? data : [];
             setDocuments(normalized);
             if (typeof onDocumentsChange === 'function') {

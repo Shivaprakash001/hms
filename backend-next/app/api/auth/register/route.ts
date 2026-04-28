@@ -10,7 +10,7 @@ import { RegisterSchema } from "@/lib/validators";
 /**
  * 📝 AUTH REGISTER — Owner Registration
  * Public endpoint. Only creates Owner/Admin accounts.
- * Students must be invited by an owner.
+ * Tenants must be invited by an owner.
  */
 export async function POST(req: NextRequest) {
   try {

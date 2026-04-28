@@ -33,8 +33,8 @@ export const profileService = {
         const response = await api.put(`/profiles/${profileId}`, data);
         return response.data;
     },
-    getUnassignedStudents: async () => {
-        const response = await api.get('/profiles/unassigned/students');
+    getUnassignedTenants: async () => {
+        const response = await api.get('/profiles/unassigned/tenants');
         return response.data;
     }
 };
@@ -153,30 +153,30 @@ export const billingService = {
     }
 };
 
-// --- Student Services ---
-export const studentService = {
+// --- Tenant Services ---
+export const tenantService = {
     getAll: async (params) => {
-        const response = await api.get('/students', { params });
+        const response = await api.get('/tenants', { params });
         return response.data;
     },
     getById: async (id) => {
-        const response = await api.get(`/students/${id}`);
+        const response = await api.get(`/tenants/${id}`);
         return response.data;
     },
     getOwnerTenantOverview: async (id) => {
-        const response = await api.get(`/students/owner/tenants/${id}/overview`);
+        const response = await api.get(`/tenants/owner/tenants/${id}/overview`);
         return response.data;
     },
     getByProfileId: async (profileId) => {
-        const response = await api.get(`/students/by-profile/${profileId}`);
+        const response = await api.get(`/tenants/by-profile/${profileId}`);
         return response.data;
     },
     getMyProfile: async () => {
-        const response = await api.get('/students/me/profile');
+        const response = await api.get('/tenants/me/profile');
         return response.data;
     },
     updateMyProfile: async (data) => {
-        const response = await api.patch('/students/me/profile', data);
+        const response = await api.patch('/tenants/me/profile', data);
         return response.data;
     },
     completeMyProfile: async (data, aadhaarFile) => {
@@ -184,7 +184,7 @@ export const studentService = {
         formData.append('profile_data', JSON.stringify(data));
         formData.append('aadhaar_file', aadhaarFile);
         try {
-            const response = await api.post('/students/me/complete-profile', formData, {
+            const response = await api.post('/tenants/me/complete-profile', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
             return response.data;
@@ -200,51 +200,51 @@ export const studentService = {
         }
     },
     getMyDocuments: async () => {
-        const response = await api.get('/students/me/documents');
+        const response = await api.get('/tenants/me/documents');
         return response.data?.documents || response.data || [];
     },
     getMyPaymentHistory: async () => {
-        const response = await api.get('/students/me/payments/history');
+        const response = await api.get('/tenants/me/payments/history');
         return response.data;
     },
     getMyRoom: async () => {
-        const response = await api.get('/students/me/room');
+        const response = await api.get('/tenants/me/room');
         return response.data;
     },
     create: async (data) => {
-        const response = await api.post('/students', data);
+        const response = await api.post('/tenants', data);
         return response.data;
     },
     update: async (id, data) => {
-        const response = await api.put(`/students/${id}`, data);
+        const response = await api.put(`/tenants/${id}`, data);
         return response.data;
     },
     delete: async (id) => {
-        const response = await api.delete(`/students/${id}`);
+        const response = await api.delete(`/tenants/${id}`);
         return response.data;
     },
     reactivate: async (id, data) => {
-        const response = await api.post(`/students/${id}/reactivate`, data);
+        const response = await api.post(`/tenants/${id}/reactivate`, data);
         return response.data;
     },
     requestReactivation: async () => {
-        const response = await api.post('/students/me/reactivation-request');
+        const response = await api.post('/tenants/me/reactivation-request');
         return response.data;
     },
     getReactivationRequests: async () => {
-        const response = await api.get('/students/owner/reactivation-requests');
+        const response = await api.get('/tenants/owner/reactivation-requests');
         return response.data;
     },
     decideReactivationRequest: async (requestId, action, notes = '') => {
-        const response = await api.post(`/students/owner/reactivation-requests/${requestId}/decision`, { action, notes });
+        const response = await api.post(`/tenants/owner/reactivation-requests/${requestId}/decision`, { action, notes });
         return response.data;
     },
     invite: async (data) => {
-        const response = await api.post('/students/invite', data);
+        const response = await api.post('/tenants/invite', data);
         return response.data;
     },
     resendInvitation: async (email) => {
-        const response = await api.post('/students/resend-invitation', { email });
+        const response = await api.post('/tenants/resend-invitation', { email });
         return response.data;
     }
 };
@@ -291,8 +291,8 @@ export const allocationService = {
         const response = await api.post('/allocations/shift', data);
         return response.data;
     },
-    getStudentHistory: async (studentId) => {
-        const response = await api.get(`/allocations/student/${studentId}`);
+    getStudentHistory: async (tenantId) => {
+        const response = await api.get(`/allocations/tenant/${tenantId}`);
         return response.data;
     },
     getAllActive: async () => {
@@ -316,25 +316,25 @@ export const paymentService = {
         const response = await api.get('/payments/dues', { params });
         return response.data;
     },
-    getStudentHistory: async (studentId) => {
+    getStudentHistory: async (tenantId) => {
         try {
             const storedStudent = localStorage.getItem('studentUser');
             const storedOwner = localStorage.getItem('ownerUser');
             const isStudentSession = Boolean(storedStudent && !storedOwner);
 
             if (isStudentSession) {
-                const meResponse = await api.get('/students/me/payments/history');
+                const meResponse = await api.get('/tenants/me/payments/history');
                 return meResponse.data;
             }
 
-            if (studentId) {
-                // Owner fetches a student-scoped ledger from payments service
+            if (tenantId) {
+                // Owner fetches a tenant-scoped ledger from payments service
                 const [dues, paymentsResult] = await Promise.all([
-                    api.get('/payments/dues', { params: { student_id: studentId } }),
-                    api.get('/payments', { params: { student_id: studentId, limit: 500 } })
+                    api.get('/payments/dues', { params: { tenant_id: tenantId } }),
+                    api.get('/payments', { params: { tenant_id: tenantId, limit: 500 } })
                 ]);
 
-                const obligations = (dues.data || []).filter((o) => o.student_id === studentId);
+                const obligations = (dues.data || []).filter((o) => o.tenant_id === tenantId);
                 const payments = (paymentsResult.data?.payments || []).map((p) => ({
                     id: p.id,
                     obligation_id: p.obligation_id,
@@ -350,7 +350,7 @@ export const paymentService = {
                 const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount_paid || 0), 0);
 
                 return {
-                    student_id: studentId,
+                    tenant_id: tenantId,
                     obligations: obligations.map((o) => ({
                         id: o.obligation_id || o.id,
                         rent_month: o.rent_month,
@@ -375,11 +375,11 @@ export const paymentService = {
                 };
             }
 
-            const fallbackMe = await api.get('/students/me/payments/history');
+            const fallbackMe = await api.get('/tenants/me/payments/history');
             return fallbackMe.data;
         } catch (error) {
             if (error?.response?.status === 404) {
-                const fallback = await api.get('/students/me/payments/history');
+                const fallback = await api.get('/tenants/me/payments/history');
                 return fallback.data;
             }
             throw error;
@@ -596,29 +596,29 @@ export const tenantDocumentService = {
         formData.append('docType', docType);
         if (documentNumber) formData.append('docNumber', documentNumber);
         formData.append('file', file);
-        const response = await api.post(`/students/${tenantId}/documents`, formData, {
+        const response = await api.post(`/tenants/${tenantId}/documents`, formData, {
             headers: { 'Content-Type': 'multipart/form-data' }
         });
         return response.data;
     },
     getAll: async (tenantId) => {
         if (!tenantId) {
-            const response = await api.get('/students/me/documents');
+            const response = await api.get('/tenants/me/documents');
             return response.data?.documents || response.data || [];
         }
-        const response = await api.get(`/students/${tenantId}/documents`);
+        const response = await api.get(`/tenants/${tenantId}/documents`);
         return response.data?.documents || response.data || [];
     },
     delete: async (tenantId, docId) => {
-        const response = await api.delete(`/students/${tenantId}/documents/${docId}`);
+        const response = await api.delete(`/tenants/${tenantId}/documents/${docId}`);
         return response.data;
     },
     verify: async (tenantId, docId) => {
-        const response = await api.patch(`/students/${tenantId}/documents/${docId}/verify`);
+        const response = await api.patch(`/tenants/${tenantId}/documents/${docId}/verify`);
         return response.data;
     },
     reject: async (tenantId, docId, reason) => {
-        const response = await api.patch(`/students/${tenantId}/documents/${docId}/reject`, { reason });
+        const response = await api.patch(`/tenants/${tenantId}/documents/${docId}/reject`, { reason });
         return response.data;
     }
 };

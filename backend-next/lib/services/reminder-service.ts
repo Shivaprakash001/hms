@@ -22,7 +22,7 @@ export class ReminderService {
         due_date: { lt: todayMid }
       },
       include: {
-        student: {
+        tenant: {
           select: { id: true, personal_email: true, owner_id: true, profile: { select: { name: true } } }
         },
         reminders: {
@@ -33,7 +33,7 @@ export class ReminderService {
     });
 
     // Optimization: Batch fetch owner preferences
-    const ownerIds = Array.from(new Set(overdueObligations.map(ob => ob.student.owner_id).filter(Boolean))) as string[];
+    const ownerIds = Array.from(new Set(overdueObligations.map(ob => ob.tenant.owner_id).filter(Boolean))) as string[];
     const hostelPrefs: any[] = await prisma.hostel.findMany({
       where: { owner_id: { in: ownerIds }, is_active: true },
     });
@@ -43,7 +43,7 @@ export class ReminderService {
     let lateFeesAdded = 0;
 
     for (const ob of overdueObligations) {
-      const ownerId = ob.student.owner_id;
+      const ownerId = ob.tenant.owner_id;
       if (!ownerId) continue;
 
       const prefs: any = prefsMap.get(ownerId);
@@ -115,7 +115,7 @@ export class ReminderService {
                 if (feeAmount > 0) {
                   await prisma.rentObligation.create({
                     data: {
-                      student_id: ob.student.id,
+                      tenant_id: ob.tenant.id,
                       allocation_id: ob.allocation_id,
                       owner_id: ob.owner_id,
                       rent_month: ob.rent_month,
@@ -140,7 +140,7 @@ export class ReminderService {
 
     if (remindersSent > 0 || lateFeesAdded > 0) {
       // Trigger live updates to owners dashboard so they see realtime notifications and late fees collected incrementing
-      const affectedOwners = Array.from(new Set(overdueObligations.map(ob => ob.student.owner_id).filter(Boolean)));
+      const affectedOwners = Array.from(new Set(overdueObligations.map(ob => ob.tenant.owner_id).filter(Boolean)));
       
       affectedOwners.forEach(ownerId => {
         if (ownerId) {
@@ -173,7 +173,7 @@ export class ReminderService {
   }
 
   private async triggerNotification(obligation: any, type: string, config: any) {
-    const student = obligation.student;
+    const tenant = obligation.tenant;
     const canEmail = config.reminder_email ?? true;
     const canInApp = config.reminder_in_app ?? true;
 
@@ -182,7 +182,7 @@ export class ReminderService {
       await prisma.reminderLog.create({
         data: {
           obligation_id: obligation.id,
-          student_id: obligation.student.id,
+          tenant_id: obligation.tenant.id,
           reminder_type: type,
           channel: "IN_APP"
         }
@@ -190,11 +190,11 @@ export class ReminderService {
     }
 
     // 2️⃣ Email Notification
-    if (canEmail && student.personal_email) {
+    if (canEmail && tenant.personal_email) {
       try {
         const mailData = {
-          toEmail: student.personal_email,
-          name: student.profile?.name || "Tenant",
+          toEmail: tenant.personal_email,
+          name: tenant.profile?.name || "Tenant",
           amount: Number(obligation.amount),
           rentMonth: new Date(obligation.rent_month).toLocaleString('default', { month: 'long', year: 'numeric' }),
           dueDate: new Date(obligation.due_date).toLocaleDateString(),
@@ -203,11 +203,11 @@ export class ReminderService {
         
         await EmailService.sendReminderBatch(mailData);
       } catch (err) {
-        console.error(`[NOTIFY] Email failed for ${student.id}:`, err);
+        console.error(`[NOTIFY] Email failed for ${tenant.id}:`, err);
       }
     }
 
-    console.log(`[NOTIFY] [${type}] to ${obligation.student.profile?.name} (student_id: ${obligation.student.id}) triggered`);
+    console.log(`[NOTIFY] [${type}] to ${obligation.tenant.profile?.name} (tenant_id: ${obligation.tenant.id}) triggered`);
   }
 }
 

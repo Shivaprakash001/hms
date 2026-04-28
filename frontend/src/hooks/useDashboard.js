@@ -34,7 +34,7 @@ export const useMonthlyStats = (months = 6) => {
 
 export const useStudentStats = () => {
   return useQuery({
-    queryKey: ['dashboard', 'student'],
+    queryKey: ['dashboard', 'tenant'],
     queryFn: async () => {
       // Assuming a service method exists or return placeholder
       // return await dashboardService.getStudentStats();

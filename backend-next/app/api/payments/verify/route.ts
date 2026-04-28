@@ -14,21 +14,21 @@ export async function POST(req: Request) {
       return apiError("Unauthorized", "UNAUTHORIZED", 401);
     }
 
-    // user.id is profile_id, but payment attempts store student_id (students table PK).
-    let studentId: string | undefined;
-    if (user.role === "STUDENT") {
-      const student = await prisma.student.findUnique({
+    // user.id is profile_id, but payment attempts store tenant_id (tenants table PK).
+    let tenantId: string | undefined;
+    if (user.role === "TENANT") {
+      const tenant = await prisma.tenant.findUnique({
         where: { profile_id: user.id },
         select: { id: true },
       });
-      studentId = student?.id;
+      tenantId = tenant?.id;
     }
 
     const body = await req.json();
     const result = await paymentService.verifyPaymentStatus({
       userId: user.id,
       role: user.role,
-      studentId,
+      tenantId,
       attemptId: body?.attempt_id,
       merchantTxnId: body?.merchant_txn_id || body?.merchantTransactionId,
       gatewayTxnId: body?.gateway_txn_id || body?.transactionId || body?.gateway_transaction_id,

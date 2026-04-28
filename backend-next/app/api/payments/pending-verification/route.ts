@@ -29,7 +29,7 @@ export async function GET(req: Request) {
         status: "PENDING_VERIFICATION",
       },
       include: {
-        student: {
+        tenant: {
           include: {
             profile: { select: { name: true, email: true, phone: true } },
           },
@@ -47,9 +47,9 @@ export async function GET(req: Request) {
 
     const items = attempts.map((a: any) => ({
       attempt_id: a.id,
-      student_name: a.student?.profile?.name || "Unknown",
-      student_email: a.student?.profile?.email || "",
-      student_phone: a.student?.profile?.phone || "",
+      student_name: a.tenant?.profile?.name || "Unknown",
+      student_email: a.tenant?.profile?.email || "",
+      student_phone: a.tenant?.profile?.phone || "",
       room_no: a.obligation?.allocation?.room?.room_no || "N/A",
       amount: Number(a.amount),
       upi_reference: a.gateway_txn_id || "—",

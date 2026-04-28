@@ -55,14 +55,14 @@ export async function POST(req: Request) {
       );
     }
 
-    // ─── Look up student ID ───
-    let studentId: string | undefined;
-    if (user.role === "STUDENT") {
-      const student = await prisma.student.findUnique({
+    // ─── Look up tenant ID ───
+    let tenantId: string | undefined;
+    if (user.role === "TENANT") {
+      const tenant = await prisma.tenant.findUnique({
         where: { profile_id: user.id },
         select: { id: true },
       });
-      studentId = student?.id;
+      tenantId = tenant?.id;
     }
 
     // ─── Get and validate the attempt ───
@@ -70,7 +70,7 @@ export async function POST(req: Request) {
       attempt_id,
       user.id,
       user.role,
-      studentId
+      tenantId
     );
 
     if (!attempt) {

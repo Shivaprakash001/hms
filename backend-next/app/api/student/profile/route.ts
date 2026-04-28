@@ -4,12 +4,12 @@ export const runtime = "nodejs";
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { studentService } from "@/lib/services/student-service";
+import { tenantService } from "@/lib/services/tenant-service";
 import { StudentProfileUpdateSchema } from "@/lib/validators";
 
 export async function GET(req: NextRequest) {
   const session = await getSession(req);
-  if (!session || session.role !== "STUDENT") {
+  if (!session || session.role !== "TENANT") {
     return apiError("Forbidden", "FORBIDDEN", 403);
   }
 
@@ -26,10 +26,10 @@ export async function GET(req: NextRequest) {
     });
 
     if (!profile) {
-      return apiError("Student profile not found", "NOT_FOUND", 404);
+      return apiError("Tenant profile not found", "NOT_FOUND", 404);
     }
 
-    const student = await prisma.student.findUnique({
+    const tenant = await prisma.tenant.findUnique({
       where: { profile_id: session.sub },
       select: {
         id: true,
@@ -66,11 +66,11 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    if (!student) {
-      return apiError("Student profile not found", "NOT_FOUND", 404);
+    if (!tenant) {
+      return apiError("Tenant profile not found", "NOT_FOUND", 404);
     }
 
-    const allocation = student.allocations[0];
+    const allocation = tenant.allocations[0];
 
     return apiResponse({
       profile: {
@@ -80,26 +80,26 @@ export async function GET(req: NextRequest) {
         email: profile.email,
         phone: profile.phone,
         emergency_contact: profile.emergency_contact,
-        personal_email: student.personal_email,
-        permanent_address: student.permanent_address,
-        temporary_address: student.temporary_address,
+        personal_email: tenant.personal_email,
+        permanent_address: tenant.permanent_address,
+        temporary_address: tenant.temporary_address,
         gender: null
       },
-      ...student,
-      student_details: student,
+      ...tenant,
+      tenant_details: tenant,
       room_no: allocation?.room?.room_no || null,
       floor: allocation?.room?.floor ?? null,
-      status: student.status
+      status: tenant.status
     });
   } catch (error: any) {
-    return apiError(error?.message || "Failed to fetch student profile");
+    return apiError(error?.message || "Failed to fetch tenant profile");
   }
 }
 
 export async function PATCH(req: NextRequest) {
   const session = await getSession(req);
-  if (!session || session.role !== "STUDENT") {
-    return apiError("Only students can update their profile", "FORBIDDEN", 403);
+  if (!session || session.role !== "TENANT") {
+    return apiError("Only tenants can update their profile", "FORBIDDEN", 403);
   }
 
   try {
@@ -109,7 +109,7 @@ export async function PATCH(req: NextRequest) {
       return apiError("Validation error", "VALIDATION_ERROR", 400);
     }
 
-    const updated = await studentService.updateStudentSelfProfile(session.sub, validated.data, session.sub);
+    const updated = await tenantService.updateStudentSelfProfile(session.sub, validated.data, session.sub);
     return apiResponse(updated);
   } catch (error: any) {
     return apiError(error?.message || "Failed to update profile");

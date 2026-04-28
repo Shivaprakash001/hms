@@ -37,32 +37,32 @@ export class InvoiceService {
       where: { payment_id: paymentId },
       include: {
         payment: true,
-        student: { include: { profile: true } }
+        tenant: { include: { profile: true } }
       }
     });
 
     if (!receipt) {
       const payment = await prisma.payment.findUnique({
         where: { id: paymentId },
-        include: { obligation: true, student: { include: { profile: true } } }
+        include: { obligation: true, tenant: { include: { profile: true } } }
       });
       if (!payment) throw new Error("Valid transaction payment not found");
 
       receipt = await prisma.receipt.create({
         data: {
           payment_id: payment.id,
-          student_id: payment.student_id,
+          tenant_id: payment.tenant_id,
           amount: payment.amount_paid,
           payment_method: payment.payment_method,
           transaction_id: payment.reference_number || undefined,
           receipt_number: `HMS-${new Date().getFullYear()}-${new Date().getTime().toString().slice(-5)}`,
           rent_month: payment.obligation?.rent_month || undefined,
-          tenant_name: payment.student?.profile?.name || '-',
+          tenant_name: payment.tenant?.profile?.name || '-',
           owner_id: payment.owner_id
         },
         include: {
           payment: true,
-          student: { include: { profile: true } }
+          tenant: { include: { profile: true } }
         }
       });
     }
@@ -75,22 +75,22 @@ export class InvoiceService {
     }
 
     const hostel = await prisma.hostel.findFirst({
-      where: { owner_id: receipt.student.owner_id as string }
+      where: { owner_id: receipt.tenant.owner_id as string }
     });
     if (!hostel) throw new Error("Hostel details not found");
 
     const allocation = await prisma.roomAllocation.findFirst({
-      where: { student_id: receipt.student_id },
+      where: { tenant_id: receipt.tenant_id },
       include: { room: true },
       orderBy: { start_date: 'desc' }
     });
 
     // ── 2. PREPARE DATA ──
-    const tenantName = receipt.student.profile?.name || receipt.tenant_name || "Unknown Tenant";
-    const tenantPhone = receipt.student.profile?.phone || "N/A";
-    const tenantEmail = receipt.student.profile?.email || "";
+    const tenantName = receipt.tenant.profile?.name || receipt.tenant_name || "Unknown Tenant";
+    const tenantPhone = receipt.tenant.profile?.phone || "N/A";
+    const tenantEmail = receipt.tenant.profile?.email || "";
     const roomNo = allocation?.room?.room_no || "N/A";
-    const tenantId = receipt.student.id.split('-')[0].toUpperCase();
+    const tenantId = receipt.tenant.id.split('-')[0].toUpperCase();
     const curr = hostel.currency === "INR" ? "Rs." : (hostel.currency || "$");
     const amountVal = Number(receipt.amount).toFixed(2);
     const monthLabel = receipt.rent_month

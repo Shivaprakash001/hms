@@ -18,22 +18,22 @@ export async function GET(
       return apiError("Unauthorized", "UNAUTHORIZED", 401);
     }
 
-    // user.id is profile_id, but payment attempts store student_id (students table PK).
-    // Look up the real student ID for STUDENT role.
-    let studentId: string | undefined;
-    if (user.role === "STUDENT") {
-      const student = await prisma.student.findUnique({
+    // user.id is profile_id, but payment attempts store tenant_id (tenants table PK).
+    // Look up the real tenant ID for TENANT role.
+    let tenantId: string | undefined;
+    if (user.role === "TENANT") {
+      const tenant = await prisma.tenant.findUnique({
         where: { profile_id: user.id },
         select: { id: true },
       });
-      studentId = student?.id;
+      tenantId = tenant?.id;
     }
 
     const result = await paymentService.getPaymentAttempt(
       params.id,
       user.id,
       user.role,
-      studentId
+      tenantId
     );
 
     return NextResponse.json(result);

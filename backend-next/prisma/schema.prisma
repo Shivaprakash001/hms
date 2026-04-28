@@ -32,9 +32,9 @@ model Profile {
   expenses              Expense[]
   hostels               Hostel[]
   notifications         Notification[]
-  owner                 Profile?       @relation("OwnerStudent", fields: [owner_id], references: [id])
-  students              Profile[]      @relation("OwnerStudent")
-  student_details       Student?       @relation("StudentToProfile")
+  owner                 Profile?       @relation("OwnerTenant", fields: [owner_id], references: [id])
+  tenants              Profile[]      @relation("OwnerTenant")
+  tenant_details       Tenant?       @relation("TenantToProfile")
 
   @@index([owner_id])
   @@index([name])
@@ -45,12 +45,13 @@ model Profile {
   @@schema("public")
 }
 
-model Student {
+model Tenant {
   id                    String                   @id @db.Uuid
   profile_id            String                   @unique @db.Uuid
+  profile_type          String                   @default("STUDENT")
   monthly_rent          Decimal?                 @db.Decimal(10, 2)
   joined_on             DateTime?                @db.Date
-  status                StudentStatus            @default(INVITED)
+  status                TenantStatus            @default(INVITED)
   owner_id              String?                  @db.Uuid
   profile_completed     Boolean                  @default(false)
   photo_url             String?
@@ -83,10 +84,10 @@ model Student {
   reminders             ReminderLog[]
   obligations           RentObligation[]
   allocations           RoomAllocation[]
-  profile               Profile                  @relation("StudentToProfile", fields: [profile_id], references: [id])
+  profile               Profile                  @relation("TenantToProfile", fields: [profile_id], references: [id])
 
   @@index([owner_id])
-  @@map("students")
+  @@map("tenants")
   @@schema("public")
 }
 
@@ -157,7 +158,7 @@ model RoomActivityLog {
 
 model RoomAllocation {
   id          String           @id @default(uuid()) @db.Uuid
-  student_id  String           @db.Uuid
+  tenant_id  String           @db.Uuid
   room_id     String           @db.Uuid
   start_date  DateTime         @db.Date
   end_date    DateTime?        @db.Date
@@ -166,9 +167,9 @@ model RoomAllocation {
   updated_at  DateTime?        @updatedAt @db.Timestamptz(6)
   obligations RentObligation[]
   room        Room             @relation(fields: [room_id], references: [id])
-  student     Student          @relation(fields: [student_id], references: [id])
+  tenant     Tenant          @relation(fields: [tenant_id], references: [id])
 
-  @@index([student_id, is_active, end_date])
+  @@index([tenant_id, is_active, end_date])
   @@index([room_id, is_active])
   @@map("room_allocations")
   @@schema("public")
@@ -176,7 +177,7 @@ model RoomAllocation {
 
 model RentObligation {
   id              String           @id @default(uuid()) @db.Uuid
-  student_id      String           @db.Uuid
+  tenant_id      String           @db.Uuid
   allocation_id   String?          @db.Uuid
   owner_id        String?          @db.Uuid
   rent_month      DateTime         @db.Date
@@ -190,10 +191,10 @@ model RentObligation {
   payments        Payment[]
   reminders       ReminderLog[]
   allocation      RoomAllocation?  @relation(fields: [allocation_id], references: [id])
-  student         Student          @relation(fields: [student_id], references: [id])
+  tenant         Tenant          @relation(fields: [tenant_id], references: [id])
 
   @@unique([allocation_id, rent_month, obligation_type])
-  @@index([student_id, rent_month])
+  @@index([tenant_id, rent_month])
   @@map("rent_obligations")
   @@schema("public")
 }
@@ -201,15 +202,15 @@ model RentObligation {
 model ReminderLog {
   id            String         @id @default(uuid()) @db.Uuid
   obligation_id String         @db.Uuid
-  student_id    String         @db.Uuid
+  tenant_id    String         @db.Uuid
   reminder_type String
   channel       String         @default("IN_APP")
   sent_at       DateTime       @default(now()) @db.Timestamptz(6)
   obligation    RentObligation @relation(fields: [obligation_id], references: [id], onDelete: Cascade)
-  student       Student        @relation(fields: [student_id], references: [id], onDelete: Cascade)
+  tenant       Tenant        @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
 
   @@index([obligation_id])
-  @@index([student_id])
+  @@index([tenant_id])
   @@map("reminder_logs")
   @@schema("public")
 }
@@ -245,7 +246,7 @@ model SystemLock {
 model Payment {
   id                 String          @id @default(uuid()) @db.Uuid
   obligation_id      String          @db.Uuid
-  student_id         String          @db.Uuid
+  tenant_id         String          @db.Uuid
   owner_id           String?         @db.Uuid
   amount_paid        Decimal         @db.Decimal(10, 2)
   payment_method     String
@@ -255,15 +256,15 @@ model Payment {
   created_at         DateTime        @default(now()) @db.Timestamptz(6)
   obligation         RentObligation  @relation(fields: [obligation_id], references: [id])
   attempt            PaymentAttempt? @relation(fields: [payment_attempt_id], references: [id])
-  student            Student         @relation(fields: [student_id], references: [id])
+  tenant            Tenant         @relation(fields: [tenant_id], references: [id])
   receipts           Receipt[]
 
   @@index([owner_id])
-  @@index([student_id])
+  @@index([tenant_id])
   @@index([created_at])
   @@index([owner_id, created_at])
-  @@index([student_id, payment_date])
-  @@index([student_id, amount_paid])
+  @@index([tenant_id, payment_date])
+  @@index([tenant_id, amount_paid])
   @@map("payments")
   @@schema("public")
 }
@@ -271,7 +272,7 @@ model Payment {
 model PaymentAttempt {
   id                  String         @id @default(uuid()) @db.Uuid
   obligation_id       String         @db.Uuid
-  student_id          String         @db.Uuid
+  tenant_id          String         @db.Uuid
   owner_id            String         @db.Uuid
   provider            String
   merchant_txn_id     String         @unique
@@ -288,7 +289,7 @@ model PaymentAttempt {
   updated_at          DateTime?      @updatedAt @db.Timestamptz(6)
   checkout_url        String?
   obligation          RentObligation @relation(fields: [obligation_id], references: [id])
-  student             Student        @relation(fields: [student_id], references: [id])
+  tenant             Tenant        @relation(fields: [tenant_id], references: [id])
   payments            Payment[]
 
   @@map("payment_attempts")
@@ -308,7 +309,7 @@ model IdentificationDocument {
   /// ImageKit fileId for deletion
   file_id          String?
   rejection_reason String?
-  student          Student        @relation(fields: [tenant_id], references: [id])
+  tenant          Tenant        @relation(fields: [tenant_id], references: [id])
 
   @@index([document_status])
   @@map("identification_documents")
@@ -317,7 +318,7 @@ model IdentificationDocument {
 
 model ReactivationRequest {
   id                      String    @id @default(uuid()) @db.Uuid
-  student_id              String    @db.Uuid
+  tenant_id              String    @db.Uuid
   owner_id                String    @db.Uuid
   requested_by_profile_id String    @db.Uuid
   current_status          String
@@ -326,7 +327,7 @@ model ReactivationRequest {
   processed_at            DateTime? @db.Timestamptz(6)
   processed_by            String?   @db.Uuid
   created_at              DateTime  @default(now()) @db.Timestamptz(6)
-  student                 Student   @relation(fields: [student_id], references: [id])
+  tenant                 Tenant   @relation(fields: [tenant_id], references: [id])
 
   @@map("reactivation_requests")
   @@schema("public")
@@ -390,7 +391,7 @@ model Expense {
 
 model Complaint {
   id          String    @id @default(uuid()) @db.Uuid
-  student_id  String    @db.Uuid
+  tenant_id  String    @db.Uuid
   owner_id    String    @db.Uuid
   title       String
   description String
@@ -401,7 +402,7 @@ model Complaint {
   comment     String?
   created_at  DateTime  @default(now()) @db.Timestamptz(6)
   updated_at  DateTime? @updatedAt @db.Timestamptz(6)
-  student     Student   @relation(fields: [student_id], references: [id])
+  tenant     Tenant   @relation(fields: [tenant_id], references: [id])
 
   @@map("complaints")
   @@schema("public")
@@ -411,7 +412,7 @@ model Receipt {
   id             String    @id @default(uuid()) @db.Uuid
   receipt_number String    @unique
   payment_id     String    @db.Uuid
-  student_id     String    @db.Uuid
+  tenant_id     String    @db.Uuid
   owner_id       String?   @db.Uuid
   amount         Decimal   @db.Decimal(10, 2)
   payment_method String
@@ -423,7 +424,7 @@ model Receipt {
   invoice_pdf_url          String?  // ✅ Final PDF storage
   invoice_template_version Int?     // ✅ Template version for cache-busting
   payment         Payment   @relation(fields: [payment_id], references: [id])
-  student         Student   @relation(fields: [student_id], references: [id])
+  tenant         Tenant   @relation(fields: [tenant_id], references: [id])
 
   @@map("receipts")
   @@schema("public")
@@ -433,7 +434,7 @@ model SystemEventLog {
   id         String   @id @default(uuid()) @db.Uuid
   event_type String
   owner_id   String?  @db.Uuid
-  student_id String?  @db.Uuid
+  tenant_id String?  @db.Uuid
   metadata   Json?
   created_at DateTime @default(now()) @db.Timestamptz(6)
 
@@ -448,12 +449,12 @@ enum Role {
   ADMIN
   OWNER
   WARDEN
-  STUDENT
+  TENANT
 
   @@schema("public")
 }
 
-enum StudentStatus {
+enum TenantStatus {
   INVITED
   ACTIVE
   LEFT

@@ -63,8 +63,8 @@ const Login = () => {
             const role = (user?.role || '').toLowerCase();
             if (role === 'owner' || role === 'admin') {
                 navigate('/owner/dashboard');
-            } else if (role === 'student') {
-                navigate('/student/dashboard');
+            } else if (role === 'tenant') {
+                navigate('/tenant/dashboard');
             }
         } catch (err) {
             console.error("Login error:", err);

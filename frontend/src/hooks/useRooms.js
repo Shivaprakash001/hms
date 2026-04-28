@@ -96,7 +96,7 @@ export const useActiveAllocations = () => {
 };
 
 /**
- * Mutate: Allocate a room to a student
+ * Mutate: Allocate a room to a tenant
  */
 export const useAllocateRoom = () => {
   const queryClient = useQueryClient();
@@ -130,7 +130,7 @@ export const useEndAllocation = () => {
 };
 
 /**
- * Mutate: Shift a student to a new room
+ * Mutate: Shift a tenant to a new room
  */
 export const useShiftTenant = () => {
   const queryClient = useQueryClient();

@@ -24,10 +24,10 @@ export async function GET(req: NextRequest) {
     if (!profile) return apiError("User not found", "NOT_FOUND", 404);
 
     const extra: any = {};
-    let studentId: string | null = null;
+    let tenantId: string | null = null;
 
-    if (profile.role === "STUDENT") {
-      const student = await prisma.student.findUnique({
+    if (profile.role === "TENANT") {
+      const tenant = await prisma.tenant.findUnique({
         where: { profile_id: profile.id },
         include: {
           allocations: {
@@ -39,13 +39,13 @@ export async function GET(req: NextRequest) {
         }
       });
 
-      if (student) {
-      studentId = student.id;
-      extra.monthly_rent = student.monthly_rent;
-      extra.student_status = student.status;
-      extra.is_profile_completed = student.profile_completed || profile.is_profile_completed;
+      if (tenant) {
+      tenantId = tenant.id;
+      extra.monthly_rent = tenant.monthly_rent;
+      extra.student_status = tenant.status;
+      extra.is_profile_completed = tenant.profile_completed || profile.is_profile_completed;
 
-      const activeAlloc = student.allocations[0];
+      const activeAlloc = tenant.allocations[0];
       if (activeAlloc) {
         extra.room_id = activeAlloc.room_id;
         extra.room_no = activeAlloc.room.room_no;
@@ -60,10 +60,10 @@ export async function GET(req: NextRequest) {
       user_id: profile.id,
       email: profile.email,
       role: profile.role,
-      student_id: studentId,
+      tenant_id: tenantId,
       is_admin: profile.role === "ADMIN",
       is_owner: profile.role === "OWNER",
-      is_student: profile.role === "STUDENT",
+      is_student: profile.role === "TENANT",
       ...extra
     });
   } catch (error) {

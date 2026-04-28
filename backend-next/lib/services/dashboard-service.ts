@@ -6,8 +6,8 @@ export class DashboardService {
     const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
     const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
 
-    const [students, rooms, payments, costs] = await Promise.all([
-      prisma.student.findMany({ where: { owner_id: userId }, select: { status: true } }),
+    const [tenants, rooms, payments, costs] = await Promise.all([
+      prisma.tenant.findMany({ where: { owner_id: userId }, select: { status: true } }),
       prisma.room.findMany({ where: { hostel: { owner_id: userId } }, select: { capacity: true } }),
       prisma.payment.findMany({ 
         where: { 
@@ -25,8 +25,8 @@ export class DashboardService {
       }),
     ]);
 
-    const totalTenants = students.length;
-    const activeTenants = students.filter((s: any) => s.status === "ACTIVE").length;
+    const totalTenants = tenants.length;
+    const activeTenants = tenants.filter((s: any) => s.status === "ACTIVE").length;
     const totalCapacity = rooms.reduce((sum: number, r: any) => sum + r.capacity, 0);
     const currentRevenue = payments.reduce((sum: number, p: any) => sum + Number(p.amount_paid), 0);
     const monthlyExpenses = Number(costs?._sum?.amount || 0);
@@ -107,7 +107,7 @@ export class DashboardService {
   }
 
   async getStudentStats(profileId: string) {
-    const student = await prisma.student.findUnique({
+    const tenant = await prisma.tenant.findUnique({
       where: { profile_id: profileId },
       include: {
         allocations: { where: { is_active: true, end_date: null }, include: { room: true } },
@@ -119,13 +119,13 @@ export class DashboardService {
       }
     });
 
-    if (!student) throw new Error("NOT_FOUND: Student record not found");
+    if (!tenant) throw new Error("NOT_FOUND: Tenant record not found");
 
     let pendingTotal = 0;
     let nextPayment: Date | null = null;
     let oldestObligationId: string | null = null;
 
-    student.obligations.forEach((ob: any) => {
+    tenant.obligations.forEach((ob: any) => {
       const paid = ob.payments.reduce((sum: number, p: any) => sum + Number(p.amount_paid), 0);
       const remaining = Number(ob.amount) - paid;
       if (remaining > 0) {
@@ -138,13 +138,13 @@ export class DashboardService {
     });
 
     return {
-      student_id: student.id,
-      room_no: student.allocations[0]?.room.room_no || "Not Assigned",
-      monthly_rent: Number(student.monthly_rent),
+      tenant_id: tenant.id,
+      room_no: tenant.allocations[0]?.room.room_no || "Not Assigned",
+      monthly_rent: Number(tenant.monthly_rent),
       pending_dues: pendingTotal,
       next_payment_date: nextPayment,
       oldest_obligation_id: oldestObligationId,
-      status: student.status
+      status: tenant.status
     };
   }
 }

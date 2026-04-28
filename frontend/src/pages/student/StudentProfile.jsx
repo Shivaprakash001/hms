@@ -4,7 +4,7 @@ import { User, Mail, Phone, MapPin, Camera, Save, Edit2, Key, Building2, CheckCi
 import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../../context/AuthContext';
-import { studentService } from '../../api/services';
+import { tenantService } from '../../api/services';
 import DocumentUploadWidget from '../../components/TenantManagement/DocumentUploadWidget';
 
 const StudentProfile = () => {
@@ -41,7 +41,7 @@ const StudentProfile = () => {
         temporary_address: '',
         gender: '',
         photo_url: '',
-        profile_type: 'student'
+        profile_type: 'tenant'
     });
 
     useEffect(() => {
@@ -50,17 +50,17 @@ const StudentProfile = () => {
             try {
                 let meData = null;
                 try {
-                    meData = await studentService.getMyProfile();
+                    meData = await tenantService.getMyProfile();
                 } catch {
-                    meData = await studentService.getByProfileId(user.id);
+                    meData = await tenantService.getByProfileId(user.id);
                 }
 
-                const studentRecord = meData?.student_details || meData || {};
+                const studentRecord = meData?.tenant_details || meData || {};
                 const apiProfile = meData?.profile || {};
                 const profRel = meData?.profile || meData?.profiles;
                 const prof = Array.isArray(profRel) ? (profRel[0] || {}) : (profRel || {});
                 setStudentInfo(meData);
-                const inferredType = (studentRecord.office_name || studentRecord.job_role || studentRecord.office_location) ? 'work' : 'student';
+                const inferredType = (studentRecord.office_name || studentRecord.job_role || studentRecord.office_location) ? 'work' : 'tenant';
                 setFormData({
                     name: prof.name || user?.name || '',
                     email: prof.email || user?.email || '',
@@ -141,12 +141,12 @@ const StudentProfile = () => {
                 phone_1: optional(formData.phone || formData.phone_1),
                 phone_2: optional(formData.emergency_contact || formData.phone_2),
                 phone_3: null,
-                college_name: optional(formData.profile_type === 'student' ? formData.college_name : null),
-                roll_number: optional(formData.profile_type === 'student' ? formData.roll_number : null),
-                course: optional(formData.profile_type === 'student' ? formData.course : null),
-                year_of_study: formData.profile_type === 'student' && formData.year_of_study ? Number(formData.year_of_study) : null,
-                section: optional(formData.profile_type === 'student' ? formData.section : null),
-                branch: optional(formData.profile_type === 'student' ? formData.branch : null),
+                college_name: optional(formData.profile_type === 'tenant' ? formData.college_name : null),
+                roll_number: optional(formData.profile_type === 'tenant' ? formData.roll_number : null),
+                course: optional(formData.profile_type === 'tenant' ? formData.course : null),
+                year_of_study: formData.profile_type === 'tenant' && formData.year_of_study ? Number(formData.year_of_study) : null,
+                section: optional(formData.profile_type === 'tenant' ? formData.section : null),
+                branch: optional(formData.profile_type === 'tenant' ? formData.branch : null),
                 office_name: optional(formData.profile_type === 'work' ? formData.office_name : null),
                 office_location: optional(formData.profile_type === 'work' ? formData.office_location : null),
                 job_role: optional(formData.profile_type === 'work' ? formData.job_role : null),
@@ -155,7 +155,7 @@ const StudentProfile = () => {
                 gender: formData.gender || null,
                 photo_url: optional(formData.photo_url)
             };
-            const updated = await studentService.updateMyProfile(payload);
+            const updated = await tenantService.updateMyProfile(payload);
             const profRel = updated?.profile || updated?.profiles;
             const prof = Array.isArray(profRel) ? (profRel[0] || {}) : (profRel || {});
             setStudentInfo(updated);
@@ -183,7 +183,7 @@ const StudentProfile = () => {
                 temporary_address: updated.temporary_address || prev.temporary_address,
                 gender: updated.gender || prev.gender,
                 photo_url: updated.photo_url || prev.photo_url,
-                profile_type: (updated.office_name || updated.job_role || updated.office_location) ? 'work' : (updated.college_name || updated.branch ? 'student' : prev.profile_type),
+                profile_type: (updated.office_name || updated.job_role || updated.office_location) ? 'work' : (updated.college_name || updated.branch ? 'tenant' : prev.profile_type),
             }));
             setIsEditing(false);
             setShowSuccess(true);
@@ -272,7 +272,7 @@ const StudentProfile = () => {
                 </div>
 
                 <div className="flex-1 text-center sm:text-left">
-                    <h1 className="text-xl font-bold text-slate-900">{formData.name || user?.name || 'Student'}</h1>
+                    <h1 className="text-xl font-bold text-slate-900">{formData.name || user?.name || 'Tenant'}</h1>
                     <p className="text-sm text-slate-500">{formData.email || user?.email || 'N/A'}</p>
                     <div className="flex flex-wrap gap-2 mt-2 justify-center sm:justify-start">
                         <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 text-xs font-semibold">Room {roomNo}</span>
@@ -338,17 +338,17 @@ const StudentProfile = () => {
                 </div>
             </section>
 
-            {/* Student/Work slider */}
+            {/* Tenant/Work slider */}
             <section className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
                 <h3 className="font-bold text-slate-800 mb-4">Profile Type</h3>
 
                 <div className="inline-flex rounded-xl bg-slate-100 p-1 mb-4">
                     <button
                         disabled={!isEditing}
-                        onClick={() => setFormData(prev => ({ ...prev, profile_type: 'student' }))}
-                        className={`px-4 py-2 text-sm font-semibold rounded-lg transition ${formData.profile_type === 'student' ? 'bg-white text-indigo-600 shadow' : 'text-slate-600'}`}
+                        onClick={() => setFormData(prev => ({ ...prev, profile_type: 'tenant' }))}
+                        className={`px-4 py-2 text-sm font-semibold rounded-lg transition ${formData.profile_type === 'tenant' ? 'bg-white text-indigo-600 shadow' : 'text-slate-600'}`}
                     >
-                        <span className="inline-flex items-center gap-2"><GraduationCap size={14} /> Student</span>
+                        <span className="inline-flex items-center gap-2"><GraduationCap size={14} /> Tenant</span>
                     </button>
                     <button
                         disabled={!isEditing}
@@ -359,7 +359,7 @@ const StudentProfile = () => {
                     </button>
                 </div>
 
-                {formData.profile_type === 'student' ? (
+                {formData.profile_type === 'tenant' ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <InfoField label="College" value={formData.college_name} icon={GraduationCap} isEditable={isEditing} onChange={(e) => setFormData({ ...formData, college_name: e.target.value })} />
                         <InfoField label="Roll Number" value={formData.roll_number} icon={GraduationCap} isEditable={isEditing} onChange={(e) => setFormData({ ...formData, roll_number: e.target.value })} />
@@ -393,7 +393,7 @@ const StudentProfile = () => {
                 <section className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
                     <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">Quick Actions</h3>
                     <button
-                        onClick={() => navigate('/student/settings')}
+                        onClick={() => navigate('/tenant/settings')}
                         className="w-full flex items-center gap-2 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 text-sm font-semibold text-slate-700"
                     >
                         <Key size={16} /> Change Password

@@ -4,7 +4,7 @@ export class BillingService {
   async getOwnerUsage(ownerId: string) {
     const [roomsUsed, tenantsUsed, hostelsUsed] = await Promise.all([
       prisma.room.count({ where: { hostel: { owner_id: ownerId } } }),
-      prisma.student.count({ where: { owner_id: ownerId, status: { not: "LEFT" } } }),
+      prisma.tenant.count({ where: { owner_id: ownerId, status: { not: "LEFT" } } }),
       prisma.hostel.count({ where: { owner_id: ownerId, is_active: true } })
     ]);
 

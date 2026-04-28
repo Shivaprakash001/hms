@@ -40,11 +40,11 @@ export class AuthService {
     const isValid = await this.verifyOrMigrateLegacyPassword(profile, password);
     if (!isValid) throw new Error("UNAUTHORIZED: Invalid email or password");
 
-    let studentId = null;
+    let tenantId = null;
     let studentProfileCompleted = null;
 
-    if (profile.role === "STUDENT") {
-      const student = await prisma.student.findUnique({
+    if (profile.role === "TENANT") {
+      const tenant = await prisma.tenant.findUnique({
         where: { profile_id: profile.id },
         select: {
           id: true,
@@ -52,10 +52,10 @@ export class AuthService {
           status: true,
         }
       });
-      if (student) {
-        studentId = student.id;
-        studentProfileCompleted = student.profile_completed;
-        if (student.status === "INVITED") {
+      if (tenant) {
+        tenantId = tenant.id;
+        studentProfileCompleted = tenant.profile_completed;
+        if (tenant.status === "INVITED") {
           throw new Error("FORBIDDEN: Account not activated. Please check your email.");
         }
       }
@@ -73,8 +73,8 @@ export class AuthService {
       role: profile.role,
       name: profile.name,
       user_id: profile.id,
-      student_id: studentId,
-      is_profile_completed: studentId ? studentProfileCompleted : profile.is_profile_completed,
+      tenant_id: tenantId,
+      is_profile_completed: tenantId ? studentProfileCompleted : profile.is_profile_completed,
     };
   }
 
@@ -244,7 +244,7 @@ export class AuthService {
     // 3. Find or Create Profile
     let profile = await prisma.profile.findUnique({
       where: { email: normalizedEmail },
-      include: { student_details: true }
+      include: { tenant_details: true }
     });
 
     if (!profile) {
@@ -257,7 +257,7 @@ export class AuthService {
           role: "OWNER",
           is_active: true,
         },
-        include: { student_details: true }
+        include: { tenant_details: true }
       });
     }
 
@@ -274,8 +274,8 @@ export class AuthService {
       role: profile.role,
       name: profile.name,
       user_id: profile.id,
-      student_id: profile.student_details?.id || null,
-      is_profile_completed: profile.student_details ? profile.student_details.profile_completed : profile.is_profile_completed,
+      tenant_id: profile.tenant_details?.id || null,
+      is_profile_completed: profile.tenant_details ? profile.tenant_details.profile_completed : profile.is_profile_completed,
     };
   }
 }

@@ -3,7 +3,7 @@ import { CreditCard, Calendar, Download, CheckCircle2, Clock, Smartphone, Chevro
 
 import { useAuth } from '../../context/AuthContext';
 import { paymentService } from '../../api/services';
-import PaymentModal from '../../components/student/payment/PaymentModal';
+import PaymentModal from '../../components/tenant/payment/PaymentModal';
 
 const StudentPayments = () => {
     const { user } = useAuth();
@@ -17,18 +17,18 @@ const StudentPayments = () => {
     // Fetch data
     const loadHistory = useCallback(async () => {
         try {
-            const data = await paymentService.getStudentHistory(user.student_id);
+            const data = await paymentService.getStudentHistory(user.tenant_id);
             setHistory(data);
         } catch (error) {
             console.error("Failed to load payment history:", error);
         }
-    }, [user?.student_id]);
+    }, [user?.tenant_id]);
 
     useEffect(() => {
-        if (user?.student_id) {
+        if (user?.tenant_id) {
             loadHistory();
         }
-    }, [user?.student_id, loadHistory]);
+    }, [user?.tenant_id, loadHistory]);
 
     const localPayments = useMemo(() => {
         const obs = (history.obligations || [])

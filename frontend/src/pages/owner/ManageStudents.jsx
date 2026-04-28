@@ -3,15 +3,15 @@ import { Search, Plus, User, Phone, Home, CreditCard, Calendar, CheckCircle2, Al
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
-import { studentService, authService, allocationService, roomService } from '../../api/services';
+import { tenantService, authService, allocationService, roomService } from '../../api/services';
 import TenantHistoryModal from '../../components/owner/payments/TenantHistoryModal';
 import TenantInvitationForm from '../../components/owner/TenantInvitationForm';
 import ExtendedProfileForm from '../../components/TenantManagement/ExtendedProfileForm';
 
-export default function ManageStudents() {
+export default function ManageTenants() {
     const location = useLocation();
     const navigate = useNavigate();
-    const [students, setStudents] = useState([]);
+    const [tenants, setTenants] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [showAddModal, setShowAddModal] = useState(false);
@@ -43,13 +43,13 @@ export default function ManageStudents() {
         }
     };
 
-    const fetchStudents = async () => {
+    const fetchTenants = async () => {
         try {
             setLoading(true);
-            const response = await studentService.getAll();
-            const studentsList = Array.isArray(response) ? response : (response.students || []);
+            const response = await tenantService.getAll();
+            const tenantsList = Array.isArray(response) ? response : (response.tenants || []);
 
-            const data = studentsList.map(s => ({
+            const data = tenantsList.map(s => ({
                 id: s.id,
                 profileId: s.profile_id,
                 name: s.profile?.name || 'Unknown',
@@ -66,10 +66,10 @@ export default function ManageStudents() {
                 paymentSummary: s.payment_summary || {}
             }));
 
-            setStudents(data);
+            setTenants(data);
             setError(null);
         } catch (err) {
-            console.error("Failed to fetch students:", err);
+            console.error("Failed to fetch tenants:", err);
             setError("Failed to load tenants. Please try again.");
         } finally {
             setLoading(false);
@@ -77,78 +77,78 @@ export default function ManageStudents() {
     };
 
     useEffect(() => {
-        fetchStudents();
+        fetchTenants();
     }, []);
 
     useEffect(() => {
         const selectedTenantId = location.state?.selectedTenantId;
-        if (!selectedTenantId || students.length === 0) return;
+        if (!selectedTenantId || tenants.length === 0) return;
 
-        const matchedStudent = students.find(student => student.id === selectedTenantId);
+        const matchedStudent = tenants.find(tenant => tenant.id === selectedTenantId);
         if (matchedStudent) {
             setExtendedProfileStudent(matchedStudent);
             navigate(location.pathname, { replace: true, state: {} });
         }
-    }, [location.pathname, location.state, navigate, students]);
+    }, [location.pathname, location.state, navigate, tenants]);
 
     // Handlers
     const handleSaveStudent = async (data) => {
         try {
             if (studentToEdit) {
-                await studentService.update(studentToEdit.id, {
+                await tenantService.update(studentToEdit.id, {
                     monthly_rent: parseFloat(data.rent),
                     status: data.status,
                     joined_on: data.joinDate
                 });
-                alert("Student updated successfully");
+                alert("Tenant updated successfully");
             }
-            fetchStudents();
+            fetchTenants();
             setShowAddModal(false);
         } catch (err) {
-            alert("Error saving student: " + (err.response?.data?.detail || err.message));
+            alert("Error saving tenant: " + (err.response?.data?.detail || err.message));
         }
     };
 
     const handleDeleteStudent = async (id) => {
         if (!window.confirm("Are you sure you want to mark this tenant as LEFT? \n\nTheir payment history will be preserved, but their room allocation will be ended immediately, making the room available for new tenants.")) return;
         try {
-            await studentService.delete(id);
-            fetchStudents();
+            await tenantService.delete(id);
+            fetchTenants();
         } catch (err) {
-            alert("Error removing student: " + err.message);
+            alert("Error removing tenant: " + err.message);
         }
     }
 
-    const handleToggleStatus = async (student, e) => {
+    const handleToggleStatus = async (tenant, e) => {
         e.stopPropagation();
-        const isActive = student.status === 'ACTIVE';
+        const isActive = tenant.status === 'ACTIVE';
         const nextStatus = isActive ? 'LEFT' : 'ACTIVE';
         const confirmMsg = isActive
-            ? `Mark "${student.name}" as LEFT?\n\nThis will end their room allocation immediately.`
-            : `Reactivate "${student.name}" as ACTIVE?\n\nThis will allow them to be assigned to a room again.`;
+            ? `Mark "${tenant.name}" as LEFT?\n\nThis will end their room allocation immediately.`
+            : `Reactivate "${tenant.name}" as ACTIVE?\n\nThis will allow them to be assigned to a room again.`;
         if (!window.confirm(confirmMsg)) return;
         try {
             if (!isActive) {
                 // LEFT → ACTIVE: use the reactivate endpoint
-                await studentService.reactivate(student.id, {
-                    monthly_rent: parseFloat(student.rent),
+                await tenantService.reactivate(tenant.id, {
+                    monthly_rent: parseFloat(tenant.rent),
                     joined_on: new Date().toISOString().split('T')[0]
                 });
             } else {
                 // ACTIVE → LEFT: use the update endpoint
-                await studentService.update(student.id, { status: 'LEFT' });
+                await tenantService.update(tenant.id, { status: 'LEFT' });
             }
-            fetchStudents();
+            fetchTenants();
         } catch (err) {
             alert('Error toggling status: ' + (err.response?.data?.detail?.message || err.message));
         }
     };
 
-    const handleResendInvitation = async (student, e) => {
+    const handleResendInvitation = async (tenant, e) => {
         e.stopPropagation();
-        if (!window.confirm(`Resend invitation to ${student.email}?`)) return;
+        if (!window.confirm(`Resend invitation to ${tenant.email}?`)) return;
         try {
-            const res = await studentService.resendInvitation(student.email);
+            const res = await tenantService.resendInvitation(tenant.email);
             alert(res?.message || "Invitation resent successfully");
         } catch (err) {
             alert("Error resending invitation: " + (err.response?.data?.error?.message || err.message));
@@ -156,28 +156,28 @@ export default function ManageStudents() {
     };
 
     // Filter Logic
-    const filteredStudents = students.filter(student => {
-        const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            student.room.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (student.phone && student.phone.includes(searchTerm)) ||
-            (student.rollNumber && student.rollNumber.toLowerCase().includes(searchTerm.toLowerCase()));
+    const filteredTenants = tenants.filter(tenant => {
+        const matchesSearch = tenant.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            tenant.room.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (tenant.phone && tenant.phone.includes(searchTerm)) ||
+            (tenant.rollNumber && tenant.rollNumber.toLowerCase().includes(searchTerm.toLowerCase()));
 
         if (showLeftTenants) return matchesSearch;
-        return matchesSearch && student.status !== 'LEFT';
+        return matchesSearch && tenant.status !== 'LEFT';
     });
 
     // Stats Calculation
     const stats = {
-        total: students.length,
-        occupiedRooms: new Set(students.filter(s => s.room !== 'N/A').map(s => s.room)).size,
-        paid: students.filter(s => s.status === 'Paid').length, // 'Paid' status might need to come from payment history? Or student status? Student status is ACTIVE/LEFT. 
+        total: tenants.length,
+        occupiedRooms: new Set(tenants.filter(s => s.room !== 'N/A').map(s => s.room)).size,
+        paid: tenants.filter(s => s.status === 'Paid').length, // 'Paid' status might need to come from payment history? Or tenant status? Tenant status is ACTIVE/LEFT. 
         // Wait, existing UI uses 'Paid'/'Pending' as status. Backend uses ACTIVE/LEFT.
         // Payment status should be separate.
         // For now, let's map ACTIVE to 'Active' and handle Payment Status separately if we have it?
-        // Or assume student.status is overridden logic in frontend?
+        // Or assume tenant.status is overridden logic in frontend?
         // Let's us ACTIVE for now.
-        active: students.filter(s => s.status === 'ACTIVE').length,
-        left: students.filter(s => s.status === 'LEFT').length
+        active: tenants.filter(s => s.status === 'ACTIVE').length,
+        left: tenants.filter(s => s.status === 'LEFT').length
     };
 
     const formatDate = (dateString) => {
@@ -195,7 +195,7 @@ export default function ManageStudents() {
             '4th Year': 0,
             'Other': 0
         };
-        students.forEach(s => {
+        tenants.forEach(s => {
             const year = Number(s.yearOfStudy);
             if (year === 1) counts['1st Year']++;
             else if (year === 2) counts['2nd Year']++;
@@ -206,7 +206,7 @@ export default function ManageStudents() {
         return Object.entries(counts)
             .map(([name, value]) => ({ name, value }))
             .filter(item => item.value > 0);
-    }, [students]);
+    }, [tenants]);
 
     const YEAR_COLORS = ['#4f46e5', '#818cf8', '#c7d2fe', '#e0e7ff', '#94a3b8'];
 
@@ -239,7 +239,7 @@ export default function ManageStudents() {
                     </div>
                     <div className="flex items-center gap-3">
                         <button
-                            onClick={fetchStudents}
+                            onClick={fetchTenants}
                             className="p-2.5 text-slate-500 hover:bg-slate-100 rounded-xl transition-colors"
                         >
                             <RefreshCw size={20} />
@@ -373,7 +373,7 @@ export default function ManageStudents() {
                                             Loading tenants...
                                         </td>
                                     </tr>
-                                ) : filteredStudents.length === 0 ? (
+                                ) : filteredTenants.length === 0 ? (
                                     <tr>
                                         <td colSpan="9" className="px-8 py-16 text-center text-slate-400">
                                             <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -384,65 +384,65 @@ export default function ManageStudents() {
                                         </td>
                                     </tr>
                                 ) : (
-                                    filteredStudents.map((student) => (
+                                    filteredTenants.map((tenant) => (
                                         <motion.tr
                                             initial={{ opacity: 0 }}
                                             animate={{ opacity: 1 }}
-                                            key={student.id}
-                                            onClick={() => navigate(`/owner/students/${student.id}`)}
+                                            key={tenant.id}
+                                            onClick={() => navigate(`/owner/tenants/${tenant.id}`)}
                                             className="hover:bg-slate-50/80 transition-colors cursor-pointer group"
                                         >
                                             <td className="px-8 py-5 whitespace-nowrap">
                                                 <div className="flex items-center gap-4">
                                                     <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-sm shadow-sm group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                                                        {getInitials(student.name)}
+                                                        {getInitials(tenant.name)}
                                                     </div>
-                                                    <span className="font-bold text-slate-700 group-hover:text-indigo-600 transition-colors">{student.name}</span>
+                                                    <span className="font-bold text-slate-700 group-hover:text-indigo-600 transition-colors">{tenant.name}</span>
                                                 </div>
                                             </td>
-                                            <td className="px-8 py-5 text-slate-600 font-bold text-sm">{student.room}</td>
-                                            <td className="px-8 py-5 text-slate-600 font-semibold text-sm">{student.rollNumber || '-'}</td>
-                                            <td className="px-8 py-5 text-slate-600 font-semibold text-sm">{student.yearOfStudy ? `${student.yearOfStudy} Year` : '-'}</td>
-                                            <td className="px-8 py-5 text-slate-900 font-black text-sm">{formatCurrency(student.rent)}</td>
+                                            <td className="px-8 py-5 text-slate-600 font-bold text-sm">{tenant.room}</td>
+                                            <td className="px-8 py-5 text-slate-600 font-semibold text-sm">{tenant.rollNumber || '-'}</td>
+                                            <td className="px-8 py-5 text-slate-600 font-semibold text-sm">{tenant.yearOfStudy ? `${tenant.yearOfStudy} Year` : '-'}</td>
+                                            <td className="px-8 py-5 text-slate-900 font-black text-sm">{formatCurrency(tenant.rent)}</td>
                                             <td className="px-8 py-5 text-slate-500 text-sm font-medium">
-                                                <span>{formatDate(student.paymentSummary?.last_paid_at)}</span>
+                                                <span>{formatDate(tenant.paymentSummary?.last_paid_at)}</span>
                                             </td>
                                             <td className="px-8 py-5">
                                                 <div className="flex flex-col">
-                                                    <span className={`text-sm font-bold ${Number(student.paymentSummary?.pending_amount || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                                        {formatCurrency(student.paymentSummary?.pending_amount || 0)}
+                                                    <span className={`text-sm font-bold ${Number(tenant.paymentSummary?.pending_amount || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                                        {formatCurrency(tenant.paymentSummary?.pending_amount || 0)}
                                                     </span>
                                                     <span className="text-xs text-slate-400">
-                                                        {student.paymentSummary?.current_month_amount ? `of ${formatCurrency(student.paymentSummary.current_month_amount)}` : 'No dues'}
+                                                        {tenant.paymentSummary?.current_month_amount ? `of ${formatCurrency(tenant.paymentSummary.current_month_amount)}` : 'No dues'}
                                                     </span>
                                                 </div>
                                             </td>
                                             <td className="px-8 py-5">
-                                                <span className={`inline-flex items-center px-3 py-1 rounded-lg text-xs font-bold border ${getPaymentBadgeStyles(student.paymentSummary?.payment_status)}`}>
-                                                    {student.paymentSummary?.payment_status === 'NOT_GENERATED' ? 'NOT GENERATED' : (student.paymentSummary?.payment_status || 'PENDING')}
+                                                <span className={`inline-flex items-center px-3 py-1 rounded-lg text-xs font-bold border ${getPaymentBadgeStyles(tenant.paymentSummary?.payment_status)}`}>
+                                                    {tenant.paymentSummary?.payment_status === 'NOT_GENERATED' ? 'NOT GENERATED' : (tenant.paymentSummary?.payment_status || 'PENDING')}
                                                 </span>
                                             </td>
                                             <td className="px-8 py-5 text-right">
                                                 <div className="flex items-center justify-end gap-1">
-                                                    {student.status === 'INVITED' && (
+                                                    {tenant.status === 'INVITED' && (
                                                         <button
-                                                            onClick={(e) => handleResendInvitation(student, e)}
+                                                            onClick={(e) => handleResendInvitation(tenant, e)}
                                                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-indigo-600 hover:bg-indigo-50 border border-indigo-200 bg-indigo-50/50"
                                                             title="Resend Invitation"
                                                         >
                                                             <RefreshCw size={14} className="animate-spin-hover" /> Resend
                                                         </button>
                                                     )}
-                                                    {(student.status === 'ACTIVE' || student.status === 'LEFT') && (
+                                                    {(tenant.status === 'ACTIVE' || tenant.status === 'LEFT') && (
                                                         <button
-                                                            onClick={(e) => handleToggleStatus(student, e)}
-                                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${student.status === 'ACTIVE'
+                                                            onClick={(e) => handleToggleStatus(tenant, e)}
+                                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${tenant.status === 'ACTIVE'
                                                                 ? 'text-amber-600 hover:bg-amber-50 border border-amber-200 bg-amber-50/50'
                                                                 : 'text-emerald-600 hover:bg-emerald-50 border border-emerald-200 bg-emerald-50/50'
                                                                 }`}
-                                                            title={student.status === 'ACTIVE' ? 'Mark as Left' : 'Reactivate'}
+                                                            title={tenant.status === 'ACTIVE' ? 'Mark as Left' : 'Reactivate'}
                                                         >
-                                                            {student.status === 'ACTIVE'
+                                                            {tenant.status === 'ACTIVE'
                                                                 ? <><ToggleLeft size={15} /> Mark Left</>
                                                                 : <><ToggleRight size={15} /> Activate</>}
                                                         </button>
@@ -456,21 +456,21 @@ export default function ManageStudents() {
                         </table>
 
                         <div className="md:hidden space-y-4 p-4">
-                            {filteredStudents.map(student => (
+                            {filteredTenants.map(tenant => (
                                 <div 
-                                    key={student.id} 
-                                    onClick={() => navigate(`/owner/students/${student.id}`)}
+                                    key={tenant.id} 
+                                    onClick={() => navigate(`/owner/tenants/${tenant.id}`)}
                                     className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm cursor-pointer hover:bg-slate-50/80 transition-all active:scale-[0.98]"
                                 >
                                     <div className="flex justify-between items-center">
-                                        <div className="font-black text-slate-900">{student.name}</div>
+                                        <div className="font-black text-slate-900">{tenant.name}</div>
                                         <div className="flex items-center gap-2">
                                             <button
-                                                onClick={(e) => handleCallTenant(student.phone, e)}
-                                                disabled={!student.phone || student.phone === 'N/A'}
-                                                title={student.phone && student.phone !== 'N/A' ? `Call ${student.name}` : 'Phone number unavailable'}
+                                                onClick={(e) => handleCallTenant(tenant.phone, e)}
+                                                disabled={!tenant.phone || tenant.phone === 'N/A'}
+                                                title={tenant.phone && tenant.phone !== 'N/A' ? `Call ${tenant.name}` : 'Phone number unavailable'}
                                                 className={`p-2 rounded-lg border transition-all ${
-                                                    student.phone && student.phone !== 'N/A'
+                                                    tenant.phone && tenant.phone !== 'N/A'
                                                         ? 'bg-green-50 text-green-600 border-green-100 hover:bg-green-100'
                                                         : 'bg-slate-100 text-slate-300 border-slate-100 cursor-not-allowed'
                                                 }`}
@@ -478,47 +478,47 @@ export default function ManageStudents() {
                                                 <Phone size={14} />
                                             </button>
                                             <div className="px-2.5 py-1 bg-slate-50 rounded-lg text-[11px] font-black text-slate-500 border border-slate-100 uppercase tracking-wider">
-                                                Room {student.room}
+                                                Room {tenant.room}
                                             </div>
                                         </div>
                                     </div>
                                     <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
                                         <div className="space-y-1">
                                             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Roll Number</p>
-                                            <p className="font-bold text-slate-700">{student.rollNumber || '-'}</p>
+                                            <p className="font-bold text-slate-700">{tenant.rollNumber || '-'}</p>
                                         </div>
                                         <div className="space-y-1">
                                             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Year</p>
-                                            <p className="font-bold text-slate-700">{student.yearOfStudy ? `${student.yearOfStudy} Year` : '-'}</p>
+                                            <p className="font-bold text-slate-700">{tenant.yearOfStudy ? `${tenant.yearOfStudy} Year` : '-'}</p>
                                         </div>
                                         <div className="space-y-1">
                                             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Monthly Rent</p>
-                                            <p className="font-bold text-slate-900">{formatCurrency(student.rent)}</p>
+                                            <p className="font-bold text-slate-900">{formatCurrency(tenant.rent)}</p>
                                         </div>
                                         <div className="space-y-1">
                                             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Dues Pending</p>
-                                            <p className={`font-bold ${Number(student.paymentSummary?.pending_amount || 0) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                                                {formatCurrency(student.paymentSummary?.pending_amount || 0)}
+                                            <p className={`font-bold ${Number(tenant.paymentSummary?.pending_amount || 0) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                                {formatCurrency(tenant.paymentSummary?.pending_amount || 0)}
                                             </p>
                                         </div>
                                     </div>
                                     
                                     <div className="mt-5 pt-4 border-t border-slate-50 flex items-center justify-between">
-                                        <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-black border uppercase tracking-wider ${getPaymentBadgeStyles(student.paymentSummary?.payment_status)}`}>
-                                            {student.paymentSummary?.payment_status || 'PENDING'}
+                                        <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-black border uppercase tracking-wider ${getPaymentBadgeStyles(tenant.paymentSummary?.payment_status)}`}>
+                                            {tenant.paymentSummary?.payment_status || 'PENDING'}
                                         </span>
                                         
                                         <div className="flex items-center gap-2">
-                                            {(student.status === 'ACTIVE' || student.status === 'LEFT') && (
+                                            {(tenant.status === 'ACTIVE' || tenant.status === 'LEFT') && (
                                                 <button
-                                                    onClick={(e) => handleToggleStatus(student, e)}
+                                                    onClick={(e) => handleToggleStatus(tenant, e)}
                                                     className={`px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all active:scale-95 ${
-                                                        student.status === 'ACTIVE'
+                                                        tenant.status === 'ACTIVE'
                                                         ? 'bg-amber-50 text-amber-600 border border-amber-100'
                                                         : 'bg-emerald-50 text-emerald-600 border border-emerald-100'
                                                     }`}
                                                 >
-                                                    {student.status === 'ACTIVE' ? 'Mark Left' : 'Activate'}
+                                                    {tenant.status === 'ACTIVE' ? 'Mark Left' : 'Activate'}
                                                 </button>
                                             )}
                                         </div>
@@ -534,7 +534,7 @@ export default function ManageStudents() {
             <TenantInvitationForm
                 isOpen={showInviteModal}
                 onClose={() => setShowInviteModal(false)}
-                onInviteSuccess={() => fetchStudents()}
+                onInviteSuccess={() => fetchTenants()}
             />
 
             {/* Add/Edit Modal */}
@@ -552,8 +552,8 @@ export default function ManageStudents() {
             <ExtendedProfileForm
                 isOpen={!!extendedProfileStudent}
                 onClose={() => setExtendedProfileStudent(null)}
-                student={extendedProfileStudent}
-                onSave={() => { fetchStudents(); setExtendedProfileStudent(null); }}
+                tenant={extendedProfileStudent}
+                onSave={() => { fetchTenants(); setExtendedProfileStudent(null); }}
             />
 
             {/* Tenant History Modal */}

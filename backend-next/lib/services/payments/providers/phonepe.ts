@@ -107,7 +107,7 @@ export class PhonePeProvider extends PaymentProvider {
     if (data.metadata) {
       payload.metaInfo = {
         udf1: data.metadata.obligation_id || "",
-        udf2: data.metadata.student_id || "",
+        udf2: data.metadata.tenant_id || "",
         udf3: data.metadata.attempt_id || "",
       };
     }

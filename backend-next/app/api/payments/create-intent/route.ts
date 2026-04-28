@@ -19,23 +19,23 @@ export async function POST(req: Request) {
       return apiError("obligation_id is required", "VALIDATION_ERROR", 400);
     }
 
-    let studentId: string | undefined;
-    if (user.role === "STUDENT") {
-      const student = await prisma.student.findUnique({
+    let tenantId: string | undefined;
+    if (user.role === "TENANT") {
+      const tenant = await prisma.tenant.findUnique({
         where: { profile_id: user.id },
         select: { id: true },
       });
-      if (!student) {
-        return apiError("Student enrollment not found", "NOT_FOUND", 404);
+      if (!tenant) {
+        return apiError("Tenant enrollment not found", "NOT_FOUND", 404);
       }
-      studentId = student.id;
+      tenantId = tenant.id;
     }
 
     const result = await paymentService.createPaymentIntent(
       obligation_id,
       amount ? Number(amount) : null,
       user.id,
-      studentId
+      tenantId
     );
 
     return NextResponse.json(result);

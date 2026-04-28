@@ -5,9 +5,9 @@ import {
     Camera, Upload, Loader2, CheckCircle2, AlertCircle,
     Lock, FileText, ChevronRight, Info
 } from 'lucide-react';
-import { studentService } from '../../api/services';
+import { tenantService } from '../../api/services';
 
-export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }) {
+export default function ExtendedProfileForm({ isOpen, onClose, tenant, onSave }) {
     const [loadingDetails, setLoadingDetails] = useState(false);
     const [saving, setSaving] = useState(false);
     const [successMsg, setSuccessMsg] = useState('');
@@ -64,16 +64,16 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
     }, []);
 
     useEffect(() => {
-        if (!isOpen || !student?.id) return;
+        if (!isOpen || !tenant?.id) return;
         
         setError('');
         setSuccessMsg('');
-        initializeFromStudent(student);
+        initializeFromStudent(tenant);
 
         const fetchFullProfile = async () => {
             setLoadingDetails(true);
             try {
-                const full = await studentService.getById(student.id);
+                const full = await tenantService.getById(tenant.id);
                 initializeFromStudent(full);
             } catch (err) {
                 console.error('Failed to load full tenant profile:', err);
@@ -83,7 +83,7 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
         };
 
         fetchFullProfile();
-    }, [isOpen, student, initializeFromStudent]);
+    }, [isOpen, tenant, initializeFromStudent]);
 
     const progress = useMemo(() => {
         const fields = Object.values(form);
@@ -127,7 +127,7 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
             if (photoPreview && photoPreview.startsWith('data:')) {
                 payload.photo_url = photoPreview;
             }
-            await studentService.update(student.id, payload);
+            await tenantService.update(tenant.id, payload);
             setSuccessMsg('Profile updated successfully!');
             setTimeout(() => {
                 setSuccessMsg('');
@@ -287,10 +287,10 @@ export default function ExtendedProfileForm({ isOpen, onClose, student, onSave }
                                 <User size={20} className="sm:size-[28px]" strokeWidth={2.5} />
                             </div>
                             <div className="flex-1 min-w-0">
-                                <h2 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight truncate">{form.name || 'Student Profile'}</h2>
+                                <h2 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight truncate">{form.name || 'Tenant Profile'}</h2>
                                 <div className="flex items-center gap-2 sm:gap-3 mt-1 sm:mt-1.5 flex-wrap">
                                     <span className="text-[8px] sm:text-[10px] font-black text-indigo-500 uppercase tracking-widest bg-indigo-50 px-1.5 py-0.5 rounded-md border border-indigo-100">
-                                        ID: {student?.rollNumber || student?.id?.substring(0, 8) || 'HMS-00'}
+                                        ID: {tenant?.rollNumber || tenant?.id?.substring(0, 8) || 'HMS-00'}
                                     </span>
                                     <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest border border-slate-100 px-1.5 py-0.5 rounded-md">
                                         Tenant Record

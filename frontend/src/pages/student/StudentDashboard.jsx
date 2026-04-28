@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Home, CreditCard, Bell, BedDouble, Calendar, AlertCircle, User, ShieldAlert } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { paymentService, notificationService, studentService } from '../../api/services';
+import { paymentService, notificationService, tenantService } from '../../api/services';
 import api from '../../api/axios';
 
 const getOrdinalDay = (day) => {
@@ -33,17 +33,17 @@ const StudentDashboard = () => {
 
     useEffect(() => {
         const fetchData = async () => {
-            if (!user?.student_id) {
+            if (!user?.tenant_id) {
                 setIsLoading(false);
                 setAnnouncementsLoading(false);
                 return;
             }
             try {
                 const [payRes, roomRes, notifRes, profileRes] = await Promise.allSettled([
-                    paymentService.getStudentHistory(user.student_id),
+                    paymentService.getStudentHistory(user.tenant_id),
                     api.get('/allocations/my-room'),
                     notificationService.getAll(),
-                    studentService.getMyProfile()
+                    tenantService.getMyProfile()
                 ]);
                 if (payRes.status === 'fulfilled') setDues(payRes.value || { obligations: [], outstanding_balance: 0 });
                 if (roomRes.status === 'fulfilled') setRoomData(roomRes.value?.data || null);
@@ -154,7 +154,7 @@ const StudentDashboard = () => {
         setRequestMessage('');
         setRequestError('');
         try {
-            await studentService.requestReactivation();
+            await tenantService.requestReactivation();
             setRequestMessage('Reactivation request sent to your owner.');
         } catch (err) {
             const detail = err?.response?.data?.detail;
@@ -232,13 +232,13 @@ const StudentDashboard = () => {
                             </button>
                         )}
                         <button
-                            onClick={() => navigate('/student/payments')}
+                            onClick={() => navigate('/tenant/payments')}
                             className="px-4 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-sm font-semibold text-slate-700"
                         >
                             View Payment History
                         </button>
                         <button
-                            onClick={() => navigate('/student/profile')}
+                            onClick={() => navigate('/tenant/profile')}
                             className="px-4 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-sm font-semibold text-slate-700"
                         >
                             Contact / Profile
@@ -262,7 +262,7 @@ const StudentDashboard = () => {
                 </div>
                 <div className="flex gap-3">
                     <button 
-                        onClick={() => navigate('/student/payments')}
+                        onClick={() => navigate('/tenant/payments')}
                         className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-medium shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-2"
                     >
                         <CreditCard size={18} />

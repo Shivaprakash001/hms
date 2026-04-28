@@ -16,13 +16,13 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const limit = parseInt(searchParams.get("limit") || "50", 10);
     const offset = parseInt(searchParams.get("offset") || "0", 10);
-    const studentId = searchParams.get("student_id") || undefined;
+    const tenantId = searchParams.get("tenant_id") || undefined;
 
     const result = await paymentService.getAllPayments(
       user.id,
       isNaN(limit) ? 50 : limit,
       isNaN(offset) ? 0 : offset,
-      studentId
+      tenantId
     );
 
     return NextResponse.json(result);

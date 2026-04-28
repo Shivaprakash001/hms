@@ -1,5 +1,5 @@
 export { useAuth } from './useAuth';
-export { useStudents, useStudent, useCreateStudent, useUpdateStudent, useDeleteStudent } from './useStudents';
+export { useTenants, useStudent, useCreateStudent, useUpdateStudent, useDeleteStudent } from './useTenants';
 export { useStudentPaymentHistory, useDuesReport, useRecordPayment, useGenerateMonthlyRent, useInitiatePayment } from './usePayments';
 export { useExpenses, useCreateExpense, useUpdateExpense, useDeleteExpense } from './useExpenses';
 export { useDashboard, useDashboardStats, useMonthlyStats, useStudentStats } from './useDashboard';

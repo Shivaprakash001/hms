@@ -68,7 +68,7 @@ const Payments = () => {
             const normalizedPayments = paymentsData.map(item => ({
                 id: item.id,
                 obligationId: item.obligation_id,
-                tenantId: item.student_id,
+                tenantId: item.tenant_id,
                 tenantName: item.student_name,
                 amount: Number(item.amount_paid || 0),
                 month: item.rent_month,
@@ -102,11 +102,11 @@ const Payments = () => {
                     combinedObligationsMap.set(p.obligation_id, {
                         ...p.obligation,
                         obligation_id: p.obligation_id,
-                        student_id: p.student_id,
+                        tenant_id: p.tenant_id,
                         student_name: p.student_name,
-                        student_phone: p.student?.profile?.phone,
-                        student_email: p.student?.profile?.email,
-                        room_no: p.student?.allocations?.[0]?.room?.room_no || 'N/A',
+                        student_phone: p.tenant?.profile?.phone,
+                        student_email: p.tenant?.profile?.email,
+                        room_no: p.tenant?.allocations?.[0]?.room?.room_no || 'N/A',
                         rent_month: p.rent_month,
                         due_date: p.obligation?.due_date,
                         amount: p.obligation?.amount || p.amount_paid,
@@ -129,7 +129,7 @@ const Payments = () => {
                 return {
                     id: item.obligation_id || item.id,
                     obligationId: item.obligation_id || item.id,
-                    tenantId: item.student_id,
+                    tenantId: item.tenant_id,
                     tenantName: item.student_name || 'Unknown',
                     tenantPhone: item.student_phone || null,
                     tenantEmail: item.student_email || null,
@@ -363,7 +363,7 @@ const Payments = () => {
             alert('Tenant profile is not available for this entry.');
             return;
         }
-        navigate('/owner/students', { state: { selectedTenantId: payment.tenantId } });
+        navigate('/owner/tenants', { state: { selectedTenantId: payment.tenantId } });
     };
 
     const handleOpenOnlineTest = (payment) => {
@@ -610,9 +610,9 @@ const Payments = () => {
                                             <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 text-sm text-amber-800">
                                                 <p className="font-bold mb-1">⚡ What happens next?</p>
                                                 <ul className="space-y-1 text-amber-700 list-disc ml-4">
-                                                    <li>Rent based on each student's assigned monthly rate</li>
-                                                    <li>Prorated for students who joined/left mid-month</li>
-                                                    <li>Student's "Pay Now" button becomes active</li>
+                                                    <li>Rent based on each tenant's assigned monthly rate</li>
+                                                    <li>Prorated for tenants who joined/left mid-month</li>
+                                                    <li>Tenant's "Pay Now" button becomes active</li>
                                                     <li>Already-generated months are safely skipped</li>
                                                 </ul>
                                             </div>

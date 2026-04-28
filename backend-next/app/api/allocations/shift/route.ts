@@ -7,7 +7,7 @@ import { roomAllocationService } from "@/lib/services/room-allocation-service";
 import { z } from "zod";
 
 const ShiftSchema = z.object({
-  student_id: z.string().uuid(),
+  tenant_id: z.string().uuid(),
   new_room_id: z.string().uuid(),
   shift_date: z.string().or(z.date()).transform(val => new Date(val))
 });
@@ -26,11 +26,11 @@ export async function POST(req: NextRequest) {
       return apiError("Validation error", "VALIDATION_ERROR", 400);
     }
 
-    const { student_id, new_room_id, shift_date } = validated.data;
+    const { tenant_id, new_room_id, shift_date } = validated.data;
 
     // Delegate the complex transactional logic to our established roomAllocationService
     const newAllocation = await roomAllocationService.shiftRoom(
-      student_id,
+      tenant_id,
       new_room_id,
       shift_date.toISOString(),
       session.sub

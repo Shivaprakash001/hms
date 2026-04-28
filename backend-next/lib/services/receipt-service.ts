@@ -38,7 +38,7 @@ export class ReceiptService {
     const payment = await prisma.payment.findUnique({
       where: { id: paymentId },
       include: {
-        student: { include: { profile: true } },
+        tenant: { include: { profile: true } },
         obligation: true
       }
     });
@@ -46,7 +46,7 @@ export class ReceiptService {
     if (!payment) throw new Error("NOT_FOUND: Payment not found");
 
     const hostel = await prisma.hostel.findFirst({
-      where: { owner_id: payment.student.owner_id as string }
+      where: { owner_id: payment.tenant.owner_id as string }
     });
 
     const receiptNumber = await this.generateReceiptNumber();
@@ -55,13 +55,13 @@ export class ReceiptService {
       data: {
         receipt_number: receiptNumber,
         payment_id: payment.id,
-        student_id: payment.student_id,
+        tenant_id: payment.tenant_id,
         owner_id: payment.owner_id,
         amount: payment.amount_paid,
         payment_method: payment.payment_method,
         transaction_id: payment.reference_number,
         hostel_name: hostel?.name || "HMS Hostel",
-        tenant_name: payment.student.profile.name,
+        tenant_name: payment.tenant.profile.name,
         rent_month: payment.obligation.rent_month
       }
     });

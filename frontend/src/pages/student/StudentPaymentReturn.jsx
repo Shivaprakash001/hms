@@ -113,7 +113,7 @@ const StudentPaymentReturn = () => {
 
                 <div className="mt-8 flex gap-3">
                     <Link
-                        to="/student/payments"
+                        to="/tenant/payments"
                         className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white hover:bg-slate-800"
                     >
                         Back To Payments

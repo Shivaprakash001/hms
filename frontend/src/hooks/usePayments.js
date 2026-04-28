@@ -2,16 +2,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { paymentService } from '../api/services';
 
 /**
- * Fetch payment history for a student
+ * Fetch payment history for a tenant
  */
-export const useStudentPaymentHistory = (studentId) => {
+export const useStudentPaymentHistory = (tenantId) => {
   return useQuery({
-    queryKey: ['payments', 'history', studentId],
+    queryKey: ['payments', 'history', tenantId],
     queryFn: async () => {
-      if (!studentId) return null;
-      return await paymentService.getStudentHistory(studentId);
+      if (!tenantId) return null;
+      return await paymentService.getStudentHistory(tenantId);
     },
-    enabled: !!studentId,
+    enabled: !!tenantId,
     staleTime: 2 * 60 * 1000,
     gcTime: 5 * 60 * 1000,
   });

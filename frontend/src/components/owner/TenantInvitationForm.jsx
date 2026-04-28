@@ -59,7 +59,7 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
         setError('');
 
         try {
-            const response = await api.post('/students/invite', {
+            const response = await api.post('/tenants/invite', {
                 full_name: name,
                 name: name,  // backward compat with deployed backend
                 email,
@@ -103,7 +103,7 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                 <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-indigo-50 to-purple-50">
                     <div>
                         <h2 className="text-xl font-bold text-slate-900">Invite New Tenant</h2>
-                        <p className="text-sm text-slate-500 font-medium">Send an activation link to a student</p>
+                        <p className="text-sm text-slate-500 font-medium">Send an activation link to a tenant</p>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-white rounded-xl transition-colors text-slate-400 hover:text-slate-600 shadow-sm border border-transparent hover:border-slate-200">
                         <X size={20} />

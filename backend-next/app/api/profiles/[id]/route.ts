@@ -18,9 +18,9 @@ export async function GET(
   if (!session) return apiError("Unauthorized", "UNAUTHORIZED", 401);
 
   try {
-    // Permission check: Students can only see their own profile.
+    // Permission check: Tenants can only see their own profile.
     // Owners/Admins can see any profile.
-    if (session.role === "STUDENT" && session.sub !== params.id) {
+    if (session.role === "TENANT" && session.sub !== params.id) {
       return apiError("Forbidden", "FORBIDDEN", 403);
     }
 
@@ -42,9 +42,9 @@ export async function PUT(
   if (!session) return apiError("Unauthorized", "UNAUTHORIZED", 401);
 
   try {
-    // Permission check: Students can only update their own profile.
+    // Permission check: Tenants can only update their own profile.
     // Owners/Admins can update any profile.
-    if (session.role === "STUDENT" && session.sub !== params.id) {
+    if (session.role === "TENANT" && session.sub !== params.id) {
        return apiError("Forbidden", "FORBIDDEN", 403);
     }
 

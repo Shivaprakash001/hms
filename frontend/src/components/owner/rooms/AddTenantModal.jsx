@@ -21,7 +21,7 @@ const AddTenantModal = ({ selectedRoom, onClose, onAdd }) => {
     const fetchAvailableProfiles = async () => {
         try {
             setLoadingProfiles(true);
-            const data = await profileService.getUnassignedStudents();
+            const data = await profileService.getUnassignedTenants();
             setProfiles(data.profiles || []);
         } catch (err) {
             console.error("Failed to fetch profiles:", err);

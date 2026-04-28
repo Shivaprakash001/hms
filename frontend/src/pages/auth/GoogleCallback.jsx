@@ -20,8 +20,8 @@ export const GoogleCallback = () => {
           
           if (role === 'owner' || role === 'admin') {
             navigate('/owner/dashboard');
-          } else if (role === 'student') {
-            navigate('/student/dashboard');
+          } else if (role === 'tenant') {
+            navigate('/tenant/dashboard');
           } else {
             navigate('/login');
           }

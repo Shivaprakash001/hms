@@ -10,17 +10,17 @@ import api from '../../api/axios'; // Or use services
 
 // --- Local Service Helper ---
 const fetchStudentFull = async (id) => {
-    const res = await api.get(`/students/${id}/full`);
+    const res = await api.get(`/tenants/${id}/full`);
     return res.data;
 };
 
 const verifyDocument = async ({ tenantId, docId }) => {
-    const res = await api.patch(`/students/${tenantId}/documents/${docId}/verify`);
+    const res = await api.patch(`/tenants/${tenantId}/documents/${docId}/verify`);
     return res.data;
 };
 
 const rejectDocument = async ({ tenantId, docId, reason }) => {
-    const res = await api.patch(`/students/${tenantId}/documents/${docId}/reject`, { reason });
+    const res = await api.patch(`/tenants/${tenantId}/documents/${docId}/reject`, { reason });
     return res.data;
 };
 
@@ -31,8 +31,8 @@ export default function StudentProfilePage() {
 
   const [previewDoc, setPreviewDoc] = useState(null);
 
-  const { data: student, isLoading, isError } = useQuery({
-    queryKey: ['student', id],
+  const { data: tenant, isLoading, isError } = useQuery({
+    queryKey: ['tenant', id],
     queryFn: () => fetchStudentFull(id),
     staleTime: 5 * 60 * 1000 // 5 minutes
   });
@@ -40,14 +40,14 @@ export default function StudentProfilePage() {
   const verifyMutation = useMutation({
     mutationFn: verifyDocument,
     onSuccess: () => {
-      queryClient.invalidateQueries(['student', id]);
+      queryClient.invalidateQueries(['tenant', id]);
     }
   });
 
   const rejectMutation = useMutation({
     mutationFn: rejectDocument,
     onSuccess: () => {
-      queryClient.invalidateQueries(['student', id]);
+      queryClient.invalidateQueries(['tenant', id]);
     }
   });
 
@@ -59,24 +59,24 @@ export default function StudentProfilePage() {
     );
   }
 
-  if (isError || !student) {
+  if (isError || !tenant) {
     return (
       <div className="p-8 text-center bg-white rounded-3xl shadow-sm border border-slate-100 mt-8 max-w-2xl mx-auto">
         <AlertCircle size={48} className="mx-auto text-rose-500 mb-4" />
-        <h2 className="text-xl font-bold text-slate-800">Failed to load student</h2>
-        <p className="text-slate-500 mt-2 mb-6">The student might not exist or you don't have access.</p>
-        <button onClick={() => navigate('/owner/students')} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-2 rounded-xl font-bold transition">
+        <h2 className="text-xl font-bold text-slate-800">Failed to load tenant</h2>
+        <p className="text-slate-500 mt-2 mb-6">The tenant might not exist or you don't have access.</p>
+        <button onClick={() => navigate('/owner/tenants')} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-2 rounded-xl font-bold transition">
           Go Back
         </button>
       </div>
     );
   }
 
-  const profile = student.profile || {};
-  const roomAllocation = student.allocations?.[0];
+  const profile = tenant.profile || {};
+  const roomAllocation = tenant.allocations?.[0];
   const currentRoom = roomAllocation?.room?.room_no || 'Unassigned';
-  const documents = student.documents || [];
-  const latestPayment = student.payments?.[0];
+  const documents = tenant.documents || [];
+  const latestPayment = tenant.payments?.[0];
   
   // Formatters
   const formatCurrency = (val) => `₹${Number(val || 0).toLocaleString('en-IN')}`;
@@ -96,7 +96,7 @@ export default function StudentProfilePage() {
         <button onClick={() => navigate(-1)} className="p-2 bg-white border border-slate-200 rounded-full text-slate-500 hover:text-indigo-600 hover:border-indigo-200 transition-colors shadow-sm">
           <ArrowLeft size={20} />
         </button>
-        <h1 className="text-xl md:text-2xl font-black text-slate-900 leading-none">Student Profile</h1>
+        <h1 className="text-xl md:text-2xl font-black text-slate-900 leading-none">Tenant Profile</h1>
       </div>
 
       <div className="space-y-6">
@@ -106,8 +106,8 @@ export default function StudentProfilePage() {
           
           <div className="flex flex-col md:flex-row items-center md:items-start gap-6 relative z-10">
             <div className="w-24 h-24 rounded-[1.5rem] bg-indigo-100 text-indigo-600 flex items-center justify-center text-3xl font-black shadow-inner overflow-hidden shrink-0">
-               {student.photo_url ? (
-                  <img src={student.photo_url} alt="Profile" className="w-full h-full object-cover" />
+               {tenant.photo_url ? (
+                  <img src={tenant.photo_url} alt="Profile" className="w-full h-full object-cover" />
                ) : (
                   getInitials(profile.name)
                )}
@@ -117,16 +117,16 @@ export default function StudentProfilePage() {
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                   <h2 className="text-2xl font-black text-slate-900">{profile.name}</h2>
-                  <p className="text-slate-500 font-medium">{student.course || ''} {student.branch ? `• ${student.branch}` : ''} {student.year_of_study ? `• ${student.year_of_study} Year` : ''}</p>
+                  <p className="text-slate-500 font-medium">{tenant.course || ''} {tenant.branch ? `• ${tenant.branch}` : ''} {tenant.year_of_study ? `• ${tenant.year_of_study} Year` : ''}</p>
                 </div>
                 
                 <div className="flex flex-wrap justify-center md:justify-end gap-2">
                    <span className={`px-4 py-1.5 rounded-xl text-xs font-black tracking-widest uppercase flex items-center gap-1.5 border ${
-                      student.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
-                      student.status === 'LEFT' ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-slate-100 text-slate-600 border-slate-200'
+                      tenant.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
+                      tenant.status === 'LEFT' ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-slate-100 text-slate-600 border-slate-200'
                    }`}>
-                      {student.status === 'ACTIVE' && <CheckCircle2 size={14} />}
-                      {student.status}
+                      {tenant.status === 'ACTIVE' && <CheckCircle2 size={14} />}
+                      {tenant.status}
                    </span>
                 </div>
               </div>
@@ -138,15 +138,15 @@ export default function StudentProfilePage() {
                 </div>
                 <div>
                   <p className="text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Monthly Rent</p>
-                  <p className="font-bold border-slate-800 bg-indigo-50 text-indigo-700 w-fit px-2 py-0.5 rounded-lg">{formatCurrency(student.monthly_rent)}</p>
+                  <p className="font-bold border-slate-800 bg-indigo-50 text-indigo-700 w-fit px-2 py-0.5 rounded-lg">{formatCurrency(tenant.monthly_rent)}</p>
                 </div>
                 <div>
                   <p className="text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Roll No.</p>
-                  <p className="font-bold text-slate-800">{student.roll_number || 'N/A'}</p>
+                  <p className="font-bold text-slate-800">{tenant.roll_number || 'N/A'}</p>
                 </div>
                 <div>
                   <p className="text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Joined Date</p>
-                  <p className="font-bold text-slate-800">{formatDate(student.joined_on)}</p>
+                  <p className="font-bold text-slate-800">{formatDate(tenant.joined_on)}</p>
                 </div>
               </div>
             </div>
@@ -161,7 +161,7 @@ export default function StudentProfilePage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-8">
             <DetailItem icon={Phone} label="Primary Phone" value={profile.phone} />
-            <DetailItem icon={Phone} label="Secondary Phone" value={student.phone_2} />
+            <DetailItem icon={Phone} label="Secondary Phone" value={tenant.phone_2} />
             <DetailItem icon={Mail} label="Email Address" value={profile.email} />
             <DetailItem icon={Phone} label="Emergency Contact" value={profile.emergency_contact} />
             
@@ -169,7 +169,7 @@ export default function StudentProfilePage() {
               <div>
                  <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5 mb-1.5"><MapPin size={12}/> Permanent Address</p>
                  <p className="text-slate-700 font-medium leading-relaxed bg-slate-50 p-4 rounded-xl border border-slate-100">
-                   {student.permanent_address || 'Not provided'}
+                   {tenant.permanent_address || 'Not provided'}
                  </p>
               </div>
             </div>
@@ -183,11 +183,11 @@ export default function StudentProfilePage() {
             <h3 className="text-lg font-black text-slate-800">Academic Details</h3>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-            <DetailItem label="College" value={student.college_name} />
-            <DetailItem label="Course" value={student.course} />
-            <DetailItem label="Branch" value={student.branch} />
-            <DetailItem label="Year of Study" value={student.year_of_study ? `${student.year_of_study} Year` : null} />
-            <DetailItem label="Section" value={student.section} />
+            <DetailItem label="College" value={tenant.college_name} />
+            <DetailItem label="Course" value={tenant.course} />
+            <DetailItem label="Branch" value={tenant.branch} />
+            <DetailItem label="Year of Study" value={tenant.year_of_study ? `${tenant.year_of_study} Year` : null} />
+            <DetailItem label="Section" value={tenant.section} />
           </div>
         </section>
 
@@ -286,7 +286,7 @@ export default function StudentProfilePage() {
              <div className="p-5 bg-slate-50 border border-slate-100 rounded-2xl">
                 <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-1">Monthly Rent</p>
                 <div className="flex items-baseline gap-1">
-                   <p className="text-3xl font-black text-slate-800">{formatCurrency(student.monthly_rent)}</p>
+                   <p className="text-3xl font-black text-slate-800">{formatCurrency(tenant.monthly_rent)}</p>
                    <span className="text-slate-500 font-bold text-sm">/mo</span>
                 </div>
              </div>
