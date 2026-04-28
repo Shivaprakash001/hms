@@ -1,4 +1,4 @@
-import { Role, StudentStatus } from "@prisma/client";
+import { Role } from "@prisma/client";
 
 export interface UserContext {
   userId: string;
