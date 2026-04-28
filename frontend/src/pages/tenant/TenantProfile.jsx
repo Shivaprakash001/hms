@@ -7,10 +7,10 @@ import { useAuth } from '../../context/AuthContext';
 import { tenantService } from '../../api/services';
 import DocumentUploadWidget from '../../components/TenantManagement/DocumentUploadWidget';
 
-const StudentProfile = () => {
+const TenantProfile = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
-    const [studentInfo, setStudentInfo] = useState(null);
+    const [tenantInfo, setTenantInfo] = useState(null);
     const [isEditing, setIsEditing] = useState(false);
     const [loading, setLoading] = useState(true);
     const [saveLoading, setSaveLoading] = useState(false);
@@ -55,35 +55,35 @@ const StudentProfile = () => {
                     meData = await tenantService.getByProfileId(user.id);
                 }
 
-                const studentRecord = meData?.tenant_details || meData || {};
+                const tenantRecord = meData?.tenant_details || meData || {};
                 const apiProfile = meData?.profile || {};
                 const profRel = meData?.profile || meData?.profiles;
                 const prof = Array.isArray(profRel) ? (profRel[0] || {}) : (profRel || {});
-                setStudentInfo(meData);
-                const inferredType = (studentRecord.office_name || studentRecord.job_role || studentRecord.office_location) ? 'work' : 'tenant';
+                setTenantInfo(meData);
+                const inferredType = (tenantRecord.office_name || tenantRecord.job_role || tenantRecord.office_location) ? 'work' : 'tenant';
                 setFormData({
                     name: prof.name || user?.name || '',
                     email: prof.email || user?.email || '',
                     phone: prof.phone || '',
                     emergency_contact: prof.emergency_contact || '',
                     address: prof.address || '',
-                    personal_email: apiProfile.personal_email || studentRecord.personal_email || '',
-                    phone_1: studentRecord.phone_1 || '',
-                    phone_2: studentRecord.phone_2 || '',
-                    phone_3: studentRecord.phone_3 || '',
-                    college_name: studentRecord.college_name || '',
-                    roll_number: studentRecord.roll_number || '',
-                    course: studentRecord.course || '',
-                    year_of_study: studentRecord.year_of_study || '',
-                    section: studentRecord.section || '',
-                    branch: studentRecord.branch || '',
-                    office_name: studentRecord.office_name || '',
-                    office_location: studentRecord.office_location || '',
-                    job_role: studentRecord.job_role || '',
-                    permanent_address: apiProfile.permanent_address || studentRecord.permanent_address || '',
-                    temporary_address: apiProfile.temporary_address || studentRecord.temporary_address || '',
-                    gender: apiProfile.gender || studentRecord.gender || '',
-                    photo_url: studentRecord.photo_url || '',
+                    personal_email: apiProfile.personal_email || tenantRecord.personal_email || '',
+                    phone_1: tenantRecord.phone_1 || '',
+                    phone_2: tenantRecord.phone_2 || '',
+                    phone_3: tenantRecord.phone_3 || '',
+                    college_name: tenantRecord.college_name || '',
+                    roll_number: tenantRecord.roll_number || '',
+                    course: tenantRecord.course || '',
+                    year_of_study: tenantRecord.year_of_study || '',
+                    section: tenantRecord.section || '',
+                    branch: tenantRecord.branch || '',
+                    office_name: tenantRecord.office_name || '',
+                    office_location: tenantRecord.office_location || '',
+                    job_role: tenantRecord.job_role || '',
+                    permanent_address: apiProfile.permanent_address || tenantRecord.permanent_address || '',
+                    temporary_address: apiProfile.temporary_address || tenantRecord.temporary_address || '',
+                    gender: apiProfile.gender || tenantRecord.gender || '',
+                    photo_url: tenantRecord.photo_url || '',
                     profile_type: inferredType
                 });
             } catch (error) {
@@ -158,7 +158,7 @@ const StudentProfile = () => {
             const updated = await tenantService.updateMyProfile(payload);
             const profRel = updated?.profile || updated?.profiles;
             const prof = Array.isArray(profRel) ? (profRel[0] || {}) : (profRel || {});
-            setStudentInfo(updated);
+            setTenantInfo(updated);
             setFormData((prev) => ({
                 ...prev,
                 name: prof.name || user?.name || prev.name,
@@ -229,7 +229,7 @@ const StudentProfile = () => {
 
     if (loading) return <div className="flex items-center justify-center min-h-[400px]">Loading profile...</div>;
 
-    const currentRoom = studentInfo?.current_room || null;
+    const currentRoom = tenantInfo?.current_room || null;
     const roomNo = currentRoom?.room_no || user?.room_no || 'Unassigned';
     const floorNo = currentRoom?.floor_id;
 
@@ -276,7 +276,7 @@ const StudentProfile = () => {
                     <p className="text-sm text-slate-500">{formData.email || user?.email || 'N/A'}</p>
                     <div className="flex flex-wrap gap-2 mt-2 justify-center sm:justify-start">
                         <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 text-xs font-semibold">Room {roomNo}</span>
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 text-xs font-semibold">{studentInfo?.status || 'Resident'}</span>
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 text-xs font-semibold">{tenantInfo?.status || 'Resident'}</span>
                     </div>
 
                     <div className="mt-3">
@@ -385,7 +385,7 @@ const StudentProfile = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
                     <InfoBadge label="Room" value={roomNo} />
                     <InfoBadge label="Floor" value={floorNo ? `Floor ${floorNo}` : 'N/A'} />
-                    <InfoBadge label="Joined" value={studentInfo?.joined_on || 'N/A'} />
+                    <InfoBadge label="Joined" value={tenantInfo?.joined_on || 'N/A'} />
                 </div>
             </section>
 
@@ -405,9 +405,9 @@ const StudentProfile = () => {
                         <FileText size={16} className="text-indigo-500" />
                         <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide">Documents</h3>
                     </div>
-                    {studentInfo?.id ? (
+                    {tenantInfo?.id ? (
                         <DocumentUploadWidget
-                            tenantId={studentInfo.id}
+                            tenantId={tenantInfo.id}
                             isOwner={false}
                         />
                     ) : (
@@ -467,4 +467,4 @@ const InfoBadge = ({ label, value }) => (
     </div>
 );
 
-export default StudentProfile;
+export default TenantProfile;

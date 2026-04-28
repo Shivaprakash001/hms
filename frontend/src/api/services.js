@@ -291,7 +291,7 @@ export const allocationService = {
         const response = await api.post('/allocations/shift', data);
         return response.data;
     },
-    getStudentHistory: async (tenantId) => {
+    getTenantHistory: async (tenantId) => {
         const response = await api.get(`/allocations/tenant/${tenantId}`);
         return response.data;
     },
@@ -316,13 +316,13 @@ export const paymentService = {
         const response = await api.get('/payments/dues', { params });
         return response.data;
     },
-    getStudentHistory: async (tenantId) => {
+    getTenantHistory: async (tenantId) => {
         try {
-            const storedStudent = localStorage.getItem('studentUser');
+            const storedTenant = localStorage.getItem('tenantUser');
             const storedOwner = localStorage.getItem('ownerUser');
-            const isStudentSession = Boolean(storedStudent && !storedOwner);
+            const isTenantSession = Boolean(storedTenant && !storedOwner);
 
-            if (isStudentSession) {
+            if (isTenantSession) {
                 const meResponse = await api.get('/tenants/me/payments/history');
                 return meResponse.data;
             }

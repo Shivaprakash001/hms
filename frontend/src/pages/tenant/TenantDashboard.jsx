@@ -16,7 +16,7 @@ const getOrdinalDay = (day) => {
     return `${day}th`;
 };
 
-const StudentDashboard = () => {
+const TenantDashboard = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
 
@@ -25,7 +25,7 @@ const StudentDashboard = () => {
     const [announcements, setAnnouncements] = useState([]);
     const [announcementsLoading, setAnnouncementsLoading] = useState(true);
     const [announcementsError, setAnnouncementsError] = useState('');
-    const [studentProfile, setStudentProfile] = useState(null);
+    const [tenantProfile, setTenantProfile] = useState(null);
     const [requestLoading, setRequestLoading] = useState(false);
     const [requestMessage, setRequestMessage] = useState('');
     const [requestError, setRequestError] = useState('');
@@ -40,7 +40,7 @@ const StudentDashboard = () => {
             }
             try {
                 const [payRes, roomRes, notifRes, profileRes] = await Promise.allSettled([
-                    paymentService.getStudentHistory(user.tenant_id),
+                    paymentService.getTenantHistory(user.tenant_id),
                     api.get('/allocations/my-room'),
                     notificationService.getAll(),
                     tenantService.getMyProfile()
@@ -56,7 +56,7 @@ const StudentDashboard = () => {
                 }
 
                 if (profileRes.status === 'fulfilled') {
-                    setStudentProfile(profileRes.value || null);
+                    setTenantProfile(profileRes.value || null);
                 }
             } catch (error) {
                 console.error("Failed to fetch dashboard data:", error);
@@ -114,14 +114,14 @@ const StudentDashboard = () => {
     const nextPayment = getNextPaymentDate();
 
     const normalizedStatus = useMemo(() => {
-        const raw = (studentProfile?.status || user?.student_status || '').toString().toUpperCase();
+        const raw = (tenantProfile?.status || user?.tenant_status || '').toString().toUpperCase();
         if (raw === 'ACTIVE') return 'ACTIVE';
         if (raw === 'INVITED') return 'INVITED';
         if (!raw || ['INACTIVE', 'BLOCKED', 'BLACKLISTED', 'ARCHIVED', 'APPLIED', 'PENDING_APPROVAL'].includes(raw)) {
             return 'LEFT';
         }
         return raw === 'LEFT' ? 'LEFT' : 'LEFT';
-    }, [studentProfile?.status, user?.student_status]);
+    }, [tenantProfile?.status, user?.tenant_status]);
 
     const statusConfig = useMemo(() => {
         const map = {
@@ -417,4 +417,4 @@ const StudentDashboard = () => {
     );
 };
 
-export default StudentDashboard;
+export default TenantDashboard;

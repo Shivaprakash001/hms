@@ -26,8 +26,8 @@ export const ChangePasswordSchema = z.object({
   new_password: z.string().min(8),
 });
 
-// --- Student & Enrollment Schemas ---
-export const StudentProfileUpdateSchema = z.object({
+// --- Tenant & Enrollment Schemas ---
+export const TenantProfileUpdateSchema = z.object({
   name: z.string().optional(),
   phone: z.string().optional(),
   emergency_contact: z.string().optional(),
@@ -64,7 +64,7 @@ export const RoomCreateSchema = z.object({
 });
 
 export const AllocationSchema = z.object({
-  student_id: z.string().uuid(),
+  tenant_id: z.string().uuid(),
   room_id: z.string().uuid(),
   start_date: z.string().transform((val) => new Date(val)),
 });

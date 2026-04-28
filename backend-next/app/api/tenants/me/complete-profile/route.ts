@@ -5,7 +5,7 @@ import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { tenantService } from "@/lib/services/tenant-service";
 import { prisma } from "@/lib/db";
-import { StudentProfileUpdateSchema } from "@/lib/validators";
+import { TenantProfileUpdateSchema } from "@/lib/validators";
 
 
 /**
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
       return apiError("Invalid JSON in profile_data", "VALIDATION_ERROR", 400);
     }
 
-    const validated = StudentProfileUpdateSchema.safeParse(parsedData);
+    const validated = TenantProfileUpdateSchema.safeParse(parsedData);
     if (!validated.success) {
       const firstIssue = validated.error.issues[0];
       const issuePath = firstIssue?.path?.join(".") || "profile_data";
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Pass data directly to self update method
-    const updated = await tenantService.updateStudentSelfProfile(session.sub, validated.data, session.sub);
+    const updated = await tenantService.updateTenantSelfProfile(session.sub, validated.data, session.sub);
     
     // Process Aadhaar Document
     const aadhaarFile = formData.get("aadhaar_file") as File | null;

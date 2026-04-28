@@ -13,7 +13,7 @@ export interface AuthPayload {
   email: string;
   role: string;
   owner_id?: string | null;
-  student_id?: string | null;
+  tenant_id?: string | null;
 }
 
 export async function generateToken(payload: AuthPayload) {

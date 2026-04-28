@@ -210,7 +210,7 @@ export class PropertyService {
     const floorsMap: Map<number, any> = new Map();
 
     rooms.forEach((room: any) => {
-      const floorNum = room.floor ?? this.extractFloor(room.room_no);
+      const floorNum = room.floor ?? 0;
       if (!floorsMap.has(floorNum)) {
         floorsMap.set(floorNum, { id: `f${floorNum}`, number: floorNum, rooms: [] });
       }
@@ -307,7 +307,7 @@ export class PropertyService {
       };
     });
 
-    const floorNum = room.floor ?? this.extractFloor(room.room_no);
+    const floorNum = room.floor ?? 0;
     const capacity = room.capacity;
     const occupied = tenants.length;
 
@@ -316,7 +316,7 @@ export class PropertyService {
       .filter((t: any) => t.last_payment)
       .map((t: any) => ({
         tenant_id: t.tenant_id,
-        student_name: t.name,
+        tenant_name: t.name,
         payment_date: t.last_payment,
         amount_paid: t.last_payment_amount
       }))
@@ -405,14 +405,6 @@ export class PropertyService {
     });
   }
 
-  private extractFloor(roomNo: string): number {
-    try {
-      if (roomNo.length >= 3 && !isNaN(parseInt(roomNo.substring(0, roomNo.length - 2)))) {
-        return parseInt(roomNo.substring(0, roomNo.length - 2));
-      }
-    } catch {}
-    return 0;
-  }
 }
 
 export const propertyService = new PropertyService();

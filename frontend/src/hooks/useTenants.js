@@ -18,7 +18,7 @@ export const useTenants = (options = {}) => {
 /**
  * Fetch single tenant by ID
  */
-export const useStudent = (tenantId) => {
+export const useTenant = (tenantId) => {
   return useQuery({
     queryKey: ['tenants', tenantId],
     queryFn: async () => {
@@ -34,16 +34,16 @@ export const useStudent = (tenantId) => {
 /**
  * Mutate: Create new tenant
  */
-export const useCreateStudent = () => {
+export const useCreateTenant = () => {
   const queryClient = useQueryClient();
   
   return useMutation({
     mutationFn: async (data) => {
       return await tenantService.create(data);
     },
-    onSuccess: (newStudent) => {
+    onSuccess: (newTenant) => {
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
-      queryClient.setQueryData(['tenants', newStudent.id], newStudent);
+      queryClient.setQueryData(['tenants', newTenant.id], newTenant);
     },
   });
 };
@@ -51,15 +51,15 @@ export const useCreateStudent = () => {
 /**
  * Mutate: Update tenant
  */
-export const useUpdateStudent = (tenantId) => {
+export const useUpdateTenant = (tenantId) => {
   const queryClient = useQueryClient();
   
   return useMutation({
     mutationFn: async (data) => {
       return await tenantService.update(tenantId, data);
     },
-    onSuccess: (updatedStudent) => {
-      queryClient.setQueryData(['tenants', tenantId], updatedStudent);
+    onSuccess: (updatedTenant) => {
+      queryClient.setQueryData(['tenants', tenantId], updatedTenant);
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
     },
   });
@@ -68,7 +68,7 @@ export const useUpdateStudent = (tenantId) => {
 /**
  * Mutate: Delete tenant
  */
-export const useDeleteStudent = () => {
+export const useDeleteTenant = () => {
   const queryClient = useQueryClient();
   
   return useMutation({

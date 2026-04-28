@@ -4,7 +4,7 @@ import { Key, Eye, EyeOff, Save, CheckCircle2, Shield, Bell } from 'lucide-react
 import { useAuth } from '../../context/AuthContext';
 import { authService } from '../../api/services';
 
-const StudentSettings = () => {
+const TenantSettings = () => {
     const { user } = useAuth();
     const [loading, setLoading] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
@@ -208,4 +208,4 @@ const PasswordInput = ({ label, name, value, show, onToggle, onChange }) => (
     </div>
 );
 
-export default StudentSettings;
+export default TenantSettings;

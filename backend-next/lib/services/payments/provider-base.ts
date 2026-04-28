@@ -29,9 +29,9 @@ export abstract class PaymentProvider {
   abstract createIntent(data: {
     amount: number;
     merchant_txn_id: string;
-    student_name: string;
-    student_email?: string;
-    student_phone?: string;
+    tenant_name: string;
+    tenant_email?: string;
+    tenant_phone?: string;
     metadata: any;
   }): Promise<CreateIntentResult>;
 

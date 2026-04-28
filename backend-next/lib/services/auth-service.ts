@@ -41,7 +41,7 @@ export class AuthService {
     if (!isValid) throw new Error("UNAUTHORIZED: Invalid email or password");
 
     let tenantId = null;
-    let studentProfileCompleted = null;
+    let tenantProfileCompleted = null;
 
     if (profile.role === "TENANT") {
       const tenant = await prisma.tenant.findUnique({
@@ -54,7 +54,7 @@ export class AuthService {
       });
       if (tenant) {
         tenantId = tenant.id;
-        studentProfileCompleted = tenant.profile_completed;
+        tenantProfileCompleted = tenant.profile_completed;
         if (tenant.status === "INVITED") {
           throw new Error("FORBIDDEN: Account not activated. Please check your email.");
         }
@@ -74,7 +74,7 @@ export class AuthService {
       name: profile.name,
       user_id: profile.id,
       tenant_id: tenantId,
-      is_profile_completed: tenantId ? studentProfileCompleted : profile.is_profile_completed,
+      is_profile_completed: tenantId ? tenantProfileCompleted : profile.is_profile_completed,
     };
   }
 

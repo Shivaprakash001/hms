@@ -2,7 +2,7 @@ import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-const ProtectedStudentRoute = () => {
+const ProtectedTenantRoute = () => {
     const { user, loading } = useAuth();
 
     if (loading) {
@@ -20,4 +20,4 @@ const ProtectedStudentRoute = () => {
     return <Outlet />;
 };
 
-export default ProtectedStudentRoute;
+export default ProtectedTenantRoute;

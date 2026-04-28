@@ -12,7 +12,7 @@ const TenantHistoryModal = ({ isOpen, onClose, tenantId, tenantName }) => {
             if (!isOpen || !tenantId) return;
             setIsLoading(true);
             try {
-                const data = await paymentService.getStudentHistory(tenantId);
+                const data = await paymentService.getTenantHistory(tenantId);
                 const obligations = (data?.obligations || []).map(item => ({
                     id: item.id,
                     amount: Number(item.amount),

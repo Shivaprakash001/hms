@@ -21,7 +21,7 @@ export const AuthProvider = ({ children }) => {
 
     const logout = () => {
         setUser(null);
-        localStorage.removeItem('studentUser');
+        localStorage.removeItem('tenantUser');
         localStorage.removeItem('ownerUser');
     };
 
@@ -45,9 +45,9 @@ export const AuthProvider = ({ children }) => {
 
     useEffect(() => {
         const initAuth = async () => {
-            const storedStudent = localStorage.getItem('studentUser');
+            const storedTenant = localStorage.getItem('tenantUser');
             const storedOwner = localStorage.getItem('ownerUser');
-            const storedData = storedOwner ? JSON.parse(storedOwner) : (storedStudent ? JSON.parse(storedStudent) : null);
+            const storedData = storedOwner ? JSON.parse(storedOwner) : (storedTenant ? JSON.parse(storedTenant) : null);
 
             if (storedData?.token) {
                 try {
@@ -71,7 +71,7 @@ export const AuthProvider = ({ children }) => {
                     if (normalizeRole(updatedUser.role) === 'owner' || normalizeRole(updatedUser.role) === 'admin') {
                         localStorage.setItem('ownerUser', JSON.stringify(updatedUser));
                     } else {
-                        localStorage.setItem('studentUser', JSON.stringify(updatedUser));
+                        localStorage.setItem('tenantUser', JSON.stringify(updatedUser));
                     }
                 } catch (error) {
                     console.error("Session verification failed:", error);
@@ -99,9 +99,9 @@ export const AuthProvider = ({ children }) => {
 
             if (normalizedRole === 'owner' || normalizedRole === 'admin') {
                 localStorage.setItem('ownerUser', JSON.stringify(userData));
-                localStorage.removeItem('studentUser');
+                localStorage.removeItem('tenantUser');
             } else {
-                localStorage.setItem('studentUser', JSON.stringify(userData));
+                localStorage.setItem('tenantUser', JSON.stringify(userData));
                 localStorage.removeItem('ownerUser');
             }
 
@@ -129,9 +129,9 @@ export const AuthProvider = ({ children }) => {
 
             if (normalizedRole === 'owner' || normalizedRole === 'admin') {
                 localStorage.setItem('ownerUser', JSON.stringify(userData));
-                localStorage.removeItem('studentUser');
+                localStorage.removeItem('tenantUser');
             } else {
-                localStorage.setItem('studentUser', JSON.stringify(userData));
+                localStorage.setItem('tenantUser', JSON.stringify(userData));
                 localStorage.removeItem('ownerUser');
             }
 

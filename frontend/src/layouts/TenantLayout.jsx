@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { notificationService } from '../api/services';
 import Avatar from '../components/common/Avatar';
 
-const StudentLayout = () => {
+const TenantLayout = () => {
     const { user, logout } = useAuth();
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -227,4 +227,4 @@ const StudentLayout = () => {
     );
 };
 
-export default StudentLayout;
+export default TenantLayout;

@@ -9,7 +9,7 @@ import {
 import api from '../../api/axios'; // Or use services
 
 // --- Local Service Helper ---
-const fetchStudentFull = async (id) => {
+const fetchTenantFull = async (id) => {
     const res = await api.get(`/tenants/${id}/full`);
     return res.data;
 };
@@ -24,7 +24,7 @@ const rejectDocument = async ({ tenantId, docId, reason }) => {
     return res.data;
 };
 
-export default function StudentProfilePage() {
+export default function TenantProfilePage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -33,7 +33,7 @@ export default function StudentProfilePage() {
 
   const { data: tenant, isLoading, isError } = useQuery({
     queryKey: ['tenant', id],
-    queryFn: () => fetchStudentFull(id),
+    queryFn: () => fetchTenantFull(id),
     staleTime: 5 * 60 * 1000 // 5 minutes
   });
 

@@ -23,7 +23,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       if (!target || target.owner_id !== session.sub) return apiError("Forbidden", "FORBIDDEN", 403);
     }
 
-    const history = await paymentService.getStudentPaymentHistory(tenantId);
+    const history = await paymentService.getTenantPaymentHistory(tenantId);
     return apiResponse(history);
   } catch (error: any) {
     const msg = typeof error?.message === "string" ? error.message : String(error);

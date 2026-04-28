@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 
     if (session.role === "TENANT") {
       // Tenants only see their own complaints
-      const complaints = await complaintService.getStudentComplaints(session.sub);
+      const complaints = await complaintService.getTenantComplaints(session.sub);
       return apiResponse(complaints);
     } else {
       // Owners/Admins see all for their property

@@ -15,19 +15,19 @@ import Expenses from './pages/owner/Expenses.jsx';
 import ActivityHistory from './pages/owner/ActivityHistory.jsx';
 import BillingPlans from './pages/owner/BillingPlans.jsx';
 import OwnerProfile from './pages/owner/OwnerProfile.jsx';
-import StudentProfilePage from './pages/owner/StudentProfilePage.jsx';
+import TenantProfilePage from './pages/owner/TenantProfilePage.jsx';
 
 // Tenant Imports
 
-import StudentLayout from './layouts/StudentLayout.jsx';
-import StudentDashboard from './pages/tenant/StudentDashboard.jsx';
-import StudentPayments from './pages/tenant/StudentPayments.jsx';
-import StudentPaymentReturn from './pages/tenant/StudentPaymentReturn.jsx';
-import StudentComplaints from './pages/tenant/StudentComplaints.jsx';
-import StudentProfile from './pages/tenant/StudentProfile.jsx';
-import StudentSettings from './pages/tenant/StudentSettings.jsx';
+import TenantLayout from './layouts/TenantLayout.jsx';
+import TenantDashboard from './pages/tenant/TenantDashboard.jsx';
+import TenantPayments from './pages/tenant/TenantPayments.jsx';
+import TenantPaymentReturn from './pages/tenant/TenantPaymentReturn.jsx';
+import TenantComplaints from './pages/tenant/TenantComplaints.jsx';
+import TenantProfile from './pages/tenant/TenantProfile.jsx';
+import TenantSettings from './pages/tenant/TenantSettings.jsx';
 import { AuthProvider } from './context/AuthContext';
-import ProtectedStudentRoute from './components/ProtectedStudentRoute';
+import ProtectedTenantRoute from './components/ProtectedTenantRoute';
 import ProtectedOwnerRoute from './components/ProtectedOwnerRoute';
 
 function App() {
@@ -41,19 +41,19 @@ function App() {
           <Route path="/complete-profile" element={<CompleteProfile />} />
             <Route path="/tenant/complete-profile" element={<Navigate to="/complete-profile" replace />} />
           <Route path="/callback" element={<GoogleCallback />} />
-            <Route path="/payment-return" element={<StudentPaymentReturn />} />
+            <Route path="/payment-return" element={<TenantPaymentReturn />} />
 
         {/* Tenant Routes */}
 
-        <Route element={<ProtectedStudentRoute />}>
-            <Route path="/tenant" element={<StudentLayout />}>
+        <Route element={<ProtectedTenantRoute />}>
+            <Route path="/tenant" element={<TenantLayout />}>
                 <Route index element={<Navigate to="dashboard" replace />} />
-                <Route path="dashboard" element={<StudentDashboard />} />
-                <Route path="payments" element={<StudentPayments />} />
-                <Route path="payment-return" element={<StudentPaymentReturn />} />
-                <Route path="complaints" element={<StudentComplaints />} />
-            <Route path="profile" element={<StudentProfile />} />
-            <Route path="settings" element={<StudentSettings />} />
+                <Route path="dashboard" element={<TenantDashboard />} />
+                <Route path="payments" element={<TenantPayments />} />
+                <Route path="payment-return" element={<TenantPaymentReturn />} />
+                <Route path="complaints" element={<TenantComplaints />} />
+            <Route path="profile" element={<TenantProfile />} />
+            <Route path="settings" element={<TenantSettings />} />
           </Route>
         </Route>
 
@@ -63,7 +63,7 @@ function App() {
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<OwnerDashboard />} />
             <Route path="tenants" element={<ManageTenants />} />
-            <Route path="tenants/:id" element={<StudentProfilePage />} />
+            <Route path="tenants/:id" element={<TenantProfilePage />} />
             <Route path="rooms" element={<ManageRooms />} />
             <Route path="payments" element={<Payments />} />
             <Route path="complaints" element={<Complaints />} />

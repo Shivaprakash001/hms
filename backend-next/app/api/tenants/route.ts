@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
       return apiError("monthly_rent must be > 0", "VALIDATION_ERROR", 400);
     }
 
-    const tenant = await tenantService.createStudent(body, session.sub);
+    const tenant = await tenantService.createTenant(body, session.sub);
     return apiResponse(tenant, 201);
   } catch (error: any) {
     return apiError(error.message || "Failed to create tenant enrollment");

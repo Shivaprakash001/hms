@@ -287,7 +287,7 @@ export class DocumentService {
   }
 
   // ── Delete ALL documents for a tenant (cascade on removal) ─
-  async deleteAllStudentDocuments(tenantId: string) {
+  async deleteAllTenantDocuments(tenantId: string) {
     const docs = await prisma.identificationDocument.findMany({
       where: { tenant_id: tenantId },
       select: { id: true, file_id: true },

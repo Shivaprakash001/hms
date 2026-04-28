@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
       return apiError("Tenant record not found", "NOT_FOUND", 404);
     }
 
-    const history = await paymentService.getStudentPaymentHistory(tenant.id);
+    const history = await paymentService.getTenantPaymentHistory(tenant.id);
     return apiResponse(history);
   } catch (error: any) {
     const msg = typeof error?.message === "string" ? error.message : String(error);

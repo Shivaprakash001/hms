@@ -5,7 +5,7 @@ import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { tenantService } from "@/lib/services/tenant-service";
-import { StudentProfileUpdateSchema } from "@/lib/validators";
+import { TenantProfileUpdateSchema } from "@/lib/validators";
 
 
 /**
@@ -109,12 +109,12 @@ export async function PATCH(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const validated = StudentProfileUpdateSchema.safeParse(body);
+    const validated = TenantProfileUpdateSchema.safeParse(body);
     if (!validated.success) {
       return apiError("Validation error", "VALIDATION_ERROR", 400);
     }
 
-    const updated = await tenantService.updateStudentSelfProfile(session.sub, validated.data, session.sub);
+    const updated = await tenantService.updateTenantSelfProfile(session.sub, validated.data, session.sub);
     return apiResponse(updated);
   } catch (error: any) {
     return apiError(error?.message || "Failed to update profile");

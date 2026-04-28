@@ -20,7 +20,7 @@ export async function GET(
   if (!session) return apiError("Unauthorized", "UNAUTHORIZED", 401);
 
   try {
-    const tenant = await tenantService.getStudentById(params.id, { sub: session.sub, role: session.role });
+    const tenant = await tenantService.getTenantById(params.id, { sub: session.sub, role: session.role });
     return apiResponse(tenant);
   } catch (error: any) {
     const msg = typeof error?.message === "string" ? error.message : String(error);
@@ -41,7 +41,7 @@ export async function PUT(
 
   try {
     const body = await req.json();
-    const updated = await tenantService.updateStudent(params.id, body, session.sub);
+    const updated = await tenantService.updateTenant(params.id, body, session.sub);
     return apiResponse(updated);
   } catch (error: any) {
     const msg = typeof error?.message === "string" ? error.message : String(error);
@@ -61,7 +61,7 @@ export async function DELETE(
   }
 
   try {
-    const result = await tenantService.deleteStudent(params.id, session.sub);
+    const result = await tenantService.deleteTenant(params.id, session.sub);
     return apiResponse(result);
   } catch (error: any) {
     const msg = typeof error?.message === "string" ? error.message : String(error);

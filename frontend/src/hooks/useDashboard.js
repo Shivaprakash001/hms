@@ -32,12 +32,12 @@ export const useMonthlyStats = (months = 6) => {
   });
 };
 
-export const useStudentStats = () => {
+export const useTenantStats = () => {
   return useQuery({
     queryKey: ['dashboard', 'tenant'],
     queryFn: async () => {
       // Assuming a service method exists or return placeholder
-      // return await dashboardService.getStudentStats();
+      // return await dashboardService.getTenantStats();
       return await dashboardService.getStats(); 
     },
     staleTime: 5 * 60 * 1000,

@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
       if (tenant) {
       tenantId = tenant.id;
       extra.monthly_rent = tenant.monthly_rent;
-      extra.student_status = tenant.status;
+      extra.tenant_status = tenant.status;
       extra.is_profile_completed = tenant.profile_completed || profile.is_profile_completed;
 
       const activeAlloc = tenant.allocations[0];
@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
       tenant_id: tenantId,
       is_admin: profile.role === "ADMIN",
       is_owner: profile.role === "OWNER",
-      is_student: profile.role === "TENANT",
+      is_tenant: profile.role === "TENANT",
       ...extra
     });
   } catch (error) {

@@ -12,7 +12,7 @@ interface User {
   email: string;
   role: string;
   owner_id?: string;
-  student_id?: string;
+  tenant_id?: string;
   is_profile_completed: boolean;
 }
 
@@ -57,7 +57,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     if (!user && !isPublic) {
       router.push("/login");
     } else if (user && isPublic) {
-      router.push(user.role === "STUDENT" ? "/student/dashboard" : "/owner/dashboard");
+      router.push(user.role === "TENANT" ? "/tenant/dashboard" : "/owner/dashboard");
     }
   }, [user, loading, pathname, router]);
 

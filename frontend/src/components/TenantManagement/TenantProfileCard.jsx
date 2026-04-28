@@ -17,7 +17,7 @@ const TABS = [
 ];
 
 export default function TenantProfileCard({ tenantId, onEdit, isOwner = true }) {
-    const [tenant, setStudent] = useState(null);
+    const [tenant, setTenant] = useState(null);
     const [documents, setDocuments] = useState([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('personal');
@@ -29,11 +29,11 @@ export default function TenantProfileCard({ tenantId, onEdit, isOwner = true }) 
     const fetchData = async () => {
         try {
             setLoading(true);
-            const [studentData, docsData] = await Promise.all([
+            const [tenantData, docsData] = await Promise.all([
                 tenantService.getById(tenantId),
                 tenantDocumentService.getAll(tenantId).catch(() => [])
             ]);
-            setStudent(studentData);
+            setTenant(tenantData);
             setDocuments(Array.isArray(docsData) ? docsData : []);
         } catch (err) {
             console.error('Failed to fetch tenant data:', err);

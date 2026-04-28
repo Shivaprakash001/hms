@@ -16,11 +16,11 @@ export default function ManageTenants() {
     const [searchTerm, setSearchTerm] = useState('');
     const [showAddModal, setShowAddModal] = useState(false);
     const [showInviteModal, setShowInviteModal] = useState(false);
-    const [studentToEdit, setStudentToEdit] = useState(null);
+    const [tenantToEdit, setTenantToEdit] = useState(null);
     const [historyTenant, setHistoryTenant] = useState(null);
     const [error, setError] = useState(null);
     const [showLeftTenants, setShowLeftTenants] = useState(false);
-    const [extendedProfileStudent, setExtendedProfileStudent] = useState(null);
+    const [extendedProfileTenant, setExtendedProfileTenant] = useState(null);
 
     const handleCallTenant = async (phone, e) => {
         e?.stopPropagation?.();
@@ -59,7 +59,7 @@ export default function ManageTenants() {
                 yearOfStudy: s.year_of_study || null,
                 room: (s.allocations && s.allocations.length > 0 && s.allocations[0].room) ? s.allocations[0].room.room_no : 'N/A',
                 roomId: (s.allocations && s.allocations.length > 0) ? s.allocations[0].room_id : null,
-                floor: (s.allocations && s.allocations.length > 0 && s.allocations[0].room?.room_no) ? s.allocations[0].room.room_no.substring(0, s.allocations[0].room.room_no.length - 2) : 'N/A',
+                floor: (s.allocations && s.allocations.length > 0 && s.allocations[0].room) ? (s.allocations[0].room.floor ?? 'N/A') : 'N/A',
                 status: s.status,
                 rent: s.monthly_rent,
                 joinDate: s.joined_on,
@@ -84,18 +84,18 @@ export default function ManageTenants() {
         const selectedTenantId = location.state?.selectedTenantId;
         if (!selectedTenantId || tenants.length === 0) return;
 
-        const matchedStudent = tenants.find(tenant => tenant.id === selectedTenantId);
-        if (matchedStudent) {
-            setExtendedProfileStudent(matchedStudent);
+        const matchedTenant = tenants.find(tenant => tenant.id === selectedTenantId);
+        if (matchedTenant) {
+            setExtendedProfileTenant(matchedTenant);
             navigate(location.pathname, { replace: true, state: {} });
         }
     }, [location.pathname, location.state, navigate, tenants]);
 
     // Handlers
-    const handleSaveStudent = async (data) => {
+    const handleSaveTenant = async (data) => {
         try {
-            if (studentToEdit) {
-                await tenantService.update(studentToEdit.id, {
+            if (tenantToEdit) {
+                await tenantService.update(tenantToEdit.id, {
                     monthly_rent: parseFloat(data.rent),
                     status: data.status,
                     joined_on: data.joinDate
@@ -109,7 +109,7 @@ export default function ManageTenants() {
         }
     };
 
-    const handleDeleteStudent = async (id) => {
+    const handleDeleteTenant = async (id) => {
         if (!window.confirm("Are you sure you want to mark this tenant as LEFT? \n\nTheir payment history will be preserved, but their room allocation will be ended immediately, making the room available for new tenants.")) return;
         try {
             await tenantService.delete(id);
@@ -540,20 +540,20 @@ export default function ManageTenants() {
             {/* Add/Edit Modal */}
             <AnimatePresence>
                 {showAddModal && (
-                    <AddStudentModal
+                    <AddTenantModal
                         onClose={() => setShowAddModal(false)}
-                        initialData={studentToEdit}
-                        onSave={handleSaveStudent}
+                        initialData={tenantToEdit}
+                        onSave={handleSaveTenant}
                     />
                 )}
             </AnimatePresence>
 
             {/* Extended Profile Modal */}
             <ExtendedProfileForm
-                isOpen={!!extendedProfileStudent}
-                onClose={() => setExtendedProfileStudent(null)}
-                tenant={extendedProfileStudent}
-                onSave={() => { fetchTenants(); setExtendedProfileStudent(null); }}
+                isOpen={!!extendedProfileTenant}
+                onClose={() => setExtendedProfileTenant(null)}
+                tenant={extendedProfileTenant}
+                onSave={() => { fetchTenants(); setExtendedProfileTenant(null); }}
             />
 
             {/* Tenant History Modal */}
@@ -579,7 +579,7 @@ const StatCard = ({ title, value, icon: Icon, iconBg, iconColor, isCurrency = fa
     </div>
 );
 
-const AddStudentModal = ({ onClose, initialData, onSave }) => {
+const AddTenantModal = ({ onClose, initialData, onSave }) => {
     // We need list of vacant rooms to select from if adding new
     const [rooms, setRooms] = useState([]);
     const [formData, setFormData] = useState({

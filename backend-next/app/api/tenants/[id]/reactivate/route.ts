@@ -30,7 +30,7 @@ export async function POST(
       return apiError("Invalid joined_on date", "VALIDATION_ERROR", 400);
     }
 
-    const result = await tenantService.reactivateStudent(
+    const result = await tenantService.reactivateTenant(
       params.id, 
       body.monthly_rent, 
       joinedOnDate, 

@@ -29,18 +29,18 @@ export const eventSystem = new HMSEventEmitter();
 
 // --- Activity Log Handlers ---
 
-eventSystem.on("student_created", async (data) => {
+eventSystem.on("tenant_created", async (data) => {
   await activityService.log({
     userId: data.creator_id,
     ownerId: data.owner_id,
     actionType: "CREATE",
-    entityType: "STUDENT",
-    entityId: data.student_id,
+    entityType: "TENANT",
+    entityId: data.tenant_id,
     metadata: { email: data.email }
   });
 });
 
-eventSystem.on("student_allocated_room", async (data) => {
+eventSystem.on("tenant_allocated_room", async (data) => {
   await activityService.log({
     userId: data.owner_id,
     ownerId: data.owner_id,
@@ -48,7 +48,7 @@ eventSystem.on("student_allocated_room", async (data) => {
     entityType: "ROOM",
     entityId: data.room_id,
     metadata: { 
-      student_id: data.student_id,
+      tenant_id: data.tenant_id,
       allocation_id: data.allocation_id 
     }
   });
@@ -56,7 +56,7 @@ eventSystem.on("student_allocated_room", async (data) => {
 
 eventSystem.on("payment_recorded", async (data) => {
   await activityService.log({
-    userId: data.student_id || data.owner_id,
+    userId: data.tenant_id || data.owner_id,
     ownerId: data.owner_id,
     actionType: "PAYMENT",
     entityType: "PAYMENT",
@@ -78,7 +78,7 @@ eventSystem.on("expense_created", async (data) => {
 
 eventSystem.on("document_uploaded", async (data) => {
   await activityService.log({
-    userId: data.student_id,
+    userId: data.tenant_id,
     ownerId: data.owner_id,
     actionType: "UPLOAD",
     entityType: "DOCUMENT",
@@ -93,6 +93,6 @@ eventSystem.on("document_verified", async (data) => {
     actionType: data.is_verified ? "VERIFY" : "UNVERIFY",
     entityType: "DOCUMENT",
     entityId: data.doc_id,
-    metadata: { student_id: data.student_id }
+    metadata: { tenant_id: data.tenant_id }
   });
 });

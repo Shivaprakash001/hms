@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const stats = await dashboardService.getStudentStats(session.sub);
+    const stats = await dashboardService.getTenantStats(session.sub);
     return apiResponse(stats);
   } catch (error: any) {
     if (error.message.startsWith("NOT_FOUND"))

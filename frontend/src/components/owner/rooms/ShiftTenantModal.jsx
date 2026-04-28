@@ -109,7 +109,7 @@ const ShiftTenantModal = ({ selectedTenant, selectedRoom, floors, onClose, onShi
                                                 </div>
                                                 <div>
                                                     <p className="text-sm font-black text-slate-900">Room {room.room_no}</p>
-                                                    <p className="text-[10px] font-bold text-slate-400">Level {room.room_no.length >= 3 ? room.room_no.substring(0, room.room_no.length - 2) : 'G'}</p>
+                                                    <p className="text-[10px] font-bold text-slate-400">Level {room.floor ?? 'N/A'}</p>
                                                 </div>
                                             </div>
                                             <div className="text-right">

@@ -5,7 +5,7 @@ import AddRoomModal from '../../components/owner/rooms/AddRoomModal';
 import AddTenantModal from '../../components/owner/rooms/AddTenantModal';
 import ShiftTenantModal from '../../components/owner/rooms/ShiftTenantModal';
 import EditRoomModal from '../../components/owner/rooms/EditRoomModal';
-import { roomService, allocationService, tenantService, paymentService } from '../../api/services';
+import { roomService, allocationService, tenantService } from '../../api/services';
 
 const ManageRooms = () => {
     // State
@@ -105,35 +105,7 @@ const ManageRooms = () => {
         setTenantProfileLoading(true);
 
         try {
-            const [studentRes, paymentHistoryRes] = await Promise.all([
-                tenantService.getById(tenantId),
-                paymentService.getStudentHistory(tenantId)
-            ]);
-
-            const ownerProfile = {
-                id: studentRes?.id,
-                name: studentRes?.profile?.name || tenant.name,
-                phone: studentRes?.phone_1 || studentRes?.profile?.phone,
-                guardian_phone: studentRes?.phone_2 || studentRes?.profile?.emergency_contact,
-                email: studentRes?.profile?.email,
-                room_number: studentRes?.current_room?.room_no,
-                floor: studentRes?.current_room?.room_no && studentRes.current_room.room_no.length >= 3
-                    ? studentRes.current_room.room_no.slice(0, -2)
-                    : 'G',
-                joined_at: studentRes?.joined_on,
-                status: studentRes?.status,
-                rent: Number(studentRes?.monthly_rent || 0),
-                total_paid: Number(paymentHistoryRes?.total_paid || 0),
-                outstanding: Number(paymentHistoryRes?.outstanding_balance || 0),
-                recent_payments: (paymentHistoryRes?.payments || []).slice(0, 5).map((payment) => ({
-                    id: payment.id,
-                    amount: Number(payment.amount_paid || 0),
-                    date: payment.payment_date,
-                    method: payment.payment_method,
-                    status: 'paid',
-                    reference_number: payment.reference_number
-                }))
-            };
+            const ownerProfile = await tenantService.getOwnerTenantOverview(tenantId);
 
             setSelectedTenantProfile(ownerProfile);
         } catch (err) {
@@ -177,11 +149,11 @@ const ManageRooms = () => {
             // 1. Get or Create Tenant Record
             try {
                 // Check if tenant already has a record by profile_id
-                const existingStudent = await tenantService.getByProfileId(tenantData.profile_id);
-                tenantId = existingStudent.id;
+                const existingTenant = await tenantService.getByProfileId(tenantData.profile_id);
+                tenantId = existingTenant.id;
 
                 // If tenant exists but is LEFT, we must reactivate them
-                if (existingStudent.status === 'LEFT') {
+                if (existingTenant.status === 'LEFT') {
                     await tenantService.reactivate(tenantId, {
                         monthly_rent: parseFloat(tenantData.rent) || 0,
                         joined_on: tenantData.joinDate || new Date().toISOString().split('T')[0]
@@ -190,14 +162,14 @@ const ManageRooms = () => {
             } catch (err) {
                 // If 404, tenant doesn't exist, create it
                 if (err.response?.status === 404) {
-                    const studentData = {
+                    const tenantData = {
                         profile_id: tenantData.profile_id,
                         monthly_rent: tenantData.rent || 0,
                         joined_on: tenantData.joinDate || new Date().toISOString().split('T')[0],
                         status: 'ACTIVE'
                     };
-                    const studentResponse = await tenantService.create(studentData);
-                    tenantId = studentResponse.id;
+                    const tenantResponse = await tenantService.create(tenantData);
+                    tenantId = tenantResponse.id;
                 } else {
                     throw err;
                 }
@@ -575,7 +547,7 @@ const RoomDetailSidebar = ({ room, onClose, onEditRoom, onAddTenant, onRemoveTen
     const occupants = room?.tenants || room?.occupants || roomInfo?.tenants || [];
     const capacity = roomInfo?.capacity || 0;
     const roomNo = roomInfo?.room_no || roomInfo?.number;
-    const floor = roomInfo?.floor ?? (roomNo?.length >= 3 ? roomNo.substring(0, roomNo.length - 2) : 'G');
+    const floor = roomInfo?.floor ?? 'N/A';
 
     const getPaymentTone = (status) => {
         switch (status) {
@@ -802,8 +774,8 @@ const TenantProfileModal = ({ tenant, profile, loading, onClose }) => {
                                 <div>
                                     <h4 className="text-xs font-black uppercase tracking-[0.2em] text-slate-400 mb-3">Stay Info</h4>
                                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                        <InfoTile label="Room" value={profile?.room_number || 'Unassigned'} icon={BedDouble} />
-                                        <InfoTile label="Floor" value={profile?.floor || 'G'} icon={LayoutGrid} />
+                                        <InfoTile label="Room" value={profile?.room_number ?? 'Unassigned'} icon={BedDouble} />
+                                        <InfoTile label="Floor" value={profile?.room_number ? (profile?.floor ?? 'N/A') : 'N/A'} icon={LayoutGrid} />
                                         <InfoTile label="Joined" value={formatDisplayDate(profile?.joined_at)} icon={Calendar} />
                                         <InfoTile label="Status" value={profile?.status || 'N/A'} icon={Users} />
                                     </div>

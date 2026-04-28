@@ -106,7 +106,7 @@ export class DashboardService {
     return stats.reverse();
   }
 
-  async getStudentStats(profileId: string) {
+  async getTenantStats(profileId: string) {
     const tenant = await prisma.tenant.findUnique({
       where: { profile_id: profileId },
       include: {

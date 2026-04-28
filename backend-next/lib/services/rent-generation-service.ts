@@ -133,7 +133,7 @@ export class RentGenerationService {
 
         // 2️⃣ Dynamic Due Date from preferences
         const dueDay = config.due_day || prefs?.due_day || 5;
-        const studentDueDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), dueDay));
+        const tenantDueDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), dueDay));
 
         // Rent priority: tenant.monthly_rent > room.base_rent > skip
         const rentAmount = Number(alloc.tenant.monthly_rent) || Number(alloc.room.base_rent) || 0;
@@ -151,7 +151,7 @@ export class RentGenerationService {
               owner_id: alloc.tenant.owner_id,
               rent_month: rentMonth,
               amount: rentAmount,
-              due_date: studentDueDate,
+              due_date: tenantDueDate,
               status: "PENDING"
             }
           });
@@ -287,7 +287,7 @@ export class RentGenerationService {
       const rentAmount = Number(alloc.tenant.monthly_rent) || Number(alloc.room.base_rent) || 0;
       return {
         allocation_id: alloc.id,
-        student_name: alloc.tenant.profile?.name || "Unknown",
+        tenant_name: alloc.tenant.profile?.name || "Unknown",
         room_no: alloc.room.room_no,
         rent_amount: rentAmount,
         already_generated: existingSet.has(alloc.id),

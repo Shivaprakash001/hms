@@ -64,7 +64,7 @@ export class RoomAllocationService {
     });
 
     // ✅ Trigger Events
-    await eventSystem.trigger("student_allocated_room", {
+    await eventSystem.trigger("tenant_allocated_room", {
       tenant_id: tenantId,
       room_id: roomId,
       allocation_id: allocationData.id,
@@ -130,7 +130,7 @@ export class RoomAllocationService {
     });
 
     // ✅ Trigger Events
-    await eventSystem.trigger("student_allocated_room", {
+    await eventSystem.trigger("tenant_allocated_room", {
       tenant_id: tenantId,
       room_id: newRoomId,
       allocation_id: shiftData.id,

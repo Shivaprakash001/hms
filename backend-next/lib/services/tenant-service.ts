@@ -3,7 +3,7 @@ import { eventSystem } from "../events";
 import { z } from "zod";
 
 export class TenantService {
-  async getStudentById(id: string, requestingUser: { sub: string; role: string }) {
+  async getTenantById(id: string, requestingUser: { sub: string; role: string }) {
     const tenant = await prisma.tenant.findUnique({
       where: { id },
       select: {
@@ -51,7 +51,7 @@ export class TenantService {
     return tenant;
   }
 
-  async getStudentByProfile(profileId: string, requestingUser: { sub: string; role: string }) {
+  async getTenantByProfile(profileId: string, requestingUser: { sub: string; role: string }) {
     const tenant = await prisma.tenant.findUnique({
       where: { profile_id: profileId },
       select: {
@@ -183,37 +183,37 @@ export class TenantService {
     return { tenants: mappedTenants, total, limit, offset };
   }
 
-  async updateStudentSelfProfile(profileId: string, data: any, updatedBy: string) {
-    const studentCheck = await prisma.tenant.findUnique({
+  async updateTenantSelfProfile(profileId: string, data: any, updatedBy: string) {
+    const tenantCheck = await prisma.tenant.findUnique({
       where: { profile_id: profileId },
       select: { id: true },
     });
 
-    if (!studentCheck) throw new Error("NOT_FOUND: Tenant record not found");
+    if (!tenantCheck) throw new Error("NOT_FOUND: Tenant record not found");
 
     const profileFields = ["name", "email", "phone"];
-    const studentFields = [
+    const tenantFields = [
       "photo_url", "phone_1", "phone_2", "phone_3", "aadhaar_number", "personal_email",
       "college_name", "roll_number", "course", "year_of_study", "section", "branch",
       "temporary_address", "permanent_address", "gender"
     ];
 
     const profileUpdate: any = {};
-    const studentUpdate: any = {};
+    const tenantUpdate: any = {};
 
     for (const [key, value] of Object.entries(data)) {
       if (profileFields.includes(key)) profileUpdate[key] = value;
-      else if (studentFields.includes(key)) studentUpdate[key] = value;
+      else if (tenantFields.includes(key)) tenantUpdate[key] = value;
     }
 
-    if (studentUpdate.gender === "Prefer not to say") {
-      studentUpdate.gender = null;
+    if (tenantUpdate.gender === "Prefer not to say") {
+      tenantUpdate.gender = null;
     }
 
     // Legacy address mapping
     if (data.address) {
-      studentUpdate.temporary_address = data.address;
-      studentUpdate.permanent_address = data.address;
+      tenantUpdate.temporary_address = data.address;
+      tenantUpdate.permanent_address = data.address;
     }
 
     if (Object.keys(profileUpdate).length > 0) {
@@ -223,19 +223,19 @@ export class TenantService {
       });
     }
 
-    if (Object.keys(studentUpdate).length > 0) {
+    if (Object.keys(tenantUpdate).length > 0) {
       try {
         await prisma.tenant.update({
           where: { profile_id: profileId },
-          data: studentUpdate,
+          data: tenantUpdate,
         });
       } catch (error: any) {
         const msg = String(error?.message || error);
-        if (msg.includes("tenants.gender") && Object.prototype.hasOwnProperty.call(studentUpdate, "gender")) {
-          delete studentUpdate.gender;
+        if (msg.includes("tenants.gender") && Object.prototype.hasOwnProperty.call(tenantUpdate, "gender")) {
+          delete tenantUpdate.gender;
           await prisma.tenant.update({
             where: { profile_id: profileId },
-            data: studentUpdate,
+            data: tenantUpdate,
           });
         } else {
           throw error;
@@ -244,7 +244,7 @@ export class TenantService {
     }
 
     // Completion check
-    const refreshed = await this.getStudentByProfile(profileId, { sub: profileId, role: "TENANT" });
+    const refreshed = await this.getTenantByProfile(profileId, { sub: profileId, role: "TENANT" });
     const isComplete = this.checkProfileCompletion(refreshed);
 
     if (isComplete) {
@@ -311,7 +311,7 @@ export class TenantService {
       requestId: request.id,
       tenantId: tenant.id,
       ownerId: tenant.owner_id,
-      studentName: tenant.profile.name,
+      tenantName: tenant.profile.name,
     });
 
     return request;
@@ -348,9 +348,9 @@ export class TenantService {
         created_at: req.created_at,
         processed_at: req.processed_at,
         processed_by: req.processed_by,
-        student_name: profile.name,
-        student_email: profile.email,
-        student_phone: profile.phone,
+        tenant_name: profile.name,
+        tenant_email: profile.email,
+        tenant_phone: profile.phone,
         room_no: room?.room_no || null
       };
     });
@@ -374,7 +374,7 @@ export class TenantService {
         where: { id: request.tenant_id },
         data: { status: "ACTIVE" }
       });
-      await eventSystem.trigger("student_reactivated", { tenantId: request.tenant_id, userId: ownerId });
+      await eventSystem.trigger("tenant_reactivated", { tenantId: request.tenant_id, userId: ownerId });
     }
 
     return await prisma.reactivationRequest.update({
@@ -434,10 +434,7 @@ export class TenantService {
         reference_number: p.reference_number
       }));
 
-    let floor = "G";
-    if (currentRoom?.room_no && currentRoom.room_no.length >= 3) {
-      floor = currentRoom.room_no.substring(0, currentRoom.room_no.length - 2);
-    }
+    const floor = currentRoom?.floor ?? null;
 
     return {
       id: tenant.id,
@@ -463,7 +460,7 @@ export class TenantService {
     };
   }
 
-  async createStudent(data: any, ownerId: string) {
+  async createTenant(data: any, ownerId: string) {
     // Note: Profile must be created first or linked.
     return await prisma.tenant.create({
       data: {
@@ -474,7 +471,7 @@ export class TenantService {
     });
   }
 
-  async updateStudent(id: string, data: any, ownerId: string) {
+  async updateTenant(id: string, data: any, ownerId: string) {
     const tenant = await prisma.tenant.findUnique({
       where: { id },
       select: { id: true, owner_id: true, status: true },
@@ -497,7 +494,7 @@ export class TenantService {
     });
   }
 
-  async deleteStudent(id: string, ownerId: string) {
+  async deleteTenant(id: string, ownerId: string) {
     const tenant = await prisma.tenant.findUnique({
       where: { id },
       select: { id: true, owner_id: true, status: true },
@@ -518,7 +515,7 @@ export class TenantService {
     });
   }
 
-  async reactivateStudent(id: string, rent: number, joinedOn: Date, ownerId: string) {
+  async reactivateTenant(id: string, rent: number, joinedOn: Date, ownerId: string) {
     const tenant = await prisma.tenant.findUnique({
       where: { id },
       select: { id: true, owner_id: true, status: true },

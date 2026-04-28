@@ -47,9 +47,9 @@ export async function GET(req: Request) {
 
     const items = attempts.map((a: any) => ({
       attempt_id: a.id,
-      student_name: a.tenant?.profile?.name || "Unknown",
-      student_email: a.tenant?.profile?.email || "",
-      student_phone: a.tenant?.profile?.phone || "",
+      tenant_name: a.tenant?.profile?.name || "Unknown",
+      tenant_email: a.tenant?.profile?.email || "",
+      tenant_phone: a.tenant?.profile?.phone || "",
       room_no: a.obligation?.allocation?.room?.room_no || "N/A",
       amount: Number(a.amount),
       upi_reference: a.gateway_txn_id || "—",

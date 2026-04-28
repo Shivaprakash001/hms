@@ -303,9 +303,9 @@ export class PaymentService {
         const result = await instance.createIntent({
             amount: validationAmount,
             merchant_txn_id: merchantTxnId,
-            student_name: obligation.tenant.profile.name,
-            student_email: obligation.tenant.profile.email,
-            student_phone: obligation.tenant.profile.phone || "",
+            tenant_name: obligation.tenant.profile.name,
+            tenant_email: obligation.tenant.profile.email,
+            tenant_phone: obligation.tenant.profile.phone || "",
             metadata: {
                 obligation_id: obligationId,
                 tenant_id: obligation.tenant_id,
@@ -568,9 +568,9 @@ export class PaymentService {
     return dues.map((d: any) => ({
         obligation_id: d.id,
         tenant_id: d.tenant_id,
-        student_name: d.tenant.profile.name,
-        student_email: d.tenant.profile.email,
-        student_phone: d.tenant.profile.phone,
+        tenant_name: d.tenant.profile.name,
+        tenant_email: d.tenant.profile.email,
+        tenant_phone: d.tenant.profile.phone,
         room_no: d.allocation?.room?.room_no || "N/A",
         rent_month: d.rent_month,
         due_date: d.due_date,
@@ -603,7 +603,7 @@ export class PaymentService {
     return {
         payments: payments.map((p: any) => ({
             ...p,
-            student_name: p.tenant.profile.name,
+            tenant_name: p.tenant.profile.name,
             rent_month: p.obligation.rent_month
         })),
         total
@@ -651,7 +651,7 @@ export class PaymentService {
     };
   }
 
-  async getStudentPaymentHistory(tenantId: string) {
+  async getTenantPaymentHistory(tenantId: string) {
     const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId },
       include: {
@@ -723,10 +723,10 @@ export class PaymentService {
     const paymentStatus = outstandingBalance <= 0 ? "PAID" : totalPaid > 0 ? "PARTIAL" : "PENDING";
     const allocationRent = Number(tenant.allocations?.[0]?.room?.base_rent || 0);
     const fallbackObligationRent = Number(tenant.obligations?.[0]?.amount || 0);
-    const studentRent = Number(tenant.monthly_rent || 0);
+    const tenantRent = Number(tenant.monthly_rent || 0);
     const monthlyRent =
       (allocationRent > 0 ? allocationRent : 0) ||
-      (studentRent > 0 ? studentRent : 0) ||
+      (tenantRent > 0 ? tenantRent : 0) ||
       (fallbackObligationRent > 0 ? fallbackObligationRent : 0);
 
     return {

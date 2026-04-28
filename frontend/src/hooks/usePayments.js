@@ -4,12 +4,12 @@ import { paymentService } from '../api/services';
 /**
  * Fetch payment history for a tenant
  */
-export const useStudentPaymentHistory = (tenantId) => {
+export const useTenantPaymentHistory = (tenantId) => {
   return useQuery({
     queryKey: ['payments', 'history', tenantId],
     queryFn: async () => {
       if (!tenantId) return null;
-      return await paymentService.getStudentHistory(tenantId);
+      return await paymentService.getTenantHistory(tenantId);
     },
     enabled: !!tenantId,
     staleTime: 2 * 60 * 1000,

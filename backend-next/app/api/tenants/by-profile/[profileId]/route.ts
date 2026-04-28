@@ -18,7 +18,7 @@ export async function GET(
   if (!session) return apiError("Unauthorized", "UNAUTHORIZED", 401);
 
   try {
-    const tenant = await tenantService.getStudentByProfile(params.profileId, { sub: session.sub, role: session.role });
+    const tenant = await tenantService.getTenantByProfile(params.profileId, { sub: session.sub, role: session.role });
     return apiResponse(tenant);
   } catch (error: any) {
     if (error.message.startsWith("NOT_FOUND")) return apiError(error.message.split(": ")[1], "NOT_FOUND", 404);

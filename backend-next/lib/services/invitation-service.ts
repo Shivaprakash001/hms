@@ -64,7 +64,7 @@ export class InvitationService {
     const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
 
     // 4. Create Profile + Tenant + Allocation atomically
-    const { profile: newProfile, tenant: newStudent } = await prisma.$transaction(async (tx) => {
+    const { profile: newProfile, tenant: newTenant } = await prisma.$transaction(async (tx) => {
       const profile = await tx.profile.create({
         data: {
           email: normalizedEmail,
@@ -102,11 +102,11 @@ export class InvitationService {
       return { profile, tenant };
     });
 
-    logger.info(`Successfully created profile ${newProfile.id} and tenant record ${newStudent.id} with status INVITED`);
+    logger.info(`Successfully created profile ${newProfile.id} and tenant record ${newTenant.id} with status INVITED`);
 
     // 5. Log Activity
-    await eventSystem.trigger("student_created", {
-      tenant_id: newStudent.id,
+    await eventSystem.trigger("tenant_created", {
+      tenant_id: newTenant.id,
       email: normalizedEmail,
       owner_id: ownerId,
       creator_id: ownerId,
@@ -133,7 +133,7 @@ export class InvitationService {
     logger.info(`Successfully queued invitation email for ${normalizedEmail}`);
 
     return {
-      tenant_id: newStudent.id,
+      tenant_id: newTenant.id,
       email: normalizedEmail,
       activation_link: activationLink, // For dev/testing purposes
       action: "INVITED",

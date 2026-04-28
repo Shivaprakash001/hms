@@ -1,6 +1,6 @@
 import React from 'react';
 
-const StudentComplaints = () => {
+const TenantComplaints = () => {
     return (
         <div className="space-y-4 animate-fade-in-up">
             <div>
@@ -18,4 +18,4 @@ const StudentComplaints = () => {
     );
 };
 
-export default StudentComplaints;
+export default TenantComplaints;

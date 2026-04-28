@@ -98,7 +98,7 @@ const OwnerLayout = () => {
                             queryClient.invalidateQueries({ queryKey: ['dashboard'] });
                             queryClient.invalidateQueries({ queryKey: ['expenses'] });
                             fetchNotifications();
-                        } else if (data.type === 'student_created' || data.type === 'student_allocated_room') {
+                        } else if (data.type === 'tenant_created' || data.type === 'tenant_allocated_room') {
                             queryClient.invalidateQueries({ queryKey: ['dashboard'] });
                             queryClient.invalidateQueries({ queryKey: ['tenants'] });
                             fetchNotifications();

@@ -13,7 +13,7 @@ export default function ExtendedProfileForm({ isOpen, onClose, tenant, onSave })
     const [successMsg, setSuccessMsg] = useState('');
     const [error, setError] = useState('');
     const [photoPreview, setPhotoPreview] = useState(null);
-    const [fullStudent, setFullStudent] = useState(null);
+    const [fullTenant, setFullTenant] = useState(null);
 
     const [form, setForm] = useState({
         // Section 1: Personal
@@ -39,9 +39,9 @@ export default function ExtendedProfileForm({ isOpen, onClose, tenant, onSave })
         section: ''
     });
 
-    const initializeFromStudent = useCallback((data) => {
+    const initializeFromTenant = useCallback((data) => {
         if (!data) return;
-        setFullStudent(data);
+        setFullTenant(data);
         setForm({
             name: data.profile?.name || data.name || '',
             personal_email: data.personal_email || data.profile?.email || '',
@@ -68,13 +68,13 @@ export default function ExtendedProfileForm({ isOpen, onClose, tenant, onSave })
         
         setError('');
         setSuccessMsg('');
-        initializeFromStudent(tenant);
+        initializeFromTenant(tenant);
 
         const fetchFullProfile = async () => {
             setLoadingDetails(true);
             try {
                 const full = await tenantService.getById(tenant.id);
-                initializeFromStudent(full);
+                initializeFromTenant(full);
             } catch (err) {
                 console.error('Failed to load full tenant profile:', err);
             } finally {
@@ -83,7 +83,7 @@ export default function ExtendedProfileForm({ isOpen, onClose, tenant, onSave })
         };
 
         fetchFullProfile();
-    }, [isOpen, tenant, initializeFromStudent]);
+    }, [isOpen, tenant, initializeFromTenant]);
 
     const progress = useMemo(() => {
         const fields = Object.values(form);

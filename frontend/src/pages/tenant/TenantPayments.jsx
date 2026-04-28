@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { paymentService } from '../../api/services';
 import PaymentModal from '../../components/tenant/payment/PaymentModal';
 
-const StudentPayments = () => {
+const TenantPayments = () => {
     const { user } = useAuth();
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [expandedRows, setExpandedRows] = useState({});
@@ -17,7 +17,7 @@ const StudentPayments = () => {
     // Fetch data
     const loadHistory = useCallback(async () => {
         try {
-            const data = await paymentService.getStudentHistory(user.tenant_id);
+            const data = await paymentService.getTenantHistory(user.tenant_id);
             setHistory(data);
         } catch (error) {
             console.error("Failed to load payment history:", error);
@@ -344,4 +344,4 @@ const StudentPayments = () => {
     );
 };
 
-export default StudentPayments;
+export default TenantPayments;

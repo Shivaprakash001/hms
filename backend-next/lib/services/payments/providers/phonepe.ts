@@ -96,7 +96,7 @@ export class PhonePeProvider extends PaymentProvider {
       expireAfter: 1800, // 30 min
       paymentFlow: {
         type: "PG_CHECKOUT",
-        message: `Rent payment - ${data.student_name || "Tenant"}`,
+        message: `Rent payment - ${data.tenant_name || "Tenant"}`,
         merchantUrls: {
           redirectUrl,
         },

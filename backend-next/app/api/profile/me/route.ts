@@ -4,7 +4,7 @@ export const runtime = "nodejs";
 import { NextRequest } from "next/server";
 import { getSession, apiError, apiResponse } from "@/lib/auth";
 import { userService } from "@/lib/services/user-service";
-import { StudentProfileUpdateSchema } from "@/lib/validators";
+import { TenantProfileUpdateSchema } from "@/lib/validators";
 
 
 export async function GET(req: NextRequest) {
@@ -27,7 +27,7 @@ export async function PATCH(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const validated = StudentProfileUpdateSchema.safeParse(body);
+    const validated = TenantProfileUpdateSchema.safeParse(body);
 
     if (!validated.success) {
       return apiError("Validation failed", "VALIDATION_ERROR", 400);

@@ -16,6 +16,6 @@ export const useAuth = () => {
     isAuthenticated: !!user,
     isAdmin: user?.role?.toLowerCase() === 'admin',
     isWarden: user?.role?.toLowerCase() === 'warden',
-    isStudent: user?.role?.toLowerCase() === 'tenant',
+    isTenant: user?.role?.toLowerCase() === 'tenant',
   };
 };

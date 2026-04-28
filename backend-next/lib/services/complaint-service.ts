@@ -2,7 +2,7 @@ import { prisma } from "../db";
 import { eventSystem } from "../events";
 
 export class ComplaintService {
-  async getStudentComplaints(tenantId: string) {
+  async getTenantComplaints(tenantId: string) {
     return prisma.complaint.findMany({
       where: { tenant_id: tenantId },
       orderBy: { created_at: "desc" }

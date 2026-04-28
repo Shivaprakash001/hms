@@ -6,7 +6,7 @@ import { paymentService } from '../../api/services';
 
 const TERMINAL_STATUSES = ['SUCCESS', 'FAILED', 'EXPIRED', 'CANCELLED'];
 
-const StudentPaymentReturn = () => {
+const TenantPaymentReturn = () => {
     const [searchParams] = useSearchParams();
     const [attempt, setAttempt] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -124,4 +124,4 @@ const StudentPaymentReturn = () => {
     );
 };
 
-export default StudentPaymentReturn;
+export default TenantPaymentReturn;
