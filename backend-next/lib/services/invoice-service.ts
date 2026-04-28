@@ -116,7 +116,7 @@ export class InvoiceService {
     // TITLE: INVOICE
     // ════════════════════════════════════════════════
     Y -= 40;
-    page.drawText("INVOICE", { x: LEFT, y: Y, size: 42, font: fontBold, color: COLORS.black });
+    page.drawText("RECEIPT", { x: LEFT, y: Y, size: 42, font: fontBold, color: COLORS.black });
 
     // ════════════════════════════════════════════════
     // META ROW: Date | Rent Month | Status
