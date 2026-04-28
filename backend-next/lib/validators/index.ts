@@ -49,6 +49,10 @@ export const TenantProfileUpdateSchema = z.object({
   permanent_address: z.string().optional(),
   temporary_address: z.string().optional(),
   gender: z.enum(["Male", "Female", "Other", "Prefer not to say"]).optional().nullable(),
+  profile_type: z.enum(["STUDENT", "WORKING_PROFESSIONAL"]).optional(),
+  office_name: z.string().optional().nullable(),
+  office_location: z.string().optional().nullable(),
+  job_role: z.string().optional().nullable(),
 });
 
 export const ReactivationRequestSchema = z.object({

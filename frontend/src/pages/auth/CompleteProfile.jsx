@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, MapPin, Phone, GraduationCap, Loader2, CheckCircle2, Upload, Mail, ShieldCheck } from 'lucide-react';
+import { User, MapPin, Phone, GraduationCap, Loader2, CheckCircle2, Upload, Briefcase, ChevronRight, ChevronLeft } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { tenantService } from '../../api/services';
 
@@ -9,55 +9,52 @@ import { tenantService } from '../../api/services';
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardTitle, CardDescription } from "@/components/ui/Card";
+import { Card, CardContent } from "@/components/ui/Card";
 
-const LogoImage = ({ src }) => {
-    const [error, setError] = useState(false);
-    if (!src || error) {
-        return (
-            <div className="w-full h-full bg-indigo-600 flex items-center justify-center text-white">
-                <ShieldCheck size={24} />
-            </div>
-        );
-    }
-    return (
-        <img
-            src={src}
-            alt="Logo"
-            className="w-full h-full object-contain p-2"
-            onError={() => setError(true)}
-        />
-    );
+const SlideVariant = {
+    initial: { opacity: 0, x: 20 },
+    animate: { opacity: 1, x: 0 },
+    exit: { opacity: 0, x: -20 },
 };
 
 const CompleteProfile = () => {
     const navigate = useNavigate();
     const { user, loading } = useAuth();
-
+    const [currentStep, setCurrentStep] = useState(1);
+    
+    // Check Auth State
     useEffect(() => {
-        if (loading) {
-            return;
-        }
-        if (!user) {
-            navigate('/', { replace: true });
-        } else if (user.is_profile_completed) {
-            navigate('/tenant/dashboard', { replace: true });
-        }
+        if (loading) return;
+        if (!user) navigate('/', { replace: true });
+        else if (user.is_profile_completed) navigate('/tenant/dashboard', { replace: true });
     }, [user, loading, navigate]);
 
+    // Form State
     const [formData, setFormData] = useState({
         name: user?.name || '',
         phone: '',
         emergency_contact: '',
         personal_email: user?.email || '',
-        aadhaar_number: '',
+        gender: '',
+        temporary_address: '',
+        permanent_address: '',
+        
+        profile_type: '', // STUDENT or WORKING_PROFESSIONAL
+        
+        // Student Fields
         college_name: '',
         roll_number: '',
         course: '',
         year_of_study: '',
         section: '',
         branch: '',
-        address: ''
+        
+        // Work Fields
+        office_name: '',
+        office_location: '',
+        job_role: '',
+        
+        aadhaar_number: ''
     });
 
     const [aadhaarFile, setAadhaarFile] = useState(null);
@@ -67,38 +64,25 @@ const CompleteProfile = () => {
     const [isSuccess, setIsSuccess] = useState(false);
 
     useEffect(() => {
-        setFormData((prev) => ({
+        setFormData(prev => ({
             ...prev,
             name: prev.name || user?.name || '',
             personal_email: prev.personal_email || user?.email || '',
         }));
-    }, [user?.name, user?.email]);
+    }, [user]);
 
-    if (loading) {
-        return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-600">Loading...</div>;
-    }
+    if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-600">Loading...</div>;
 
-    const handleInputChange = (e) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
-    };
+    const handleChange = (e) => setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
 
     const handleFileChange = (e) => {
         const file = e.target.files?.[0];
         if (!file) return;
-
-        if (file.size > 5 * 1024 * 1024) {
-            setError('File size must be less than 5MB');
-            return;
-        }
-        if (!['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.type)) {
-            setError('Only JPG, PNG, WebP, or PDF files are allowed');
-            return;
-        }
-
+        if (file.size > 5 * 1024 * 1024) return setError('File size must be < 5MB');
+        if (!['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.type)) return setError('Only JPG, PNG, or PDF allowed');
+        
         setAadhaarFile(file);
         setError('');
-
         if (file.type.startsWith('image/')) {
             const reader = new FileReader();
             reader.onloadend = () => setPreviewUrl(reader.result);
@@ -108,213 +92,336 @@ const CompleteProfile = () => {
         }
     };
 
-    const validateRequired = () => {
-        if (!formData.name.trim()) return 'Full name is required';
-        if (!formData.phone.trim()) return 'Phone number is required';
-        if (!formData.emergency_contact.trim()) return 'Parent / Emergency number is required';
-        if (!formData.aadhaar_number.trim()) return 'Aadhaar number is required';
-        if (formData.aadhaar_number.trim().length !== 12) return 'Aadhaar number must be 12 digits';
-        if (!formData.college_name.trim()) return 'College name is required';
-        if (!formData.roll_number.trim()) return 'Roll number is required';
-        if (!formData.year_of_study) return 'Year of study is required';
-        if (!formData.branch.trim()) return 'Branch is required';
-        if (!formData.address.trim()) return 'Address is required';
-        if (!aadhaarFile) return 'Aadhaar document upload is required';
+    // Step Validations
+    const validateStep1 = () => {
+        if (!formData.name.trim()) return 'Please enter your full name';
+        if (!formData.phone.trim()) return 'We need your phone number';
+        if (!formData.emergency_contact.trim()) return 'Emergency contact is required for your safety';
+        if (!formData.gender) return 'Please select your gender';
+        if (!formData.permanent_address.trim()) return 'Permanent address is required';
         return null;
     };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        const validationError = validateRequired();
-        if (validationError) {
-            setError(validationError);
-            return;
+    const validateStep2 = () => {
+        if (!formData.profile_type) return 'Please select what best describes you';
+        if (formData.profile_type === 'STUDENT') {
+            if (!formData.college_name.trim()) return 'Your college name is required';
+            if (!formData.roll_number.trim()) return 'Your roll number helps us identify you';
+        } else {
+            if (!formData.office_name.trim()) return 'Your office name is required';
         }
+        return null;
+    };
+
+    const validateStep3 = () => {
+        if (!formData.aadhaar_number.trim() || formData.aadhaar_number.length !== 12) return 'A valid 12-digit Aadhaar is required';
+        if (!aadhaarFile) return 'Please upload a photo of your ID';
+        return null;
+    };
+
+    const performStepLogic = async (direction) => {
+        setError('');
+        if (direction === 'next') {
+            let err = null;
+            if (currentStep === 1) err = validateStep1();
+            if (currentStep === 2) err = validateStep2();
+            if (err) return setError(err);
+            
+            // Auto copy permanent address to temporary if empty
+            if (currentStep === 1 && !formData.temporary_address) {
+                setFormData(prev => ({ ...prev, temporary_address: formData.permanent_address }));
+            }
+            setCurrentStep(c => c + 1);
+        } else {
+            setCurrentStep(c => Math.max(1, c - 1));
+        }
+    };
+
+    const handleSubmitComplete = async () => {
+        const err = validateStep3();
+        if (err) return setError(err);
 
         setIsLoading(true);
         setError('');
-
         try {
+            // Map the frontend state into the API schema
             const payload = {
                 name: formData.name.trim(),
                 phone: formData.phone.trim(),
                 emergency_contact: formData.emergency_contact.trim(),
-                phone_1: formData.phone.trim(),
-                phone_2: formData.emergency_contact.trim(),
+                gender: formData.gender,
                 personal_email: formData.personal_email?.trim() || null,
+                address: formData.permanent_address.trim(), // API legacy map
+                temporary_address: formData.temporary_address.trim(),
+                permanent_address: formData.permanent_address.trim(),
+                
+                profile_type: formData.profile_type,
+                
+                // Student
+                college_name: formData.college_name.trim() || undefined,
+                roll_number: formData.roll_number.trim() || undefined,
+                course: formData.course.trim() || undefined,
+                year_of_study: formData.year_of_study ? Number(formData.year_of_study) : undefined,
+                branch: formData.branch.trim() || undefined,
+                
+                // Work
+                office_name: formData.office_name.trim() || undefined,
+                office_location: formData.office_location.trim() || undefined,
+                job_role: formData.job_role.trim() || undefined,
+                
                 aadhaar_number: formData.aadhaar_number.trim(),
-                college_name: formData.college_name.trim(),
-                roll_number: formData.roll_number.trim(),
-                course: formData.course?.trim() || null,
-                year_of_study: Number(formData.year_of_study),
-                section: formData.section?.trim() || null,
-                branch: formData.branch.trim(),
-                address: formData.address.trim()
             };
 
             await tenantService.completeMyProfile(payload, aadhaarFile);
-
             setIsSuccess(true);
-            setTimeout(() => {
-                window.location.href = '/tenant/dashboard';
-            }, 1200);
+            setTimeout(() => window.location.href = '/tenant/dashboard', 1500);
         } catch (err) {
-            const apiError = err?.response?.data?.error;
-            const detail = err?.response?.data?.detail;
-            let msg = 'Submission failed. Please try again.';
-            
-            if (apiError?.message) {
-                msg = apiError.message;
-            } else if (typeof detail === 'object') {
-                msg = detail.message;
-                if (detail.details) {
-                    msg = `${msg}: ${detail.details}`;
-                }
-            } else if (typeof detail === 'string') {
-                msg = detail;
-            }
-            
-            setError(msg || err.message || 'Submission failed. Please try again.');
+            setError(err?.response?.data?.error?.message || err?.response?.data?.detail || 'Submission failed. Please try again.');
         } finally {
             setIsLoading(false);
         }
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 relative overflow-hidden font-sans">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-white via-slate-50 to-slate-100" />
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 relative font-sans">
+            {/* Soft decorative background */}
+            <div className="fixed inset-0 pointer-events-none flex justify-center items-center overflow-hidden">
+                <div className="absolute top-[-10%] sm:w-[800px] sm:h-[800px] w-[400px] h-[400px] bg-indigo-50/50 rounded-full blur-3xl mix-blend-multiply" />
+                <div className="absolute bottom-[-10%] sm:w-[600px] sm:h-[600px] w-[300px] h-[300px] bg-purple-50/50 rounded-full blur-3xl mix-blend-multiply" />
+            </div>
 
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="w-full max-w-[560px] relative z-10 py-8"
-            >
-                <Card className="border-slate-200 shadow-2xl relative overflow-hidden">
+            <main className="w-full max-w-[500px] relative z-10 pt-4 pb-12">
+                
+                {/* Header Welcome Card */}
+                {!isSuccess && (
+                     <div className="mb-8 text-center px-4">
+                        <div className="mx-auto w-16 h-16 bg-white rounded-2xl shadow-xl border border-slate-100 flex items-center justify-center mb-6 overflow-hidden p-2">
+                             <img src="https://trishul.solutions/logo.png" alt="Logo" className="w-full h-full object-contain" />
+                        </div>
+                        <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-tight">Welcome to Trishul!</h1>
+                        <p className="text-slate-500 font-medium mt-2">Let’s quickly set up your profile.</p>
+                     </div>
+                )}
+
+                {/* Progress Indicators */}
+                {!isSuccess && (
+                    <div className="flex justify-center items-center gap-3 mb-8">
+                        {[1, 2, 3].map((step) => (
+                            <div key={step} className="flex flex-col flex-1 max-w-[40px] gap-1.5 items-center">
+                                <div className={`h-1.5 w-full rounded-full transition-all duration-300 ${step <= currentStep ? 'bg-indigo-600' : 'bg-slate-200'}`} />
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {/* Error Banner */}
+                {error && (
+                    <div className="mb-6 bg-red-50 text-red-600 px-4 py-3 rounded-xl text-sm font-medium border border-red-100 flex items-center gap-2">
+                        <span className="shrink-0">⚠️</span> {error}
+                    </div>
+                )}
+
+                <Card className="border-0 shadow-2xl bg-white/80 backdrop-blur-xl relative overflow-hidden rounded-[24px]">
                     <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
                     
-                    <CardContent className="p-8 md:p-10">
-                        <AnimatePresence mode="wait">
+                    <CardContent className="p-6 sm:p-8">
+                        <AnimatePresence mode="wait" initial={false}>
                             {isSuccess ? (
-                                <motion.div key="success" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-6">
-                                    <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 text-green-600">
-                                        <CheckCircle2 size={40} />
+                                <motion.div key="success" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-8">
+                                    <div className="w-20 h-20 bg-green-100/50 rounded-full flex items-center justify-center mx-auto mb-6 text-green-600 ring-4 ring-green-50 shadow-sm">
+                                        <CheckCircle2 size={40} className="text-green-500" />
                                     </div>
-                                    <h2 className="text-3xl font-black text-slate-900 mb-4">Profile Completed!</h2>
-                                    <p className="text-slate-500 font-medium mb-6">Redirecting to dashboard...</p>
-                                    <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mx-auto" />
+                                    <h2 className="text-2xl font-black text-slate-900 mb-3">You're all set!</h2>
+                                    <p className="text-slate-500 font-medium mb-8">Your profile has been built securely. Redirecting you to your dashboard...</p>
+                                    <Loader2 className="w-8 h-8 text-indigo-500 animate-spin mx-auto" />
                                 </motion.div>
                             ) : (
-                                <motion.div key="form">
-                                    <div className="text-center mb-8">
-                                        <div className="inline-flex items-center justify-center w-20 h-20 bg-white rounded-2xl mb-6 shadow-xl border border-slate-100 overflow-hidden">
-                                            <LogoImage src="https://trishul.solutions/logo.png" />
-                                        </div>
-                                        <CardTitle className="text-3xl font-black tracking-tight text-slate-900 mb-2">Complete Your Profile</CardTitle>
-                                        <CardDescription className="text-slate-500 text-sm font-medium">Verify your identity and academic details</CardDescription>
-                                    </div>
+                                <motion.div key={`step-${currentStep}`} variants={SlideVariant} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.2 }}>
+                                    
+                                    {/* -------------------- STAGE 1: IDENTITY -------------------- */}
+                                    {currentStep === 1 && (
+                                        <div className="space-y-6">
+                                            <div className="mb-4">
+                                                <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                                                    <span className="text-2xl">👤</span> Basics First
+                                                </h3>
+                                                <p className="text-slate-500 text-sm mt-1">Hostels require this for your safety.</p>
+                                            </div>
 
-                                    {error && (
-                                        <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm font-medium mb-6 text-center border border-red-100">{error}</div>
+                                            <div className="space-y-5">
+                                                <div>
+                                                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 block">Full Name</Label>
+                                                    <Input name="name" value={formData.name} onChange={handleChange} className="h-12 bg-slate-50/50 border-slate-200" placeholder="Sam Altman" />
+                                                </div>
+                                                
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 block">Your Phone</Label>
+                                                        <Input name="phone" value={formData.phone} onChange={handleChange} className="h-12 bg-slate-50/50" placeholder="+91" />
+                                                    </div>
+                                                    <div>
+                                                        <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 block">Gender</Label>
+                                                        <select name="gender" value={formData.gender} onChange={handleChange} className="flex h-12 w-full rounded-md border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500">
+                                                            <option value="" disabled>Select</option>
+                                                            <option value="Male">Male</option>
+                                                            <option value="Female">Female</option>
+                                                            <option value="Other">Other</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+
+                                                <div>
+                                                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 block">Emergency Contact (Parent)</Label>
+                                                    <Input name="emergency_contact" value={formData.emergency_contact} onChange={handleChange} className="h-12 bg-slate-50/50" placeholder="Parent's Mobile" />
+                                                </div>
+
+                                                <div>
+                                                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 block">Permanent Home Address</Label>
+                                                    <textarea name="permanent_address" value={formData.permanent_address} onChange={handleChange} className="flex w-full rounded-md border border-slate-200 bg-slate-50/50 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 resize-none h-20" placeholder="Flat No, Street, City, State..." />
+                                                </div>
+                                            </div>
+                                        </div>
                                     )}
 
-                                    <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div className="md:col-span-2">
-                                            <Label htmlFor="name">Full Name *</Label>
-                                            <Input id="name" name="name" value={formData.name} onChange={handleInputChange} className="mt-1" />
-                                        </div>
-                                        
-                                        <div>
-                                            <Label htmlFor="phone">Phone Number *</Label>
-                                            <Input id="phone" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="10-digit number" className="mt-1" />
-                                        </div>
-                                        
-                                        <div>
-                                            <Label htmlFor="emergency_contact">Emergency Contact *</Label>
-                                            <Input id="emergency_contact" name="emergency_contact" value={formData.emergency_contact} onChange={handleInputChange} placeholder="Parent/Guardian" className="mt-1" />
-                                        </div>
+                                    {/* -------------------- STAGE 2: ABOUT YOU -------------------- */}
+                                    {currentStep === 2 && (
+                                        <div className="space-y-6">
+                                            <div className="mb-4">
+                                                <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                                                    <span className="text-2xl">👋</span> What best describes you?
+                                                </h3>
+                                            </div>
 
-                                        <div className="md:col-span-2">
-                                            <Label htmlFor="aadhaar_number">Aadhaar Number *</Label>
-                                            <Input id="aadhaar_number" name="aadhaar_number" value={formData.aadhaar_number} onChange={handleInputChange} placeholder="12-digit number" className="mt-1" />
-                                        </div>
+                                            <div className="grid grid-cols-2 gap-3 mb-6">
+                                                <button 
+                                                    type="button" 
+                                                    onClick={() => setFormData(p => ({...p, profile_type: 'STUDENT'}))}
+                                                    className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-2 ${formData.profile_type === 'STUDENT' ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-100 bg-white hover:bg-slate-50 text-slate-500'}`}
+                                                >
+                                                    <GraduationCap size={32} />
+                                                    <span className="font-bold text-sm">Student</span>
+                                                </button>
+                                                <button 
+                                                    type="button" 
+                                                    onClick={() => setFormData(p => ({...p, profile_type: 'WORKING_PROFESSIONAL'}))}
+                                                    className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-2 ${formData.profile_type === 'WORKING_PROFESSIONAL' ? 'border-purple-600 bg-purple-50 text-purple-700' : 'border-slate-100 bg-white hover:bg-slate-50 text-slate-500'}`}
+                                                >
+                                                    <Briefcase size={32} />
+                                                    <span className="font-bold text-sm">Working</span>
+                                                </button>
+                                            </div>
 
-                                        <div className="md:col-span-2">
-                                            <Label htmlFor="personal_email">Personal Email</Label>
-                                            <Input id="personal_email" name="personal_email" type="email" value={formData.personal_email} onChange={handleInputChange} className="mt-1" />
-                                        </div>
-
-                                        <div className="md:col-span-2 space-y-4 pt-2">
-                                            <div className="h-px bg-slate-100 w-full" />
-                                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Academic Information</p>
-                                        </div>
-
-                                        <div className="md:col-span-2">
-                                            <Label htmlFor="college_name">College Name *</Label>
-                                            <Input id="college_name" name="college_name" value={formData.college_name} onChange={handleInputChange} className="mt-1" />
-                                        </div>
-
-                                        <div>
-                                            <Label htmlFor="roll_number">Roll Number *</Label>
-                                            <Input id="roll_number" name="roll_number" value={formData.roll_number} onChange={handleInputChange} className="mt-1" />
-                                        </div>
-
-                                        <div>
-                                            <Label htmlFor="course">Course</Label>
-                                            <Input id="course" name="course" value={formData.course} onChange={handleInputChange} className="mt-1" />
-                                        </div>
-
-                                        <div>
-                                            <Label htmlFor="year_of_study">Year of Study *</Label>
-                                            <Input id="year_of_study" name="year_of_study" type="number" min="1" max="6" value={formData.year_of_study} onChange={handleInputChange} className="mt-1" />
-                                        </div>
-
-                                        <div>
-                                            <Label htmlFor="branch">Branch *</Label>
-                                            <Input id="branch" name="branch" value={formData.branch} onChange={handleInputChange} className="mt-1" />
-                                        </div>
-
-                                        <div className="md:col-span-2">
-                                            <Label htmlFor="address">Permanent Address *</Label>
-                                            <Input id="address" name="address" value={formData.address} onChange={handleInputChange} className="mt-1" />
-                                        </div>
-
-                                        <div className="md:col-span-2 space-y-2 pt-2">
-                                            <Label>Aadhaar Document *</Label>
-                                            <label className="block w-full cursor-pointer bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-6 hover:bg-slate-100 hover:border-indigo-400 transition-all text-center">
-                                                <input type="file" className="hidden" accept="image/*,.pdf" onChange={handleFileChange} />
-                                                <div className="flex flex-col items-center justify-center gap-2">
-                                                    {previewUrl ? (
-                                                        <img src={previewUrl} alt="Preview" className="h-32 object-contain rounded-lg shadow-sm" />
-                                                    ) : (
-                                                        <>
-                                                            <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm border border-slate-100 mb-1">
-                                                                <Upload className="h-6 w-6 text-indigo-600" />
+                                            <AnimatePresence>
+                                                {formData.profile_type === 'STUDENT' && (
+                                                    <motion.div initial={{opacity:0, height:0}} animate={{opacity:1, height:'auto'}} className="space-y-4">
+                                                        <div>
+                                                            <Label className="text-xs font-bold uppercase text-slate-500 mb-1 block">College Name *</Label>
+                                                            <Input name="college_name" value={formData.college_name} onChange={handleChange} className="h-12 bg-slate-50/50" />
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-4">
+                                                            <div>
+                                                                <Label className="text-xs font-bold uppercase text-slate-500 mb-1 block">Roll Number *</Label>
+                                                                <Input name="roll_number" value={formData.roll_number} onChange={handleChange} className="h-12 bg-slate-50/50" />
                                                             </div>
-                                                            <span className="text-sm font-bold text-slate-700">Upload Aadhaar Copy</span>
-                                                            <span className="text-xs text-slate-400">PDF, JPG or PNG (max 5MB)</span>
-                                                        </>
-                                                    )}
-                                                    {aadhaarFile && !previewUrl && (
-                                                        <span className="text-xs text-indigo-600 font-bold bg-indigo-50 px-3 py-1 rounded-full">{aadhaarFile.name}</span>
-                                                    )}
-                                                </div>
-                                            </label>
-                                        </div>
+                                                            <div>
+                                                                <Label className="text-xs font-bold uppercase text-slate-500 mb-1 block">Branch / Course</Label>
+                                                                <Input name="branch" value={formData.branch} onChange={handleChange} className="h-12 bg-slate-50/50" />
+                                                            </div>
+                                                        </div>
+                                                    </motion.div>
+                                                )}
 
-                                        <Button
-                                            type="submit"
-                                            disabled={isLoading}
-                                            className="md:col-span-2 w-full h-12 shadow-xl shadow-indigo-600/20 text-base font-bold transition-all hover:scale-[1.01] active:scale-[0.99] mt-4"
-                                        >
-                                            {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Submit & Complete Registration'}
-                                        </Button>
-                                    </form>
+                                                {formData.profile_type === 'WORKING_PROFESSIONAL' && (
+                                                    <motion.div initial={{opacity:0, height:0}} animate={{opacity:1, height:'auto'}} className="space-y-4">
+                                                         <div>
+                                                            <Label className="text-xs font-bold uppercase text-slate-500 mb-1 block">Company / Office Name *</Label>
+                                                            <Input name="office_name" value={formData.office_name} onChange={handleChange} className="h-12 bg-slate-50/50" />
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-4">
+                                                            <div>
+                                                                <Label className="text-xs font-bold uppercase text-slate-500 mb-1 block">Job Role</Label>
+                                                                <Input name="job_role" value={formData.job_role} onChange={handleChange} className="h-12 bg-slate-50/50" />
+                                                            </div>
+                                                            <div>
+                                                                <Label className="text-xs font-bold uppercase text-slate-500 mb-1 block">Office City</Label>
+                                                                <Input name="office_location" value={formData.office_location} onChange={handleChange} className="h-12 bg-slate-50/50" />
+                                                            </div>
+                                                        </div>
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
+                                        </div>
+                                    )}
+
+                                    {/* -------------------- STAGE 3: DOCUMENTS -------------------- */}
+                                    {currentStep === 3 && (
+                                        <div className="space-y-6">
+                                            <div className="mb-4">
+                                                <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                                                    <span className="text-2xl">🔐</span> Verification
+                                                </h3>
+                                                <p className="text-slate-500 text-sm mt-1">Upload an ID proof to verify your booking.</p>
+                                            </div>
+
+                                            <div className="space-y-6">
+                                                <div>
+                                                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 block">Aadhaar Number *</Label>
+                                                    <Input name="aadhaar_number" value={formData.aadhaar_number} onChange={handleChange} className="h-12 bg-slate-50/50 font-mono tracking-widest text-lg" placeholder="0000 0000 0000" maxLength={12} />
+                                                </div>
+
+                                                <div>
+                                                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 block">Upload ID Document *</Label>
+                                                    <label className="block w-full cursor-pointer bg-indigo-50/30 border-2 border-dashed border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50/50 rounded-[16px] p-8 transition-all text-center">
+                                                        <input type="file" className="hidden" accept="image/*,.pdf" onChange={handleFileChange} />
+                                                        <div className="flex flex-col items-center justify-center gap-3">
+                                                            {previewUrl ? (
+                                                                <div className="relative group">
+                                                                    <img src={previewUrl} alt="Preview" className="h-32 rounded-xl object-contain shadow-sm bg-white" />
+                                                                    <div className="absolute inset-0 bg-black/40 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-medium text-sm backdrop-blur-sm">Change Image</div>
+                                                                </div>
+                                                            ) : (
+                                                                <>
+                                                                    <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center shadow-sm border border-slate-100 text-indigo-500">
+                                                                        <Upload size={24} />
+                                                                    </div>
+                                                                    <div>
+                                                                        <span className="block font-bold text-indigo-700 text-sm mb-1">Click to browse your device</span>
+                                                                        <span className="block text-xs text-slate-400 font-medium">JPEG, PNG, PDF (Max 5MB)</span>
+                                                                    </div>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* -------------------- WIZARD CONTROLS -------------------- */}
+                                    <div className="mt-10 flex items-center justify-between gap-4 border-t border-slate-100 pt-6">
+                                        {currentStep > 1 ? (
+                                            <Button type="button" variant="outline" className="h-12 px-6 rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50" onClick={() => performStepLogic('prev')}>
+                                                <ChevronLeft size={18} className="mr-1" /> Back
+                                            </Button>
+                                        ) : <div />}
+
+                                        {currentStep < 3 ? (
+                                            <Button type="button" className="h-12 px-8 rounded-xl bg-slate-900 hover:bg-slate-800 text-white shadow-lg shadow-slate-900/10 font-bold" onClick={() => performStepLogic('next')}>
+                                                Continue <ChevronRight size={18} className="ml-1" />
+                                            </Button>
+                                        ) : (
+                                            <Button type="button" disabled={isLoading} className="h-12 px-8 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-600/20 font-bold w-full sm:w-auto" onClick={handleSubmitComplete}>
+                                                {isLoading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Complete Registration'}
+                                            </Button>
+                                        )}
+                                    </div>
+                                    
                                 </motion.div>
                             )}
                         </AnimatePresence>
                     </CardContent>
                 </Card>
-            </motion.div>
+            </main>
         </div>
     );
 };
