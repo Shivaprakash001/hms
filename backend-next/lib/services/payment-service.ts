@@ -672,18 +672,18 @@ export class PaymentService {
     let totalDue = 0;
     let totalPaid = 0;
     const allPayments: any[] = [];
-    let latestUnpaidDueDate: Date | null = null;
+    
+    // Sort obligations to find earliest unpaid reliably
+    const latestUnpaidDueDate = student.obligations
+      .filter((o: any) => o.status === "PENDING" || o.status === "PARTIAL")
+      .sort((a: any, b: any) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())[0]?.due_date || null;
+
     const formattedObligations = student.obligations.map((o: any) => {
       const obligationPaid = o.payments.reduce((sum: number, p: any) => sum + Number(p.amount_paid), 0);
       const remainingDue = Math.max(0, Number(o.amount) - obligationPaid);
       
       if (o.status !== "WAIVED") totalDue += Number(o.amount);
       totalPaid += obligationPaid;
-
-      if ((o.status === "PENDING" || o.status === "PARTIAL") && !latestUnpaidDueDate) {
-        latestUnpaidDueDate = o.due_date;
-      }
-      
       o.payments.forEach((p: any) => {
         allPayments.push({
           id: p.id,

@@ -328,15 +328,14 @@ export const paymentService = {
             }
 
             if (studentId) {
-                const response = await api.get(`/payments/student/${studentId}`);
+                // If owner fetches history for a student:
+                const response = await api.get(`/students/${studentId}/payments`);
                 return response.data;
             }
 
             const fallbackMe = await api.get('/students/me/payments/history');
             return fallbackMe.data;
         } catch (error) {
-            // Backend-next serves student history from /students/me/payments/history.
-            // Keep backward compatibility with legacy /payments/student/:id callers.
             if (error?.response?.status === 404) {
                 const fallback = await api.get('/students/me/payments/history');
                 return fallback.data;

@@ -29,24 +29,12 @@ export async function GET(req: NextRequest) {
     if (profile.role === "STUDENT") {
       const student = await prisma.student.findUnique({
         where: { profile_id: profile.id },
-        select: {
-          id: true,
-          monthly_rent: true,
-          status: true,
-          profile_completed: true,
+        include: {
           allocations: {
             where: { is_active: true },
             orderBy: { created_at: "desc" },
             take: 1,
-            select: {
-              room_id: true,
-              room: {
-                select: {
-                  room_no: true,
-                  capacity: true
-                }
-              }
-            }
+            include: { room: true }
           }
         }
       });
