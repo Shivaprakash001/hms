@@ -7,11 +7,6 @@ import { prisma } from "@/lib/db";
 import { studentService } from "@/lib/services/student-service";
 import { StudentProfileUpdateSchema } from "@/lib/validators";
 
-
-/**
- * 👨‍🎓 STUDENT ME PROFILE
- * GET /api/students/me/profile
- */
 export async function GET(req: NextRequest) {
   const session = await getSession(req);
   if (!session || session.role !== "STUDENT") {

@@ -650,9 +650,19 @@ export class PaymentService {
     const student = await prisma.student.findUnique({
       where: { id: studentId },
       include: {
+        allocations: {
+          where: { is_active: true, end_date: null },
+          include: { room: true },
+          orderBy: { created_at: "desc" }
+        },
         obligations: {
           orderBy: { due_date: "desc" },
-          include: { payments: { orderBy: { payment_date: "desc" } } }
+          include: {
+            payments: {
+              include: { attempt: true },
+              orderBy: { payment_date: "desc" }
+            }
+          }
         }
       }
     });
@@ -662,14 +672,30 @@ export class PaymentService {
     let totalDue = 0;
     let totalPaid = 0;
     const allPayments: any[] = [];
+    let latestUnpaidDueDate: Date | null = null;
     const formattedObligations = student.obligations.map((o: any) => {
       const obligationPaid = o.payments.reduce((sum: number, p: any) => sum + Number(p.amount_paid), 0);
       const remainingDue = Math.max(0, Number(o.amount) - obligationPaid);
       
       if (o.status !== "WAIVED") totalDue += Number(o.amount);
       totalPaid += obligationPaid;
+
+      if ((o.status === "PENDING" || o.status === "PARTIAL") && !latestUnpaidDueDate) {
+        latestUnpaidDueDate = o.due_date;
+      }
       
-      o.payments.forEach((p: any) => allPayments.push(p));
+      o.payments.forEach((p: any) => {
+        allPayments.push({
+          id: p.id,
+          obligation_id: p.obligation_id,
+          amount_paid: Number(p.amount_paid),
+          payment_date: p.payment_date,
+          payment_method: p.payment_method,
+          reference_number: p.reference_number,
+          transaction_id: p.reference_number || p.attempt?.gateway_txn_id || p.attempt?.merchant_txn_id || p.id,
+          rent_month: o.rent_month
+        });
+      });
 
       return {
         id: o.id,
@@ -682,18 +708,32 @@ export class PaymentService {
           id: p.id,
           amount_paid: Number(p.amount_paid),
           payment_date: p.payment_date,
-          method: p.payment_method
+          method: p.payment_method,
+          transaction_id: p.reference_number || p.attempt?.gateway_txn_id || p.attempt?.merchant_txn_id || p.id
         }))
       };
     });
+
+    const outstandingBalance = Math.max(totalDue - totalPaid, 0);
+    const paymentStatus = outstandingBalance <= 0 ? "PAID" : totalPaid > 0 ? "PARTIAL" : "PENDING";
+    const allocationRent = Number(student.allocations?.[0]?.room?.base_rent || 0);
+    const fallbackObligationRent = Number(student.obligations?.[0]?.amount || 0);
+    const studentRent = Number(student.monthly_rent || 0);
+    const monthlyRent =
+      (allocationRent > 0 ? allocationRent : 0) ||
+      (studentRent > 0 ? studentRent : 0) ||
+      (fallbackObligationRent > 0 ? fallbackObligationRent : 0);
 
     return {
       student_id: studentId,
       obligations: formattedObligations,
       payments: allPayments.sort((a, b) => new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime()),
+      monthly_rent: monthlyRent,
+      next_due_date: latestUnpaidDueDate,
+      payment_status: paymentStatus,
       total_due: totalDue,
       total_paid: totalPaid,
-      outstanding_balance: Math.max(totalDue - totalPaid, 0)
+      outstanding_balance: outstandingBalance
     };
   }
 

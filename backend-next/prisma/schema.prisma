@@ -67,6 +67,7 @@ model Student {
   office_name           String?
   office_location       String?
   job_role              String?
+  gender                String?
   permanent_address     String?
   temporary_address     String?
   aadhaar_number        String?                  @unique

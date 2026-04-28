@@ -48,6 +48,7 @@ export const StudentProfileUpdateSchema = z.object({
   address: z.string().optional(),
   permanent_address: z.string().optional(),
   temporary_address: z.string().optional(),
+  gender: z.enum(["Male", "Female", "Other"]).optional().nullable(),
 });
 
 export const ReactivationRequestSchema = z.object({

@@ -6,6 +6,12 @@ import api from '../api/axios';
 const AuthContext = createContext(null);
 
 const normalizeRole = (role) => (role || '').toString().toLowerCase();
+const LOGIN_ERROR_MAP = {
+    401: 'Incorrect email or password',
+    404: 'Account not found',
+    429: 'Too many login attempts. Try again later.',
+    500: 'Something went wrong. Please try again.',
+};
 
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
@@ -102,9 +108,13 @@ export const AuthProvider = ({ children }) => {
             return userData;
         } catch (error) {
             console.error("Login failed:", error);
+            if (!error?.response) {
+                throw new Error('Unable to connect. Check your internet.');
+            }
+            const status = error.response?.status;
             const detail = error.response?.data?.detail;
-            const message = typeof detail === 'object' ? detail.message : detail;
-            throw new Error(message || error.message || 'Login failed');
+            const fallback = typeof detail === 'object' ? detail.message : detail;
+            throw new Error(LOGIN_ERROR_MAP[status] || fallback || 'Something went wrong. Please try again.');
         }
     };
 

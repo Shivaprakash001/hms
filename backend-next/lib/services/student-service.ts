@@ -141,7 +141,7 @@ export class StudentService {
     const studentFields = [
       "photo_url", "phone_1", "phone_2", "phone_3", "aadhaar_number", "personal_email",
       "college_name", "roll_number", "course", "year_of_study", "section", "branch",
-      "temporary_address", "permanent_address"
+      "temporary_address", "permanent_address", "gender"
     ];
 
     const profileUpdate: any = {};

@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import { User, Mail, Phone, MapPin, Camera, Save, Edit2, Key, Building2, CheckCircle2, GraduationCap, Briefcase, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../../context/AuthContext';
-import { studentService, tenantDocumentService } from '../../api/services';
+import { studentService } from '../../api/services';
 import DocumentUploadWidget from '../../components/TenantManagement/DocumentUploadWidget';
 
 const StudentProfile = () => {
@@ -15,7 +15,6 @@ const StudentProfile = () => {
     const [loading, setLoading] = useState(true);
     const [saveLoading, setSaveLoading] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
-    const [docCompletion, setDocCompletion] = useState({ uploaded: 0, total: 3 });
     const fileInputRef = useRef(null);
 
     // Local State for Form Data
@@ -40,6 +39,7 @@ const StudentProfile = () => {
         job_role: '',
         permanent_address: '',
         temporary_address: '',
+        gender: '',
         photo_url: '',
         profile_type: 'student'
     });
@@ -55,32 +55,35 @@ const StudentProfile = () => {
                     meData = await studentService.getByProfileId(user.id);
                 }
 
+                const studentRecord = meData?.student_details || meData || {};
+                const apiProfile = meData?.profile || {};
                 const profRel = meData?.profile || meData?.profiles;
                 const prof = Array.isArray(profRel) ? (profRel[0] || {}) : (profRel || {});
                 setStudentInfo(meData);
-                const inferredType = (meData.office_name || meData.job_role || meData.office_location) ? 'work' : 'student';
+                const inferredType = (studentRecord.office_name || studentRecord.job_role || studentRecord.office_location) ? 'work' : 'student';
                 setFormData({
                     name: prof.name || user?.name || '',
                     email: prof.email || user?.email || '',
                     phone: prof.phone || '',
                     emergency_contact: prof.emergency_contact || '',
                     address: prof.address || '',
-                    personal_email: meData.personal_email || '',
-                    phone_1: meData.phone_1 || '',
-                    phone_2: meData.phone_2 || '',
-                    phone_3: meData.phone_3 || '',
-                    college_name: meData.college_name || '',
-                    roll_number: meData.roll_number || '',
-                    course: meData.course || '',
-                    year_of_study: meData.year_of_study || '',
-                    section: meData.section || '',
-                    branch: meData.branch || '',
-                    office_name: meData.office_name || '',
-                    office_location: meData.office_location || '',
-                    job_role: meData.job_role || '',
-                    permanent_address: meData.permanent_address || '',
-                    temporary_address: meData.temporary_address || '',
-                    photo_url: meData.photo_url || '',
+                    personal_email: apiProfile.personal_email || studentRecord.personal_email || '',
+                    phone_1: studentRecord.phone_1 || '',
+                    phone_2: studentRecord.phone_2 || '',
+                    phone_3: studentRecord.phone_3 || '',
+                    college_name: studentRecord.college_name || '',
+                    roll_number: studentRecord.roll_number || '',
+                    course: studentRecord.course || '',
+                    year_of_study: studentRecord.year_of_study || '',
+                    section: studentRecord.section || '',
+                    branch: studentRecord.branch || '',
+                    office_name: studentRecord.office_name || '',
+                    office_location: studentRecord.office_location || '',
+                    job_role: studentRecord.job_role || '',
+                    permanent_address: apiProfile.permanent_address || studentRecord.permanent_address || '',
+                    temporary_address: apiProfile.temporary_address || studentRecord.temporary_address || '',
+                    gender: apiProfile.gender || studentRecord.gender || '',
+                    photo_url: studentRecord.photo_url || '',
                     profile_type: inferredType
                 });
             } catch (error) {
@@ -92,22 +95,6 @@ const StudentProfile = () => {
         fetchData();
     }, [user]);
 
-    useEffect(() => {
-        const fetchDocumentCompletion = async () => {
-            if (!studentInfo?.id) return;
-            try {
-                const docs = await tenantDocumentService.getAll(studentInfo.id);
-                const uploadedTypes = new Set((Array.isArray(docs) ? docs : []).map(d => d?.doc_type).filter(Boolean));
-                setDocCompletion({ uploaded: uploadedTypes.size, total: 3 });
-            } catch (err) {
-                console.error('Failed to load document completion:', err);
-                setDocCompletion({ uploaded: 0, total: 3 });
-            }
-        };
-
-        fetchDocumentCompletion();
-    }, [studentInfo?.id]);
-
     const profileCompletion = useMemo(() => {
         const isFilled = (val) => {
             if (val === null || val === undefined) return false;
@@ -115,7 +102,7 @@ const StudentProfile = () => {
             return Boolean(val);
         };
 
-        const baseChecks = [
+        const checks = [
             isFilled(formData.name),
             isFilled(formData.email),
             isFilled(formData.phone),
@@ -123,22 +110,14 @@ const StudentProfile = () => {
             isFilled(formData.personal_email),
             isFilled(formData.permanent_address),
             isFilled(formData.temporary_address),
-            isFilled(formData.photo_url),
+            isFilled(formData.gender),
         ];
-
-        const profileTypeChecks = formData.profile_type === 'work'
-            ? [isFilled(formData.office_name), isFilled(formData.job_role), isFilled(formData.office_location)]
-            : [isFilled(formData.college_name), isFilled(formData.roll_number), isFilled(formData.year_of_study), isFilled(formData.branch)];
-
-        const documentsChecks = Array.from({ length: docCompletion.total }, (_, i) => i < docCompletion.uploaded);
-
-        const allChecks = [...baseChecks, ...profileTypeChecks, ...documentsChecks];
-        const completed = allChecks.filter(Boolean).length;
-        const total = allChecks.length;
+        const completed = checks.filter(Boolean).length;
+        const total = checks.length;
         const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
 
         return { completed, total, percent };
-    }, [formData, docCompletion]);
+    }, [formData]);
 
     const handleSave = async () => {
         setSaveLoading(true);
@@ -173,6 +152,7 @@ const StudentProfile = () => {
                 job_role: optional(formData.profile_type === 'work' ? formData.job_role : null),
                 permanent_address: optional(formData.permanent_address),
                 temporary_address: optional(formData.temporary_address),
+                gender: formData.gender === 'Prefer not to say' ? null : optional(formData.gender),
                 photo_url: optional(formData.photo_url)
             };
             const updated = await studentService.updateMyProfile(payload);
@@ -201,6 +181,7 @@ const StudentProfile = () => {
                 job_role: updated.job_role || prev.job_role,
                 permanent_address: updated.permanent_address || prev.permanent_address,
                 temporary_address: updated.temporary_address || prev.temporary_address,
+                gender: updated.gender || prev.gender,
                 photo_url: updated.photo_url || prev.photo_url,
                 profile_type: (updated.office_name || updated.job_role || updated.office_location) ? 'work' : (updated.college_name || updated.branch ? 'student' : prev.profile_type),
             }));
@@ -258,15 +239,10 @@ const StudentProfile = () => {
             {/* Success Toast */}
             <AnimatePresence>
                 {showSuccess && (
-                    <motion.div
-                        initial={{ opacity: 0, y: -20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                        className="fixed top-24 right-8 z-50 bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 font-semibold text-sm"
-                    >
+                    <div className="fixed top-24 right-8 z-50 bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 font-semibold text-sm">
                         <CheckCircle2 size={18} className="text-emerald-500" />
                         Profile updated successfully!
-                    </motion.div>
+                    </div>
                 )}
             </AnimatePresence>
 
@@ -344,6 +320,15 @@ const StudentProfile = () => {
                     <InfoField label="Email" value={formData.email} icon={Mail} isEditable={isEditing} type="email" onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
                     <InfoField label="Phone" value={formData.phone} icon={Phone} isEditable={isEditing} type="tel" onChange={(e) => setFormData({ ...formData, phone: e.target.value })} />
                     <InfoField label="Emergency Contact" value={formData.emergency_contact} icon={Phone} isEditable={isEditing} type="tel" onChange={(e) => setFormData({ ...formData, emergency_contact: e.target.value })} />
+                    <InfoField
+                        label="Gender"
+                        value={formData.gender}
+                        icon={User}
+                        isEditable={isEditing}
+                        type="select"
+                        options={['Male', 'Female', 'Other', 'Prefer not to say']}
+                        onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                    />
                     <InfoField label="Personal Email" value={formData.personal_email} icon={Mail} isEditable={isEditing} type="email" onChange={(e) => setFormData({ ...formData, personal_email: e.target.value })} />
                     <InfoField label="Temporary Address" value={formData.temporary_address || formData.address} icon={MapPin} isEditable={isEditing} onChange={(e) => setFormData({ ...formData, temporary_address: e.target.value, address: e.target.value })} />
                     <div className="md:col-span-2">
@@ -423,10 +408,6 @@ const StudentProfile = () => {
                         <DocumentUploadWidget
                             tenantId={studentInfo.id}
                             isOwner={false}
-                            onDocumentsChange={(docs) => {
-                                const uploadedTypes = new Set((Array.isArray(docs) ? docs : []).map(d => d?.doc_type).filter(Boolean));
-                                setDocCompletion({ uploaded: uploadedTypes.size, total: 3 });
-                            }}
                         />
                     ) : (
                         <p className="text-sm text-slate-400">No tenant record found.</p>
@@ -437,25 +418,40 @@ const StudentProfile = () => {
     );
 };
 
-const InfoField = ({ label, value, icon: Icon, isEditable, onChange, type = "text" }) => (
+const InfoField = ({ label, value, icon, isEditable, onChange, type = "text", options = [] }) => (
     <div className="space-y-1.5">
         <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide ml-1">{label}</label>
         {isEditable ? (
             <div className="relative flex items-center">
                 <div className="absolute left-3 text-slate-400">
-                    <Icon size={16} />
+                    {icon ? React.createElement(icon, { size: 16 }) : null}
                 </div>
-                <input
-                    type={type}
-                    value={value || ''}
-                    onChange={onChange}
-                    className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all text-sm font-medium text-slate-900"
-                />
+                {type === 'select' ? (
+                    <select
+                        value={value || ''}
+                        onChange={onChange}
+                        className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all text-sm font-medium text-slate-900"
+                    >
+                        <option value="">Select</option>
+                        {options.map((option) => (
+                            <option key={option} value={option}>
+                                {option}
+                            </option>
+                        ))}
+                    </select>
+                ) : (
+                    <input
+                        type={type}
+                        value={value || ''}
+                        onChange={onChange}
+                        className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all text-sm font-medium text-slate-900"
+                    />
+                )}
             </div>
         ) : (
             <div className="flex items-center gap-3 p-2 text-slate-700">
                 <div className="text-slate-400">
-                    <Icon size={18} />
+                    {icon ? React.createElement(icon, { size: 18 }) : null}
                 </div>
                 <span className="font-medium">{value || 'N/A'}</span>
             </div>
