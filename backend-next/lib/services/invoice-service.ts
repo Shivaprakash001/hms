@@ -2,6 +2,9 @@ import { PDFDocument, StandardFonts, rgb, PDFPage, PDFFont } from "pdf-lib";
 import { prisma } from "../db";
 import { imagekit } from "../imagekit";
 
+// ── Template Version (bump this when the PDF layout changes) ──
+const INVOICE_TEMPLATE_VERSION = 2;
+
 // ── Color Palette (Slate Design System) ──
 const COLORS = {
   black:      rgb(0.06, 0.09, 0.16),   // #0f172a
@@ -64,9 +67,11 @@ export class InvoiceService {
       });
     }
 
-    // ── CACHE CHECK ──
-    if ((receipt as any).invoice_pdf_url) {
-      return { url: (receipt as any).invoice_pdf_url, cached: true };
+    // ── CACHE CHECK (version-aware) ──
+    const cachedUrl = (receipt as any).invoice_pdf_url;
+    const cachedVersion = (receipt as any).invoice_template_version;
+    if (cachedUrl && cachedVersion === INVOICE_TEMPLATE_VERSION) {
+      return { url: cachedUrl, cached: true };
     }
 
     const hostel = await prisma.hostel.findFirst({
@@ -296,7 +301,10 @@ export class InvoiceService {
 
     await prisma.receipt.update({
       where: { id: receipt.id },
-      data: { invoice_pdf_url: uploadRes.url } as any
+      data: {
+        invoice_pdf_url: uploadRes.url,
+        invoice_template_version: INVOICE_TEMPLATE_VERSION
+      } as any
     });
 
     return { url: uploadRes.url, cached: false };
