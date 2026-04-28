@@ -18,8 +18,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     // Generates or fetches cached PDF URL
     const result = await invoiceService.generateInvoicePDF(paymentId);
     
-    // Redirect directly to PDF so window.open() handles it naturally
-    return NextResponse.redirect(result.url, 307);
+    // Return URL as JSON — 307 redirect breaks CORS with ImageKit's wildcard origin
+    return NextResponse.json({ url: result.url, cached: result.cached });
 
   } catch (error: any) {
     console.error("Invoice generation failed:", error);
