@@ -106,21 +106,12 @@ export class PhonePeProvider extends PaymentProvider {
     const redirect = new URL(configuredRedirectUrl);
     redirect.searchParams.set("attempt_id", data.metadata?.attempt_id || data.merchant_txn_id);
     const redirectUrl = redirect.toString();
-    const callbackUrl =
-      process.env.PHONEPE_CALLBACK_URL ||
-      `${process.env.NEXT_PUBLIC_API_BASE_URL || frontendUrl}/api/webhooks/payments/phonepe`;
 
     const payload: any = {
       merchantOrderId: data.merchant_txn_id,
       merchantUserId: data.tenant_id || "unknown-tenant",
       amount: amountInPaise,
-      redirectUrl,
-      redirectMode: "POST",
-      callbackUrl,
       expireAfter: 1800, // 30 min
-      paymentInstrument: {
-        type: "UPI_QR" // Required by PhonePe sandbox to prevent internal Map.getOrDefault crash
-      },
       paymentFlow: {
         type: "PG_CHECKOUT",
         message: `Rent payment - ${data.tenant_name || "Tenant"}`,
@@ -175,6 +166,11 @@ export class PhonePeProvider extends PaymentProvider {
     if (!checkoutUrl) {
       console.error("[PhonePe] Create order response missing checkout URL:", responseData);
       throw new Error("PhonePe order creation failed: missing checkout URL");
+    }
+
+    if (checkoutUrl === redirectUrl || checkoutUrl.includes("/payment-return")) {
+      console.error("[PhonePe] Create order returned merchant redirect instead of checkout URL:", responseData);
+      throw new Error("PhonePe order creation failed: invalid checkout URL");
     }
       
     const orderId = responseData.orderId || responseData.data?.orderId || null;

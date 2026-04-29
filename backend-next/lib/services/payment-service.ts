@@ -266,7 +266,8 @@ export class PaymentService {
 
     if (existingAttempt) {
       // If the attempt has a valid checkout_url, reuse it
-      if (existingAttempt.checkout_url) {
+      const checkoutUrl = existingAttempt.checkout_url || "";
+      if (checkoutUrl && !checkoutUrl.includes("/payment-return")) {
         return existingAttempt;
       }
       // Otherwise expire the stale attempt so we create a fresh one with checkout_url
