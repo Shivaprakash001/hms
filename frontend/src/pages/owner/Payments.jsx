@@ -380,11 +380,11 @@ const Payments = () => {
 
     const handleOpenOnlineTest = (payment) => {
         if (!payment?.obligationId) {
-            alert('Unable to start payment test for this row.');
+            alert('No rent entry selected for payment.');
             return;
         }
-        if (Number(payment.balance || 0) <= 0) {
-            alert('Selected obligation has no pending balance.');
+        if (Number(payment?.balance || 0) <= 0) {
+            alert('This rent entry has no pending balance.');
             return;
         }
         setOnlineTestTarget(payment);
@@ -597,7 +597,7 @@ const Payments = () => {
                                 <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/80">
                                     <div>
                                         <h2 className="text-xl font-black text-slate-900">Generate Monthly Rent</h2>
-                                        <p className="text-sm text-slate-500 mt-0.5">Create rent obligations for all active tenants</p>
+                                        <p className="text-sm text-slate-500 mt-0.5">Create rent entries for all active tenants</p>
                                     </div>
                                     {!genLoading && (
                                         <button onClick={() => setShowGenModal(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400">
@@ -622,7 +622,7 @@ const Payments = () => {
                                                     className="w-full px-4 py-3 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all"
                                                 />
                                                 <p className="text-xs text-slate-400 mt-2">
-                                                    This will create pending rent obligations for all tenants who had an active allocation in {formatMonthYear(genMonth, preferences)}.
+                                                    This will create rent entries for all tenants who had an active room in {formatMonthYear(genMonth, preferences)}.
                                                 </p>
                                             </div>
 
@@ -630,19 +630,19 @@ const Payments = () => {
                                                 <p className="font-bold mb-1">⚡ What happens next?</p>
                                                 <ul className="space-y-1 text-amber-700 list-disc ml-4">
                                                     <li>Rent based on each tenant's assigned monthly rate</li>
-                                                    <li>Prorated for tenants who joined/left mid-month</li>
+                                                    <li>Prorated for tenants who joined mid-month</li>
                                                     <li>Tenant's "Pay Now" button becomes active</li>
-                                                    <li>Already-generated months are safely skipped</li>
+                                                    <li>Already-created months are safely skipped</li>
                                                 </ul>
                                             </div>
 
                                             {previewData && (
                                                 <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-sm text-indigo-800">
                                                     <p className="font-bold mb-1">Preview</p>
-                                                    <p>Active tenants: <span className="font-semibold">{previewData.tenants || 0}</span></p>
-                                                    <p>To generate: <span className="font-semibold">{previewData.tenants_to_create || 0}</span></p>
-                                                    <p>Already generated: <span className="font-semibold">{previewData.tenants_already_generated || 0}</span></p>
-                                                    <p>Total expected: <span className="font-semibold">{formatCurrency(previewData.total_amount || 0, preferences)}</span></p>
+                                                    <p>Total tenants: <span className="font-semibold">{previewData.tenants || 0}</span></p>
+                                                    <p>Rent already added: <span className="font-semibold">{previewData.tenants_already_generated || 0}</span></p>
+                                                    <p>New rents to create: <span className="font-semibold">{previewData.tenants_to_create || 0}</span></p>
+                                                    <p>Total amount: <span className="font-semibold">{formatCurrency(previewData.total_amount || 0, preferences)}</span></p>
                                                 </div>
                                             )}
 
@@ -661,7 +661,7 @@ const Payments = () => {
                                                     className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20 active:scale-95 disabled:opacity-60"
                                                 >
                                                     {genLoading ? (
-                                                        <><Loader2 className="animate-spin" size={18} /> Generating...</>
+                                                        <><Loader2 className="animate-spin" size={18} /> Creating rent entries...</>
                                                     ) : (
                                                         <><Zap size={18} /> Generate</>
                                                     )}
@@ -679,11 +679,15 @@ const Payments = () => {
                                                 <CheckCircle2 size={40} strokeWidth={2.5} />
                                             </motion.div>
                                             <div>
-                                                <h3 className="text-xl font-black text-slate-900">Rent Obligations Created!</h3>
+                                                <h3 className="text-xl font-black text-slate-900">Rent Created Successfully</h3>
                                                 <p className="text-slate-500 mt-1 text-sm">
-                                                    {genResult.data?.generated_count ?? 0} obligations generated,&nbsp;
-                                                    {genResult.data?.skipped_count ?? 0} skipped (already existing).
+                                                    {genResult.data?.created ?? 0} tenant rent{(genResult.data?.created ?? 0) !== 1 ? 's' : ''} added
                                                 </p>
+                                                {(genResult.data?.skipped ?? 0) > 0 && (
+                                                    <p className="text-slate-400 text-xs mt-0.5">
+                                                        {genResult.data.skipped} tenant{genResult.data.skipped !== 1 ? 's' : ''} already had rent for this month
+                                                    </p>
+                                                )}
                                             </div>
                                             <button
                                                 onClick={() => setShowGenModal(false)}

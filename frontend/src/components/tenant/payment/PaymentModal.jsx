@@ -68,7 +68,7 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
 
     const handleCreateIntent = async () => {
         if (!obligationId) {
-            setError('No payable obligation is available right now.');
+            setError('No pending rent is available for payment right now.');
             return;
         }
 

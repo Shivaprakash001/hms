@@ -50,12 +50,12 @@ const OnlinePaymentTestModal = ({ isOpen, onClose, obligation, onSettled }) => {
 
     const handleCreateIntent = async () => {
         if (!obligation?.obligationId) {
-            setError('No obligation selected.');
+            setError('No rent entry selected.');
             return;
         }
 
         if (amount <= 0) {
-            setError('Selected obligation has no payable balance.');
+            setError('This rent entry has no payable balance.');
             return;
         }
 
@@ -127,7 +127,7 @@ const OnlinePaymentTestModal = ({ isOpen, onClose, obligation, onSettled }) => {
                             <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-4">
                                 <p className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-500">Payable Amount</p>
                                 <p className="mt-2 text-3xl font-black text-slate-900">₹{amount.toLocaleString()}</p>
-                                <p className="mt-1 text-sm text-slate-500">Obligation: {obligation.obligationId}</p>
+                                <p className="mt-1 text-sm text-slate-500">Rent Entry: {obligation.obligationId}</p>
                             </div>
 
                             {!attempt ? (

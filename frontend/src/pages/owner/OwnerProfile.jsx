@@ -604,7 +604,7 @@ function NotificationsModule({ prefs, updatePref }) {
 function AutomationModule({ prefs, updatePref }) {
     return (
         <div className="space-y-3">
-            <ToggleField label="Auto Generate Rent" desc="Monthly rent obligations created automatically"
+            <ToggleField label="Auto Generate Rent" desc="Monthly rent entries created automatically"
                 value={prefs.auto_generate_rent} onChange={(v) => updatePref('auto_generate_rent', v)} />
             <ToggleField label="Auto Apply Late Fees" desc="Late fees added after overdue period"
                 value={prefs.auto_apply_late_fees} onChange={(v) => updatePref('auto_apply_late_fees', v)} />

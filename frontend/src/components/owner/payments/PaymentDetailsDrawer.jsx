@@ -165,7 +165,7 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, onMarkPaid, onDownload
                                     <DetailRow label="Rent Month" value={formatMonthYear(payment.month || payment.date, preferences, 'Not available')} icon={Calendar} />
                                     <DetailRow label="Room" value={payment.room || 'Not assigned'} icon={Home} />
                                     <DetailRow label="Due Date" value={formatDate(payment.dueDate, preferences, 'Not available')} icon={FileClock} />
-                                    <DetailRow label="Obligation ID" value={payment.obligationId || payment.id} icon={Landmark} />
+                                    <DetailRow label="Rent Entry ID" value={payment.obligationId || payment.id} icon={Landmark} />
                                 </SectionCard>
 
                                 <SectionCard title="Tenant Information">

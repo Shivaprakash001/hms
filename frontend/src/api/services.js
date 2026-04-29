@@ -445,11 +445,11 @@ export const paymentService = {
         return response.data;
     },
     generateRent: async (month) => {
-        const response = await api.post('/payments/generate-monthly', { rent_month: month });
+        const response = await api.post('/rent/generate', { month });
         return response.data;
     },
     previewGenerateRent: async (month) => {
-        const response = await api.get('/payments/generate-preview', { params: { rent_month: month } });
+        const response = await api.get('/rent/generate', { params: { month } });
         return response.data;
     },
     waive: async (obligationId, reason) => {
