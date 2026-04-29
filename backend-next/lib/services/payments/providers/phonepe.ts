@@ -91,9 +91,7 @@ export class PhonePeProvider extends PaymentProvider {
       `${process.env.NEXT_PUBLIC_FRONTEND_URL || "https://trishul.solutions"}/payment-return`;
 
     const payload: any = {
-      merchantId: this.clientId, // Usually PhonePe client ID serves as merchant ID in sandbox
       merchantOrderId: data.merchant_txn_id,
-      merchantTransactionId: data.merchant_txn_id,
       merchantUserId: data.tenant_id || "unknown-tenant",
       amount: amountInPaise,
       redirectUrl,
