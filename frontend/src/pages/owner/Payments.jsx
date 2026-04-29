@@ -21,6 +21,7 @@ const Payments = () => {
     const [paymentRecords, setPaymentRecords] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
     const [monthFilter, setMonthFilter] = useState('all');
     const [methodFilter, setMethodFilter] = useState('all');
@@ -46,6 +47,13 @@ const Payments = () => {
     useEffect(() => {
         loadLedger();
     }, []);
+
+    useEffect(() => {
+        const t = setTimeout(() => {
+            setDebouncedSearch(searchTerm);
+        }, 300);
+        return () => clearTimeout(t);
+    }, [searchTerm]);
 
     const normalizeStatus = (status, dueDate, balance) => {
         const raw = String(status || '').toUpperCase();
@@ -173,15 +181,16 @@ const Payments = () => {
 
     const filteredData = useMemo(() => {
         return ledgerRows.filter(item => {
-            const matchesSearch = item.tenantName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                item.room?.toString().includes(searchTerm);
+            const matchesSearch = (item.tenantName || "").toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+                (item.room || "").toString().includes(debouncedSearch) ||
+                (item.tenantPhone || "").toString().includes(debouncedSearch);
             const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
             const matchesMonth = monthFilter === 'all' || item.month?.slice(0, 7) === monthFilter;
             const matchesMethod = methodFilter === 'all' || item.paymentMethods?.includes(methodFilter);
             const matchesTenant = tenantFilter === 'all' || item.tenantName === tenantFilter;
             return matchesSearch && matchesStatus && matchesMonth && matchesMethod && matchesTenant;
         });
-    }, [ledgerRows, searchTerm, statusFilter, monthFilter, methodFilter, tenantFilter]);
+    }, [ledgerRows, debouncedSearch, statusFilter, monthFilter, methodFilter, tenantFilter]);
 
     const paginatedData = useMemo(() => {
         const start = (currentPage - 1) * pageSize;
@@ -393,30 +402,47 @@ const Payments = () => {
     return (
         <div className="space-y-8 animate-fade-in-up">
             {/* Header Section */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex flex-col gap-5 sticky top-0 z-20 bg-[#f8fafc] pt-2 pb-4">
                 <div>
                     <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Payments & Rent Ledger</h1>
                     <p className="text-slate-500 text-sm">Unified ledger of rent, payments, balances, and collection actions.</p>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-2 flex-wrap sm:items-center">
-                    <button
-                        onClick={handleExportReport}
-                        disabled={exportLoading}
-                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-sm font-bold text-sm disabled:opacity-60"
-                    >
-                        {exportLoading ? <Loader2 className="animate-spin" size={16} /> : <Download size={16} />}
-                        {exportLoading ? 'Exporting...' : 'Export Report'}
-                    </button>
-                    <button
-                        onClick={() => {
-                            setShowGenModal(true);
-                            setGenResult(null);
-                            setPreviewData(null);
-                        }}
-                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-600/20 transition-all font-bold text-sm active:scale-95"
-                    >
-                        <Zap size={16} /> Generate Monthly Rent
-                    </button>
+
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div className="relative group w-full md:w-96">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
+                        <input
+                            type="text"
+                            placeholder="Search tenants, phone, room..."
+                            className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all placeholder:text-slate-400 shadow-sm"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                    
+                    <div className="flex gap-2">
+                        <button
+                            onClick={handleExportReport}
+                            disabled={exportLoading}
+                            className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-sm font-bold text-sm disabled:opacity-60"
+                        >
+                            {exportLoading ? <Loader2 className="animate-spin" size={16} /> : <Download size={16} />}
+                            <span className="hidden sm:inline">{exportLoading ? 'Exporting...' : 'Export Report'}</span>
+                            <span className="sm:hidden">{exportLoading ? 'Exporting...' : 'Export'}</span>
+                        </button>
+                        <button
+                            onClick={() => {
+                                setShowGenModal(true);
+                                setGenResult(null);
+                                setPreviewData(null);
+                            }}
+                            className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-600/20 transition-all font-bold text-sm active:scale-95"
+                        >
+                            <Zap size={16} /> 
+                            <span className="hidden sm:inline">Generate Monthly Rent</span>
+                            <span className="sm:hidden">Generate Rent</span>
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -456,21 +482,11 @@ const Payments = () => {
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
                 
                 {/* Filters Bar */}
-                <div className="p-4 border-b border-slate-100 bg-white space-y-4 sticky top-0 z-10 w-full overflow-hidden">
-                    <div className="relative group w-full">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
-                        <input
-                            type="text"
-                            placeholder="Search tenant..."
-                            className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all placeholder:text-slate-400"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
-                    </div>
+                <div className="p-4 border-b border-slate-100 bg-white space-y-4 w-full overflow-hidden">
 
-                    <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 w-full max-w-full">
+                    <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center pb-1 w-full">
                         <select
-                            className="shrink-0 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100 hover:border-slate-300 transition-all cursor-pointer"
+                            className="w-full sm:w-auto px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100 hover:border-slate-300 transition-all cursor-pointer"
                             value={tenantFilter}
                             onChange={(e) => setTenantFilter(e.target.value)}
                         >
@@ -481,7 +497,7 @@ const Payments = () => {
                         </select>
 
                         <select
-                            className="shrink-0 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100 hover:border-slate-300 transition-all cursor-pointer"
+                            className="w-full sm:w-auto px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100 hover:border-slate-300 transition-all cursor-pointer"
                             value={statusFilter}
                             onChange={(e) => setStatusFilter(e.target.value)}
                         >
@@ -494,7 +510,7 @@ const Payments = () => {
                         </select>
 
                         <select
-                            className="shrink-0 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100 hover:border-slate-300 transition-all cursor-pointer"
+                            className="w-full sm:w-auto px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100 hover:border-slate-300 transition-all cursor-pointer"
                             value={methodFilter}
                             onChange={(e) => setMethodFilter(e.target.value)}
                         >
@@ -505,7 +521,7 @@ const Payments = () => {
                         </select>
 
                         <select
-                            className="shrink-0 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100 hover:border-slate-300 transition-all cursor-pointer"
+                            className="w-full sm:w-auto px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100 hover:border-slate-300 transition-all cursor-pointer"
                             value={monthFilter}
                             onChange={(e) => setMonthFilter(e.target.value)}
                         >

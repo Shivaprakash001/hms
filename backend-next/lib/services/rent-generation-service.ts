@@ -65,10 +65,13 @@ export class RentGenerationService {
     }
 
     try {
+      const lastDay = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 0)).getUTCDate();
+      const monthEndDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), lastDay, 23, 59, 59, 999));
+
       // Find allocations that are active AND haven't ended before this month
       const whereClause: any = {
         is_active: true,
-        start_date: { lte: rentMonth },
+        start_date: { lte: monthEndDate },
         tenant: { status: "ACTIVE" },
         OR: [
           { end_date: null },
@@ -247,9 +250,12 @@ export class RentGenerationService {
     const now = targetDate || new Date();
     const rentMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
 
+    const lastDay = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 0)).getUTCDate();
+    const monthEndDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), lastDay, 23, 59, 59, 999));
+
     const whereClause: any = {
       is_active: true,
-      start_date: { lte: rentMonth },
+      start_date: { lte: monthEndDate },
       tenant: { status: "ACTIVE" },
       OR: [
         { end_date: null },
