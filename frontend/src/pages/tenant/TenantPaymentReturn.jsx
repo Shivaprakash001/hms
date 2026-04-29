@@ -28,43 +28,46 @@ const TenantPaymentReturn = () => {
             return undefined;
         }
 
-        let timer;
         const loadAttempt = async () => {
             try {
-                // Use verifyPayment which actively queries PhonePe's status API
-                // instead of getAttempt which only reads the local DB
                 const result = await paymentService.verifyPayment({ attempt_id: attemptId });
                 const attemptData = result.attempt || result;
                 setAttempt(attemptData);
-                setError(''); // successfully talked to DB, clear any old errors
-                if (attemptData.status === 'SUCCESS') {
-                    // We purposefully leave localStorage intact so that if the user 
-                    // refreshes the success page, it still finds the attempt and shows SUCCESS
+                setError('');
+                if (TERMINAL_STATUSES.includes(attemptData.status)) {
                     setLoading(false);
-                } else if (TERMINAL_STATUSES.includes(attemptData.status)) {
-                    setLoading(false);
-                } else {
-                    timer = window.setTimeout(loadAttempt, 4000);
+                    return true; // tell interval to stop
                 }
+                return false;
             } catch (attemptError) {
-                // If verify fails (e.g. not logged in), fall back to getAttempt
                 try {
                     const fallback = await paymentService.getAttempt(attemptId);
                     setAttempt(fallback);
                     if (TERMINAL_STATUSES.includes(fallback.status)) {
                         setLoading(false);
-                    } else {
-                        timer = window.setTimeout(loadAttempt, 4000);
+                        return true;
                     }
                 } catch {
                     setError('Unable to verify payment status right now.');
                     setLoading(false);
+                    return true; // Stop polling on hard error
                 }
+                return false;
             }
         };
 
+        // Initial load immediately
         loadAttempt();
-        return () => window.clearTimeout(timer);
+
+        // Then poll every 4 seconds
+        const timer = window.setInterval(async () => {
+            const shouldStop = await loadAttempt();
+            if (shouldStop) {
+                window.clearInterval(timer);
+            }
+        }, 4000);
+
+        return () => window.clearInterval(timer);
     }, [attemptId]);
 
     const status = attempt?.status || (loading ? 'PENDING' : 'UNKNOWN');

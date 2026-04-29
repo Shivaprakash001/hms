@@ -251,12 +251,15 @@ export class PaymentService {
         throw new Error(`BAD_REQUEST: Payment (₹${validationAmount}) exceeds outstanding balance (₹${balance}).`);
     }
 
-    // Check for existing pending attempt
+    // Check for existing pending or newly created attempt
     const existingAttempt = await prisma.paymentAttempt.findFirst({
         where: {
             obligation_id: obligationId,
-            status: "PENDING",
-            expires_at: { gte: new Date() }
+            status: { in: ["PENDING", "CREATED"] },
+            OR: [
+              { expires_at: null, created_at: { gte: new Date(Date.now() - 5 * 60 * 1000) } }, // CREATED state protection
+              { expires_at: { gte: new Date() } } // PENDING state protection
+            ]
         },
         orderBy: { created_at: "desc" }
     });

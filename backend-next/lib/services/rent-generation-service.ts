@@ -147,6 +147,21 @@ export class RentGenerationService {
         }
 
         try {
+          // Idempotency check: Guard against duplicate rent for the same tenant & month
+          const existingRent = await prisma.rentObligation.findFirst({
+            where: {
+              tenant_id: alloc.tenant.id,
+              rent_month: rentMonth,
+              obligation_type: "RENT"
+            }
+          });
+
+          if (existingRent) {
+            console.info(`[RENT] Already generated for tenant ${alloc.tenant.id}, month ${rentMonth.toISOString()}`);
+            skipped++;
+            continue;
+          }
+
           await prisma.rentObligation.create({
             data: {
               tenant_id: alloc.tenant.id,
