@@ -5,8 +5,8 @@ import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { paymentService } from '../../api/services';
 
 const TERMINAL_STATUSES = ['SUCCESS', 'FAILED', 'EXPIRED', 'CANCELLED'];
-const VERIFY_INTERVAL_MS = 4000;
-const MAX_VERIFY_POLLS = 23;
+const VERIFY_DELAYS_MS = [4000, 6000, 8000, 10000];
+const MAX_VERIFY_POLLS = 18;
 
 const TenantPaymentReturn = () => {
     const [searchParams] = useSearchParams();
@@ -34,6 +34,7 @@ const TenantPaymentReturn = () => {
 
         let pollCount = 0;
         let isActive = true;
+        let timer;
 
         const loadAttempt = async () => {
             try {
@@ -54,6 +55,7 @@ const TenantPaymentReturn = () => {
                     const fallback = await paymentService.getAttempt(attemptId);
                     if (!isActive) return true;
                     setAttempt(fallback);
+                    setError('Payment confirmation is taking longer than expected. Please wait while we confirm with the bank.');
                     if (TERMINAL_STATUSES.includes(fallback.status)) {
                         sessionStorage.removeItem('lastPaymentAttemptId');
                         localStorage.removeItem('lastPaymentAttemptId');
@@ -62,40 +64,43 @@ const TenantPaymentReturn = () => {
                     }
                 } catch {
                     if (!isActive) return true;
-                    setError('Unable to verify payment status right now.');
-                    setLoading(false);
-                    return true; // Stop polling on hard error
+                    setError('Payment confirmation is taking longer than expected. Please wait while we confirm with the bank.');
                 }
                 return false;
             }
         };
 
-        // Initial load immediately
-        loadAttempt();
+        const scheduleNextPoll = () => {
+            const delay = VERIFY_DELAYS_MS[Math.min(pollCount, VERIFY_DELAYS_MS.length - 1)];
+            timer = window.setTimeout(pollAttempt, delay);
+        };
 
-        // Then poll every 4 seconds
-        const timer = window.setInterval(async () => {
+        const pollAttempt = async () => {
+            if (!isActive) return;
             pollCount += 1;
+            const shouldStop = await loadAttempt();
+
+            if (!isActive || shouldStop) return;
+
             if (pollCount >= MAX_VERIFY_POLLS) {
-                window.clearInterval(timer);
-                setError('Payment verification timed out. Please check again from your payments page.');
+                setError('Payment is being confirmed. You will see the update in a few moments.');
                 setLoading(false);
                 return;
             }
 
-            const shouldStop = await loadAttempt();
-            if (shouldStop) {
-                window.clearInterval(timer);
-            }
-        }, VERIFY_INTERVAL_MS);
+            scheduleNextPoll();
+        };
+
+        // Initial load immediately, then retry with backoff while PhonePe/bank status settles.
+        pollAttempt();
 
         return () => {
             isActive = false;
-            window.clearInterval(timer);
+            window.clearTimeout(timer);
         };
     }, [attemptId]);
 
-    const status = attempt?.status || (loading ? 'PENDING' : 'UNKNOWN');
+    const status = attempt?.status || 'PENDING';
 
     return (
         <div className="min-h-screen bg-slate-50 px-4 py-10">
@@ -121,7 +126,14 @@ const TenantPaymentReturn = () => {
                         </div>
                     )}
 
-                    {!loading && status !== 'SUCCESS' && (
+                    {!loading && status === 'PENDING' && (
+                        <div className="flex items-center gap-3 text-amber-700">
+                            <AlertCircle size={20} />
+                            <span>Payment is being confirmed. You will see the update in a few moments.</span>
+                        </div>
+                    )}
+
+                    {!loading && status !== 'SUCCESS' && status !== 'PENDING' && (
                         <div className="flex items-center gap-3 text-amber-700">
                             <AlertCircle size={20} />
                             <span>Current status: {status}. You can retry if this does not change soon.</span>
@@ -136,7 +148,7 @@ const TenantPaymentReturn = () => {
                         </div>
                     )}
 
-                    {error && <p className="mt-4 text-sm text-rose-600">{error}</p>}
+                    {error && <p className="mt-4 text-sm text-amber-700">{error}</p>}
                 </div>
 
                 <div className="mt-8 flex gap-3">

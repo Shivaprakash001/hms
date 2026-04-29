@@ -524,7 +524,7 @@ export class PaymentService {
       throw new Error("FORBIDDEN: You can only verify attempts for your hostel");
     }
 
-    if (attempt.status === "SUCCESS") {
+    if (["SUCCESS", "FAILED", "EXPIRED", "CANCELLED"].includes(attempt.status)) {
       return {
         attempt,
         status: attempt.status,
@@ -533,7 +533,24 @@ export class PaymentService {
     }
 
     const { instance } = await this.getProviderInstance(attempt.owner_id, attempt.provider);
-    const fetched = await instance.fetchStatus(attempt.merchant_txn_id, gatewayTxnId || attempt.gateway_txn_id || undefined);
+    let fetched;
+
+    try {
+      fetched = await instance.fetchStatus(attempt.merchant_txn_id, gatewayTxnId || attempt.gateway_txn_id || undefined);
+    } catch (error) {
+      console.error("[payments.verify] provider status fetch failed", {
+        attemptId: attempt.id,
+        merchantTxnId: attempt.merchant_txn_id,
+        provider: attempt.provider,
+        error: String(error),
+      });
+
+      return {
+        attempt,
+        status: attempt.status,
+        source: "cached_pending"
+      };
+    }
 
     console.info("[payments.verify] fetched status", {
       attemptId: attempt.id,
