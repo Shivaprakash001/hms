@@ -10,6 +10,7 @@ export class RoomAllocationService {
         tenant: {
           owner_id: userId
         },
+        is_active: true,
         end_date: null // active allocations
       },
       include: {
@@ -29,7 +30,7 @@ export class RoomAllocationService {
     const allocationData = await prisma.$transaction(async (tx) => {
       // 1. Check if tenant already has an active allocation
       const existing = await tx.roomAllocation.findFirst({
-        where: { tenant_id: tenantId, end_date: null }
+        where: { tenant_id: tenantId, is_active: true, end_date: null }
       });
       
       if (existing) {
@@ -78,7 +79,10 @@ export class RoomAllocationService {
   async endAllocation(allocationId: string, endDate: string) {
     return await prisma.roomAllocation.update({
       where: { id: allocationId },
-      data: { end_date: new Date(endDate) }
+      data: { 
+        end_date: new Date(endDate),
+        is_active: false
+      }
     });
   }
 
@@ -88,7 +92,7 @@ export class RoomAllocationService {
     const shiftData = await prisma.$transaction(async (tx) => {
       // 1. Find active allocation
       const active = await tx.roomAllocation.findFirst({
-        where: { tenant_id: tenantId, end_date: null },
+        where: { tenant_id: tenantId, is_active: true, end_date: null },
         orderBy: { start_date: "desc" }
       });
 
@@ -99,7 +103,10 @@ export class RoomAllocationService {
       // 2. End old allocation
       await tx.roomAllocation.update({
         where: { id: active.id },
-        data: { end_date: new Date(shiftDate) }
+        data: { 
+          end_date: new Date(shiftDate),
+          is_active: false
+        }
       });
 
       // 3. Check new room capacity
