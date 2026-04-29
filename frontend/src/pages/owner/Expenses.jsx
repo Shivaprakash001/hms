@@ -154,7 +154,7 @@ export default function Expenses() {
     }, [expenses, searchQuery, categoryFilter, dateFilter]);
 
     const totalStats = useMemo(() => {
-        const total = filteredExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+        const total = filteredExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
         return {
             total,
             count: filteredExpenses.length,
@@ -295,7 +295,7 @@ export default function Expenses() {
                             {categories
                                 .map(cat => ({
                                     name: cat,
-                                    amount: expenses.filter(e => e.category === cat).reduce((sum, e) => sum + e.amount, 0)
+                                    amount: expenses.filter(e => e.category === cat).reduce((sum, e) => sum + Number(e.amount || 0), 0)
                                 }))
                                 .sort((a, b) => b.amount - a.amount)
                                 .slice(0, 3)

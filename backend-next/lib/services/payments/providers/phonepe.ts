@@ -145,7 +145,13 @@ export class PhonePeProvider extends PaymentProvider {
     }
 
     // Response contains orderId and redirectUrl for the checkout page
-    const checkoutUrl = responseData.redirectUrl || responseData.data?.redirectUrl || null;
+    // Standard V2: responseData.redirectUrl
+    // Standard PG: responseData.data.instrumentResponse.redirectInfo.url
+    const checkoutUrl = responseData.redirectUrl 
+      || responseData.data?.redirectUrl 
+      || responseData.data?.instrumentResponse?.redirectInfo?.url
+      || null;
+      
     const orderId = responseData.orderId || responseData.data?.orderId || null;
 
     return {
@@ -273,10 +279,11 @@ export class PhonePeProvider extends PaymentProvider {
     const responseData = await response.json();
 
     let status: "SUCCESS" | "FAILED" | "PENDING" = "PENDING";
-    const state = (responseData.state || responseData.payload?.state || "").toUpperCase();
+    const state = (responseData.state || responseData.payload?.state || responseData.data?.state || "").toUpperCase();
+    const code = (responseData.code || "").toUpperCase();
 
-    if (state === "COMPLETED") status = "SUCCESS";
-    else if (state === "FAILED") status = "FAILED";
+    if (state === "COMPLETED" || code === "PAYMENT_SUCCESS") status = "SUCCESS";
+    else if (state === "FAILED" || code === "PAYMENT_ERROR" || code === "INTERNAL_SERVER_ERROR") status = "FAILED";
 
     return {
       status,

@@ -14,6 +14,8 @@ const TenantPaymentReturn = () => {
 
     const attemptId = searchParams.get('attempt_id')
         || searchParams.get('merchantOrderId')
+        || searchParams.get('transactionId')
+        || searchParams.get('merchantTransactionId')
         || sessionStorage.getItem('lastPaymentAttemptId')
         || localStorage.getItem('lastPaymentAttemptId');
 
