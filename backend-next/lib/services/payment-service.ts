@@ -454,6 +454,22 @@ export class PaymentService {
         try {
             const verification = await instance.verifyWebhook(headers, body);
             if (verification.merchant_txn_id === attempt.merchant_txn_id) {
+              if (verification.status === "SUCCESS") {
+                const expectedPaise = Math.round(Number(attempt.amount) * 100);
+                const receivedPaise =
+                  verification.amount == null ? null : Math.round(Number(verification.amount) * 100);
+
+                if (receivedPaise == null || receivedPaise !== expectedPaise) {
+                  console.error("[payments.webhook] amount mismatch", {
+                    attemptId: attempt.id,
+                    merchantTxnId: attempt.merchant_txn_id,
+                    expectedAmount: Number(attempt.amount),
+                    receivedAmount: verification.amount ?? null,
+                  });
+                  throw new Error("BAD_REQUEST: Webhook amount does not match payment attempt");
+                }
+              }
+
               console.info("[payments.webhook] matched attempt", {
                 attemptId: attempt.id,
                 merchantTxnId: attempt.merchant_txn_id,
