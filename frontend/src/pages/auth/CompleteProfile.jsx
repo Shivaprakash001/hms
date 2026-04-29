@@ -21,7 +21,7 @@ const CompleteProfile = () => {
     const navigate = useNavigate();
     const { user, loading } = useAuth();
     const [currentStep, setCurrentStep] = useState(1);
-    
+
     // Check Auth State
     useEffect(() => {
         if (loading) return;
@@ -38,9 +38,9 @@ const CompleteProfile = () => {
         gender: '',
         temporary_address: '',
         permanent_address: '',
-        
+
         profile_type: '', // STUDENT or WORKING_PROFESSIONAL
-        
+
         // Student Fields
         college_name: '',
         roll_number: '',
@@ -48,12 +48,12 @@ const CompleteProfile = () => {
         year_of_study: '',
         section: '',
         branch: '',
-        
+
         // Work Fields
         office_name: '',
         office_location: '',
         job_role: '',
-        
+
         aadhaar_number: ''
     });
 
@@ -80,7 +80,7 @@ const CompleteProfile = () => {
         if (!file) return;
         if (file.size > 5 * 1024 * 1024) return setError('File size must be < 5MB');
         if (!['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.type)) return setError('Only JPG, PNG, or PDF allowed');
-        
+
         setAadhaarFile(file);
         setError('');
         if (file.type.startsWith('image/')) {
@@ -126,7 +126,7 @@ const CompleteProfile = () => {
             if (currentStep === 1) err = validateStep1();
             if (currentStep === 2) err = validateStep2();
             if (err) return setError(err);
-            
+
             // Auto copy permanent address to temporary if empty
             if (currentStep === 1 && !formData.temporary_address) {
                 setFormData(prev => ({ ...prev, temporary_address: formData.permanent_address }));
@@ -154,21 +154,21 @@ const CompleteProfile = () => {
                 address: formData.permanent_address.trim(), // API legacy map
                 temporary_address: formData.temporary_address.trim(),
                 permanent_address: formData.permanent_address.trim(),
-                
+
                 profile_type: formData.profile_type,
-                
+
                 // Student
                 college_name: formData.college_name.trim() || undefined,
                 roll_number: formData.roll_number.trim() || undefined,
                 course: formData.course.trim() || undefined,
                 year_of_study: formData.year_of_study ? Number(formData.year_of_study) : undefined,
                 branch: formData.branch.trim() || undefined,
-                
+
                 // Work
                 office_name: formData.office_name.trim() || undefined,
                 office_location: formData.office_location.trim() || undefined,
                 job_role: formData.job_role.trim() || undefined,
-                
+
                 aadhaar_number: formData.aadhaar_number.trim(),
             };
 
@@ -228,16 +228,16 @@ const CompleteProfile = () => {
             </div>
 
             <main className="w-full max-w-[500px] relative z-10 pt-4 pb-12">
-                
+
                 {/* Header Welcome Card */}
                 {!isSuccess && (
-                     <div className="mb-8 text-center px-4">
+                    <div className="mb-8 text-center px-4">
                         <div className="mx-auto w-16 h-16 bg-white rounded-2xl shadow-xl border border-slate-100 flex items-center justify-center mb-6 overflow-hidden p-2">
-                             <img src="https://trishul.solutions/logo.png" alt="Logo" className="w-full h-full object-contain" />
+                            <img src="https://trishul.solutions/logo.png" alt="Logo" className="w-full h-full object-contain" />
                         </div>
                         <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-tight">Welcome to Trishul!</h1>
                         <p className="text-slate-500 font-medium mt-2">Let’s quickly set up your profile.</p>
-                     </div>
+                    </div>
                 )}
 
                 {/* Progress Indicators */}
@@ -260,7 +260,7 @@ const CompleteProfile = () => {
 
                 <Card className="border-0 shadow-2xl bg-white/80 backdrop-blur-xl relative overflow-hidden rounded-[24px]">
                     <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
-                    
+
                     <CardContent className="p-6 sm:p-8">
                         <AnimatePresence mode="wait" initial={false}>
                             {isSuccess ? (
@@ -274,7 +274,7 @@ const CompleteProfile = () => {
                                 </motion.div>
                             ) : (
                                 <motion.div key={`step-${currentStep}`} variants={SlideVariant} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.2 }}>
-                                    
+
                                     {/* -------------------- STAGE 1: IDENTITY -------------------- */}
                                     {currentStep === 1 && (
                                         <div className="space-y-6">
@@ -290,7 +290,7 @@ const CompleteProfile = () => {
                                                     <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 block">Full Name</Label>
                                                     <Input name="name" value={formData.name} onChange={handleChange} className="h-12 bg-slate-50/50 border-slate-200" placeholder="Sam Altman" />
                                                 </div>
-                                                
+
                                                 <div className="grid grid-cols-2 gap-4">
                                                     <div>
                                                         <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 block">Your Phone</Label>
@@ -330,17 +330,17 @@ const CompleteProfile = () => {
                                             </div>
 
                                             <div className="grid grid-cols-2 gap-3 mb-6">
-                                                <button 
-                                                    type="button" 
-                                                    onClick={() => setFormData(p => ({...p, profile_type: 'STUDENT'}))}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setFormData(p => ({ ...p, profile_type: 'STUDENT' }))}
                                                     className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-2 ${formData.profile_type === 'STUDENT' ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-100 bg-white hover:bg-slate-50 text-slate-500'}`}
                                                 >
                                                     <GraduationCap size={32} />
                                                     <span className="font-bold text-sm">Student</span>
                                                 </button>
-                                                <button 
-                                                    type="button" 
-                                                    onClick={() => setFormData(p => ({...p, profile_type: 'WORKING_PROFESSIONAL'}))}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setFormData(p => ({ ...p, profile_type: 'WORKING_PROFESSIONAL' }))}
                                                     className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-2 ${formData.profile_type === 'WORKING_PROFESSIONAL' ? 'border-purple-600 bg-purple-50 text-purple-700' : 'border-slate-100 bg-white hover:bg-slate-50 text-slate-500'}`}
                                                 >
                                                     <Briefcase size={32} />
@@ -350,7 +350,7 @@ const CompleteProfile = () => {
 
                                             <AnimatePresence>
                                                 {formData.profile_type === 'STUDENT' && (
-                                                    <motion.div initial={{opacity:0, height:0}} animate={{opacity:1, height:'auto'}} className="space-y-4">
+                                                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="space-y-4">
                                                         <div>
                                                             <Label className="text-xs font-bold uppercase text-slate-500 mb-1 block">College Name *</Label>
                                                             <Input name="college_name" value={formData.college_name} onChange={handleChange} className="h-12 bg-slate-50/50" />
@@ -369,8 +369,8 @@ const CompleteProfile = () => {
                                                 )}
 
                                                 {formData.profile_type === 'WORKING_PROFESSIONAL' && (
-                                                    <motion.div initial={{opacity:0, height:0}} animate={{opacity:1, height:'auto'}} className="space-y-4">
-                                                         <div>
+                                                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="space-y-4">
+                                                        <div>
                                                             <Label className="text-xs font-bold uppercase text-slate-500 mb-1 block">Company / Office Name *</Label>
                                                             <Input name="office_name" value={formData.office_name} onChange={handleChange} className="h-12 bg-slate-50/50" />
                                                         </div>
@@ -435,7 +435,7 @@ const CompleteProfile = () => {
                                             </Button>
                                         )}
                                     </div>
-                                    
+
                                 </motion.div>
                             )}
                         </AnimatePresence>

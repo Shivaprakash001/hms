@@ -21,29 +21,6 @@ import { eventLog } from "./event-log-service";
 
 export class RentGenerationService {
 
-  calculateRent(tenant: any, targetMonth: Date, fallbackRent: number): number {
-    const rent = Number(tenant.monthly_rent) || fallbackRent || 0;
-    if (!tenant.joined_on) return rent;
-
-    const joined = new Date(tenant.joined_on);
-    const target = new Date(targetMonth);
-
-    if (
-      joined.getMonth() === target.getMonth() &&
-      joined.getFullYear() === target.getFullYear()
-    ) {
-      const daysInMonth = new Date(
-        target.getFullYear(),
-        target.getMonth() + 1,
-        0
-      ).getDate();
-      
-      const daysStayed = daysInMonth - joined.getDate() + 1;
-      return Math.round((rent / daysInMonth) * daysStayed);
-    }
-    return rent;
-  }
-
   async generateMonthlyRent(
     targetDate?: Date,
     ownerId?: string,
@@ -106,7 +83,7 @@ export class RentGenerationService {
         where: whereClause,
         include: {
           tenant: {
-            select: { id: true, monthly_rent: true, owner_id: true, joined_on: true }
+            select: { id: true, monthly_rent: true, owner_id: true }
           },
           room: {
             select: { base_rent: true }
@@ -159,9 +136,7 @@ export class RentGenerationService {
         const tenantDueDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), dueDay));
 
         // Rent priority: tenant.monthly_rent > room.base_rent > skip
-        const baseRent = Number(alloc.tenant.monthly_rent) || Number(alloc.room.base_rent) || 0;
-        const rentAmount = this.calculateRent(alloc.tenant, rentMonth, baseRent);
-        
+        const rentAmount = Number(alloc.tenant.monthly_rent) || Number(alloc.room.base_rent) || 0;
         if (rentAmount <= 0) {
           console.info(`[RENT] Skipping allocation ${alloc.id} — zero rent`);
           skipped++;
@@ -289,7 +264,7 @@ export class RentGenerationService {
       where: whereClause,
       include: {
         tenant: {
-          select: { id: true, monthly_rent: true, owner_id: true, joined_on: true, profile: { select: { name: true } } }
+          select: { id: true, monthly_rent: true, owner_id: true, profile: { select: { name: true } } }
         },
         room: {
           select: { room_no: true, base_rent: true }
@@ -309,9 +284,7 @@ export class RentGenerationService {
     const existingSet = new Set(existingObligations.map(o => o.allocation_id));
 
     const preview = allocations.map(alloc => {
-      const baseRent = Number(alloc.tenant.monthly_rent) || Number(alloc.room.base_rent) || 0;
-      const rentAmount = this.calculateRent(alloc.tenant, rentMonth, baseRent);
-      
+      const rentAmount = Number(alloc.tenant.monthly_rent) || Number(alloc.room.base_rent) || 0;
       return {
         allocation_id: alloc.id,
         tenant_name: alloc.tenant.profile?.name || "Unknown",
@@ -322,14 +295,11 @@ export class RentGenerationService {
       };
     });
 
-    const totalAmount = preview.filter(p => !p.will_skip && !p.already_generated).reduce((sum, p) => sum + p.rent_amount, 0);
-
     return {
       rent_month: rentMonth.toISOString(),
-      tenants: preview.length,
-      tenants_to_create: preview.filter(p => !p.will_skip && !p.already_generated).length,
-      tenants_already_generated: preview.filter(p => p.already_generated).length,
-      total_amount: totalAmount,
+      total: preview.length,
+      will_create: preview.filter(p => !p.will_skip).length,
+      will_skip: preview.filter(p => p.will_skip).length,
       items: preview
     };
   }
