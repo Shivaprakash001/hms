@@ -4,6 +4,8 @@ import { PaymentProviderFactory } from "./payments/provider-factory";
 import crypto from "crypto";
 import { EmailService } from "./email-service";
 import { receiptService } from "./receipt-service";
+import { getPreferences } from "../preferences";
+import { formatCurrency, formatMonthYear } from "../format";
 
 export class PaymentService {
   /**
@@ -226,29 +228,26 @@ export class PaymentService {
     const validationAmount = amount || balance;
 
     // 1️⃣ Fetch Owner Preferences for Payment Rules
-    const hostel: any = await prisma.hostel.findFirst({
-        where: { owner_id: obligation.owner_id || "" },
-    });
-    const prefConfig = (hostel?.preferences_config as any) || {};
+    const prefs = await getPreferences(obligation.owner_id || "");
 
-    const allowPartial = prefConfig.allow_partial_payments ?? false;
-    const minAmount = Number(prefConfig.min_payment_amount) || 0;
+    const allowPartial = prefs.allow_partial_payments;
+    const minAmount = prefs.min_payment_amount;
 
     if (obligation.status === "WAIVED") throw new Error("BAD_REQUEST: Cannot pay for waived obligation");
     if (validationAmount <= 0) throw new Error("BAD_REQUEST: Obligation is already paid");
 
     // 2️⃣ Partial Payment Enforcement
     if (!allowPartial && validationAmount < balance) {
-        throw new Error(`BAD_REQUEST: Partial payments are disabled by the owner. Full payment of ₹${balance} is required.`);
+        throw new Error(`BAD_REQUEST: Partial payments are disabled by the owner. Full payment of ${formatCurrency(balance)} is required.`);
     }
 
     // 3️⃣ Minimum Amount Enforcement
     if (validationAmount < minAmount && validationAmount < balance) {
-        throw new Error(`BAD_REQUEST: Minimum payment amount allowed is ₹${minAmount}.`);
+        throw new Error(`BAD_REQUEST: Minimum payment amount allowed is ${formatCurrency(minAmount)}.`);
     }
 
     if (validationAmount > balance) {
-        throw new Error(`BAD_REQUEST: Payment (₹${validationAmount}) exceeds outstanding balance (₹${balance}).`);
+        throw new Error(`BAD_REQUEST: Payment (${formatCurrency(validationAmount)}) exceeds outstanding balance (${formatCurrency(balance)}).`);
     }
 
     // Check for existing pending or newly created attempt
@@ -400,22 +399,18 @@ export class PaymentService {
     // Then conditionally generate PDF and email it based on owner preference
     receiptService.createReceipt(recordResult.payment.id).then(async (receipt) => {
         try {
-            // ── Check auto_email_receipt preference ──
-            const hostel = await prisma.hostel.findFirst({
-                where: { owner_id: attempt.owner_id, is_active: true }
-            });
-            const prefConfig = (hostel?.preferences_config as any) || {};
-            const autoEmailReceipt = prefConfig.auto_email_receipt ?? false;
+            // ── Check auto_email_receipt preference via global service ──
+            const prefs = await getPreferences(attempt.owner_id);
 
-            if (!autoEmailReceipt) {
+            if (!prefs.auto_email_receipt) {
                 console.info("[payments.finalize] auto_email_receipt disabled, skipping receipt email for payment", recordResult.payment.id);
                 return;
             }
 
             const renderContext = receipt._renderContext || {
-                footer: prefConfig.receipt_footer || null,
-                currency: hostel?.currency || "INR",
-                timezone: hostel?.timezone || "Asia/Kolkata",
+                footer: prefs.receipt_footer || null,
+                currency: prefs.currency,
+                timezone: prefs.timezone,
             };
 
             const pdfBuffer = receiptService.renderReceiptPdf(receipt, renderContext);
@@ -425,9 +420,7 @@ export class PaymentService {
             });
             
             if (tenant?.profile?.email) {
-                const rentMonth = receipt.rent_month
-                    ? new Date(receipt.rent_month).toLocaleString('default', { month: 'long', year: 'numeric' })
-                    : 'N/A';
+                const rentMonth = formatMonthYear(receipt.rent_month, prefs);
                 await EmailService.sendReceipt({
                     toEmail: tenant.profile.email,
                     name: tenant.profile.name,

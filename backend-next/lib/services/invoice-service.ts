@@ -1,6 +1,8 @@
 import { PDFDocument, StandardFonts, rgb, PDFPage, PDFFont } from "pdf-lib";
 import { prisma } from "../db";
 import { imagekit } from "../imagekit";
+import { getHostelWithPreferences } from "../preferences";
+import { formatCurrency, formatShortDate, formatMonthYear, getCurrencySymbol } from "../format";
 
 // ── Template Version (bump this when the PDF layout changes) ──
 const INVOICE_TEMPLATE_VERSION = 3;
@@ -74,9 +76,7 @@ export class InvoiceService {
       return { url: cachedUrl, cached: true };
     }
 
-    const hostel = await prisma.hostel.findFirst({
-      where: { owner_id: receipt.tenant.owner_id as string }
-    });
+    const { hostel, prefs } = await getHostelWithPreferences(receipt.tenant.owner_id as string);
     if (!hostel) throw new Error("Hostel details not found");
 
     const allocation = await prisma.roomAllocation.findFirst({
@@ -91,13 +91,11 @@ export class InvoiceService {
     const tenantEmail = receipt.tenant.profile?.email || "";
     const roomNo = allocation?.room?.room_no || "N/A";
     const tenantId = receipt.tenant.id.split('-')[0].toUpperCase();
-    const curr = hostel.currency === "INR" ? "Rs." : (hostel.currency || "$");
+    const curr = getCurrencySymbol(prefs);
     const amountVal = Number(receipt.amount).toFixed(2);
-    const monthLabel = receipt.rent_month
-      ? new Date(receipt.rent_month).toLocaleString('default', { month: 'long', year: 'numeric' })
-      : "N/A";
-    const issueDate = new Date(receipt.issued_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-    const paymentDate = new Date(receipt.payment.payment_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const monthLabel = formatMonthYear(receipt.rent_month, prefs);
+    const issueDate = formatShortDate(receipt.issued_at, prefs);
+    const paymentDate = formatShortDate(receipt.payment.payment_date, prefs);
 
     // ── 3. CREATE PDF ──
     const pdfDoc = await PDFDocument.create();

@@ -3,6 +3,8 @@ import { eventSystem } from "../events";
 import { EmailService } from "./email-service";
 import { eventLog } from "./event-log-service";
 import { resolveRules, calculateSingleRuleFee } from "../billing/engine";
+import { resolvePreferences } from "../preferences";
+import { formatMonthYear, formatDate } from "../format";
 
 export class ReminderService {
 
@@ -48,7 +50,7 @@ export class ReminderService {
       if (!ownerId) continue;
 
       const prefs: any = prefsMap.get(ownerId);
-      const config = (prefs?.preferences_config as any) || {};
+      const config = resolvePreferences(prefs);
 
       // Automation Guards
       const autoReminders = config.auto_send_reminders ?? true;
@@ -251,9 +253,10 @@ export class ReminderService {
           toEmail: tenant.personal_email,
           name: tenant.profile?.name || "Tenant",
           amount: Number(obligation.amount),
-          rentMonth: new Date(obligation.rent_month).toLocaleString('default', { month: 'long', year: 'numeric' }),
-          dueDate: new Date(obligation.due_date).toLocaleDateString(),
-          type: type as any
+          rentMonth: formatMonthYear(obligation.rent_month, config),
+          dueDate: formatDate(obligation.due_date, config),
+          type: type as any,
+          prefs: config,
         };
         
         await EmailService.sendReminderBatch(mailData);

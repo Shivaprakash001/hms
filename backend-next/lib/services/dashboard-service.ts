@@ -1,4 +1,5 @@
 import { prisma } from "../db";
+import { formatShortMonth } from "../format";
 
 export class DashboardService {
   async getOwnerStats(userId: string) {
@@ -96,7 +97,7 @@ export class DashboardService {
         const dueAmount = Number(due._sum.amount || 0);
 
         stats.push({
-            month: start.toLocaleString('default', { month: 'short' }),
+            month: formatShortMonth(start),
             year: start.getFullYear(),
             collected: collectedAmount,
             due: dueAmount,

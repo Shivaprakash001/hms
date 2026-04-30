@@ -157,13 +157,13 @@ export class PropertyService {
 
     // Financial safety validations
     if (newConfig.late_fee_amount !== undefined && Number(newConfig.late_fee_amount) > 10000) {
-      throw new Error("VALIDATION: Late fee amount cannot exceed ₹10,000");
+      throw new Error("VALIDATION: Late fee amount cannot exceed 10,000");
     }
     if (newConfig.late_fee_percentage !== undefined && (Number(newConfig.late_fee_percentage) < 0 || Number(newConfig.late_fee_percentage) > 50)) {
       throw new Error("VALIDATION: Late fee percentage must be 0–50%");
     }
     if (newConfig.max_late_fee !== undefined && Number(newConfig.max_late_fee) > 50000) {
-      throw new Error("VALIDATION: Maximum late fee cannot exceed ₹50,000");
+      throw new Error("VALIDATION: Maximum late fee cannot exceed 50,000");
     }
     if (newConfig.min_payment_amount !== undefined && Number(newConfig.min_payment_amount) < 0) {
       throw new Error("VALIDATION: Minimum payment must be positive");
@@ -199,7 +199,7 @@ export class PropertyService {
         } else {
           const amt = Number(rule.amount);
           if (isNaN(amt) || amt < 0 || amt > 50000) {
-            throw new Error("VALIDATION: Rule amount must be 0–₹50,000");
+            throw new Error("VALIDATION: Rule amount must be 0–50,000");
           }
         }
         const afterDays = Number(rule.after_days);

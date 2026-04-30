@@ -6,6 +6,8 @@ import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { EmailService } from "@/lib/services/email-service";
 import { prisma } from "@/lib/db";
 import { eventLog } from "@/lib/services/event-log-service";
+import { getPreferences } from "@/lib/preferences";
+import { formatMonthYear } from "@/lib/format";
 
 /**
  * 🔔 TEST REMINDER
@@ -40,16 +42,12 @@ export async function POST(req: NextRequest) {
       return apiError("No email found for your account", "NOT_FOUND", 404);
     }
 
-    // Fetch hostel preferences for context
-    const hostel = await prisma.hostel.findFirst({
-      where: { owner_id: session.sub, is_active: true },
-    });
-
-    const prefs = (hostel as any)?.preferences_config || {};
-    const dueDay = prefs.due_day || 5;
+    // Fetch preferences via global service
+    const prefs = await getPreferences(session.sub);
+    const dueDay = prefs.due_day;
     const now = new Date();
     const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    const monthLabel = nextMonth.toLocaleString("default", { month: "long", year: "numeric" });
+    const monthLabel = formatMonthYear(nextMonth, prefs);
 
     // Send the test email using the real template pipeline
     const result = await EmailService.sendReminderBatch({
@@ -59,6 +57,7 @@ export async function POST(req: NextRequest) {
       rentMonth: monthLabel,
       dueDate: `${dueDay} ${monthLabel}`,
       type: reminderType as any,
+      prefs,
     });
 
     // Audit log

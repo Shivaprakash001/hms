@@ -1,6 +1,8 @@
 import { prisma } from "../db";
 import { jsPDF } from "jspdf";
 import crypto from "crypto";
+import { getHostelWithPreferences, resolvePreferences } from "../preferences";
+import { formatCurrency, formatShortDate, formatMonthYear, getCurrencySymbol } from "../format";
 
 export class ReceiptService {
 
@@ -10,14 +12,9 @@ export class ReceiptService {
    * Uses retry loop to handle concurrent receipt creation.
    */
   async generateReceiptNumber(ownerId: string): Promise<string> {
-    const hostel = await prisma.hostel.findFirst({
-      where: { owner_id: ownerId, is_active: true },
-    });
-
-    const config = (hostel as any)?.preferences_config || {};
-    const customPrefix = config.receipt_prefix || hostel?.receipt_prefix || "HMS";
+    const { prefs } = await getHostelWithPreferences(ownerId);
     const year = new Date().getFullYear();
-    const prefix = `${customPrefix}-${year}-`;
+    const prefix = `${prefs.receipt_prefix}-${year}-`;
 
     // Retry loop for race-condition safety
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -44,23 +41,24 @@ export class ReceiptService {
 
       if (!exists) return candidate;
 
-      // Collision detected — retry with incremented sequence
       console.warn(`[ReceiptService] Sequence collision on ${candidate}, retrying (attempt ${attempt + 1})`);
     }
 
     // Fallback: UUID-based receipt number to guarantee uniqueness
-    const fallback = `${customPrefix}-${year}-${crypto.randomUUID().substring(0, 8).toUpperCase()}`;
+    const fallback = `${prefs.receipt_prefix}-${year}-${crypto.randomUUID().substring(0, 8).toUpperCase()}`;
     console.warn(`[ReceiptService] Exhausted retries, using fallback receipt number: ${fallback}`);
     return fallback;
   }
 
   /**
    * Create a receipt record in the database after a payment is confirmed.
-   * This is the ONLY place receipts are created — triggered from finalizePaymentAttempt or recordPayment.
    * IDEMPOTENT: will not duplicate if called multiple times for the same payment.
+   *
+   * SNAPSHOTS preferences at creation time so future preference changes
+   * do not alter historical receipts.
    */
   async createReceipt(paymentId: string): Promise<any> {
-    // Check if receipt already exists for this payment (idempotent)
+    // Idempotency check
     const existing = await prisma.receipt.findFirst({
       where: { payment_id: paymentId },
     });
@@ -76,12 +74,8 @@ export class ReceiptService {
 
     if (!payment) throw new Error("NOT_FOUND: Payment not found");
 
-    const hostel = await prisma.hostel.findFirst({
-      where: { owner_id: payment.tenant.owner_id as string },
-    });
-
-    const config = (hostel as any)?.preferences_config || {};
     const ownerId = payment.tenant.owner_id || payment.owner_id || "";
+    const { hostel, prefs } = await getHostelWithPreferences(ownerId);
 
     const receiptNumber = await this.generateReceiptNumber(ownerId);
 
@@ -100,28 +94,26 @@ export class ReceiptService {
       },
     });
 
+    // Attach transient rendering context — NOT persisted in DB, but used
+    // immediately by renderReceiptPdf if called in the same flow
     return {
       ...receipt,
-      // Attach transient rendering context (not stored in DB)
       _renderContext: {
-        footer: config.receipt_footer || null,
-        currency: hostel?.currency || "INR",
-        timezone: hostel?.timezone || "Asia/Kolkata",
+        footer: prefs.receipt_footer || null,
+        currency: prefs.currency,
+        timezone: prefs.timezone,
       },
     };
   }
 
   /**
    * Generate PDF buffer from a receipt record (by paymentId).
-   * Looks up the stored receipt, then renders a PDF from it.
    */
   async generatePdfBuffer(paymentId: string): Promise<Buffer> {
-    // Ensure receipt exists first
     let receipt = await prisma.receipt.findFirst({
       where: { payment_id: paymentId },
     });
 
-    // If no receipt record exists yet, create one (backward compatibility)
     if (!receipt) {
       receipt = await this.createReceipt(paymentId);
     }
@@ -131,21 +123,18 @@ export class ReceiptService {
     }
 
     // Fetch rendering context from hostel preferences
-    const hostel = await prisma.hostel.findFirst({
-      where: { owner_id: receipt.owner_id || "" },
-    });
-    const config = (hostel as any)?.preferences_config || {};
+    const { prefs } = await getHostelWithPreferences(receipt.owner_id || "");
 
     return this.renderReceiptPdf(receipt as any, {
-      footer: config.receipt_footer || null,
-      currency: hostel?.currency || "INR",
-      timezone: hostel?.timezone || "Asia/Kolkata",
+      footer: prefs.receipt_footer || null,
+      currency: prefs.currency,
+      timezone: prefs.timezone,
     });
   }
 
   /**
    * Generate PDF buffer directly from a receipt record.
-   * Now preference-aware: uses owner's currency, timezone, and custom footer.
+   * Preference-aware: uses owner's currency, timezone, and custom footer.
    */
   renderReceiptPdf(
     receipt: {
@@ -164,21 +153,20 @@ export class ReceiptService {
       timezone?: string;
     }
   ): Buffer {
-    const tz = context?.timezone || "Asia/Kolkata";
-    const currency = context?.currency || "INR";
-    const customFooter = context?.footer;
+    const prefs = {
+      currency: context?.currency || "INR",
+      timezone: context?.timezone || "Asia/Kolkata",
+    };
 
-    const currencySymbol =
-      currency === "USD" ? "$" :
-      currency === "EUR" ? "€" :
-      currency === "GBP" ? "£" : "₹";
+    const currencySymbol = getCurrencySymbol(prefs);
+    const customFooter = context?.footer;
 
     const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 20;
     let y = 25;
 
-    // ── Header ──────────────────────────────────────────────
+    // ── Header ──
     doc.setFontSize(22);
     doc.setFont("helvetica", "bold");
     doc.text(receipt.hostel_name || "HMS Hostel", pageWidth / 2, y, { align: "center" });
@@ -191,13 +179,12 @@ export class ReceiptService {
     doc.setTextColor(0, 0, 0);
     y += 5;
 
-    // Divider
     doc.setDrawColor(200, 200, 200);
     doc.setLineWidth(0.5);
     doc.line(margin, y, pageWidth - margin, y);
     y += 12;
 
-    // ── Receipt Details ─────────────────────────────────────
+    // ── Receipt Details ──
     const labelX = margin + 5;
     const valueX = margin + 45;
     const rightLabelX = pageWidth / 2 + 10;
@@ -229,30 +216,14 @@ export class ReceiptService {
     doc.roundedRect(margin, y - 5, pageWidth - 2 * margin, rowHeight * 5 + 10, 3, 3, "FD");
     y += 4;
 
-    // Format date using owner's timezone preference
-    let dateStr: string;
-    try {
-      dateStr = new Intl.DateTimeFormat("en-IN", {
-        timeZone: tz,
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      }).format(new Date(receipt.issued_at));
-    } catch {
-      dateStr = new Date(receipt.issued_at).toLocaleDateString("en-IN", {
-        day: "2-digit", month: "short", year: "numeric",
-      });
-    }
-
+    const dateStr = formatShortDate(receipt.issued_at, prefs);
     drawRow("Receipt No:", receipt.receipt_number, y, "Date:", dateStr);
     y += rowHeight;
 
     drawRow("Tenant:", receipt.tenant_name || "N/A", y);
     y += rowHeight;
 
-    const cycleName = receipt.rent_month
-      ? new Date(receipt.rent_month).toLocaleString("default", { month: "long", year: "numeric" })
-      : "N/A";
+    const cycleName = formatMonthYear(receipt.rent_month, prefs);
     drawRow("Rent Cycle:", cycleName, y);
     y += rowHeight;
 
@@ -265,7 +236,7 @@ export class ReceiptService {
 
     y += rowHeight + 10;
 
-    // ── Amount Box ──────────────────────────────────────────
+    // ── Amount Box ──
     const amount = Number(receipt.amount);
     doc.setDrawColor(99, 102, 241);
     doc.setFillColor(238, 242, 255);
@@ -278,11 +249,11 @@ export class ReceiptService {
 
     doc.setFontSize(16);
     doc.setTextColor(67, 56, 202);
-    doc.text(`${currencySymbol} ${amount.toLocaleString("en-IN")}`, pageWidth - margin - 5, y + 14, { align: "right" });
+    doc.text(formatCurrency(amount, prefs), pageWidth - margin - 5, y + 14, { align: "right" });
 
     y += 38;
 
-    // ── Footer ──────────────────────────────────────────────
+    // ── Footer ──
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(150, 150, 150);

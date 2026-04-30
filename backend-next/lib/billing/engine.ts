@@ -88,20 +88,20 @@ export function calculateLateFees(
     switch (rule.type) {
       case "flat": {
         feeAmount = Math.max(Number(rule.amount) || 0, 0);
-        desc = `Flat fee ₹${feeAmount} (after ${afterDays}d)`;
+        desc = `Flat fee ${feeAmount} (after ${afterDays}d)`;
         break;
       }
       case "percentage": {
         const pct = Math.max(Number(rule.value) || 0, 0);
         feeAmount = Math.round(rentAmount * pct / 100);
-        desc = `${pct}% of ₹${rentAmount} = ₹${feeAmount} (after ${afterDays}d)`;
+        desc = `${pct}% of ${rentAmount} = ${feeAmount} (after ${afterDays}d)`;
         break;
       }
       case "per_day": {
         const dailyAmount = Math.max(Number(rule.amount) || 0, 0);
         const activeDays = Math.max(effectiveDelay - afterDays, 0);
         feeAmount = dailyAmount * activeDays;
-        desc = `₹${dailyAmount}/day × ${activeDays}d = ₹${feeAmount} (after ${afterDays}d)`;
+        desc = `${dailyAmount}/day × ${activeDays}d = ${feeAmount} (after ${afterDays}d)`;
         break;
       }
       default:

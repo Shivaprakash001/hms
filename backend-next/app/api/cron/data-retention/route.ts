@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { eventLog } from "@/lib/services/event-log-service";
+import { resolvePreferences } from "@/lib/preferences";
 
 /**
  * 🗑️ DATA RETENTION CRON
@@ -38,8 +39,8 @@ export async function GET(req: NextRequest) {
     const results: any[] = [];
 
     for (const hostel of hostels) {
-      const config = (hostel.preferences_config as any) || {};
-      const retentionMonths = Number(config.data_retention_months) || 0;
+      const prefs = resolvePreferences(hostel);
+      const retentionMonths = prefs.data_retention_months;
 
       if (retentionMonths <= 0) continue; // Retain forever
 

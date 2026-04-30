@@ -1,6 +1,7 @@
 import { prisma } from "../db";
 import { imagekit, IMAGEKIT_URL_ENDPOINT } from "../imagekit";
 import { eventSystem } from "../events";
+import { getPreferences } from "../preferences";
 
 // ── Constants ──────────────────────────────────────────────
 const ALLOWED_MIME_TYPES = [
@@ -56,11 +57,8 @@ export class DocumentService {
     // signed URLs are withheld for non-approved documents.
     let requireApproval = false;
     if (requestingUser.role === "TENANT" && tenant.owner_id) {
-      const hostel = await prisma.hostel.findFirst({
-        where: { owner_id: tenant.owner_id, is_active: true },
-      });
-      const config = (hostel?.preferences_config as any) || {};
-      requireApproval = config.require_doc_approval === true;
+      const prefs = await getPreferences(tenant.owner_id);
+      requireApproval = prefs.require_doc_approval === true;
     }
 
     // Generate signed URLs for each document (5-minute expiry)

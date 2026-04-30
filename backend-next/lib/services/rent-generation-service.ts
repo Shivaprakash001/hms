@@ -2,6 +2,7 @@ import { prisma } from "../db";
 import { eventSystem } from "../events";
 import { invalidateDashboardCache } from "../cache/dashboard-cache";
 import { eventLog } from "./event-log-service";
+import { resolvePreferences } from "../preferences";
 
 /**
  * 🏦 Rent Generation Service
@@ -122,7 +123,7 @@ export class RentGenerationService {
         }
 
         const prefs: any = prefsMap.get(ownerId);
-        const config = (prefs?.preferences_config as any) || {};
+        const config = resolvePreferences(prefs);
 
         // 1️⃣ Automation Guard: Skip if owner disabled auto-generation (unless manual trigger)
         if (triggerType === "cron") {

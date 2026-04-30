@@ -1,5 +1,7 @@
 import { Resend } from "resend";
 import { eventLog } from "./event-log-service";
+import { formatCurrency } from "../format";
+import type { HostelPreferences } from "../preferences";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const DEFAULT_FROM = process.env.EMAIL_FROM || "noreply@mail.trishul.solutions";
@@ -63,6 +65,7 @@ export class EmailService {
     roomNumber: string;
     roomRent: number;
     activationLink: string;
+    prefs?: Partial<HostelPreferences>;
   }) {
     const subject = `You're invited to join ${data.hostelName}`;
     const html = `
@@ -72,7 +75,7 @@ export class EmailService {
         <p>${data.ownerName} has invited you to join the hostel management system.</p>
         <div style="background: #f4f4f4; padding: 15px; border-radius: 8px;">
           <p><strong>Room:</strong> ${data.roomNumber}</p>
-          <p><strong>Rent:</strong> ₹${data.roomRent}</p>
+          <p><strong>Rent:</strong> ${formatCurrency(data.roomRent, data.prefs)}</p>
         </div>
         <p style="text-align: center; margin: 30px 0;">
           <a href="${data.activationLink}" style="background: #6366f1; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">Activate Account</a>
@@ -90,13 +93,15 @@ export class EmailService {
     rentMonth: string;
     reference: string;
     pdfBuffer?: Buffer;
+    prefs?: Partial<HostelPreferences>;
   }) {
+    const formattedAmount = formatCurrency(data.amount, data.prefs);
     const subject = `Payment Receipt - ${data.rentMonth}`;
     const html = `
       <div style="font-family: sans-serif;">
         <h3>Rent Payment Received</h3>
         <p>Hi ${data.name},</p>
-        <p>We've received your payment of ₹${data.amount} for the month of ${data.rentMonth}.</p>
+        <p>We've received your payment of ${formattedAmount} for the month of ${data.rentMonth}.</p>
         <p><strong>Reference:</strong> ${data.reference}</p>
         ${data.pdfBuffer ? '<p>Please find your payment receipt attached to this email.</p>' : ''}
       </div>
@@ -116,7 +121,9 @@ export class EmailService {
     rentMonth: string;
     dueDate: string;
     type: "DUE_SOON" | "WARNING" | "FINAL_NOTICE" | "LATE_FEE_ADDED";
+    prefs?: Partial<HostelPreferences>;
   }) {
+    const formattedAmount = formatCurrency(data.amount, data.prefs);
     let subject = "";
     let title = "";
     let message = "";
@@ -126,18 +133,18 @@ export class EmailService {
       case "DUE_SOON":
         subject = `Rent Payment Reminder - ${data.rentMonth}`;
         title = "Gentle Rent Reminder";
-        message = `This is a friendly reminder that your rent of <strong>₹${data.amount}</strong> for ${data.rentMonth} is due soon. kindly ignore if already paid.`;
+        message = `This is a friendly reminder that your rent of <strong>${formattedAmount}</strong> for ${data.rentMonth} is due soon. kindly ignore if already paid.`;
         break;
       case "WARNING":
         subject = `Overdue Payment Notice - ${data.rentMonth}`;
         title = "Payment Overdue";
-        message = `Your rent payment of <strong>₹${data.amount}</strong> for ${data.rentMonth} is now past its due date (${data.dueDate}). Please settle this to avoid late fees.`;
+        message = `Your rent payment of <strong>${formattedAmount}</strong> for ${data.rentMonth} is now past its due date (${data.dueDate}). Please settle this to avoid late fees.`;
         color = "#f59e0b"; // Amber
         break;
       case "FINAL_NOTICE":
         subject = `URGENT: Final Rent Notice - ${data.rentMonth}`;
         title = "Final Payment Notice";
-        message = `URGENT: Your rent of <strong>₹${data.amount}</strong> for ${data.rentMonth} is significantly overdue. Please pay immediately to avoid service deactivation or additional penalties.`;
+        message = `URGENT: Your rent of <strong>${formattedAmount}</strong> for ${data.rentMonth} is significantly overdue. Please pay immediately to avoid service deactivation or additional penalties.`;
         color = "#ef4444"; // Red
         break;
       case "LATE_FEE_ADDED":
@@ -158,7 +165,7 @@ export class EmailService {
           <p>${message}</p>
           <div style="margin: 20px 0; padding: 16px; background: #f8fafc; border-radius: 8px; border-left: 4px solid ${color};">
             <p style="margin: 0; font-size: 14px; color: #64748b;">Amount Due</p>
-            <p style="margin: 4px 0 0; font-size: 24px; font-weight: bold; color: #0f172a;">₹${data.amount}</p>
+            <p style="margin: 4px 0 0; font-size: 24px; font-weight: bold; color: #0f172a;">${formattedAmount}</p>
             <p style="margin: 12px 0 0; font-size: 14px; color: #64748b;">Due Date: ${data.dueDate}</p>
           </div>
           <p style="font-size: 14px; color: #64748b; margin-top: 24px; margin-bottom: 24px;">

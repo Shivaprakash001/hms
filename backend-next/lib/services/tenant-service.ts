@@ -1,6 +1,7 @@
 import { prisma } from "../db";
 import { eventSystem } from "../events";
 import { z } from "zod";
+import { getPreferences } from "../preferences";
 
 export class TenantService {
   async getTenantById(id: string, requestingUser: { sub: string; role: string }) {
@@ -197,11 +198,8 @@ export class TenantService {
 
     // ── Enforce allow_tenant_edits preference ──
     if (tenantCheck.owner_id) {
-      const hostel = await prisma.hostel.findFirst({
-        where: { owner_id: tenantCheck.owner_id, is_active: true },
-      });
-      const config = (hostel?.preferences_config as any) || {};
-      if (config.allow_tenant_edits === false) {
+      const prefs = await getPreferences(tenantCheck.owner_id);
+      if (prefs.allow_tenant_edits === false) {
         throw new Error("FORBIDDEN: Profile editing is currently disabled by the hostel owner");
       }
     }

@@ -1,4 +1,5 @@
 import { prisma } from "../db";
+import { formatCurrency } from "../format";
 
 export class ActivityService {
   async getOwnerActivity(params: {
@@ -35,7 +36,7 @@ export class ActivityService {
         id: `payment_${p.id}`,
         event_type: "PAYMENT_RECEIVED",
         title: "Payment Received",
-        detail: `Received ₹${Number(p.amount_paid).toLocaleString()} via ${p.payment_method}`,
+        detail: `Received ${formatCurrency(Number(p.amount_paid))} via ${p.payment_method}`,
         tenant_name: p.tenant.profile.name,
         amount: Number(p.amount_paid),
         event_at: p.payment_date
