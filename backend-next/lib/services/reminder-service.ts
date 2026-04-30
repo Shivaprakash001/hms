@@ -80,54 +80,137 @@ export class ReminderService {
           }
         }
 
-        // 2️⃣ Organic Late Fee Generation
-        if (autoLateFees && config.late_fee_type && config.late_fee_type !== 'none') {
-          const afterDays = config.late_fee_after_days || 7;
-          
-          if (daysOverdue >= afterDays) {
-            // Check if a Late Fee already exists for this allocation + month
-            if (ob.allocation_id) {
-              const existingLateFee = await prisma.rentObligation.findUnique({
-                where: {
-                  allocation_id_rent_month_obligation_type: {
+        // 2️⃣ Organic Late Fee Generation (Rules Engine)
+        if (autoLateFees && ob.allocation_id) {
+          const graceDays = Number(config.grace_days) || 0;
+          const effectiveOverdue = Math.max(daysOverdue - graceDays, 0);
+
+          // Resolve rules: prefer new `late_fee_rules[]`, fallback to legacy flat fields
+          let rules: any[] = [];
+          if (Array.isArray(config.late_fee_rules) && config.late_fee_rules.length > 0) {
+            rules = config.late_fee_rules.filter((r: any) => r.enabled !== false);
+          } else if (config.late_fee_type && config.late_fee_type !== 'none') {
+            // Legacy single-rule backward compat
+            rules = [{
+              id: 'legacy',
+              type: config.late_fee_type,
+              amount: Number(config.late_fee_amount) || 200,
+              value: Number(config.late_fee_percentage) || 5,
+              after_days: Number(config.late_fee_after_days) || 7,
+              enabled: true,
+            }];
+          }
+
+          if (rules.length > 0 && effectiveOverdue > 0) {
+            const maxCap = Number(config.max_late_fee) || 0;
+
+            // Fetch all existing late fees for this allocation + month to calculate accumulated total
+            const existingLateFees = await prisma.rentObligation.findMany({
+              where: {
+                allocation_id: ob.allocation_id,
+                rent_month: ob.rent_month,
+                obligation_type: "LATE_FEE",
+              },
+              select: { amount: true },
+            });
+            const accumulatedFees = existingLateFees.reduce((sum: number, lf: any) => sum + Number(lf.amount), 0);
+
+            for (const rule of rules) {
+              const afterDays = Number(rule.after_days) || 7;
+
+              if (effectiveOverdue < afterDays) continue;
+
+              // Build idempotency key: use rule.id to avoid duplicate fees per rule per month
+              const feeKey = `${ob.allocation_id}_${ob.rent_month.toISOString()}_${rule.id || rule.type}`;
+
+              if (rule.type === 'per_day') {
+                // Per-day fees: create ONE obligation per day, check if today's already exists
+                const todayFeeKey = `${feeKey}_day_${daysOverdue}`;
+                const existingDailyFee = await prisma.rentObligation.findFirst({
+                  where: {
                     allocation_id: ob.allocation_id,
                     rent_month: ob.rent_month,
-                    obligation_type: "LATE_FEE"
+                    obligation_type: "LATE_FEE",
+                    // Use created_at date range for today's entry
+                    created_at: {
+                      gte: todayMid,
+                      lt: new Date(todayMid.getTime() + 86400000),
+                    },
+                  },
+                });
+
+                if (!existingDailyFee) {
+                  let feeAmount = Number(rule.amount) || 0;
+                  // Cap check
+                  if (maxCap > 0 && accumulatedFees + feeAmount > maxCap) {
+                    feeAmount = Math.max(maxCap - accumulatedFees, 0);
+                  }
+
+                  if (feeAmount > 0) {
+                    await prisma.rentObligation.create({
+                      data: {
+                        tenant_id: ob.tenant.id,
+                        allocation_id: ob.allocation_id,
+                        owner_id: ob.owner_id,
+                        rent_month: ob.rent_month,
+                        amount: feeAmount,
+                        due_date: todayMid,
+                        status: "PENDING",
+                        obligation_type: "LATE_FEE",
+                      },
+                    });
+                    lateFeesAdded++;
+                    await this.triggerNotification(ob, "LATE_FEE_ADDED", config);
+                    remindersSent++;
                   }
                 }
-              });
+              } else {
+                // One-time fees (flat, percentage): create once per rule per month
+                const existingRuleFee = await prisma.rentObligation.findFirst({
+                  where: {
+                    allocation_id: ob.allocation_id,
+                    rent_month: ob.rent_month,
+                    obligation_type: "LATE_FEE",
+                  },
+                });
 
-              if (!existingLateFee) {
-                // Calculate Fee: Flat or Percentage
-                let feeAmount = 0;
-                if (config.late_fee_type === 'flat') {
-                  feeAmount = Number(config.late_fee_amount) || 200;
-                } else if (config.late_fee_type === 'percentage') {
-                  const pct = Number(config.late_fee_percentage) || 5;
-                  feeAmount = Math.round(Number(ob.amount) * (pct / 100));
-                }
+                // For backward compat: if legacy (single rule), check simple existence
+                // For new rules: we allow multiple LATE_FEE obligations (one per rule)
+                const hasThisRuleFee = rules.length <= 1
+                  ? !!existingRuleFee
+                  : existingLateFees.length >= rules.filter((r: any) => r.type !== 'per_day').length;
 
-                // Apply Cap if defined
-                if (config.max_late_fee && feeAmount > Number(config.max_late_fee)) {
-                  feeAmount = Number(config.max_late_fee);
-                }
+                if (!hasThisRuleFee) {
+                  let feeAmount = 0;
+                  if (rule.type === 'flat') {
+                    feeAmount = Number(rule.amount) || 200;
+                  } else if (rule.type === 'percentage') {
+                    const pct = Number(rule.value) || 5;
+                    feeAmount = Math.round(Number(ob.amount) * (pct / 100));
+                  }
 
-                if (feeAmount > 0) {
-                  await prisma.rentObligation.create({
-                    data: {
-                      tenant_id: ob.tenant.id,
-                      allocation_id: ob.allocation_id,
-                      owner_id: ob.owner_id,
-                      rent_month: ob.rent_month,
-                      amount: feeAmount,
-                      due_date: todayMid,
-                      status: "PENDING",
-                      obligation_type: "LATE_FEE"
-                    }
-                  });
-                  lateFeesAdded++;
-                  await this.triggerNotification(ob, "LATE_FEE_ADDED", config);
-                  remindersSent++;
+                  // Cap check
+                  if (maxCap > 0 && accumulatedFees + feeAmount > maxCap) {
+                    feeAmount = Math.max(maxCap - accumulatedFees, 0);
+                  }
+
+                  if (feeAmount > 0) {
+                    await prisma.rentObligation.create({
+                      data: {
+                        tenant_id: ob.tenant.id,
+                        allocation_id: ob.allocation_id,
+                        owner_id: ob.owner_id,
+                        rent_month: ob.rent_month,
+                        amount: feeAmount,
+                        due_date: todayMid,
+                        status: "PENDING",
+                        obligation_type: "LATE_FEE",
+                      },
+                    });
+                    lateFeesAdded++;
+                    await this.triggerNotification(ob, "LATE_FEE_ADDED", config);
+                    remindersSent++;
+                  }
                 }
               }
             }

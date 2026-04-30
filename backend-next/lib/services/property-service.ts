@@ -133,7 +133,7 @@ export class PropertyService {
     // ── Extended config (JSON blob) ──
     const extendedKeys = [
       "due_day", "late_fee_type", "late_fee_amount", "late_fee_percentage",
-      "late_fee_after_days", "max_late_fee",
+      "late_fee_after_days", "max_late_fee", "grace_days", "late_fee_rules",
       "allow_partial_payments", "min_payment_amount",
       "reminder_email", "reminder_in_app", "reminder_whatsapp",
       "reminder_day_1", "reminder_day_5", "reminder_day_10",
@@ -167,6 +167,46 @@ export class PropertyService {
     }
     if (newConfig.min_payment_amount !== undefined && Number(newConfig.min_payment_amount) < 0) {
       throw new Error("VALIDATION: Minimum payment must be positive");
+    }
+
+    // ── Late Fee Rules Engine validation ──
+    if (newConfig.grace_days !== undefined) {
+      const gd = Number(newConfig.grace_days);
+      if (isNaN(gd) || gd < 0 || gd > 30) throw new Error("VALIDATION: Grace period must be 0–30 days");
+      newConfig.grace_days = gd;
+    }
+
+    if (newConfig.late_fee_rules !== undefined) {
+      if (!Array.isArray(newConfig.late_fee_rules)) {
+        throw new Error("VALIDATION: late_fee_rules must be an array");
+      }
+      if (newConfig.late_fee_rules.length > 5) {
+        throw new Error("VALIDATION: Maximum 5 late fee rules allowed");
+      }
+      const validTypes = ["flat", "per_day", "percentage"];
+      for (const rule of newConfig.late_fee_rules) {
+        if (!rule.id || typeof rule.id !== "string") {
+          throw new Error("VALIDATION: Each rule must have a string 'id'");
+        }
+        if (!validTypes.includes(rule.type)) {
+          throw new Error(`VALIDATION: Invalid rule type '${rule.type}'. Must be: ${validTypes.join(", ")}`);
+        }
+        if (rule.type === "percentage") {
+          const pct = Number(rule.value);
+          if (isNaN(pct) || pct < 0 || pct > 100) {
+            throw new Error("VALIDATION: Rule percentage must be 0–100");
+          }
+        } else {
+          const amt = Number(rule.amount);
+          if (isNaN(amt) || amt < 0 || amt > 50000) {
+            throw new Error("VALIDATION: Rule amount must be 0–₹50,000");
+          }
+        }
+        const afterDays = Number(rule.after_days);
+        if (isNaN(afterDays) || afterDays < 1 || afterDays > 60) {
+          throw new Error("VALIDATION: Rule after_days must be 1–60");
+        }
+      }
     }
 
     if (hasExtended) {

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { User, Building2, Settings, Save, Loader2, ChevronDown, ChevronRight, Receipt, Bell, CreditCard, Shield, Zap, Globe, IndianRupee, Calendar, Clock, FileText, ToggleLeft, ToggleRight, AlertTriangle, CheckCircle2, Send, Lock } from 'lucide-react';
+import { User, Building2, Settings, Save, Loader2, ChevronDown, ChevronRight, Receipt, Bell, CreditCard, Shield, Zap, Globe, IndianRupee, Calendar, Clock, FileText, ToggleLeft, ToggleRight, AlertTriangle, CheckCircle2, Send, Lock, Trash2, Plus } from 'lucide-react';
+import { migrateLegacyPrefs, createDefaultRule, simulateBilling, calculateWhatIf } from '../../utils/billing-simulator';
 import { useSearchParams } from 'react-router-dom';
 import { ownerService } from '../../api/services';
 import ProfileLogoUploader from '../../components/owner/ProfileLogoUploader';
@@ -44,7 +45,7 @@ export default function OwnerProfile() {
     const [preferences, setPreferences] = useState({
         currency: 'INR', rent_cycle: 'MONTHLY', auto_rent_day: 1, due_day: 5,
         late_fee_type: 'none', late_fee_amount: 200, late_fee_percentage: 5,
-        late_fee_after_days: 7, max_late_fee: 500,
+        late_fee_after_days: 7, max_late_fee: 500, grace_days: 0, late_fee_rules: [],
         upi_id: '', phonepe_merchant_id: '', allow_partial_payments: false, min_payment_amount: 500,
         reminder_email: true, reminder_in_app: true, reminder_whatsapp: false,
         reminder_day_1: true, reminder_day_5: true, reminder_day_10: true,
@@ -90,6 +91,8 @@ export default function OwnerProfile() {
                     ...(prefs.late_fee_percentage !== undefined && { late_fee_percentage: prefs.late_fee_percentage }),
                     ...(prefs.late_fee_after_days !== undefined && { late_fee_after_days: prefs.late_fee_after_days }),
                     ...(prefs.max_late_fee !== undefined && { max_late_fee: prefs.max_late_fee }),
+                    ...(prefs.grace_days !== undefined && { grace_days: prefs.grace_days }),
+                    ...(prefs.late_fee_rules !== undefined && { late_fee_rules: prefs.late_fee_rules }),
                     ...(prefs.auto_generate_rent !== undefined && { auto_generate_rent: prefs.auto_generate_rent }),
                     ...(prefs.auto_apply_late_fees !== undefined && { auto_apply_late_fees: prefs.auto_apply_late_fees }),
                     ...(prefs.auto_send_reminders !== undefined && { auto_send_reminders: prefs.auto_send_reminders }),
@@ -186,6 +189,7 @@ export default function OwnerProfile() {
                 due_day: preferences.due_day, late_fee_type: preferences.late_fee_type,
                 late_fee_amount: preferences.late_fee_amount, late_fee_percentage: preferences.late_fee_percentage,
                 late_fee_after_days: preferences.late_fee_after_days, max_late_fee: preferences.max_late_fee,
+                grace_days: preferences.grace_days ?? 0, late_fee_rules: preferences.late_fee_rules || [],
                 auto_generate_rent: preferences.auto_generate_rent, auto_apply_late_fees: preferences.auto_apply_late_fees,
                 auto_send_reminders: preferences.auto_send_reminders, auto_deactivate_days: preferences.auto_deactivate_days,
                 auto_email_receipt: preferences.auto_email_receipt, receipt_format: preferences.receipt_format,
@@ -419,31 +423,54 @@ export default function OwnerProfile() {
 // ──── MODULE PANELS ────────────────────────────────────────────
 
 function BillingModule({ prefs, updatePref }) {
-    // ELITE #1: Enhanced simulation preview with day-by-day timeline
-    const simulation = useMemo(() => {
-        if (prefs.late_fee_type === 'none') return null;
-        const rent = 8000;
-        const afterDays = prefs.late_fee_after_days || 7;
-        const feePerHit = prefs.late_fee_type === 'flat'
-            ? Number(prefs.late_fee_amount)
-            : Math.round(rent * Number(prefs.late_fee_percentage) / 100);
-        const cap = Number(prefs.max_late_fee) || Infinity;
-        const dueDay = prefs.due_day || 5;
+    // ── Rules Engine State ──
+    // Migrate legacy flat prefs → rules array on mount
+    const billingConfig = useMemo(() => migrateLegacyPrefs(prefs), [
+        prefs.late_fee_rules, prefs.late_fee_type, prefs.late_fee_amount,
+        prefs.late_fee_percentage, prefs.late_fee_after_days, prefs.max_late_fee,
+        prefs.grace_days, prefs.auto_rent_day, prefs.due_day,
+    ]);
 
-        const timeline = [];
-        timeline.push({ label: `May 1`, desc: 'Rent generated', amount: rent, color: 'slate' });
-        timeline.push({ label: `May ${dueDay}`, desc: 'Due date', amount: rent, color: 'indigo' });
-        const feeDay = dueDay + afterDays;
-        const totalWithFee = rent + Math.min(feePerHit, cap);
-        timeline.push({ label: `May ${feeDay}`, desc: `Late fee applied (+₹${Math.min(feePerHit, cap)})`, amount: totalWithFee, color: 'amber' });
-        if (cap < feePerHit * 3) {
-            timeline.push({ label: `Cap`, desc: `Max fee ₹${cap}`, amount: rent + cap, color: 'rose' });
-        }
-        return timeline;
-    }, [prefs.late_fee_type, prefs.late_fee_amount, prefs.late_fee_percentage, prefs.late_fee_after_days, prefs.max_late_fee, prefs.due_day]);
+    const [whatIfRent, setWhatIfRent] = useState(8000);
+    const [whatIfDelay, setWhatIfDelay] = useState(10);
+
+    // ── Rules CRUD ──
+    const rules = billingConfig.late_fee_rules || [];
+
+    const addRule = () => {
+        if (rules.length >= 5) return;
+        const newRule = createDefaultRule();
+        updatePref('late_fee_rules', [...rules, newRule]);
+        // Also sync legacy fields for backward compat
+        syncLegacyFromRules([...rules, newRule], prefs, updatePref);
+    };
+
+    const removeRule = (ruleId) => {
+        const updated = rules.filter(r => r.id !== ruleId);
+        updatePref('late_fee_rules', updated);
+        syncLegacyFromRules(updated, prefs, updatePref);
+    };
+
+    const updateRule = (ruleId, field, value) => {
+        const updated = rules.map(r => r.id === ruleId ? { ...r, [field]: value } : r);
+        updatePref('late_fee_rules', updated);
+        syncLegacyFromRules(updated, prefs, updatePref);
+    };
+
+    // ── Live Simulation ──
+    const simulation = useMemo(() => {
+        if (rules.filter(r => r.enabled).length === 0) return null;
+        return simulateBilling(billingConfig, whatIfRent, 30);
+    }, [billingConfig, whatIfRent]);
+
+    // ── What-If ──
+    const whatIfResult = useMemo(() => {
+        return calculateWhatIf(billingConfig, whatIfRent, whatIfDelay);
+    }, [billingConfig, whatIfRent, whatIfDelay]);
 
     return (
-        <div className="space-y-3">
+        <div className="space-y-4">
+            {/* ── Section 1: Core Settings ── */}
             <div className="grid grid-cols-2 gap-3">
                 <SelectField label="Rent Cycle" value={prefs.rent_cycle}
                     options={[{ value: 'MONTHLY', label: 'Monthly' }, { value: 'QUARTERLY', label: 'Quarterly' }, { value: 'YEARLY', label: 'Yearly' }]}
@@ -452,66 +479,218 @@ function BillingModule({ prefs, updatePref }) {
                     options={Array.from({ length: 28 }, (_, i) => ({ value: String(i + 1), label: `${i + 1}${getDaySuffix(i + 1)}` }))}
                     onChange={(v) => updatePref('auto_rent_day', Number(v))} />
             </div>
-            <SelectField label="Due Day" value={String(prefs.due_day)}
-                options={[{ value: '5', label: '5th of month' }, { value: '10', label: '10th of month' }, { value: '15', label: '15th of month' }, { value: '20', label: '20th of month' }]}
-                onChange={(v) => updatePref('due_day', Number(v))} />
+            <div className="grid grid-cols-2 gap-3">
+                <SelectField label="Due Day" value={String(prefs.due_day)}
+                    options={[{ value: '5', label: '5th of month' }, { value: '10', label: '10th of month' }, { value: '15', label: '15th of month' }, { value: '20', label: '20th of month' }]}
+                    onChange={(v) => updatePref('due_day', Number(v))} />
+                <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Grace Period</label>
+                    <div className="flex items-center gap-2">
+                        <input type="range" min="0" max="10" value={prefs.grace_days ?? 0}
+                            onChange={(e) => updatePref('grace_days', Number(e.target.value))}
+                            className="flex-1 h-2 bg-slate-200 rounded-full appearance-none cursor-pointer accent-indigo-600" />
+                        <span className="text-sm font-bold text-indigo-600 min-w-[40px] text-right">{prefs.grace_days ?? 0}d</span>
+                    </div>
+                </div>
+            </div>
 
+            {/* ── Section 2: Late Fee Rules Builder ── */}
             <Divider label="Late Fee Rules" />
 
-            <SelectField label="Late Fee Type" value={prefs.late_fee_type}
-                options={[{ value: 'none', label: 'None' }, { value: 'flat', label: 'Flat Amount' }, { value: 'percentage', label: 'Percentage of Rent' }]}
-                onChange={(v) => updatePref('late_fee_type', v)} />
+            {rules.length === 0 && (
+                <div className="bg-slate-50 border border-dashed border-slate-200 rounded-xl px-4 py-6 text-center">
+                    <p className="text-sm text-slate-400">No late fee rules configured</p>
+                    <p className="text-xs text-slate-300 mt-1">Add rules to automatically charge penalties for late payments</p>
+                </div>
+            )}
 
-            {prefs.late_fee_type === 'flat' && (
-                <div className="grid grid-cols-2 gap-3">
-                    <Field label="Flat Amount (₹)" value={prefs.late_fee_amount} type="number"
-                        onChange={(v) => updatePref('late_fee_amount', Number(v))} />
-                    <Field label="Apply After (days)" value={prefs.late_fee_after_days} type="number"
-                        onChange={(v) => updatePref('late_fee_after_days', Number(v))} />
-                </div>
+            <div className="space-y-2.5">
+                {rules.map((rule, idx) => (
+                    <div key={rule.id} className={`border rounded-xl p-3.5 transition-all ${rule.enabled
+                        ? 'bg-white border-slate-200 shadow-sm'
+                        : 'bg-slate-50/50 border-slate-100 opacity-60'}`}>
+                        <div className="flex items-center justify-between mb-2.5">
+                            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                Rule {idx + 1}
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                                <button type="button" onClick={() => updateRule(rule.id, 'enabled', !rule.enabled)}
+                                    className="p-1 rounded-md hover:bg-slate-100 transition">
+                                    {rule.enabled
+                                        ? <ToggleRight size={20} className="text-indigo-600" />
+                                        : <ToggleLeft size={20} className="text-slate-300" />}
+                                </button>
+                                <button type="button" onClick={() => removeRule(rule.id)}
+                                    className="p-1 rounded-md hover:bg-rose-50 text-slate-300 hover:text-rose-500 transition">
+                                    <Trash2 size={15} />
+                                </button>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2.5">
+                            <div>
+                                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Type</label>
+                                <select value={rule.type} onChange={(e) => updateRule(rule.id, 'type', e.target.value)}
+                                    className="w-full px-2.5 py-2 rounded-lg border text-xs font-medium bg-slate-50 border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none appearance-none">
+                                    <option value="flat">Flat ₹</option>
+                                    <option value="per_day">Per Day ₹</option>
+                                    <option value="percentage">% of Rent</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                                    {rule.type === 'percentage' ? 'Percent' : 'Amount (₹)'}
+                                </label>
+                                <input type="number" min="0"
+                                    value={rule.type === 'percentage' ? (rule.value ?? 5) : (rule.amount ?? 200)}
+                                    onChange={(e) => updateRule(rule.id, rule.type === 'percentage' ? 'value' : 'amount', Number(e.target.value))}
+                                    className="w-full px-2.5 py-2 rounded-lg border text-xs font-medium bg-slate-50 border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none" />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">After Days</label>
+                                <input type="number" min="1" max="30" value={rule.after_days ?? 5}
+                                    onChange={(e) => updateRule(rule.id, 'after_days', Number(e.target.value))}
+                                    className="w-full px-2.5 py-2 rounded-lg border text-xs font-medium bg-slate-50 border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none" />
+                            </div>
+                        </div>
+                        {/* Rule human-readable summary */}
+                        <p className="text-[11px] text-slate-400 mt-2 italic">
+                            {rule.type === 'flat' && `Charge ₹${rule.amount || 0} once, ${rule.after_days} days after due date`}
+                            {rule.type === 'per_day' && `Charge ₹${rule.amount || 0} every day starting ${rule.after_days} days after due date`}
+                            {rule.type === 'percentage' && `Charge ${rule.value || 0}% of rent, ${rule.after_days} days after due date`}
+                        </p>
+                    </div>
+                ))}
+            </div>
+
+            {rules.length < 5 && (
+                <button type="button" onClick={addRule}
+                    className="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl border-2 border-dashed border-slate-200 text-sm font-medium text-slate-400 hover:border-indigo-300 hover:text-indigo-500 hover:bg-indigo-50/30 transition-all active:scale-[0.98]">
+                    <Plus size={16} /> Add Rule
+                </button>
             )}
-            {prefs.late_fee_type === 'percentage' && (
-                <div className="grid grid-cols-2 gap-3">
-                    <Field label="Percentage (%)" value={prefs.late_fee_percentage} type="number"
-                        onChange={(v) => updatePref('late_fee_percentage', Number(v))} />
-                    <Field label="Apply After (days)" value={prefs.late_fee_after_days} type="number"
-                        onChange={(v) => updatePref('late_fee_after_days', Number(v))} />
-                </div>
-            )}
-            {prefs.late_fee_type !== 'none' && (
-                <Field label="Maximum Late Fee (₹)" value={prefs.max_late_fee} type="number"
+
+            {rules.length > 0 && (
+                <Field label="Maximum Late Fee Cap (₹)" value={prefs.max_late_fee ?? 0} type="number"
                     onChange={(v) => updatePref('max_late_fee', Number(v))} />
             )}
 
-            {/* ELITE #1: Day-by-day simulation timeline */}
+            {/* ── Section 3: Live Simulation Timeline ── */}
             {simulation && (
-                <div className="bg-gradient-to-br from-indigo-50 to-violet-50 border border-indigo-100 rounded-xl px-4 py-3.5">
-                    <p className="text-indigo-700 font-semibold text-sm mb-3 flex items-center gap-1.5">
-                        <Calendar size={14} /> Billing Simulation (₹8,000 rent)
-                    </p>
+                <div className="bg-gradient-to-br from-indigo-50 via-violet-50 to-purple-50 border border-indigo-100 rounded-xl px-4 py-3.5">
+                    <div className="flex items-center justify-between mb-3">
+                        <p className="text-indigo-700 font-semibold text-sm flex items-center gap-1.5">
+                            <Calendar size={14} /> Live Billing Timeline
+                        </p>
+                        <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-medium text-slate-400">Rent:</span>
+                            <input type="number" min="1000" step="500" value={whatIfRent}
+                                onChange={(e) => setWhatIfRent(Number(e.target.value) || 8000)}
+                                className="w-20 px-2 py-1 rounded-md border border-indigo-200 text-xs font-bold text-indigo-700 bg-white/80 outline-none focus:ring-2 focus:ring-indigo-200" />
+                        </div>
+                    </div>
                     <div className="space-y-0">
-                        {simulation.map((step, i) => (
-                            <div key={i} className="flex items-start gap-3">
-                                <div className="flex flex-col items-center">
-                                    <div className={`w-2.5 h-2.5 rounded-full mt-1 ${step.color === 'slate' ? 'bg-slate-400' : step.color === 'indigo' ? 'bg-indigo-500' : step.color === 'amber' ? 'bg-amber-500' : 'bg-rose-500'}`} />
-                                    {i < simulation.length - 1 && <div className="w-px h-6 bg-slate-200" />}
-                                </div>
-                                <div className="pb-2">
-                                    <div className="flex items-baseline gap-2">
-                                        <span className="text-xs font-bold text-slate-600">{step.label}</span>
-                                        <span className="text-xs text-slate-400">{step.desc}</span>
+                        {simulation.map((step, i) => {
+                            const dotColor = {
+                                slate: 'bg-slate-400', indigo: 'bg-indigo-500', amber: 'bg-amber-500',
+                                orange: 'bg-orange-500', rose: 'bg-rose-500',
+                            }[step.color] || 'bg-slate-400';
+                            const textColor = ['amber', 'orange', 'rose'].includes(step.color) ? 'text-amber-700' : 'text-slate-700';
+                            return (
+                                <div key={i} className="flex items-start gap-3">
+                                    <div className="flex flex-col items-center">
+                                        <div className={`w-2.5 h-2.5 rounded-full mt-1.5 ${dotColor} ${step.type === 'late_fee' ? 'animate-pulse' : ''}`} />
+                                        {i < simulation.length - 1 && <div className="w-px h-7 bg-indigo-200/50" />}
                                     </div>
-                                    <span className={`text-sm font-bold ${step.color === 'amber' || step.color === 'rose' ? 'text-amber-700' : 'text-slate-700'}`}>
-                                        ₹{step.amount.toLocaleString('en-IN')}
-                                    </span>
+                                    <div className="pb-1.5 flex-1">
+                                        <div className="flex items-baseline gap-2">
+                                            <span className="text-xs font-bold text-slate-600">{step.label}</span>
+                                            <span className="text-xs text-slate-400 flex-1">{step.description}</span>
+                                        </div>
+                                        <span className={`text-sm font-bold ${textColor}`}>
+                                            ₹{step.running_total.toLocaleString('en-IN')}
+                                        </span>
+                                    </div>
                                 </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
+            {/* ── Section 4: What-If Calculator ── */}
+            {rules.filter(r => r.enabled).length > 0 && (
+                <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl px-4 py-4 text-white">
+                    <p className="text-sm font-semibold flex items-center gap-1.5 mb-3">
+                        <Zap size={14} className="text-amber-400" /> What-If Calculator
+                    </p>
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                        <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Rent Amount (₹)</label>
+                            <input type="number" min="500" step="500" value={whatIfRent}
+                                onChange={(e) => setWhatIfRent(Number(e.target.value) || 8000)}
+                                className="w-full px-2.5 py-2 rounded-lg border text-xs font-medium bg-slate-700/50 border-slate-600 text-white outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/20" />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Days Delayed</label>
+                            <input type="number" min="0" max="60" value={whatIfDelay}
+                                onChange={(e) => setWhatIfDelay(Number(e.target.value) || 0)}
+                                className="w-full px-2.5 py-2 rounded-lg border text-xs font-medium bg-slate-700/50 border-slate-600 text-white outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/20" />
+                        </div>
+                    </div>
+
+                    {/* Result */}
+                    <div className="bg-slate-700/40 rounded-lg px-3.5 py-3">
+                        <div className="flex items-baseline justify-between mb-2">
+                            <span className="text-xs text-slate-400">Total Payable</span>
+                            <span className="text-xl font-bold text-white">
+                                ₹{whatIfResult.totalPayable.toLocaleString('en-IN')}
+                            </span>
+                        </div>
+                        {whatIfResult.graceDaysApplied > 0 && (
+                            <p className="text-[11px] text-emerald-400 mb-1.5">
+                                {whatIfResult.effectiveDelay === 0 && whatIfDelay > 0
+                                    ? `✓ Within ${whatIfResult.graceDaysApplied}-day grace period — no penalties`
+                                    : `Grace: ${whatIfResult.graceDaysApplied}d → effective delay: ${whatIfResult.effectiveDelay}d`}
+                            </p>
+                        )}
+                        {whatIfResult.breakdown.length > 0 ? (
+                            <div className="space-y-1">
+                                {whatIfResult.breakdown.map((b, i) => (
+                                    <div key={i} className="flex items-center justify-between text-xs">
+                                        <span className="text-slate-300">{b.desc}</span>
+                                    </div>
+                                ))}
+                                {whatIfResult.capApplied && (
+                                    <p className="text-[11px] text-rose-400 font-medium mt-1">⚠ Cap applied — max ₹{prefs.max_late_fee}</p>
+                                )}
                             </div>
-                        ))}
+                        ) : (
+                            <p className="text-xs text-slate-400">
+                                {whatIfDelay === 0 ? 'No delay — full rent only' : 'No penalties triggered yet'}
+                            </p>
+                        )}
                     </div>
                 </div>
             )}
         </div>
     );
+}
+
+/** Sync rules back to legacy flat fields for backward compatibility */
+function syncLegacyFromRules(rules, prefs, updatePref) {
+    if (!rules || rules.length === 0) {
+        updatePref('late_fee_type', 'none');
+        return;
+    }
+    // Use first enabled rule for legacy fields
+    const primary = rules.find(r => r.enabled) || rules[0];
+    updatePref('late_fee_type', primary.type === 'per_day' ? 'flat' : primary.type);
+    updatePref('late_fee_after_days', primary.after_days);
+    if (primary.type === 'percentage') {
+        updatePref('late_fee_percentage', primary.value || 5);
+    } else {
+        updatePref('late_fee_amount', primary.amount || 200);
+    }
 }
 
 function PaymentsModule({ prefs, updatePref }) {
