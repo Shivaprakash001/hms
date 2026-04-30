@@ -4,11 +4,14 @@ import { AlertCircle, CheckCircle2, Copy, ExternalLink, Loader2, QrCode, Smartph
 
 import { paymentService } from '../../../api/services';
 import QrCodeImage from '../../shared/QrCodeImage';
+import { useAppPreferences } from '../../../context/AppPreferencesContext';
+import { formatCurrency } from '../../../utils/format';
 
 const POLL_INTERVAL_MS = 4000;
 const TERMINAL_STATUSES = ['SUCCESS', 'FAILED', 'EXPIRED', 'CANCELLED'];
 
 const OnlinePaymentTestModal = ({ isOpen, onClose, obligation, onSettled }) => {
+    const { preferences } = useAppPreferences();
     const [loading, setLoading] = useState(false);
     const [attempt, setAttempt] = useState(null);
     const [status, setStatus] = useState('IDLE');
@@ -126,7 +129,7 @@ const OnlinePaymentTestModal = ({ isOpen, onClose, obligation, onSettled }) => {
                         <div className="space-y-4 p-6">
                             <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-4">
                                 <p className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-500">Payable Amount</p>
-                                <p className="mt-2 text-3xl font-black text-slate-900">₹{amount.toLocaleString()}</p>
+                                <p className="mt-2 text-3xl font-black text-slate-900">{formatCurrency(amount, preferences)}</p>
                                 <p className="mt-1 text-sm text-slate-500">Rent Entry: {obligation.obligationId}</p>
                             </div>
 

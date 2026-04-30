@@ -14,11 +14,14 @@ import {
 
 import { paymentService } from '../../../api/services';
 import QrCodeImage from '../../shared/QrCodeImage';
+import { useAppPreferences } from '../../../context/AppPreferencesContext';
+import { formatCurrency } from '../../../utils/format';
 
 const POLL_INTERVAL_MS = 4000;
 const TERMINAL_STATUSES = ['SUCCESS', 'FAILED', 'EXPIRED', 'CANCELLED', 'PENDING_VERIFICATION'];
 
 const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
+    const { preferences } = useAppPreferences();
     const [loading, setLoading] = useState(false);
     const [attempt, setAttempt] = useState(null);
     const [status, setStatus] = useState('idle');
@@ -197,7 +200,7 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
                             {/* Amount Display */}
                             <div className="rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3">
                                 <p className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-500">Amount</p>
-                                <p className="mt-2 text-3xl font-black text-slate-900">₹{Number(amount || 0).toLocaleString()}</p>
+                                <p className="mt-2 text-3xl font-black text-slate-900">{formatCurrency(Number(amount || 0), preferences)}</p>
                             </div>
 
                             {/* Step 1: Initial — Create Intent */}

@@ -51,25 +51,45 @@ export class DocumentService {
       orderBy: { created_at: "desc" },
     });
 
+    // ── Enforce require_doc_approval ──
+    // When enabled, tenants can see doc metadata (for tracking status) but
+    // signed URLs are withheld for non-approved documents.
+    let requireApproval = false;
+    if (requestingUser.role === "TENANT" && tenant.owner_id) {
+      const hostel = await prisma.hostel.findFirst({
+        where: { owner_id: tenant.owner_id, is_active: true },
+      });
+      const config = (hostel?.preferences_config as any) || {};
+      requireApproval = config.require_doc_approval === true;
+    }
+
     // Generate signed URLs for each document (5-minute expiry)
-    return docs.map((doc) => ({
-      ...doc,
-      signed_url: imagekit.helper.buildSrc({
-        src: doc.file_url,
-        urlEndpoint: IMAGEKIT_URL_ENDPOINT,
-        signed: true,
-        expiresIn: 300,
-      }),
-      // Thumbnail URL for dashboard previews
-      thumbnail_url: imagekit.helper.buildSrc({
-        src: doc.file_url,
-        urlEndpoint: IMAGEKIT_URL_ENDPOINT,
-        signed: true,
-        expiresIn: 300,
-        transformationPosition: "query",
-        transformation: [{ width: "400" }],
-      }),
-    }));
+    return docs.map((doc) => {
+      const isAccessible = !requireApproval || doc.document_status === "APPROVED";
+
+      return {
+        ...doc,
+        signed_url: isAccessible
+          ? imagekit.helper.buildSrc({
+              src: doc.file_url,
+              urlEndpoint: IMAGEKIT_URL_ENDPOINT,
+              signed: true,
+              expiresIn: 300,
+            })
+          : null,
+        // Thumbnail URL for dashboard previews
+        thumbnail_url: isAccessible
+          ? imagekit.helper.buildSrc({
+              src: doc.file_url,
+              urlEndpoint: IMAGEKIT_URL_ENDPOINT,
+              signed: true,
+              expiresIn: 300,
+              transformationPosition: "query",
+              transformation: [{ width: "400" }],
+            })
+          : null,
+      };
+    });
   }
 
   // ── Upload Document ───────────────────────────────────────

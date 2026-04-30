@@ -397,10 +397,28 @@ export class PaymentService {
     });
 
     // Create receipt record in DB (idempotent — won't duplicate)
-    // Then asynchronously generate PDF and email it
+    // Then conditionally generate PDF and email it based on owner preference
     receiptService.createReceipt(recordResult.payment.id).then(async (receipt) => {
         try {
-            const pdfBuffer = receiptService.renderReceiptPdf(receipt);
+            // ── Check auto_email_receipt preference ──
+            const hostel = await prisma.hostel.findFirst({
+                where: { owner_id: attempt.owner_id, is_active: true }
+            });
+            const prefConfig = (hostel?.preferences_config as any) || {};
+            const autoEmailReceipt = prefConfig.auto_email_receipt ?? false;
+
+            if (!autoEmailReceipt) {
+                console.info("[payments.finalize] auto_email_receipt disabled, skipping receipt email for payment", recordResult.payment.id);
+                return;
+            }
+
+            const renderContext = receipt._renderContext || {
+                footer: prefConfig.receipt_footer || null,
+                currency: hostel?.currency || "INR",
+                timezone: hostel?.timezone || "Asia/Kolkata",
+            };
+
+            const pdfBuffer = receiptService.renderReceiptPdf(receipt, renderContext);
             const tenant = await prisma.tenant.findUnique({
                 where: { id: attempt.tenant_id },
                 include: { profile: true }

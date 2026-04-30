@@ -5,7 +5,7 @@ import { useSearchParams } from 'react-router-dom';
 import { ownerService } from '../../api/services';
 import ProfileLogoUploader from '../../components/owner/ProfileLogoUploader';
 import { useAppPreferences } from '../../context/AppPreferencesContext';
-import { formatDateTime } from '../../utils/format';
+import { formatCurrency, formatDateTime } from '../../utils/format';
 
 const tabs = [
     { key: 'owner', label: 'Owner Profile', icon: User },
@@ -534,14 +534,14 @@ function BillingModule({ prefs, updatePref }) {
                                 <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Type</label>
                                 <select value={rule.type} onChange={(e) => updateRule(rule.id, 'type', e.target.value)}
                                     className="w-full px-2.5 py-2 rounded-lg border text-xs font-medium bg-slate-50 border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none appearance-none">
-                                    <option value="flat">Flat ₹</option>
-                                    <option value="per_day">Per Day ₹</option>
+                                    <option value="flat">Flat Amount</option>
+                                    <option value="per_day">Per Day Amount</option>
                                     <option value="percentage">% of Rent</option>
                                 </select>
                             </div>
                             <div>
                                 <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                                    {rule.type === 'percentage' ? 'Percent' : 'Amount (₹)'}
+                                    {rule.type === 'percentage' ? 'Percent' : 'Amount'}
                                 </label>
                                 <input type="number" min="0"
                                     value={rule.type === 'percentage' ? (rule.value ?? 5) : (rule.amount ?? 200)}
@@ -557,8 +557,8 @@ function BillingModule({ prefs, updatePref }) {
                         </div>
                         {/* Rule human-readable summary */}
                         <p className="text-[11px] text-slate-400 mt-2 italic">
-                            {rule.type === 'flat' && `Charge ₹${rule.amount || 0} once, ${rule.after_days} days after due date`}
-                            {rule.type === 'per_day' && `Charge ₹${rule.amount || 0} every day starting ${rule.after_days} days after due date`}
+                            {rule.type === 'flat' && `Charge ${formatCurrency(rule.amount || 0, prefs)} once, ${rule.after_days} days after due date`}
+                            {rule.type === 'per_day' && `Charge ${formatCurrency(rule.amount || 0, prefs)} every day starting ${rule.after_days} days after due date`}
                             {rule.type === 'percentage' && `Charge ${rule.value || 0}% of rent, ${rule.after_days} days after due date`}
                         </p>
                     </div>
@@ -573,7 +573,7 @@ function BillingModule({ prefs, updatePref }) {
             )}
 
             {rules.length > 0 && (
-                <Field label="Maximum Late Fee Cap (₹)" value={prefs.max_late_fee ?? 0} type="number"
+                <Field label="Maximum Late Fee Cap" value={prefs.max_late_fee ?? 0} type="number"
                     onChange={(v) => updatePref('max_late_fee', Number(v))} />
             )}
 
@@ -611,7 +611,7 @@ function BillingModule({ prefs, updatePref }) {
                                             <span className="text-xs text-slate-400 flex-1">{step.description}</span>
                                         </div>
                                         <span className={`text-sm font-bold ${textColor}`}>
-                                            ₹{step.running_total.toLocaleString('en-IN')}
+                                            {formatCurrency(step.running_total, prefs)}
                                         </span>
                                     </div>
                                 </div>
@@ -629,7 +629,7 @@ function BillingModule({ prefs, updatePref }) {
                     </p>
                     <div className="grid grid-cols-2 gap-3 mb-3">
                         <div>
-                            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Rent Amount (₹)</label>
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Rent Amount</label>
                             <input type="number" min="500" step="500" value={whatIfRent}
                                 onChange={(e) => setWhatIfRent(Number(e.target.value) || 8000)}
                                 className="w-full px-2.5 py-2 rounded-lg border text-xs font-medium bg-slate-700/50 border-slate-600 text-white outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/20" />
@@ -647,7 +647,7 @@ function BillingModule({ prefs, updatePref }) {
                         <div className="flex items-baseline justify-between mb-2">
                             <span className="text-xs text-slate-400">Total Payable</span>
                             <span className="text-xl font-bold text-white">
-                                ₹{whatIfResult.totalPayable.toLocaleString('en-IN')}
+                                {formatCurrency(whatIfResult.totalPayable, prefs)}
                             </span>
                         </div>
                         {whatIfResult.graceDaysApplied > 0 && (
@@ -665,7 +665,7 @@ function BillingModule({ prefs, updatePref }) {
                                     </div>
                                 ))}
                                 {whatIfResult.capApplied && (
-                                    <p className="text-[11px] text-rose-400 font-medium mt-1">⚠ Cap applied — max ₹{prefs.max_late_fee}</p>
+                                    <p className="text-[11px] text-rose-400 font-medium mt-1">⚠ Cap applied — max {formatCurrency(prefs.max_late_fee, prefs)}</p>
                                 )}
                             </div>
                         ) : (
@@ -706,7 +706,7 @@ function PaymentsModule({ prefs, updatePref }) {
             <ToggleField label="Allow Partial Payments" desc="Let tenants pay less than full amount"
                 value={prefs.allow_partial_payments} onChange={(v) => updatePref('allow_partial_payments', v)} />
             {prefs.allow_partial_payments && (
-                <Field label="Minimum Payment (₹)" value={prefs.min_payment_amount} type="number"
+                <Field label="Minimum Payment" value={prefs.min_payment_amount} type="number"
                     onChange={(v) => updatePref('min_payment_amount', Number(v))} />
             )}
         </div>

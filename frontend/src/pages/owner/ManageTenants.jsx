@@ -3,12 +3,15 @@ import { Search, Plus, User, Phone, Home, CreditCard, Calendar, CheckCircle2, Al
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
-import { tenantService, authService, allocationService, roomService } from '../../api/services';
+import { useAppPreferences } from '../../context/AppPreferencesContext';
+import { formatDate as globalFormatDate, formatCurrency as globalFormatCurrency } from '../../utils/format';
+import { tenantService, roomService } from '../../api/services';
 import TenantHistoryModal from '../../components/owner/payments/TenantHistoryModal';
 import TenantInvitationForm from '../../components/owner/TenantInvitationForm';
 import ExtendedProfileForm from '../../components/TenantManagement/ExtendedProfileForm';
 
 export default function ManageTenants() {
+    const { preferences } = useAppPreferences();
     const location = useLocation();
     const navigate = useNavigate();
     const [tenants, setTenants] = useState([]);
@@ -180,11 +183,7 @@ export default function ManageTenants() {
         left: tenants.filter(s => s.status === 'LEFT').length
     };
 
-    const formatDate = (dateString) => {
-        if (!dateString) return 'N/A';
-        const date = new Date(dateString);
-        return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-    };
+    const formatDate = (dateString) => globalFormatDate(dateString, preferences);
 
     // Year Distribution Calculation
     const yearDistribution = React.useMemo(() => {
@@ -210,7 +209,7 @@ export default function ManageTenants() {
 
     const YEAR_COLORS = ['#4f46e5', '#818cf8', '#c7d2fe', '#e0e7ff', '#94a3b8'];
 
-    const formatCurrency = (value) => `₹${Number(value || 0).toLocaleString('en-IN')}`;
+    const formatCurrency = (value) => globalFormatCurrency(value, preferences);
 
     const getPaymentBadgeStyles = (status) => {
         const styles = {

@@ -9,8 +9,11 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { expenseService } from '../../api/services';
+import { useAppPreferences } from '../../context/AppPreferencesContext';
+import { formatCurrency, formatDate } from '../../utils/format';
 
 export default function Expenses() {
+    const { preferences } = useAppPreferences();
     const [expenses, setExpenses] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -272,12 +275,12 @@ export default function Expenses() {
                         <div>
                             <p className="text-slate-500 text-sm font-bold uppercase tracking-wider mb-1">Total Expenses (Feb)</p>
                             <div className="flex items-baseline gap-2">
-                                <h2 className="text-4xl font-black text-slate-900">₹{totalStats.total.toLocaleString()}</h2>
+                                <h2 className="text-4xl font-black text-slate-900">{formatCurrency(totalStats.total, preferences)}</h2>
                                 <span className="inline-flex items-center text-xs font-bold text-rose-600 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-full">
                                     <ArrowUpRight size={12} className="mr-0.5" /> +8.2%
                                 </span>
                             </div>
-                            <p className="text-slate-400 text-xs mt-2 font-medium">vs. ₹{Math.round(totalStats.total * 0.92).toLocaleString()} last month</p>
+                            <p className="text-slate-400 text-xs mt-2 font-medium">vs. {formatCurrency(Math.round(totalStats.total * 0.92), preferences)} last month</p>
                         </div>
                         <div className="p-3 bg-indigo-50 rounded-2xl text-indigo-600">
                             <IndianRupee size={24} />
@@ -427,10 +430,10 @@ export default function Expenses() {
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4 text-sm text-slate-500 font-medium">
-                                                {expense.date}
+                                                {formatDate(expense.date, preferences)}
                                             </td>
                                             <td className="px-6 py-4">
-                                                <span className="text-sm font-bold text-slate-900">₹{expense.amount.toLocaleString()}</span>
+                                                <span className="text-sm font-bold text-slate-900">{formatCurrency(expense.amount, preferences)}</span>
                                             </td>
                                             <td className="px-6 py-4">
                                                 <span className={`inline-flex items-center gap-1.5 text-xs font-bold ${expense.status === 'paid' ? 'text-emerald-600' : 'text-amber-600'
@@ -491,9 +494,9 @@ export default function Expenses() {
                                         <div className="flex justify-between items-start">
                                             <div>
                                                 <p className="text-sm font-bold text-slate-900 line-clamp-1">{expense.title}</p>
-                                                <p className="text-xs text-slate-500 mt-0.5 font-medium">{expense.date}</p>
+                                                <p className="text-xs text-slate-500 mt-0.5 font-medium">{formatDate(expense.date, preferences)}</p>
                                             </div>
-                                            <span className="text-sm font-black text-slate-900">₹{expense.amount.toLocaleString()}</span>
+                                            <span className="text-sm font-black text-slate-900">{formatCurrency(expense.amount, preferences)}</span>
                                         </div>
 
                                         <div className="flex items-center justify-between pt-3 border-t border-slate-50">

@@ -190,10 +190,21 @@ export class TenantService {
   async updateTenantSelfProfile(profileId: string, data: any, updatedBy: string) {
     const tenantCheck = await prisma.tenant.findUnique({
       where: { profile_id: profileId },
-      select: { id: true },
+      select: { id: true, owner_id: true },
     });
 
     if (!tenantCheck) throw new Error("NOT_FOUND: Tenant record not found");
+
+    // ── Enforce allow_tenant_edits preference ──
+    if (tenantCheck.owner_id) {
+      const hostel = await prisma.hostel.findFirst({
+        where: { owner_id: tenantCheck.owner_id, is_active: true },
+      });
+      const config = (hostel?.preferences_config as any) || {};
+      if (config.allow_tenant_edits === false) {
+        throw new Error("FORBIDDEN: Profile editing is currently disabled by the hostel owner");
+      }
+    }
 
     const profileFields = ["name", "email", "phone"];
     const tenantFields = [

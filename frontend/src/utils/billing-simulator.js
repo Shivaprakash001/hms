@@ -68,15 +68,15 @@ export function generateRuleId() {
   return 'rule_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
 }
 
-export function createDefaultRule() {
-  return {
-    id: generateRuleId(),
-    type: 'flat',
-    amount: 200,
-    after_days: 5,
-    enabled: true,
-  };
-}
+import { formatCurrency } from './format';
+
+export const createDefaultRule = () => ({
+  id: generateRuleId(),
+  type: 'flat',
+  amount: 200,
+  after_days: 5,
+  enabled: true,
+});
 
 // ─── Core Fee Calculation (mirrors engine.ts calculateLateFees) ──
 
@@ -125,20 +125,20 @@ function calculateLateFeesCore(config, rentAmount, daysDelayed) {
     switch (rule.type) {
       case 'flat': {
         feeAmount = Math.max(Number(rule.amount) || 0, 0);
-        desc = `Flat fee ₹${feeAmount} (after ${afterDays}d)`;
+        desc = `Flat fee ${formatCurrency(feeAmount)} (after ${afterDays}d)`;
         break;
       }
       case 'percentage': {
         const pct = Math.max(Number(rule.value) || 0, 0);
         feeAmount = Math.round(rentAmount * pct / 100);
-        desc = `${pct}% of ₹${rentAmount.toLocaleString('en-IN')} = ₹${feeAmount.toLocaleString('en-IN')} (after ${afterDays}d)`;
+        desc = `${pct}% of ${formatCurrency(rentAmount)} = ${formatCurrency(feeAmount)} (after ${afterDays}d)`;
         break;
       }
       case 'per_day': {
         const dailyAmount = Math.max(Number(rule.amount) || 0, 0);
         const activeDays = Math.max(effectiveDelay - afterDays, 0);
         feeAmount = dailyAmount * activeDays;
-        desc = `₹${dailyAmount}/day × ${activeDays}d = ₹${feeAmount.toLocaleString('en-IN')} (after ${afterDays}d)`;
+        desc = `${formatCurrency(dailyAmount)}/day × ${activeDays}d = ${formatCurrency(feeAmount)} (after ${afterDays}d)`;
         break;
       }
       default:
@@ -178,6 +178,7 @@ function calculateLateFeesCore(config, rentAmount, daysDelayed) {
 export function simulateBilling(config, rentAmount, simulateDays = 30, monthIndex = 4) {
   const events = [];
   const monthName = MONTH_NAMES[monthIndex];
+  const runDate = new Date();
   let runningTotal = rentAmount;
   let totalLateFees = 0;
   const maxCap = Math.max(Number(config.max_late_fee) || 0, 0);
@@ -249,8 +250,9 @@ export function simulateBilling(config, rentAmount, simulateDays = 30, monthInde
       events.push({
         day: triggerDay,
         label: `${monthName} ${triggerDay}`,
-        description: `${typeLabel} (+₹${feeAmount.toLocaleString('en-IN')})`,
-        fee_amount: feeAmount,
+        amount: feeAmount,
+        description: `${typeLabel} (+${formatCurrency(feeAmount)})`,
+        date: new Date(runDate).toISOString(),
         running_total: runningTotal,
         type: 'late_fee',
         color: 'amber',
@@ -281,8 +283,9 @@ export function simulateBilling(config, rentAmount, simulateDays = 30, monthInde
       events.push({
         day: startDay,
         label: `${monthName} ${startDay}+`,
-        description: `₹${dailyAmount}/day × ${daysActive} days (+₹${totalDailyFee.toLocaleString('en-IN')})`,
-        fee_amount: totalDailyFee,
+        amount: totalDailyFee,
+        description: `${formatCurrency(dailyAmount)}/day × ${daysActive} days (+${formatCurrency(totalDailyFee)})`,
+        date: new Date(runDate).toISOString(),
         running_total: runningTotal,
         type: 'late_fee',
         color: 'orange',
@@ -295,8 +298,8 @@ export function simulateBilling(config, rentAmount, simulateDays = 30, monthInde
     events.push({
       day: null,
       label: 'Cap',
-      description: `Maximum late fee ₹${maxCap.toLocaleString('en-IN')}`,
-      fee_amount: 0,
+      description: `Maximum late fee ${formatCurrency(maxCap)}`,
+      amount: 0,
       running_total: rentAmount + maxCap,
       type: 'cap',
       color: 'rose',

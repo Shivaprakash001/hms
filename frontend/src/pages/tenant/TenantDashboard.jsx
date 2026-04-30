@@ -3,7 +3,9 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Home, CreditCard, Bell, BedDouble, Calendar, AlertCircle, User, ShieldAlert } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useAppPreferences } from '../../context/AppPreferencesContext';
 import { paymentService, notificationService, tenantService } from '../../api/services';
+import { formatCurrency, formatDate } from '../../utils/format';
 import api from '../../api/axios';
 
 const getOrdinalDay = (day) => {
@@ -18,6 +20,7 @@ const getOrdinalDay = (day) => {
 
 const TenantDashboard = () => {
     const { user } = useAuth();
+    const { preferences } = useAppPreferences();
     const navigate = useNavigate();
 
     const [dues, setDues] = useState({ obligations: [], outstanding_balance: 0 });
@@ -77,7 +80,7 @@ const TenantDashboard = () => {
         if (diff < 60) return 'Just now';
         if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
         if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-        return past.toLocaleDateString();
+        return formatDate(past, preferences);
     };
 
     // Calculate pending dues from obligations
@@ -94,7 +97,7 @@ const TenantDashboard = () => {
             const today = new Date(now);
             today.setHours(0, 0, 0, 0);
             const daysLeft = Math.ceil((next - today) / (1000 * 60 * 60 * 24));
-            const formatted = next.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+            const formatted = formatDate(next, preferences);
             return { formatted, daysLeft };
         }
 
@@ -107,7 +110,7 @@ const TenantDashboard = () => {
             next = new Date(year, month + 1, dueDay);
         }
         const daysLeft = Math.ceil((next - now) / (1000 * 60 * 60 * 24));
-        const formatted = next.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+        const formatted = formatDate(next, preferences);
         return { formatted, daysLeft };
     };
 
@@ -284,7 +287,7 @@ const TenantDashboard = () => {
                     },
                     {
                         label: 'Monthly Rent',
-                        val: `₹${monthlyRent}`,
+                        val: formatCurrency(monthlyRent, preferences),
                         sub: autoRentDay ? `Generated on the ${getOrdinalDay(autoRentDay)} of every month` : 'Rent schedule not set',
                         icon: CreditCard,
                         color: 'text-emerald-600',
@@ -292,7 +295,7 @@ const TenantDashboard = () => {
                     },
                     {
                         label: 'Pending Dues',
-                        val: `₹${pendingDues}`,
+                        val: formatCurrency(pendingDues, preferences),
                         sub: pendingDues > 0 ? 'Pay immediately' : 'All clear!',
                         icon: AlertCircle,
                         color: 'text-rose-600',

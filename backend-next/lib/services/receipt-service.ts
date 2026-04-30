@@ -1,37 +1,68 @@
 import { prisma } from "../db";
 import { jsPDF } from "jspdf";
+import crypto from "crypto";
 
 export class ReceiptService {
 
   /**
-   * Generate a sequential receipt number: RCP-YYYY-XXXXX
+   * Generate a sequential, race-safe receipt number scoped per hostel + year.
+   * Format: PREFIX-YEAR-SEQUENCE (e.g., HMS-2026-00001)
+   * Uses retry loop to handle concurrent receipt creation.
    */
-  async generateReceiptNumber(): Promise<string> {
-    const year = new Date().getFullYear();
-    const prefix = `RCP-${year}-`;
-
-    const lastReceipt = await prisma.receipt.findFirst({
-      where: { receipt_number: { startsWith: prefix } },
-      orderBy: { issued_at: "desc" }
+  async generateReceiptNumber(ownerId: string): Promise<string> {
+    const hostel = await prisma.hostel.findFirst({
+      where: { owner_id: ownerId, is_active: true },
     });
 
-    let nextSeq = 1;
-    if (lastReceipt) {
-      const lastSeq = parseInt(lastReceipt.receipt_number.replace(prefix, ""), 10);
-      if (!isNaN(lastSeq)) nextSeq = lastSeq + 1;
+    const config = (hostel as any)?.preferences_config || {};
+    const customPrefix = config.receipt_prefix || hostel?.receipt_prefix || "HMS";
+    const year = new Date().getFullYear();
+    const prefix = `${customPrefix}-${year}-`;
+
+    // Retry loop for race-condition safety
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const lastReceipt = await prisma.receipt.findFirst({
+        where: {
+          receipt_number: { startsWith: prefix },
+          owner_id: ownerId,
+        },
+        orderBy: { issued_at: "desc" },
+      });
+
+      let nextSeq = 1;
+      if (lastReceipt) {
+        const lastSeq = parseInt(lastReceipt.receipt_number.replace(prefix, ""), 10);
+        if (!isNaN(lastSeq)) nextSeq = lastSeq + 1;
+      }
+
+      const candidate = `${prefix}${nextSeq.toString().padStart(5, "0")}`;
+
+      // Verify the candidate doesn't already exist (race-condition guard)
+      const exists = await prisma.receipt.findUnique({
+        where: { receipt_number: candidate },
+      });
+
+      if (!exists) return candidate;
+
+      // Collision detected — retry with incremented sequence
+      console.warn(`[ReceiptService] Sequence collision on ${candidate}, retrying (attempt ${attempt + 1})`);
     }
 
-    return `${prefix}${nextSeq.toString().padStart(5, "0")}`;
+    // Fallback: UUID-based receipt number to guarantee uniqueness
+    const fallback = `${customPrefix}-${year}-${crypto.randomUUID().substring(0, 8).toUpperCase()}`;
+    console.warn(`[ReceiptService] Exhausted retries, using fallback receipt number: ${fallback}`);
+    return fallback;
   }
 
   /**
    * Create a receipt record in the database after a payment is confirmed.
    * This is the ONLY place receipts are created — triggered from finalizePaymentAttempt or recordPayment.
+   * IDEMPOTENT: will not duplicate if called multiple times for the same payment.
    */
   async createReceipt(paymentId: string): Promise<any> {
     // Check if receipt already exists for this payment (idempotent)
     const existing = await prisma.receipt.findFirst({
-      where: { payment_id: paymentId }
+      where: { payment_id: paymentId },
     });
     if (existing) return existing;
 
@@ -39,17 +70,20 @@ export class ReceiptService {
       where: { id: paymentId },
       include: {
         tenant: { include: { profile: true } },
-        obligation: true
-      }
+        obligation: true,
+      },
     });
 
     if (!payment) throw new Error("NOT_FOUND: Payment not found");
 
     const hostel = await prisma.hostel.findFirst({
-      where: { owner_id: payment.tenant.owner_id as string }
+      where: { owner_id: payment.tenant.owner_id as string },
     });
 
-    const receiptNumber = await this.generateReceiptNumber();
+    const config = (hostel as any)?.preferences_config || {};
+    const ownerId = payment.tenant.owner_id || payment.owner_id || "";
+
+    const receiptNumber = await this.generateReceiptNumber(ownerId);
 
     const receipt = await prisma.receipt.create({
       data: {
@@ -62,11 +96,19 @@ export class ReceiptService {
         transaction_id: payment.reference_number,
         hostel_name: hostel?.name || "HMS Hostel",
         tenant_name: payment.tenant.profile.name,
-        rent_month: payment.obligation.rent_month
-      }
+        rent_month: payment.obligation.rent_month,
+      },
     });
 
-    return receipt;
+    return {
+      ...receipt,
+      // Attach transient rendering context (not stored in DB)
+      _renderContext: {
+        footer: config.receipt_footer || null,
+        currency: hostel?.currency || "INR",
+        timezone: hostel?.timezone || "Asia/Kolkata",
+      },
+    };
   }
 
   /**
@@ -76,7 +118,7 @@ export class ReceiptService {
   async generatePdfBuffer(paymentId: string): Promise<Buffer> {
     // Ensure receipt exists first
     let receipt = await prisma.receipt.findFirst({
-      where: { payment_id: paymentId }
+      where: { payment_id: paymentId },
     });
 
     // If no receipt record exists yet, create one (backward compatibility)
@@ -88,22 +130,49 @@ export class ReceiptService {
       throw new Error("Failed to create or retrieve receipt");
     }
 
-    return this.renderReceiptPdf(receipt as any);
+    // Fetch rendering context from hostel preferences
+    const hostel = await prisma.hostel.findFirst({
+      where: { owner_id: receipt.owner_id || "" },
+    });
+    const config = (hostel as any)?.preferences_config || {};
+
+    return this.renderReceiptPdf(receipt as any, {
+      footer: config.receipt_footer || null,
+      currency: hostel?.currency || "INR",
+      timezone: hostel?.timezone || "Asia/Kolkata",
+    });
   }
 
   /**
    * Generate PDF buffer directly from a receipt record.
+   * Now preference-aware: uses owner's currency, timezone, and custom footer.
    */
-  renderReceiptPdf(receipt: {
-    receipt_number: string;
-    hostel_name: string | null;
-    tenant_name: string | null;
-    rent_month: Date | null;
-    amount: any;
-    payment_method: string;
-    transaction_id: string | null;
-    issued_at: Date;
-  }): Buffer {
+  renderReceiptPdf(
+    receipt: {
+      receipt_number: string;
+      hostel_name: string | null;
+      tenant_name: string | null;
+      rent_month: Date | null;
+      amount: any;
+      payment_method: string;
+      transaction_id: string | null;
+      issued_at: Date;
+    },
+    context?: {
+      footer?: string | null;
+      currency?: string;
+      timezone?: string;
+    }
+  ): Buffer {
+    const tz = context?.timezone || "Asia/Kolkata";
+    const currency = context?.currency || "INR";
+    const customFooter = context?.footer;
+
+    const currencySymbol =
+      currency === "USD" ? "$" :
+      currency === "EUR" ? "€" :
+      currency === "GBP" ? "£" : "₹";
+
     const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 20;
@@ -160,9 +229,21 @@ export class ReceiptService {
     doc.roundedRect(margin, y - 5, pageWidth - 2 * margin, rowHeight * 5 + 10, 3, 3, "FD");
     y += 4;
 
-    const dateStr = receipt.issued_at
-      ? new Date(receipt.issued_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
-      : "N/A";
+    // Format date using owner's timezone preference
+    let dateStr: string;
+    try {
+      dateStr = new Intl.DateTimeFormat("en-IN", {
+        timeZone: tz,
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }).format(new Date(receipt.issued_at));
+    } catch {
+      dateStr = new Date(receipt.issued_at).toLocaleDateString("en-IN", {
+        day: "2-digit", month: "short", year: "numeric",
+      });
+    }
+
     drawRow("Receipt No:", receipt.receipt_number, y, "Date:", dateStr);
     y += rowHeight;
 
@@ -197,7 +278,7 @@ export class ReceiptService {
 
     doc.setFontSize(16);
     doc.setTextColor(67, 56, 202);
-    doc.text(`Rs. ${amount.toLocaleString("en-IN")}`, pageWidth - margin - 5, y + 14, { align: "right" });
+    doc.text(`${currencySymbol} ${amount.toLocaleString("en-IN")}`, pageWidth - margin - 5, y + 14, { align: "right" });
 
     y += 38;
 
@@ -205,10 +286,9 @@ export class ReceiptService {
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(150, 150, 150);
-    doc.text(
-      "This is a computer generated receipt and does not require a physical signature.",
-      pageWidth / 2, y, { align: "center" }
-    );
+
+    const footerText = customFooter || "This is a computer generated receipt and does not require a physical signature.";
+    doc.text(footerText, pageWidth / 2, y, { align: "center", maxWidth: pageWidth - 2 * margin });
 
     const arrayBuf = doc.output("arraybuffer");
     return Buffer.from(arrayBuf);

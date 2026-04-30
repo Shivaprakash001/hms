@@ -2,8 +2,11 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Calendar, CheckCircle, Clock, AlertCircle, Download } from 'lucide-react';
 import { paymentService } from '../../../api/services';
+import { useAppPreferences } from '../../../context/AppPreferencesContext';
+import { formatCurrency, formatDate, formatMonthYear } from '../../../utils/format';
 
 const TenantHistoryModal = ({ isOpen, onClose, tenantId, tenantName }) => {
+    const { preferences } = useAppPreferences();
     const [history, setHistory] = React.useState([]);
     const [isLoading, setIsLoading] = React.useState(true);
 
@@ -125,15 +128,15 @@ const TenantHistoryModal = ({ isOpen, onClose, tenantId, tenantName }) => {
                                                         <DollarSignIcon status={payment.status} />
                                                     </div>
                                                     <div>
-                                                        <p className="font-bold text-slate-900 text-lg">₹{payment.amount.toLocaleString()}</p>
+                                                        <p className="font-bold text-slate-900 text-lg">{formatCurrency(payment.amount, preferences)}</p>
                                                         <div className="flex items-center gap-2 text-sm text-slate-500 mt-1">
                                                             <span className="bg-slate-100 px-2 py-0.5 rounded text-xs font-semibold uppercase">
-                                                                {new Date(payment.month).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
+                                                                {formatMonthYear(payment.month, preferences)}
                                                             </span>
                                                             <span>•</span>
                                                             <span className="flex items-center gap-1">
                                                                 <Calendar size={12} />
-                                                                {new Date(payment.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                                {formatDate(payment.date, preferences)}
                                                             </span>
                                                         </div>
                                                     </div>

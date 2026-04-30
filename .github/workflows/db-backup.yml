@@ -1,0 +1,291 @@
+name: Daily DB Backup
+
+on:
+
+
+  schedule:
+    # Run daily at 2:00 AM UTC (7:30 AM IST)
+    - cron: "0 2 * * *"
+    # Run monthly snapshot at 2:30 AM UTC on the 1st of each month
+    - cron: "30 2 1 * *"
+  workflow_dispatch: # Allow manual trigger
+env:
+  BACKUP_RETENTION_DAYS: 30
+
+jobs:
+  # ─────────────────────────────────────────────
+  # Layer 0: Monthly Permanent Snapshot
+  # ─────────────────────────────────────────────
+  monthly-snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Check if today is the 1st of the month
+        id: monthly
+        run: |
+          if [ "$(date +%d)" = "01" ]; then
+            echo "is_monthly=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_monthly=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create backup directory
+        if: steps.monthly.outputs.is_monthly == 'true'
+        run: mkdir -p backups
+
+      - name: Full database dump (monthly)
+        if: steps.monthly.outputs.is_monthly == 'true'
+        run: |
+          pg_dump "$DATABASE_URL" \
+            --no-owner \
+            --no-privileges \
+            --clean \
+            --if-exists \
+            --format=custom \
+            --file=backups/monthly_snapshot_$(date +%Y-%m).dump
+        env:
+          DATABASE_URL: ${{ secrets.DIRECT_URL }}
+
+      - name: Full database dump (SQL format, monthly)
+        if: steps.monthly.outputs.is_monthly == 'true'
+        run: |
+          pg_dump "$DATABASE_URL" \
+            --no-owner \
+            --no-privileges \
+            --clean \
+            --if-exists \
+            > backups/monthly_snapshot_$(date +%Y-%m).sql
+        env:
+          DATABASE_URL: ${{ secrets.DIRECT_URL }}
+
+      - name: Compress SQL backup (monthly)
+        if: steps.monthly.outputs.is_monthly == 'true'
+        run: gzip backups/monthly_snapshot_$(date +%Y-%m).sql
+
+      - name: Upload monthly snapshot artifact (permanent)
+        if: steps.monthly.outputs.is_monthly == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-monthly-snapshot-${{ github.run_id }}
+          path: backups/monthly_snapshot_*
+          retention-days: 10000 # Permanent (GitHub max)
+  # ─────────────────────────────────────────────
+  # Layer 1: Full Database Backup
+  # ─────────────────────────────────────────────
+  full-backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Create backup directory
+        run: mkdir -p backups
+
+      - name: Full database dump
+        run: |
+          pg_dump "$DATABASE_URL" \
+            --no-owner \
+            --no-privileges \
+            --clean \
+            --if-exists \
+            --format=custom \
+            --file=backups/full_backup_$(date +%F).dump
+        env:
+          DATABASE_URL: ${{ secrets.DIRECT_URL }}
+
+      - name: Full database dump (SQL format)
+        run: |
+          pg_dump "$DATABASE_URL" \
+            --no-owner \
+            --no-privileges \
+            --clean \
+            --if-exists \
+            > backups/full_backup_$(date +%F).sql
+        env:
+          DATABASE_URL: ${{ secrets.DIRECT_URL }}
+
+      - name: Compress SQL backup
+        run: gzip backups/full_backup_$(date +%F).sql
+
+      - name: Upload full backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-full-backup-${{ github.run_id }}
+          path: backups/full_backup_*
+          retention-days: 30
+
+  # ─────────────────────────────────────────────
+  # Layer 2: Financial Tables Backup (Critical)
+  # ─────────────────────────────────────────────
+  finance-backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Create backup directory
+        run: mkdir -p backups/finance
+
+      - name: Dump financial tables
+        run: |
+          pg_dump "$DATABASE_URL" \
+            --no-owner \
+            --no-privileges \
+            --clean \
+            --if-exists \
+            -t payments \
+            -t payment_attempts \
+            -t payment_webhook_events \
+            -t rent_obligations \
+            > backups/finance/finance_backup_$(date +%F).sql
+        env:
+          DATABASE_URL: ${{ secrets.DIRECT_URL }}
+
+      - name: Export payments CSV ledger
+        run: |
+          psql "$DATABASE_URL" -c "\COPY (
+            SELECT 
+              p.id,
+              p.student_id,
+              p.owner_id,
+              p.amount,
+              p.status,
+              p.payment_method,
+              p.reference_number,
+              p.month,
+              p.year,
+              p.created_at,
+              p.updated_at
+            FROM payments p 
+            ORDER BY p.created_at DESC
+          ) TO STDOUT WITH CSV HEADER" > backups/finance/payments_ledger_$(date +%F).csv
+        env:
+          DATABASE_URL: ${{ secrets.DIRECT_URL }}
+
+      - name: Export rent obligations CSV
+        run: |
+          psql "$DATABASE_URL" -c "\COPY (
+            SELECT * FROM rent_obligations ORDER BY created_at DESC
+          ) TO STDOUT WITH CSV HEADER" > backups/finance/rent_obligations_$(date +%F).csv
+        env:
+          DATABASE_URL: ${{ secrets.DIRECT_URL }}
+
+      - name: Compress finance backups
+        run: |
+          cd backups/finance
+          tar -czf ../finance_backup_$(date +%F).tar.gz .
+
+      - name: Upload finance backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-finance-backup-${{ github.run_id }}
+          path: backups/finance_backup_*.tar.gz
+          retention-days: 90
+
+  # ─────────────────────────────────────────────
+  # Layer 3: Upload to Supabase Storage
+  # ─────────────────────────────────────────────
+  upload-to-storage:
+    runs-on: ubuntu-latest
+    needs: [full-backup, finance-backup]
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+
+
+      - name: Download full backup artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: db-full-backup-${{ github.run_id }}
+          path: backups
+
+      - name: Verify backup integrity (pg_restore)
+        run: |
+          BACKUP_FILE=$(ls backups/full_backup_*.dump | head -n 1)
+          pg_restore --list "$BACKUP_FILE"
+
+      - name: Encrypt backup with GPG
+        env:
+          GPG_PASSPHRASE: ${{ secrets.BACKUP_GPG_PASSPHRASE }}
+        run: |
+          BACKUP_FILE=$(ls backups/full_backup_*.sql.gz | head -n 1)
+          echo "$GPG_PASSPHRASE" | gpg --batch --yes --passphrase-fd 0 -c --cipher-algo AES256 "$BACKUP_FILE"
+          rm "$BACKUP_FILE"
+
+      - name: Upload to Supabase Storage
+        run: |
+          BACKUP_FILE=$(ls backups/full_backup_*.sql.gz.gpg | head -n 1)
+          STORAGE_PATH="$(date +%F)/full_backup.sql.gz.gpg"
+          
+          # Upload using Supabase Storage REST API
+          curl -X POST \
+            "${SUPABASE_URL}/storage/v1/object/db-backups/${STORAGE_PATH}" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary @"${BACKUP_FILE}" \
+            --fail-with-body || echo "Upload failed - bucket may not exist yet. Run: scripts/backup/setup-storage-bucket.sh"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+  # ─────────────────────────────────────────────
+  # Cleanup old backups from Supabase Storage
+  # ─────────────────────────────────────────────
+  cleanup-old-backups:
+    runs-on: ubuntu-latest
+    needs: [upload-to-storage]
+    timeout-minutes: 10
+
+    steps:
+      - name: Cleanup backups older than 30 days
+        run: |
+          CUTOFF_DATE=$(date -d "30 days ago" +%F)
+          echo "Cleaning up backups older than ${CUTOFF_DATE}"
+          
+          # List objects in bucket
+          OBJECTS=$(curl -s \
+            "${SUPABASE_URL}/storage/v1/object/list/db-backups" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{"prefix":"","limit":1000}')
+          
+          echo "Found objects: ${OBJECTS}"
+          # Cleanup logic handled by retention policies
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

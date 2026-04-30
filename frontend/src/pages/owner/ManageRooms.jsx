@@ -6,8 +6,11 @@ import AddTenantModal from '../../components/owner/rooms/AddTenantModal';
 import ShiftTenantModal from '../../components/owner/rooms/ShiftTenantModal';
 import EditRoomModal from '../../components/owner/rooms/EditRoomModal';
 import { roomService, allocationService, tenantService } from '../../api/services';
+import { useAppPreferences } from '../../context/AppPreferencesContext';
+import { formatCurrency, formatDate } from '../../utils/format';
 
 const ManageRooms = () => {
+    const { preferences } = useAppPreferences();
     // State
     const [floors, setFloors] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -648,7 +651,7 @@ const RoomDetailSidebar = ({ room, onClose, onEditRoom, onAddTenant, onRemoveTen
                                                 <div className="flex flex-wrap items-center gap-2 mt-2">
                                                     {tenant.rent != null && (
                                                         <span className="text-xs font-bold text-slate-600 bg-white px-2.5 py-1 rounded-full border border-slate-100">
-                                                            ₹{Number(tenant.rent).toLocaleString()}/month
+                                                            {formatCurrency(Number(tenant.rent), preferences)}/month
                                                         </span>
                                                     )}
                                                     <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${getPaymentTone((tenant.payment_status || '').toUpperCase())}`}>
@@ -656,7 +659,7 @@ const RoomDetailSidebar = ({ room, onClose, onEditRoom, onAddTenant, onRemoveTen
                                                     </span>
                                                     {tenant.pending_dues > 0 && (
                                                         <span className="text-xs font-bold text-rose-700 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-100">
-                                                            Due ₹{Number(tenant.pending_dues).toLocaleString()}
+                                                            Due {formatCurrency(Number(tenant.pending_dues), preferences)}
                                                         </span>
                                                     )}
                                                 </div>
@@ -713,18 +716,10 @@ const RoomDetailSidebar = ({ room, onClose, onEditRoom, onAddTenant, onRemoveTen
 };
 
 const TenantProfileModal = ({ tenant, profile, loading, onClose }) => {
+    const { preferences } = useAppPreferences();
     const payments = profile?.recent_payments || [];
     const latestPayment = payments[0] || null;
-    const formatDisplayDate = (value) => {
-        if (!value) return 'N/A';
-        const date = new Date(value);
-        if (Number.isNaN(date.getTime())) return value;
-        return date.toLocaleDateString('en-IN', {
-            day: 'numeric',
-            month: 'short',
-            year: 'numeric'
-        });
-    };
+    const formatDisplayDate = (value) => formatDate(value, preferences, 'N/A');
 
     return (
         <>
@@ -784,12 +779,12 @@ const TenantProfileModal = ({ tenant, profile, loading, onClose }) => {
                                 <div>
                                     <h4 className="text-xs font-black uppercase tracking-[0.2em] text-slate-400 mb-3">Financials</h4>
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                        <SummaryTile label="Monthly Rent" value={`₹${Number(profile?.rent || 0).toLocaleString()}`} />
-                                        <SummaryTile label="Total Paid" value={`₹${Number(profile?.total_paid || 0).toLocaleString()}`} />
-                                        <SummaryTile label="Outstanding" value={`₹${Number(profile?.outstanding || 0).toLocaleString()}`} />
+                                        <SummaryTile label="Monthly Rent" value={formatCurrency(Number(profile?.rent || 0), preferences)} />
+                                        <SummaryTile label="Total Paid" value={formatCurrency(Number(profile?.total_paid || 0), preferences)} />
+                                        <SummaryTile label="Outstanding" value={formatCurrency(Number(profile?.outstanding || 0), preferences)} />
                                         <SummaryTile
                                             label="Last Payment"
-                                            value={latestPayment ? `₹${Number(latestPayment.amount || 0).toLocaleString()}` : 'No payment'}
+                                            value={latestPayment ? formatCurrency(Number(latestPayment.amount || 0), preferences) : 'No payment'}
                                             subtitle={latestPayment ? formatDisplayDate(latestPayment.date) : 'No payment history'}
                                         />
                                     </div>
@@ -806,7 +801,7 @@ const TenantProfileModal = ({ tenant, profile, loading, onClose }) => {
                                             payments.map((payment) => (
                                                 <div key={payment.id} className="rounded-2xl border border-slate-100 p-4 flex items-center justify-between gap-4">
                                                     <div>
-                                                        <div className="font-bold text-slate-900">₹{Number(payment.amount || 0).toLocaleString()}</div>
+                                                        <div className="font-bold text-slate-900">{formatCurrency(Number(payment.amount || 0), preferences)}</div>
                                                         <div className="text-sm text-slate-500 mt-1">
                                                             {formatDisplayDate(payment.date)} • {payment.method || 'Unknown method'}
                                                         </div>

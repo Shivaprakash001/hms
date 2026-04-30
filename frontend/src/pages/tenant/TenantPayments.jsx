@@ -2,11 +2,14 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { CreditCard, Calendar, Download, CheckCircle2, Clock, Smartphone, ChevronRight, ChevronDown, Loader2 } from 'lucide-react';
 
 import { useAuth } from '../../context/AuthContext';
+import { useAppPreferences } from '../../context/AppPreferencesContext';
 import { paymentService } from '../../api/services';
 import PaymentModal from '../../components/tenant/payment/PaymentModal';
+import { formatCurrency, formatDate, formatDateTime, formatMonthYear } from '../../utils/format';
 
 const TenantPayments = () => {
     const { user } = useAuth();
+    const { preferences } = useAppPreferences();
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [expandedRows, setExpandedRows] = useState({});
     const [downloadingId, setDownloadingId] = useState(null);
@@ -65,7 +68,7 @@ const TenantPayments = () => {
         [history.obligations]
     );
 
-    const nextDueDate = history.next_due_date ? new Date(history.next_due_date).toLocaleDateString('en-GB') : 'No dues';
+    const nextDueDate = history.next_due_date ? formatDate(history.next_due_date, preferences) : 'No dues';
     const monthlyRent = Number(history.monthly_rent || user?.monthly_rent || 0);
 
     const handlePaymentSuccess = async () => {
@@ -117,7 +120,7 @@ const TenantPayments = () => {
                         <CreditCard size={100} />
                     </div>
                     <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Monthly Rent</p>
-                    <h3 className="text-3xl font-black text-slate-900">₹{monthlyRent.toLocaleString()}</h3>
+                    <h3 className="text-3xl font-black text-slate-900">{formatCurrency(monthlyRent, preferences)}</h3>
                     <div className="mt-4 flex items-center gap-2 text-sm text-slate-500 font-medium">
                         <Calendar size={16} className="text-indigo-500" />
                         <span>Due on {user?.due_day ? `${user.due_day}th` : '---'} of every month</span>
@@ -135,7 +138,7 @@ const TenantPayments = () => {
                     </p>
                     <h3 className={`text-3xl font-black ${pendingAmount > 0 ? 'text-rose-900' : 'text-emerald-900'
                         }`}>
-                        {pendingAmount > 0 ? `₹${pendingAmount.toLocaleString()}` : 'All Clear'}
+                        {pendingAmount > 0 ? formatCurrency(pendingAmount, preferences) : 'All Clear'}
                     </h3>
 
                     {pendingAmount > 0 ? (
@@ -214,13 +217,13 @@ const TenantPayments = () => {
                                         className="hover:bg-slate-50/80 transition-colors"
                                     >
                                         <td className="px-6 py-4 text-sm font-medium text-slate-700">
-                                            {txn.date ? new Date(txn.date).toLocaleDateString('en-GB') : 'Pending'}
+                                            {txn.date ? formatDate(txn.date, preferences) : 'Pending'}
                                         </td>
                                         <td className="px-6 py-4 text-xs font-mono text-slate-500 bg-slate-100 w-fit rounded px-2 py-1">
                                             {txn.transaction_id || '---'}
                                         </td>
                                         <td className="px-6 py-4 text-sm font-black text-slate-900">
-                                            ₹{txn.amount.toLocaleString()}
+                                            {formatCurrency(txn.amount, preferences)}
                                         </td>
                                         <td className="px-6 py-4 text-sm text-slate-600">
                                             <div className="flex items-center gap-2">
@@ -280,14 +283,14 @@ const TenantPayments = () => {
                                         <div className="flex items-start justify-between gap-3">
                                             <div>
                                                 <p className="text-sm font-semibold text-slate-800">
-                                                    {txn.date ? new Date(txn.date).toLocaleDateString('en-GB') : 'Pending'}
+                                                    {txn.date ? formatDate(txn.date, preferences) : 'Pending'}
                                                 </p>
                                                 <p className="text-xs mt-1 text-slate-500">
                                                     Status: {txn.status === 'paid' ? 'Paid' : 'Pending'}
                                                 </p>
                                             </div>
                                             <div className="text-right">
-                                                <p className="text-sm font-black text-slate-900">₹{Number(txn.amount || 0).toLocaleString()}</p>
+                                                <p className="text-sm font-black text-slate-900">{formatCurrency(Number(txn.amount || 0), preferences)}</p>
                                                 <ChevronDown size={16} className={`ml-auto mt-1 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                                             </div>
                                         </div>
@@ -297,8 +300,8 @@ const TenantPayments = () => {
                                         <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-3 space-y-2 text-xs">
                                             <p><span className="text-slate-400">Transaction ID:</span> <span className="font-mono text-slate-700">{txn.transaction_id || '---'}</span></p>
                                             <p><span className="text-slate-400">Payment Method:</span> <span className="font-semibold text-slate-700">{txn.method || '---'}</span></p>
-                                            <p><span className="text-slate-400">Payment Time:</span> <span className="font-semibold text-slate-700">{txn.payment_time ? new Date(txn.payment_time).toLocaleString('en-GB') : '---'}</span></p>
-                                            <p><span className="text-slate-400">Month Paid:</span> <span className="font-semibold text-slate-700">{txn.month_paid ? new Date(txn.month_paid).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : '---'}</span></p>
+                                            <p><span className="text-slate-400">Payment Time:</span> <span className="font-semibold text-slate-700">{txn.payment_time ? formatDateTime(txn.payment_time, preferences) : '---'}</span></p>
+                                            <p><span className="text-slate-400">Month Paid:</span> <span className="font-semibold text-slate-700">{txn.month_paid ? formatMonthYear(txn.month_paid, preferences) : '---'}</span></p>
                                             {(txn.status === 'paid' || txn.status === 'success') && (
                                                 <button
                                                     onClick={() => handleDownloadReceipt(txn)}

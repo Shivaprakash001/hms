@@ -1,8 +1,11 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Users, Bed, CreditCard, UserPlus, ArrowRightLeft, Trash2, Phone, Calendar } from 'lucide-react';
+import { useAppPreferences } from '../../context/AppPreferencesContext';
+import { formatCurrency } from '../../utils/format';
 
 const RoomDetailsView = ({ room, onBack, onAddTenant, onShiftTenant, onRemoveTenant }) => {
+    const { preferences } = useAppPreferences();
     const vacantBeds = room.capacity - room.occupied;
     const totalRent = room?.tenants?.reduce((sum, t) => sum + (t?.rent || 0), 0) || 0;
 
@@ -102,7 +105,7 @@ const RoomDetailsView = ({ room, onBack, onAddTenant, onShiftTenant, onRemoveTen
                         { label: 'Total Beds', val: room.capacity, icon: Bed, color: 'text-blue-600', bg: 'bg-blue-50' },
                         { label: 'Occupied', val: room.occupied, icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50' },
                         { label: 'Vacant', val: vacantBeds, icon: Bed, color: 'text-green-600', bg: 'bg-green-50' },
-                        { label: 'Revenue', val: `₹${totalRent.toLocaleString()}`, icon: CreditCard, color: 'text-violet-600', bg: 'bg-violet-50' }
+                        { label: 'Revenue', val: formatCurrency(totalRent, preferences), icon: CreditCard, color: 'text-violet-600', bg: 'bg-violet-50' }
                     ].map((stat) => (
                         <motion.div
                             key={stat.label}
@@ -163,7 +166,7 @@ const RoomDetailsView = ({ room, onBack, onAddTenant, onShiftTenant, onRemoveTen
                                             </div>
                                             <div className="flex items-center justify-between text-sm">
                                                 <span className="text-slate-500 font-medium flex items-center gap-2"><CreditCard size={14} /> Rent</span>
-                                                <span className="text-slate-900 font-bold">₹{tenant.rent.toLocaleString()}</span>
+                                                <span className="text-slate-900 font-bold">{formatCurrency(tenant.rent, preferences)}</span>
                                             </div>
                                             <div className="flex items-center justify-between text-sm">
                                                 <span className="text-slate-500 font-medium flex items-center gap-2"><Calendar size={14} /> Joined</span>

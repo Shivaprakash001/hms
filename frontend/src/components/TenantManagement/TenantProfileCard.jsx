@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import { tenantService, tenantDocumentService } from '../../api/services';
 import DocumentUploadWidget from './DocumentUploadWidget';
+import { useAppPreferences } from '../../context/AppPreferencesContext';
+import { formatCurrency } from '../../utils/format';
 
 const TABS = [
     { key: 'personal', label: 'Personal', icon: User },
@@ -17,6 +19,7 @@ const TABS = [
 ];
 
 export default function TenantProfileCard({ tenantId, onEdit, isOwner = true }) {
+    const { preferences } = useAppPreferences();
     const [tenant, setTenant] = useState(null);
     const [documents, setDocuments] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -160,7 +163,7 @@ export default function TenantProfileCard({ tenantId, onEdit, isOwner = true }) 
                         <InfoItem label="Email" value={profile.email} icon={Mail} />
                         <InfoItem label="Personal Email" value={tenant.personal_email} icon={Mail} />
                         <InfoItem label="Joined On" value={tenant.joined_on} icon={Calendar} />
-                        <InfoItem label="Monthly Rent" value={tenant.monthly_rent ? `₹${Number(tenant.monthly_rent).toLocaleString()}` : null} icon={Building2} />
+                        <InfoItem label="Monthly Rent" value={tenant.monthly_rent ? formatCurrency(Number(tenant.monthly_rent), preferences) : null} icon={Building2} />
                     </div>
                 )}
 
