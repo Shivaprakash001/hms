@@ -2,6 +2,7 @@ import { prisma } from "../db";
 import { eventSystem } from "../events";
 import { EmailService } from "./email-service";
 import { eventLog } from "./event-log-service";
+import { resolveRules, calculateSingleRuleFee } from "../billing/engine";
 
 export class ReminderService {
 
@@ -80,30 +81,12 @@ export class ReminderService {
           }
         }
 
-        // 2️⃣ Organic Late Fee Generation (Rules Engine)
+        // 2️⃣ Organic Late Fee Generation (Shared Billing Engine)
         if (autoLateFees && ob.allocation_id) {
-          const graceDays = Number(config.grace_days) || 0;
+          const { rules, graceDays, maxCap } = resolveRules(config);
           const effectiveOverdue = Math.max(daysOverdue - graceDays, 0);
 
-          // Resolve rules: prefer new `late_fee_rules[]`, fallback to legacy flat fields
-          let rules: any[] = [];
-          if (Array.isArray(config.late_fee_rules) && config.late_fee_rules.length > 0) {
-            rules = config.late_fee_rules.filter((r: any) => r.enabled !== false);
-          } else if (config.late_fee_type && config.late_fee_type !== 'none') {
-            // Legacy single-rule backward compat
-            rules = [{
-              id: 'legacy',
-              type: config.late_fee_type,
-              amount: Number(config.late_fee_amount) || 200,
-              value: Number(config.late_fee_percentage) || 5,
-              after_days: Number(config.late_fee_after_days) || 7,
-              enabled: true,
-            }];
-          }
-
           if (rules.length > 0 && effectiveOverdue > 0) {
-            const maxCap = Number(config.max_late_fee) || 0;
-
             // Fetch all existing late fees for this allocation + month to calculate accumulated total
             const existingLateFees = await prisma.rentObligation.findMany({
               where: {
@@ -111,27 +94,24 @@ export class ReminderService {
                 rent_month: ob.rent_month,
                 obligation_type: "LATE_FEE",
               },
-              select: { amount: true },
+              select: { amount: true, created_at: true },
             });
-            const accumulatedFees = existingLateFees.reduce((sum: number, lf: any) => sum + Number(lf.amount), 0);
+            let accumulatedFees = existingLateFees.reduce((sum: number, lf: any) => sum + Number(lf.amount), 0);
+
+            // Cap already reached → skip all rules
+            if (maxCap > 0 && accumulatedFees >= maxCap) continue;
 
             for (const rule of rules) {
               const afterDays = Number(rule.after_days) || 7;
-
               if (effectiveOverdue < afterDays) continue;
 
-              // Build idempotency key: use rule.id to avoid duplicate fees per rule per month
-              const feeKey = `${ob.allocation_id}_${ob.rent_month.toISOString()}_${rule.id || rule.type}`;
-
               if (rule.type === 'per_day') {
-                // Per-day fees: create ONE obligation per day, check if today's already exists
-                const todayFeeKey = `${feeKey}_day_${daysOverdue}`;
+                // Per-day: create ONE obligation per day, idempotent via created_at date check
                 const existingDailyFee = await prisma.rentObligation.findFirst({
                   where: {
                     allocation_id: ob.allocation_id,
                     rent_month: ob.rent_month,
                     obligation_type: "LATE_FEE",
-                    // Use created_at date range for today's entry
                     created_at: {
                       gte: todayMid,
                       lt: new Date(todayMid.getTime() + 86400000),
@@ -140,7 +120,8 @@ export class ReminderService {
                 });
 
                 if (!existingDailyFee) {
-                  let feeAmount = Number(rule.amount) || 0;
+                  let feeAmount = calculateSingleRuleFee(rule as any, Number(ob.amount));
+
                   // Cap check
                   if (maxCap > 0 && accumulatedFees + feeAmount > maxCap) {
                     feeAmount = Math.max(maxCap - accumulatedFees, 0);
@@ -159,6 +140,7 @@ export class ReminderService {
                         obligation_type: "LATE_FEE",
                       },
                     });
+                    accumulatedFees += feeAmount;
                     lateFeesAdded++;
                     await this.triggerNotification(ob, "LATE_FEE_ADDED", config);
                     remindersSent++;
@@ -166,28 +148,17 @@ export class ReminderService {
                 }
               } else {
                 // One-time fees (flat, percentage): create once per rule per month
-                const existingRuleFee = await prisma.rentObligation.findFirst({
-                  where: {
-                    allocation_id: ob.allocation_id,
-                    rent_month: ob.rent_month,
-                    obligation_type: "LATE_FEE",
-                  },
-                });
+                // For single legacy rule: check any LATE_FEE exists
+                // For multi-rule: count existing one-time fees vs expected
+                const oneTimeRuleCount = rules.filter((r: any) => r.type !== 'per_day').length;
+                const existingOneTimeFees = existingLateFees.length;
 
-                // For backward compat: if legacy (single rule), check simple existence
-                // For new rules: we allow multiple LATE_FEE obligations (one per rule)
                 const hasThisRuleFee = rules.length <= 1
-                  ? !!existingRuleFee
-                  : existingLateFees.length >= rules.filter((r: any) => r.type !== 'per_day').length;
+                  ? existingOneTimeFees > 0
+                  : existingOneTimeFees >= oneTimeRuleCount;
 
                 if (!hasThisRuleFee) {
-                  let feeAmount = 0;
-                  if (rule.type === 'flat') {
-                    feeAmount = Number(rule.amount) || 200;
-                  } else if (rule.type === 'percentage') {
-                    const pct = Number(rule.value) || 5;
-                    feeAmount = Math.round(Number(ob.amount) * (pct / 100));
-                  }
+                  let feeAmount = calculateSingleRuleFee(rule as any, Number(ob.amount));
 
                   // Cap check
                   if (maxCap > 0 && accumulatedFees + feeAmount > maxCap) {
@@ -207,6 +178,7 @@ export class ReminderService {
                         obligation_type: "LATE_FEE",
                       },
                     });
+                    accumulatedFees += feeAmount;
                     lateFeesAdded++;
                     await this.triggerNotification(ob, "LATE_FEE_ADDED", config);
                     remindersSent++;

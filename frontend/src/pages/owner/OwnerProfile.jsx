@@ -495,7 +495,10 @@ function BillingModule({ prefs, updatePref }) {
             </div>
 
             {/* ── Section 2: Late Fee Rules Builder ── */}
-            <Divider label="Late Fee Rules" />
+            <Divider label="Late Fee Rules (cumulative)" />
+            {rules.length > 1 && (
+                <p className="text-[11px] text-slate-400 -mt-1 px-0.5">All enabled rules stack — each rule applies independently.</p>
+            )}
 
             {rules.length === 0 && (
                 <div className="bg-slate-50 border border-dashed border-slate-200 rounded-xl px-4 py-6 text-center">
@@ -579,7 +582,8 @@ function BillingModule({ prefs, updatePref }) {
                 <div className="bg-gradient-to-br from-indigo-50 via-violet-50 to-purple-50 border border-indigo-100 rounded-xl px-4 py-3.5">
                     <div className="flex items-center justify-between mb-3">
                         <p className="text-indigo-700 font-semibold text-sm flex items-center gap-1.5">
-                            <Calendar size={14} /> Live Billing Timeline
+                            <Calendar size={14} /> Billing Preview
+                            <span className="text-[9px] font-medium text-indigo-400 bg-indigo-100 px-1.5 py-0.5 rounded-md uppercase tracking-wider">Estimate</span>
                         </p>
                         <div className="flex items-center gap-1.5">
                             <span className="text-[10px] font-medium text-slate-400">Rent:</span>

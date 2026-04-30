@@ -1,52 +1,27 @@
 /**
- * 🏦 Billing Simulation Engine
+ * 🏦 Billing Simulation Engine (Frontend Port)
  *
- * Pure function — no side effects, no API calls.
- * Generates a timeline of billing events based on owner-configured rules.
+ * This is a JavaScript port of backend-next/lib/billing/engine.ts
+ * It uses the IDENTICAL math for fee calculation.
+ *
+ * ⚠️  This file is a UI PREVIEW tool. The backend is the source of truth
+ * for actual charges. Any changes to engine.ts MUST be reflected here.
  *
  * Supports:
  * - Multiple late fee rules (flat, per_day, percentage)
  * - Grace period before any late fee kicks in
  * - Max late fee cap across all accumulated fees
  * - What-if scenario testing
- */
-
-/**
- * @typedef {Object} LateFeeRule
- * @property {string} id - Unique identifier
- * @property {'flat'|'per_day'|'percentage'} type - Rule type
- * @property {number} [amount] - Amount for flat/per_day
- * @property {number} [value] - Percentage value
- * @property {number} after_days - Days after due date (excluding grace)
- * @property {boolean} enabled - Whether this rule is active
- */
-
-/**
- * @typedef {Object} BillingConfig
- * @property {number} auto_rent_day - Day of month rent is generated
- * @property {number} due_day - Day of month rent is due
- * @property {number} grace_days - Grace period after due date
- * @property {LateFeeRule[]} late_fee_rules - Array of late fee rules
- * @property {number} max_late_fee - Maximum total late fee cap
- */
-
-/**
- * @typedef {Object} TimelineEvent
- * @property {number} day - Day of the month
- * @property {string} label - Short label (e.g., "May 1")
- * @property {string} description - Description of the event
- * @property {number} fee_amount - Fee applied at this step (0 for non-fee events)
- * @property {number} running_total - Running total owed
- * @property {'generation'|'due'|'grace_end'|'late_fee'|'cap'} type - Event type
- * @property {string} color - Color key for UI rendering
+ * - Legacy config auto-migration
  */
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+// ─── Rule Resolution (mirrors engine.ts resolveRules) ────────────
+
 /**
- * Convert legacy flat preference fields into a rules array.
- * This provides backward compatibility for owners who haven't
- * upgraded to the new rules format yet.
+ * Convert legacy flat preference fields into a normalized billing config.
+ * Mirrors backend-next/lib/billing/engine.ts → resolveRules()
  */
 export function migrateLegacyPrefs(prefs) {
   if (prefs.late_fee_rules && Array.isArray(prefs.late_fee_rules) && prefs.late_fee_rules.length > 0) {
@@ -72,6 +47,8 @@ export function migrateLegacyPrefs(prefs) {
       rule.amount = Number(prefs.late_fee_amount) || 200;
     } else if (prefs.late_fee_type === 'percentage') {
       rule.value = Number(prefs.late_fee_percentage) || 5;
+    } else if (prefs.late_fee_type === 'per_day') {
+      rule.amount = Number(prefs.late_fee_amount) || 50;
     }
     rules.push(rule);
   }
@@ -85,16 +62,12 @@ export function migrateLegacyPrefs(prefs) {
   };
 }
 
-/**
- * Generate a unique rule ID.
- */
+// ─── Rule Helpers ────────────────────────────────────────────────
+
 export function generateRuleId() {
   return 'rule_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
 }
 
-/**
- * Create a default empty rule.
- */
 export function createDefaultRule() {
   return {
     id: generateRuleId(),
@@ -105,22 +78,110 @@ export function createDefaultRule() {
   };
 }
 
+// ─── Core Fee Calculation (mirrors engine.ts calculateLateFees) ──
+
 /**
- * Simulate the billing timeline for a given month.
+ * Calculate fee for a single rule.
+ * Mirrors backend-next/lib/billing/engine.ts → calculateSingleRuleFee()
+ */
+function calculateSingleRuleFeeAmount(rule, rentAmount) {
+  switch (rule.type) {
+    case 'flat':
+      return Math.max(Number(rule.amount) || 0, 0);
+    case 'percentage':
+      return Math.round(rentAmount * (Math.max(Number(rule.value) || 0, 0)) / 100);
+    case 'per_day':
+      return Math.max(Number(rule.amount) || 0, 0);
+    default:
+      return 0;
+  }
+}
+
+/**
+ * Calculate total late fees for a given delay.
+ * Mirrors backend-next/lib/billing/engine.ts → calculateLateFees()
  *
- * @param {BillingConfig} config - Billing rules configuration
- * @param {number} rentAmount - Monthly rent amount
- * @param {number} [simulateDays=30] - Number of days past due to simulate
- * @param {number} [monthIndex=4] - 0-indexed month (default May = 4)
- * @returns {TimelineEvent[]} - Ordered list of billing events
+ * IMPORTANT: This MUST produce identical results to the backend engine.
+ */
+function calculateLateFeesCore(config, rentAmount, daysDelayed) {
+  const graceDays = Math.max(Number(config.grace_days) || 0, 0);
+  const maxCap = Math.max(Number(config.max_late_fee) || 0, 0);
+  const effectiveDelay = Math.max(daysDelayed - graceDays, 0);
+
+  const enabledRules = (config.late_fee_rules || [])
+    .filter(r => r.enabled)
+    .sort((a, b) => a.after_days - b.after_days);
+
+  let totalLateFee = 0;
+  const breakdown = [];
+
+  for (const rule of enabledRules) {
+    const afterDays = Math.max(Number(rule.after_days) || 0, 0);
+    if (effectiveDelay < afterDays) continue;
+
+    let feeAmount = 0;
+    let desc = '';
+
+    switch (rule.type) {
+      case 'flat': {
+        feeAmount = Math.max(Number(rule.amount) || 0, 0);
+        desc = `Flat fee ₹${feeAmount} (after ${afterDays}d)`;
+        break;
+      }
+      case 'percentage': {
+        const pct = Math.max(Number(rule.value) || 0, 0);
+        feeAmount = Math.round(rentAmount * pct / 100);
+        desc = `${pct}% of ₹${rentAmount.toLocaleString('en-IN')} = ₹${feeAmount.toLocaleString('en-IN')} (after ${afterDays}d)`;
+        break;
+      }
+      case 'per_day': {
+        const dailyAmount = Math.max(Number(rule.amount) || 0, 0);
+        const activeDays = Math.max(effectiveDelay - afterDays, 0);
+        feeAmount = dailyAmount * activeDays;
+        desc = `₹${dailyAmount}/day × ${activeDays}d = ₹${feeAmount.toLocaleString('en-IN')} (after ${afterDays}d)`;
+        break;
+      }
+      default:
+        continue;
+    }
+
+    // Enforce cap
+    let capped = false;
+    if (maxCap > 0 && totalLateFee + feeAmount > maxCap) {
+      feeAmount = Math.max(maxCap - totalLateFee, 0);
+      capped = true;
+    }
+
+    if (feeAmount > 0) {
+      totalLateFee += feeAmount;
+      breakdown.push({ rule, feeAmount, desc: desc + (capped ? ' (capped)' : ''), capped });
+    }
+  }
+
+  return {
+    rentAmount,
+    totalLateFee,
+    totalPayable: rentAmount + totalLateFee,
+    breakdown,
+    graceDaysApplied: graceDays,
+    effectiveDelay,
+    capApplied: maxCap > 0 && totalLateFee >= maxCap,
+  };
+}
+
+// ─── Timeline Simulation (UI-specific) ──────────────────────────
+
+/**
+ * Generate a visual billing timeline for the preview card.
+ * Uses calculateLateFeesCore internally for consistent math.
  */
 export function simulateBilling(config, rentAmount, simulateDays = 30, monthIndex = 4) {
   const events = [];
   const monthName = MONTH_NAMES[monthIndex];
   let runningTotal = rentAmount;
   let totalLateFees = 0;
-  const maxCap = Number(config.max_late_fee) || 0;
-  const graceDays = Number(config.grace_days) || 0;
+  const maxCap = Math.max(Number(config.max_late_fee) || 0, 0);
+  const graceDays = Math.max(Number(config.grace_days) || 0, 0);
 
   // 1️⃣ Rent Generation
   events.push({
@@ -144,7 +205,7 @@ export function simulateBilling(config, rentAmount, simulateDays = 30, monthInde
     color: 'indigo',
   });
 
-  // 3️⃣ Grace Period End (if > 0)
+  // 3️⃣ Grace Period End
   if (graceDays > 0) {
     const graceEndDay = config.due_day + graceDays;
     events.push({
@@ -158,28 +219,25 @@ export function simulateBilling(config, rentAmount, simulateDays = 30, monthInde
     });
   }
 
-  // 4️⃣ Sort rules by after_days ascending for proper timeline
+  // 4️⃣ Apply rules using same core logic
   const enabledRules = (config.late_fee_rules || [])
     .filter(r => r.enabled)
     .sort((a, b) => a.after_days - b.after_days);
 
-  // Track per_day rules and simulate day-by-day
-  const perDayRules = enabledRules.filter(r => r.type === 'per_day');
   const oneTimeRules = enabledRules.filter(r => r.type !== 'per_day');
+  const perDayRules = enabledRules.filter(r => r.type === 'per_day');
 
-  // Apply one-time rules (flat, percentage) at their trigger day
+  // One-time rules at their trigger day
   for (const rule of oneTimeRules) {
     const triggerDay = config.due_day + graceDays + rule.after_days;
     if (triggerDay - config.due_day > simulateDays) continue;
 
-    let feeAmount = 0;
-    if (rule.type === 'flat') {
-      feeAmount = Number(rule.amount) || 0;
-    } else if (rule.type === 'percentage') {
-      feeAmount = Math.round(rentAmount * (Number(rule.value) || 0) / 100);
+    let feeAmount = calculateSingleRuleFeeAmount(rule, rentAmount);
+    if (rule.type === 'percentage') {
+      feeAmount = Math.round(rentAmount * (Math.max(Number(rule.value) || 0, 0)) / 100);
     }
 
-    // Apply cap
+    // Cap
     if (maxCap > 0 && totalLateFees + feeAmount > maxCap) {
       feeAmount = Math.max(maxCap - totalLateFees, 0);
     }
@@ -187,9 +245,7 @@ export function simulateBilling(config, rentAmount, simulateDays = 30, monthInde
     if (feeAmount > 0) {
       totalLateFees += feeAmount;
       runningTotal += feeAmount;
-
       const typeLabel = rule.type === 'flat' ? 'Flat fee' : `${rule.value}% of rent`;
-
       events.push({
         day: triggerDay,
         label: `${monthName} ${triggerDay}`,
@@ -202,21 +258,19 @@ export function simulateBilling(config, rentAmount, simulateDays = 30, monthInde
     }
   }
 
-  // Simulate per_day rules — show the start + a few days + summary
+  // Per-day rules — summarized
   for (const rule of perDayRules) {
     const startDay = config.due_day + graceDays + rule.after_days;
-    const dailyAmount = Number(rule.amount) || 0;
+    const dailyAmount = Math.max(Number(rule.amount) || 0, 0);
     if (dailyAmount <= 0 || startDay - config.due_day > simulateDays) continue;
 
-    // Calculate how many days this rule runs within the simulation window
     const endSimDay = config.due_day + simulateDays;
     const daysActive = Math.max(endSimDay - startDay, 0);
-
     if (daysActive <= 0) continue;
 
     let totalDailyFee = dailyAmount * daysActive;
 
-    // Apply cap
+    // Cap
     if (maxCap > 0 && totalLateFees + totalDailyFee > maxCap) {
       totalDailyFee = Math.max(maxCap - totalLateFees, 0);
     }
@@ -224,7 +278,6 @@ export function simulateBilling(config, rentAmount, simulateDays = 30, monthInde
     if (totalDailyFee > 0) {
       totalLateFees += totalDailyFee;
       runningTotal += totalDailyFee;
-
       events.push({
         day: startDay,
         label: `${monthName} ${startDay}+`,
@@ -253,65 +306,12 @@ export function simulateBilling(config, rentAmount, simulateDays = 30, monthInde
   return events;
 }
 
+// ─── What-If Calculator ─────────────────────────────────────────
+
 /**
- * What-If Calculator: Given a rent amount and days delayed,
- * compute the total payable and which rules triggered.
- *
- * @param {BillingConfig} config
- * @param {number} rentAmount
- * @param {number} daysDelayed - Days past the due date
- * @returns {{ totalPayable: number, breakdown: Array, totalLateFee: number }}
+ * What-If Calculator using the same core logic as the backend.
+ * Mirrors backend-next/lib/billing/engine.ts → calculateLateFees()
  */
 export function calculateWhatIf(config, rentAmount, daysDelayed) {
-  const graceDays = Number(config.grace_days) || 0;
-  const maxCap = Number(config.max_late_fee) || 0;
-  const effectiveDelay = Math.max(daysDelayed - graceDays, 0);
-
-  const enabledRules = (config.late_fee_rules || [])
-    .filter(r => r.enabled)
-    .sort((a, b) => a.after_days - b.after_days);
-
-  let totalLateFee = 0;
-  const breakdown = [];
-
-  for (const rule of enabledRules) {
-    if (effectiveDelay < rule.after_days) continue;
-
-    let feeAmount = 0;
-    let desc = '';
-
-    if (rule.type === 'flat') {
-      feeAmount = Number(rule.amount) || 0;
-      desc = `Flat fee: ₹${feeAmount.toLocaleString('en-IN')} (after ${rule.after_days} days)`;
-    } else if (rule.type === 'percentage') {
-      const pct = Number(rule.value) || 0;
-      feeAmount = Math.round(rentAmount * pct / 100);
-      desc = `${pct}% of ₹${rentAmount.toLocaleString('en-IN')}: ₹${feeAmount.toLocaleString('en-IN')} (after ${rule.after_days} days)`;
-    } else if (rule.type === 'per_day') {
-      const dailyAmount = Number(rule.amount) || 0;
-      const activeDays = effectiveDelay - rule.after_days;
-      feeAmount = dailyAmount * Math.max(activeDays, 0);
-      desc = `₹${dailyAmount}/day × ${Math.max(activeDays, 0)} days: ₹${feeAmount.toLocaleString('en-IN')} (after ${rule.after_days} days)`;
-    }
-
-    // Apply cap
-    if (maxCap > 0 && totalLateFee + feeAmount > maxCap) {
-      feeAmount = Math.max(maxCap - totalLateFee, 0);
-      desc += ' (capped)';
-    }
-
-    if (feeAmount > 0) {
-      totalLateFee += feeAmount;
-      breakdown.push({ rule, feeAmount, desc });
-    }
-  }
-
-  return {
-    totalPayable: rentAmount + totalLateFee,
-    totalLateFee,
-    breakdown,
-    graceDaysApplied: graceDays,
-    effectiveDelay,
-    capApplied: maxCap > 0 && totalLateFee >= maxCap,
-  };
+  return calculateLateFeesCore(config, rentAmount, daysDelayed);
 }
