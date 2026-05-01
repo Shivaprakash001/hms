@@ -1,3 +1,87 @@
+# ── Restore Single Table ────────────────────────────────────────
+restore_table() {
+    if [ -z "$TABLE_NAME" ]; then
+        log_error "No table specified."
+        echo "Usage: $0 table <table_name> <backup_file>"
+        exit 1
+    fi
+
+    if [ -z "$BACKUP_FILE" ]; then
+        log_error "No backup file specified."
+        echo "Usage: $0 table <table_name> <backup_file>"
+        exit 1
+    fi
+
+    if [ ! -f "$BACKUP_FILE" ]; then
+        log_error "Backup file not found: $BACKUP_FILE"
+        exit 1
+    fi
+
+    # Default schema to public if not provided
+    local target="$TABLE_NAME"
+    if [[ "$TABLE_NAME" != *.* ]]; then
+        target="public.$TABLE_NAME"
+    fi
+
+    confirm_action "Restore table ${target} from: $BACKUP_FILE"
+
+    local ext="${BACKUP_FILE##*.}"
+
+    case "$ext" in
+        dump)
+            log_info "Restoring table via pg_restore -t ${target}..."
+            pg_restore "$BACKUP_FILE" \
+                --dbname="$DIRECT_URL" \
+                --no-owner \
+                --no-privileges \
+                --clean \
+                --if-exists \
+                --single-transaction \
+                -t "$target" 2>&1 || true
+            ;;
+        gz)
+            if [[ "$BACKUP_FILE" == *.sql.gz ]]; then
+                log_info "Filtering SQL for table ${target} from compressed SQL..."
+                # Best-effort restore: extract statements for the target table
+                gunzip -c "$BACKUP_FILE" | awk -v t="${target}" '
+                    BEGIN{IGNORECASE=1}
+                    /COPY[ ]+[^;]*\(/ {inblock=1}
+                    /;$/ {endstmt=1}
+                    {
+                      if ($0 ~ "TABLE \\"?" t "\\"?" || $0 ~ "COPY \\"?" t "\\"?" || inblock==1) {
+                        print $0
+                      }
+                      if (endstmt==1) {inblock=0; endstmt=0}
+                    }
+                ' | psql "$DIRECT_URL" 2>&1 || true
+            else
+                log_error "Unknown gzip format for table restore"
+                exit 1
+            fi
+            ;;
+        sql)
+            log_info "Filtering SQL for table ${target}..."
+            awk -v t="${target}" '
+                BEGIN{IGNORECASE=1}
+                /COPY[ ]+[^;]*\(/ {inblock=1}
+                /;$/ {endstmt=1}
+                {
+                  if ($0 ~ "TABLE \\"?" t "\\"?" || $0 ~ "COPY \\"?" t "\\"?" || inblock==1) {
+                    print $0
+                  }
+                  if (endstmt==1) {inblock=0; endstmt=0}
+                }
+            ' "$BACKUP_FILE" | psql "$DIRECT_URL" 2>&1 || true
+            ;;
+        *)
+            log_error "Unknown backup format: .$ext"
+            echo "Supported: .dump, .sql, .sql.gz"
+            exit 1
+            ;;
+    esac
+
+    log_success "Table restore completed for ${target}!"
+}
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════
 # HMS Database Restore Script
@@ -24,6 +108,7 @@ set -euo pipefail
 BACKUP_DIR="$(pwd)/backups"
 RESTORE_TYPE="${1:-help}"
 BACKUP_FILE="${2:-}"
+TABLE_NAME=""
 
 # Colors
 RED='\033[0;31m'
@@ -316,6 +401,12 @@ main() {
         finance)
             check_prerequisites
             restore_finance
+            ;;
+        table)
+            check_prerequisites
+            TABLE_NAME="${2:-}"
+            BACKUP_FILE="${3:-}"
+            restore_table
             ;;
         verify)
             verify_restore
