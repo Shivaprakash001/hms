@@ -15,50 +15,30 @@ import { prisma } from "../db";
 import crypto from "crypto";
 import { getHostelWithPreferences } from "../preferences";
 import { htmlToPdf } from "../pdf/browser";
-import { renderReceiptHTML, RECEIPT_TEMPLATE_VERSION, type ReceiptRenderData } from "../pdf/receipt-template";
+import { renderReceiptHTML, type ReceiptRenderData } from "../pdf/receipt-template";
 
 export class ReceiptService {
 
   /**
    * Generate a sequential, race-safe receipt number scoped per hostel + year.
    * Format: PREFIX-YEAR-SEQUENCE (e.g., HMS-2026-00001)
-   * Uses retry loop to handle concurrent receipt creation.
+   *
+   * 🔧 FIX C4: Uses atomic PostgreSQL sequence instead of find-max + check-exists.
+   * The old TOCTOU pattern could exhaust retries under concurrency and fall back
+   * to UUID, permanently breaking sequential numbering.
    */
   async generateReceiptNumber(ownerId: string): Promise<string> {
     const { prefs } = await getHostelWithPreferences(ownerId);
     const year = new Date().getFullYear();
     const prefix = `${prefs.receipt_prefix}-${year}-`;
 
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const lastReceipt = await prisma.receipt.findFirst({
-        where: {
-          receipt_number: { startsWith: prefix },
-          owner_id: ownerId,
-        },
-        orderBy: { issued_at: "desc" },
-      });
+    // Atomic sequence — single round-trip, no race condition
+    const result = await prisma.$queryRaw<[{ nextval: bigint }]>`
+      SELECT nextval('receipt_seq')
+    `;
+    const seq = Number(result[0].nextval);
 
-      let nextSeq = 1;
-      if (lastReceipt) {
-        const lastSeq = parseInt(lastReceipt.receipt_number.replace(prefix, ""), 10);
-        if (!isNaN(lastSeq)) nextSeq = lastSeq + 1;
-      }
-
-      const candidate = `${prefix}${nextSeq.toString().padStart(5, "0")}`;
-
-      const exists = await prisma.receipt.findUnique({
-        where: { receipt_number: candidate },
-      });
-
-      if (!exists) return candidate;
-
-      console.warn(`[ReceiptService] Sequence collision on ${candidate}, retrying (attempt ${attempt + 1})`);
-    }
-
-    const { prefs: p } = await getHostelWithPreferences(ownerId);
-    const fallback = `${p.receipt_prefix}-${new Date().getFullYear()}-${crypto.randomUUID().substring(0, 8).toUpperCase()}`;
-    console.warn(`[ReceiptService] Exhausted retries, using fallback: ${fallback}`);
-    return fallback;
+    return `${prefix}${seq.toString().padStart(5, "0")}`;
   }
 
   /**
@@ -98,7 +78,6 @@ export class ReceiptService {
         hostel_name: hostel?.name || "HMS Hostel",
         tenant_name: payment.tenant.profile.name,
         rent_month: payment.obligation.rent_month,
-        invoice_template_version: RECEIPT_TEMPLATE_VERSION,
       },
     });
 

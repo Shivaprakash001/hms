@@ -1,380 +1,198 @@
-# 🛡️ HMS Database Backup & Recovery Guide
+# Database Backup & Recovery
 
-## Architecture Overview
+Runbook for the HMS Supabase Postgres database. Anchored in
+`.github/workflows/db-backup.yml` and `scripts/backup/*.sh`.
 
-```
-Supabase DB (Primary)
-     │
-     ├── Layer 1: GitHub Action Daily pg_dump ──→ GitHub Artifacts (30 days)
-     │
-     ├── Layer 2: Supabase Storage Bucket ──→ db-backups/ (30 days)
-     │
-     ├── Layer 3: Local Backup Scripts ──→ backups/ directory
-     │
-     ├── Layer 4: Financial Tables Backup ──→ payments, rent_obligations (90 days)
-     │
-     └── Layer 5: Storage Files Backup ──→ documents, receipts, logos
+> ⚠️ **Known drift:** The workflow's weekly-verify job and CSV export step
+> still reference the pre-rename `students` table and legacy `payments`
+> columns (`student_id`, `amount`, `status`, `month`, `year`). These will
+> cause failures on the current schema. See `docs/TASKS.md:T-020`.
+
+---
+
+## Layers
+
+| # | Mechanism | Schedule | Retention |
+|---|---|---|---|
+| 0 | **Monthly permanent snapshot** (`monthly-snapshot` job) — full `pg_dump` encrypted with GPG, uploaded to Supabase Storage at `snapshots/<YYYY-MM>/full.sql.gz.gpg`, and attached to the run as a permanent GitHub Artifact. | 1st of each month, 02:30 UTC | 10,000 days (GitHub max) |
+| 1 | **Daily full DB dump** (`full-backup` job) — custom-format `.dump` + `.sql.gz`, uploaded as a GitHub Artifact. | Daily 02:00 UTC | 30 days |
+| 2 | **Daily finance dump** (`finance-backup` job) — `pg_dump -t payments -t payment_attempts -t payment_webhook_events -t rent_obligations` + CSV exports, bundled as `.tar.gz`. | Daily 02:00 UTC | 90 days |
+| 3 | **Supabase Storage upload** (`upload-to-storage` job) — encrypts the daily full dump with GPG and `PUT`s to `db-backups/<YYYY-MM-DD>/full.sql.gz.gpg`. | Daily 02:00 UTC | Bucket policy |
+| 4 | **Weekly restore verification** (`verify-weekly` job) — restores the daily dump into an ephemeral Postgres 15 service container and compares row counts against the source for critical tables. Only runs on Sundays. | Sunday 03:00 UTC | n/a |
+| 5 | **Storage cleanup** (`cleanup-old-backups` job) — lists objects older than 30 days in `db-backups` and logs them. (Cleanup is declarative; actual deletion is expected to be handled via Supabase retention policies — see `db-backup.yml:467-480`.) | Daily | n/a |
+| 6 | **Local scripts** (`scripts/backup/*.sh`) — on-demand dumps + upload + storage-files backup. | Manual | Local |
+
+---
+
+## GitHub Secrets required
+
+Configure at **Settings → Secrets → Actions**:
+
+| Secret | Purpose |
+|---|---|
+| `DIRECT_URL` | Non-pooler Supabase connection (port **5432**). Validation step fails the workflow if `:5432` is missing or if the URL contains `pooler`. |
+| `SUPABASE_URL` | Project URL for Storage REST uploads. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service-role key for Storage uploads. |
+| `BACKUP_GPG_PASSPHRASE` | Symmetric passphrase for `gpg -c --cipher-algo AES256` encryption of daily + monthly dumps. |
+
+---
+
+## Trigger manually
+
+GitHub UI: **Actions → Daily DB Backup → Run workflow**.
+Or with `gh`:
+
+```bash
+gh workflow run db-backup.yml
 ```
 
 ---
 
-## Quick Start
+## Local backups (on-demand)
 
-### 1. One-Time Setup
-
-```bash
-# Make all scripts executable
-chmod +x scripts/backup/*.sh
-
-# Create Supabase Storage buckets for backups
-./scripts/backup/setup-storage-bucket.sh
-
-# Add GitHub secrets (required for automated backups)
-# Go to: https://github.com/Shivaprakash001/hms/settings/secrets/actions
-# Add these secrets:
-#   DIRECT_URL          → Your Supabase direct connection URL (port 5432)
-#   SUPABASE_URL        → Your Supabase project URL
-#   SUPABASE_SERVICE_ROLE_KEY → Your Supabase service role key
-```
-
-### 2. Run a Local Backup Now
+Scripts under `scripts/backup/`:
 
 ```bash
-# Full backup (database + finance + schema)
-./scripts/backup/local-backup.sh all
-
-# Only financial tables
-./scripts/backup/local-backup.sh finance
-
-# Only full database
-./scripts/backup/local-backup.sh full
-
-# Only schema
-./scripts/backup/local-backup.sh schema
+./scripts/backup/local-backup.sh all        # full + finance + schema
+./scripts/backup/local-backup.sh full       # full DB only
+./scripts/backup/local-backup.sh finance    # payments/obligations only
+./scripts/backup/local-backup.sh schema     # schema only
+./scripts/backup/backup-storage-files.sh    # Supabase Storage files
 ```
 
-### 3. Upload to Supabase Storage
+Output tree:
 
-```bash
-# Upload a specific backup file
-./scripts/backup/upload-to-storage.sh backups/full/full_backup_2026-04-30_14-30-00.dump
-```
-
-### 4. Backup Storage Files (Documents, Receipts)
-
-```bash
-./scripts/backup/backup-storage-files.sh
-```
-
----
-
-## Backup Layers Explained
-
-### Layer 1: GitHub Action Daily Backup (Automated)
-
-**File:** `.github/workflows/db-backup.yml`
-
-- Runs daily at 2:00 AM UTC (7:30 AM IST)
-- Can be triggered manually from GitHub Actions tab
-- Creates:
-  - Full database dump (`.dump` + `.sql.gz`)
-  - Financial tables dump
-  - Payments CSV ledger
-  - Rent obligations CSV
-- Stored as GitHub Artifacts (30 day retention for full, 90 days for finance)
-- Also uploads to Supabase Storage bucket
-
-**To trigger manually:**
-1. Go to https://github.com/Shivaprakash001/hms/actions
-2. Click "Daily DB Backup"
-3. Click "Run workflow"
-
-### Layer 2: Supabase Storage Backup
-
-**Bucket structure:**
-```
-db-backups/
-   ├── 2026-04-30/
-   │   └── full_backup.sql.gz
-   ├── 2026-04-29/
-   │   └── full_backup.sql.gz
-   └── ...
-```
-
-### Layer 3: Local Backup Scripts
-
-**Script:** `scripts/backup/local-backup.sh`
-
-Creates backups in the `backups/` directory:
 ```
 backups/
-   ├── full/
-   │   ├── full_backup_2026-04-30_14-30-00.dump    (custom format, best for restore)
-   │   └── full_backup_2026-04-30_14-30-00.sql.gz  (SQL format, human readable)
-   │
-   ├── finance/
-   │   ├── finance_backup_2026-04-30_14-30-00.sql
-   │   ├── payments_ledger_2026-04-30.csv
-   │   ├── rent_obligations_2026-04-30.csv
-   │   ├── payment_attempts_2026-04-30.csv
-   │   └── finance_bundle_2026-04-30_14-30-00.tar.gz
-   │
-   └── schema/
-       └── schema_2026-04-30_14-30-00.sql
+├── full/      full_backup_YYYY-MM-DD_HH-MM-SS.{dump,sql.gz}
+├── finance/   finance_backup_*.sql, *_ledger_*.csv, finance_bundle_*.tar.gz
+└── schema/    schema_*.sql
 ```
 
-### Layer 4: Financial Tables Backup (Critical for Payments)
+Upload a specific file to Supabase Storage:
 
-Backs up only these critical tables:
-- `payments` — All payment records
-- `payment_attempts` — Payment gateway attempts
-- `payment_webhook_events` — Webhook event logs
-- `rent_obligations` — Rent due records
-
-Also exports CSV ledger files for financial auditing.
-
-### Layer 5: Storage Files Backup
-
-**Script:** `scripts/backup/backup-storage-files.sh`
-
-Downloads all files from Supabase Storage buckets:
-- Tenant documents (ID proofs, agreements)
-- Receipts / payment screenshots
-- Hostel logos
+```bash
+./scripts/backup/upload-to-storage.sh backups/full/full_backup_*.dump
+```
 
 ---
 
-## Recovery Procedures
+## Recovery
 
-### Full Database Restore
+### Full restore
 
 ```bash
-# From custom dump (recommended - fastest, most reliable)
-./scripts/backup/restore-db.sh full backups/full/full_backup_2026-04-30_14-30-00.dump
+# From custom-format dump (recommended)
+./scripts/backup/restore-db.sh full backups/full/full_backup_*.dump
 
 # From compressed SQL
-./scripts/backup/restore-db.sh full backups/full/full_backup_2026-04-30_14-30-00.sql.gz
+./scripts/backup/restore-db.sh full backups/full/full_backup_*.sql.gz
 
 # From plain SQL
-./scripts/backup/restore-db.sh full backups/full/full_backup_2026-04-30_14-30-00.sql
+./scripts/backup/restore-db.sh full backups/full/full_backup_*.sql
 ```
 
-### Financial Tables Only Restore
+### Finance-only restore
 
 ```bash
-# Restore only payments, payment_attempts, rent_obligations
-./scripts/backup/restore-db.sh finance backups/finance/finance_backup_2026-04-30_14-30-00.sql
-
-# From compressed bundle
-./scripts/backup/restore-db.sh finance backups/finance/finance_bundle_2026-04-30_14-30-00.tar.gz
+./scripts/backup/restore-db.sh finance backups/finance/finance_backup_*.sql
+./scripts/backup/restore-db.sh finance backups/finance/finance_bundle_*.tar.gz
 ```
 
-### Restore from GitHub Artifacts
+### Restore from a GitHub Actions artifact
 
 ```bash
-# 1. Download from GitHub UI
-#    Go to: https://github.com/Shivaprakash001/hms/actions
-#    Click latest "Daily DB Backup" run → Download artifact
-
-# 2. Or use GitHub CLI
+gh run list --workflow=db-backup.yml -L 5
 gh run download <run-id> -n db-full-backup-<run-id>
-
-# 3. Extract and restore
-unzip db-full-backup-*.zip
-./scripts/backup/restore-db.sh full full_backup_2026-04-30.dump
-```
-
-### Verify After Restore
-
-```bash
-./scripts/backup/restore-db.sh verify
-```
-
-This checks:
-- Table row counts
-- Critical tables existence (payments, profiles, rooms, students, hostels)
-
-### List Available Backups
-
-```bash
-./scripts/backup/restore-db.sh list
-```
-
----
-
-## GitHub Secrets Required
-
-Add these to your repository: https://github.com/Shivaprakash001/hms/settings/secrets/actions
-
-| Secret | Description | Example |
-|--------|-------------|---------|
-| `DIRECT_URL` | Supabase direct connection (port 5432, NOT pooler) | `postgresql://postgres.xxx:pass@aws-1-ap-northeast-1.pooler.supabase.com:5432/postgres` |
-| `SUPABASE_URL` | Supabase project URL | `https://xxx.supabase.co` |
-| `SUPABASE_SERVICE_ROLE_KEY` | Service role key (admin access) | `eyJhbGciOiJIUzI1NiIs...` |
-
-> ⚠️ **Important:** Use the DIRECT_URL (port 5432), not the pooled connection (port 6543). pg_dump doesn't work with PgBouncer pooling.
-
----
-
-## Cron Schedule Reference
-
-| Backup | Schedule | Retention |
-|--------|----------|-----------|
-| GitHub Action - Full DB | Daily 2:00 AM UTC | 30 days |
-| GitHub Action - Finance | Daily 2:00 AM UTC | 90 days |
-| Supabase Storage Upload | Daily (after GitHub Action) | 30 days |
-| Local backup | Manual / Weekly recommended | 30 days (auto-cleanup) |
-
-### Recommended Manual Schedule
-
-```bash
-# Weekly full backup (Sunday night)
-./scripts/backup/local-backup.sh all
-
-# Upload to Supabase Storage
-./scripts/backup/upload-to-storage.sh backups/full/full_backup_*.dump
-
-# Monthly storage files backup
-./scripts/backup/backup-storage-files.sh
-```
-
----
-
-## Disaster Recovery Scenarios
-
-### Scenario 1: Accidental Data Deletion
-
-```bash
-# 1. Get latest backup
-./scripts/backup/restore-db.sh list
-
-# 2. If only payments affected
-./scripts/backup/restore-db.sh finance backups/finance/finance_backup_LATEST.sql
-
-# 3. If full DB affected
-./scripts/backup/restore-db.sh full backups/full/full_backup_LATEST.dump
-
-# 4. Verify
-./scripts/backup/restore-db.sh verify
-```
-
-### Scenario 2: Database Corruption
-
-```bash
-# 1. Download latest GitHub Action backup
-gh run list --workflow=db-backup.yml --limit=5
-gh run download <latest-run-id> -n db-full-backup-<run-id>
-
-# 2. Restore
 ./scripts/backup/restore-db.sh full full_backup_*.dump
-
-# 3. Run Prisma migrations if needed
-cd backend-next && npx prisma migrate deploy
 ```
 
-### Scenario 3: Supabase Goes Down
-
-If you have a replica database (Neon/Railway/AWS RDS):
+### Decrypt a Supabase Storage / monthly snapshot
 
 ```bash
-# 1. Update DATABASE_URL in .env to point to replica
-# 2. Deploy with new connection string
-# 3. When Supabase recovers, sync back
+gpg --batch --yes --passphrase "$BACKUP_GPG_PASSPHRASE" \
+    -o full.sql.gz -d full.sql.gz.gpg
+gunzip full.sql.gz
+psql "$DIRECT_URL" -f full.sql
 ```
 
-### Scenario 4: Need to Audit Financial Data
+### Verify after restore
 
 ```bash
-# CSV exports are in the finance backups
-ls backups/finance/payments_ledger_*.csv
-ls backups/finance/rent_obligations_*.csv
+./scripts/backup/restore-db.sh verify
+./scripts/backup/restore-db.sh list
+```
 
-# Or download from GitHub Actions artifacts
+> The `verify` helper currently probes a list of tables. If it reports
+> `students` missing, the message is expected — the current schema uses
+> `tenants` (see `docs/DATABASE_SCHEMA.md §2.2`). The helper should be
+> updated in a follow-up.
+
+---
+
+## Disaster scenarios
+
+### Accidental deletion
+
+1. `./scripts/backup/restore-db.sh list`
+2. If payments-only damage: `restore-db.sh finance <latest-finance>.sql`
+3. If broader: `restore-db.sh full <latest-full>.dump`
+4. `./scripts/backup/restore-db.sh verify`
+
+### DB corruption
+
+```bash
+gh run list --workflow=db-backup.yml -L 5
+gh run download <run-id> -n db-full-backup-<run-id>
+./scripts/backup/restore-db.sh full full_backup_*.dump
+cd backend-next && npx prisma migrate deploy   # if schema skew suspected
+```
+
+### Financial audit
+
+Daily CSV exports (payments ledger + rent_obligations) are included in the
+finance artifact. The CSV `SELECT` in the workflow is out of date
+(`docs/TASKS.md:T-020`) — for a reliable export run:
+
+```bash
+psql "$DIRECT_URL" -c "\COPY (SELECT * FROM payments ORDER BY created_at DESC) TO STDOUT WITH CSV HEADER" \
+  > payments_$(date +%F).csv
+psql "$DIRECT_URL" -c "\COPY (SELECT * FROM rent_obligations ORDER BY created_at DESC) TO STDOUT WITH CSV HEADER" \
+  > obligations_$(date +%F).csv
 ```
 
 ---
 
-## File Structure
+## Best practices
 
-```
-hms/
-├── .github/
-│   └── workflows/
-│       └── db-backup.yml           # Automated daily backups
-│
-├── scripts/
-│   └── backup/
-│       ├── local-backup.sh         # Local backup (full/finance/schema)
-│       ├── restore-db.sh           # Restore database
-│       ├── setup-storage-bucket.sh # One-time Supabase bucket setup
-│       ├── upload-to-storage.sh    # Upload backup to Supabase Storage
-│       └── backup-storage-files.sh # Backup Supabase Storage files
-│
-├── backups/                        # Local backups (gitignored)
-│   ├── full/
-│   ├── finance/
-│   ├── schema/
-│   └── storage/
-│
-└── docs/
-    └── BACKUP_RECOVERY.md          # This file
-```
-
----
-
-## Monitoring & Alerts
-
-### Check if GitHub Action ran successfully
-
-1. Go to https://github.com/Shivaprakash001/hms/actions
-2. Look for "Daily DB Backup" workflow
-3. Green ✓ = success, Red ✗ = failed
-
-### Setup email notifications for failures
-
-In GitHub repository settings:
-1. Go to Settings → Notifications
-2. Enable "Failed workflows" notifications
-
----
-
-## Best Practices
-
-1. **Test restores regularly** — A backup is only good if you can restore from it
-2. **Keep finance backups longer** — 90 days minimum for payment data
-3. **Export CSVs monthly** — For financial auditing and compliance
-4. **Backup before major deployments** — Run `./scripts/backup/local-backup.sh all` before any migration
-5. **Store backups in multiple locations** — GitHub + Supabase Storage + Local
-6. **Never commit backups to git** — They contain sensitive data (already gitignored)
-7. **Rotate credentials** — If backup scripts are compromised, rotate Supabase keys immediately
+1. Test restores regularly — a backup is only as good as its last successful restore. The weekly `verify-weekly` job covers this automatically on Sundays.
+2. Keep finance artifacts for ≥ 90 days for audit/compliance.
+3. Snapshot before major migrations: `./scripts/backup/local-backup.sh all`.
+4. Keep multiple locations: GitHub Artifacts + Supabase Storage + local.
+5. Rotate `SUPABASE_SERVICE_ROLE_KEY` and `BACKUP_GPG_PASSPHRASE` if backup machines are compromised.
 
 ---
 
 ## Troubleshooting
 
-### pg_dump fails with "connection refused"
+| Symptom | Fix |
+|---|---|
+| `pg_dump: connection refused` | Ensure `DIRECT_URL` uses port **5432**, not 6543 (PgBouncer). |
+| `bucket not found` on upload | Run `./scripts/backup/setup-storage-bucket.sh` (creates `db-backups`). |
+| GitHub Action fails at "Validate DIRECT_URL" | URL is missing port 5432 or contains `pooler`. |
+| Restore logs many `DROP … does not exist` lines | Expected with `--clean --if-exists`; use `restore-db.sh verify` to confirm. |
+| `verify-weekly` fails counting `students` or `payments.amount` | Schema drift — see `docs/TASKS.md:T-020`. |
 
-- Use `DIRECT_URL` (port 5432), not `DATABASE_URL` (port 6543)
-- PgBouncer pooling (port 6543) doesn't support pg_dump
+---
 
-### "bucket not found" error
+## Files
 
-```bash
-./scripts/backup/setup-storage-bucket.sh
 ```
-
-### GitHub Action fails
-
-- Check if secrets are set: Repository → Settings → Secrets → Actions
-- Ensure `DIRECT_URL` uses port 5432
-
-### Restore shows errors but completes
-
-- This is normal — `--clean --if-exists` flags will show DROP errors for non-existent objects
-- Verify with: `./scripts/backup/restore-db.sh verify`
-
-### Large backup files
-
-- Custom format (`.dump`) is already compressed
-- SQL dumps are auto-compressed with gzip
-- Finance bundles are tar.gz compressed
+.github/workflows/db-backup.yml    Automated daily / monthly / weekly jobs
+scripts/backup/
+  local-backup.sh                  Manual full/finance/schema dumps
+  restore-db.sh                    Restore + verify + list
+  upload-to-storage.sh             Push a local file to Supabase Storage
+  backup-storage-files.sh          Mirror Supabase Storage buckets locally
+docs/BACKUP_RECOVERY.md            This document
+```

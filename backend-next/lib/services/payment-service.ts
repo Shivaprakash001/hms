@@ -6,153 +6,13 @@ import { EmailService } from "./email-service";
 import { receiptService } from "./receipt-service";
 import { getPreferences } from "../preferences";
 import { formatCurrency, formatMonthYear } from "../format";
+import { eventLog } from "./event-log-service";
 
 export class PaymentService {
-  /**
-   * Calculate prorated rent for a month.
-   */
-  calculateProratedRent(monthlyRent: number, startDate: Date, endDate: Date | null, targetMonth: Date): number {
-    const monthStart = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), 1);
-    const lastDay = new Date(targetMonth.getFullYear(), targetMonth.getMonth() + 1, 0).getDate();
-    const monthEnd = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), lastDay);
-
-    const actualStart = startDate > monthStart ? startDate : monthStart;
-    const actualEnd = endDate && endDate < monthEnd ? endDate : monthEnd;
-
-    if (actualStart > actualEnd) return 0;
-
-    const daysOccupied = Math.ceil((actualEnd.getTime() - actualStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    if (daysOccupied >= lastDay) return monthlyRent;
-
-    return Number(((monthlyRent * daysOccupied) / lastDay).toFixed(2));
-  }
-
-  async generateMonthlyRent(rentMonth: Date, ownerId?: string) {
-    const targetMonth = new Date(rentMonth.getFullYear(), rentMonth.getMonth(), 1);
-    const lastDay = new Date(targetMonth.getFullYear(), targetMonth.getMonth() + 1, 0).getDate();
-    const monthEndDate = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), lastDay);
-
-    // Find all allocations active during some part of this month
-    const allocations = await prisma.roomAllocation.findMany({
-      where: {
-        start_date: { lte: monthEndDate },
-        OR: [
-          { end_date: null },
-          { end_date: { gte: targetMonth } }
-        ],
-        ...(ownerId && { tenant: { owner_id: ownerId } })
-      },
-      include: { tenant: true }
-    });
-
-    let generated = 0;
-    let skipped = 0;
-
-    for (const alloc of allocations) {
-      if (!alloc.tenant) continue;
-
-      // Fallback to 0 if monthly rent is null to prevent NaN Prisma crashes
-      const monthlyRent = Number(alloc.tenant.monthly_rent || 0);
-      
-      // Use the full monthly rent instead of prorating based on joining dates
-      // to ensure consistency between the tenant profile and ledger.
-      const amount = monthlyRent;
-
-      if (isNaN(amount) || amount <= 0) continue;
-
-      // Check for existing
-      const existing = await prisma.rentObligation.findFirst({
-        where: {
-          tenant_id: alloc.tenant_id,
-          rent_month: targetMonth,
-        }
-      });
-
-      if (existing) {
-        skipped++;
-        continue;
-      }
-
-      const obligation = await prisma.rentObligation.create({
-        data: {
-          tenant_id: alloc.tenant_id,
-          allocation_id: alloc.id,
-          owner_id: ownerId || alloc.tenant.owner_id,
-          rent_month: targetMonth,
-          amount: amount,
-          due_date: new Date(targetMonth.getFullYear(), targetMonth.getMonth(), 10), // Default 10th
-          status: "PENDING"
-        }
-      });
-
-      generated++;
-      await eventSystem.trigger("rent_obligation_created", {
-        obligationId: obligation.id,
-        tenantId: alloc.tenant_id,
-        amount
-      });
-    }
-
-    return { generated, skipped, total: allocations.length };
-  }
-
-  async previewMonthlyRent(rentMonth: Date, ownerId?: string) {
-    const targetMonth = new Date(rentMonth.getFullYear(), rentMonth.getMonth(), 1);
-    const lastDay = new Date(targetMonth.getFullYear(), targetMonth.getMonth() + 1, 0).getDate();
-    const monthEndDate = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), lastDay);
-
-    const allocations = await prisma.roomAllocation.findMany({
-      where: {
-        start_date: { lte: monthEndDate },
-        OR: [
-          { end_date: null },
-          { end_date: { gte: targetMonth } }
-        ],
-        ...(ownerId && { tenant: { owner_id: ownerId } })
-      },
-      include: { tenant: true }
-    });
-
-    let tenantsToCreate = 0;
-    let tenantsAlreadyGenerated = 0;
-    let totalAmount = 0;
-
-    for (const alloc of allocations) {
-      if (!alloc.tenant) continue;
-
-      const amount = this.calculateProratedRent(
-        Number(alloc.tenant.monthly_rent),
-        alloc.start_date,
-        alloc.end_date,
-        targetMonth
-      );
-
-      if (amount <= 0) continue;
-
-      const existing = await prisma.rentObligation.findFirst({
-        where: {
-          tenant_id: alloc.tenant_id,
-          rent_month: targetMonth,
-        }
-      });
-
-      if (existing) {
-        tenantsAlreadyGenerated++;
-        continue;
-      }
-
-      tenantsToCreate++;
-      totalAmount += amount;
-    }
-
-    return {
-      tenants: allocations.length,
-      tenants_to_create: tenantsToCreate,
-      tenants_already_generated: tenantsAlreadyGenerated,
-      total_amount: Number(totalAmount.toFixed(2)),
-      rent_month: targetMonth.toISOString().slice(0, 10),
-    };
-  }
+  // 🔧 FIX C1: Old calculateProratedRent, generateMonthlyRent, previewMonthlyRent DELETED.
+  // These were a split-brain duplicate of RentGenerationService with different rules:
+  //   - No lock, no P2002 catch, hardcoded due day to 10th, local time instead of UTC.
+  // Use rentGenerationService (lib/services/rent-generation-service.ts) exclusively.
 
   async recordPayment(data: {
     obligationId: string;
@@ -164,25 +24,41 @@ export class PaymentService {
     paymentAttemptId?: string;
   }) {
     return prisma.$transaction(async (tx: any) => {
+      // Row-level lock on this specific obligation — prevents concurrent double-pay
+      await tx.$queryRaw`
+        SELECT id FROM rent_obligations WHERE id = ${data.obligationId}::uuid FOR UPDATE
+      `;
+
       const obligation = await tx.rentObligation.findUnique({
         where: { id: data.obligationId },
-        include: { payments: true }
+        include: { payments: { select: { amount_paid: true } } }
       });
 
       if (!obligation) throw new Error("NOT_FOUND: Obligation not found");
       if (obligation.status === "WAIVED") throw new Error("BAD_REQUEST: Cannot pay for waived obligation");
+      if (obligation.status === "PAID") throw new Error("BAD_REQUEST: Obligation already fully paid");
 
-      const totalAlreadyPaid = obligation.payments.reduce((acc: number, p: any) => acc + Number(p.amount_paid), 0);
-      const remaining = Number(obligation.amount) - totalAlreadyPaid;
+      // Paisa-safe arithmetic
+      const totalAlreadyPaidPaisa = obligation.payments.reduce(
+        (acc: number, p: any) => acc + Math.round(Number(p.amount_paid) * 100), 0
+      );
+      const obligationPaisa = Math.round(Number(obligation.amount) * 100);
+      const remainingPaisa = obligationPaisa - totalAlreadyPaidPaisa;
+      const paymentPaisa = Math.round(data.amountPaid * 100);
 
-      if (data.amountPaid > remaining) throw new Error(`BAD_REQUEST: Payment exceeds balance. Remaining: ${remaining}`);
+      if (paymentPaisa > remainingPaisa) {
+        throw new Error(`BAD_REQUEST: Payment exceeds balance. Remaining: ${(remainingPaisa / 100).toFixed(2)}`);
+      }
+      if (paymentPaisa <= 0) {
+        throw new Error("BAD_REQUEST: Payment amount must be positive");
+      }
 
       const payment = await tx.payment.create({
         data: {
           obligation_id: data.obligationId,
           tenant_id: obligation.tenant_id,
           owner_id: obligation.owner_id,
-          amount_paid: data.amountPaid,
+          amount_paid: paymentPaisa / 100,
           payment_method: data.paymentMethod,
           reference_number: data.referenceNumber,
           payment_date: data.paymentDate || new Date(),
@@ -190,8 +66,8 @@ export class PaymentService {
         }
       });
 
-      const newTotalPaid = totalAlreadyPaid + data.amountPaid;
-      const newStatus = newTotalPaid >= Number(obligation.amount) ? "PAID" : "PARTIAL";
+      const newTotalPaidPaisa = totalAlreadyPaidPaisa + paymentPaisa;
+      const newStatus = newTotalPaidPaisa >= obligationPaisa ? "PAID" : "PARTIAL";
 
       await tx.rentObligation.update({
         where: { id: data.obligationId },
@@ -208,8 +84,320 @@ export class PaymentService {
         amount: data.amountPaid,
         method: data.paymentMethod
       });
+
+      // 🔧 FIX C3: Create receipt for ALL payment paths (manual + UPI)
+      // Previously only the UPI finalization path created receipts.
+      // Cash/manual payments (majority of hostel payments) were invisible to the receipt system.
+      receiptService.createReceipt(res.payment.id).then(async (receipt) => {
+        try {
+          const prefs = await getPreferences(res.payment.owner_id || "");
+          if (!prefs.auto_email_receipt) return;
+
+          const renderContext = receipt._renderContext || {
+            footer: prefs.receipt_footer || null,
+            currency: prefs.currency,
+            timezone: prefs.timezone,
+          };
+          const pdfBuffer = await receiptService.renderReceiptPdf(receipt, renderContext);
+          const tenant = await prisma.tenant.findUnique({
+            where: { id: res.payment.tenant_id },
+            include: { profile: true },
+          });
+          if (tenant?.profile?.email) {
+            const rentMonth = formatMonthYear(receipt.rent_month, prefs);
+            await EmailService.sendReceipt({
+              toEmail: tenant.profile.email,
+              name: tenant.profile.name,
+              amount: data.amountPaid,
+              rentMonth,
+              reference: receipt.receipt_number,
+              pdfBuffer,
+            });
+          }
+        } catch (err) {
+          console.error("[recordPayment] Receipt email failed:", err);
+        }
+      }).catch(err => console.error("[recordPayment] Receipt creation failed:", err));
+
+      // 🔧 FIX M3: Audit log for all payment recordings
+      await eventLog.log("PAYMENT_RECORDED", data.userId || null, {
+        payment_id: res.payment.id,
+        obligation_id: data.obligationId,
+        amount: data.amountPaid,
+        method: data.paymentMethod,
+      });
+
       return res;
     });
+  }
+
+  /**
+   * 💰 FIFO Payment Allocation — Financial-Grade Implementation
+   *
+   * Total payable = RENT + ALL unpaid LATE_FEEs
+   *
+   * Safety guarantees:
+   * 1. Row-level locking (FOR UPDATE) — prevents concurrent double-pay
+   * 2. Idempotency key — prevents duplicate payments from retries/double-clicks
+   * 3. Paisa-safe arithmetic — all math in integer cents, no floating-point
+   * 4. Payment grouping — one payment_group_id per user action
+   * 5. Single receipt — one receipt per group, shows full breakdown
+   * 6. FIFO order — oldest due_date first, RENT before LATE_FEE within same date
+   * 7. Partial payments allowed — remaining obligations stay PENDING/PARTIAL
+   */
+  async recordTenantPayment(data: {
+    tenantId: string;
+    amountPaid: number;
+    paymentMethod: string;
+    referenceNumber?: string;
+    paymentDate?: Date;
+    userId?: string;
+    paymentAttemptId?: string;
+    idempotencyKey?: string;
+  }) {
+    // ── 1. INPUT VALIDATION ──
+    if (!data.tenantId) throw new Error("BAD_REQUEST: tenant_id is required");
+    if (!data.paymentMethod) throw new Error("BAD_REQUEST: payment_method is required");
+    if (!Number.isFinite(data.amountPaid) || data.amountPaid <= 0) {
+      throw new Error("BAD_REQUEST: amount_paid must be a positive finite number");
+    }
+    if (data.amountPaid > 10_000_000) {
+      throw new Error("BAD_REQUEST: amount_paid exceeds maximum allowed (₹1 crore)");
+    }
+
+    // Convert to paisa for all arithmetic (prevents floating-point errors)
+    const amountPaisa = Math.round(data.amountPaid * 100);
+
+    // ── 2. IDEMPOTENCY CHECK ──
+    // If caller provides a key, check if this payment was already processed.
+    // This prevents duplicate payments from retries, double-clicks, or network failures.
+    if (data.idempotencyKey) {
+      const existing = await prisma.payment.findFirst({
+        where: { idempotency_key: data.idempotencyKey },
+        select: { payment_group_id: true, amount_paid: true, created_at: true },
+      });
+      if (existing) {
+        console.info(`[PAYMENT] Idempotent skip: key=${data.idempotencyKey}, group=${existing.payment_group_id}`);
+        // Return the existing group's data
+        const groupPayments = await prisma.payment.findMany({
+          where: { payment_group_id: existing.payment_group_id! },
+          include: { obligation: { select: { obligation_type: true, rent_month: true } } },
+        });
+        return {
+          duplicate: true,
+          payment_group_id: existing.payment_group_id,
+          totalPaid: groupPayments.reduce((s, p) => s + Number(p.amount_paid), 0),
+          payments: groupPayments.map(p => ({
+            payment_id: p.id,
+            obligation_id: p.obligation_id,
+            obligation_type: p.obligation?.obligation_type,
+            allocated: Number(p.amount_paid),
+          })),
+        };
+      }
+    }
+
+    const groupId = crypto.randomUUID();
+
+    // ── 3. ATOMIC TRANSACTION WITH ROW-LEVEL LOCKING ──
+    const txResult = await prisma.$transaction(async (tx: any) => {
+      // Lock ALL PENDING/PARTIAL obligations for this tenant.
+      // FOR UPDATE prevents any concurrent transaction from reading or modifying these rows
+      // until our transaction commits. This eliminates the double-pay race condition.
+      const lockedRows: { id: string }[] = await tx.$queryRaw`
+        SELECT id FROM rent_obligations
+        WHERE tenant_id = ${data.tenantId}::uuid
+          AND status IN ('PENDING', 'PARTIAL')
+        ORDER BY due_date ASC
+        FOR UPDATE
+      `;
+
+      if (lockedRows.length === 0) {
+        throw new Error("BAD_REQUEST: No unpaid obligations found for this tenant");
+      }
+
+      // Now read the full data (rows are locked, safe from concurrent modification)
+      const obligations = await tx.rentObligation.findMany({
+        where: { id: { in: lockedRows.map(r => r.id) } },
+        include: { payments: { select: { amount_paid: true } } },
+        orderBy: { due_date: "asc" },
+      });
+
+      // Sort: FIFO by due_date, then RENT before LATE_FEE within same date
+      obligations.sort((a: any, b: any) => {
+        const dateDiff = new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+        if (dateDiff !== 0) return dateDiff;
+        if (a.obligation_type === "RENT" && b.obligation_type !== "RENT") return -1;
+        if (a.obligation_type !== "RENT" && b.obligation_type === "RENT") return 1;
+        return 0;
+      });
+
+      // Calculate total outstanding IN PAISA
+      let totalDuePaisa = 0;
+      const obData = obligations.map((ob: any) => {
+        const paidPaisa = ob.payments.reduce(
+          (s: number, p: any) => s + Math.round(Number(p.amount_paid) * 100), 0
+        );
+        const duePaisa = Math.round(Number(ob.amount) * 100);
+        const outstandingPaisa = Math.max(duePaisa - paidPaisa, 0);
+        totalDuePaisa += outstandingPaisa;
+        return { ob, paidPaisa, duePaisa, outstandingPaisa };
+      });
+
+      // Reject overpayment
+      if (amountPaisa > totalDuePaisa) {
+        throw new Error(
+          `BAD_REQUEST: Payment (${(amountPaisa / 100).toFixed(2)}) exceeds total due (${(totalDuePaisa / 100).toFixed(2)})`
+        );
+      }
+
+      // ── 4. FIFO ALLOCATION ──
+      let remainingPaisa = amountPaisa;
+      const allocations: any[] = [];
+
+      for (const { ob, paidPaisa, duePaisa, outstandingPaisa } of obData) {
+        if (remainingPaisa <= 0) break;
+        if (outstandingPaisa <= 0) continue;
+
+        const allocPaisa = Math.min(remainingPaisa, outstandingPaisa);
+        const allocRupees = allocPaisa / 100;
+
+        const payment = await tx.payment.create({
+          data: {
+            obligation_id: ob.id,
+            tenant_id: data.tenantId,
+            owner_id: ob.owner_id,
+            amount_paid: allocRupees,
+            payment_method: data.paymentMethod,
+            reference_number: data.referenceNumber,
+            payment_date: data.paymentDate || new Date(),
+            payment_attempt_id: data.paymentAttemptId || null,
+            payment_group_id: groupId,
+            // Only first payment in group gets the idempotency key (unique constraint)
+            idempotency_key: allocations.length === 0 ? (data.idempotencyKey || null) : null,
+          },
+        });
+
+        const newTotalPaidPaisa = paidPaisa + allocPaisa;
+        const newStatus = newTotalPaidPaisa >= duePaisa ? "PAID" : "PARTIAL";
+
+        await tx.rentObligation.update({
+          where: { id: ob.id },
+          data: { status: newStatus },
+        });
+
+        allocations.push({
+          payment_id: payment.id,
+          obligation_id: ob.id,
+          obligation_type: ob.obligation_type,
+          rent_month: ob.rent_month,
+          allocated: allocRupees,
+          new_status: newStatus,
+        });
+
+        remainingPaisa -= allocPaisa;
+      }
+
+      const totalPaid = amountPaisa / 100;
+      const totalDue = totalDuePaisa / 100;
+      const remaining = remainingPaisa / 100;
+      const overallStatus = remainingPaisa <= 0 && amountPaisa >= totalDuePaisa ? "PAID" : "PARTIAL";
+
+      return { allocations, totalDue, totalPaid, remaining, overallStatus, groupId };
+    });
+
+    // ── 5. POST-TRANSACTION: Events, receipt, audit log ──
+    // (Outside transaction — idempotent side-effects)
+
+    // Fire payment events
+    for (const alloc of txResult.allocations) {
+      await eventSystem.trigger("payment_recorded", {
+        payment_id: alloc.payment_id,
+        obligation_id: alloc.obligation_id,
+        tenant_id: data.tenantId,
+        amount: alloc.allocated,
+        method: data.paymentMethod,
+        group_id: txResult.groupId,
+      });
+    }
+
+    // ONE receipt per payment group (not per allocation)
+    // Uses the FIRST payment in the group as the anchor, stores full breakdown
+    const firstPaymentId = txResult.allocations[0]?.payment_id;
+    if (firstPaymentId) {
+      receiptService.createReceipt(firstPaymentId).catch(err =>
+        console.error("[recordTenantPayment] Receipt creation failed:", err)
+      );
+    }
+
+    // Audit log
+    await eventLog.log("TENANT_PAYMENT_RECORDED", data.userId || null, {
+      tenant_id: data.tenantId,
+      payment_group_id: txResult.groupId,
+      total_paid: txResult.totalPaid,
+      total_due: txResult.totalDue,
+      allocations: txResult.allocations.map((a: any) => ({
+        obligation_type: a.obligation_type,
+        amount: a.allocated,
+        status: a.new_status,
+      })),
+      method: data.paymentMethod,
+      idempotency_key: data.idempotencyKey || null,
+    });
+
+    return txResult;
+  }
+
+  /**
+   * 📊 Get total dues for a tenant — aggregates RENT + LATE_FEE obligations
+   *
+   * This is what the frontend payment page should call to show:
+   *   [ ] Rent (May 2026) — ₹8,000
+   *   [ ] Late Fee (Apr 2026) — ₹500
+   *   [ ] Late Fee (Apr 2026) — ₹200
+   *   Total: ₹8,700
+   */
+  async getTenantTotalDues(tenantId: string) {
+    const obligations = await prisma.rentObligation.findMany({
+      where: {
+        tenant_id: tenantId,
+        status: { in: ["PENDING", "PARTIAL"] },
+      },
+      include: {
+        payments: { select: { amount_paid: true } },
+        allocation: { include: { room: { select: { room_no: true } } } },
+      },
+      orderBy: [{ due_date: "asc" }],
+    });
+
+    const items = obligations.map((ob: any) => {
+      const paid = ob.payments.reduce((s: number, p: any) => s + Number(p.amount_paid), 0);
+      const outstanding = Math.max(Number(ob.amount) - paid, 0);
+      return {
+        obligation_id: ob.id,
+        type: ob.obligation_type,
+        rent_month: ob.rent_month,
+        due_date: ob.due_date,
+        amount: Number(ob.amount),
+        paid,
+        outstanding,
+        status: ob.status,
+        room_no: ob.allocation?.room?.room_no || null,
+      };
+    });
+
+    const totalDue = items.reduce((s, i) => s + i.outstanding, 0);
+    const rentDue = items.filter(i => i.type === "RENT").reduce((s, i) => s + i.outstanding, 0);
+    const lateFeesDue = items.filter(i => i.type === "LATE_FEE").reduce((s, i) => s + i.outstanding, 0);
+
+    return {
+      tenant_id: tenantId,
+      items,
+      total_due: totalDue,
+      rent_due: rentDue,
+      late_fees_due: lateFeesDue,
+      obligation_count: items.length,
+    };
   }
 
   async createPaymentIntent(obligationId: string, amount: number | null, userId: string, tenantId?: string) {
@@ -238,29 +426,29 @@ export class PaymentService {
 
     // 2️⃣ Partial Payment Enforcement
     if (!allowPartial && validationAmount < balance) {
-        throw new Error(`BAD_REQUEST: Partial payments are disabled by the owner. Full payment of ${formatCurrency(balance)} is required.`);
+      throw new Error(`BAD_REQUEST: Partial payments are disabled by the owner. Full payment of ${formatCurrency(balance)} is required.`);
     }
 
     // 3️⃣ Minimum Amount Enforcement
     if (validationAmount < minAmount && validationAmount < balance) {
-        throw new Error(`BAD_REQUEST: Minimum payment amount allowed is ${formatCurrency(minAmount)}.`);
+      throw new Error(`BAD_REQUEST: Minimum payment amount allowed is ${formatCurrency(minAmount)}.`);
     }
 
     if (validationAmount > balance) {
-        throw new Error(`BAD_REQUEST: Payment (${formatCurrency(validationAmount)}) exceeds outstanding balance (${formatCurrency(balance)}).`);
+      throw new Error(`BAD_REQUEST: Payment (${formatCurrency(validationAmount)}) exceeds outstanding balance (${formatCurrency(balance)}).`);
     }
 
     // Check for existing pending or newly created attempt
     const existingAttempt = await prisma.paymentAttempt.findFirst({
-        where: {
-            obligation_id: obligationId,
-            status: { in: ["PENDING", "CREATED"] },
-            OR: [
-              { expires_at: null, created_at: { gte: new Date(Date.now() - 5 * 60 * 1000) } }, // CREATED state protection
-              { expires_at: { gte: new Date() } } // PENDING state protection
-            ]
-        },
-        orderBy: { created_at: "desc" }
+      where: {
+        obligation_id: obligationId,
+        status: { in: ["PENDING", "CREATED"] },
+        OR: [
+          { expires_at: null, created_at: { gte: new Date(Date.now() - 5 * 60 * 1000) } }, // CREATED state protection
+          { expires_at: { gte: new Date() } } // PENDING state protection
+        ]
+      },
+      orderBy: { created_at: "desc" }
     });
 
     if (existingAttempt) {
@@ -289,57 +477,57 @@ export class PaymentService {
       amount: validationAmount,
       merchantTxnId,
     });
-    
+
     const attempt = await prisma.paymentAttempt.create({
-        data: {
-            obligation_id: obligationId,
-            tenant_id: obligation.tenant_id,
-            owner_id: obligation.owner_id || "",
-            provider: provider,
-            merchant_txn_id: merchantTxnId,
-            amount: validationAmount,
-            status: "CREATED"
-        }
+      data: {
+        obligation_id: obligationId,
+        tenant_id: obligation.tenant_id,
+        owner_id: obligation.owner_id || "",
+        provider: provider,
+        merchant_txn_id: merchantTxnId,
+        amount: validationAmount,
+        status: "CREATED"
+      }
     });
 
     try {
-        const result = await instance.createIntent({
-            amount: validationAmount,
-            merchant_txn_id: merchantTxnId,
-            tenant_name: obligation.tenant.profile.name,
-            tenant_email: obligation.tenant.profile.email,
-            tenant_phone: obligation.tenant.profile.phone || "",
-            metadata: {
-                obligation_id: obligationId,
-                tenant_id: obligation.tenant_id,
-                attempt_id: attempt.id
-            }
-        });
+      const result = await instance.createIntent({
+        amount: validationAmount,
+        merchant_txn_id: merchantTxnId,
+        tenant_name: obligation.tenant.profile.name,
+        tenant_email: obligation.tenant.profile.email,
+        tenant_phone: obligation.tenant.profile.phone || "",
+        metadata: {
+          obligation_id: obligationId,
+          tenant_id: obligation.tenant_id,
+          attempt_id: attempt.id
+        }
+      });
 
-        return await prisma.paymentAttempt.update({
-            where: { id: attempt.id },
-            data: {
-                status: "PENDING",
-                gateway_txn_id: result.gateway_txn_id,
-                upi_intent_url: result.upi_intent_url,
-                qr_payload: result.qr_payload,
-                checkout_url: result.checkout_url,
-                expires_at: result.expires_at,
-                raw_create_response: result.raw_response as any
-            }
-        });
+      return await prisma.paymentAttempt.update({
+        where: { id: attempt.id },
+        data: {
+          status: "PENDING",
+          gateway_txn_id: result.gateway_txn_id,
+          upi_intent_url: result.upi_intent_url,
+          qr_payload: result.qr_payload,
+          checkout_url: result.checkout_url,
+          expires_at: result.expires_at,
+          raw_create_response: result.raw_response as any
+        }
+      });
     } catch (error) {
-            console.error("[payments.createIntent] provider create failed", {
-              attemptId: attempt.id,
-              provider,
-              merchantTxnId,
-              error: String(error),
-            });
-        await prisma.paymentAttempt.update({
-            where: { id: attempt.id },
-            data: { status: "FAILED", raw_create_response: { error: String(error) } as any }
-        });
-        throw error;
+      console.error("[payments.createIntent] provider create failed", {
+        attemptId: attempt.id,
+        provider,
+        merchantTxnId,
+        error: String(error),
+      });
+      await prisma.paymentAttempt.update({
+        where: { id: attempt.id },
+        data: { status: "FAILED", raw_create_response: { error: String(error) } as any }
+      });
+      throw error;
     }
   }
 
@@ -359,85 +547,48 @@ export class PaymentService {
 
   async finalizePaymentAttempt(attemptId: string, status: string, gatewayTxnId?: string, rawPayload?: any) {
     const attempt = await prisma.paymentAttempt.findUnique({
-        where: { id: attemptId },
-        include: { payments: true }
+      where: { id: attemptId },
+      include: { payments: true }
     });
 
     if (!attempt) throw new Error("NOT_FOUND: Attempt not found");
     if (attempt.status === "SUCCESS") return attempt;
 
     if (status !== "SUCCESS") {
-        return await prisma.paymentAttempt.update({
-            where: { id: attemptId },
-            data: {
-                status: status as any,
-                gateway_txn_id: gatewayTxnId,
-                raw_webhook_payload: rawPayload || null
-            }
-        });
+      return await prisma.paymentAttempt.update({
+        where: { id: attemptId },
+        data: {
+          status: status as any,
+          gateway_txn_id: gatewayTxnId,
+          raw_webhook_payload: rawPayload || null
+        }
+      });
     }
 
     // Success path
     if (attempt.payments.length > 0) {
-        return await prisma.paymentAttempt.update({
-            where: { id: attemptId },
-            data: { status: "SUCCESS", gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null, confirmed_at: new Date() }
-        });
+      return await prisma.paymentAttempt.update({
+        where: { id: attemptId },
+        data: { status: "SUCCESS", gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null, confirmed_at: new Date() }
+      });
     }
 
     const recordResult = await this.recordPayment({
-        obligationId: attempt.obligation_id,
-        amountPaid: Number(attempt.amount),
-        paymentMethod: "UPI",
-        referenceNumber: gatewayTxnId || attempt.merchant_txn_id,
-        paymentDate: new Date(),
-        userId: attempt.owner_id,
-        paymentAttemptId: attempt.id
+      obligationId: attempt.obligation_id,
+      amountPaid: Number(attempt.amount),
+      paymentMethod: "UPI",
+      referenceNumber: gatewayTxnId || attempt.merchant_txn_id,
+      paymentDate: new Date(),
+      userId: attempt.owner_id,
+      paymentAttemptId: attempt.id
     });
 
-    // Create receipt record in DB (idempotent — won't duplicate)
-    // Then conditionally generate PDF and email it based on owner preference
-    receiptService.createReceipt(recordResult.payment.id).then(async (receipt) => {
-        try {
-            // ── Check auto_email_receipt preference via global service ──
-            const prefs = await getPreferences(attempt.owner_id);
-
-            if (!prefs.auto_email_receipt) {
-                console.info("[payments.finalize] auto_email_receipt disabled, skipping receipt email for payment", recordResult.payment.id);
-                return;
-            }
-
-            const renderContext = receipt._renderContext || {
-                footer: prefs.receipt_footer || null,
-                currency: prefs.currency,
-                timezone: prefs.timezone,
-            };
-
-            const pdfBuffer = await receiptService.renderReceiptPdf(receipt, renderContext);
-            const tenant = await prisma.tenant.findUnique({
-                where: { id: attempt.tenant_id },
-                include: { profile: true }
-            });
-            
-            if (tenant?.profile?.email) {
-                const rentMonth = formatMonthYear(receipt.rent_month, prefs);
-                await EmailService.sendReceipt({
-                    toEmail: tenant.profile.email,
-                    name: tenant.profile.name,
-                    amount: Number(attempt.amount),
-                    rentMonth,
-                    reference: receipt.receipt_number,
-                    pdfBuffer
-                });
-            }
-        } catch (emailErr) {
-            console.error("Failed to generate/send receipt email:", emailErr);
-        }
-    }).catch(err => console.error("Failed to create receipt record:", err));
+    // 🔧 Receipt creation now handled inside recordPayment() (FIX C3).
+    // createReceipt is idempotent, so the centralized call covers both UPI and manual paths.
 
     const result = await prisma.paymentAttempt.update({
-        where: { id: attemptId },
-        data: { status: "SUCCESS", gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null, confirmed_at: new Date() }
+      where: { id: attemptId },
+      data: { status: "SUCCESS", gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null, confirmed_at: new Date() }
     });
 
     return result;
@@ -447,12 +598,12 @@ export class PaymentService {
     // This is complex because we need to find the correct attempt
     // For now, let's assume we can match by merchantTxnId in the provider's verifyWebhook
     const providerStr = providerName.toUpperCase();
-    
+
     // We'll search for recent pending attempts of this provider
     const attempts = await prisma.paymentAttempt.findMany({
-        where: { provider: providerStr, status: "PENDING" },
-        orderBy: { created_at: "desc" },
-        take: 20
+      where: { provider: providerStr, status: "PENDING" },
+      orderBy: { created_at: "desc" },
+      take: 20
     });
 
     console.info("[payments.webhook] received", {
@@ -462,41 +613,41 @@ export class PaymentService {
     });
 
     for (const attempt of attempts) {
-        const { instance } = await this.getProviderInstance(attempt.owner_id, attempt.provider);
-        try {
-            const verification = await instance.verifyWebhook(headers, body);
-            if (verification.merchant_txn_id === attempt.merchant_txn_id) {
-              if (verification.status === "SUCCESS") {
-                const expectedPaise = Math.round(Number(attempt.amount) * 100);
-                const receivedPaise =
-                  verification.amount == null ? null : Math.round(Number(verification.amount) * 100);
+      const { instance } = await this.getProviderInstance(attempt.owner_id, attempt.provider);
+      try {
+        const verification = await instance.verifyWebhook(headers, body);
+        if (verification.merchant_txn_id === attempt.merchant_txn_id) {
+          if (verification.status === "SUCCESS") {
+            const expectedPaise = Math.round(Number(attempt.amount) * 100);
+            const receivedPaise =
+              verification.amount == null ? null : Math.round(Number(verification.amount) * 100);
 
-                if (receivedPaise == null || receivedPaise !== expectedPaise) {
-                  console.error("[payments.webhook] amount mismatch", {
-                    attemptId: attempt.id,
-                    merchantTxnId: attempt.merchant_txn_id,
-                    expectedAmount: Number(attempt.amount),
-                    receivedAmount: verification.amount ?? null,
-                  });
-                  throw new Error("BAD_REQUEST: Webhook amount does not match payment attempt");
-                }
-              }
-
-              console.info("[payments.webhook] matched attempt", {
+            if (receivedPaise == null || receivedPaise !== expectedPaise) {
+              console.error("[payments.webhook] amount mismatch", {
                 attemptId: attempt.id,
                 merchantTxnId: attempt.merchant_txn_id,
-                status: verification.status,
+                expectedAmount: Number(attempt.amount),
+                receivedAmount: verification.amount ?? null,
               });
-                return await this.finalizePaymentAttempt(
-                    attempt.id,
-                    verification.status,
-                    verification.gateway_txn_id || undefined,
-                    verification.raw_event
-                );
+              throw new Error("BAD_REQUEST: Webhook amount does not match payment attempt");
             }
-        } catch (e) {
-            continue;
+          }
+
+          console.info("[payments.webhook] matched attempt", {
+            attemptId: attempt.id,
+            merchantTxnId: attempt.merchant_txn_id,
+            status: verification.status,
+          });
+          return await this.finalizePaymentAttempt(
+            attempt.id,
+            verification.status,
+            verification.gateway_txn_id || undefined,
+            verification.raw_event
+          );
         }
+      } catch (e) {
+        continue;
+      }
     }
 
     throw new Error("NOT_FOUND: Matching payment attempt not found or verification failed");
@@ -590,8 +741,8 @@ export class PaymentService {
     if (existingPayments.length > 0) throw new Error("BAD_REQUEST: Cannot waive an obligation with payments");
 
     const obligation = await prisma.rentObligation.update({
-        where: { id: obligationId },
-        data: { status: "WAIVED" }
+      where: { id: obligationId },
+      data: { status: "WAIVED" }
     });
 
     await eventSystem.trigger("rent_waived", { obligationId, userId });
@@ -600,31 +751,31 @@ export class PaymentService {
 
   async getDuesReport(ownerId: string, rentMonth?: Date, status?: string) {
     const dues = await prisma.rentObligation.findMany({
-        where: {
-            owner_id: ownerId,
-            ...(rentMonth && { rent_month: rentMonth }),
-            ...(status ? { status: status as any } : {})
-        },
-        include: {
-            tenant: { include: { profile: true } },
-            allocation: { include: { room: true } },
-            payments: true
-        },
-        orderBy: { rent_month: "desc" }
+      where: {
+        owner_id: ownerId,
+        ...(rentMonth && { rent_month: rentMonth }),
+        ...(status ? { status: status as any } : {})
+      },
+      include: {
+        tenant: { include: { profile: true } },
+        allocation: { include: { room: true } },
+        payments: true
+      },
+      orderBy: { rent_month: "desc" }
     });
 
     return dues.map((d: any) => ({
-        obligation_id: d.id,
-        tenant_id: d.tenant_id,
-        tenant_name: d.tenant.profile.name,
-        tenant_email: d.tenant.profile.email,
-        tenant_phone: d.tenant.profile.phone,
-        room_no: d.allocation?.room?.room_no || "N/A",
-        rent_month: d.rent_month,
-        due_date: d.due_date,
-        amount: Number(d.amount),
-        status: d.status,
-        outstanding: Math.max(0, Number(d.amount) - (d.payments?.reduce((s: number, p: any) => s + Number(p.amount_paid), 0) || 0))
+      obligation_id: d.id,
+      tenant_id: d.tenant_id,
+      tenant_name: d.tenant.profile.name,
+      tenant_email: d.tenant.profile.email,
+      tenant_phone: d.tenant.profile.phone,
+      room_no: d.allocation?.room?.room_no || "N/A",
+      rent_month: d.rent_month,
+      due_date: d.due_date,
+      amount: Number(d.amount),
+      status: d.status,
+      outstanding: Math.max(0, Number(d.amount) - (d.payments?.reduce((s: number, p: any) => s + Number(p.amount_paid), 0) || 0))
     }));
   }
 
@@ -635,33 +786,33 @@ export class PaymentService {
     };
 
     const [payments, total] = await Promise.all([
-        prisma.payment.findMany({
-            where,
-            include: {
-                tenant: { include: { profile: true } },
-                obligation: true
-            },
-            orderBy: { payment_date: "desc" },
-            take: limit,
-            skip: offset
-        }),
-        prisma.payment.count({ where })
+      prisma.payment.findMany({
+        where,
+        include: {
+          tenant: { include: { profile: true } },
+          obligation: true
+        },
+        orderBy: { payment_date: "desc" },
+        take: limit,
+        skip: offset
+      }),
+      prisma.payment.count({ where })
     ]);
 
     return {
-        payments: payments.map((p: any) => ({
-            ...p,
-            tenant_name: p.tenant.profile.name,
-            rent_month: p.obligation.rent_month
-        })),
-        total
+      payments: payments.map((p: any) => ({
+        ...p,
+        tenant_name: p.tenant.profile.name,
+        rent_month: p.obligation.rent_month
+      })),
+      total
     };
   }
 
   private async getExistingPaidAmount(obligationId: string): Promise<number> {
     const payments = await prisma.payment.findMany({
-        where: { obligation_id: obligationId },
-        select: { amount_paid: true }
+      where: { obligation_id: obligationId },
+      select: { amount_paid: true }
     });
     return payments.reduce((sum: number, p: any) => sum + Number(p.amount_paid), 0);
   }
@@ -682,20 +833,20 @@ export class PaymentService {
 
     // UPI Direct provider — tenant pays owner directly via UPI intent link
     return {
-        provider: "PHONEPE", // Provider class name kept for backward compat with existing attempts table
-        config: {
-            owner_upi_id: hostel.upi_id,
-            owner_name: hostel.name || hostel.owner?.name || "Hostel",
-            hostel_id: hostel.id,
-        }
+      provider: "PHONEPE", // Provider class name kept for backward compat with existing attempts table
+      config: {
+        owner_upi_id: hostel.upi_id,
+        owner_name: hostel.name || hostel.owner?.name || "Hostel",
+        hostel_id: hostel.id,
+      }
     };
   }
 
   private async getProviderInstance(ownerId: string, providerName: string) {
     const { config } = await this.getProviderForOwner(ownerId);
     return {
-        instance: PaymentProviderFactory.getProvider(providerName, config),
-        config
+      instance: PaymentProviderFactory.getProvider(providerName, config),
+      config
     };
   }
 
@@ -725,7 +876,7 @@ export class PaymentService {
     let totalDue = 0;
     let totalPaid = 0;
     const allPayments: any[] = [];
-    
+
     // Sort obligations to find earliest unpaid reliably
     const latestUnpaidDueDate = tenant.obligations
       .filter((o: any) => o.status === "PENDING" || o.status === "PARTIAL")
@@ -734,7 +885,7 @@ export class PaymentService {
     const formattedObligations = tenant.obligations.map((o: any) => {
       const obligationPaid = o.payments.reduce((sum: number, p: any) => sum + Number(p.amount_paid), 0);
       const remainingDue = Math.max(0, Number(o.amount) - obligationPaid);
-      
+
       if (o.status !== "WAIVED") totalDue += Number(o.amount);
       totalPaid += obligationPaid;
       o.payments.forEach((p: any) => {
@@ -755,6 +906,7 @@ export class PaymentService {
         rent_month: o.rent_month,
         due_date: o.due_date,
         amount: Number(o.amount),
+        obligation_type: o.obligation_type,
         status: o.status,
         remaining_due: o.status === "WAIVED" ? 0 : remainingDue,
         payments: o.payments.map((p: any) => ({
@@ -802,12 +954,12 @@ export class PaymentService {
         ...(options?.ownerId ? { owner_id: options.ownerId } : {}),
         ...(options?.attemptIds?.length
           ? {
-              OR: [
-                { id: { in: options.attemptIds } },
-                { merchant_txn_id: { in: options.attemptIds } },
-                { gateway_txn_id: { in: options.attemptIds } },
-              ]
-            }
+            OR: [
+              { id: { in: options.attemptIds } },
+              { merchant_txn_id: { in: options.attemptIds } },
+              { gateway_txn_id: { in: options.attemptIds } },
+            ]
+          }
           : {})
       }
     });

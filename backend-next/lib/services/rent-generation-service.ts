@@ -3,6 +3,7 @@ import { eventSystem } from "../events";
 import { invalidateDashboardCache } from "../cache/dashboard-cache";
 import { eventLog } from "./event-log-service";
 import { resolvePreferences } from "../preferences";
+import { getDayInTimezone } from "../timezone";
 
 /**
  * 🏦 Rent Generation Service
@@ -129,14 +130,35 @@ export class RentGenerationService {
         if (triggerType === "cron") {
           const autoGen = config.auto_generate_rent ?? true; // Default to true for backward compat
           if (!autoGen) {
-            console.info(`[RENT] Skipping owner ${alloc.tenant.owner_id} — auto_generate_rent disabled`);
+            console.info(`[RENT] Skipping owner ${ownerId} — auto_generate_rent disabled`);
+            skipped++;
+            continue;
+          }
+
+          // 1️⃣b Per-owner generation-day guard.
+          // The cron runs daily; only process owners whose configured
+          // auto_rent_day matches "today" in THEIR timezone.
+          const tz = config.timezone || "Asia/Kolkata";
+          const expectedDay = Number(config.auto_rent_day ?? 1);
+          const localDay = getDayInTimezone(now, tz);
+
+          console.log("[RENT] day-check", {
+            ownerId,
+            utcNow: now.toISOString(),
+            timezone: tz,
+            localDay,
+            expectedDay,
+            willProcess: localDay === expectedDay,
+          });
+
+          if (localDay !== expectedDay) {
             skipped++;
             continue;
           }
         }
 
         // 2️⃣ Dynamic Due Date from preferences
-        const dueDay = config.due_day || prefs?.due_day || 5;
+        const dueDay = config.due_day ?? prefs?.due_day ?? 5;
         const tenantDueDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), dueDay));
 
         // Rent priority: tenant.monthly_rent > room.base_rent > skip
@@ -170,6 +192,7 @@ export class RentGenerationService {
               owner_id: alloc.tenant.owner_id,
               rent_month: rentMonth,
               amount: rentAmount,
+              total_amount: rentAmount,
               due_date: tenantDueDate,
               status: "PENDING"
             }
@@ -252,9 +275,10 @@ export class RentGenerationService {
       return summary;
 
     } finally {
-      await prisma.systemLock.deleteMany({
-        where: { key: lockKey }
-      }).catch(e => console.error("[RENT] Failed to release DB lock:", e));
+      // 🔧 FIX M4: Use raw SQL for cleanup to match raw SQL lock acquisition
+      // Prevents connection/transaction mismatch between raw SQL INSERT and Prisma ORM DELETE
+      await prisma.$executeRaw`DELETE FROM system_locks WHERE key = ${lockKey}`
+        .catch((e: any) => console.error("[RENT] Failed to release DB lock:", e));
     }
   }
 

@@ -17,7 +17,8 @@ export class ReminderService {
     // Neutralize to UTC Midnight for accurate day comparison checks
     const todayMid = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
 
-    // Only fetch RENT obligations (LATE_FEEs themselves don't accumulate recursive late fees for now)
+    // 🔒 CRITICAL: Only fetch RENT obligations — late fees NEVER generate late fees.
+    // This is the guard that prevents compounding debt spirals.
     const overdueObligations = await prisma.rentObligation.findMany({
       where: {
         status: "PENDING",
@@ -130,22 +131,32 @@ export class ReminderService {
                   }
 
                   if (feeAmount > 0) {
-                    await prisma.rentObligation.create({
-                      data: {
-                        tenant_id: ob.tenant.id,
-                        allocation_id: ob.allocation_id,
-                        owner_id: ob.owner_id,
-                        rent_month: ob.rent_month,
-                        amount: feeAmount,
-                        due_date: todayMid,
-                        status: "PENDING",
-                        obligation_type: "LATE_FEE",
-                      },
-                    });
-                    accumulatedFees += feeAmount;
-                    lateFeesAdded++;
-                    await this.triggerNotification(ob, "LATE_FEE_ADDED", config);
-                    remindersSent++;
+                    try {
+                      await prisma.rentObligation.create({
+                        data: {
+                          tenant_id: ob.tenant.id,
+                          allocation_id: ob.allocation_id,
+                          owner_id: ob.owner_id,
+                          rent_month: ob.rent_month,
+                          amount: feeAmount,
+                          total_amount: feeAmount,
+                          due_date: todayMid,
+                          status: "PENDING",
+                          obligation_type: "LATE_FEE",
+                        },
+                      });
+                      accumulatedFees += feeAmount;
+                      lateFeesAdded++;
+                      await this.triggerNotification(ob, "LATE_FEE_ADDED", config);
+                      remindersSent++;
+                    } catch (feeErr: any) {
+                      if (feeErr?.code === "P2002") {
+                        // Idempotent skip — duplicate caught by unique index
+                        console.info(`[REMINDER] Duplicate per_day late fee skipped for obligation ${ob.id}`);
+                      } else {
+                        throw feeErr;
+                      }
+                    }
                   }
                 }
               } else {
@@ -168,22 +179,32 @@ export class ReminderService {
                   }
 
                   if (feeAmount > 0) {
-                    await prisma.rentObligation.create({
-                      data: {
-                        tenant_id: ob.tenant.id,
-                        allocation_id: ob.allocation_id,
-                        owner_id: ob.owner_id,
-                        rent_month: ob.rent_month,
-                        amount: feeAmount,
-                        due_date: todayMid,
-                        status: "PENDING",
-                        obligation_type: "LATE_FEE",
-                      },
-                    });
-                    accumulatedFees += feeAmount;
-                    lateFeesAdded++;
-                    await this.triggerNotification(ob, "LATE_FEE_ADDED", config);
-                    remindersSent++;
+                    try {
+                      await prisma.rentObligation.create({
+                        data: {
+                          tenant_id: ob.tenant.id,
+                          allocation_id: ob.allocation_id,
+                          owner_id: ob.owner_id,
+                          rent_month: ob.rent_month,
+                          amount: feeAmount,
+                          total_amount: feeAmount,
+                          due_date: todayMid,
+                          status: "PENDING",
+                          obligation_type: "LATE_FEE",
+                        },
+                      });
+                      accumulatedFees += feeAmount;
+                      lateFeesAdded++;
+                      await this.triggerNotification(ob, "LATE_FEE_ADDED", config);
+                      remindersSent++;
+                    } catch (feeErr: any) {
+                      if (feeErr?.code === "P2002") {
+                        // Idempotent skip — duplicate caught by unique index
+                        console.info(`[REMINDER] Duplicate one-time late fee skipped for obligation ${ob.id}`);
+                      } else {
+                        throw feeErr;
+                      }
+                    }
                   }
                 }
               }
@@ -198,7 +219,7 @@ export class ReminderService {
     if (remindersSent > 0 || lateFeesAdded > 0) {
       // Trigger live updates to owners dashboard so they see realtime notifications and late fees collected incrementing
       const affectedOwners = Array.from(new Set(overdueObligations.map(ob => ob.tenant.owner_id).filter(Boolean)));
-      
+
       affectedOwners.forEach(ownerId => {
         if (ownerId) {
           eventSystem.trigger("dashboard_updated", { reason: "reminders_processed", ownerId });
@@ -258,7 +279,7 @@ export class ReminderService {
           type: type as any,
           prefs: config,
         };
-        
+
         await EmailService.sendReminderBatch(mailData);
       } catch (err) {
         console.error(`[NOTIFY] Email failed for ${tenant.id}:`, err);

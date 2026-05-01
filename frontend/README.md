@@ -1,16 +1,73 @@
-# React + Vite
+# HMS Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Vite + React 19 single-page app for the Hostel Management System. Owner and
+tenant dashboards share a single bundle.
 
-Currently, two official plugins are available:
+## Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **React 19** + **React Router 7** (`src/App.jsx`)
+- **Vite 7** build tool (`vite.config.js`)
+- **TailwindCSS 4** with shadcn-style primitives in `src/components/ui/`
+- **@tanstack/react-query 5** for server state
+- **axios** for HTTP (`src/api/axios.js`, `src/api/services.js`)
+- **framer-motion**, **recharts**, **lucide-react**, **react-hot-toast** for UX
+- **@react-oauth/google** for Google sign-in
 
-## React Compiler
+## Route map (from `src/App.jsx`)
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Public:
+- `/`, `/login`, `/register`, `/activate`, `/complete-profile`, `/callback`,
+  `/payment-return`
 
-## Expanding the ESLint configuration
+Protected — owner (`components/ProtectedOwnerRoute.jsx`):
+- `/owner/dashboard`, `/owner/tenants[/:id]`, `/owner/rooms`, `/owner/payments`,
+  `/owner/complaints`, `/owner/expenses`, `/owner/activities`, `/owner/billing`,
+  `/owner/profile`
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Protected — tenant (`components/ProtectedTenantRoute.jsx`):
+- `/tenant/dashboard`, `/tenant/payments`, `/tenant/payment-return`,
+  `/tenant/complaints`, `/tenant/profile`, `/tenant/settings`
+
+## API base URL
+
+Defined in `src/api/axios.js`:
+
+```js
+const PRODUCTION_API_URL = 'https://hms-r68g.vercel.app/api';
+// In non-localhost hosts, VITE_API_URL is ignored — see ../docs/TASKS.md:T-009
+```
+
+Tokens are stored in `localStorage` under `ownerUser` / `tenantUser` and sent
+as `Authorization: Bearer`; `withCredentials: true` is also set so the
+`hms_session` HTTP-only cookie is included. See `../docs/TASKS.md:T-010`.
+
+## Scripts
+
+```bash
+npm install
+npm run dev       # Vite dev server :5173
+npm run build     # Production build → dist/
+npm run preview   # Serve dist/
+npm run lint      # ESLint 9 flat config
+npm test          # Vitest
+npm run coverage  # Vitest with v8 coverage
+```
+
+## Environment variables
+
+| Variable | Purpose |
+|---|---|
+| `VITE_API_URL` | Backend base URL (localhost only — ignored in prod) |
+| `VITE_GOOGLE_CLIENT_ID` | Google OAuth client id |
+| `VITE_GOOGLE_REDIRECT_URI` | Google OAuth redirect URI |
+| `VITE_RAZORPAY_KEY_ID` | Referenced in `.env.example`; no Razorpay code path was found in the current codebase (PhonePe is the only integrated provider). |
+
+## Tests
+
+Vitest config in `vitest.config.js`, setup in `tests/setup.js`. Coverage via
+`@vitest/coverage-v8`.
+
+## Deployment
+
+`vercel.json` exists in this directory; deployed to Vercel separately from the
+Next.js API.

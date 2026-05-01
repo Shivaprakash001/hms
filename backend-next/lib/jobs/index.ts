@@ -1,3 +1,4 @@
+import { rentGenerationService } from "../services/rent-generation-service";
 import { paymentService } from "../services/payment-service";
 
 /**
@@ -15,8 +16,12 @@ export async function dailyReconciliation() {
 
 export async function monthlyRentGeneration() {
   console.log("[Job] Starting monthly rent generation...");
-  const today = new Date();
-  const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-  const result = await paymentService.generateMonthlyRent(nextMonth);
-  console.log(`[Job] Rent generation finished: ${result.generated} created.`);
+  // 🔧 FIX C1: Use the canonical rent generation service (has lock, P2002 catch, UTC dates, preferences)
+  // The old paymentService.generateMonthlyRent was a split-brain duplicate with different rules.
+  const result = await rentGenerationService.generateMonthlyRent(undefined, undefined, "cron");
+  if ("locked" in result) {
+    console.warn(`[Job] Rent generation skipped: ${result.error}`);
+  } else {
+    console.log(`[Job] Rent generation finished: ${result.created} created, ${result.skipped} skipped.`);
+  }
 }

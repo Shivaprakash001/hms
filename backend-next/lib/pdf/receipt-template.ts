@@ -1,25 +1,18 @@
 /**
- * 📄 Receipt HTML Template Renderer — v1
+ * 📄 Receipt HTML Template Renderer
  *
- * TEMPLATE_VERSION: 1
- *
- * Generates a complete, self-contained HTML document from receipt data.
- * All fonts are base64-embedded (no external requests).
- * All values are HTML-escaped (XSS-safe).
- * All formatting uses the global format engine (lib/format.ts).
+ * Generates a complete HTML document from receipt data using the
+ * owner-provided premium receipt design. This HTML is then fed to
+ * Puppeteer for pixel-perfect PDF generation.
  *
  * RULES:
  * - DO NOT modify the HTML structure or CSS
  * - Only inject dynamic values into placeholders
- * - Bump TEMPLATE_VERSION when changing layout/styles
+ * - All formatting uses the global format engine (lib/format.ts)
  */
 
 import type { HostelPreferences } from "../preferences";
-import { formatShortDate, formatMonthYear } from "../format";
-import { getEmbeddedFontCSS, getDefaultLogoDataUri } from "./embedded-fonts";
-
-// ─── Template Version ─────────────────────────────────────────
-export const RECEIPT_TEMPLATE_VERSION = 1;
+import { formatCurrency, formatShortDate, formatMonthYear, formatDateTime } from "../format";
 
 // ─── Data Contract ────────────────────────────────────────────
 
@@ -73,11 +66,11 @@ function esc(val: string | null | undefined): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+    .replace(/"/g, "&quot;");
 }
 
 function formatAmount(amount: number, prefs: Partial<HostelPreferences>): string {
+  // For display like "₹ 8,500.00"
   const symbol = getCurrencySymbolRaw(prefs.currency);
   const formatted = new Intl.NumberFormat(getLocale(prefs.currency), {
     minimumFractionDigits: 2,
@@ -87,6 +80,7 @@ function formatAmount(amount: number, prefs: Partial<HostelPreferences>): string
 }
 
 function formatAmountShort(amount: number, prefs: Partial<HostelPreferences>): string {
+  // For display like "₹ 8,500"
   const symbol = getCurrencySymbolRaw(prefs.currency);
   const formatted = new Intl.NumberFormat(getLocale(prefs.currency), {
     minimumFractionDigits: 0,
@@ -112,16 +106,9 @@ function buildAddressLine(city?: string | null, state?: string | null, pincode?:
 }
 
 function getLogoBlock(data: ReceiptRenderData): string {
-  // Priority: hostel logo URL → default favicon → letter fallback
   if (data.hostel_logo_url) {
     return `<img class="logo-img" src="${esc(data.hostel_logo_url)}" alt="${esc(data.hostel_name)}" />`;
   }
-
-  const defaultLogo = getDefaultLogoDataUri();
-  if (defaultLogo) {
-    return `<img class="logo-img" src="${defaultLogo}" alt="${esc(data.hostel_name)}" />`;
-  }
-
   const initial = (data.hostel_name || "H").charAt(0).toUpperCase();
   return `<span class="logo-fallback">${initial}</span>`;
 }
@@ -148,23 +135,18 @@ export function renderReceiptHTML(data: ReceiptRenderData): string {
   const footerNote = data.footer ||
     "This is a computer-generated receipt and does not require a physical signature. For any payment queries, please contact the hostel management directly.";
 
-  // ── Load embedded fonts (cached after first call) ──
-  const fontCSS = getEmbeddedFontCSS();
-
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Payment Receipt — ${esc(data.receipt_number)}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Mono:wght@400;500&family=Inter:wght@400;500&display=swap" rel="stylesheet" />
+
   <style>
-    /* ── Embedded Fonts (base64, no external requests) ── */
-    ${fontCSS}
-
-    /* ── Reset ── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    /* ── Tokens ── */
     :root {
       --gold:         #C9A84C;
       --gold-dim:     rgba(201, 168, 76, 0.55);
@@ -218,7 +200,6 @@ export function renderReceiptHTML(data: ReceiptRenderData): string {
       border-radius: var(--radius-md);
       display: flex; align-items: center; justify-content: center;
       flex-shrink: 0;
-      overflow: hidden;
     }
     .logo-img { width: 100%; height: 100%; object-fit: contain; border-radius: var(--radius-md); }
     .logo-fallback {

@@ -38,27 +38,7 @@ let _cachedCSS: string | null = null;
 export function getEmbeddedFontCSS(): string {
   if (_cachedCSS) return _cachedCSS;
 
-  // Try multiple possible locations (dev vs production build)
-  const candidates = [
-    path.join(process.cwd(), "lib", "pdf", "fonts"),
-    path.join(__dirname, "fonts"),
-    path.join(__dirname, "..", "pdf", "fonts"),
-  ];
-
-  let fontsDir = "";
-  for (const dir of candidates) {
-    if (fs.existsSync(dir)) {
-      fontsDir = dir;
-      break;
-    }
-  }
-
-  if (!fontsDir) {
-    console.warn("[fonts] No fonts directory found, falling back to system fonts");
-    _cachedCSS = "";
-    return _cachedCSS;
-  }
-
+  const fontsDir = path.join(__dirname, "fonts");
   const blocks: string[] = [];
 
   for (const font of FONTS) {

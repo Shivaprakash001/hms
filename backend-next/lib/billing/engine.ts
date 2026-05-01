@@ -134,7 +134,7 @@ export function calculateLateFees(
     breakdown,
     graceDaysApplied: graceDays,
     effectiveDelay,
-    capApplied: maxCap > 0 && totalLateFee >= maxCap,
+    capApplied: breakdown.some(b => b.capped),
   };
 }
 

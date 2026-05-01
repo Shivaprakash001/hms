@@ -45,7 +45,6 @@ export class PhonePeProvider extends PaymentProvider {
 
   // ─── OAuth Token ───────────────────────────────────────────────
   private cachedToken: { token: string; expiresAt: number } | null = null;
-  private tokenPromise: Promise<string> | null = null;
 
   private async getAccessToken(): Promise<string> {
     // Return cached token if still valid (with 60s buffer)
@@ -53,20 +52,6 @@ export class PhonePeProvider extends PaymentProvider {
       return this.cachedToken.token;
     }
 
-    if (this.tokenPromise) {
-      return this.tokenPromise;
-    }
-
-    this.tokenPromise = this.fetchAccessToken();
-
-    try {
-      return await this.tokenPromise;
-    } finally {
-      this.tokenPromise = null;
-    }
-  }
-
-  private async fetchAccessToken(): Promise<string> {
     const url = `${this.authBaseUrl}/v1/oauth/token`;
 
     const response = await fetch(url, {
@@ -101,17 +86,21 @@ export class PhonePeProvider extends PaymentProvider {
     const accessToken = await this.getAccessToken();
     const amountInPaise = Math.round(data.amount * 100);
 
-    const frontendUrl = process.env.NEXT_PUBLIC_FRONTEND_URL || "https://trishul.solutions";
-    const configuredRedirectUrl = process.env.PHONEPE_REDIRECT_URL || `${frontendUrl}/payment-return`;
-    const redirect = new URL(configuredRedirectUrl);
-    redirect.searchParams.set("attempt_id", data.metadata?.attempt_id || data.merchant_txn_id);
-    const redirectUrl = redirect.toString();
+    const redirectUrl =
+      process.env.PHONEPE_REDIRECT_URL ||
+      `${process.env.NEXT_PUBLIC_FRONTEND_URL || "https://trishul.solutions"}/payment-return`;
 
     const payload: any = {
       merchantOrderId: data.merchant_txn_id,
       merchantUserId: data.tenant_id || "unknown-tenant",
       amount: amountInPaise,
+      redirectUrl,
+      redirectMode: "POST",
+      callbackUrl: `${process.env.NEXT_PUBLIC_FRONTEND_URL || "https://trishul.solutions"}/api/payments/webhook`,
       expireAfter: 1800, // 30 min
+      paymentInstrument: {
+        type: "UPI_QR" // Required by PhonePe sandbox to prevent internal Map.getOrDefault crash
+      },
       paymentFlow: {
         type: "PG_CHECKOUT",
         message: `Rent payment - ${data.tenant_name || "Tenant"}`,
@@ -156,23 +145,7 @@ export class PhonePeProvider extends PaymentProvider {
     }
 
     // Response contains orderId and redirectUrl for the checkout page
-    // Standard V2: responseData.redirectUrl
-    // Standard PG: responseData.data.instrumentResponse.redirectInfo.url
-    const checkoutUrl = responseData.redirectUrl
-      || responseData.data?.redirectUrl
-      || responseData.data?.instrumentResponse?.redirectInfo?.url
-      || null;
-
-    if (!checkoutUrl) {
-      console.error("[PhonePe] Create order response missing checkout URL:", responseData);
-      throw new Error("PhonePe order creation failed: missing checkout URL");
-    }
-
-    if (checkoutUrl === redirectUrl || checkoutUrl.includes("/payment-return")) {
-      console.error("[PhonePe] Create order returned merchant redirect instead of checkout URL:", responseData);
-      throw new Error("PhonePe order creation failed: invalid checkout URL");
-    }
-      
+    const checkoutUrl = responseData.redirectUrl || responseData.data?.redirectUrl || null;
     const orderId = responseData.orderId || responseData.data?.orderId || null;
 
     return {
@@ -264,31 +237,22 @@ export class PhonePeProvider extends PaymentProvider {
     let status: "SUCCESS" | "FAILED" | "PENDING" = "PENDING";
     const state = (payload.state || "").toUpperCase();
 
-    if (
-      state === "COMPLETED" ||
-      state === "PAYMENT_SUCCESS" ||
-      event === "checkout.order.completed" ||
-      event === "pg.order.completed"
-    ) {
+    if (state === "COMPLETED" || event === "checkout.order.completed" || event === "pg.order.completed") {
       status = "SUCCESS";
-    } else if (
-      ["FAILED", "PAYMENT_ERROR", "CANCELLED", "TIMED_OUT", "EXPIRED"].includes(state) ||
-      event === "checkout.order.failed" ||
-      event === "pg.order.failed"
-    ) {
+    } else if (state === "FAILED" || event === "checkout.order.failed" || event === "pg.order.failed") {
       status = "FAILED";
     }
 
     // 4. Extract payment details
     const paymentDetail = payload.paymentDetails?.[0];
     const gatewayTxnId = paymentDetail?.transactionId || payload.orderId || null;
-    const amountInPaise = Number(payload.amount ?? paymentDetail?.amount);
+    const amountInPaise = payload.amount || paymentDetail?.amount || 0;
 
     return {
       merchant_txn_id: payload.merchantOrderId,
       gateway_txn_id: gatewayTxnId,
       status,
-      amount: Number.isFinite(amountInPaise) ? amountInPaise / 100 : null,
+      amount: amountInPaise / 100,
       raw_event: parsed,
     };
   }
@@ -309,25 +273,14 @@ export class PhonePeProvider extends PaymentProvider {
     const responseData = await response.json();
 
     let status: "SUCCESS" | "FAILED" | "PENDING" = "PENDING";
-    const state = (responseData.state || responseData.payload?.state || responseData.data?.state || "").toUpperCase();
-    const code = (responseData.code || responseData.payload?.code || responseData.data?.code || "").toUpperCase();
+    const state = (responseData.state || responseData.payload?.state || "").toUpperCase();
 
-    if (state === "COMPLETED" || state === "PAYMENT_SUCCESS" || code === "PAYMENT_SUCCESS") status = "SUCCESS";
-    else if (
-      ["FAILED", "CANCELLED", "TIMED_OUT", "EXPIRED"].includes(state) ||
-      ["PAYMENT_ERROR", "INTERNAL_SERVER_ERROR", "PAYMENT_DECLINED"].includes(code)
-    ) status = "FAILED";
+    if (state === "COMPLETED") status = "SUCCESS";
+    else if (state === "FAILED") status = "FAILED";
 
     return {
       status,
-      gateway_txn_id:
-        responseData.paymentDetails?.[0]?.transactionId ||
-        responseData.payload?.paymentDetails?.[0]?.transactionId ||
-        responseData.data?.paymentDetails?.[0]?.transactionId ||
-        responseData.orderId ||
-        responseData.payload?.orderId ||
-        gateway_txn_id ||
-        null,
+      gateway_txn_id: responseData.orderId || responseData.payload?.orderId || gateway_txn_id || null,
       raw_status: responseData,
     };
   }

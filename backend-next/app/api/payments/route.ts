@@ -41,10 +41,10 @@ export async function POST(req: Request) {
     }
 
     const data = await req.json();
-    
+
     // Authorization check for manual recording: only OWNER/ADMIN
     if (user.role !== "OWNER" && user.role !== "ADMIN") {
-        return apiError("Only owners can record manual payments", "FORBIDDEN", 403);
+      return apiError("Only owners can record manual payments", "FORBIDDEN", 403);
     }
 
     const result = await paymentService.recordPayment({
