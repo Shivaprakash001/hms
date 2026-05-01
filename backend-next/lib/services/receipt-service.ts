@@ -15,7 +15,7 @@ import { prisma } from "../db";
 import crypto from "crypto";
 import { getHostelWithPreferences } from "../preferences";
 import { htmlToPdf } from "../pdf/browser";
-import { renderReceiptHTML, type ReceiptRenderData } from "../pdf/receipt-template";
+import { renderReceiptHTML, RECEIPT_TEMPLATE_VERSION, type ReceiptRenderData } from "../pdf/receipt-template";
 
 export class ReceiptService {
 
@@ -98,6 +98,7 @@ export class ReceiptService {
         hostel_name: hostel?.name || "HMS Hostel",
         tenant_name: payment.tenant.profile.name,
         rent_month: payment.obligation.rent_month,
+        invoice_template_version: RECEIPT_TEMPLATE_VERSION,
       },
     });
 
