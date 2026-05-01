@@ -143,6 +143,34 @@ jobs:
           if [[ "$DIRECT_URL" == *"pooler"* ]]; then echo "❌ ERROR: DIRECT_URL must NOT use pooler" >&2; exit 1; fi
           echo "✅ DIRECT_URL looks valid"
 
+      - name: Force IPv4 for Postgres (PGHOSTADDR)
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: |
+          set -euo pipefail
+          hp="${DIRECT_URL#*@}"
+          hostport="${hp%%/*}"
+          host="${hostport%%:*}"
+          echo "Resolving IPv4 for: $host"
+          ipv4=$(getent ahostsv4 "$host" | awk '{print $1; exit}')
+          if [ -z "${ipv4:-}" ]; then
+            ipv4=$(getent hosts "$host" | awk '$1 !~ /:/{print $1; exit}')
+          fi
+          if [ -z "${ipv4:-}" ]; then echo "❌ Could not resolve IPv4 for $host" >&2; exit 1; fi
+          echo "Using IPv4 $ipv4"
+          echo "PGHOSTADDR=$ipv4" >> $GITHUB_ENV
+
+      - name: Verify PGHOSTADDR
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: |
+          set -euo pipefail
+          echo "PGHOSTADDR=$PGHOSTADDR"
+          hp="${DIRECT_URL#*@}"
+          hostport="${hp%%/*}"
+          host="${hostport%%:*}"
+          getent hosts "$host" || true
+
       - name: Debug environment and connectivity
         env:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
@@ -158,7 +186,7 @@ jobs:
           hostport="${hostport%%/*}"
           echo "Connecting to host:port -> ${hostport}"
           echo "Testing DB connectivity (no secrets logged)..."
-          psql "$DIRECT_URL" -c "select now();" >/dev/null
+          PGHOSTADDR="$PGHOSTADDR" psql "$DIRECT_URL" -c "select now();" >/dev/null
 
       - name: Create backup directory
         run: mkdir -p backups
@@ -166,7 +194,7 @@ jobs:
       - name: Full database dump
         run: |
           set -euo pipefail
-          pg_dump "$DIRECT_URL" \
+          PGHOSTADDR="$PGHOSTADDR" pg_dump "$DIRECT_URL" \
             --no-owner \
             --no-privileges \
             --clean \
@@ -179,7 +207,7 @@ jobs:
       - name: Full database dump (SQL format)
         run: |
           set -euo pipefail
-          pg_dump "$DIRECT_URL" \
+          PGHOSTADDR="$PGHOSTADDR" pg_dump "$DIRECT_URL" \
             --no-owner \
             --no-privileges \
             --clean \
