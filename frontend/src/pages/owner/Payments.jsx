@@ -245,7 +245,15 @@ const Payments = () => {
                 alert('Invalid payment ID');
                 return;
             }
-            await paymentService.downloadInvoice(paymentId);
+            const blob = await paymentService.downloadReceipt(paymentId);
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Receipt_${paymentId.substring(0, 8)}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
         } catch (error) {
             console.error("Failed to download receipt:", error?.response?.data || error);
             let errorMessage = 'Failed to download receipt';

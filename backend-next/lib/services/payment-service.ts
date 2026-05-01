@@ -413,7 +413,7 @@ export class PaymentService {
                 timezone: prefs.timezone,
             };
 
-            const pdfBuffer = receiptService.renderReceiptPdf(receipt, renderContext);
+            const pdfBuffer = await receiptService.renderReceiptPdf(receipt, renderContext);
             const tenant = await prisma.tenant.findUnique({
                 where: { id: attempt.tenant_id },
                 include: { profile: true }

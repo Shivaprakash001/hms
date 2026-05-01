@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
-export const runtime = "nodejs"; // Needed for buffer & pdfkit
+export const runtime = "nodejs";
+export const maxDuration = 30; // Puppeteer needs more time than default
 
 import { NextResponse } from "next/server";
 import { receiptService } from "@/lib/services/receipt-service";
@@ -14,15 +15,15 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
     const { id: paymentId } = params;
 
-    // Generate the PDF buffer
+    // Generate the PDF buffer via Puppeteer
     const pdfBuffer = await receiptService.generatePdfBuffer(paymentId);
 
-    // Return it as a downloadable file
     return new NextResponse(pdfBuffer as any, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="receipt_${paymentId.substring(0, 8)}.pdf"`,
+        "Content-Disposition": `inline; filename="receipt_${paymentId.substring(0, 8)}.pdf"`,
+        "Cache-Control": "private, max-age=300",
       },
     });
   } catch (error: any) {
