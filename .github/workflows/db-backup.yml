@@ -42,6 +42,23 @@ jobs:
           if [[ "$DIRECT_URL" == *"pooler"* ]]; then echo "❌ ERROR: DIRECT_URL must NOT use pooler" >&2; exit 1; fi
           echo "✅ DIRECT_URL looks valid"
 
+      - name: Force IPv4 for Postgres (PGHOSTADDR)
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: |
+          set -euo pipefail
+          hp="${DIRECT_URL#*@}"
+          hostport="${hp%%/*}"
+          host="${hostport%%:*}"
+          echo "Resolving IPv4 for: $host"
+          ipv4=$(getent ahostsv4 "$host" | awk '{print $1; exit}')
+          if [ -z "${ipv4:-}" ]; then
+            ipv4=$(getent hosts "$host" | awk '$1 !~ /:/{print $1; exit}')
+          fi
+          if [ -z "${ipv4:-}" ]; then echo "❌ Could not resolve IPv4 for $host" >&2; exit 1; fi
+          echo "Using IPv4 $ipv4"
+          echo "PGHOSTADDR=$ipv4" >> $GITHUB_ENV
+
       - name: Check if today is the 1st of the month
         id: monthly
         run: |
@@ -203,8 +220,20 @@ jobs:
           hostport="${DIRECT_URL#*@}"
           hostport="${hostport%%/*}"
           echo "Connecting to host:port -> ${hostport}"
-          echo "Testing DB connectivity (no secrets logged)..."
-          PGHOSTADDR="$PGHOSTADDR" psql "$DIRECT_URL" -c "select now();" >/dev/null
+          echo "Resolving IPv4 and testing DB connectivity (no secrets logged)..."
+          # Resolve hostname -> IPv4
+          host="${hostport%%:*}"
+          ipv4=$(getent ahostsv4 "$host" | awk '{print $1; exit}')
+          if [ -z "${ipv4:-}" ]; then
+            ipv4=$(getent hosts "$host" | awk '$1 !~ /:/{print $1; exit}')
+          fi
+          if [ -z "${ipv4:-}" ]; then echo "❌ Could not resolve IPv4 for $host" >&2; exit 1; fi
+          echo "Using IPv4 $ipv4"
+          # Build IP-based DSN: postgresql://USER:PASS@IP:5432/DB?sslmode=require
+          up="${DIRECT_URL#postgresql://}"; up="${up%@*}"
+          dbn="${DIRECT_URL##*/}"; dbn="${dbn%%\?*}"
+          IP_DSN="postgresql://${up}@${ipv4}:5432/${dbn}?sslmode=require"
+          psql "$IP_DSN" -c "select now();" >/dev/null
 
       - name: Create backup directory
         run: mkdir -p backups
@@ -212,7 +241,15 @@ jobs:
       - name: Full database dump
         run: |
           set -euo pipefail
-          PGHOSTADDR="$PGHOSTADDR" pg_dump "$DIRECT_URL" \
+          # Build IP-based DSN
+          hostport="${DIRECT_URL#*@}"; hostport="${hostport%%/*}"; host="${hostport%%:*}"
+          ipv4=$(getent ahostsv4 "$host" | awk '{print $1; exit}')
+          if [ -z "${ipv4:-}" ]; then ipv4=$(getent hosts "$host" | awk '$1 !~ /:/{print $1; exit}'); fi
+          if [ -z "${ipv4:-}" ]; then echo "❌ Could not resolve IPv4 for $host" >&2; exit 1; fi
+          up="${DIRECT_URL#postgresql://}"; up="${up%@*}"
+          dbn="${DIRECT_URL##*/}"; dbn="${dbn%%\?*}"
+          IP_DSN="postgresql://${up}@${ipv4}:5432/${dbn}?sslmode=require"
+          pg_dump "$IP_DSN" \
             --no-owner \
             --no-privileges \
             --clean \
@@ -225,7 +262,15 @@ jobs:
       - name: Full database dump (SQL format)
         run: |
           set -euo pipefail
-          PGHOSTADDR="$PGHOSTADDR" pg_dump "$DIRECT_URL" \
+          # Build IP-based DSN
+          hostport="${DIRECT_URL#*@}"; hostport="${hostport%%/*}"; host="${hostport%%:*}"
+          ipv4=$(getent ahostsv4 "$host" | awk '{print $1; exit}')
+          if [ -z "${ipv4:-}" ]; then ipv4=$(getent hosts "$host" | awk '$1 !~ /:/{print $1; exit}'); fi
+          if [ -z "${ipv4:-}" ]; then echo "❌ Could not resolve IPv4 for $host" >&2; exit 1; fi
+          up="${DIRECT_URL#postgresql://}"; up="${up%@*}"
+          dbn="${DIRECT_URL##*/}"; dbn="${dbn%%\?*}"
+          IP_DSN="postgresql://${up}@${ipv4}:5432/${dbn}?sslmode=require"
+          pg_dump "$IP_DSN" \
             --no-owner \
             --no-privileges \
             --clean \
@@ -273,7 +318,7 @@ jobs:
       - name: Dump financial tables
         run: |
           set -euo pipefail
-          pg_dump "$DIRECT_URL" \
+          PGHOSTADDR="$PGHOSTADDR" pg_dump "$DIRECT_URL" \
             --no-owner \
             --no-privileges \
             --clean \
@@ -289,7 +334,7 @@ jobs:
       - name: Export payments CSV ledger
         run: |
           set -euo pipefail
-          psql "$DIRECT_URL" -c "\COPY (
+          PGHOSTADDR="$PGHOSTADDR" psql "$DIRECT_URL" -c "\COPY (
             SELECT 
               p.id,
               p.student_id,
@@ -311,7 +356,7 @@ jobs:
       - name: Export rent obligations CSV
         run: |
           set -euo pipefail
-          psql "$DIRECT_URL" -c "\COPY (
+          PGHOSTADDR="$PGHOSTADDR" psql "$DIRECT_URL" -c "\COPY (
             SELECT * FROM rent_obligations ORDER BY created_at DESC
           ) TO STDOUT WITH CSV HEADER" > backups/finance/rent_obligations_$(date +%F).csv
         env:
@@ -465,13 +510,25 @@ jobs:
         run: |
           set -euo pipefail
           tables=(payments payment_attempts payment_webhook_events rent_obligations profiles students rooms hostels)
+          echo "Resolving IPv4 for source and collecting counts..."
+          hp="${SOURCE_DB_URL#*@}"
+          hostport="${hp%%/*}"
+          host="${hostport%%:*}"
+          ipv4=$(getent ahostsv4 "$host" | awk '{print $1; exit}')
+          if [ -z "${ipv4:-}" ]; then
+            ipv4=$(getent hosts "$host" | awk '$1 !~ /:/{print $1; exit}')
+          fi
+          if [ -z "${ipv4:-}" ]; then echo "❌ Could not resolve IPv4 for $host" >&2; exit 1; fi
+          export PGHOSTADDR="$ipv4"
+          echo "PGHOSTADDR=$PGHOSTADDR"
           echo "Collecting counts from source..."
           : > source_counts.txt
           for t in "${tables[@]}"; do
-            c=$(psql "$SOURCE_DB_URL" -At -c "SELECT COUNT(*) FROM $t;" 2>/dev/null || echo "N/A")
+            c=$(PGHOSTADDR="$PGHOSTADDR" psql "$SOURCE_DB_URL" -At -c "SELECT COUNT(*) FROM $t;" 2>/dev/null || echo "N/A")
             echo "$t $c" >> source_counts.txt
           done
           echo "Collecting counts from restore..."
+          unset PGHOSTADDR || true
           : > restore_counts.txt
           for t in "${tables[@]}"; do
             c=$(psql "$TEMP_DB_URL" -At -c "SELECT COUNT(*) FROM $t;" 2>/dev/null || echo "N/A")
