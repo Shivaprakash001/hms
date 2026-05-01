@@ -60,7 +60,16 @@ jobs:
         run: |
           set -euo pipefail
           pg_dump --version
-          pg_dump "$DIRECT_URL" \
+          hp="${DIRECT_URL#*@}"
+          hostport="${hp%%/*}"
+          host="${hostport%%:*}"
+          ipv4=$(getent ahostsv4 "$host" | awk '{print $1; exit}')
+          if [ -z "${ipv4:-}" ]; then
+            ipv4=$(getent hosts "$host" | awk '$1 !~ /:/{print $1; exit}')
+          fi
+          if [ -z "${ipv4:-}" ]; then echo "❌ Could not resolve IPv4 for $host" >&2; exit 1; fi
+          echo "Using IPv4 $ipv4 for pg_dump (monthly)"
+          PGHOSTADDR="$ipv4" pg_dump "$DIRECT_URL" \
             --no-owner \
             --no-privileges \
             --clean \
@@ -74,7 +83,16 @@ jobs:
         if: steps.monthly.outputs.is_monthly == 'true'
         run: |
           set -euo pipefail
-          pg_dump "$DIRECT_URL" \
+          hp="${DIRECT_URL#*@}"
+          hostport="${hp%%/*}"
+          host="${hostport%%:*}"
+          ipv4=$(getent ahostsv4 "$host" | awk '{print $1; exit}')
+          if [ -z "${ipv4:-}" ]; then
+            ipv4=$(getent hosts "$host" | awk '$1 !~ /:/{print $1; exit}')
+          fi
+          if [ -z "${ipv4:-}" ]; then echo "❌ Could not resolve IPv4 for $host" >&2; exit 1; fi
+          echo "Using IPv4 $ipv4 for pg_dump (monthly SQL)"
+          PGHOSTADDR="$ipv4" pg_dump "$DIRECT_URL" \
             --no-owner \
             --no-privileges \
             --clean \
