@@ -3,7 +3,7 @@
  * Ensures consistent log format across all services
  */
 
-type LogFunction = (message: string, meta?: any) => void;
+type LogFunction = (messageOrMeta: string | Record<string, any>, metaOrMessage?: any) => void;
 type Logger = {
   info: LogFunction;
   warn: LogFunction;
@@ -27,22 +27,44 @@ function write(level: "INFO" | "WARN" | "ERROR" | "METRIC", service: string, eve
   return console.info(line);
 }
 
+function normalizeArgs(messageOrMeta: string | Record<string, any>, metaOrMessage?: any) {
+  if (typeof messageOrMeta === "string") {
+    return { event: messageOrMeta, meta: metaOrMessage };
+  }
+
+  if (typeof metaOrMessage === "string") {
+    return { event: metaOrMessage, meta: messageOrMeta };
+  }
+
+  return {
+    event: "log.event",
+    meta: {
+      ...(messageOrMeta || {}),
+      ...(metaOrMessage || {}),
+    },
+  };
+}
+
 function createLogger(service: string): Logger {
   return {
-    info: (message: string, meta?: any) => {
-      write("INFO", service, message, meta);
+    info: (messageOrMeta: string | Record<string, any>, metaOrMessage?: any) => {
+      const { event, meta } = normalizeArgs(messageOrMeta, metaOrMessage);
+      write("INFO", service, event, meta);
     },
 
-    warn: (message: string, meta?: any) => {
-      write("WARN", service, message, meta);
+    warn: (messageOrMeta: string | Record<string, any>, metaOrMessage?: any) => {
+      const { event, meta } = normalizeArgs(messageOrMeta, metaOrMessage);
+      write("WARN", service, event, meta);
     },
 
-    error: (message: string, meta?: any) => {
-      write("ERROR", service, message, meta);
+    error: (messageOrMeta: string | Record<string, any>, metaOrMessage?: any) => {
+      const { event, meta } = normalizeArgs(messageOrMeta, metaOrMessage);
+      write("ERROR", service, event, meta);
     },
 
-    metrics: (message: string, meta?: any) => {
-      write("METRIC", service, message, meta);
+    metrics: (messageOrMeta: string | Record<string, any>, metaOrMessage?: any) => {
+      const { event, meta } = normalizeArgs(messageOrMeta, metaOrMessage);
+      write("METRIC", service, event, meta);
     },
   };
 }
