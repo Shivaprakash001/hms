@@ -7,7 +7,6 @@ import { receiptService } from "./receipt-service";
 import { getPreferences } from "../preferences";
 import { formatCurrency, formatMonthYear } from "../format";
 import { eventLog } from "./event-log-service";
-import { logger } from "../logger";
 import { incrementPayment, incrementWebhook } from "../metrics";
 
 export class PaymentService {
