@@ -193,6 +193,7 @@ model RentObligation {
   updated_at      DateTime?        @updatedAt @db.Timestamptz(6)
   obligation_type String           @default("RENT")
   attempts        PaymentAttempt[]
+  attempt_links   PaymentAttemptObligation[]
   payments        Payment[]
   reminders       ReminderLog[]
   allocation      RoomAllocation?  @relation(fields: [allocation_id], references: [id])
@@ -300,8 +301,24 @@ model PaymentAttempt {
   invoice             OwnerInvoice?   @relation(fields: [invoice_id], references: [id], onDelete: SetNull)
   tenant              Tenant          @relation(fields: [tenant_id], references: [id])
   payments            Payment[]
+  obligations        PaymentAttemptObligation[]
 
   @@map("payment_attempts")
+  @@schema("public")
+}
+
+model PaymentAttemptObligation {
+  id                String        @id @default(uuid()) @db.Uuid
+  payment_attempt_id String        @db.Uuid
+  obligation_id    String        @db.Uuid
+  amount           Decimal       @db.Decimal(10, 2)
+  created_at        DateTime      @default(now()) @db.Timestamptz(6)
+
+  payment_attempt   PaymentAttempt @relation(fields: [payment_attempt_id], references: [id], onDelete: Cascade)
+  obligation      RentObligation  @relation(fields: [obligation_id], references: [id])
+
+  @@unique([payment_attempt_id, obligation_id])
+  @@map("payment_attempt_obligations")
   @@schema("public")
 }
 

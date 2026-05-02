@@ -636,11 +636,15 @@ export class PaymentService {
         merchant_txn_id: merchantTxnId,
         amount: totalAmount,
         status: "CREATED",
-        raw_create_response: {
-          multi_obligation_ids: obligationIds,
-          breakdown: paymentBreakdown,
-        } as any
       }
+    });
+
+    await prisma.paymentAttemptObligation.createMany({
+      data: paymentBreakdown.map(item => ({
+        payment_attempt_id: attempt.id,
+        obligation_id: item.obligationId,
+        amount: item.amount,
+      }))
     });
 
     try {
@@ -999,16 +1003,16 @@ export class PaymentService {
       return updatedAttempt;
     }
 
-    const rawResponse = attempt.raw_create_response as any;
-    const isMultiOB = rawResponse?.multi_obligation_ids?.length > 0 || rawResponse?.is_multi === true;
-    const breakdown = rawResponse?.breakdown || [];
+    const obligationLinks = await prisma.paymentAttemptObligation.findMany({
+      where: { payment_attempt_id: attemptId }
+    });
 
-    if (isMultiOB && breakdown.length > 0) {
-      for (const item of breakdown) {
-        if (item.amount > 0) {
+    if (obligationLinks.length > 0) {
+      for (const link of obligationLinks) {
+        if (Number(link.amount) > 0) {
           await this.recordPayment({
-            obligationId: item.obligationId,
-            amountPaid: item.amount,
+            obligationId: link.obligation_id,
+            amountPaid: Number(link.amount),
             paymentMethod: "UPI",
             referenceNumber: gatewayTxnId || attempt.merchant_txn_id,
             paymentDate: new Date(),
