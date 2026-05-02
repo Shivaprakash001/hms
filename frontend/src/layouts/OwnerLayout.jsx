@@ -81,7 +81,12 @@ const OwnerLayout = () => {
 
         const connectSSE = async () => {
             try {
-                es = new EventSource('/api/events', { withCredentials: true });
+                // Fetch a short-lived (60s) token — never exposes the main JWT in URLs
+                const { sseService } = await import('../api/services');
+                const shortToken = await sseService.getToken();
+                if (!mounted) return;
+
+                es = new EventSource(`/api/events?token=${encodeURIComponent(shortToken)}`);
 
                 es.onmessage = (event) => {
                     try {

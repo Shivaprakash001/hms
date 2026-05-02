@@ -1,11 +1,20 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getSession, verifyToken } from "@/lib/auth";
 import { addClient, removeClient } from "@/lib/events/event-bus";
 
 export async function GET(req: NextRequest) {
+  // EventSource cannot send custom headers, so we support token via query param
   let session = await getSession(req);
+
+  if (!session) {
+    const { searchParams } = new URL(req.url);
+    const token = searchParams.get("token");
+    if (token) {
+      session = await verifyToken(token);
+    }
+  }
 
   if (!session) {
     return new Response("Unauthorized", { status: 401 });

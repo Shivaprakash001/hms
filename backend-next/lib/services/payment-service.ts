@@ -1077,33 +1077,146 @@ export class PaymentService {
     }));
   }
 
-  async getAllPayments(ownerId: string, limit: number = 50, offset: number = 0, tenantId?: string) {
-    const where: any = {
-      owner_id: ownerId,
-      ...(tenantId ? { tenant_id: tenantId } : {})
+  async getAllPayments(
+    ownerId: string,
+    limit: number = 50,
+    offset: number = 0,
+    filters?: {
+      tenantId?: string;
+      status?: string;
+      method?: string;
+      month?: string;
+    }
+  ) {
+    const month = typeof filters?.month === "string" && /^\d{4}-\d{2}$/.test(filters.month)
+      ? filters.month
+      : undefined;
+
+    const monthStart = month ? new Date(`${month}-01T00:00:00.000Z`) : undefined;
+    const nextMonthStart = monthStart
+      ? new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 1, 0, 0, 0, 0))
+      : undefined;
+
+    const obligations = await prisma.rentObligation.findMany({
+      where: {
+        owner_id: ownerId,
+        ...(filters?.tenantId ? { tenant_id: filters.tenantId } : {}),
+        ...(monthStart && nextMonthStart ? { rent_month: { gte: monthStart, lt: nextMonthStart } } : {})
+      },
+      include: {
+        tenant: { include: { profile: true } },
+        allocation: { include: { room: true } },
+        payments: {
+          where: {
+            ...(filters?.method ? { payment_method: filters.method } : {})
+          },
+          orderBy: { payment_date: "desc" }
+        }
+      },
+      orderBy: [{ rent_month: "desc" }, { due_date: "desc" }]
+    });
+
+    const now = new Date();
+    const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+
+    const entries = obligations.map((ob: any) => {
+      const payments = ob.payments || [];
+      const paidAmount = payments.reduce((sum: number, p: any) => sum + Number(p.amount_paid), 0);
+      const rentAmount = Number(ob.amount || 0);
+      const balance = Math.max(0, rentAmount - paidAmount);
+      const latestPayment = payments[0] || null;
+
+      let computedStatus: "paid" | "pending" | "partial" | "overdue" | "waived" = "pending";
+      if (ob.status === "WAIVED") {
+        computedStatus = "waived";
+      } else if (balance <= 0 || ob.status === "PAID") {
+        computedStatus = "paid";
+      } else if (ob.due_date && ob.due_date < todayUTC) {
+        computedStatus = "overdue";
+      } else if (ob.status === "PARTIAL") {
+        computedStatus = "partial";
+      }
+
+      const row = {
+        id: ob.id,
+        obligationId: ob.id,
+        tenantId: ob.tenant_id,
+        tenantName: ob.tenant?.profile?.name || "Unknown",
+        tenantPhone: ob.tenant?.profile?.phone || null,
+        tenantEmail: ob.tenant?.profile?.email || null,
+        room: ob.allocation?.room?.room_no || "N/A",
+        month: ob.rent_month,
+        dueDate: ob.due_date,
+        rentAmount,
+        paidAmount,
+        balance,
+        status: computedStatus,
+        statusRaw: String(ob.status || "").toUpperCase(),
+        paymentMethod: latestPayment?.payment_method || null,
+        paymentMethods: Array.from(new Set(payments.map((p: any) => p.payment_method).filter(Boolean))),
+        latestPaymentId: latestPayment?.id || null,
+        reference_number: latestPayment?.reference_number || null,
+        preferred_app: latestPayment?.preferred_app || null,
+        createdAt: latestPayment?.created_at || null,
+        paymentDate: latestPayment?.payment_date || null,
+        isReceiptAvailable: Boolean(latestPayment?.id),
+        entityType: "ledger",
+        amount: balance > 0 ? balance : paidAmount || rentAmount,
+      };
+
+      return { row, payments };
+    });
+
+    const statusFilter = (filters?.status || "").toUpperCase();
+    const filteredEntries = entries.filter(({ row }) => {
+      if (!statusFilter || statusFilter === "ALL") return true;
+      if (statusFilter === "PAID") return row.status === "paid";
+      if (statusFilter === "PENDING") return row.status === "pending" || row.status === "partial";
+      if (statusFilter === "OVERDUE") return row.status === "overdue";
+      if (statusFilter === "PARTIAL") return row.status === "partial";
+      if (statusFilter === "WAIVED") return row.status === "waived";
+      return row.status.toUpperCase() === statusFilter;
+    });
+
+    const total = filteredEntries.length;
+    const paginatedEntries = filteredEntries.slice(offset, offset + limit);
+    const paginatedRows = paginatedEntries.map((entry) => entry.row);
+
+    const pendingEntries = filteredEntries.filter((entry) => ["pending", "partial", "overdue"].includes(entry.row.status));
+    const overdueEntries = filteredEntries.filter((entry) => entry.row.status === "overdue");
+
+    const stats = {
+      total_collected: Number(filteredEntries.reduce((sum, entry) => sum + Number(entry.row.paidAmount || 0), 0).toFixed(2)),
+      pending_dues: Number(pendingEntries.reduce((sum, entry) => sum + Number(entry.row.balance || 0), 0).toFixed(2)),
+      overdue_amount: Number(overdueEntries.reduce((sum, entry) => sum + Number(entry.row.balance || 0), 0).toFixed(2)),
+      active_tenants: new Set(filteredEntries.map((entry) => entry.row.tenantId).filter(Boolean)).size,
+      pending_rows: pendingEntries.length,
+      overdue_rows: overdueEntries.length,
     };
 
-    const [payments, total] = await Promise.all([
-      prisma.payment.findMany({
-        where,
-        include: {
-          tenant: { include: { profile: true } },
-          obligation: true
-        },
-        orderBy: { payment_date: "desc" },
-        take: limit,
-        skip: offset
-      }),
-      prisma.payment.count({ where })
-    ]);
+    const paymentRecords = filteredEntries.flatMap((entry) =>
+      entry.payments.map((payment: any) => ({
+        id: payment.id,
+        obligationId: entry.row.obligationId,
+        tenantId: entry.row.tenantId,
+        tenantName: entry.row.tenantName,
+        amount: Number(payment.amount_paid || 0),
+        month: entry.row.month,
+        date: payment.payment_date,
+        paymentDate: payment.payment_date,
+        createdAt: payment.created_at,
+        method: payment.payment_method,
+        status: "paid",
+      }))
+    );
 
     return {
-      payments: payments.map((p: any) => ({
-        ...p,
-        tenant_name: p.tenant.profile.name,
-        rent_month: p.obligation.rent_month
-      })),
-      total
+      stats,
+      payments: paginatedRows,
+      payment_records: paymentRecords,
+      total,
+      limit,
+      offset,
     };
   }
 

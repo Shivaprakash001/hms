@@ -143,7 +143,7 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, onMarkPaid, onDownload
                                         <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold ${payment.status === 'paid' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
                                             }`}>
                                             <span className={`h-2 w-2 rounded-full ${payment.status === 'paid' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-                                            {payment.status.toUpperCase()}
+                                            {(typeof payment.status === 'string' && payment.status.length > 0 ? payment.status.toUpperCase() : 'PENDING')}
                                         </span>
                                         {payment.method ? (
                                             <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-slate-200">

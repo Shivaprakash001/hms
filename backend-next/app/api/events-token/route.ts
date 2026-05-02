@@ -4,7 +4,7 @@ import { getSession, apiResponse, apiError, generateShortToken } from "@/lib/aut
 /**
  * GET /api/events-token
  * Issues a short-lived (60s) JWT for SSE connections.
- * Use it in the Authorization header: Bearer <token>
+ * The frontend fetches this, then passes it as a query param to /api/events.
  */
 export async function GET(req: NextRequest) {
   const session = await getSession(req);
