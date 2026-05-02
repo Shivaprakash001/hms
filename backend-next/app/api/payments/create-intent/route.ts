@@ -15,9 +15,9 @@ export async function POST(req: Request) {
     }
 
     const { obligation_id, obligation_ids, amount } = await req.json();
-    const ids = Array.isArray(obligation_ids)
-      ? obligation_ids.filter(Boolean)
-      : (obligation_id ? [obligation_id] : []);
+    const ids: string[] = Array.isArray(obligation_ids)
+      ? obligation_ids.map((id: any) => String(id)).filter(Boolean)
+      : (obligation_id ? [String(obligation_id)] : []);
 
     if (ids.length === 0) {
       return apiError("obligation_id or obligation_ids is required", "VALIDATION_ERROR", 400);
