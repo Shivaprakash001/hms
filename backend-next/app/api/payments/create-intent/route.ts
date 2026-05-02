@@ -14,9 +14,13 @@ export async function POST(req: Request) {
       return apiError("Unauthorized", "UNAUTHORIZED", 401);
     }
 
-    const { obligation_id, amount } = await req.json();
-    if (!obligation_id) {
-      return apiError("obligation_id is required", "VALIDATION_ERROR", 400);
+    const { obligation_id, obligation_ids, amount } = await req.json();
+    const ids = Array.isArray(obligation_ids)
+      ? obligation_ids.filter(Boolean)
+      : (obligation_id ? [obligation_id] : []);
+
+    if (ids.length === 0) {
+      return apiError("obligation_id or obligation_ids is required", "VALIDATION_ERROR", 400);
     }
 
     let tenantId: string | undefined;
@@ -32,7 +36,7 @@ export async function POST(req: Request) {
     }
 
     const result = await paymentService.createPaymentIntent(
-      obligation_id,
+      ids,
       amount ? Number(amount) : null,
       user.id,
       tenantId

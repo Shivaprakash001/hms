@@ -16,6 +16,7 @@ const TenantPayments = () => {
     const [downloadedId, setDownloadedId] = useState(null);
 
     const [history, setHistory] = useState({ payments: [], obligations: [] });
+    const [selectedObligations, setSelectedObligations] = useState([]);
 
     // Fetch data
     const loadHistory = useCallback(async () => {
@@ -68,6 +69,31 @@ const TenantPayments = () => {
         [history.obligations]
     );
 
+    const obligationsMap = useMemo(() => {
+        const map = {};
+        (history.obligations || []).forEach((o) => {
+            map[o.id] = o;
+        });
+        return map;
+    }, [history.obligations]);
+
+    const selectedTotal = useMemo(() => {
+        return selectedObligations.reduce((sum, id) => {
+            const o = obligationsMap[id];
+            const balance = Number(o?.remaining_due ?? o?.amount ?? 0);
+            return sum + balance;
+        }, 0);
+    }, [selectedObligations, obligationsMap]);
+
+    const selectableObligations = useMemo(() => {
+        return (history.obligations || [])
+            .filter((o) => {
+                const status = String(o.status || '').toUpperCase();
+                return status !== 'PAID' && status !== 'WAIVED';
+            })
+            .sort((a, b) => new Date(a.rent_month || a.due_date || 0) - new Date(b.rent_month || b.due_date || 0));
+    }, [history.obligations]);
+
     const nextDueDate = history.next_due_date ? formatDate(history.next_due_date, preferences) : 'No dues';
     const monthlyRent = Number(history.monthly_rent || user?.monthly_rent || 0);
 
@@ -78,6 +104,7 @@ const TenantPayments = () => {
             console.error("Payment failed", error);
         } finally {
             setShowPaymentModal(false);
+            setSelectedObligations([]);
         }
     };
 
@@ -165,15 +192,15 @@ const TenantPayments = () => {
 
                     <button
                         onClick={() => setShowPaymentModal(true)}
-                        disabled={pendingAmount <= 0}
-                        className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95 ${pendingAmount > 0
+                        disabled={selectedTotal <= 0}
+                        className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95 ${selectedTotal > 0
                             ? 'bg-indigo-500 hover:bg-indigo-400 text-white shadow-indigo-500/30'
                             : 'bg-slate-800 text-slate-500 cursor-not-allowed'
                             }`}
                     >
-                        {pendingAmount > 0 ? (
+                        {selectedTotal > 0 ? (
                             <>
-                                <span>Pay Now</span>
+                                <span>Pay Selected</span>
                                 <ChevronRight size={16} />
                             </>
                         ) : (
@@ -183,6 +210,71 @@ const TenantPayments = () => {
                             </>
                         )}
                     </button>
+                </div>
+            </div>
+
+            {/* 2. Select Obligations */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="p-6 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h3 className="font-bold text-slate-900 text-lg">Select Dues to Pay</h3>
+                        <p className="text-sm text-slate-500">Choose the rent entries you want to settle now.</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => setSelectedObligations(selectableObligations.map((o) => o.id))}
+                            className="text-sm font-semibold text-indigo-600 hover:text-indigo-700"
+                            disabled={selectableObligations.length === 0}
+                        >
+                            Select All
+                        </button>
+                        <button
+                            onClick={() => setSelectedObligations([])}
+                            className="text-sm font-semibold text-slate-500 hover:text-slate-700"
+                            disabled={selectedObligations.length === 0}
+                        >
+                            Clear
+                        </button>
+                    </div>
+                </div>
+                {selectableObligations.length === 0 ? (
+                    <div className="px-6 py-10 text-center text-slate-400">No pending dues available.</div>
+                ) : (
+                    <div className="divide-y divide-slate-100">
+                        {selectableObligations.map((o) => {
+                            const balance = Number(o.remaining_due ?? o.amount ?? 0);
+                            const isChecked = selectedObligations.includes(o.id);
+                            return (
+                                <label key={o.id} className="flex items-center justify-between gap-4 px-6 py-4">
+                                    <div className="flex items-center gap-3">
+                                        <input
+                                            type="checkbox"
+                                            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                            checked={isChecked}
+                                            onChange={(e) => {
+                                                const checked = e.target.checked;
+                                                setSelectedObligations((prev) =>
+                                                    checked ? [...prev, o.id] : prev.filter((id) => id !== o.id)
+                                                );
+                                            }}
+                                        />
+                                        <div>
+                                            <p className="text-sm font-semibold text-slate-900">{formatMonthYear(o.rent_month || o.due_date, preferences)}</p>
+                                            <p className="text-xs text-slate-500">Due {o.due_date ? formatDate(o.due_date, preferences) : '---'}</p>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-sm font-black text-slate-900">{formatCurrency(balance, preferences)}</p>
+                                        <p className="text-xs text-slate-500">Balance</p>
+                                    </div>
+                                </label>
+                            );
+                        })}
+                    </div>
+                )}
+                <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between text-sm">
+                    <span className="text-slate-500">Selected: {selectedObligations.length}</span>
+                    <span className="font-bold text-slate-900">Total: {formatCurrency(selectedTotal, preferences)}</span>
                 </div>
             </div>
 
@@ -339,8 +431,9 @@ const TenantPayments = () => {
             <PaymentModal
                 isOpen={showPaymentModal}
                 onClose={() => setShowPaymentModal(false)}
-                amount={pendingAmount > 0 ? pendingAmount : 0}
-                obligationId={payableObligation?.id}
+                amount={selectedTotal > 0 ? selectedTotal : 0}
+                obligationId={selectedObligations.length === 1 ? selectedObligations[0] : null}
+                obligationIds={selectedObligations}
                 onSuccess={handlePaymentSuccess}
             />
         </div>

@@ -20,7 +20,7 @@ import { formatCurrency } from '../../../utils/format';
 const POLL_INTERVAL_MS = 4000;
 const TERMINAL_STATUSES = ['SUCCESS', 'FAILED', 'EXPIRED', 'CANCELLED', 'PENDING_VERIFICATION'];
 
-const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
+const PaymentModal = ({ isOpen, onClose, amount, obligationId, obligationIds = [], onSuccess }) => {
     const { preferences } = useAppPreferences();
     const [loading, setLoading] = useState(false);
     const [attempt, setAttempt] = useState(null);
@@ -70,7 +70,8 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
     const canRetry = useMemo(() => ['FAILED', 'EXPIRED', 'CANCELLED'].includes(status), [status]);
 
     const handleCreateIntent = async () => {
-        if (!obligationId) {
+        const ids = (obligationIds || []).filter(Boolean);
+        if (ids.length === 0 && !obligationId) {
             setError('No pending rent is available for payment right now.');
             return;
         }
@@ -79,8 +80,8 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, onSuccess }) => {
         setError('');
         try {
             const intent = await paymentService.createIntent({
-                obligation_id: obligationId,
-                amount
+                obligation_ids: ids.length > 0 ? ids : undefined,
+                obligation_id: ids.length === 0 ? obligationId : undefined,
             });
 
             // ✅ If gateway (like PhonePe v2) returns a hosted checkout URL, redirect immediately!
