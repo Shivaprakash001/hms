@@ -541,6 +541,198 @@ export class PaymentService {
     }
   }
 
+  async createMultiObligationPaymentIntent(obligationIds: string[], userId: string, tenantId?: string) {
+    const obligations = await prisma.rentObligation.findMany({
+      where: { id: { in: obligationIds } },
+      include: { tenant: { include: { profile: true } }, payments: { select: { amount_paid: true } } }
+    });
+
+    if (obligations.length === 0) {
+      throw new Error("NOT_FOUND: No obligations found");
+    }
+    if (obligations.length !== obligationIds.length) {
+      const foundIds = new Set(obligations.map(o => o.id));
+      const missing = obligationIds.filter(id => !foundIds.has(id));
+      throw new Error(`NOT_FOUND: Obligations not found: ${missing.join(", ")}`);
+    }
+
+    const tenantIds = Array.from(new Set(obligations.map(o => o.tenant_id).filter(Boolean)));
+    if (tenantIds.length > 1) {
+      throw new Error("BAD_REQUEST: All obligations must belong to the same tenant");
+    }
+    const singleTenantId = tenantIds[0];
+    if (tenantId && singleTenantId !== tenantId) {
+      throw new Error("FORBIDDEN: You can only pay your own obligations");
+    }
+
+    const statusCounts = obligations.reduce((acc, o) => {
+      acc[o.status] = (acc[o.status] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    if (statusCounts.WAIVED) {
+      throw new Error("BAD_REQUEST: Cannot pay for waived obligations");
+    }
+    if (statusCounts.PAID && statusCounts.PAID === obligations.length) {
+      throw new Error("BAD_REQUEST: All obligations are already paid");
+    }
+
+    const ownerId = obligations[0].owner_id || "";
+    const prefs = await getPreferences(ownerId);
+
+    let totalAmountPaisa = 0;
+    const paymentBreakdown: { obligationId: string; amount: number }[] = [];
+
+    for (const ob of obligations) {
+      if (ob.status === "PAID" || ob.status === "WAIVED") continue;
+
+      const paidPaisa = ob.payments.reduce((sum, p) => sum + Math.round(Number(p.amount_paid) * 100), 0);
+      const duePaisa = Math.round(Number(ob.amount) * 100);
+      const outstandingPaisa = Math.max(0, duePaisa - paidPaisa);
+
+      if (outstandingPaisa <= 0) continue;
+
+      totalAmountPaisa += outstandingPaisa;
+      paymentBreakdown.push({
+        obligationId: ob.id,
+        amount: outstandingPaisa / 100
+      });
+    }
+
+    if (totalAmountPaisa <= 0) {
+      throw new Error("BAD_REQUEST: No outstanding amount to pay");
+    }
+
+    const totalAmount = totalAmountPaisa / 100;
+    const minAmountPaisa = Math.round(prefs.min_payment_amount * 100);
+    if (totalAmountPaisa < minAmountPaisa) {
+      throw new Error(`BAD_REQUEST: Minimum payment amount allowed is ${formatCurrency(prefs.min_payment_amount)}`);
+    }
+
+    if (!prefs.allow_partial_payments && paymentBreakdown.length < obligations.filter(o => o.status !== "PAID" && o.status !== "WAIVED").length) {
+      throw new Error(`BAD_REQUEST: Partial payments are disabled by the owner. Full payment of ${formatCurrency(totalAmount)} is required.`);
+    }
+
+    const { provider, config } = await this.getProviderForOwner(ownerId);
+    const instance = PaymentProviderFactory.getProvider(provider, config);
+
+    const merchantTxnId = `hms_multi_${crypto.randomBytes(6).toString("hex")}`;
+
+    logger.info("payments.create_multi_intent.start", {
+      obligationCount: obligationIds.length,
+      userId,
+      tenantId: tenantId || null,
+      provider,
+      amount: totalAmount,
+      merchantTxnId,
+      breakdown: paymentBreakdown,
+    });
+
+    const attempt = await prisma.paymentAttempt.create({
+      data: {
+        tenant_id: singleTenantId,
+        owner_id: ownerId,
+        provider: provider,
+        merchant_txn_id: merchantTxnId,
+        amount: totalAmount,
+        status: "CREATED",
+        raw_create_response: {
+          multi_obligation_ids: obligationIds,
+          breakdown: paymentBreakdown,
+        } as any
+      }
+    });
+
+    try {
+      const result = await instance.createIntent({
+        amount: totalAmount,
+        merchant_txn_id: merchantTxnId,
+        tenant_name: obligations[0].tenant.profile.name,
+        tenant_email: obligations[0].tenant.profile.email,
+        tenant_phone: obligations[0].tenant.profile.phone || "",
+        metadata: {
+          obligation_ids: obligationIds,
+          tenant_id: singleTenantId,
+          attempt_id: attempt.id,
+          is_multi: true
+        }
+      });
+
+      return await prisma.paymentAttempt.update({
+        where: { id: attempt.id },
+        data: {
+          status: "PENDING",
+          gateway_txn_id: result.gateway_txn_id,
+          upi_intent_url: result.upi_intent_url,
+          qr_payload: result.qr_payload,
+          checkout_url: result.checkout_url,
+          expires_at: result.expires_at,
+          raw_create_response: result.raw_response as any
+        }
+      });
+    } catch (error) {
+      logger.error("payments.create_multi_intent.failed", {
+        attemptId: attempt.id,
+        provider,
+        merchantTxnId,
+        error: String(error),
+      });
+      await prisma.paymentAttempt.update({
+        where: { id: attempt.id },
+        data: { status: "FAILED", raw_create_response: { error: String(error) } as any }
+      });
+      throw error;
+    }
+  }
+
+  async previewPaymentAmount(obligationIds: string[], userId: string, tenantId?: string) {
+    const obligations = await prisma.rentObligation.findMany({
+      where: { id: { in: obligationIds } },
+      include: { payments: { select: { amount_paid: true } } }
+    });
+
+    if (obligations.length === 0) {
+      throw new Error("NOT_FOUND: No obligations found");
+    }
+    if (obligations.length !== obligationIds.length) {
+      const foundIds = new Set(obligations.map(o => o.id));
+      const missing = obligationIds.filter(id => !foundIds.has(id));
+      throw new Error(`NOT_FOUND: Obligations not found: ${missing.join(", ")}`);
+    }
+
+    const tenantIds = Array.from(new Set(obligations.map(o => o.tenant_id).filter(Boolean)));
+    if (tenantIds.length > 1) {
+      throw new Error("BAD_REQUEST: All obligations must belong to the same tenant");
+    }
+    const singleTenantId = tenantIds[0];
+    if (tenantId && singleTenantId !== tenantId) {
+      throw new Error("FORBIDDEN: You can only preview your own obligations");
+    }
+
+    const items = obligations.map(ob => {
+      const paidPaisa = ob.payments.reduce((sum, p) => sum + Math.round(Number(p.amount_paid) * 100), 0);
+      const duePaisa = Math.round(Number(ob.amount) * 100);
+      const outstandingPaisa = Math.max(0, duePaisa - paidPaisa);
+      return {
+        id: ob.id,
+        rent_month: ob.rent_month,
+        obligation_type: ob.obligation_type,
+        due_amount: Number(ob.amount),
+        paid_amount: paidPaisa / 100,
+        outstanding_amount: outstandingPaisa / 100,
+        status: ob.status,
+      };
+    });
+
+    const totalOutstandingPaisa = items.reduce((sum, item) => sum + Math.round(item.outstanding_amount * 100), 0);
+
+    return {
+      obligations: items,
+      total_outstanding: totalOutstandingPaisa / 100,
+      currency: "INR",
+    };
+  }
+
   async getPaymentAttempt(attemptId: string, userId: string, role: string, tenantId?: string) {
     const attempt = await prisma.paymentAttempt.findUnique({ where: { id: attemptId } });
     if (!attempt) throw new Error("NOT_FOUND: Payment attempt not found");
@@ -807,18 +999,35 @@ export class PaymentService {
       return updatedAttempt;
     }
 
-    const recordResult = await this.recordPayment({
-      obligationId: attempt.obligation_id!, // rent path: guaranteed by XOR constraint
-      amountPaid: Number(attempt.amount),
-      paymentMethod: "UPI",
-      referenceNumber: gatewayTxnId || attempt.merchant_txn_id,
-      paymentDate: new Date(),
-      userId: attempt.owner_id,
-      paymentAttemptId: attempt.id
-    });
+    const rawResponse = attempt.raw_create_response as any;
+    const isMultiOB = rawResponse?.multi_obligation_ids?.length > 0 || rawResponse?.is_multi === true;
+    const breakdown = rawResponse?.breakdown || [];
 
-    // 🔧 Receipt creation now handled inside recordPayment() (FIX C3).
-    // createReceipt is idempotent, so the centralized call covers both UPI and manual paths.
+    if (isMultiOB && breakdown.length > 0) {
+      for (const item of breakdown) {
+        if (item.amount > 0) {
+          await this.recordPayment({
+            obligationId: item.obligationId,
+            amountPaid: item.amount,
+            paymentMethod: "UPI",
+            referenceNumber: gatewayTxnId || attempt.merchant_txn_id,
+            paymentDate: new Date(),
+            userId: attempt.owner_id,
+            paymentAttemptId: attempt.id
+          });
+        }
+      }
+    } else if (attempt.obligation_id) {
+      await this.recordPayment({
+        obligationId: attempt.obligation_id,
+        amountPaid: Number(attempt.amount),
+        paymentMethod: "UPI",
+        referenceNumber: gatewayTxnId || attempt.merchant_txn_id,
+        paymentDate: new Date(),
+        userId: attempt.owner_id,
+        paymentAttemptId: attempt.id
+      });
+    }
 
     const result = await prisma.paymentAttempt.update({
       where: { id: attemptId },
@@ -973,14 +1182,44 @@ export class PaymentService {
       }
     });
 
-    if (!attempt) throw new Error("NOT_FOUND: Payment attempt not found");
+    if (!attempt) {
+      logger.warn("payments.verify.attempt_not_found", {
+        userId,
+        role,
+        attemptId: attemptId || null,
+        merchantTxnId: merchantTxnId || null,
+        gatewayTxnId: gatewayTxnId || null,
+      });
+      throw new Error("NOT_FOUND: Payment attempt not found");
+    }
 
     if (role === "TENANT" && attempt.tenant_id !== tenantId) {
+      logger.warn("payments.verify.forbidden_tenant_mismatch", {
+        userId,
+        role,
+        attemptTenantId: attempt.tenant_id,
+        requestTenantId: tenantId,
+        merchantTxnId: attempt.merchant_txn_id,
+      });
       throw new Error("FORBIDDEN: You can only verify your own attempts");
     }
     if (role === "OWNER" && attempt.owner_id !== userId) {
+      logger.warn("payments.verify.forbidden_owner_mismatch", {
+        userId,
+        role,
+        attemptOwnerId: attempt.owner_id,
+        requestUserId: userId,
+        merchantTxnId: attempt.merchant_txn_id,
+      });
       throw new Error("FORBIDDEN: You can only verify attempts for your hostel");
     }
+
+    logger.info("payments.verify.attempt_found", {
+      attemptId: attempt.id,
+      merchantTxnId: attempt.merchant_txn_id,
+      status: attempt.status,
+      role,
+    });
 
     if (["SUCCESS", "FAILED", "EXPIRED", "CANCELLED"].includes(attempt.status)) {
       return {

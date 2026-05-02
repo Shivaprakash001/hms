@@ -6,6 +6,9 @@ import { paymentService } from "@/lib/services/payment-service";
 import { authService } from "@/lib/services/auth-service";
 import { apiError } from "@/lib/utils/api-utils";
 import { prisma } from "@/lib/db";
+import { getLogger } from "@/lib/logger";
+
+const logger = getLogger("verify");
 
 export async function POST(req: Request) {
   try {
@@ -25,6 +28,14 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
+
+    logger.info("verify_started", {
+      userId: user.id,
+      userRole: user.role,
+      attemptId: body?.attempt_id,
+      merchantTxnId: body?.merchant_txn_id || body?.merchantTransactionId,
+    });
+
     const result = await paymentService.verifyPaymentStatus({
       userId: user.id,
       role: user.role,

@@ -495,6 +495,12 @@ export const paymentService = {
     bulkGenerate: async (data) => {
         const response = await api.post('/payments/bulk-generate', data);
         return response.data;
+    },
+    previewPayment: async (obligationIds) => {
+        const response = await api.get('/payments/preview', { 
+            params: { ids: obligationIds.join(',') } 
+        });
+        return response.data;
     }
 };
 

@@ -6,30 +6,24 @@ import { paymentService } from "@/lib/services/payment-service";
 import { authService } from "@/lib/services/auth-service";
 import { apiError } from "@/lib/utils/api-utils";
 import { prisma } from "@/lib/db";
-import { getLogger } from "@/lib/logger";
 
-const logger = getLogger("create-intent");
-
-export async function POST(req: Request) {
+export async function GET(req: Request) {
   try {
     const user = await authService.getCurrentUser(req);
     if (!user) {
       return apiError("Unauthorized", "UNAUTHORIZED", 401);
     }
 
-    const { obligation_ids } = await req.json();
-    if (!Array.isArray(obligation_ids) || obligation_ids.length === 0) {
-      return apiError("obligation_ids must be a non-empty array", "VALIDATION_ERROR", 400);
+    const { searchParams } = new URL(req.url || "");
+    const idsParam = searchParams.get("ids");
+    if (!idsParam) {
+      return apiError("ids query parameter is required", "VALIDATION_ERROR", 400);
     }
 
-    const ids: string[] = obligation_ids.map((id: any) => String(id)).filter(Boolean);
-
-    logger.info("create_intent_called", {
-      userId: user.id,
-      userRole: user.role,
-      obligationCount: ids.length,
-      obligationIds: ids,
-    });
+    const obligationIds = idsParam.split(",").map(id => id.trim()).filter(Boolean);
+    if (obligationIds.length === 0) {
+      return apiError("ids must be a non-empty comma-separated list", "VALIDATION_ERROR", 400);
+    }
 
     let tenantId: string | undefined;
     if (user.role === "TENANT") {
@@ -43,27 +37,30 @@ export async function POST(req: Request) {
       tenantId = tenant.id;
     }
 
-    const result = await paymentService.createMultiObligationPaymentIntent(
-      ids,
-      user.id,
-      tenantId
-    );
+    const preview = await paymentService.previewPaymentAmount(obligationIds, user.id, tenantId);
 
-    logger.info("redirecting_to_checkout", {
-      attemptId: result.id,
-      merchantTxnId: result.merchant_txn_id,
-      checkoutUrl: result.checkout_url ? "present" : "missing",
-      amount: result.amount,
-    });
+    const normalized = {
+      items: preview.obligations.map((item: any) => ({
+        id: item.id,
+        tenant_id: item.tenant_id,
+        rent_month: item.rent_month,
+        type: item.obligation_type,
+        due_amount: item.due_amount,
+        paid_amount: item.paid_amount,
+        outstanding_amount: item.outstanding_amount,
+        status: item.status,
+      })),
+      total_outstanding: preview.total_outstanding,
+      currency: preview.currency,
+    };
 
-    return NextResponse.json(result);
+    return NextResponse.json(normalized);
   } catch (error: any) {
-    console.error("Error creating payment intent:", error);
+    console.error("Error previewing payment:", error);
     const message = String(error?.message ?? error);
     if (message.includes("FORBIDDEN")) return apiError(message, "FORBIDDEN", 403);
     if (message.includes("NOT_FOUND")) return apiError(message, "NOT_FOUND", 404);
     if (message.includes("BAD_REQUEST")) return apiError(message, "VALIDATION_ERROR", 400);
-    if (message.includes("CONFIG_ERROR")) return apiError(message, "CONFIG_ERROR", 422);
     return apiError(message, "INTERNAL_ERROR", 500);
   }
 }
