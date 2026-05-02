@@ -28,6 +28,14 @@ export async function POST(req: NextRequest) {
 
     const response = NextResponse.json(jsonResponse, { status: 200 });
 
+    response.cookies.set("hms_session", jsonResponse.access_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+      path: "/",
+    });
+
     // Set HTTP-only Cookie for refresh token (Prevents XSS)
     response.cookies.set("hms_refresh_token", refresh_token, {
       httpOnly: true,

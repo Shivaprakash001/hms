@@ -61,10 +61,15 @@ export class AuthService {
       }
     }
 
+    if (profile.role === "OWNER" && !profile.owner_id) {
+      throw new Error("UNAUTHORIZED: Invalid OWNER: missing owner_id");
+    }
+
     const token = await generateToken({
       sub: profile.id,
       role: profile.role,
       email: profile.email,
+      owner_id: profile.owner_id || null,
     });
 
     const refreshToken = generateRefreshToken();
@@ -147,6 +152,7 @@ export class AuthService {
           name: data.name,
           phone: data.phone || null,
           role: "OWNER",
+          owner_id: userId,
           hostels: {
             create: {
               name: data.hostel_name,
@@ -263,16 +269,22 @@ export class AuthService {
 
     if (!profile) {
       // Create new profile for first-time Google login (default to OWNER/ADMIN for now as per Python)
+      const newProfileId = crypto.randomUUID();
       profile = await prisma.profile.create({
         data: {
-          id: crypto.randomUUID(),
+          id: newProfileId,
           email: normalizedEmail,
           name: name || "User",
           role: "OWNER",
           is_active: true,
+          owner_id: newProfileId,
         },
         include: { tenant_details: true }
       });
+    }
+
+    if (profile.role === "OWNER" && !profile.owner_id) {
+      throw new Error("UNAUTHORIZED: Invalid OWNER: missing owner_id");
     }
 
     // 4. Create local JWT
@@ -280,6 +292,7 @@ export class AuthService {
       sub: profile.id,
       role: profile.role,
       email: profile.email,
+      owner_id: profile.owner_id || null,
     });
 
     return {

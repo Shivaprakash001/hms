@@ -44,11 +44,16 @@ export async function POST(req: NextRequest) {
       return apiError("Account is disabled", "FORBIDDEN", 403);
     }
 
+    if (tokenRecord.profile.role === "OWNER" && !tokenRecord.profile.owner_id) {
+      return apiError("Invalid OWNER: missing owner_id", "UNAUTHORIZED", 401);
+    }
+
     // Generate new tokens (Rotation)
     const newAccessToken = await generateToken({
       sub: tokenRecord.profile.id,
       role: tokenRecord.profile.role,
       email: tokenRecord.profile.email,
+      owner_id: tokenRecord.profile.owner_id || null,
     });
 
     const newRefreshToken = generateRefreshToken();
@@ -72,6 +77,14 @@ export async function POST(req: NextRequest) {
     ]);
 
     const response = NextResponse.json({ access_token: newAccessToken }, { status: 200 });
+
+    response.cookies.set("hms_session", newAccessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+      path: "/",
+    });
 
     response.cookies.set("hms_refresh_token", newRefreshToken, {
       httpOnly: true,

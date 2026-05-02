@@ -51,13 +51,11 @@ export async function middleware(req: NextRequest) {
     return response;
   }
 
-  // 3. Extract Token (Priority: Cookie -> Header -> Query param for SSE)
+  // 3. Extract Token (Priority: Cookie -> Header)
   const cookieToken = req.cookies.get("hms_session")?.value;
   const authHeader = req.headers.get("authorization");
   const headerToken = authHeader?.startsWith("Bearer ") ? authHeader.substring(7) : null;
-  // EventSource (SSE) cannot send custom headers, so accept token via query param
-  const queryToken = pathname === "/api/events" ? req.nextUrl.searchParams.get("token") : null;
-  const token = cookieToken || headerToken || queryToken;
+  const token = cookieToken || headerToken;
 
   if (!token) {
     return NextResponse.json(
@@ -71,6 +69,13 @@ export async function middleware(req: NextRequest) {
   if (!payload) {
     return NextResponse.json(
       { error: { message: "Invalid session", code: "UNAUTHORIZED" } },
+      { status: 401, headers: corsHeaders }
+    );
+  }
+
+  if (payload.role === "OWNER" && !payload.owner_id) {
+    return NextResponse.json(
+      { error: { message: "Invalid OWNER: missing owner_id", code: "UNAUTHORIZED" } },
       { status: 401, headers: corsHeaders }
     );
   }

@@ -16,7 +16,14 @@ export interface AuthPayload {
   tenant_id?: string | null;
 }
 
+function assertOwnerPayload(payload: AuthPayload) {
+  if (payload.role === "OWNER" && !payload.owner_id) {
+    throw new Error("Invalid OWNER: missing owner_id");
+  }
+}
+
 export async function generateToken(payload: AuthPayload) {
+  assertOwnerPayload(payload);
   return new SignJWT(payload as any)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -29,6 +36,7 @@ export async function generateToken(payload: AuthPayload) {
  * Even if URL-logged, it expires almost immediately.
  */
 export async function generateShortToken(payload: AuthPayload) {
+  assertOwnerPayload(payload);
   return new SignJWT(payload as any)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()

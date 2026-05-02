@@ -1,20 +1,11 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest } from "next/server";
-import { getSession, verifyToken } from "@/lib/auth";
+import { getSession } from "@/lib/auth";
 import { addClient, removeClient } from "@/lib/events/event-bus";
 
 export async function GET(req: NextRequest) {
-  // EventSource cannot send custom headers, so we support token via query param
   let session = await getSession(req);
-  
-  if (!session) {
-    const { searchParams } = new URL(req.url);
-    const token = searchParams.get("token");
-    if (token) {
-      session = await verifyToken(token);
-    }
-  }
 
   if (!session) {
     return new Response("Unauthorized", { status: 401 });
@@ -23,6 +14,11 @@ export async function GET(req: NextRequest) {
   // Only owners/admins can subscribe to the event stream
   if (!["OWNER", "ADMIN"].includes(session.role)) {
     return new Response("Forbidden", { status: 403 });
+  }
+
+  const ownerId = session.owner_id;
+  if (!ownerId) {
+    return new Response("Unauthorized", { status: 401 });
   }
 
   const stream = new ReadableStream({
@@ -38,7 +34,7 @@ export async function GET(req: NextRequest) {
       };
 
       const client = {
-        ownerId: session!.sub, // Strict owner binding for multi-tenant isolation
+        ownerId,
         send
       };
 
