@@ -14,20 +14,12 @@ export async function POST(req: Request) {
       return apiError("Unauthorized", "UNAUTHORIZED", 401);
     }
 
-    const { obligation_id, obligation_ids, amount } = await req.json();
-    const normalizedArray = Array.isArray(obligation_ids)
-      ? obligation_ids
-      : Array.isArray(obligation_id)
-        ? obligation_id
-        : null;
-
-    const ids: string[] = normalizedArray
-      ? normalizedArray.map((id: any) => String(id)).filter(Boolean)
-      : (obligation_id ? [String(obligation_id)] : []);
-
-    if (ids.length === 0) {
-      return apiError("obligation_id or obligation_ids is required", "VALIDATION_ERROR", 400);
+    const { obligation_ids, amount } = await req.json();
+    if (!Array.isArray(obligation_ids) || obligation_ids.length === 0) {
+      return apiError("obligation_ids must be a non-empty array", "VALIDATION_ERROR", 400);
     }
+
+    const ids: string[] = obligation_ids.map((id: any) => String(id)).filter(Boolean);
 
     let tenantId: string | undefined;
     if (user.role === "TENANT") {
@@ -41,7 +33,7 @@ export async function POST(req: Request) {
       tenantId = tenant.id;
     }
 
-    const result = await (paymentService as any).createPaymentIntent(
+    const result = await paymentService.createPaymentIntent(
       ids,
       amount ? Number(amount) : null,
       user.id,
