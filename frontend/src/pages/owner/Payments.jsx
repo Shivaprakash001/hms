@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Search, Download, TrendingUp, TrendingDown, DollarSign, Zap, CheckCircle2, AlertCircle, X, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
@@ -19,6 +19,15 @@ const Payments = () => {
     const { preferences } = useAppPreferences();
     const [ledgerRows, setLedgerRows] = useState([]);
     const [paymentRecords, setPaymentRecords] = useState([]);
+    const [summaryStats, setSummaryStats] = useState({
+        total_collected: 0,
+        pending_dues: 0,
+        overdue_amount: 0,
+        active_tenants: 0,
+        pending_rows: 0,
+        overdue_rows: 0,
+    });
+    const [serverTotal, setServerTotal] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -44,9 +53,12 @@ const Payments = () => {
     const [previewData, setPreviewData] = useState(null);
     const [exportLoading, setExportLoading] = useState(false);
 
-    useEffect(() => {
-        loadLedger();
-    }, []);
+    const paymentFilters = useMemo(() => ({
+        tenantId: tenantFilter !== 'all' ? tenantFilter : undefined,
+        status: statusFilter !== 'all' ? statusFilter.toUpperCase() : undefined,
+        method: methodFilter !== 'all' ? methodFilter : undefined,
+        month: monthFilter !== 'all' ? monthFilter : undefined,
+    }), [tenantFilter, statusFilter, methodFilter, monthFilter]);
 
     useEffect(() => {
         const t = setTimeout(() => {
@@ -67,130 +79,75 @@ const Payments = () => {
         return new Date(dueDate) < new Date() && Number(balance) > 0 ? 'overdue' : 'pending';
     };
 
-    const loadLedger = async () => {
+    const loadLedger = useCallback(async () => {
         setIsLoading(true);
         try {
-            const [dues, paymentsResult] = await Promise.all([
-                paymentService.getAllDues(),
-                paymentService.getAll({ limit: 1000 })
-            ]);
-
-            const paymentsData = paymentsResult?.payments || [];
-            const normalizedPayments = paymentsData.map(item => ({
-                id: item.id,
-                obligationId: item.obligation_id,
-                tenantId: item.tenant_id,
-                tenantName: item.tenant_name,
-                amount: Number(item.amount_paid || 0),
-                month: item.rent_month,
-                date: item.payment_date,
-                paymentDate: item.payment_date,
-                createdAt: item.created_at,
-                method: item.payment_method,
-                status: 'paid'
-            }));
-            setPaymentRecords(normalizedPayments);
-
-            const paymentsByObligation = paymentsData.reduce((acc, item) => {
-                const key = item.obligation_id;
-                if (!key) return acc;
-                if (!acc[key]) acc[key] = [];
-                acc[key].push(item);
-                return acc;
-            }, {});
-
-            // Create a map of all unique obligations from both dues and payments
-            const combinedObligationsMap = new Map();
-
-            // First add all dues explicitly returned by the dues API
-            (dues || []).forEach(due => {
-                combinedObligationsMap.set(due.obligation_id || due.id, due);
+            const result = await paymentService.getAll({
+                limit: 1000,
+                tenant_id: paymentFilters.tenantId,
+                status: paymentFilters.status,
+                method: paymentFilters.method,
+                month: paymentFilters.month,
             });
 
-            // Then add any obligations from the completed payments that might be missing from dues
-            paymentsData.forEach(p => {
-                if (p.obligation_id && !combinedObligationsMap.has(p.obligation_id)) {
-                    combinedObligationsMap.set(p.obligation_id, {
-                        ...p.obligation,
-                        obligation_id: p.obligation_id,
-                        tenant_id: p.tenant_id,
-                        tenant_name: p.tenant_name,
-                        tenant_phone: p.tenant?.profile?.phone,
-                        tenant_email: p.tenant?.profile?.email,
-                        room_no: p.tenant?.allocations?.[0]?.room?.room_no || 'N/A',
-                        rent_month: p.rent_month,
-                        due_date: p.obligation?.due_date,
-                        amount: p.obligation?.amount || p.amount_paid,
-                        status: p.obligation?.status || 'PAID',
-                    });
-                }
+            setLedgerRows(result?.payments || []);
+            setPaymentRecords(result?.payment_records || []);
+            // TEMP DEBUG: Log filtered payment count and amount for dev verification
+            if (process.env.NODE_ENV === 'development') {
+                const records = result?.payment_records || [];
+                const now = new Date();
+                const currentYear = now.getFullYear();
+                const currentMonth = now.getMonth();
+                const monthPayments = records.filter((p) => {
+                    const paymentDate = p.paymentDate || p.date || p.createdAt;
+                    if (!paymentDate) return false;
+                    const parsed = new Date(paymentDate);
+                    if (Number.isNaN(parsed.getTime())) return false;
+                    return parsed.getFullYear() === currentYear && parsed.getMonth() === currentMonth;
+                });
+                const totalAmount = monthPayments.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+                // eslint-disable-next-line no-console
+                console.debug('[DEV] Month-filtered payments:', monthPayments.length, 'Total amount:', totalAmount);
+            }
+            setSummaryStats({
+                total_collected: Number(result?.stats?.total_collected || 0),
+                pending_dues: Number(result?.stats?.pending_dues || 0),
+                overdue_amount: Number(result?.stats?.overdue_amount || 0),
+                active_tenants: Number(result?.stats?.active_tenants || 0),
+                pending_rows: Number(result?.stats?.pending_rows || 0),
+                overdue_rows: Number(result?.stats?.overdue_rows || 0),
             });
-
-            const rows = Array.from(combinedObligationsMap.values()).map((item) => {
-                const obligationPayments = paymentsByObligation[item.obligation_id || item.id] || [];
-                const paidAmount = obligationPayments.reduce((sum, p) => sum + Number(p.amount_paid || 0), 0);
-                const rentAmount = Number(item.amount || 0);
-                const balance = Math.max(0, rentAmount - paidAmount);
-                const latestPayment = obligationPayments
-                    .slice()
-                    .sort((a, b) => new Date(b.payment_date || b.created_at || 0) - new Date(a.payment_date || a.created_at || 0))[0];
-
-                const status = normalizeStatus(item.status, item.due_date || item.dueDate, balance);
-
-                return {
-                    id: item.obligation_id || item.id,
-                    obligationId: item.obligation_id || item.id,
-                    tenantId: item.tenant_id,
-                    tenantName: item.tenant_name || 'Unknown',
-                    tenantPhone: item.tenant_phone || null,
-                    tenantEmail: item.tenant_email || null,
-                    room: item.room_no || item.room || 'N/A',
-                    month: item.rent_month || item.month,
-                    dueDate: item.due_date || item.dueDate,
-                    rentAmount,
-                    paidAmount,
-                    balance,
-                    status,
-                    statusRaw: String(item.status || '').toUpperCase(),
-                    paymentMethod: latestPayment?.payment_method || null,
-                    paymentMethods: [...new Set(obligationPayments.map((p) => p.payment_method).filter(Boolean))],
-                    latestPaymentId: latestPayment?.id || null,
-                    reference_number: latestPayment?.reference_number || null,
-                    preferred_app: latestPayment?.preferred_app || null,
-                    createdAt: latestPayment?.created_at || null,
-                    paymentDate: latestPayment?.payment_date || null,
-                    isReceiptAvailable: Boolean(latestPayment?.id),
-                    entityType: 'ledger',
-                    amount: balance > 0 ? balance : paidAmount || rentAmount,
-                };
-            });
-
-            // Sort rows descending by month/date so newest appear first
-            const sortedRows = rows.sort((a, b) => {
-                if (b.month && a.month) return new Date(b.month) - new Date(a.month);
-                return 0;
-            });
-
-            setLedgerRows(sortedRows);
+            setServerTotal(Number(result?.total || 0));
         } catch (error) {
             console.error('Failed to load ledger:', error);
+            setLedgerRows([]);
+            setPaymentRecords([]);
+            setSummaryStats({
+                total_collected: 0,
+                pending_dues: 0,
+                overdue_amount: 0,
+                active_tenants: 0,
+                pending_rows: 0,
+                overdue_rows: 0,
+            });
+            setServerTotal(0);
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [paymentFilters]);
+
+    useEffect(() => {
+        loadLedger();
+    }, [loadLedger]);
 
     const filteredData = useMemo(() => {
         return ledgerRows.filter(item => {
             const matchesSearch = (item.tenantName || "").toLowerCase().includes(debouncedSearch.toLowerCase()) ||
                 (item.room || "").toString().includes(debouncedSearch) ||
                 (item.tenantPhone || "").toString().includes(debouncedSearch);
-            const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
-            const matchesMonth = monthFilter === 'all' || item.month?.slice(0, 7) === monthFilter;
-            const matchesMethod = methodFilter === 'all' || item.paymentMethods?.includes(methodFilter);
-            const matchesTenant = tenantFilter === 'all' || item.tenantName === tenantFilter;
-            return matchesSearch && matchesStatus && matchesMonth && matchesMethod && matchesTenant;
+            return matchesSearch;
         });
-    }, [ledgerRows, debouncedSearch, statusFilter, monthFilter, methodFilter, tenantFilter]);
+    }, [ledgerRows, debouncedSearch]);
 
     const paginatedData = useMemo(() => {
         const start = (currentPage - 1) * pageSize;
@@ -205,16 +162,15 @@ const Payments = () => {
 
     // Stats
     const stats = useMemo(() => {
-        const totalCollected = ledgerRows.reduce((acc, curr) => acc + Number(curr.paidAmount || 0), 0);
-        const totalPending = ledgerRows
-            .filter(p => ['pending', 'partial', 'overdue'].includes(p.status))
-            .reduce((acc, curr) => acc + Number(curr.balance || 0), 0);
-        const overdueAmount = ledgerRows
-            .filter(p => p.status === 'overdue')
-            .reduce((acc, curr) => acc + Number(curr.balance || 0), 0);
-        const uniqueTenants = new Set(ledgerRows.map(p => p.tenantName)).size;
-        return { totalCollected, totalPending, overdueAmount, uniqueTenants };
-    }, [ledgerRows]);
+        return {
+            totalCollected: Number(summaryStats.total_collected || 0),
+            totalPending: Number(summaryStats.pending_dues || 0),
+            overdueAmount: Number(summaryStats.overdue_amount || 0),
+            uniqueTenants: Number(summaryStats.active_tenants || 0),
+            pendingRows: Number(summaryStats.pending_rows || 0),
+            overdueRows: Number(summaryStats.overdue_rows || 0),
+        };
+    }, [summaryStats]);
 
     // Mark as paid
     const handleMarkAsPaid = async (formData) => {
@@ -403,8 +359,16 @@ const Payments = () => {
     };
 
     const availableTenants = useMemo(() => {
-        const names = new Set(ledgerRows.map(p => p.tenantName).filter(Boolean));
-        return [...names].sort();
+        const map = new Map();
+        ledgerRows.forEach((row) => {
+            if (!row.tenantId || !row.tenantName) return;
+            if (!map.has(row.tenantId)) {
+                map.set(row.tenantId, row.tenantName);
+            }
+        });
+        return [...map.entries()]
+            .map(([id, name]) => ({ id, name }))
+            .sort((a, b) => a.name.localeCompare(b.name));
     }, [ledgerRows]);
 
     return (
@@ -461,21 +425,21 @@ const Payments = () => {
                     value={formatCurrency(stats.totalCollected, preferences)}
                     type="success"
                     icon={TrendingUp}
-                    subtext={<span className="text-emerald-600 flex items-center gap-1"><TrendingUp size={12} /> This month</span>}
+                    subtext={<span className="text-emerald-600 flex items-center gap-1"><TrendingUp size={12} /> Filtered scope</span>}
                 />
                 <PaymentStatsCard
                     title="Pending Dues"
                     value={formatCurrency(stats.totalPending, preferences)}
                     type="warning"
                     icon={TrendingDown}
-                    subtext={<span className="text-amber-600 flex items-center gap-1">{ledgerRows.filter(p => ['pending', 'partial', 'overdue'].includes(p.status)).length} due rows</span>}
+                    subtext={<span className="text-amber-600 flex items-center gap-1">{stats.pendingRows} due rows</span>}
                 />
                 <PaymentStatsCard
                     title="Overdue Amount"
                     value={formatCurrency(stats.overdueAmount, preferences)}
                     type="danger"
                     icon={AlertCircle}
-                    subtext={<span className="text-rose-600 flex items-center gap-1">{ledgerRows.filter(p => p.status === 'overdue').length} overdue</span>}
+                    subtext={<span className="text-rose-600 flex items-center gap-1">{stats.overdueRows} overdue</span>}
                 />
                 <PaymentStatsCard
                     title="Active Tenants"
@@ -499,8 +463,8 @@ const Payments = () => {
                             onChange={(e) => setTenantFilter(e.target.value)}
                         >
                             <option value="all">All Tenants</option>
-                            {availableTenants.map(name => (
-                                <option key={name} value={name}>{name}</option>
+                            {availableTenants.map((tenant) => (
+                                <option key={tenant.id} value={tenant.id}>{tenant.name}</option>
                             ))}
                         </select>
 
@@ -554,7 +518,7 @@ const Payments = () => {
 
                 {/* Pagination */}
                 <div className="p-4 border-t border-slate-100 flex items-center justify-between text-sm text-slate-500">
-                    <span>Showing {filteredData.length === 0 ? 0 : ((currentPage - 1) * pageSize + 1)}-{Math.min(currentPage * pageSize, filteredData.length)} of {filteredData.length} results</span>
+                    <span>Showing {filteredData.length === 0 ? 0 : ((currentPage - 1) * pageSize + 1)}-{Math.min(currentPage * pageSize, filteredData.length)} of {debouncedSearch ? filteredData.length : serverTotal} results</span>
                     <div className="flex items-center gap-2">
                         <select
                             className="px-2 py-1 border border-slate-200 rounded-lg bg-white"
