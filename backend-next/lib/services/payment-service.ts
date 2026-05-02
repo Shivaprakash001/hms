@@ -999,39 +999,47 @@ export class PaymentService {
       return attempt; // Already updated by another thread
     }
 
+    // Single source of truth: check if payments already exist
     if (attempt.payments.length > 0) {
       return updatedAttempt;
     }
 
+    // Use ONLY junction table - no fallback to raw_create_response
     const obligationLinks = await prisma.paymentAttemptObligation.findMany({
       where: { payment_attempt_id: attemptId }
     });
 
-    if (obligationLinks.length > 0) {
-      for (const link of obligationLinks) {
-        if (Number(link.amount) > 0) {
-          await this.recordPayment({
-            obligationId: link.obligation_id,
-            amountPaid: Number(link.amount),
-            paymentMethod: "UPI",
-            referenceNumber: gatewayTxnId || attempt.merchant_txn_id,
-            paymentDate: new Date(),
-            userId: attempt.owner_id,
-            paymentAttemptId: attempt.id
-          });
+    // Wrap in transaction to prevent partial payments
+    await prisma.$transaction(async (tx) => {
+      if (obligationLinks.length > 0) {
+        // Multi-obligation payment: use junction table
+        for (const link of obligationLinks) {
+          if (Number(link.amount) > 0) {
+            await this.recordPayment({
+              obligationId: link.obligation_id,
+              amountPaid: Number(link.amount),
+              paymentMethod: "UPI",
+              referenceNumber: gatewayTxnId || attempt.merchant_txn_id,
+              paymentDate: new Date(),
+              userId: attempt.owner_id,
+              paymentAttemptId: attempt.id
+            });
+          }
         }
+      } else if (attempt.obligation_id) {
+        // Single obligation payment (legacy)
+        await this.recordPayment({
+          obligationId: attempt.obligation_id,
+          amountPaid: Number(attempt.amount),
+          paymentMethod: "UPI",
+          referenceNumber: gatewayTxnId || attempt.merchant_txn_id,
+          paymentDate: new Date(),
+          userId: attempt.owner_id,
+          paymentAttemptId: attempt.id
+        });
       }
-    } else if (attempt.obligation_id) {
-      await this.recordPayment({
-        obligationId: attempt.obligation_id,
-        amountPaid: Number(attempt.amount),
-        paymentMethod: "UPI",
-        referenceNumber: gatewayTxnId || attempt.merchant_txn_id,
-        paymentDate: new Date(),
-        userId: attempt.owner_id,
-        paymentAttemptId: attempt.id
-      });
-    }
+      // If neither - it's an invoice payment or no linkage (handled elsewhere)
+    });
 
     const result = await prisma.paymentAttempt.update({
       where: { id: attemptId },
