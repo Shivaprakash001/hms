@@ -35,12 +35,19 @@ export async function POST(req: Request) {
       tenantId = tenant.id;
     }
 
-    const result = await (paymentService as any).createPaymentIntent(
-      ids,
-      amount ? Number(amount) : null,
-      user.id,
-      tenantId
-    );
+    const result = ids.length > 1
+      ? await (paymentService as any).createPaymentIntentMulti(
+          ids,
+          amount ? Number(amount) : null,
+          user.id,
+          tenantId
+        )
+      : await paymentService.createPaymentIntent(
+          ids[0],
+          amount ? Number(amount) : null,
+          user.id,
+          tenantId
+        );
 
     return NextResponse.json(result);
   } catch (error: any) {
