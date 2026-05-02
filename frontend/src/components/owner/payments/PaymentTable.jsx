@@ -63,7 +63,7 @@ const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadRece
                                 <td className="py-4 px-6">
                                     <div className="flex items-center gap-3">
                                         <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center text-xs font-bold">
-                                            {payment.tenantName.charAt(0)}
+                                            {(payment.tenantName?.charAt(0)) || '?'}
                                         </div>
                                         <div>
                                             <p className="font-semibold text-slate-900 text-sm">{payment.tenantName}</p>
@@ -162,7 +162,7 @@ const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadRece
                             <div className="flex justify-between items-start">
                                 <div className="flex items-center gap-3">
                                     <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center text-xs font-bold">
-                                        {payment.tenantName.charAt(0)}
+                                        {(payment.tenantName?.charAt(0)) || '?'}
                                     </div>
                                     <div>
                                         <p className="font-semibold text-slate-900 text-sm">{payment.tenantName}</p>
