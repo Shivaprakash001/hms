@@ -7,6 +7,8 @@ import { receiptService } from "./receipt-service";
 import { getPreferences } from "../preferences";
 import { formatCurrency, formatMonthYear } from "../format";
 import { eventLog } from "./event-log-service";
+import { logger } from "../logger";
+import { incrementPayment, incrementWebhook } from "../metrics";
 
 export class PaymentService {
   // 🔧 FIX C1: Old calculateProratedRent, generateMonthlyRent, previewMonthlyRent DELETED.
@@ -546,35 +548,175 @@ export class PaymentService {
   }
 
   async finalizePaymentAttempt(attemptId: string, status: string, gatewayTxnId?: string, rawPayload?: any) {
+    // 1. Use atomic update to prevent double-crediting race conditions
     const attempt = await prisma.paymentAttempt.findUnique({
       where: { id: attemptId },
-      include: { payments: true }
+      include: { payments: true, invoice: true }
     });
 
     if (!attempt) throw new Error("NOT_FOUND: Attempt not found");
-    if (attempt.status === "SUCCESS") return attempt;
+    if (attempt.status === "SUCCESS" || attempt.status === "FAILED") return attempt;
+
+    // ──────────────────────────────────────────────────────────────
+    // 🧾 BILLING PATH: Invoice payment (plan upgrade/renewal)
+    // ──────────────────────────────────────────────────────────────
+    if (attempt.invoice_id && attempt.invoice) {
+      const invoice = attempt.invoice;
+
+      // SAFETY 1: Idempotency — if invoice already PAID, do nothing
+      if (invoice.status === "PAID") {
+        console.info(`[billing.webhook] Invoice ${invoice.id} already PAID, skipping`);
+        if (attempt.status === "PENDING") {
+          await prisma.paymentAttempt.update({
+            where: { id: attemptId, status: "PENDING" },
+            data: { status: "SUCCESS", gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null, confirmed_at: new Date() }
+          }).catch(() => {});
+        }
+        return attempt;
+      }
+
+      // SAFETY 2: Non-SUCCESS statuses → mark attempt but leave invoice PENDING
+      if (status !== "SUCCESS") {
+        console.info(`[billing.webhook] Invoice payment ${attemptId} status=${status}, not activating`);
+        return await prisma.paymentAttempt.update({
+          where: { id: attemptId, status: "PENDING" },
+          data: { status: status as any, gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null }
+        }).catch(() => attempt);
+      }
+
+      // SAFETY 3: Validate amount match (paisa-safe)
+      const attemptPaisa = Math.round(Number(attempt.amount) * 100);
+      const invoicePaisa = invoice.amount_paise;
+      if (attemptPaisa !== invoicePaisa) {
+        console.error(`[billing.webhook] Amount mismatch: attempt=${attemptPaisa} invoice=${invoicePaisa}`);
+        throw new Error(`VALIDATION_ERROR: Payment amount (${attemptPaisa}) does not match invoice (${invoicePaisa})`);
+      }
+
+      // SAFETY 4: Validate owner match
+      if (attempt.owner_id !== invoice.owner_id) {
+        console.error(`[billing.webhook] Owner mismatch: attempt=${attempt.owner_id} invoice=${invoice.owner_id}`);
+        throw new Error(`SECURITY_ERROR: Payment owner does not match invoice owner`);
+      }
+
+      // SAFETY 5: Ensure invoice has plan_id (required for activation)
+      if (!invoice.plan_id) {
+        throw new Error(`VALIDATION_ERROR: Invoice ${invoice.id} missing plan_id, cannot activate subscription`);
+      }
+
+      // ── Atomic transaction: mark invoice PAID + activate/extend subscription ──
+      await prisma.$transaction(async (tx) => {
+        // Mark invoice PAID (idempotent WHERE clause)
+        const updated = await tx.ownerInvoice.updateMany({
+          where: { id: invoice.id, status: "PENDING" },
+          data: { status: "PAID", paid_at: new Date() }
+        });
+
+        if (updated.count === 0) {
+          console.warn(`[billing.webhook] Invoice ${invoice.id} already processed by another webhook`);
+          return; // Race condition: another webhook already marked it PAID
+        }
+
+        // Fetch current subscription (if exists)
+        const currentSub = await tx.ownerSubscription.findUnique({
+          where: { owner_id: invoice.owner_id }
+        });
+
+        const now = new Date();
+        let startDate: Date;
+        let endDate: Date;
+
+        if (currentSub && currentSub.status === "ACTIVE" && currentSub.end_date) {
+          // EXTEND from current end_date (not from now)
+          startDate = currentSub.start_date;
+          const currentEnd = new Date(currentSub.end_date);
+          const effectiveStart = currentEnd > now ? currentEnd : now;
+          endDate = new Date(Date.UTC(
+            effectiveStart.getUTCFullYear(),
+            effectiveStart.getUTCMonth() + 1,
+            effectiveStart.getUTCDate()
+          ));
+        } else {
+          // NEW or EXPIRED subscription: start now
+          startDate = now;
+          endDate = new Date(Date.UTC(
+            now.getUTCFullYear(),
+            now.getUTCMonth() + 1,
+            now.getUTCDate()
+          ));
+        }
+
+        // Upsert subscription (single-owner invariant)
+        await tx.ownerSubscription.upsert({
+          where: { owner_id: invoice.owner_id },
+          update: {
+            plan_id: invoice.plan_id!,
+            status: "ACTIVE",
+            start_date: startDate,
+            end_date: endDate,
+            auto_renew: true,
+            updated_at: now
+          },
+          create: {
+            owner_id: invoice.owner_id,
+            plan_id: invoice.plan_id!,
+            status: "ACTIVE",
+            start_date: startDate,
+            end_date: endDate,
+            auto_renew: true
+          }
+        });
+
+        // Mark attempt SUCCESS
+        await tx.paymentAttempt.update({
+          where: { id: attemptId, status: "PENDING" },
+          data: {
+            status: "SUCCESS",
+            gateway_txn_id: gatewayTxnId,
+            raw_webhook_payload: rawPayload || null,
+            confirmed_at: now
+          }
+        }).catch(() => {}); // Idempotent: ignore if already SUCCESS
+
+        console.info(`[billing.webhook] Subscription activated: owner=${invoice.owner_id} plan=${invoice.plan_id} end=${endDate.toISOString()}`);
+      });
+
+      return await prisma.paymentAttempt.findUnique({ where: { id: attemptId } });
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // 💰 RENT PATH: Obligation payment (existing logic)
+    // ──────────────────────────────────────────────────────────────
 
     if (status !== "SUCCESS") {
+      // Atomic status transition
       return await prisma.paymentAttempt.update({
-        where: { id: attemptId },
+        where: { id: attemptId, status: "PENDING" },
         data: {
           status: status as any,
           gateway_txn_id: gatewayTxnId,
           raw_webhook_payload: rawPayload || null
         }
-      });
+      }).catch(e => attempt); // Return existing if race condition already updated it
     }
 
-    // Success path
-    if (attempt.payments.length > 0) {
-      return await prisma.paymentAttempt.update({
-        where: { id: attemptId },
+    // Success path - atomic transition
+    let updatedAttempt;
+    try {
+      updatedAttempt = await prisma.paymentAttempt.update({
+        where: { id: attemptId, status: "PENDING" },
         data: { status: "SUCCESS", gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null, confirmed_at: new Date() }
       });
+    } catch (e) {
+      console.warn(`[payments] Race condition mitigated for attempt ${attemptId}`);
+      return attempt; // Already updated by another thread
+    }
+
+    if (attempt.payments.length > 0) {
+      return updatedAttempt;
     }
 
     const recordResult = await this.recordPayment({
-      obligationId: attempt.obligation_id,
+      obligationId: attempt.obligation_id!, // rent path: guaranteed by XOR constraint
       amountPaid: Number(attempt.amount),
       paymentMethod: "UPI",
       referenceNumber: gatewayTxnId || attempt.merchant_txn_id,
@@ -595,62 +737,115 @@ export class PaymentService {
   }
 
   async handlePaymentWebhook(providerName: string, headers: any, body: any) {
-    // This is complex because we need to find the correct attempt
-    // For now, let's assume we can match by merchantTxnId in the provider's verifyWebhook
     const providerStr = providerName.toUpperCase();
+    
+    // Instead of searching top 20 pending attempts, we MUST extract the merchantOrderId directly
+    // since we know it's a PhonePe webhook and the format.
+    let merchantOrderId: string | null = null;
+    
+    try {
+      let parsed = body;
+      if (typeof body === "string") parsed = JSON.parse(body);
+      merchantOrderId = parsed?.payload?.merchantOrderId || null;
+    } catch (e) {
+      console.warn("[payments.webhook] Could not extract merchantOrderId from body", e);
+    }
 
-    // We'll search for recent pending attempts of this provider
-    const attempts = await prisma.paymentAttempt.findMany({
-      where: { provider: providerStr, status: "PENDING" },
-      orderBy: { created_at: "desc" },
-      take: 20
+    if (!merchantOrderId) {
+      throw new Error("BAD_REQUEST: Webhook payload missing merchantOrderId");
+    }
+
+    // Direct lookup - O(1) and safe
+    const attempt = await prisma.paymentAttempt.findUnique({
+      where: { merchant_txn_id: merchantOrderId }
     });
 
-    console.info("[payments.webhook] received", {
+    if (!attempt) {
+      throw new Error(`NOT_FOUND: Payment attempt not found for merchant_txn_id: ${merchantOrderId}`);
+    }
+
+    if (attempt.provider !== providerStr) {
+      throw new Error(`BAD_REQUEST: Webhook provider ${providerStr} does not match attempt provider ${attempt.provider}`);
+    }
+
+    // Idempotency check
+    if (attempt.status !== "PENDING") {
+      console.info("[payments.webhook] attempt already processed", {
+        attemptId: attempt.id,
+        status: attempt.status,
+      });
+      incrementWebhook(true); // Already processed, not an error
+      return { success: true, message: `Attempt already in ${attempt.status} state` };
+    }
+
+    console.info("[payments.webhook] received matching attempt", {
       provider: providerStr,
-      pendingCandidates: attempts.length,
+      attemptId: attempt.id,
+      merchantTxnId: attempt.merchant_txn_id,
       hasVerifyHeader: Boolean(headers?.["x-verify"] || headers?.["X-VERIFY"]),
     });
 
-    for (const attempt of attempts) {
-      const { instance } = await this.getProviderInstance(attempt.owner_id, attempt.provider);
-      try {
-        const verification = await instance.verifyWebhook(headers, body);
-        if (verification.merchant_txn_id === attempt.merchant_txn_id) {
-          if (verification.status === "SUCCESS") {
-            const expectedPaise = Math.round(Number(attempt.amount) * 100);
-            const receivedPaise =
-              verification.amount == null ? null : Math.round(Number(verification.amount) * 100);
+    const { instance } = await this.getProviderInstance(attempt.owner_id, attempt.provider);
+    
+    // 1. Initial parsing of the webhook payload
+    const verification = await instance.verifyWebhook(headers, body);
+    
+    if (verification.merchant_txn_id !== attempt.merchant_txn_id) {
+       throw new Error(`SECURITY_ERROR: Webhook merchantTxnId ${verification.merchant_txn_id} does not match DB ${attempt.merchant_txn_id}`);
+    }
 
-            if (receivedPaise == null || receivedPaise !== expectedPaise) {
-              console.error("[payments.webhook] amount mismatch", {
-                attemptId: attempt.id,
-                merchantTxnId: attempt.merchant_txn_id,
-                expectedAmount: Number(attempt.amount),
-                receivedAmount: verification.amount ?? null,
-              });
-              throw new Error("BAD_REQUEST: Webhook amount does not match payment attempt");
-            }
-          }
+    // 2. CRITICAL SECURITY: Never trust webhook payload blindly.
+    // Call out to the payment provider to fetch the absolute source of truth status.
+    let sourceOfTruth;
+    try {
+      sourceOfTruth = await instance.fetchStatus(attempt.merchant_txn_id, verification.gateway_txn_id || undefined);
+    } catch (e) {
+      // SRE FIX: If the provider API is down, save the raw webhook payload so we don't lose the event data
+      // even though we are returning 500 and expecting a retry.
+      await prisma.paymentAttempt.update({
+        where: { id: attempt.id },
+        data: { raw_webhook_payload: verification.raw_event }
+      });
+      throw e;
+    }
+    
+    if (sourceOfTruth.status === "PENDING" && verification.status === "SUCCESS") {
+      throw new Error(`SECURITY_ERROR: Webhook claimed SUCCESS but Provider API claims PENDING for ${attempt.merchant_txn_id}`);
+    }
 
-          console.info("[payments.webhook] matched attempt", {
-            attemptId: attempt.id,
-            merchantTxnId: attempt.merchant_txn_id,
-            status: verification.status,
-          });
-          return await this.finalizePaymentAttempt(
-            attempt.id,
-            verification.status,
-            verification.gateway_txn_id || undefined,
-            verification.raw_event
-          );
-        }
-      } catch (e) {
-        continue;
+    const finalStatus = sourceOfTruth.status !== "PENDING" ? sourceOfTruth.status : verification.status;
+
+    if (finalStatus === "SUCCESS") {
+      const expectedPaise = Math.round(Number(attempt.amount) * 100);
+      const receivedPaise =
+        verification.amount == null ? null : Math.round(Number(verification.amount) * 100);
+
+      if (receivedPaise == null || receivedPaise !== expectedPaise) {
+        console.error("[payments.webhook] amount mismatch", {
+          attemptId: attempt.id,
+          merchantTxnId: attempt.merchant_txn_id,
+          expectedAmount: Number(attempt.amount),
+          receivedAmount: verification.amount ?? null,
+        });
+        throw new Error("BAD_REQUEST: Webhook amount does not match payment attempt");
       }
     }
 
-    throw new Error("NOT_FOUND: Matching payment attempt not found or verification failed");
+    console.info("[payments.webhook] matched attempt successfully", {
+      attemptId: attempt.id,
+      merchantTxnId: attempt.merchant_txn_id,
+      status: verification.status,
+    });
+    
+    incrementWebhook(true);
+    incrementPayment("success");
+    
+    return await this.finalizePaymentAttempt(
+      attempt.id,
+      finalStatus,
+      sourceOfTruth.gateway_txn_id || verification.gateway_txn_id || undefined,
+      verification.raw_event
+    );
   }
 
   async verifyPaymentStatus(params: {

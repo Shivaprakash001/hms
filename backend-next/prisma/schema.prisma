@@ -277,8 +277,9 @@ model Payment {
 
 model PaymentAttempt {
   id                  String         @id @default(uuid()) @db.Uuid
-  obligation_id       String         @db.Uuid
-  tenant_id          String         @db.Uuid
+  obligation_id       String?        @db.Uuid
+  invoice_id          String?        @db.Uuid
+  tenant_id           String         @db.Uuid
   owner_id            String         @db.Uuid
   provider            String
   merchant_txn_id     String         @unique
@@ -294,8 +295,9 @@ model PaymentAttempt {
   created_at          DateTime       @default(now()) @db.Timestamptz(6)
   updated_at          DateTime?      @updatedAt @db.Timestamptz(6)
   checkout_url        String?
-  obligation          RentObligation @relation(fields: [obligation_id], references: [id])
-  tenant             Tenant        @relation(fields: [tenant_id], references: [id])
+  obligation          RentObligation? @relation(fields: [obligation_id], references: [id])
+  invoice             OwnerInvoice?   @relation(fields: [invoice_id], references: [id], onDelete: SetNull)
+  tenant              Tenant          @relation(fields: [tenant_id], references: [id])
   payments            Payment[]
 
   @@map("payment_attempts")
@@ -507,6 +509,7 @@ model OwnerInvoice {
   owner           Profile            @relation(fields: [owner_id], references: [id], onDelete: Cascade)
   subscription    OwnerSubscription? @relation(fields: [subscription_id], references: [id], onDelete: SetNull)
   plan            Plan?              @relation(fields: [plan_id], references: [id], onDelete: SetNull)
+  attempts        PaymentAttempt[]
 
   @@index([owner_id, created_at(sort: Desc)])
   @@index([status])
