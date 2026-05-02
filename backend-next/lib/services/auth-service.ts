@@ -61,7 +61,18 @@ export class AuthService {
       }
     }
 
-    if (profile.role === "OWNER" && !profile.owner_id) {
+    let effectiveOwnerId = profile.owner_id;
+    if (profile.role === "OWNER" && (!effectiveOwnerId || effectiveOwnerId.trim() === "")) {
+      console.warn("[auth.login] repairing missing owner_id for OWNER", { user_id: profile.id });
+      const updated = await prisma.profile.update({
+        where: { id: profile.id },
+        data: { owner_id: profile.id },
+        select: { owner_id: true },
+      });
+      effectiveOwnerId = updated.owner_id;
+    }
+
+    if (profile.role === "OWNER" && !effectiveOwnerId) {
       throw new Error("UNAUTHORIZED: Invalid OWNER: missing owner_id");
     }
 
@@ -69,7 +80,7 @@ export class AuthService {
       sub: profile.id,
       role: profile.role,
       email: profile.email,
-      owner_id: profile.owner_id || null,
+      owner_id: effectiveOwnerId || null,
     });
 
     const refreshToken = generateRefreshToken();

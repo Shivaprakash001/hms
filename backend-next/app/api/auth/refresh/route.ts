@@ -44,7 +44,18 @@ export async function POST(req: NextRequest) {
       return apiError("Account is disabled", "FORBIDDEN", 403);
     }
 
-    if (tokenRecord.profile.role === "OWNER" && !tokenRecord.profile.owner_id) {
+    let effectiveOwnerId = tokenRecord.profile.owner_id;
+    if (tokenRecord.profile.role === "OWNER" && (!effectiveOwnerId || effectiveOwnerId.trim() === "")) {
+      console.warn("[auth.refresh] repairing missing owner_id for OWNER", { user_id: tokenRecord.profile.id });
+      const updated = await prisma.profile.update({
+        where: { id: tokenRecord.profile.id },
+        data: { owner_id: tokenRecord.profile.id },
+        select: { owner_id: true },
+      });
+      effectiveOwnerId = updated.owner_id;
+    }
+
+    if (tokenRecord.profile.role === "OWNER" && !effectiveOwnerId) {
       return apiError("Invalid OWNER: missing owner_id", "UNAUTHORIZED", 401);
     }
 
@@ -53,7 +64,7 @@ export async function POST(req: NextRequest) {
       sub: tokenRecord.profile.id,
       role: tokenRecord.profile.role,
       email: tokenRecord.profile.email,
-      owner_id: tokenRecord.profile.owner_id || null,
+      owner_id: effectiveOwnerId || null,
     });
 
     const newRefreshToken = generateRefreshToken();
