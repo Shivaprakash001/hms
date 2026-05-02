@@ -5,6 +5,7 @@ import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PaymentProviderFactory } from "@/lib/services/payments/provider-factory";
+import { eventLog } from "@/lib/services/event-log-service";
 import crypto from "crypto";
 
 /**
@@ -70,8 +71,11 @@ export async function POST(req: NextRequest) {
 
     // 4. Create invoice (PENDING)
     const invoiceNumber = `INV-${Date.now()}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
-    const dueDate = new Date();
+    const now = new Date();
+    const dueDate = new Date(now);
     dueDate.setDate(dueDate.getDate() + 7); // 7 days to pay
+    const expiresAt = new Date(now);
+    expiresAt.setDate(expiresAt.getDate() + 30); // 30 days payment window
 
     const invoice = await prisma.ownerInvoice.create({
       data: {
@@ -80,8 +84,9 @@ export async function POST(req: NextRequest) {
         invoice_number: invoiceNumber,
         amount_paise: plan.price_paise,
         status: "PENDING",
-        billing_month: new Date(),
-        due_date: dueDate
+        billing_month: now,
+        due_date: dueDate,
+        expires_at: expiresAt
       }
     });
 
@@ -152,6 +157,17 @@ export async function POST(req: NextRequest) {
           expires_at: result.expires_at,
           raw_create_response: result.raw_response as any
         }
+      });
+
+      // Audit log: plan upgrade initiated
+      await eventLog.log("PLAN_UPGRADE_INITIATED", session.sub, {
+        plan_id: plan.id,
+        plan_code: plan.code,
+        plan_name: plan.name,
+        invoice_id: invoice.id,
+        invoice_number: invoiceNumber,
+        amount_paise: plan.price_paise,
+        payment_attempt_id: updatedAttempt.id
       });
 
       return apiResponse({

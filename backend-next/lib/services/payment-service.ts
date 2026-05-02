@@ -603,6 +603,17 @@ export class PaymentService {
         throw new Error(`VALIDATION_ERROR: Invoice ${invoice.id} missing plan_id, cannot activate subscription`);
       }
 
+      // SAFETY 6: Reject expired invoices
+      const now = new Date();
+      if (invoice.expires_at && invoice.expires_at < now) {
+        console.error(`[billing.webhook] Invoice ${invoice.id} expired at ${invoice.expires_at.toISOString()}`);
+        await prisma.paymentAttempt.update({
+          where: { id: attemptId },
+          data: { status: "FAILED", raw_webhook_payload: rawPayload || null }
+        }).catch(() => {});
+        throw new Error(`VALIDATION_ERROR: Invoice expired on ${invoice.expires_at.toISOString()}. Payment rejected.`);
+      }
+
       // ── Atomic transaction: mark invoice PAID + activate/extend subscription ──
       await prisma.$transaction(async (tx) => {
         // Mark invoice PAID (idempotent WHERE clause)
@@ -616,7 +627,16 @@ export class PaymentService {
           return; // Race condition: another webhook already marked it PAID
         }
 
-        // Fetch current subscription (if exists)
+        // CONCURRENCY SAFETY: Lock subscription row to serialize concurrent updates
+        // This prevents race conditions where two webhooks read the same end_date
+        // and both calculate the same new end_date, causing one month to be lost.
+        await tx.$queryRaw`
+          SELECT id FROM owner_subscriptions
+          WHERE owner_id = ${invoice.owner_id}::uuid
+          FOR UPDATE
+        `;
+
+        // Fetch current subscription (now locked for this transaction)
         const currentSub = await tx.ownerSubscription.findUnique({
           where: { owner_id: invoice.owner_id }
         });
@@ -678,6 +698,24 @@ export class PaymentService {
         }).catch(() => {}); // Idempotent: ignore if already SUCCESS
 
         console.info(`[billing.webhook] Subscription activated: owner=${invoice.owner_id} plan=${invoice.plan_id} end=${endDate.toISOString()}`);
+      });
+
+      // Audit logging for billing events
+      await eventLog.log("INVOICE_PAID", invoice.owner_id, {
+        invoice_id: invoice.id,
+        invoice_number: invoice.invoice_number,
+        amount_paise: invoice.amount_paise,
+        plan_id: invoice.plan_id,
+        payment_attempt_id: attemptId,
+        gateway_txn_id: gatewayTxnId
+      });
+
+      await eventLog.log("SUBSCRIPTION_ACTIVATED", invoice.owner_id, {
+        plan_id: invoice.plan_id,
+        invoice_id: invoice.id,
+        start_date: (await prisma.ownerSubscription.findUnique({ where: { owner_id: invoice.owner_id } }))?.start_date,
+        end_date: (await prisma.ownerSubscription.findUnique({ where: { owner_id: invoice.owner_id } }))?.end_date,
+        status: "ACTIVE"
       });
 
       return await prisma.paymentAttempt.findUnique({ where: { id: attemptId } });
