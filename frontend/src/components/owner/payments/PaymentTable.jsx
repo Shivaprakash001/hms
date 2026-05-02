@@ -63,10 +63,15 @@ const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadRece
                                 <td className="py-4 px-6">
                                     <div className="flex items-center gap-3">
                                         <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center text-xs font-bold">
-                                            {(payment.tenantName?.charAt(0)) || '?'}
+                                            {(() => {
+                                                const tn = payment.tenantName;
+                                                return typeof tn === 'string' && tn.length > 0
+                                                    ? tn[0].toUpperCase()
+                                                    : '?';
+                                            })()}
                                         </div>
                                         <div>
-                                            <p className="font-semibold text-slate-900 text-sm">{payment.tenantName}</p>
+                                            <p className="font-semibold text-slate-900 text-sm">{typeof payment.tenantName === 'string' && payment.tenantName.length > 0 ? payment.tenantName : 'Unknown Tenant'}</p>
                                         </div>
                                     </div>
                                 </td>
@@ -162,10 +167,15 @@ const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadRece
                             <div className="flex justify-between items-start">
                                 <div className="flex items-center gap-3">
                                     <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center text-xs font-bold">
-                                        {(payment.tenantName?.charAt(0)) || '?'}
+                                            {(() => {
+                                                const tn = payment.tenantName;
+                                                return typeof tn === 'string' && tn.length > 0
+                                                    ? tn[0].toUpperCase()
+                                                    : '?';
+                                            })()}
                                     </div>
                                     <div>
-                                        <p className="font-semibold text-slate-900 text-sm">{payment.tenantName}</p>
+                                            <p className="font-semibold text-slate-900 text-sm">{typeof payment.tenantName === 'string' && payment.tenantName.length > 0 ? payment.tenantName : 'Unknown Tenant'}</p>
                                         <p className="text-xs text-slate-500 font-medium">Room {payment.room}</p>
                                     </div>
                                 </div>
