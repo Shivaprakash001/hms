@@ -17,12 +17,22 @@ export async function GET(req: Request) {
     const limit = parseInt(searchParams.get("limit") || "50", 10);
     const offset = parseInt(searchParams.get("offset") || "0", 10);
     const tenantId = searchParams.get("tenant_id") || undefined;
+    const status = searchParams.get("status") || undefined;
+    const method = searchParams.get("method") || undefined;
+    const month = searchParams.get("month") || undefined;
+
+    const filters = {
+      tenantId,
+      status,
+      method,
+      month,
+    };
 
     const result = await paymentService.getAllPayments(
       user.id,
       isNaN(limit) ? 50 : limit,
       isNaN(offset) ? 0 : offset,
-      tenantId
+      filters
     );
 
     return NextResponse.json(result);
