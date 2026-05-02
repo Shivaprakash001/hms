@@ -34,7 +34,7 @@ export async function POST(req: Request) {
     }
 
     const result = await paymentService.createPaymentIntent(
-      ids,
+      ids[0],
       amount ? Number(amount) : null,
       user.id,
       tenantId
