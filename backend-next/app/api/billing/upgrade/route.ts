@@ -4,9 +4,12 @@ export const runtime = "nodejs";
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { getLogger } from "@/lib/logger";
 import { PaymentProviderFactory } from "@/lib/services/payments/provider-factory";
 import { eventLog } from "@/lib/services/event-log-service";
 import crypto from "crypto";
+
+const logger = getLogger("billing.upgrade");
 
 /**
  * 💳 Plan Upgrade Payment Flow
@@ -22,6 +25,7 @@ import crypto from "crypto";
  * - Webhook will activate subscription on SUCCESS
  */
 export async function POST(req: NextRequest) {
+  const requestId = req.headers.get("x-request-id") || crypto.randomUUID();
   const session = await getSession(req);
   if (!session || session.role !== "OWNER") {
     return apiError("Only owners can upgrade plans", "FORBIDDEN", 403);
@@ -196,7 +200,14 @@ export async function POST(req: NextRequest) {
         data: { status: "FAILED", raw_create_response: { error: String(error) } as any }
       });
 
-      console.error("[billing.upgrade] Payment provider failed:", error);
+      logger.error("billing.upgrade.intent_failed", {
+        request_id: requestId,
+        owner_id: session.sub,
+        plan_id: plan.id,
+        invoice_id: invoice.id,
+        attempt_id: attempt.id,
+        error: String(error),
+      });
       return apiError(
         "Failed to create payment intent. Please try again.",
         "PAYMENT_PROVIDER_ERROR",
@@ -205,7 +216,10 @@ export async function POST(req: NextRequest) {
     }
 
   } catch (error: any) {
-    console.error("[billing.upgrade] Error:", error);
+    logger.error("billing.upgrade.failed", {
+      request_id: requestId,
+      error: String(error),
+    });
     return apiError(error.message || "Failed to initiate upgrade", "INTERNAL_ERROR", 500);
   }
 }

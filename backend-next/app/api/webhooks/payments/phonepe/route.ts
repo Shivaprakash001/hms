@@ -3,20 +3,29 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { paymentService } from "@/lib/services/payment-service";
+import { getLogger } from "@/lib/logger";
+import { incrementWebhook } from "@/lib/metrics";
+import { randomUUID } from "crypto";
+
+const logger = getLogger("webhook.phonepe");
 
 
 /**
- * 🔔 PhonePe Webhook (Checkout v2)
+ * PhonePe Webhook (Checkout v2)
  * POST /api/webhooks/payments/phonepe
  * 
  * Events: pg.order.completed, pg.order.failed
- * Auth: SHA256(username:password) in Authorization header
+ * Auth: Basic Auth (username:password) in Authorization header
  * 
  * This endpoint is PUBLIC (no JWT auth) — PhonePe calls it server-to-server.
  */
 export async function POST(req: Request) {
+  const startTime = Date.now();
+  let statusCode = 200;
+  let merchantOrderId = "unknown";
+  const requestId = req.headers.get("x-request-id") || randomUUID();
+
   try {
-    // Collect all headers
     const headers: Record<string, string> = {};
     req.headers.forEach((value, key) => {
       headers[key] = value;
@@ -26,64 +35,85 @@ export async function POST(req: Request) {
     const webhookUsername = process.env.PHONEPE_WEBHOOK_USERNAME;
     const webhookPassword = process.env.PHONEPE_WEBHOOK_PASSWORD;
 
-    // 1. PhonePe Basic Auth Validation (happens before checking body)
     if (webhookUsername && webhookPassword && authHeader && authHeader.startsWith("Basic ")) {
       const encoded = authHeader.substring(6);
       const decoded = Buffer.from(encoded, "base64").toString("utf-8");
       const [username, password] = decoded.split(":");
 
-      // Return 401 if credentials don't match (PhonePe will see "Unauthorized")
       if (username !== webhookUsername || password !== webhookPassword) {
-        console.warn("[webhook.phonepe] Invalid Basic Auth credentials");
+        logger.warn("webhook.phonepe.auth_invalid", {
+          request_id: requestId,
+          ip: req.headers.get("x-forwarded-for") || "unknown",
+        });
         return new Response("Unauthorized", { status: 401 });
       }
     }
 
-    // 2. Read raw body text first
     const rawBody = await req.text();
 
-    // 3. Handle PhonePe dashboard validation ping (empty or very short body)
     if (!rawBody || rawBody.trim().length === 0) {
-      console.info("[webhook.phonepe] Received empty validation ping from PhonePe");
+      logger.info("webhook.phonepe.validation_ping_empty", { request_id: requestId });
       return new Response("Webhook verified", { status: 200 });
     }
 
-    // 4. Parse JSON
     const body = JSON.parse(rawBody);
 
-    // 5. Short-circuit validation pings that contain JSON but aren't real events
-    // PhonePe dashboard sends dummy payloads during webhook creation
     if (body.test || !body.payload || !body.payload.merchantOrderId) {
-      console.info("[webhook.phonepe] Received non-payment validation ping from PhonePe");
+      logger.info("webhook.phonepe.validation_ping_non_payment", { request_id: requestId });
       return NextResponse.json({ success: true, message: "Webhook verified" }, { status: 200 });
     }
 
-    console.info("[webhook.phonepe] received real event:", {
+    merchantOrderId = body.payload.merchantOrderId;
+
+    logger.info("webhook.phonepe.event_received", {
+      request_id: requestId,
       event: body.event,
-      merchantOrderId: body.payload.merchantOrderId,
+      merchant_order_id: merchantOrderId,
       state: body.payload.state,
     });
 
-    const result = await paymentService.handlePaymentWebhook("PHONEPE", headers, body);
+    const result = await paymentService.handlePaymentWebhook("PHONEPE", headers, body, { requestId });
+
+    logger.metrics("webhook_processed", {
+      request_id: requestId,
+      merchant_order_id: merchantOrderId,
+      status: "success",
+      duration_ms: Date.now() - startTime,
+    });
 
     return NextResponse.json({ success: true, data: result }, { status: 200 });
   } catch (error: any) {
-    console.error("[webhook.phonepe] Error inside webhook:", error);
+    statusCode = error.message?.includes("Invalid webhook payload") ? 200 : 500;
     
-    // ALWAYS return success:true and 200 to PhonePe to acknowledge receipt safely.
-    // If we return success:false, PhonePe's dashboard validator assumes the URL is broken.
-    // We already log the real error above internally.
+    logger.error("webhook.phonepe.processing_failed", {
+      request_id: requestId,
+      merchant_order_id: merchantOrderId,
+      status_code: statusCode,
+      duration_ms: Date.now() - startTime,
+      error: error.message,
+    });
+
+    incrementWebhook(false);
+
+    logger.metrics("webhook_processed", {
+      request_id: requestId,
+      merchant_order_id: merchantOrderId,
+      status: "error",
+      duration_ms: Date.now() - startTime,
+    });
+
+    if (error.message && error.message.includes("Invalid webhook payload")) {
+       return NextResponse.json({ success: true, status: "validation_ping_ignored" }, { status: 200 });
+    }
+
     return NextResponse.json(
-      { success: true, status: "acknowledged_with_internal_error" },
-      { status: 200 }
+      { success: false, error: "Internal Server Error" },
+      { status: 500 }
     );
   }
 }
 
 
-/**
- * Handle browser GET requests gracefully.
- */
 export async function GET() {
   return NextResponse.json(
     { success: true, message: "PhonePe webhook endpoint is active and listening for POST requests." },

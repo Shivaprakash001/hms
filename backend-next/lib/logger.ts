@@ -1,24 +1,55 @@
-import pino from "pino";
+/**
+ * Structured Logging Utility
+ * Ensures consistent log format across all services
+ */
 
-const level = process.env.LOG_LEVEL || "info";
-const isProduction = process.env.NODE_ENV === "production";
+type LogFunction = (message: string, meta?: any) => void;
+type Logger = {
+  info: LogFunction;
+  warn: LogFunction;
+  error: LogFunction;
+  metrics: LogFunction;
+};
 
-// `pino-pretty` transport is helpful locally but can break in serverless runtimes.
-// Keep production logger transport-free for maximum compatibility.
-const logger = isProduction
-  ? pino({ level })
-  : pino({
-      level,
-      transport: {
-        target: "pino-pretty",
-        options: {
-          colorize: true,
-          translateTime: "SYS:standard",
-          ignore: "pid,hostname",
-        },
-      },
-    });
+function write(level: "INFO" | "WARN" | "ERROR" | "METRIC", service: string, event: string, meta?: any) {
+  const payload = {
+    timestamp: new Date().toISOString(),
+    level,
+    service,
+    event,
+    message: event,
+    ...(meta || {}),
+  };
 
-export function getLogger(name: string) {
-  return logger.child({ component: name });
+  const line = JSON.stringify(payload);
+  if (level === "WARN") return console.warn(line);
+  if (level === "ERROR") return console.error(line);
+  return console.info(line);
 }
+
+function createLogger(service: string): Logger {
+  return {
+    info: (message: string, meta?: any) => {
+      write("INFO", service, message, meta);
+    },
+
+    warn: (message: string, meta?: any) => {
+      write("WARN", service, message, meta);
+    },
+
+    error: (message: string, meta?: any) => {
+      write("ERROR", service, message, meta);
+    },
+
+    metrics: (message: string, meta?: any) => {
+      write("METRIC", service, message, meta);
+    },
+  };
+}
+
+export function getLogger(service: string): Logger {
+  return createLogger(service);
+}
+
+// Default logger instance
+export const logger = createLogger("app");

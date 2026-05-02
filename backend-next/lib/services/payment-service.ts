@@ -7,7 +7,10 @@ import { receiptService } from "./receipt-service";
 import { getPreferences } from "../preferences";
 import { formatCurrency, formatMonthYear } from "../format";
 import { eventLog } from "./event-log-service";
+import { getLogger } from "../logger";
 import { incrementPayment, incrementWebhook } from "../metrics";
+
+const logger = getLogger("payment.service");
 
 export class PaymentService {
   // 🔧 FIX C1: Old calculateProratedRent, generateMonthlyRent, previewMonthlyRent DELETED.
@@ -178,7 +181,10 @@ export class PaymentService {
         select: { payment_group_id: true, amount_paid: true, created_at: true },
       });
       if (existing) {
-        console.info(`[PAYMENT] Idempotent skip: key=${data.idempotencyKey}, group=${existing.payment_group_id}`);
+        logger.info("payments.record_tenant.idempotent_skip", {
+          idempotency_key: data.idempotencyKey,
+          payment_group_id: existing.payment_group_id,
+        });
         // Return the existing group's data
         const groupPayments = await prisma.payment.findMany({
           where: { payment_group_id: existing.payment_group_id! },
@@ -470,7 +476,7 @@ export class PaymentService {
 
     const merchantTxnId = `hms_${obligationId.replace(/-/g, "").substring(0, 12)}_${crypto.randomBytes(4).toString("hex")}`;
 
-    console.info("[payments.createIntent] creating attempt", {
+    logger.info("payments.create_intent.start", {
       obligationId,
       userId,
       tenantId: tenantId || null,
@@ -518,7 +524,7 @@ export class PaymentService {
         }
       });
     } catch (error) {
-      console.error("[payments.createIntent] provider create failed", {
+      logger.error("payments.create_intent.failed", {
         attemptId: attempt.id,
         provider,
         merchantTxnId,
@@ -546,7 +552,14 @@ export class PaymentService {
     return attempt;
   }
 
-  async finalizePaymentAttempt(attemptId: string, status: string, gatewayTxnId?: string, rawPayload?: any) {
+  async finalizePaymentAttempt(
+    attemptId: string,
+    status: string,
+    gatewayTxnId?: string,
+    rawPayload?: any,
+    context?: { requestId?: string }
+  ) {
+    const requestMeta = context?.requestId ? { request_id: context.requestId } : {};
     // 1. Use atomic update to prevent double-crediting race conditions
     const attempt = await prisma.paymentAttempt.findUnique({
       where: { id: attemptId },
@@ -564,7 +577,11 @@ export class PaymentService {
 
       // SAFETY 1: Idempotency — if invoice already PAID, do nothing
       if (invoice.status === "PAID") {
-        console.info(`[billing.webhook] Invoice ${invoice.id} already PAID, skipping`);
+        logger.info("billing.webhook.invoice_already_paid", {
+          ...requestMeta,
+          invoice_id: invoice.id,
+          attempt_id: attemptId,
+        });
         if (attempt.status === "PENDING") {
           await prisma.paymentAttempt.update({
             where: { id: attemptId, status: "PENDING" },
@@ -576,7 +593,11 @@ export class PaymentService {
 
       // SAFETY 2: Non-SUCCESS statuses → mark attempt but leave invoice PENDING
       if (status !== "SUCCESS") {
-        console.info(`[billing.webhook] Invoice payment ${attemptId} status=${status}, not activating`);
+        logger.info("billing.webhook.invoice_not_success", {
+          ...requestMeta,
+          attempt_id: attemptId,
+          status,
+        });
         return await prisma.paymentAttempt.update({
           where: { id: attemptId, status: "PENDING" },
           data: { status: status as any, gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null }
@@ -587,13 +608,25 @@ export class PaymentService {
       const attemptPaisa = Math.round(Number(attempt.amount) * 100);
       const invoicePaisa = invoice.amount_paise;
       if (attemptPaisa !== invoicePaisa) {
-        console.error(`[billing.webhook] Amount mismatch: attempt=${attemptPaisa} invoice=${invoicePaisa}`);
+        logger.error("billing.webhook.amount_mismatch", {
+          ...requestMeta,
+          attempt_id: attemptId,
+          invoice_id: invoice.id,
+          attempt_amount_paise: attemptPaisa,
+          invoice_amount_paise: invoicePaisa,
+        });
         throw new Error(`VALIDATION_ERROR: Payment amount (${attemptPaisa}) does not match invoice (${invoicePaisa})`);
       }
 
       // SAFETY 4: Validate owner match
       if (attempt.owner_id !== invoice.owner_id) {
-        console.error(`[billing.webhook] Owner mismatch: attempt=${attempt.owner_id} invoice=${invoice.owner_id}`);
+        logger.error("billing.webhook.owner_mismatch", {
+          ...requestMeta,
+          attempt_id: attemptId,
+          invoice_id: invoice.id,
+          attempt_owner_id: attempt.owner_id,
+          invoice_owner_id: invoice.owner_id,
+        });
         throw new Error(`SECURITY_ERROR: Payment owner does not match invoice owner`);
       }
 
@@ -605,7 +638,12 @@ export class PaymentService {
       // SAFETY 6: Reject expired invoices
       const now = new Date();
       if (invoice.expires_at && invoice.expires_at < now) {
-        console.error(`[billing.webhook] Invoice ${invoice.id} expired at ${invoice.expires_at.toISOString()}`);
+        logger.warn("billing.webhook.invoice_expired", {
+          ...requestMeta,
+          attempt_id: attemptId,
+          invoice_id: invoice.id,
+          expires_at: invoice.expires_at.toISOString(),
+        });
         await prisma.paymentAttempt.update({
           where: { id: attemptId },
           data: { status: "FAILED", raw_webhook_payload: rawPayload || null }
@@ -622,7 +660,11 @@ export class PaymentService {
         });
 
         if (updated.count === 0) {
-          console.warn(`[billing.webhook] Invoice ${invoice.id} already processed by another webhook`);
+          logger.warn("billing.webhook.invoice_race_already_processed", {
+            ...requestMeta,
+            attempt_id: attemptId,
+            invoice_id: invoice.id,
+          });
           return; // Race condition: another webhook already marked it PAID
         }
 
@@ -696,7 +738,14 @@ export class PaymentService {
           }
         }).catch(() => {}); // Idempotent: ignore if already SUCCESS
 
-        console.info(`[billing.webhook] Subscription activated: owner=${invoice.owner_id} plan=${invoice.plan_id} end=${endDate.toISOString()}`);
+        logger.info("billing.webhook.subscription_activated", {
+          ...requestMeta,
+          attempt_id: attemptId,
+          invoice_id: invoice.id,
+          owner_id: invoice.owner_id,
+          plan_id: invoice.plan_id,
+          end_date: endDate.toISOString(),
+        });
       });
 
       // Audit logging for billing events
@@ -744,7 +793,10 @@ export class PaymentService {
         data: { status: "SUCCESS", gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null, confirmed_at: new Date() }
       });
     } catch (e) {
-      console.warn(`[payments] Race condition mitigated for attempt ${attemptId}`);
+      logger.warn("payments.finalize.race_mitigated", {
+        ...requestMeta,
+        attempt_id: attemptId,
+      });
       return attempt; // Already updated by another thread
     }
 
@@ -773,8 +825,9 @@ export class PaymentService {
     return result;
   }
 
-  async handlePaymentWebhook(providerName: string, headers: any, body: any) {
+  async handlePaymentWebhook(providerName: string, headers: any, body: any, context?: { requestId?: string }) {
     const providerStr = providerName.toUpperCase();
+    const requestMeta = context?.requestId ? { request_id: context.requestId } : {};
     
     // Instead of searching top 20 pending attempts, we MUST extract the merchantOrderId directly
     // since we know it's a PhonePe webhook and the format.
@@ -785,7 +838,10 @@ export class PaymentService {
       if (typeof body === "string") parsed = JSON.parse(body);
       merchantOrderId = parsed?.payload?.merchantOrderId || null;
     } catch (e) {
-      console.warn("[payments.webhook] Could not extract merchantOrderId from body", e);
+      logger.warn("payments.webhook.merchant_order_id_extract_failed", {
+        ...requestMeta,
+        error: String(e),
+      });
     }
 
     if (!merchantOrderId) {
@@ -807,7 +863,8 @@ export class PaymentService {
 
     // Idempotency check
     if (attempt.status !== "PENDING") {
-      console.info("[payments.webhook] attempt already processed", {
+      logger.info("payments.webhook.attempt_already_processed", {
+        ...requestMeta,
         attemptId: attempt.id,
         status: attempt.status,
       });
@@ -815,7 +872,8 @@ export class PaymentService {
       return { success: true, message: `Attempt already in ${attempt.status} state` };
     }
 
-    console.info("[payments.webhook] received matching attempt", {
+    logger.info("payments.webhook.attempt_matched", {
+      ...requestMeta,
       provider: providerStr,
       attemptId: attempt.id,
       merchantTxnId: attempt.merchant_txn_id,
@@ -858,7 +916,8 @@ export class PaymentService {
         verification.amount == null ? null : Math.round(Number(verification.amount) * 100);
 
       if (receivedPaise == null || receivedPaise !== expectedPaise) {
-        console.error("[payments.webhook] amount mismatch", {
+        logger.error("payments.webhook.amount_mismatch", {
+          ...requestMeta,
           attemptId: attempt.id,
           merchantTxnId: attempt.merchant_txn_id,
           expectedAmount: Number(attempt.amount),
@@ -868,7 +927,8 @@ export class PaymentService {
       }
     }
 
-    console.info("[payments.webhook] matched attempt successfully", {
+    logger.info("payments.webhook.verified", {
+      ...requestMeta,
       attemptId: attempt.id,
       merchantTxnId: attempt.merchant_txn_id,
       status: verification.status,
@@ -881,7 +941,8 @@ export class PaymentService {
       attempt.id,
       finalStatus,
       sourceOfTruth.gateway_txn_id || verification.gateway_txn_id || undefined,
-      verification.raw_event
+      verification.raw_event,
+      context
     );
   }
 
@@ -932,7 +993,7 @@ export class PaymentService {
     try {
       fetched = await instance.fetchStatus(attempt.merchant_txn_id, gatewayTxnId || attempt.gateway_txn_id || undefined);
     } catch (error) {
-      console.error("[payments.verify] provider status fetch failed", {
+      logger.error("payments.verify.fetch_status_failed", {
         attemptId: attempt.id,
         merchantTxnId: attempt.merchant_txn_id,
         provider: attempt.provider,
@@ -946,7 +1007,7 @@ export class PaymentService {
       };
     }
 
-    console.info("[payments.verify] fetched status", {
+    logger.info("payments.verify.fetched_status", {
       attemptId: attempt.id,
       merchantTxnId: attempt.merchant_txn_id,
       fromStatus: attempt.status,
@@ -1231,7 +1292,7 @@ export class PaymentService {
         else pendingCount++;
       } catch (error) {
         errors++;
-        console.error("[payments.reconcile] failed to reconcile attempt", {
+        logger.error("payments.reconcile.failed", {
           attemptId: attempt.id,
           merchantTxnId: attempt.merchant_txn_id,
           error: String(error),
