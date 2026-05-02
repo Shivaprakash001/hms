@@ -962,9 +962,11 @@ export class PaymentService {
       { source: "verify", payload: fetched.raw_status }
     );
 
+    const resolvedAttempt = finalized || attempt;
+
     return {
-      attempt: finalized,
-      status: finalized.status,
+      attempt: resolvedAttempt,
+      status: resolvedAttempt.status,
       source: "provider"
     };
   }
@@ -1221,10 +1223,12 @@ export class PaymentService {
           { source: "reconcile", payload: fetched.raw_status }
         );
 
-        if (finalized.status === "SUCCESS") success++;
-        else if (finalized.status === "FAILED") failed++;
-        else if (finalized.status === "EXPIRED") expired++;
-        else if (finalized.status === "CANCELLED") cancelled++;
+        const resolvedAttempt = finalized || attempt;
+
+        if (resolvedAttempt.status === "SUCCESS") success++;
+        else if (resolvedAttempt.status === "FAILED") failed++;
+        else if (resolvedAttempt.status === "EXPIRED") expired++;
+        else if (resolvedAttempt.status === "CANCELLED") cancelled++;
         else pendingCount++;
       } catch (error) {
         errors++;
