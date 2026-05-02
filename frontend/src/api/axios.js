@@ -1,8 +1,7 @@
 import axios from 'axios';
 
 // Force production traffic to the Vercel API deployment.
-// This avoids stale/misconfigured VITE_API_URL values causing requests to hit
-// legacy backends (which return errors like: permission denied for schema public).
+// This avoids stale/misconfigured VITE_API_URL values.
 const PRODUCTION_API_URL = 'https://hms-r68g.vercel.app/api';
 const isLocalDev = typeof window !== 'undefined' && window.location.hostname === 'localhost';
 
@@ -27,7 +26,6 @@ const api = axios.create({
 api.interceptors.request.use(
     (config) => {
         // For multipart requests, let the browser/axios set the boundary automatically.
-        // A forced JSON content-type causes FastAPI to miss UploadFile fields.
         if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
             if (config.headers) {
                 delete config.headers['Content-Type'];
@@ -58,14 +56,46 @@ api.interceptors.request.use(
 // Add a response interceptor to handle errors
 api.interceptors.response.use(
     (response) => response,
-    (error) => {
-        if (error.response && error.response.status === 401) {
-            // Clear local storage on unauthorized
-            localStorage.removeItem('ownerUser');
-            localStorage.removeItem('tenantUser');
-            // Allow the application state to handle the redirect naturally
-            // rather than forcing a full page reload which causes flickering loops
+    async (error) => {
+        const originalRequest = error.config;
+
+        if (error.response && error.response.status === 401 && !originalRequest._retry) {
+            originalRequest._retry = true;
+
+            try {
+                // Attempt to refresh the token using the httpOnly cookie
+                const refreshResponse = await axios.post(`${baseURL}/auth/refresh`, {}, {
+                    withCredentials: true // Important: send the httpOnly cookie
+                });
+
+                const newAccessToken = refreshResponse.data.access_token;
+
+                // Update localStorage with the new token
+                const ownerData = localStorage.getItem('ownerUser');
+                const tenantData = localStorage.getItem('tenantUser');
+
+                if (ownerData) {
+                    const parsed = JSON.parse(ownerData);
+                    parsed.token = newAccessToken;
+                    localStorage.setItem('ownerUser', JSON.stringify(parsed));
+                } else if (tenantData) {
+                    const parsed = JSON.parse(tenantData);
+                    parsed.token = newAccessToken;
+                    localStorage.setItem('tenantUser', JSON.stringify(parsed));
+                }
+
+                // Update the authorization header and retry the original request
+                originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+                return api(originalRequest);
+            } catch (refreshError) {
+                // Refresh failed (e.g. refresh token expired or invalid)
+                localStorage.removeItem('ownerUser');
+                localStorage.removeItem('tenantUser');
+                window.location.href = '/login';
+                return Promise.reject(refreshError);
+            }
         }
+        
         return Promise.reject(error);
     }
 );

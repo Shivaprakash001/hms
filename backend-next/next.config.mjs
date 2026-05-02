@@ -6,7 +6,7 @@ dotenv.config({ path: path.resolve(process.cwd(), "..", ".env") });
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Ensure @sparticuz/chromium binary is bundled for serverless PDF generation
-  serverExternalPackages: ["@sparticuz/chromium"],
+
   experimental: {
     serverComponentsExternalPackages: ["@sparticuz/chromium"],
   },

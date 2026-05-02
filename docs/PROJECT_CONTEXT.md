@@ -1,43 +1,35 @@
 # PROJECT_CONTEXT.md
 
-> Forensic audit. Every fact below is derived from explicit code. Unverified
-> behavior is marked `[UNKNOWN — NOT FOUND IN CODE]` or `[INSUFFICIENT EVIDENCE]`.
+> Forensic audit. Every fact below is derived from explicit code.
+> Last updated: May 2026 (Phase 1 Complete)
 
 ---
 
 ## 1. Repository layout (top level)
 
-**FACT:** The repository contains three active code trees plus SQL migrations.
+**Current Components:**
 
-**SOURCE:**
-- `backend/` — Python FastAPI service (`backend/app/main.py`)
-- `backend-next/` — Next.js 14 App Router API (`backend-next/app/api/`, `backend-next/package.json`)
-- `frontend/` — Vite + React 19 SPA (`frontend/package.json`, `frontend/src/App.jsx`)
-- `migrations/` — 51 raw `.sql` files applied against Supabase (`migrations/*.sql`)
-- `backend-next/prisma/migrations_manual/` — 14 additional manual SQL files
+| Tree | Runtime | Purpose |
+|------|---------|---------|
+| `backend-next/` | Next.js 14 App Router | **Active API** (`/api/*`) |
+| `frontend/` | Vite + React 19 SPA | Owner & tenant dashboards |
+| `backend-next/prisma/` | Prisma ORM | Schema source of truth |
+
+**Historical (Removed):**
+- `backend/` — Python FastAPI (removed in Phase 1)
+- `migrations/` — Raw SQL (moved to `archive/`)
+- `backend-next/prisma/migrations_manual/` — Raw SQL (moved to `archive/`)
 
 **CONFIDENCE:** HIGH
 
 ---
 
-## 2. Which backend the frontend talks to
+## 2. Frontend API Target
 
-**FACT:** The SPA hard-codes its production API base URL to
+**FACT:** The SPA hard-codes production API base URL to
 `https://hms-r68g.vercel.app/api` and ignores `VITE_API_URL` outside `localhost`.
-In localhost it defaults to `http://localhost:3000/api` (the Next.js dev port).
 
-**SOURCE:** `frontend/src/api/axios.js:6-14`
-
-**CONFIDENCE:** HIGH
-
-**FACT:** Next.js routes live under `backend-next/app/api/**/route.ts` (87
-route files). The Python FastAPI backend under `backend/` has its own router
-tree but is not referenced by the frontend axios config.
-
-**SOURCE:** `backend-next/app/api/` (enumerated via `find … -name route.ts`),
-`backend/app/main.py:91-101`
-
-**CONFIDENCE:** HIGH
+**SOURCE:** `frontend/src/api/axios.js`
 
 ---
 

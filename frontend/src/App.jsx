@@ -10,7 +10,6 @@ import OwnerDashboard from './pages/owner/OwnerDashboard.jsx';
 import ManageTenants from './pages/owner/ManageTenants.jsx';
 import ManageRooms from './pages/owner/ManageRooms.jsx';
 import Payments from './pages/owner/Payments.jsx';
-import Complaints from './pages/owner/Complaints.jsx';
 import Expenses from './pages/owner/Expenses.jsx';
 import ActivityHistory from './pages/owner/ActivityHistory.jsx';
 import BillingPlans from './pages/owner/BillingPlans.jsx';
@@ -23,7 +22,6 @@ import TenantLayout from './layouts/TenantLayout.jsx';
 import TenantDashboard from './pages/tenant/TenantDashboard.jsx';
 import TenantPayments from './pages/tenant/TenantPayments.jsx';
 import TenantPaymentReturn from './pages/tenant/TenantPaymentReturn.jsx';
-import TenantComplaints from './pages/tenant/TenantComplaints.jsx';
 import TenantProfile from './pages/tenant/TenantProfile.jsx';
 import TenantSettings from './pages/tenant/TenantSettings.jsx';
 import { AuthProvider } from './context/AuthContext';
@@ -53,7 +51,6 @@ function App() {
                 <Route path="dashboard" element={<TenantDashboard />} />
                 <Route path="payments" element={<TenantPayments />} />
                 <Route path="payment-return" element={<TenantPaymentReturn />} />
-                <Route path="complaints" element={<TenantComplaints />} />
             <Route path="profile" element={<TenantProfile />} />
             <Route path="settings" element={<TenantSettings />} />
           </Route>
@@ -68,7 +65,6 @@ function App() {
             <Route path="tenants/:id" element={<TenantProfilePage />} />
             <Route path="rooms" element={<ManageRooms />} />
             <Route path="payments" element={<Payments />} />
-            <Route path="complaints" element={<Complaints />} />
             <Route path="expenses" element={<Expenses />} />
             <Route path="activities" element={<ActivityHistory />} />
             <Route path="activity" element={<Navigate to="/owner/activities" replace />} />

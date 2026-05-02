@@ -251,15 +251,15 @@ export class PaymentService {
         return { ob, paidPaisa, duePaisa, outstandingPaisa };
       });
 
-      // Reject overpayment
-      if (amountPaisa > totalDuePaisa) {
+      // Reject overpayment (allow 1 paisa tolerance for decimal conversion edges)
+      if (amountPaisa > totalDuePaisa + 1) {
         throw new Error(
-          `BAD_REQUEST: Payment (${(amountPaisa / 100).toFixed(2)}) exceeds total due (${(totalDuePaisa / 100).toFixed(2)})`
+          `BAD_REQUEST: MAX_PAYABLE_EXCEEDED: Payment (${(amountPaisa / 100).toFixed(2)}) exceeds total due (${(totalDuePaisa / 100).toFixed(2)}). Please refresh dues and pay up to ₹${(totalDuePaisa / 100).toFixed(2)}.`
         );
       }
 
       // ── 4. FIFO ALLOCATION ──
-      let remainingPaisa = amountPaisa;
+      let remainingPaisa = Math.min(amountPaisa, totalDuePaisa);
       const allocations: any[] = [];
 
       for (const { ob, paidPaisa, duePaisa, outstandingPaisa } of obData) {
@@ -420,7 +420,9 @@ export class PaymentService {
 
     const alreadyPaid = await this.getExistingPaidAmount(obligationId);
     const balance = Number(obligation.amount) - alreadyPaid;
+    const balancePaisa = Math.max(0, Math.round(balance * 100));
     const validationAmount = amount || balance;
+    const validationAmountPaisa = Math.round(validationAmount * 100);
 
     // 1️⃣ Fetch Owner Preferences for Payment Rules
     const prefs = await getPreferences(obligation.owner_id || "");
@@ -429,20 +431,21 @@ export class PaymentService {
     const minAmount = prefs.min_payment_amount;
 
     if (obligation.status === "WAIVED") throw new Error("BAD_REQUEST: Cannot pay for waived obligation");
-    if (validationAmount <= 0) throw new Error("BAD_REQUEST: Obligation is already paid");
+    if (validationAmountPaisa <= 0) throw new Error("BAD_REQUEST: Obligation is already paid");
 
     // 2️⃣ Partial Payment Enforcement
-    if (!allowPartial && validationAmount < balance) {
+    if (!allowPartial && validationAmountPaisa < balancePaisa) {
       throw new Error(`BAD_REQUEST: Partial payments are disabled by the owner. Full payment of ${formatCurrency(balance)} is required.`);
     }
 
     // 3️⃣ Minimum Amount Enforcement
-    if (validationAmount < minAmount && validationAmount < balance) {
+    const minAmountPaisa = Math.round(minAmount * 100);
+    if (validationAmountPaisa < minAmountPaisa && validationAmountPaisa < balancePaisa) {
       throw new Error(`BAD_REQUEST: Minimum payment amount allowed is ${formatCurrency(minAmount)}.`);
     }
 
-    if (validationAmount > balance) {
-      throw new Error(`BAD_REQUEST: Payment (${formatCurrency(validationAmount)}) exceeds outstanding balance (${formatCurrency(balance)}).`);
+    if (validationAmountPaisa > balancePaisa + 1) {
+      throw new Error(`BAD_REQUEST: MAX_PAYABLE_EXCEEDED: Payment (${formatCurrency(validationAmount)}) exceeds outstanding balance (${formatCurrency(balance)}). Please refresh dues and pay up to ${formatCurrency(balance)}.`);
     }
 
     // Check for existing pending or newly created attempt
@@ -1158,7 +1161,6 @@ export class PaymentService {
           orderBy: { due_date: "desc" },
           include: {
             payments: {
-              include: { attempt: true },
               orderBy: { payment_date: "desc" }
             }
           }
@@ -1184,6 +1186,7 @@ export class PaymentService {
       if (o.status !== "WAIVED") totalDue += Number(o.amount);
       totalPaid += obligationPaid;
       o.payments.forEach((p: any) => {
+        const transactionId = p.reference_number || p.payment_attempt_id || p.id;
         allPayments.push({
           id: p.id,
           obligation_id: p.obligation_id,
@@ -1191,7 +1194,7 @@ export class PaymentService {
           payment_date: p.payment_date,
           payment_method: p.payment_method,
           reference_number: p.reference_number,
-          transaction_id: p.reference_number || p.attempt?.gateway_txn_id || p.attempt?.merchant_txn_id || p.id,
+          transaction_id: transactionId,
           rent_month: o.rent_month
         });
       });
@@ -1209,7 +1212,7 @@ export class PaymentService {
           amount_paid: Number(p.amount_paid),
           payment_date: p.payment_date,
           method: p.payment_method,
-          transaction_id: p.reference_number || p.attempt?.gateway_txn_id || p.attempt?.merchant_txn_id || p.id
+          transaction_id: p.reference_number || p.payment_attempt_id || p.id
         }))
       };
     });

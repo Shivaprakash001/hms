@@ -61,7 +61,7 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
         try {
             const response = await api.post('/tenants/invite', {
                 full_name: name,
-                name: name,  // backward compat with deployed backend
+                name: name,
                 email,
                 phone: phone || "",
                 monthly_rent: monthlyRent ? parseFloat(monthlyRent) : null,
@@ -77,7 +77,7 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
             } else if (detail?.message) {
                 message = detail.message;
             } else if (Array.isArray(detail) && detail.length > 0) {
-                // FastAPI pydantic validation returns [{loc, msg, type}, ...]
+                // Validation returns [{loc, msg, type}, ...]
                 message = detail.map(d => d.msg || d.message || JSON.stringify(d)).join(', ');
             }
             setError(message);

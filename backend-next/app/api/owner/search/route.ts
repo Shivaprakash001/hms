@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(results);
   } catch (error) {
-    logger.error({ err: error instanceof Error ? error : new Error(String(error)) }, "Search API Error");
+    logger.error("Search API Error", { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json(
       { error: { message: "Search failed", code: "INTERNAL_ERROR" } },
       { status: 500 }

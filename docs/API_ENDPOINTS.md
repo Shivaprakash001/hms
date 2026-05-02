@@ -1,24 +1,25 @@
 # API_ENDPOINTS.md
 
-> All entries below were extracted from `backend-next/app/api/**/route.ts` by
-> locating every `export async function (GET|POST|PUT|PATCH|DELETE)`.
-> The Python FastAPI backend in `backend/app/api/routes/` is **not** documented
-> here because the frontend does not target it
-> (`frontend/src/api/axios.js:6-14`).
->
-> Response shapes are only described when the handler's code made them clear.
-> Otherwise `[RESPONSE STRUCTURE UNKNOWN]`.
+> All entries below were extracted from `backend-next/app/api/**/route.ts`.
+> Last updated: May 2026 (Phase 1 Complete)
+
+> **Note:** Python FastAPI backend (`backend/`) has been **removed**.
+> The frontend only targets `backend-next/` (Next.js).
+
+---
 
 ## Authentication & routing rules
 
-**FACT:** Public (no-JWT) routes: `/api/health`, `/api/auth/login`,
-`/api/auth/register`, `/api/auth/refresh` (referenced but no route file found —
-see TASKS.md), `/api/auth/google-callback`, `/api/webhooks/payments/phonepe`,
-`/api/plans`. All other `/api/*` paths require a verified JWT.
+**Public (no-JWT) routes:** `/api/health`, `/api/auth/login`,
+`/api/auth/register`, `/api/auth/refresh`, `/api/auth/google-callback`,
+`/api/webhooks/payments/phonepe`, `/api/plans`, `/api/cron/*`.
 
-**SOURCE:** `backend-next/middleware.ts:4-12, 44-48`.
+**Auth Flow:**
+- Login returns 1-hour JWT (`access_token`) + 30-day refresh token (httpOnly cookie `hms_refresh_token`)
+- Refresh endpoint (`POST /api/auth/refresh`) rotates tokens and detects reuse attacks
+- Logout invalidates refresh tokens
 
-**CONFIDENCE:** HIGH
+**SOURCE:** `backend-next/middleware.ts`, `backend-next/lib/auth-edge.ts`
 
 ---
 

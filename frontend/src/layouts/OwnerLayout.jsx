@@ -322,7 +322,6 @@ const OwnerLayout = () => {
             case 'payment': return <CheckCircle2 size={16} className="text-green-500" />;
             case 'tenant': return <User size={16} className="text-indigo-500" />;
             case 'room': return <Bed size={16} className="text-indigo-500" />;
-            case 'complaint': return <AlertCircle size={16} className="text-yellow-500" />;
             default: return <Clock size={16} className="text-slate-500" />;
         }
     };

@@ -7,21 +7,23 @@
 
 ## 1. Top-level components
 
-| Tree | Runtime | Purpose (evidence) |
-|------|---------|--------------------|
-| `backend-next/` | Next.js 14 App Router (Node.js runtime on most routes, Edge for middleware) | API + Prisma/Supabase data layer |
-| `backend/` | Python 3 + FastAPI | Legacy API (no longer referenced by frontend axios) |
+| Tree | Runtime | Purpose |
+|------|---------|---------|
+| `backend-next/` | Next.js 14 App Router | **Active API** (`/api/*`) |
 | `frontend/` | Vite + React 19 SPA | Owner & tenant dashboards |
-| `migrations/` | Raw Postgres SQL | Applied against Supabase |
-| `backend-next/prisma/migrations_manual/` | Raw Postgres SQL | Additional manual migrations |
+| `backend-next/prisma/` | Prisma ORM | Schema + migrations source of truth |
 
-**SOURCE:** `backend-next/package.json:28` (`next 14.2.16`), `backend-next/middleware.ts:1` (Edge), route files declare `export const runtime = "nodejs"` (e.g. `backend-next/app/api/payments/create-intent/route.ts:2`), `backend/app/main.py:8-30` (FastAPI), `frontend/package.json:51` (Vite 7).
+**SOURCE:** `backend-next/package.json` (`next 14.2.16`), `backend-next/middleware.ts` (Edge), route files declare `export const runtime = "nodejs"`, `frontend/package.json` (Vite 7).
+
+**NOTES:**
+- Python FastAPI backend (`backend/`) has been **removed** (Phase 1).
+- Raw SQL migrations moved to `migrations/archive/` and `backend-next/prisma/migrations_manual/archive/`.
+- Prisma schema (`schema.prisma`) is now the single source of truth.
+- Refresh token auth system implemented (2-token: short-lived JWT + DB-backed refresh token).
+- Payment webhooks hardened with O(1) lookup, provider API verification, and idempotency.
+- Structured logging and metrics via `lib/logger.ts` and `lib/metrics.ts`.
 
 **CONFIDENCE:** HIGH
-
----
-
-## 2. backend-next/ layered layout (as observed)
 
 ```
 backend-next/
@@ -88,12 +90,11 @@ the middleware (no DB hit).
 `prisma` + `eventSystem`, exported as a module-level singleton.
 
 **Examples (SOURCE):**
-- `backend-next/lib/services/tenant-service.ts:6,552` (`class TenantService` → `export const tenantService`)
-- `backend-next/lib/services/payment-service.ts:11` (`class PaymentService`)
-- `backend-next/lib/services/auth-service.ts:7,283`
-- `backend-next/lib/services/dashboard-service.ts:4,153`
-- `backend-next/lib/services/billing-service.ts:3,46`
-- `backend-next/lib/services/complaint-service.ts:4,89`
+- `backend-next/lib/services/tenant-service.ts`
+- `backend-next/lib/services/payment-service.ts`
+- `backend-next/lib/services/auth-service.ts`
+- `backend-next/lib/services/dashboard-service.ts`
+- `backend-next/lib/services/billing-service.ts`
 
 **CONFIDENCE:** HIGH
 
@@ -118,17 +119,11 @@ instantiated in `lib/events/index.ts` and exported as `eventSystem`. When
 cache for that owner, (b) SSE-broadcasts the payload, (c) emits the local
 event for listener side-effects (activity log writes).
 
-**SOURCE:** `backend-next/lib/events/index.ts:1-99`.
+**SOURCE:** `backend-next/lib/events/index.ts`.
 
 **CONFIDENCE:** HIGH
 
-**FACT:** The Python backend has its own hook registry
-(`register_hook("student_left", …)`) and uses polling reconciliation
-(`asyncio.create_task(_payment_reconciliation_loop)`).
-
-**SOURCE:** `backend/app/main.py:49-89`.
-
-**CONFIDENCE:** HIGH
+**Historical Note:** Python backend hook registry was removed in Phase 1.
 
 ---
 
@@ -182,8 +177,13 @@ framer-motion, recharts, react-hot-toast.
 
 | Capability | Package | Evidence |
 |---|---|---|
-| JWT | `jose` | `backend-next/lib/auth-edge.ts:6` |
-| Password hashing | `bcryptjs` | `backend-next/package.json:23` |
+| `JWT_SECRET` is verified with `jose` against `sub`, `role`, `email`, and optional
+   `owner_id`. Access tokens expire in 1 hour; refresh tokens are stored in the
+   database with a 30-day expiry.
+
+| JWT | `jose` | `backend-next/lib/auth-edge.ts` |
+| Password hashing | `bcryptjs` | `backend-next/package.json` |
+| Refresh tokens | Prisma + httpOnly cookie | `RefreshToken` model, `app/api/auth/refresh/route.ts` |
 | ORM | `@prisma/client` | `backend-next/lib/db.ts:1` |
 | DB admin/auth | `@supabase/supabase-js` | `backend-next/lib/db.ts:2` |
 | Email | `resend` | `backend-next/package.json:37` |
@@ -198,22 +198,12 @@ framer-motion, recharts, react-hot-toast.
 
 ## 9. Cron & background work
 
-**FACT:** Three cron routes exist, all gated by `GET`:
-- `/api/cron/generate-rent`
-- `/api/cron/rent-reminders`
-- `/api/cron/data-retention`
+**FACT:** Four cron routes exist:
+- `/api/cron/generate-rent` — Monthly rent generation
+- `/api/cron/rent-reminders` — Payment reminders
+- `/api/cron/data-retention` — Data cleanup
+- `/api/cron/reconcile-payments` — Hourly payment reconciliation
 
-**SOURCE:** `backend-next/app/api/cron/*/route.ts`.
+**SOURCE:** `backend-next/app/api/cron/*/route.ts`, `backend-next/vercel.json`.
 
 **CONFIDENCE:** HIGH
-
-**FACT:** Actual cron scheduling mechanism (Vercel Cron config) is not
-present in `backend-next/vercel.json` as of the current read.
-
-**SOURCE:** `backend-next/vercel.json` (191 bytes, no `crons` key observed at
-last read).
-
-**NOTE:** `[UNKNOWN — NOT FOUND IN CODE]` whether these are triggered by
-Vercel Cron, GitHub Actions, or external schedulers.
-
-**CONFIDENCE:** MEDIUM

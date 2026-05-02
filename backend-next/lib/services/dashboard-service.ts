@@ -132,7 +132,7 @@ export class DashboardService {
         const targetYear = now.getUTCFullYear() + Math.floor(targetMonth / 12);
         const normalizedMonth = ((targetMonth % 12) + 12) % 12;
         const start = new Date(Date.UTC(targetYear, normalizedMonth, 1, 0, 0, 0, 0));
-        const end = new Date(Date.UTC(targetYear, normalizedMonth + 1, 0, 0, 0, 0, 0));
+        const end = new Date(Date.UTC(targetYear, normalizedMonth + 1, 1, 0, 0, 0, 0));
 
         const [collected, due] = await Promise.all([
             prisma.payment.aggregate({

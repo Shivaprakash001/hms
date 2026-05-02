@@ -1,32 +1,25 @@
 # DATABASE_SCHEMA.md
 
-> Source of truth: `backend-next/prisma/schema.prisma` (497 lines) and SQL
-> migration files under `migrations/` and `backend-next/prisma/migrations_manual/`.
->
-> ENUM values, column types, defaults, and relations below are quoted directly
-> from those files. Anything not in them is `[UNKNOWN — NOT FOUND IN CODE]`.
+> Source of truth: `backend-next/prisma/schema.prisma`
+> Last updated: May 2026 (Phase 1 Complete)
+
+> **Note:** Raw SQL migration files have been moved to `migrations/archive/`.
+> Prisma schema is now the single source of truth.
 
 ---
 
 ## 1. Enums
 
-**FACT:**
+**Current:**
 ```
 Role            = { ADMIN, OWNER, WARDEN, TENANT }
 TenantStatus    = { INVITED, ACTIVE, LEFT }
 PaymentStatus   = { PENDING, PARTIAL, PAID, WAIVED }
-AttemptStatus   = { CREATED, PENDING, SUCCESS, FAILED, EXPIRED, CANCELLED, PENDING_VERIFICATION }
-DocumentStatus  = { PENDING, APPROVED, REJECTED }
+AttemptStatus  = { CREATED, PENDING, SUCCESS, FAILED, EXPIRED, CANCELLED, PENDING_VERIFICATION }
+DocumentStatus = { PENDING, APPROVED, REJECTED }
 ```
 
-**SOURCE:** `backend-next/prisma/schema.prisma:452-496`.
-
-**CONFIDENCE:** HIGH
-
-**HISTORICAL NOTE (FACT):** `TenantStatus` was previously `StudentStatus`,
-renamed via `backend-next/prisma/migrations_manual/011_rename_student_status_enum.sql`.
-`TENANT` was added to `Role` and `STUDENT` rows migrated in
-`010_rename_student_role_to_tenant.sql`.
+**Historical Note:** `TenantStatus` was previously `StudentStatus`, renamed via migration.
 
 **CONFIDENCE:** HIGH
 

@@ -63,6 +63,7 @@ export class PhonePeProvider extends PaymentProvider {
         client_version: this.clientVersion,
         grant_type: "client_credentials",
       }),
+      signal: AbortSignal.timeout(5000),
     });
 
     const data = await response.json();
@@ -135,6 +136,7 @@ export class PhonePeProvider extends PaymentProvider {
         Authorization: `O-Bearer ${accessToken}`,
       },
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(8000),
     });
 
     const responseData = await response.json();
@@ -268,7 +270,12 @@ export class PhonePeProvider extends PaymentProvider {
         "Content-Type": "application/json",
         Authorization: `O-Bearer ${accessToken}`,
       },
+      signal: AbortSignal.timeout(5000),
     });
+
+    if (!response.ok) {
+      throw new Error(`PhonePe API fetchStatus failed with HTTP ${response.status}`);
+    }
 
     const responseData = await response.json();
 

@@ -1,5 +1,5 @@
 import { prisma, supabase } from "../db";
-import { verifyPassword, hashPassword, generateToken } from "../auth";
+import { verifyPassword, hashPassword, generateToken, generateRefreshToken, hashToken } from "../auth";
 import { z } from "zod";
 import { LoginSchema } from "../validators";
 import { randomUUID } from "crypto";
@@ -67,8 +67,22 @@ export class AuthService {
       email: profile.email,
     });
 
+    const refreshToken = generateRefreshToken();
+    const refreshTokenHash = hashToken(refreshToken);
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30); // 30 days expiry
+
+    await prisma.refreshToken.create({
+      data: {
+        user_id: profile.id,
+        token_hash: refreshTokenHash,
+        expires_at: expiresAt,
+      },
+    });
+
     return {
       access_token: token,
+      refresh_token: refreshToken,
       token_type: "bearer",
       role: profile.role,
       name: profile.name,
