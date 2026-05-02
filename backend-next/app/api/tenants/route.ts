@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { tenantService } from "@/lib/services/tenant-service";
+import { planGate } from "@/lib/services/plan-gate-service";
 
 
 /**
@@ -51,6 +52,8 @@ export async function POST(req: NextRequest) {
     if (!body.monthly_rent || body.monthly_rent <= 0) {
       return apiError("monthly_rent must be > 0", "VALIDATION_ERROR", 400);
     }
+
+    await planGate.assertTenantLimit(session.sub);
 
     const tenant = await tenantService.createTenant(body, session.sub);
     return apiResponse(tenant, 201);

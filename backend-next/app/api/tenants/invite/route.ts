@@ -5,6 +5,7 @@ import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { invitationService } from "@/lib/services/invitation-service";
 import { InvitationSchema } from "@/lib/validators";
+import { planGate } from "@/lib/services/plan-gate-service";
 
 
 /**
@@ -25,6 +26,8 @@ export async function POST(req: NextRequest) {
       return apiError("Validation failed", "VALIDATION_ERROR", 400);
     }
 
+    await planGate.assertTenantLimit(session.sub);
+
     const result = await invitationService.inviteTenant(validatedData.data, session.sub);
     
     return apiResponse(result, 201);
@@ -38,6 +41,7 @@ export async function POST(req: NextRequest) {
       VALIDATION_ERROR: 400,
       VALIDATION: 400,
       BAD_REQUEST: 400,
+      PLAN_LIMIT: 402,
       FORBIDDEN: 403,
       NOT_FOUND: 404,
       ALREADY_EXISTS: 409,

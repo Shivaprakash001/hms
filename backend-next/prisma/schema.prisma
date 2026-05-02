@@ -35,6 +35,8 @@ model Profile {
   owner                 Profile?       @relation("OwnerTenant", fields: [owner_id], references: [id])
   tenants              Profile[]      @relation("OwnerTenant")
   tenant_details       Tenant?       @relation("TenantToProfile")
+  subscription          OwnerSubscription?
+  invoices              OwnerInvoice[]
 
   @@index([owner_id])
   @@index([name])
@@ -448,6 +450,71 @@ model SystemEventLog {
   @@map("system_event_logs")
   @@schema("public")
 }
+
+// ─── SaaS Billing ─────────────────────────────────────────────
+
+model Plan {
+  id            String             @id @default(uuid()) @db.Uuid
+  code          String             @unique
+  name          String
+  price_paise   Int                // price in INR paise (₹499 = 49900)
+  tenant_limit  Int?               // null = unlimited
+  hostel_limit  Int?               // null = unlimited
+  features      Json               @default("[]")
+  is_active     Boolean            @default(true)
+  display_order Int                @default(0)
+  created_at    DateTime           @default(now()) @db.Timestamptz(6)
+  subscriptions OwnerSubscription[]
+  invoices      OwnerInvoice[]
+
+  @@map("plans")
+  @@schema("public")
+}
+
+model OwnerSubscription {
+  id                String       @id @default(uuid()) @db.Uuid
+  owner_id          String       @db.Uuid
+  plan_id           String       @db.Uuid
+  status            String       @default("FREE")
+  start_date        DateTime     @db.Date
+  end_date          DateTime?    @db.Date
+  auto_renew        Boolean      @default(true)
+  created_at        DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime?    @updatedAt @db.Timestamptz(6)
+  owner             Profile      @relation(fields: [owner_id], references: [id], onDelete: Cascade)
+  plan              Plan         @relation(fields: [plan_id], references: [id])
+  invoices          OwnerInvoice[]
+
+  @@unique([owner_id])
+  @@index([owner_id])
+  @@index([status])
+  @@map("owner_subscriptions")
+  @@schema("public")
+}
+
+model OwnerInvoice {
+  id              String             @id @default(uuid()) @db.Uuid
+  owner_id        String             @db.Uuid
+  subscription_id String?            @db.Uuid
+  plan_id         String?            @db.Uuid
+  invoice_number  String?            @unique
+  amount_paise    Int
+  status          String             @default("PENDING")
+  billing_month   DateTime?          @db.Date
+  due_date        DateTime           @db.Date
+  paid_at         DateTime?          @db.Timestamptz(6)
+  created_at      DateTime           @default(now()) @db.Timestamptz(6)
+  owner           Profile            @relation(fields: [owner_id], references: [id], onDelete: Cascade)
+  subscription    OwnerSubscription? @relation(fields: [subscription_id], references: [id], onDelete: SetNull)
+  plan            Plan?              @relation(fields: [plan_id], references: [id], onDelete: SetNull)
+
+  @@index([owner_id, created_at(sort: Desc)])
+  @@index([status])
+  @@map("owner_invoices")
+  @@schema("public")
+}
+
+// ──────────────────────────────────────────────────────────────
 
 enum Role {
   ADMIN
