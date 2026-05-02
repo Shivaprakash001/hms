@@ -15,8 +15,14 @@ export async function POST(req: Request) {
     }
 
     const { obligation_id, obligation_ids, amount } = await req.json();
-    const ids: string[] = Array.isArray(obligation_ids)
-      ? obligation_ids.map((id: any) => String(id)).filter(Boolean)
+    const normalizedArray = Array.isArray(obligation_ids)
+      ? obligation_ids
+      : Array.isArray(obligation_id)
+        ? obligation_id
+        : null;
+
+    const ids: string[] = normalizedArray
+      ? normalizedArray.map((id: any) => String(id)).filter(Boolean)
       : (obligation_id ? [String(obligation_id)] : []);
 
     if (ids.length === 0) {
