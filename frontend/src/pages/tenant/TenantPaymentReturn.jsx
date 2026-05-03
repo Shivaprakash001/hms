@@ -67,7 +67,12 @@ const TenantPaymentReturn = () => {
                         setLoading(false);
                         return;
                     }
-                    // Non-404 errors: keep polling — transient network issues shouldn't abort
+                    // Non-404 errors: keep polling — but if we already have a terminal
+                    // status from a previous successful call, trust it and stop.
+                    if (TERMINAL_STATUSES.includes(attempt?.status)) {
+                        setLoading(false);
+                        return;
+                    }
                 }
 
                 if (i < MAX_POLL_ATTEMPTS && !cancelledRef.current) {
@@ -86,6 +91,48 @@ const TenantPaymentReturn = () => {
             cancelledRef.current = true;
         };
     }, [merchantTxnId, doVerify]);
+
+    // After timeout: slow background re-check every 15s.
+    // Catches the common mobile case: webhook arrives after the polling window ends.
+    // Stops automatically when a terminal status is reached.
+    useEffect(() => {
+        if (!timedOut || TERMINAL_STATUSES.includes(currentStatus)) return;
+
+        const bgTimer = setInterval(async () => {
+            try {
+                const data = await doVerify();
+                if (TERMINAL_STATUSES.includes(data?.status)) {
+                    setTimedOut(false);
+                    clearInterval(bgTimer);
+                }
+            } catch (_) {
+                // silent — background attempt, don't surface transient errors
+            }
+        }, 15000);
+
+        return () => clearInterval(bgTimer);
+    }, [timedOut, currentStatus, doVerify]);
+
+    // Window focus re-check: when the user switches back to this tab/app,
+    // immediately verify if not in a terminal state.
+    // Covers mobile: user pays in another app → switches back → instant recovery.
+    useEffect(() => {
+        const onFocus = async () => {
+            if (!merchantTxnId || TERMINAL_STATUSES.includes(currentStatus) || isChecking) return;
+            try {
+                const data = await doVerify();
+                if (TERMINAL_STATUSES.includes(data?.status)) {
+                    setTimedOut(false);
+                    setLoading(false);
+                }
+            } catch (_) {
+                // silent — focus check, don't surface transient errors
+            }
+        };
+
+        window.addEventListener('focus', onFocus);
+        return () => window.removeEventListener('focus', onFocus);
+    }, [merchantTxnId, currentStatus, isChecking, doVerify]);
 
     // Manual one-shot check (from timeout screen or error screen)
     const handleManualCheck = async () => {
