@@ -19,19 +19,22 @@ const TenantPaymentReturn = () => {
     const [isChecking, setIsChecking] = useState(false);
     const cancelledRef = useRef(false);
     const focusVerifyingRef = useRef(false);
+    const attemptRef = useRef(null);
 
-    const currentStatus = attempt?.status ?? 'PENDING';
+    // Honest projection — undefined when attempt not yet loaded (unknown, not PENDING)
+    const currentStatus = attempt?.status;
 
     const merchantTxnId =
         searchParams.get('merchant_txn_id') ||
         searchParams.get('merchantOrderId') ||
         searchParams.get('transactionId');
 
-    // Single verify call — updates attempt state, returns the data
+    // Single verify call — updates attempt state + ref, returns the data
     const doVerify = useCallback(async () => {
         const result = await paymentService.verifyPayment({ merchant_txn_id: merchantTxnId });
         const data = result?.attempt || result;
         if (data) {
+            attemptRef.current = data;  // ref for stale-closure reads inside polling loop
             setAttempt(data);
             setError('');
         }
@@ -70,9 +73,9 @@ const TenantPaymentReturn = () => {
                         setLoading(false);
                         return;
                     }
-                    // Non-404 errors: keep polling — but if we already have a terminal
-                    // status from a previous successful call, trust it and stop.
-                    if (TERMINAL_STATUSES.includes(attempt?.status)) {
+                    // Non-404 errors: keep polling — but trust last known good state via ref.
+                    // attempt from closure is stale (null at mount time); ref always has latest.
+                    if (TERMINAL_STATUSES.includes(attemptRef.current?.status)) {
                         setLoading(false);
                         return;
                     }
@@ -99,7 +102,8 @@ const TenantPaymentReturn = () => {
     // Catches the common mobile case: webhook arrives after the polling window ends.
     // Stops automatically when a terminal status is reached.
     useEffect(() => {
-        if (!timedOut || TERMINAL_STATUSES.includes(currentStatus)) return;
+        if (!timedOut) return;
+        if (attempt && TERMINAL_STATUSES.includes(attempt.status)) return;  // source, not projection
 
         const bgTimer = setInterval(async () => {
             try {
@@ -114,14 +118,15 @@ const TenantPaymentReturn = () => {
         }, 15000);
 
         return () => clearInterval(bgTimer);
-    }, [timedOut, currentStatus, doVerify]);
+    }, [timedOut, attempt, doVerify]);
 
     // Window focus re-check: when the user switches back to this tab/app,
     // immediately verify if not in a terminal state.
     // Covers mobile: user pays in another app → switches back → instant recovery.
     useEffect(() => {
         const onFocus = async () => {
-            if (!merchantTxnId || TERMINAL_STATUSES.includes(currentStatus) || isChecking || focusVerifyingRef.current) return;
+            if (!merchantTxnId || isChecking || focusVerifyingRef.current) return;
+            if (attempt && TERMINAL_STATUSES.includes(attempt.status)) return;  // source, not projection
             focusVerifyingRef.current = true;
             try {
                 const data = await doVerify();
@@ -138,7 +143,7 @@ const TenantPaymentReturn = () => {
 
         window.addEventListener('focus', onFocus);
         return () => window.removeEventListener('focus', onFocus);
-    }, [merchantTxnId, currentStatus, isChecking, doVerify]);
+    }, [merchantTxnId, attempt, isChecking, doVerify]);
 
     // Manual one-shot check (from timeout screen or error screen)
     const handleManualCheck = async () => {
