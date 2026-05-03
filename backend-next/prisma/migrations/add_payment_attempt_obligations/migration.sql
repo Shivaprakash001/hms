@@ -3,8 +3,6 @@
 -- Fixes XOR constraint violation for multi-obligation payments
 -- Provides single source of truth for payment breakdown
 
-BEGIN;
-
 -- Drop the problematic XOR constraint that breaks multi-obligation payments
 ALTER TABLE "payment_attempts" DROP CONSTRAINT IF EXISTS "payment_attempts_obligation_invoice_xor_check";
 
@@ -21,5 +19,3 @@ CREATE TABLE IF NOT EXISTS "payment_attempt_obligations" (
 -- Add indexes for lookups
 CREATE INDEX IF NOT EXISTS "payment_attempt_obligations_attempt_idx" ON "payment_attempt_obligations"("payment_attempt_id");
 CREATE INDEX IF NOT EXISTS "payment_attempt_obligations_obligation_idx" ON "payment_attempt_obligations"("obligation_id");
-
-COMMIT;
