@@ -106,7 +106,7 @@ export class PhonePeProvider extends PaymentProvider {
       callbackUrl: `${process.env.NEXT_PUBLIC_FRONTEND_URL || "https://trishul.solutions"}/api/payments/webhook`,
       expireAfter: 1800, // 30 min
       paymentInstrument: {
-        type: "UPI_QR" // Required by PhonePe sandbox to prevent internal Map.getOrDefault crash
+        type: "PAY_PAGE"
       },
       paymentFlow: {
         type: "PG_CHECKOUT",
@@ -155,10 +155,15 @@ export class PhonePeProvider extends PaymentProvider {
 
     console.info("[PhonePe] Raw response:", JSON.stringify(responseData));
 
-    // PhonePe Checkout v2 response: orderId + redirectUrl (their hosted checkout page).
-    // NOTE: responseData.redirectUrl is PhonePe's checkout page — completely separate from
-    // the redirectUrl we sent in the request (our return URL after payment).
-    const checkoutUrl = responseData.redirectUrl || responseData.data?.redirectUrl || null;
+    // Extract checkout URL. PAY_PAGE returns it nested inside instrumentResponse (v1-style);
+    // some v2 sandbox builds surface it at the top level as redirectUrl.
+    // We check the nested path first — if PhonePe echoes OUR redirectUrl at top level
+    // (as seen in logs when wrong paymentInstrument.type is used), the nested path
+    // will be undefined and the guard below catches it.
+    const checkoutUrl =
+      responseData?.data?.instrumentResponse?.redirectInfo?.url ||
+      responseData?.redirectUrl ||
+      null;
     const orderId = responseData.orderId || responseData.data?.orderId || null;
 
     // Guard: if checkoutUrl points back to our own site it means PhonePe echoed our
