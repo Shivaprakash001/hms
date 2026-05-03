@@ -625,7 +625,7 @@ export class PaymentService {
       // same tenant block here regardless of which obligations they select.
       // hashtext() maps the UUID string to int4; cast to bigint for the lock API.
       const advisoryKey = `pay_intent:${singleTenantId}`;
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${advisoryKey})::bigint)`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${advisoryKey})::bigint)`;
 
       // Row-level lock on selected obligations — complements advisory lock and
       // protects re-read amounts from concurrent finalization.
