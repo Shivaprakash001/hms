@@ -97,17 +97,14 @@ export class PhonePeProvider extends PaymentProvider {
     const sep = returnBase.includes("?") ? "&" : "?";
     const redirectUrl = `${returnBase}${sep}merchant_txn_id=${encodeURIComponent(data.merchant_txn_id)}`;
 
+    // Clean v2 payload — no v1 fields (paymentInstrument, top-level redirectUrl/redirectMode/callbackUrl).
+    // Having both paymentInstrument (v1) and paymentFlow (v2) causes the API to ignore paymentFlow
+    // and return a minimal response that echoes our redirectUrl instead of a checkout page URL.
     const payload: any = {
       merchantOrderId: data.merchant_txn_id,
       merchantUserId: data.tenant_id || "unknown-tenant",
       amount: amountInPaise,
-      redirectUrl,
-      redirectMode: "POST",
-      callbackUrl: `${process.env.NEXT_PUBLIC_FRONTEND_URL || "https://trishul.solutions"}/api/payments/webhook`,
-      expireAfter: 1800, // 30 min
-      paymentInstrument: {
-        type: "PAY_PAGE"
-      },
+      expireAfter: 1800,
       paymentFlow: {
         type: "PG_CHECKOUT",
         message: `Rent payment - ${data.tenant_name || "Tenant"}`,
@@ -135,6 +132,7 @@ export class PhonePeProvider extends PaymentProvider {
       redirectUrl,
       url,
     });
+    console.info("[PhonePe] Full request payload:", JSON.stringify(payload));
 
     const response = await fetch(url, {
       method: "POST",
