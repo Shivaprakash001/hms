@@ -87,16 +87,22 @@ export class PhonePeProvider extends PaymentProvider {
     const accessToken = await this.getAccessToken();
     const amountInPaise = Math.round(data.amount * 100);
 
-    const redirectUrl =
+    // Always embed merchant_txn_id in the return URL so the React SPA has a
+    // guaranteed identifier in useSearchParams() regardless of what params
+    // PhonePe appends. Without this, a POST-mode redirect loses all data
+    // because the browser navigates to the URL and the POST body is discarded.
+    const returnBase =
       process.env.PHONEPE_REDIRECT_URL ||
       `${process.env.NEXT_PUBLIC_FRONTEND_URL || "https://trishul.solutions"}/payment-return`;
+    const sep = returnBase.includes("?") ? "&" : "?";
+    const redirectUrl = `${returnBase}${sep}merchant_txn_id=${encodeURIComponent(data.merchant_txn_id)}`;
 
     const payload: any = {
       merchantOrderId: data.merchant_txn_id,
       merchantUserId: data.tenant_id || "unknown-tenant",
       amount: amountInPaise,
       redirectUrl,
-      redirectMode: "POST",
+      redirectMode: "REDIRECT",
       callbackUrl: `${process.env.NEXT_PUBLIC_FRONTEND_URL || "https://trishul.solutions"}/api/payments/webhook`,
       expireAfter: 1800, // 30 min
       paymentInstrument: {
