@@ -9,7 +9,17 @@ const logger = getLogger("invitation-service");
 
 export class InvitationService {
   async inviteTenant(data: any, ownerId: string) {
-    const { email, name, phone, room_id, monthly_rent, advance_amount, maintenance_amount } = data;
+    const { email, name, phone, room_id, monthly_rent } = data;
+    let advance_amount    = data.advance_amount    as number | undefined;
+    let maintenance_amount = data.maintenance_amount as number | undefined;
+
+    // Backend safety: if frontend omits values, fall back to owner preferences
+    if (advance_amount === undefined || maintenance_amount === undefined) {
+      const { getPreferences } = await import("../preferences");
+      const prefs = await getPreferences(ownerId);
+      if (advance_amount    === undefined) advance_amount    = prefs.advance_amount_default    ?? 0;
+      if (maintenance_amount === undefined) maintenance_amount = prefs.maintenance_amount_default ?? 0;
+    }
     const normalizedEmail = String(email || "").trim().toLowerCase();
 
     logger.info(`Starting invitation process for email: ${normalizedEmail} by owner: ${ownerId}`);

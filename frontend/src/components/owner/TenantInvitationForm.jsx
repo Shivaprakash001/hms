@@ -52,10 +52,8 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
             const res = await api.get('/owner/me/preferences');
             const p = res.data;
             setPrefs(p);
-            setAdvanceAmount(p.advance_enabled && p.advance_amount_default > 0
-                ? String(p.advance_amount_default) : '');
-            setMaintenanceAmount(p.maintenance_enabled && p.maintenance_amount_default > 0
-                ? String(p.maintenance_amount_default) : '');
+            setAdvanceAmount(String(p.advance_amount_default ?? 0));
+            setMaintenanceAmount(String(p.maintenance_amount_default ?? 0));
         } catch {
             setPrefs({ advance_enabled: false, maintenance_enabled: false });
         } finally {
@@ -94,8 +92,8 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                 phone: phone || '',
                 monthly_rent: monthlyRent ? parseFloat(monthlyRent) : null,
                 room_id: roomId,
-                advance_amount:     prefs?.advance_enabled     ? (advanceAmount     ? parseFloat(advanceAmount)     : 0) : 0,
-                maintenance_amount: prefs?.maintenance_enabled ? (maintenanceAmount ? parseFloat(maintenanceAmount) : 0) : 0,
+                advance_amount:     advanceAmount     ? parseFloat(advanceAmount)     : 0,
+                maintenance_amount: maintenanceAmount ? parseFloat(maintenanceAmount) : 0,
             });
             setSuccessData(response.data);
             if (onInviteSuccess) onInviteSuccess(response.data);
@@ -247,39 +245,35 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                     </div>
                                 </div>
 
-                                {/* Advance Deposit — only when advance_enabled */}
-                                {prefs?.advance_enabled && (
-                                    <div className="space-y-2">
-                                        <label className={labelCls}>
-                                            Advance / Security Deposit (₹)
-                                            <span className="ml-1 normal-case font-normal text-indigo-500">prefilled from settings</span>
-                                        </label>
-                                        <div className="relative group">
-                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                                <Wallet className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
-                                            </div>
-                                            <input type="number" min="0" value={advanceAmount} onChange={e => setAdvanceAmount(e.target.value)} className={inputCls} placeholder="0" />
+                                {/* Advance Deposit — always visible, prefilled from preferences */}
+                                <div className="space-y-2">
+                                    <label className={labelCls}>
+                                        Advance / Security Deposit (₹)
+                                        {prefs && <span className="ml-1 normal-case font-normal text-indigo-400">from settings</span>}
+                                    </label>
+                                    <div className="relative group">
+                                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                            <Wallet className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
                                         </div>
-                                        <p className="text-xs text-slate-400 ml-1">One-time refundable deposit collected at move-in.</p>
+                                        <input type="number" min="0" value={advanceAmount} onChange={e => setAdvanceAmount(e.target.value)} className={inputCls} placeholder="0" />
                                     </div>
-                                )}
+                                    <p className="text-xs text-slate-400 ml-1">One-time refundable deposit. Set 0 if not applicable.</p>
+                                </div>
 
-                                {/* Maintenance Charge — only when maintenance_enabled */}
-                                {prefs?.maintenance_enabled && (
-                                    <div className="space-y-2">
-                                        <label className={labelCls}>
-                                            Monthly Maintenance (₹)
-                                            <span className="ml-1 normal-case font-normal text-indigo-500">prefilled from settings</span>
-                                        </label>
-                                        <div className="relative group">
-                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                                <Wrench className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
-                                            </div>
-                                            <input type="number" min="0" value={maintenanceAmount} onChange={e => setMaintenanceAmount(e.target.value)} className={inputCls} placeholder="0" />
+                                {/* Maintenance Charge — always visible, prefilled from preferences */}
+                                <div className="space-y-2">
+                                    <label className={labelCls}>
+                                        Monthly Maintenance (₹)
+                                        {prefs && <span className="ml-1 normal-case font-normal text-indigo-400">from settings</span>}
+                                    </label>
+                                    <div className="relative group">
+                                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                            <Wrench className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
                                         </div>
-                                        <p className="text-xs text-slate-400 ml-1">Added to rent each month as a maintenance charge.</p>
+                                        <input type="number" min="0" value={maintenanceAmount} onChange={e => setMaintenanceAmount(e.target.value)} className={inputCls} placeholder="0" />
                                     </div>
-                                )}
+                                    <p className="text-xs text-slate-400 ml-1">Monthly maintenance charge. Set 0 if not applicable.</p>
+                                </div>
 
                                 <button
                                     type="submit"
