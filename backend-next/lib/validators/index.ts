@@ -97,7 +97,6 @@ export const InvitationSchema = z.object({
   monthly_rent: z.number().positive(),
   advance_amount: z.number().min(0).optional(),
   maintenance_amount: z.number().min(0).optional(),
-  date_of_birth: z.string().optional().nullable(),
 });
 
 export const ActivationSchema = z.object({
