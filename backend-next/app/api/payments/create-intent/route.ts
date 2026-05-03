@@ -43,11 +43,13 @@ export async function POST(req: Request) {
       tenantId = tenant.id;
     }
 
-    const result = await paymentService.createMultiObligationPaymentIntent(
+    const raw = await paymentService.createMultiObligationPaymentIntent(
       ids,
       user.id,
       tenantId
     );
+    // Normalize: dedup path returns {attempt, isReused: true, ...}; new path returns PaymentAttempt directly
+    const result = (raw as any).isReused === true ? (raw as any).attempt : raw;
 
     logger.info("redirecting_to_checkout", {
       attemptId: result.id,

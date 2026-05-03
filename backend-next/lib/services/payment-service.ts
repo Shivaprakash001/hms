@@ -1071,15 +1071,16 @@ export class PaymentService {
     // ──────────────────────────────────────────────────────────────
 
     if (status !== "SUCCESS") {
-      // Atomic status transition
-      return await prisma.paymentAttempt.update({
-        where: { id: attemptId, status: "PENDING" },
-        data: {
-          status: status as any,
-          gateway_txn_id: gatewayTxnId,
-          raw_webhook_payload: rawPayload || null
-        }
-      }).catch(e => attempt); // Return existing if race condition already updated it
+      // Atomic status transition — WHERE includes status:PENDING so concurrent webhook
+      // can't double-update. On miss, re-read fresh state rather than returning stale object.
+      try {
+        return await prisma.paymentAttempt.update({
+          where: { id: attemptId, status: "PENDING" },
+          data: { status: status as any, gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null }
+        });
+      } catch (e) {
+        return await prisma.paymentAttempt.findUnique({ where: { id: attemptId } });
+      }
     }
 
     // Success path - atomic transition
@@ -1094,7 +1095,9 @@ export class PaymentService {
         ...requestMeta,
         attempt_id: attemptId,
       });
-      return attempt; // Already updated by another thread
+      // Re-read fresh state — returning `attempt` here gives caller stale PENDING status
+      // when webhook has already set it to SUCCESS.
+      return await prisma.paymentAttempt.findUnique({ where: { id: attemptId } });
     }
 
     // Single source of truth: check if payments already exist
@@ -1259,7 +1262,9 @@ export class PaymentService {
       const receivedPaise =
         verification.amount == null ? null : Math.round(Number(verification.amount) * 100);
 
-      if (receivedPaise == null || receivedPaise !== expectedPaise) {
+      // Only reject if amount IS present and doesn't match — PhonePe webhooks sometimes
+      // omit amount, and throwing on null would silently kill all webhook processing.
+      if (receivedPaise !== null && receivedPaise !== expectedPaise) {
         logger.error("payments.webhook.amount_mismatch", {
           ...requestMeta,
           attemptId: attempt.id,
@@ -1388,6 +1393,12 @@ export class PaymentService {
       fetchedStatus: fetched.status,
       provider: attempt.provider,
     });
+
+    // Skip finalize when provider says PENDING — no state change needed, avoids
+    // a no-op DB write on every poll while payment is in-flight.
+    if (fetched.status === "PENDING") {
+      return { attempt, status: attempt.status, source: "pending" };
+    }
 
     const finalized = await this.finalizePaymentAttempt(
       attempt.id,

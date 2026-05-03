@@ -18,6 +18,7 @@ const TenantPaymentReturn = () => {
     const [error, setError] = useState('');
     const [isChecking, setIsChecking] = useState(false);
     const cancelledRef = useRef(false);
+    const focusVerifyingRef = useRef(false);
 
     const merchantTxnId =
         searchParams.get('merchant_txn_id') ||
@@ -118,7 +119,8 @@ const TenantPaymentReturn = () => {
     // Covers mobile: user pays in another app → switches back → instant recovery.
     useEffect(() => {
         const onFocus = async () => {
-            if (!merchantTxnId || TERMINAL_STATUSES.includes(currentStatus) || isChecking) return;
+            if (!merchantTxnId || TERMINAL_STATUSES.includes(currentStatus) || isChecking || focusVerifyingRef.current) return;
+            focusVerifyingRef.current = true;
             try {
                 const data = await doVerify();
                 if (TERMINAL_STATUSES.includes(data?.status)) {
@@ -127,6 +129,8 @@ const TenantPaymentReturn = () => {
                 }
             } catch (_) {
                 // silent — focus check, don't surface transient errors
+            } finally {
+                focusVerifyingRef.current = false;
             }
         };
 
