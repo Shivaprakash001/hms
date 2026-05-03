@@ -48,6 +48,7 @@ export const TenantProfileUpdateSchema = z.object({
   address: z.string().optional(),
   permanent_address: z.string().optional(),
   temporary_address: z.string().optional(),
+  date_of_birth: z.string().optional().nullable(),
   gender: z.enum(["Male", "Female", "Other", "Prefer not to say"]).optional().nullable(),
   profile_type: z.enum(["STUDENT", "WORKING_PROFESSIONAL"]).optional(),
   office_name: z.string().optional().nullable(),
@@ -94,6 +95,9 @@ export const InvitationSchema = z.object({
   phone: z.string().optional(),
   room_id: z.string().uuid(),
   monthly_rent: z.number().positive(),
+  advance_amount: z.number().min(0).optional(),
+  maintenance_amount: z.number().min(0).optional(),
+  date_of_birth: z.string().optional().nullable(),
 });
 
 export const ActivationSchema = z.object({

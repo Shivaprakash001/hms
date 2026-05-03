@@ -4,7 +4,24 @@ export const runtime = "nodejs";
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { propertyService } from "@/lib/services/property-service";
+import { getPreferences } from "@/lib/preferences";
 
+/**
+ * GET — Return resolved preferences (defaults merged with hostel overrides).
+ * Used by the invite form to prefill advance/maintenance defaults.
+ */
+export async function GET(req: NextRequest) {
+  const session = await getSession(req);
+  if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
+    return apiError("Forbidden", "FORBIDDEN", 403);
+  }
+  try {
+    const prefs = await getPreferences(session.sub);
+    return apiResponse(prefs);
+  } catch (error: any) {
+    return apiError(error.message || "Failed to fetch preferences");
+  }
+}
 
 /**
  * ⚙️ OWNER PREFERENCES

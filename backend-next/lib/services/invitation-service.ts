@@ -9,7 +9,7 @@ const logger = getLogger("invitation-service");
 
 export class InvitationService {
   async inviteTenant(data: any, ownerId: string) {
-    const { email, name, phone, room_id, monthly_rent } = data;
+    const { email, name, phone, room_id, monthly_rent, advance_amount, maintenance_amount, date_of_birth } = data;
     const normalizedEmail = String(email || "").trim().toLowerCase();
 
     logger.info(`Starting invitation process for email: ${normalizedEmail} by owner: ${ownerId}`);
@@ -86,7 +86,10 @@ export class InvitationService {
           monthly_rent: Number(monthly_rent),
           joined_on: new Date(),
           status: "INVITED",
-        },
+          advance_deposit:    Number(advance_amount    ?? 0),
+          maintenance_charge: Number(maintenance_amount ?? 0),
+          ...(date_of_birth ? { date_of_birth: new Date(date_of_birth) } : {}),
+        } as any,
       });
 
       // Reserve/track room assignment for invited tenant so resend + lifecycle remain consistent.

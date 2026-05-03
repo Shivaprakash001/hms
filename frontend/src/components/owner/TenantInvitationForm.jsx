@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Mail, Home, Loader2, Send, X, CheckCircle2, AlertCircle, Phone, CreditCard } from 'lucide-react';
+import { User, Mail, Home, Loader2, Send, X, CheckCircle2, AlertCircle, Phone, CreditCard, Wallet, Wrench, Calendar } from 'lucide-react';
 import api from '../../api/axios';
 
 const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
@@ -14,10 +14,15 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
     const [successData, setSuccessData] = useState(null);
+    const [advanceAmount, setAdvanceAmount] = useState('');
+    const [maintenanceAmount, setMaintenanceAmount] = useState('');
+    const [dateOfBirth, setDateOfBirth] = useState('');
+    const [prefs, setPrefs] = useState(null);
 
     useEffect(() => {
         if (isOpen) {
             fetchRooms();
+            fetchPreferences();
             setSuccessData(null);
             setError('');
             setName('');
@@ -25,8 +30,27 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
             setPhone('');
             setMonthlyRent('');
             setRoomId('');
+            setAdvanceAmount('');
+            setMaintenanceAmount('');
+            setDateOfBirth('');
         }
     }, [isOpen]);
+
+    const fetchPreferences = async () => {
+        try {
+            const res = await api.get('/owner/me/preferences');
+            const p = res.data;
+            setPrefs(p);
+            if (p.advance_enabled && p.advance_amount_default > 0) {
+                setAdvanceAmount(String(p.advance_amount_default));
+            }
+            if (p.maintenance_enabled && p.maintenance_amount_default > 0) {
+                setMaintenanceAmount(String(p.maintenance_amount_default));
+            }
+        } catch {
+            // preferences unavailable — fields still shown with empty defaults
+        }
+    };
 
     const fetchRooms = async () => {
         setIsLoading(true);
@@ -65,7 +89,10 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                 email,
                 phone: phone || "",
                 monthly_rent: monthlyRent ? parseFloat(monthlyRent) : null,
-                room_id: roomId
+                room_id: roomId,
+                advance_amount:     advanceAmount     ? parseFloat(advanceAmount)     : 0,
+                maintenance_amount: maintenanceAmount ? parseFloat(maintenanceAmount) : 0,
+                date_of_birth: dateOfBirth || null,
             });
             setSuccessData(response.data);
             if (onInviteSuccess) onInviteSuccess(response.data);
@@ -246,6 +273,71 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                                 ))}
                                             </select>
                                         </div>
+                                    </div>
+                                </div>
+
+                                {/* Advance Deposit — shown only when enabled in preferences */}
+                                {(!prefs || prefs.advance_enabled) && (
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold text-slate-500 ml-1 uppercase tracking-wider">
+                                            Advance / Security Deposit (₹)
+                                            {prefs?.advance_enabled && <span className="ml-1 text-indigo-500">(prefilled from settings)</span>}
+                                        </label>
+                                        <div className="relative group">
+                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                                <Wallet className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+                                            </div>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                value={advanceAmount}
+                                                onChange={(e) => setAdvanceAmount(e.target.value)}
+                                                className="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-medium"
+                                                placeholder="0"
+                                            />
+                                        </div>
+                                        <p className="text-xs text-slate-400 ml-1">One-time refundable deposit collected at move-in.</p>
+                                    </div>
+                                )}
+
+                                {/* Maintenance Charge — shown only when enabled in preferences */}
+                                {(!prefs || prefs.maintenance_enabled) && (
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold text-slate-500 ml-1 uppercase tracking-wider">
+                                            Monthly Maintenance (₹)
+                                            {prefs?.maintenance_enabled && <span className="ml-1 text-indigo-500">(prefilled from settings)</span>}
+                                        </label>
+                                        <div className="relative group">
+                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                                <Wrench className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+                                            </div>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                value={maintenanceAmount}
+                                                onChange={(e) => setMaintenanceAmount(e.target.value)}
+                                                className="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-medium"
+                                                placeholder="0"
+                                            />
+                                        </div>
+                                        <p className="text-xs text-slate-400 ml-1">Added to rent each month as a maintenance charge.</p>
+                                    </div>
+                                )}
+
+                                {/* Date of Birth */}
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-500 ml-1 uppercase tracking-wider">Date of Birth</label>
+                                    <div className="relative group">
+                                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                            <Calendar className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+                                        </div>
+                                        <input
+                                            type="date"
+                                            value={dateOfBirth}
+                                            onChange={(e) => setDateOfBirth(e.target.value)}
+                                            max={new Date().toISOString().split('T')[0]}
+                                            className="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-medium"
+                                        />
                                     </div>
                                 </div>
 
