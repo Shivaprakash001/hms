@@ -20,6 +20,8 @@ const TenantPaymentReturn = () => {
     const cancelledRef = useRef(false);
     const focusVerifyingRef = useRef(false);
 
+    const currentStatus = attempt?.status ?? 'PENDING';
+
     const merchantTxnId =
         searchParams.get('merchant_txn_id') ||
         searchParams.get('merchantOrderId') ||
@@ -154,8 +156,6 @@ const TenantPaymentReturn = () => {
             setIsChecking(false);
         }
     };
-
-    const currentStatus = attempt?.status;
 
     // ── Loading spinner ──────────────────────────────────────────────────────
     if (loading) {
