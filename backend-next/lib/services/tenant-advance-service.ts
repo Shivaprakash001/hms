@@ -1,7 +1,11 @@
 import { prisma } from "../db";
 import { getLogger } from "../logger";
+import { getPreferences } from "../preferences";
 
 const logger = getLogger("tenant.advance");
+
+// Refund lifecycle — physical money has not necessarily been returned until COMPLETED.
+export type RefundStatus = "PENDING" | "COMPLETED" | "FAILED";
 
 export class TenantAdvanceService {
   /**
@@ -12,20 +16,35 @@ export class TenantAdvanceService {
    */
   async getBalance(tenantId: string, ownerId: string) {
     await this._assertOwnership(tenantId, ownerId);
+    return this._buildBalanceResponse(tenantId);
+  }
 
+  /**
+   * Tenant self-service balance — derives ownerId from DB, no caller-supplied ownerId.
+   * Used by GET /api/tenants/me/advance.
+   */
+  async getBalanceForTenant(profileId: string) {
+    const tenant = await prisma.tenant.findUnique({
+      where: { profile_id: profileId },
+      select: { id: true, owner_id: true },
+    });
+    if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
+    return this._buildBalanceResponse(tenant.id);
+  }
+
+  private async _buildBalanceResponse(tenantId: string) {
     const entries = await prisma.tenantAdvanceLedger.findMany({
       where: { tenant_id: tenantId },
       orderBy: { created_at: "asc" },
     });
-
     const balance = entries.reduce((acc: number, e: any) => {
       const amt = Number(e.amount);
       return e.type === "CREDIT" ? acc + amt : acc - amt;
     }, 0);
-
     return {
       tenant_id: tenantId,
       balance: Math.round(balance * 100) / 100,
+      last_updated: entries.length > 0 ? entries[entries.length - 1].created_at : null,
       entries,
     };
   }
@@ -48,14 +67,12 @@ export class TenantAdvanceService {
 
     if (amount <= 0) throw new Error("BAD_REQUEST: Amount must be positive");
     await this._assertOwnership(tenantId, ownerId);
+    await this._assertAdvanceEnabled(ownerId);
 
     return prisma.$transaction(async (tx) => {
-      // Lock tenant row — serializes all advance mutations for this tenant
       await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${tenantId}::uuid FOR UPDATE`;
-
       const currentBalance = await this._computeBalance(tx, tenantId);
       const newBalance = Math.round((currentBalance + amount) * 100) / 100;
-
       const entry = await tx.tenantAdvanceLedger.create({
         data: {
           tenant_id: tenantId,
@@ -70,17 +87,71 @@ export class TenantAdvanceService {
           created_by: createdBy,
         },
       });
-
-      logger.info("advance.credit", {
-        tenant_id: tenantId,
-        reason,
-        amount,
-        new_balance: newBalance,
-        entry_id: entry.id,
-      });
-
+      logger.info("advance.credit", { tenant_id: tenantId, reason, amount, new_balance: newBalance, entry_id: entry.id });
       return { entry, balance: newBalance };
     });
+  }
+
+  /**
+   * Idempotent credit used exclusively by finalizePaymentAttempt().
+   * Called INSIDE the caller's transaction — no new transaction started.
+   * Guards against duplicate webhook processing via the DB unique index
+   * on (reference_id, reference_type).
+   *
+   * Returns the existing entry if already credited (idempotent), or creates a new one.
+   */
+  async creditIdempotentInTx(
+    tx: any,
+    params: {
+      tenantId: string;
+      ownerId: string;
+      createdBy: string;
+      amount: number;
+      referenceId: string;
+      referenceType: string;
+      notes?: string;
+    }
+  ) {
+    const { tenantId, ownerId, createdBy, amount, referenceId, referenceType, notes } = params;
+
+    // Idempotency: if a ledger entry already exists for this reference, return it.
+    const existing = await tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM tenant_advance_ledger
+      WHERE reference_id = ${referenceId}::uuid AND reference_type = ${referenceType}
+      LIMIT 1
+    `;
+    if (existing.length > 0) {
+      logger.info("advance.credit.already_credited", { reference_id: referenceId, reference_type: referenceType });
+      return { alreadyCredited: true };
+    }
+
+    const currentBalance = await this._computeBalance(tx, tenantId);
+    const newBalance = Math.round((currentBalance + amount) * 100) / 100;
+
+    const entry = await tx.tenantAdvanceLedger.create({
+      data: {
+        tenant_id: tenantId,
+        owner_id: ownerId,
+        type: "CREDIT",
+        reason: "DEPOSIT",
+        amount,
+        balance_after: newBalance,
+        notes: notes || `Gateway advance payment credited`,
+        reference_id: referenceId,
+        reference_type: referenceType,
+        created_by: createdBy,
+      },
+    });
+
+    logger.info("advance.credit.from_gateway", {
+      tenant_id: tenantId,
+      amount,
+      new_balance: newBalance,
+      entry_id: entry.id,
+      reference_id: referenceId,
+    });
+
+    return { entry, balance: newBalance, alreadyCredited: false };
   }
 
   /**
@@ -97,15 +168,23 @@ export class TenantAdvanceService {
     notes?: string;
     referenceId?: string;
     referenceType?: string;
+    refundStatus?: RefundStatus;
   }) {
-    const { tenantId, ownerId, createdBy, reason, amount, notes, referenceId, referenceType } = params;
+    const { tenantId, ownerId, createdBy, reason, amount, notes, referenceId, referenceType, refundStatus } = params;
 
     if (amount <= 0) throw new Error("BAD_REQUEST: Amount must be positive");
     await this._assertOwnership(tenantId, ownerId);
+    await this._assertAdvanceEnabled(ownerId);
+
+    // For REFUND: the entry is created with refund_status = PENDING.
+    // Balance decreases immediately (intent recorded), but the physical money may not have
+    // been returned yet. Owner must call the update-refund-status endpoint to mark COMPLETED.
+    // CORRECTION entries bypass this — they are admin fixes and don't track physical flow.
+    const effectiveRefundStatus =
+      reason === "REFUND" ? (refundStatus ?? "PENDING") : null;
 
     return prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${tenantId}::uuid FOR UPDATE`;
-
       const currentBalance = await this._computeBalance(tx, tenantId);
 
       if (reason !== "CORRECTION" && currentBalance < amount) {
@@ -127,19 +206,32 @@ export class TenantAdvanceService {
           notes: notes || null,
           reference_id: referenceId || null,
           reference_type: referenceType || null,
+          refund_status: effectiveRefundStatus,
           created_by: createdBy,
         },
       });
 
-      logger.info("advance.debit", {
-        tenant_id: tenantId,
-        reason,
-        amount,
-        new_balance: newBalance,
-        entry_id: entry.id,
-      });
-
+      logger.info("advance.debit", { tenant_id: tenantId, reason, amount, new_balance: newBalance, entry_id: entry.id, refund_status: effectiveRefundStatus });
       return { entry, balance: newBalance };
+    });
+  }
+
+  /**
+   * Update the physical refund status on an existing REFUND ledger entry.
+   * This must be called when the bank transfer actually completes or fails.
+   */
+  async updateRefundStatus(entryId: string, ownerId: string, status: RefundStatus) {
+    const entry = await prisma.tenantAdvanceLedger.findUnique({
+      where: { id: entryId },
+      select: { owner_id: true, reason: true },
+    });
+    if (!entry) throw new Error("NOT_FOUND: Ledger entry not found");
+    if (entry.owner_id !== ownerId) throw new Error("FORBIDDEN: Not your ledger entry");
+    if ((entry as any).reason !== "REFUND") throw new Error("BAD_REQUEST: Can only update refund_status on REFUND entries");
+
+    return prisma.tenantAdvanceLedger.update({
+      where: { id: entryId },
+      data: { refund_status: status },
     });
   }
 
@@ -166,6 +258,7 @@ export class TenantAdvanceService {
 
     if (amount <= 0) throw new Error("BAD_REQUEST: Amount must be positive");
     await this._assertOwnership(tenantId, ownerId);
+    await this._assertAdvanceEnabled(ownerId);
 
     return prisma.$transaction(async (tx) => {
       // Lock tenant row first (always first to avoid deadlock ordering)
@@ -265,6 +358,13 @@ export class TenantAdvanceService {
     });
     if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
     if (tenant.owner_id !== ownerId) throw new Error("FORBIDDEN: Tenant does not belong to this owner");
+  }
+
+  private async _assertAdvanceEnabled(ownerId: string) {
+    const prefs = await getPreferences(ownerId);
+    if (!prefs.advance_enabled) {
+      throw new Error("BAD_REQUEST: Advance/deposit feature is not enabled for this hostel. Enable it in Settings → Preferences.");
+    }
   }
 
   /**

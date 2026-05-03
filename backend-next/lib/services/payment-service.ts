@@ -5,6 +5,7 @@ import crypto from "crypto";
 import { EmailService } from "./email-service";
 import { receiptService } from "./receipt-service";
 import { getPreferences } from "../preferences";
+import { tenantAdvanceService } from "./tenant-advance-service";
 import { formatCurrency, formatMonthYear } from "../format";
 import { eventLog } from "./event-log-service";
 import { getLogger } from "../logger";
@@ -787,6 +788,116 @@ export class PaymentService {
     }
   }
 
+  /**
+   * Create a PhonePe payment intent for an advance/deposit payment.
+   * No obligation is linked — on SUCCESS, finalizePaymentAttempt credits the ledger.
+   *
+   * Lock ordering (consistent with adjustAgainstObligation):
+   *   pg_advisory_xact_lock(tenant) → tenant row FOR UPDATE
+   */
+  async createAdvancePaymentIntent(params: {
+    tenantId: string;
+    ownerId: string;
+    amount: number;
+    profileId: string;
+  }) {
+    const { tenantId, ownerId, amount, profileId } = params;
+
+    if (amount <= 0) throw new Error("BAD_REQUEST: Amount must be positive");
+
+    const prefs = await getPreferences(ownerId);
+    if (!prefs.advance_enabled) {
+      throw new Error("BAD_REQUEST: Advance/deposit payments are not enabled for this hostel");
+    }
+    const minPaisa = Math.round(prefs.min_payment_amount * 100);
+    const amountPaisa = Math.round(amount * 100);
+    if (amountPaisa < minPaisa) {
+      throw new Error(`BAD_REQUEST: Minimum payment amount is ${formatCurrency(prefs.min_payment_amount)}`);
+    }
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      include: { profile: true },
+    });
+    if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
+    if (tenant.owner_id !== ownerId) throw new Error("FORBIDDEN: Tenant does not belong to this owner");
+
+    const { provider, config } = await this.getProviderForOwner(ownerId);
+    const instance = PaymentProviderFactory.getProvider(provider, config);
+
+    const txResult = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"adv_intent:" + tenantId})::bigint)`;
+      await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${tenantId}::uuid FOR UPDATE`;
+
+      // Dedup: reuse a live PENDING advance attempt for this tenant
+      const existing = await tx.paymentAttempt.findFirst({
+        where: {
+          tenant_id: tenantId,
+          payment_type: "ADVANCE",
+          status: { in: ["CREATED", "PENDING"] },
+        },
+        orderBy: { created_at: "desc" },
+      });
+
+      if (existing) {
+        const checkoutUrl = (existing as any).checkout_url || "";
+        const twoMinAgo = new Date(Date.now() - 2 * 60 * 1000);
+        const isInFlight = existing.status === "CREATED" && existing.created_at > twoMinAgo;
+        const hasValidCheckout = checkoutUrl.length > 0 && !checkoutUrl.includes("/payment-return");
+        if (isInFlight || hasValidCheckout) {
+          return { attempt: existing, isReused: true };
+        }
+        await tx.paymentAttempt.update({ where: { id: existing.id }, data: { status: "EXPIRED" } });
+      }
+
+      const merchantTxnId = `hms_adv_${crypto.randomBytes(6).toString("hex")}`;
+      const newAttempt = await tx.paymentAttempt.create({
+        data: {
+          tenant_id: tenantId,
+          owner_id: ownerId,
+          provider,
+          merchant_txn_id: merchantTxnId,
+          amount,
+          status: "CREATED",
+          payment_type: "ADVANCE",
+        } as any,
+      });
+      return { attempt: newAttempt, isReused: false };
+    });
+
+    if (txResult.isReused) return txResult.attempt;
+
+    const { attempt } = txResult;
+    try {
+      const result = await instance.createIntent({
+        amount,
+        merchant_txn_id: attempt.merchant_txn_id,
+        tenant_name: tenant.profile.name,
+        tenant_email: tenant.profile.email,
+        tenant_phone: tenant.profile.phone || "",
+        metadata: { tenant_id: tenantId, attempt_id: attempt.id, payment_type: "ADVANCE" },
+      });
+      return await prisma.paymentAttempt.update({
+        where: { id: attempt.id },
+        data: {
+          status: "PENDING",
+          gateway_txn_id: result.gateway_txn_id,
+          upi_intent_url: result.upi_intent_url,
+          qr_payload: result.qr_payload,
+          checkout_url: result.checkout_url,
+          expires_at: result.expires_at,
+          raw_create_response: result.raw_response as any,
+        },
+      });
+    } catch (error) {
+      await prisma.paymentAttempt.update({
+        where: { id: attempt.id },
+        data: { status: "FAILED", raw_create_response: { error: String(error) } as any },
+      });
+      throw error;
+    }
+  }
+
   async previewPaymentAmount(obligationIds: string[], userId: string, tenantId?: string) {
     const obligations = await prisma.rentObligation.findMany({
       where: { id: { in: obligationIds } },
@@ -1100,8 +1211,40 @@ export class PaymentService {
       return await prisma.paymentAttempt.findUnique({ where: { id: attemptId } });
     }
 
-    // Single source of truth: check if payments already exist
+    // Single source of truth: check if payments already exist (RENT path)
     if (attempt.payments.length > 0) {
+      return updatedAttempt;
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // 💎 ADVANCE PATH: Gateway-driven deposit, no obligation linkage
+    // ──────────────────────────────────────────────────────────────
+    if ((attempt as any).payment_type === "ADVANCE") {
+      await prisma.$transaction(async (tx) => {
+        // Lock ordering: tenant row first (consistent with adjustAgainstObligation)
+        await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${attempt.tenant_id}::uuid FOR UPDATE`;
+        await tenantAdvanceService.creditIdempotentInTx(tx, {
+          tenantId: attempt.tenant_id,
+          ownerId: attempt.owner_id,
+          amount: Number(attempt.amount),
+          referenceId: attempt.id,
+          referenceType: "PAYMENT_ATTEMPT",
+          createdBy: attempt.owner_id,
+        });
+      });
+      logger.info("payments.finalize.advance_credited", {
+        ...requestMeta,
+        attempt_id: attemptId,
+        amount: Number(attempt.amount),
+        tenant_id: attempt.tenant_id,
+      });
+      await eventLog.log("ADVANCE_CREDITED", attempt.owner_id, {
+        attempt_id: attemptId,
+        merchant_txn_id: attempt.merchant_txn_id,
+        amount: Number(attempt.amount),
+        tenant_id: attempt.tenant_id,
+        gateway_txn_id: gatewayTxnId || null,
+      });
       return updatedAttempt;
     }
 

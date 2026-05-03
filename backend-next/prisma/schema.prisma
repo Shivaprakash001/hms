@@ -218,6 +218,7 @@ model TenantAdvanceLedger {
   notes          String?
   reference_id   String?             @db.Uuid
   reference_type String?
+  refund_status  String?
   created_by     String              @db.Uuid
   created_at     DateTime            @default(now()) @db.Timestamptz(6)
 
@@ -322,6 +323,7 @@ model PaymentAttempt {
   created_at          DateTime       @default(now()) @db.Timestamptz(6)
   updated_at          DateTime?      @updatedAt @db.Timestamptz(6)
   checkout_url        String?
+  payment_type        String         @default("RENT")
   obligation          RentObligation? @relation(fields: [obligation_id], references: [id])
   invoice             OwnerInvoice?   @relation(fields: [invoice_id], references: [id], onDelete: SetNull)
   tenant              Tenant          @relation(fields: [tenant_id], references: [id])
