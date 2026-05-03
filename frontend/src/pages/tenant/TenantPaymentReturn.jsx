@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
 
@@ -10,10 +10,10 @@ const POLL_INTERVAL_MS = 4000;
 
 const TenantPaymentReturn = () => {
     const [searchParams] = useSearchParams();
-    const [attempt, setAttempt] = useState<any>(null);
+    const [attempt, setAttempt] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [pollAttempts, setPollAttempts] = useState(0);
+    const pollAttemptsRef = useRef(0);
     const [isPolling, setIsPolling] = useState(false);
 
     const merchantTxnId = searchParams.get('merchant_txn_id')
@@ -27,14 +27,14 @@ const TenantPaymentReturn = () => {
             return;
         }
 
-        const loadAttempt = async (): Promise<boolean> => {
-            if (pollAttempts >= MAX_POLL_ATTEMPTS) {
+        const loadAttempt = async () => {
+            if (pollAttemptsRef.current >= MAX_POLL_ATTEMPTS) {
                 setError('Verification timed out. Please refresh the page or contact support.');
                 setIsPolling(false);
                 return true;
             }
 
-            setPollAttempts(prev => prev + 1);
+            pollAttemptsRef.current += 1;
 
             try {
                 const result = await paymentService.verifyPayment({ 
@@ -59,12 +59,12 @@ const TenantPaymentReturn = () => {
                 }
 
                 return false;
-            } catch (attemptError: any) {
+            } catch (attemptError) {
                 const errorMsg = attemptError?.response?.data?.message 
                     || attemptError?.message 
                     || 'Unable to verify payment status.';
                 
-                if (pollAttempts >= MAX_POLL_ATTEMPTS) {
+                if (pollAttemptsRef.current >= MAX_POLL_ATTEMPTS) {
                     setError('Verification timed out. ' + errorMsg);
                     setIsPolling(false);
                     return true;
@@ -100,7 +100,7 @@ const TenantPaymentReturn = () => {
     const handleManualRefresh = async () => {
         if (!merchantTxnId || isPolling) return;
         
-        setPollAttempts(0);
+        pollAttemptsRef.current = 0;
         setLoading(true);
         setError('');
         

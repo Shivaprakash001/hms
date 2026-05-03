@@ -18,6 +18,69 @@ export class PaymentService {
   //   - No lock, no P2002 catch, hardcoded due day to 10th, local time instead of UTC.
   // Use rentGenerationService (lib/services/rent-generation-service.ts) exclusively.
 
+  /**
+   * Core DB-only payment logic — must be called inside an existing transaction.
+   * No side-effects (events, receipts, audit logs) — callers handle those after commit.
+   */
+  private async _applyPaymentInTx(tx: any, data: {
+    obligationId: string;
+    amountPaid: number;
+    paymentMethod: string;
+    referenceNumber?: string;
+    paymentDate?: Date;
+    paymentAttemptId?: string;
+  }) {
+    await tx.$queryRaw`
+      SELECT id FROM rent_obligations WHERE id = ${data.obligationId}::uuid FOR UPDATE
+    `;
+
+    const obligation = await tx.rentObligation.findUnique({
+      where: { id: data.obligationId },
+      include: { payments: { select: { amount_paid: true } } }
+    });
+
+    if (!obligation) throw new Error("NOT_FOUND: Obligation not found");
+    if (obligation.status === "WAIVED") throw new Error("BAD_REQUEST: Cannot pay for waived obligation");
+    if (obligation.status === "PAID") throw new Error("BAD_REQUEST: Obligation already fully paid");
+
+    const totalAlreadyPaidPaisa = obligation.payments.reduce(
+      (acc: number, p: any) => acc + Math.round(Number(p.amount_paid) * 100), 0
+    );
+    const obligationPaisa = Math.round(Number(obligation.amount) * 100);
+    const remainingPaisa = obligationPaisa - totalAlreadyPaidPaisa;
+    const paymentPaisa = Math.round(data.amountPaid * 100);
+
+    if (paymentPaisa > remainingPaisa) {
+      throw new Error(`BAD_REQUEST: Payment exceeds balance. Remaining: ${(remainingPaisa / 100).toFixed(2)}`);
+    }
+    if (paymentPaisa <= 0) {
+      throw new Error("BAD_REQUEST: Payment amount must be positive");
+    }
+
+    const payment = await tx.payment.create({
+      data: {
+        obligation_id: data.obligationId,
+        tenant_id: obligation.tenant_id,
+        owner_id: obligation.owner_id,
+        amount_paid: paymentPaisa / 100,
+        payment_method: data.paymentMethod,
+        reference_number: data.referenceNumber,
+        payment_date: data.paymentDate || new Date(),
+        payment_attempt_id: data.paymentAttemptId || null,
+      }
+    });
+
+    const newTotalPaidPaisa = totalAlreadyPaidPaisa + paymentPaisa;
+    const newStatus = newTotalPaidPaisa >= obligationPaisa ? "PAID" : "PARTIAL";
+
+    await tx.rentObligation.update({
+      where: { id: data.obligationId },
+      data: { status: newStatus }
+    });
+
+    return { payment, newStatus, tenantId: obligation.tenant_id, ownerId: obligation.owner_id };
+  }
+
   async recordPayment(data: {
     obligationId: string;
     amountPaid: number;
@@ -28,57 +91,7 @@ export class PaymentService {
     paymentAttemptId?: string;
   }) {
     return prisma.$transaction(async (tx: any) => {
-      // Row-level lock on this specific obligation — prevents concurrent double-pay
-      await tx.$queryRaw`
-        SELECT id FROM rent_obligations WHERE id = ${data.obligationId}::uuid FOR UPDATE
-      `;
-
-      const obligation = await tx.rentObligation.findUnique({
-        where: { id: data.obligationId },
-        include: { payments: { select: { amount_paid: true } } }
-      });
-
-      if (!obligation) throw new Error("NOT_FOUND: Obligation not found");
-      if (obligation.status === "WAIVED") throw new Error("BAD_REQUEST: Cannot pay for waived obligation");
-      if (obligation.status === "PAID") throw new Error("BAD_REQUEST: Obligation already fully paid");
-
-      // Paisa-safe arithmetic
-      const totalAlreadyPaidPaisa = obligation.payments.reduce(
-        (acc: number, p: any) => acc + Math.round(Number(p.amount_paid) * 100), 0
-      );
-      const obligationPaisa = Math.round(Number(obligation.amount) * 100);
-      const remainingPaisa = obligationPaisa - totalAlreadyPaidPaisa;
-      const paymentPaisa = Math.round(data.amountPaid * 100);
-
-      if (paymentPaisa > remainingPaisa) {
-        throw new Error(`BAD_REQUEST: Payment exceeds balance. Remaining: ${(remainingPaisa / 100).toFixed(2)}`);
-      }
-      if (paymentPaisa <= 0) {
-        throw new Error("BAD_REQUEST: Payment amount must be positive");
-      }
-
-      const payment = await tx.payment.create({
-        data: {
-          obligation_id: data.obligationId,
-          tenant_id: obligation.tenant_id,
-          owner_id: obligation.owner_id,
-          amount_paid: paymentPaisa / 100,
-          payment_method: data.paymentMethod,
-          reference_number: data.referenceNumber,
-          payment_date: data.paymentDate || new Date(),
-          payment_attempt_id: data.paymentAttemptId || null,
-        }
-      });
-
-      const newTotalPaidPaisa = totalAlreadyPaidPaisa + paymentPaisa;
-      const newStatus = newTotalPaidPaisa >= obligationPaisa ? "PAID" : "PARTIAL";
-
-      await tx.rentObligation.update({
-        where: { id: data.obligationId },
-        data: { status: newStatus }
-      });
-
-      return { payment, newStatus };
+      return this._applyPaymentInTx(tx, data);
     }).then(async (res: any) => {
       await eventSystem.trigger("payment_recorded", {
         payment_id: res.payment.id,
@@ -542,9 +555,10 @@ export class PaymentService {
   }
 
   async createMultiObligationPaymentIntent(obligationIds: string[], userId: string, tenantId?: string) {
+    // ── 1. INITIAL VALIDATION (outside tx — fast-path rejects, no locks needed) ──
     const obligations = await prisma.rentObligation.findMany({
       where: { id: { in: obligationIds } },
-      include: { tenant: { include: { profile: true } }, payments: { select: { amount_paid: true } } }
+      include: { tenant: { include: { profile: true } } }
     });
 
     if (obligations.length === 0) {
@@ -564,93 +578,177 @@ export class PaymentService {
     if (tenantId && singleTenantId !== tenantId) {
       throw new Error("FORBIDDEN: You can only pay your own obligations");
     }
-
-    const statusCounts = obligations.reduce((acc, o) => {
-      acc[o.status] = (acc[o.status] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-
-    if (statusCounts.WAIVED) {
+    if (obligations.some(o => o.status === "WAIVED")) {
       throw new Error("BAD_REQUEST: Cannot pay for waived obligations");
     }
-    if (statusCounts.PAID && statusCounts.PAID === obligations.length) {
+    if (obligations.every(o => o.status === "PAID")) {
       throw new Error("BAD_REQUEST: All obligations are already paid");
     }
 
     const ownerId = obligations[0].owner_id || "";
     const prefs = await getPreferences(ownerId);
-
-    let totalAmountPaisa = 0;
-    const paymentBreakdown: { obligationId: string; amount: number }[] = [];
-
-    for (const ob of obligations) {
-      if (ob.status === "PAID" || ob.status === "WAIVED") continue;
-
-      const paidPaisa = ob.payments.reduce((sum, p) => sum + Math.round(Number(p.amount_paid) * 100), 0);
-      const duePaisa = Math.round(Number(ob.amount) * 100);
-      const outstandingPaisa = Math.max(0, duePaisa - paidPaisa);
-
-      if (outstandingPaisa <= 0) continue;
-
-      totalAmountPaisa += outstandingPaisa;
-      paymentBreakdown.push({
-        obligationId: ob.id,
-        amount: outstandingPaisa / 100
-      });
-    }
-
-    if (totalAmountPaisa <= 0) {
-      throw new Error("BAD_REQUEST: No outstanding amount to pay");
-    }
-
-    const totalAmount = totalAmountPaisa / 100;
-    const minAmountPaisa = Math.round(prefs.min_payment_amount * 100);
-    if (totalAmountPaisa < minAmountPaisa) {
-      throw new Error(`BAD_REQUEST: Minimum payment amount allowed is ${formatCurrency(prefs.min_payment_amount)}`);
-    }
-
-    if (!prefs.allow_partial_payments && paymentBreakdown.length < obligations.filter(o => o.status !== "PAID" && o.status !== "WAIVED").length) {
-      throw new Error(`BAD_REQUEST: Partial payments are disabled by the owner. Full payment of ${formatCurrency(totalAmount)} is required.`);
-    }
-
     const { provider, config } = await this.getProviderForOwner(ownerId);
     const instance = PaymentProviderFactory.getProvider(provider, config);
 
-    const merchantTxnId = `hms_multi_${crypto.randomBytes(6).toString("hex")}`;
-
-    logger.info("payments.create_multi_intent.start", {
-      obligationCount: obligationIds.length,
-      userId,
-      tenantId: tenantId || null,
-      provider,
-      amount: totalAmount,
-      merchantTxnId,
-      breakdown: paymentBreakdown,
-    });
-
-    const attempt = await prisma.paymentAttempt.create({
-      data: {
-        tenant_id: singleTenantId,
-        owner_id: ownerId,
-        provider: provider,
-        merchant_txn_id: merchantTxnId,
-        amount: totalAmount,
-        status: "CREATED",
+    // ── 2. PAYMENT RULES — partial payment enforcement ──
+    // Rule: if partial payments are disabled, tenant must cover ALL outstanding obligations,
+    // not just a selected subset. Compare against the live DB count, not the selection.
+    if (!prefs.allow_partial_payments) {
+      const tenantTotalOutstanding = await prisma.rentObligation.count({
+        where: {
+          tenant_id: singleTenantId,
+          status: { in: ["PENDING", "PARTIAL"] },
+        }
+      });
+      const selectedNonPaid = obligations.filter(o => o.status !== "PAID" && o.status !== "WAIVED").length;
+      if (selectedNonPaid < tenantTotalOutstanding) {
+        throw new Error(
+          `BAD_REQUEST: Partial payments are disabled by the owner. All ${tenantTotalOutstanding} outstanding obligation(s) must be selected and paid at once.`
+        );
       }
+    }
+
+    // ── 3. ATOMIC TRANSACTION: lock → re-read amounts → dedup → create attempt ──
+    //
+    // Two-level serialization:
+    //   a) pg_advisory_xact_lock — tenant-scoped mutex. Prevents concurrent
+    //      create-intent calls for the SAME TENANT even when they select
+    //      non-overlapping obligation sets (which FOR UPDATE alone cannot stop).
+    //   b) SELECT ... FOR UPDATE — obligation-row lock. Belt-and-suspenders for
+    //      requests on the same obligation set that somehow bypass advisory lock.
+    //
+    // Both locks release automatically when this transaction commits or rolls back.
+    // Gateway I/O happens OUTSIDE this transaction so locks are not held during
+    // network delay.
+    const txResult = await prisma.$transaction(async (tx) => {
+      // Advisory lock: tenant-scoped, so two simultaneous create-intents for the
+      // same tenant block here regardless of which obligations they select.
+      // hashtext() maps the UUID string to int4; cast to bigint for the lock API.
+      const advisoryKey = `pay_intent:${singleTenantId}`;
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${advisoryKey})::bigint)`;
+
+      // Row-level lock on selected obligations — complements advisory lock and
+      // protects re-read amounts from concurrent finalization.
+      await tx.$queryRaw`
+        SELECT id FROM rent_obligations
+        WHERE id = ANY(${obligationIds}::uuid[])
+        FOR UPDATE
+      `;
+
+      // Re-read with fresh payments under lock — source of truth for amounts
+      const locked = await tx.rentObligation.findMany({
+        where: { id: { in: obligationIds } },
+        include: { payments: { select: { amount_paid: true } } }
+      });
+
+      let totalAmountPaisa = 0;
+      const paymentBreakdown: { obligationId: string; amount: number }[] = [];
+
+      for (const ob of locked) {
+        if (ob.status === "PAID" || ob.status === "WAIVED") continue;
+        const paidPaisa = ob.payments.reduce((sum, p) => sum + Math.round(Number(p.amount_paid) * 100), 0);
+        const duePaisa = Math.round(Number(ob.amount) * 100);
+        const outstandingPaisa = Math.max(0, duePaisa - paidPaisa);
+        if (outstandingPaisa <= 0) continue;
+        totalAmountPaisa += outstandingPaisa;
+        paymentBreakdown.push({ obligationId: ob.id, amount: outstandingPaisa / 100 });
+      }
+
+      if (totalAmountPaisa <= 0) {
+        throw new Error("BAD_REQUEST: No outstanding amount to pay (verified under lock)");
+      }
+
+      const totalAmount = totalAmountPaisa / 100;
+      const minAmountPaisa = Math.round(prefs.min_payment_amount * 100);
+      if (totalAmountPaisa < minAmountPaisa) {
+        throw new Error(`BAD_REQUEST: Minimum payment amount allowed is ${formatCurrency(prefs.min_payment_amount)}`);
+      }
+
+      // Dedup check inside the same tx — eliminates TOCTOU race
+      const existingLinks = await tx.paymentAttemptObligation.findMany({
+        where: {
+          obligation_id: { in: paymentBreakdown.map(p => p.obligationId) },
+          payment_attempt: { status: { in: ["CREATED", "PENDING"] } },
+        },
+        include: { payment_attempt: true },
+        orderBy: { created_at: "desc" },
+      });
+
+      if (existingLinks.length > 0) {
+        const existingAttempt = existingLinks[0].payment_attempt;
+        const checkoutUrl = existingAttempt.checkout_url || "";
+        const twoMinAgo = new Date(Date.now() - 2 * 60 * 1000);
+
+        // An in-flight CREATED attempt has no checkout_url yet because the gateway
+        // call is still running (we are outside the tx when we call PhonePe).
+        // Do NOT expire it — return it and let the caller wait for the checkout_url.
+        const isInFlight =
+          existingAttempt.status === "CREATED" &&
+          existingAttempt.created_at > twoMinAgo;
+
+        // A live PENDING attempt already has a usable checkout URL.
+        const hasValidCheckout =
+          checkoutUrl.length > 0 && !checkoutUrl.includes("/payment-return");
+
+        if (isInFlight || hasValidCheckout) {
+          logger.info("payments.create_multi_intent.reuse_existing", {
+            existingAttemptId: existingAttempt.id,
+            merchantTxnId: existingAttempt.merchant_txn_id,
+            reason: isInFlight ? "in_flight_created" : "valid_checkout",
+          });
+          return { attempt: existingAttempt, isReused: true as const, totalAmount, paymentBreakdown };
+        }
+
+        // Stale: CREATED > 2 min with no checkout_url, or PENDING with expired URL
+        await tx.paymentAttempt.update({
+          where: { id: existingAttempt.id },
+          data: { status: "EXPIRED" },
+        });
+      }
+
+      const merchantTxnId = `hms_multi_${crypto.randomBytes(6).toString("hex")}`;
+
+      logger.info("payments.create_multi_intent.start", {
+        obligationCount: obligationIds.length,
+        userId,
+        tenantId: tenantId || null,
+        provider,
+        amount: totalAmount,
+        merchantTxnId,
+        breakdown: paymentBreakdown,
+      });
+
+      const newAttempt = await tx.paymentAttempt.create({
+        data: {
+          tenant_id: singleTenantId,
+          owner_id: ownerId,
+          provider,
+          merchant_txn_id: merchantTxnId,
+          amount: totalAmount,
+          status: "CREATED",
+        }
+      });
+
+      await tx.paymentAttemptObligation.createMany({
+        data: paymentBreakdown.map(item => ({
+          payment_attempt_id: newAttempt.id,
+          obligation_id: item.obligationId,
+          amount: item.amount,
+        }))
+      });
+
+      return { attempt: newAttempt, isReused: false as const, totalAmount, paymentBreakdown };
     });
 
-    await prisma.paymentAttemptObligation.createMany({
-      data: paymentBreakdown.map(item => ({
-        payment_attempt_id: attempt.id,
-        obligation_id: item.obligationId,
-        amount: item.amount,
-      }))
-    });
+    if (txResult.isReused) return txResult.attempt;
 
+    const { attempt, totalAmount } = txResult;
+
+    // ── 4. CALL GATEWAY (outside transaction — network I/O must not hold a DB lock) ──
     try {
       const result = await instance.createIntent({
         amount: totalAmount,
-        merchant_txn_id: merchantTxnId,
+        merchant_txn_id: attempt.merchant_txn_id,
         tenant_name: obligations[0].tenant.profile.name,
         tenant_email: obligations[0].tenant.profile.email,
         tenant_phone: obligations[0].tenant.profile.phone || "",
@@ -678,7 +776,7 @@ export class PaymentService {
       logger.error("payments.create_multi_intent.failed", {
         attemptId: attempt.id,
         provider,
-        merchantTxnId,
+        merchantTxnId: attempt.merchant_txn_id,
         error: String(error),
       });
       await prisma.paymentAttempt.update({
@@ -1009,44 +1107,66 @@ export class PaymentService {
       where: { payment_attempt_id: attemptId }
     });
 
-    // Wrap in transaction to prevent partial payments
+    // Single atomic transaction — all obligation payments succeed or all roll back.
+    // _applyPaymentInTx is used directly so we don't nest prisma.$transaction calls.
+    const appliedPayments: { payment: any; newStatus: string; tenantId: string; ownerId: string }[] = [];
+
     await prisma.$transaction(async (tx) => {
       if (obligationLinks.length > 0) {
         // Multi-obligation payment: use junction table
         for (const link of obligationLinks) {
           if (Number(link.amount) > 0) {
-            await this.recordPayment({
+            const res = await this._applyPaymentInTx(tx, {
               obligationId: link.obligation_id,
               amountPaid: Number(link.amount),
               paymentMethod: "UPI",
               referenceNumber: gatewayTxnId || attempt.merchant_txn_id,
               paymentDate: new Date(),
-              userId: attempt.owner_id,
-              paymentAttemptId: attempt.id
+              paymentAttemptId: attempt.id,
             });
+            appliedPayments.push(res);
           }
         }
       } else if (attempt.obligation_id) {
         // Single obligation payment (legacy)
-        await this.recordPayment({
+        const res = await this._applyPaymentInTx(tx, {
           obligationId: attempt.obligation_id,
           amountPaid: Number(attempt.amount),
           paymentMethod: "UPI",
           referenceNumber: gatewayTxnId || attempt.merchant_txn_id,
           paymentDate: new Date(),
-          userId: attempt.owner_id,
-          paymentAttemptId: attempt.id
+          paymentAttemptId: attempt.id,
         });
+        appliedPayments.push(res);
       }
-      // If neither - it's an invoice payment or no linkage (handled elsewhere)
+      // If neither — invoice payment or no linkage (handled in billing path above)
     });
 
-    const result = await prisma.paymentAttempt.update({
-      where: { id: attemptId },
-      data: { status: "SUCCESS", gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null, confirmed_at: new Date() }
+    // Post-transaction side-effects: events, receipts, audit logs
+    for (const { payment, tenantId: tId } of appliedPayments) {
+      await eventSystem.trigger("payment_recorded", {
+        payment_id: payment.id,
+        obligation_id: payment.obligation_id,
+        tenant_id: tId,
+        owner_id: payment.owner_id,
+        amount: Number(payment.amount_paid),
+        method: "UPI",
+        attempt_id: attemptId,
+      });
+    }
+    if (appliedPayments.length > 0) {
+      receiptService.createReceipt(appliedPayments[0].payment.id).catch(err =>
+        logger.error("payments.finalize.receipt_failed", { attempt_id: attemptId, error: String(err) })
+      );
+    }
+    await eventLog.log("PAYMENT_FINALIZED", attempt.owner_id, {
+      attempt_id: attemptId,
+      merchant_txn_id: attempt.merchant_txn_id,
+      gateway_txn_id: gatewayTxnId || null,
+      obligation_count: appliedPayments.length,
     });
 
-    return result;
+    return updatedAttempt;
   }
 
   async handlePaymentWebhook(providerName: string, headers: any, body: any, context?: { requestId?: string }) {
@@ -1608,21 +1728,56 @@ export class PaymentService {
     ownerId?: string;
     attemptIds?: string[];
   }) {
-    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const now = new Date();
+    const ownerFilter = options?.ownerId ? { owner_id: options.ownerId } : {};
+    const idFilter = options?.attemptIds?.length
+      ? { OR: [
+          { id: { in: options.attemptIds } },
+          { merchant_txn_id: { in: options.attemptIds } },
+          { gateway_txn_id: { in: options.attemptIds } },
+        ] }
+      : {};
+
+    // ── Pass 1: Auto-expire stale CREATED attempts (no provider call needed) ──
+    // CREATED = PaymentAttempt was inserted but gateway call never returned / crashed.
+    // 10-minute grace window; anything older is a ghost attempt.
+    const staleCreatedCutoff = new Date(now.getTime() - 10 * 60 * 1000);
+    const staleCreatedResult = await prisma.paymentAttempt.updateMany({
+      where: { status: "CREATED", created_at: { lt: staleCreatedCutoff }, ...ownerFilter, ...idFilter },
+      data: { status: "EXPIRED" },
+    });
+
+    // ── Pass 2: Auto-expire PENDING attempts past their expires_at ──
+    // These are gateway-issued expiry times. Proactively mark EXPIRED without
+    // hitting the provider API — the gateway already considers them invalid.
+    const autoExpireResult = await prisma.paymentAttempt.updateMany({
+      where: { status: "PENDING", expires_at: { lt: now }, ...ownerFilter, ...idFilter },
+      data: { status: "EXPIRED" },
+    });
+
+    logger.info("payments.reconcile.sweep", {
+      stale_created_expired: staleCreatedResult.count,
+      auto_expired_by_expiry: autoExpireResult.count,
+    });
+
+    // ── Pass 3: Query provider for remaining PENDING attempts (48h window) ──
+    // 48h instead of 24h to catch delayed webhook delivery on flaky connections.
+    //
+    // BACKOFF: Only reconcile attempts that are at least 15 minutes old.
+    // Anything younger should be resolved by a webhook or the tenant's verify
+    // poll — hitting the provider API immediately wastes quota and races with
+    // in-flight webhooks. Operator-supplied IDs bypass this floor so support
+    // engineers can force-reconcile a specific attempt at any time.
+    const pendingCutoff = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+    const backoffFloor = options?.attemptIds?.length
+      ? new Date(0)                                      // no floor for explicit IDs
+      : new Date(now.getTime() - 15 * 60 * 1000);      // 15-minute floor for sweeps
     const pending = await prisma.paymentAttempt.findMany({
       where: {
         status: "PENDING",
-        created_at: { gte: cutoff },
-        ...(options?.ownerId ? { owner_id: options.ownerId } : {}),
-        ...(options?.attemptIds?.length
-          ? {
-            OR: [
-              { id: { in: options.attemptIds } },
-              { merchant_txn_id: { in: options.attemptIds } },
-              { gateway_txn_id: { in: options.attemptIds } },
-            ]
-          }
-          : {})
+        created_at: { gte: pendingCutoff, lt: backoffFloor },
+        ...ownerFilter,
+        ...idFilter,
       }
     });
 
@@ -1633,13 +1788,25 @@ export class PaymentService {
     let cancelled = 0;
     let errors = 0;
 
+    // Cache provider instances keyed by owner_id to avoid N identical DB reads
+    // for owners with multiple pending attempts.
+    const providerCache = new Map<string, any>();
+
     for (const attempt of pending) {
       try {
-        const { instance } = await this.getProviderInstance(attempt.owner_id, attempt.provider);
+        let instance = providerCache.get(attempt.owner_id);
+        if (!instance) {
+          const pi = await this.getProviderInstance(attempt.owner_id, attempt.provider);
+          instance = pi.instance;
+          providerCache.set(attempt.owner_id, instance);
+        }
+
         const fetched = await instance.fetchStatus(attempt.merchant_txn_id, attempt.gateway_txn_id || undefined);
 
+        // If the provider still says PENDING but expires_at has now passed
+        // (may have just crossed the boundary during this reconcile run)
         let nextStatus = fetched.status;
-        if (nextStatus === "PENDING" && attempt.expires_at && attempt.expires_at < new Date()) {
+        if (nextStatus === "PENDING" && attempt.expires_at && attempt.expires_at < now) {
           nextStatus = "EXPIRED";
         }
 
@@ -1669,6 +1836,8 @@ export class PaymentService {
 
     return {
       processed: pending.length,
+      stale_created_expired: staleCreatedResult.count,
+      auto_expired: autoExpireResult.count,
       success,
       failed,
       pending: pendingCount,

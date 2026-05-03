@@ -70,8 +70,14 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, obligationIds = [
     const canRetry = useMemo(() => ['FAILED', 'EXPIRED', 'CANCELLED'].includes(status), [status]);
 
     const handleCreateIntent = async () => {
-        const ids = (obligationIds || []).filter(Boolean);
-        if (ids.length === 0 && !obligationId) {
+        // Normalise: merge both props into a single de-duplicated array.
+        // Backend ONLY accepts obligation_ids (array) — never send obligation_id string.
+        const idSet = new Set([
+            ...((obligationIds || []).filter(Boolean)),
+            ...(obligationId ? [obligationId] : []),
+        ]);
+        const ids = [...idSet];
+        if (ids.length === 0) {
             setError('No pending rent is available for payment right now.');
             return;
         }
@@ -80,8 +86,7 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, obligationIds = [
         setError('');
         try {
             const intent = await paymentService.createIntent({
-                obligation_ids: ids.length > 0 ? ids : undefined,
-                obligation_id: ids.length === 0 ? obligationId : undefined,
+                obligation_ids: ids,
             });
 
             // ✅ If gateway (like PhonePe v2) returns a hosted checkout URL, redirect immediately!
