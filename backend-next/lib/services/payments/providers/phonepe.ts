@@ -102,7 +102,7 @@ export class PhonePeProvider extends PaymentProvider {
       merchantUserId: data.tenant_id || "unknown-tenant",
       amount: amountInPaise,
       redirectUrl,
-      redirectMode: "REDIRECT",
+      redirectMode: "POST",
       callbackUrl: `${process.env.NEXT_PUBLIC_FRONTEND_URL || "https://trishul.solutions"}/api/payments/webhook`,
       expireAfter: 1800, // 30 min
       paymentInstrument: {
@@ -132,6 +132,7 @@ export class PhonePeProvider extends PaymentProvider {
       merchantOrderId: data.merchant_txn_id,
       amount: data.amount,
       amountInPaise,
+      redirectUrl,
       url,
     });
 
@@ -152,9 +153,26 @@ export class PhonePeProvider extends PaymentProvider {
       throw new Error(`PhonePe order creation failed: ${responseData.message || response.statusText}`);
     }
 
-    // Response contains orderId and redirectUrl for the checkout page
+    console.info("[PhonePe] Raw response:", JSON.stringify(responseData));
+
+    // PhonePe Checkout v2 response: orderId + redirectUrl (their hosted checkout page).
+    // NOTE: responseData.redirectUrl is PhonePe's checkout page — completely separate from
+    // the redirectUrl we sent in the request (our return URL after payment).
     const checkoutUrl = responseData.redirectUrl || responseData.data?.redirectUrl || null;
     const orderId = responseData.orderId || responseData.data?.orderId || null;
+
+    // Guard: if checkoutUrl points back to our own site it means PhonePe echoed our
+    // return URL instead of giving a checkout page — this breaks the entire flow.
+    const frontendOrigin = process.env.NEXT_PUBLIC_FRONTEND_URL || "https://trishul.solutions";
+    if (!checkoutUrl || checkoutUrl.startsWith(frontendOrigin) || checkoutUrl.includes("/payment-return")) {
+      console.error("[PhonePe] Bad checkoutUrl from response:", { checkoutUrl, orderId, responseData });
+      throw new Error(
+        `PhonePe did not return a valid checkout URL. Got: ${checkoutUrl ?? "null"}. ` +
+        `orderId=${orderId}. Check server logs for full response.`
+      );
+    }
+
+    console.info("[PhonePe] Checkout URL:", { checkoutUrl, orderId });
 
     return {
       provider: "PHONEPE",
