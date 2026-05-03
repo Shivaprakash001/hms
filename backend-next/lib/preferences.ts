@@ -31,6 +31,15 @@ export interface HostelPreferences {
   allow_partial_payments: boolean;
   min_payment_amount: number;
 
+  // Advance / Deposit
+  advance_enabled: boolean;
+  advance_amount_default: number;
+  advance_refundable: boolean;
+
+  // Maintenance
+  maintenance_enabled: boolean;
+  maintenance_amount_default: number;
+
   // Notifications
   reminder_email: boolean;
   reminder_in_app: boolean;
@@ -81,6 +90,13 @@ const DEFAULTS: HostelPreferences = {
 
   allow_partial_payments: false,
   min_payment_amount: 500,
+
+  advance_enabled: false,
+  advance_amount_default: 0,
+  advance_refundable: true,
+
+  maintenance_enabled: false,
+  maintenance_amount_default: 0,
 
   reminder_email: true,
   reminder_in_app: true,

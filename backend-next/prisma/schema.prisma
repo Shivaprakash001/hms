@@ -72,6 +72,7 @@ model Tenant {
   office_location       String?
   job_role              String?
   gender                String?
+  date_of_birth         DateTime?                @db.Date
   permanent_address     String?
   temporary_address     String?
   aadhaar_number        String?                  @unique
@@ -87,6 +88,7 @@ model Tenant {
   reminders             ReminderLog[]
   obligations           RentObligation[]
   allocations           RoomAllocation[]
+  advance_ledger        TenantAdvanceLedger[]
   profile               Profile                  @relation("TenantToProfile", fields: [profile_id], references: [id])
 
   @@index([owner_id])
@@ -202,6 +204,29 @@ model RentObligation {
   @@unique([allocation_id, rent_month, obligation_type])
   @@index([tenant_id, rent_month])
   @@map("rent_obligations")
+  @@schema("public")
+}
+
+model TenantAdvanceLedger {
+  id             String              @id @default(uuid()) @db.Uuid
+  tenant_id      String              @db.Uuid
+  owner_id       String              @db.Uuid
+  type           AdvanceLedgerType
+  reason         AdvanceLedgerReason
+  amount         Decimal             @db.Decimal(10, 2)
+  balance_after  Decimal             @db.Decimal(10, 2)
+  notes          String?
+  reference_id   String?             @db.Uuid
+  reference_type String?
+  created_by     String              @db.Uuid
+  created_at     DateTime            @default(now()) @db.Timestamptz(6)
+
+  tenant         Tenant              @relation(fields: [tenant_id], references: [id])
+
+  @@index([tenant_id])
+  @@index([owner_id])
+  @@index([tenant_id, created_at])
+  @@map("tenant_advance_ledger")
   @@schema("public")
 }
 
@@ -595,6 +620,24 @@ enum DocumentStatus {
   PENDING
   APPROVED
   REJECTED
+
+  @@schema("public")
+}
+
+enum AdvanceLedgerType {
+  CREDIT
+  DEBIT
+
+  @@schema("public")
+}
+
+enum AdvanceLedgerReason {
+  DEPOSIT
+  TOPUP
+  ADJUSTMENT
+  DEDUCTION
+  REFUND
+  CORRECTION
 
   @@schema("public")
 }
