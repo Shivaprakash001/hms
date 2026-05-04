@@ -52,12 +52,15 @@ export async function middleware(req: NextRequest) {
     return response;
   }
 
-  // 3. Extract Token (Priority: Cookie -> Header -> Query param for SSE)
-  const cookieToken = req.cookies.get("hms_session")?.value;
+  // 3. Extract Token (Priority: Header -> Cookie -> Query param for SSE)
+  //    Header takes priority because the frontend explicitly sets it from
+  //    localStorage on every request. The cookie may be stale on mobile
+  //    browsers that block cross-origin Set-Cookie (Safari ITP, etc.).
   const authHeader = req.headers.get("authorization");
   const headerToken = authHeader?.startsWith("Bearer ") ? authHeader.substring(7) : null;
+  const cookieToken = req.cookies.get("hms_session")?.value;
   const queryToken = pathname === "/api/events" ? req.nextUrl.searchParams.get("token") : null;
-  const token = cookieToken || headerToken || queryToken;
+  const token = headerToken || cookieToken || queryToken;
 
   if (!token) {
     return NextResponse.json(

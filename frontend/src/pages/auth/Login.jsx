@@ -64,7 +64,11 @@ const Login = () => {
             if (role === 'owner' || role === 'admin') {
                 navigate('/owner/dashboard');
             } else if (role === 'tenant') {
-                navigate('/tenant/dashboard');
+                if (!user.is_profile_completed) {
+                    navigate('/complete-profile', { replace: true });
+                } else {
+                    navigate('/tenant/dashboard');
+                }
             }
         } catch (err) {
             console.error("Login error:", err);

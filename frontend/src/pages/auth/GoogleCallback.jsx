@@ -17,11 +17,15 @@ export const GoogleCallback = () => {
           const redirectUri = `${window.location.origin}/callback`;
           const user = await loginWithGoogle(code, redirectUri);
           const role = (user?.role || '').toLowerCase();
-          
+
           if (role === 'owner' || role === 'admin') {
             navigate('/owner/dashboard');
           } else if (role === 'tenant') {
-            navigate('/tenant/dashboard');
+            if (!user.is_profile_completed) {
+              navigate('/complete-profile', { replace: true });
+            } else {
+              navigate('/tenant/dashboard');
+            }
           } else {
             navigate('/login');
           }
