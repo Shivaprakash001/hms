@@ -4,6 +4,7 @@ import { migrateLegacyPrefs, createDefaultRule, simulateBilling, calculateWhatIf
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { ownerService, billingService, addonService } from '../../api/services';
 import ProfileLogoUploader from '../../components/owner/ProfileLogoUploader';
+import BuyRemindersModal from '../../components/owner/BuyRemindersModal';
 import { useAppPreferences } from '../../context/AppPreferencesContext';
 import { formatCurrency, formatDateTime } from '../../utils/format';
 
@@ -51,6 +52,7 @@ export default function OwnerProfile() {
 
     const [currentPlan, setCurrentPlan] = useState('FREE');
     const [upgradeModal, setUpgradeModal] = useState(null); // { feature, requiredPlan }
+    const [buyCreditsModal, setBuyCreditsModal] = useState(null); // null | 'empty' | 'low' | 'manual'
     const [reminderCredits, setReminderCredits] = useState(null); // null = loading
 
     const [ownerForm, setOwnerForm] = useState({ name: '', email: '', phone: '' });
@@ -94,7 +96,28 @@ export default function OwnerProfile() {
                 if (subData?.current_plan?.id) {
                     setCurrentPlan(subData.current_plan.id);
                 }
-                setReminderCredits(addonData?.reminders_remaining ?? 0);
+                const credits = addonData?.reminders_remaining ?? 0;
+                setReminderCredits(credits);
+
+                // Auto-open buy modal for returned payment success
+                const params = new URLSearchParams(window.location.search);
+                if (params.get('status') === 'addon_success') {
+                    const addedCredits = params.get('credits');
+                    if (addedCredits) {
+                        // Show success toast-like indicator by refreshing state
+                        // (credits already allocated via webhook)
+                        addonService.getUsage().then(d => setReminderCredits(d?.reminders_remaining ?? 0)).catch(() => {});
+                    }
+                    // Clean URL without reload
+                    window.history.replaceState({}, '', window.location.pathname);
+                    // Auto-retry pending action
+                    const pendingAction = sessionStorage.getItem('pending_reminder_action');
+                    if (pendingAction === 'send_test_reminder') {
+                        sessionStorage.removeItem('pending_reminder_action');
+                        // Signal to NotificationsModule via a flag
+                        window.__pendingRetryReminder = true;
+                    }
+                }
 
                 const owner = data?.owner || {};
                 const hostel = data?.hostel || {};
@@ -438,7 +461,7 @@ export default function OwnerProfile() {
                                     <div className="px-4 pb-4 pt-1 border-t border-slate-100 space-y-4">
                                         {mod.key === 'billing' && <BillingModule prefs={preferences} updatePref={updatePref} />}
                                         {mod.key === 'payments' && <PaymentsModule prefs={preferences} updatePref={updatePref} />}
-                                        {mod.key === 'notifications' && <NotificationsModule prefs={preferences} updatePref={updatePref} reminderCredits={reminderCredits} />}
+                                        {mod.key === 'notifications' && <NotificationsModule prefs={preferences} updatePref={updatePref} reminderCredits={reminderCredits} onBuyCredits={(t) => setBuyCreditsModal(t || 'empty')} onCreditsRefresh={(c) => setReminderCredits(c)} />}
                                         {mod.key === 'automation' && <AutomationModule prefs={preferences} updatePref={updatePref} plan={currentPlan} onLockedClick={(feature, reqPlan) => setUpgradeModal({ feature, requiredPlan: reqPlan })} />}
                                         {mod.key === 'receipts' && <ReceiptsModule prefs={preferences} updatePref={updatePref} />}
                                         {mod.key === 'security' && <SecurityModule prefs={preferences} updatePref={updatePref} />}
@@ -469,12 +492,20 @@ export default function OwnerProfile() {
             )}
         </div>
 
-        {/* Upgrade Modal */}
+        {/* Upgrade Modal (plan gate) */}
         {upgradeModal && (
             <UpgradeModal
                 feature={upgradeModal.feature}
                 requiredPlan={upgradeModal.requiredPlan}
                 onClose={() => setUpgradeModal(null)}
+            />
+        )}
+
+        {/* Buy Reminders Modal (credit gate) */}
+        {buyCreditsModal && (
+            <BuyRemindersModal
+                trigger={buyCreditsModal}
+                onClose={() => setBuyCreditsModal(null)}
             />
         )}
     </>
@@ -774,12 +805,21 @@ function PaymentsModule({ prefs, updatePref }) {
     );
 }
 
-function NotificationsModule({ prefs, updatePref, reminderCredits }) {
+function NotificationsModule({ prefs, updatePref, reminderCredits, onBuyCredits, onCreditsRefresh }) {
     const [testSending, setTestSending] = useState(false);
     const [testSent, setTestSent] = useState(false);
     const [testResult, setTestResult] = useState('');
 
     const noCredits = reminderCredits !== null && reminderCredits <= 0;
+    const lowCredits = reminderCredits !== null && reminderCredits > 0 && reminderCredits <= 20;
+
+    // Auto-retry after payment return
+    useEffect(() => {
+        if (window.__pendingRetryReminder && reminderCredits > 0) {
+            window.__pendingRetryReminder = false;
+            sendTestReminder();
+        }
+    }, [reminderCredits]);
 
     const sendTestReminder = async () => {
         setTestSending(true);
@@ -791,7 +831,9 @@ function NotificationsModule({ prefs, updatePref, reminderCredits }) {
         } catch (e) {
             const errData = e?.response?.data;
             if (errData?.error === 'NO_REMINDERS_LEFT') {
-                setTestResult('No reminder credits left. Buy a pack to continue.');
+                // Save intent and open buy modal
+                sessionStorage.setItem('pending_reminder_action', 'send_test_reminder');
+                onBuyCredits('empty');
             } else {
                 const detail = errData?.detail;
                 setTestResult(typeof detail === 'string' ? detail : (detail?.message || 'Failed to send test reminder'));
@@ -804,21 +846,41 @@ function NotificationsModule({ prefs, updatePref, reminderCredits }) {
 
     return (
         <div className="space-y-3">
-            {/* Reminder credit status */}
+            {/* Zero-credit banner */}
             {noCredits && (
                 <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-3">
                     <AlertTriangle size={15} className="text-amber-500 mt-0.5 flex-shrink-0" />
-                    <div>
+                    <div className="flex-1">
                         <p className="text-sm font-semibold text-amber-800">No reminder credits left</p>
-                        <p className="text-xs text-amber-600 mt-0.5">Buy a reminder pack to continue sending reminders to tenants.</p>
+                        <p className="text-xs text-amber-600 mt-0.5">Buy a pack to continue sending reminders to tenants.</p>
                     </div>
+                    <button onClick={() => onBuyCredits('empty')}
+                        className="flex-shrink-0 text-xs font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 px-2.5 py-1.5 rounded-lg transition whitespace-nowrap">
+                        Buy Credits
+                    </button>
                 </div>
             )}
-            {reminderCredits !== null && reminderCredits > 0 && (
+
+            {/* Low-credit nudge */}
+            {lowCredits && (
+                <div className="flex items-center gap-2.5 bg-orange-50 border border-orange-200 rounded-xl px-3.5 py-2.5">
+                    <AlertTriangle size={14} className="text-orange-400 flex-shrink-0" />
+                    <p className="text-xs text-orange-700 flex-1">
+                        Only <span className="font-bold">{reminderCredits}</span> reminder credits left
+                    </p>
+                    <button onClick={() => onBuyCredits('low')}
+                        className="text-xs font-bold text-orange-600 hover:text-orange-700 underline underline-offset-2 whitespace-nowrap transition">
+                        Top up
+                    </button>
+                </div>
+            )}
+
+            {/* Healthy credit balance */}
+            {reminderCredits !== null && reminderCredits > 20 && (
                 <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3.5 py-2.5">
                     <CheckCircle2 size={14} className="text-emerald-500 flex-shrink-0" />
                     <p className="text-xs font-medium text-emerald-700">
-                        <span className="font-bold">{reminderCredits}</span> reminder credit{reminderCredits !== 1 ? 's' : ''} remaining
+                        <span className="font-bold">{reminderCredits}</span> reminder credits remaining
                     </p>
                 </div>
             )}
@@ -851,25 +913,28 @@ function NotificationsModule({ prefs, updatePref, reminderCredits }) {
 
             {/* Test Reminder — disabled only when credits = 0 */}
             <div className="pt-1 space-y-2">
-                <button type="button" onClick={sendTestReminder}
-                    disabled={testSending || testSent || noCredits}
-                    title={noCredits ? 'No reminder credits remaining' : ''}
-                    className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-medium transition-all ${
-                        noCredits
-                            ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
-                            : testSent
+                {noCredits ? (
+                    <button type="button"
+                        onClick={() => { sessionStorage.setItem('pending_reminder_action', 'send_test_reminder'); onBuyCredits('empty'); }}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-amber-300 bg-amber-50 text-amber-700 text-sm font-medium hover:bg-amber-100 transition-all">
+                        <CreditCard size={14} />
+                        Buy Credits to Send Test Reminder
+                    </button>
+                ) : (
+                    <button type="button" onClick={sendTestReminder}
+                        disabled={testSending || testSent}
+                        className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-medium transition-all ${
+                            testSent
                                 ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
                                 : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 active:bg-slate-200'
-                    } disabled:opacity-60`}>
-                    {testSending ? <Loader2 size={14} className="animate-spin" />
-                        : testSent ? <CheckCircle2 size={14} />
-                            : <Send size={14} />}
-                    {testSending ? 'Sending...'
-                        : testSent ? (testResult || 'Sent!')
-                            : noCredits ? 'No Credits — Buy a Pack'
-                                : 'Send Test Reminder to Myself'}
-                </button>
-                {testResult && !testSent && (
+                        } disabled:opacity-60`}>
+                        {testSending ? <Loader2 size={14} className="animate-spin" />
+                            : testSent ? <CheckCircle2 size={14} />
+                                : <Send size={14} />}
+                        {testSending ? 'Sending...' : testSent ? (testResult || 'Sent!') : 'Send Test Reminder to Myself'}
+                    </button>
+                )}
+                {testResult && !testSent && !noCredits && (
                     <p className="text-xs text-rose-600 text-center">{testResult}</p>
                 )}
             </div>

@@ -161,6 +161,10 @@ export const addonService = {
         const response = await api.get('/addons/usage');
         return response.data;
     },
+    purchasePack: async (pack) => {
+        const response = await api.post('/addons/purchase', { pack });
+        return response.data; // { checkout_url, attempt_id, amount, credits, pack }
+    },
     buyPack: async (pack) => {
         const response = await api.post('/addons', { pack });
         return response.data;

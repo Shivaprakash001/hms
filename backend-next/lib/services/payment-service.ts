@@ -1008,6 +1008,69 @@ export class PaymentService {
     if (!attempt) throw new Error("NOT_FOUND: Attempt not found");
 
     // ──────────────────────────────────────────────────────────────
+    // 🎁 ADDON PATH: Reminder pack credit allocation
+    // ──────────────────────────────────────────────────────────────
+    if ((attempt as any).payment_type === "ADDON") {
+      if (status !== "SUCCESS") {
+        return await prisma.paymentAttempt.update({
+          where: { id: attemptId },
+          data: { status: status as any, gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null },
+        });
+      }
+
+      const pack = (attempt as any).addon_pack || "500";
+      const PACK_CREDITS: Record<string, number> = { "200": 200, "500": 500 };
+      const credits = PACK_CREDITS[pack] ?? 500;
+
+      await prisma.$transaction(async (tx) => {
+        // Idempotency: skip if already SUCCESS
+        const fresh = await tx.paymentAttempt.findUnique({
+          where: { id: attemptId },
+          select: { status: true },
+        });
+        if (fresh?.status === "SUCCESS") return;
+
+        // Atomically increment credits
+        await tx.addonUsage.upsert({
+          where: { owner_id: attempt.owner_id },
+          update: { reminders_remaining: { increment: credits } },
+          create: {
+            owner_id: attempt.owner_id,
+            reminders_remaining: credits,
+            reminders_used: 0,
+          },
+        });
+
+        await tx.paymentAttempt.update({
+          where: { id: attemptId },
+          data: {
+            status: "SUCCESS",
+            gateway_txn_id: gatewayTxnId,
+            raw_webhook_payload: rawPayload || null,
+            confirmed_at: new Date(),
+          },
+        });
+      });
+
+      logger.info("addons.credits_allocated", {
+        ...requestMeta,
+        attempt_id: attemptId,
+        owner_id: attempt.owner_id,
+        pack,
+        credits,
+      });
+
+      await eventLog.log("ADDON_CREDITS_ADDED", attempt.owner_id, {
+        pack,
+        credits,
+        payment_attempt_id: attemptId,
+        gateway_txn_id: gatewayTxnId,
+      }).catch(() => {});
+
+      return await prisma.paymentAttempt.findUnique({ where: { id: attemptId } });
+    }
+
+    // ──────────────────────────────────────────────────────────────
     // 🧾 BILLING PATH: Invoice payment (plan upgrade/renewal)
     // ──────────────────────────────────────────────────────────────
     if (attempt.invoice_id && attempt.invoice) {

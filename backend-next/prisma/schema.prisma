@@ -328,6 +328,7 @@ model PaymentAttempt {
   updated_at          DateTime?      @updatedAt @db.Timestamptz(6)
   checkout_url        String?
   payment_type        String         @default("RENT")
+  addon_pack          String?        // "200" | "500" — set when payment_type = "ADDON"
   obligation          RentObligation? @relation(fields: [obligation_id], references: [id])
   invoice             OwnerInvoice?   @relation(fields: [invoice_id], references: [id], onDelete: SetNull)
   tenant              Tenant?         @relation(fields: [tenant_id], references: [id])
