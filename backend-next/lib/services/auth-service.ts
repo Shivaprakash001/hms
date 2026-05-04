@@ -306,8 +306,23 @@ export class AuthService {
       owner_id: profile.owner_id || null,
     });
 
+    // 5. Create refresh token (same as email login)
+    const refreshToken = generateRefreshToken();
+    const refreshTokenHash = hashToken(refreshToken);
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30);
+
+    await prisma.refreshToken.create({
+      data: {
+        user_id: profile.id,
+        token_hash: refreshTokenHash,
+        expires_at: expiresAt,
+      },
+    });
+
     return {
       access_token: token,
+      refresh_token: refreshToken,
       token_type: "bearer",
       role: profile.role,
       name: profile.name,

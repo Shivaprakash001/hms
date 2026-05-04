@@ -28,10 +28,12 @@ export async function POST(req: NextRequest) {
 
     const response = NextResponse.json(jsonResponse, { status: 200 });
 
+    const isProd = process.env.NODE_ENV === "production";
+
     response.cookies.set("hms_session", jsonResponse.access_token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      secure: isProd,
+      sameSite: isProd ? "none" : "lax",
       maxAge: 60 * 60 * 24 * 7, // 7 days
       path: "/",
     });
@@ -39,8 +41,8 @@ export async function POST(req: NextRequest) {
     // Set HTTP-only Cookie for refresh token (Prevents XSS)
     response.cookies.set("hms_refresh_token", refresh_token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      secure: isProd,
+      sameSite: isProd ? "none" : "lax",
       maxAge: 60 * 60 * 24 * 30, // 30 days
       path: "/",
     });

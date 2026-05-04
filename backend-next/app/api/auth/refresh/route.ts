@@ -89,18 +89,20 @@ export async function POST(req: NextRequest) {
 
     const response = NextResponse.json({ access_token: newAccessToken }, { status: 200 });
 
+    const isProd = process.env.NODE_ENV === "production";
+
     response.cookies.set("hms_session", newAccessToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      secure: isProd,
+      sameSite: isProd ? "none" : "lax",
       maxAge: 60 * 60 * 24 * 7, // 7 days
       path: "/",
     });
 
     response.cookies.set("hms_refresh_token", newRefreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      secure: isProd,
+      sameSite: isProd ? "none" : "lax",
       maxAge: 60 * 60 * 24 * 30, // 30 days
       path: "/",
     });
