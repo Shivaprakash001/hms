@@ -45,9 +45,10 @@ export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
 
+    const currentPrefs = await getPreferences(session.sub) as any;
     // 🔒 Automation save guard — block enabling automation on FREE plan
     const isTryingToEnableAutomation = AUTOMATION_KEYS.some(
-      (key) => key in body && body[key] === true
+      (key) => key in body && body[key] === true && currentPrefs[key] !== true
     );
 
     if (isTryingToEnableAutomation) {
