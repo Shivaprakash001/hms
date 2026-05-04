@@ -163,6 +163,7 @@ export class AuthService {
           name: data.name,
           phone: data.phone || null,
           role: "OWNER",
+          is_active: true,
           owner_id: userId,
           hostels: {
             create: {

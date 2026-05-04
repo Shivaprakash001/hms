@@ -16,7 +16,7 @@ model Profile {
   phone                 String?
   password_hash         String?
   role                  Role
-  is_active             Boolean        @default(false)
+  is_active             Boolean        @default(true)
   is_profile_completed  Boolean        @default(false)
   address               String?
   city                  String?
