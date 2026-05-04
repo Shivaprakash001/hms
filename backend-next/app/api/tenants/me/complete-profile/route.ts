@@ -61,7 +61,10 @@ export async function POST(req: NextRequest) {
         fileUrl = `data:${mimeType};base64,${base64Str}`;
     }
 
-    // 🔥 Atomic Database Transaction 🔥
+    // 🔥 Atomic Transaction — profile + tenant only (doc write is outside to avoid tx timeout)
+    // The base64 file_url can be several MB; inserting it inside a 5 s interactive
+    // transaction reliably blows the limit. Profile+tenant must be atomic; the doc
+    // record is best-effort and can be written after the tx commits.
     const updated = await prisma.$transaction(async (tx) => {
       // 1. Update Profile Layer
       await tx.profile.update({
@@ -85,39 +88,39 @@ export async function POST(req: NextRequest) {
           temporary_address: tempAddr || undefined,
           permanent_address: permAddr || undefined,
           profile_type: payload.profile_type || "STUDENT",
-          
+
           college_name: payload.college_name || null,
           roll_number: payload.roll_number || null,
           course: payload.course || null,
           year_of_study: payload.year_of_study || null,
           branch: payload.branch || null,
           section: payload.section || null,
-          
+
           office_name: payload.office_name || null,
           office_location: payload.office_location || null,
           job_role: payload.job_role || null,
-          
+
           aadhaar_number: payload.aadhaar_number ?? undefined,
           profile_completed: true,
         }
       });
 
-      // 3. Identification Document Layer
-      if (fileUrl) {
-        await tx.identificationDocument.create({
-          data: {
-             tenant_id: tenantUpdate.id,
-             doc_type: "AADHAAR",
-             doc_number: payload.aadhaar_number || null,
-             file_url: fileUrl,
-             uploaded_by: session.sub,
-             is_verified: false
-          }
-        });
-      }
-
       return tenantUpdate;
-    });
+    }, { timeout: 15000 });
+
+    // 3. Identification Document — written AFTER tx commits (large base64 payload, not latency-critical)
+    if (fileUrl) {
+      await prisma.identificationDocument.create({
+        data: {
+          tenant_id: updated.id,
+          doc_type: "AADHAAR",
+          doc_number: payload.aadhaar_number || null,
+          file_url: fileUrl,
+          uploaded_by: session.sub,
+          is_verified: false,
+        },
+      });
+    }
 
     return apiResponse(updated, 201);
   } catch (error: any) {
