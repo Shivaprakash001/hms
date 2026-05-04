@@ -1010,7 +1010,7 @@ export class PaymentService {
     // ──────────────────────────────────────────────────────────────
     // 🎁 ADDON PATH: Reminder pack credit allocation
     // ──────────────────────────────────────────────────────────────
-    if ((attempt as any).payment_type === "ADDON") {
+    if (attempt.payment_type === "ADDON") {
       // Non-success statuses: record and exit
       if (status !== "SUCCESS") {
         logger.info("addons.webhook.non_success", { ...requestMeta, attempt_id: attemptId, status });
@@ -1021,7 +1021,7 @@ export class PaymentService {
       }
 
       // ── Security: validate pack is from allow-list ────────────────
-      const pack = (attempt as any).addon_pack as string | null;
+      const pack = attempt.addon_pack as string | null;
       const PACK_MAP: Record<string, { credits: number; amount: number }> = {
         "200": { credits: 200, amount: 99 },
         "500": { credits: 500, amount: 199 },
@@ -1104,7 +1104,7 @@ export class PaymentService {
         });
 
         // Audit trail: immutable ledger entry
-        await (tx as any).addonTransaction.create({
+        await tx.addonTransaction.create({
           data: {
             owner_id: attempt.owner_id,
             payment_attempt_id: attemptId,

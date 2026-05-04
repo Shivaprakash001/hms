@@ -82,8 +82,8 @@ export async function PATCH(req: NextRequest) {
 
     await prisma.addonUsage.upsert({
       where: { owner_id: user.sub },
-      update: { auto_topup } as any,
-      create: { owner_id: user.sub, reminders_remaining: 0, reminders_used: 0, auto_topup } as any,
+      update: { auto_topup },
+      create: { owner_id: user.sub, reminders_remaining: 0, reminders_used: 0, auto_topup },
     });
 
     // Analytics: log auto-topup toggle

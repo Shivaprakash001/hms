@@ -11,33 +11,33 @@ datasource db {
 }
 
 model Profile {
-  email                 String         @unique
+  email                 String             @unique
   name                  String
   phone                 String?
   password_hash         String?
   role                  Role
-  is_active             Boolean        @default(true)
-  is_profile_completed  Boolean        @default(false)
+  is_active             Boolean            @default(true)
+  is_profile_completed  Boolean            @default(false)
   address               String?
   city                  String?
   state                 String?
   pincode               String?
-  created_at            DateTime       @default(now())
-  updated_at            DateTime?      @updatedAt
-  invitation_token      String?        @unique
+  created_at            DateTime           @default(now())
+  updated_at            DateTime?          @updatedAt
+  invitation_token      String?            @unique
   invitation_expires_at DateTime?
-  id                    String         @id @default(uuid()) @db.Uuid
-  owner_id              String?        @db.Uuid
+  id                    String             @id @default(uuid()) @db.Uuid
+  owner_id              String?            @db.Uuid
   emergency_contact     String?
   expenses              Expense[]
   hostels               Hostel[]
   notifications         Notification[]
-  owner                 Profile?       @relation("OwnerTenant", fields: [owner_id], references: [id])
-  tenants              Profile[]      @relation("OwnerTenant")
-  tenant_details       Tenant?       @relation("TenantToProfile")
-  subscription          OwnerSubscription?
   invoices              OwnerInvoice[]
+  subscription          OwnerSubscription?
+  owner                 Profile?           @relation("OwnerTenant", fields: [owner_id], references: [id])
+  tenants               Profile[]          @relation("OwnerTenant")
   refresh_tokens        RefreshToken[]
+  tenant_details        Tenant?            @relation("TenantToProfile")
 
   @@index([owner_id])
   @@index([name])
@@ -54,7 +54,7 @@ model Tenant {
   profile_type          String                   @default("STUDENT")
   monthly_rent          Decimal?                 @db.Decimal(10, 2)
   joined_on             DateTime?                @db.Date
-  status                TenantStatus            @default(INVITED)
+  status                TenantStatus             @default(INVITED)
   owner_id              String?                  @db.Uuid
   profile_completed     Boolean                  @default(false)
   photo_url             String?
@@ -167,7 +167,7 @@ model RoomActivityLog {
 
 model RoomAllocation {
   id          String           @id @default(uuid()) @db.Uuid
-  tenant_id  String           @db.Uuid
+  tenant_id   String           @db.Uuid
   room_id     String           @db.Uuid
   start_date  DateTime         @db.Date
   end_date    DateTime?        @db.Date
@@ -176,7 +176,7 @@ model RoomAllocation {
   updated_at  DateTime?        @updatedAt @db.Timestamptz(6)
   obligations RentObligation[]
   room        Room             @relation(fields: [room_id], references: [id])
-  tenant     Tenant          @relation(fields: [tenant_id], references: [id])
+  tenant      Tenant           @relation(fields: [tenant_id], references: [id])
 
   @@index([tenant_id, is_active, end_date])
   @@index([room_id, is_active])
@@ -185,25 +185,25 @@ model RoomAllocation {
 }
 
 model RentObligation {
-  id              String           @id @default(uuid()) @db.Uuid
-  tenant_id      String           @db.Uuid
-  allocation_id   String?          @db.Uuid
-  owner_id        String?          @db.Uuid
-  rent_month      DateTime         @db.Date
-  amount          Decimal          @db.Decimal(10, 2)
-  late_fee        Decimal?         @default(0) @db.Decimal(10, 2)
-  total_amount    Decimal          @db.Decimal(10, 2)
-  due_date        DateTime         @db.Date
-  status          PaymentStatus    @default(PENDING)
-  created_at      DateTime         @default(now()) @db.Timestamptz(6)
-  updated_at      DateTime?        @updatedAt @db.Timestamptz(6)
-  obligation_type String           @default("RENT")
-  attempts        PaymentAttempt[]
+  id              String                     @id @default(uuid()) @db.Uuid
+  tenant_id       String                     @db.Uuid
+  allocation_id   String?                    @db.Uuid
+  owner_id        String?                    @db.Uuid
+  rent_month      DateTime                   @db.Date
+  amount          Decimal                    @db.Decimal(10, 2)
+  late_fee        Decimal?                   @default(0) @db.Decimal(10, 2)
+  total_amount    Decimal                    @db.Decimal(10, 2)
+  due_date        DateTime                   @db.Date
+  status          PaymentStatus              @default(PENDING)
+  created_at      DateTime                   @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime?                  @updatedAt @db.Timestamptz(6)
+  obligation_type String                     @default("RENT")
   attempt_links   PaymentAttemptObligation[]
+  attempts        PaymentAttempt[]
   payments        Payment[]
   reminders       ReminderLog[]
-  allocation      RoomAllocation?  @relation(fields: [allocation_id], references: [id])
-  tenant         Tenant          @relation(fields: [tenant_id], references: [id])
+  allocation      RoomAllocation?            @relation(fields: [allocation_id], references: [id])
+  tenant          Tenant                     @relation(fields: [tenant_id], references: [id])
 
   @@unique([allocation_id, rent_month, obligation_type])
   @@index([tenant_id, rent_month])
@@ -225,7 +225,6 @@ model TenantAdvanceLedger {
   refund_status  String?
   created_by     String              @db.Uuid
   created_at     DateTime            @default(now()) @db.Timestamptz(6)
-
   tenant         Tenant              @relation(fields: [tenant_id], references: [id])
 
   @@index([tenant_id])
@@ -238,12 +237,12 @@ model TenantAdvanceLedger {
 model ReminderLog {
   id            String         @id @default(uuid()) @db.Uuid
   obligation_id String         @db.Uuid
-  tenant_id    String         @db.Uuid
+  tenant_id     String         @db.Uuid
   reminder_type String
   channel       String         @default("IN_APP")
   sent_at       DateTime       @default(now()) @db.Timestamptz(6)
   obligation    RentObligation @relation(fields: [obligation_id], references: [id], onDelete: Cascade)
-  tenant       Tenant        @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  tenant        Tenant         @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
 
   @@index([obligation_id])
   @@index([tenant_id])
@@ -282,7 +281,7 @@ model SystemLock {
 model Payment {
   id                 String          @id @default(uuid()) @db.Uuid
   obligation_id      String          @db.Uuid
-  tenant_id         String          @db.Uuid
+  tenant_id          String          @db.Uuid
   owner_id           String?         @db.Uuid
   amount_paid        Decimal         @db.Decimal(10, 2)
   payment_method     String
@@ -294,8 +293,8 @@ model Payment {
   created_at         DateTime        @default(now()) @db.Timestamptz(6)
   obligation         RentObligation  @relation(fields: [obligation_id], references: [id])
   attempt            PaymentAttempt? @relation(fields: [payment_attempt_id], references: [id])
-  tenant            Tenant         @relation(fields: [tenant_id], references: [id])
-  receipts           Receipt[]
+  tenant             Tenant          @relation(fields: [tenant_id], references: [id])
+  receipts           Receipt?
 
   @@index([owner_id])
   @@index([tenant_id])
@@ -308,46 +307,45 @@ model Payment {
 }
 
 model PaymentAttempt {
-  id                  String         @id @default(uuid()) @db.Uuid
-  obligation_id       String?        @db.Uuid
-  invoice_id          String?        @db.Uuid
-  tenant_id           String?        @db.Uuid
-  owner_id            String         @db.Uuid
+  id                  String                     @id @default(uuid()) @db.Uuid
+  obligation_id       String?                    @db.Uuid
+  invoice_id          String?                    @db.Uuid
+  tenant_id           String?                    @db.Uuid
+  owner_id            String                     @db.Uuid
   provider            String
-  merchant_txn_id     String         @unique
-  gateway_txn_id      String?        @unique
-  amount              Decimal        @db.Decimal(10, 2)
-  status              AttemptStatus  @default(CREATED)
+  merchant_txn_id     String                     @unique
+  gateway_txn_id      String?                    @unique
+  amount              Decimal                    @db.Decimal(10, 2)
+  status              AttemptStatus              @default(CREATED)
   upi_intent_url      String?
   qr_payload          String?
-  expires_at          DateTime?      @db.Timestamptz(6)
-  confirmed_at        DateTime?      @db.Timestamptz(6)
+  expires_at          DateTime?                  @db.Timestamptz(6)
+  confirmed_at        DateTime?                  @db.Timestamptz(6)
   raw_create_response Json?
   raw_webhook_payload Json?
-  created_at          DateTime       @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime?      @updatedAt @db.Timestamptz(6)
+  created_at          DateTime                   @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime?                  @updatedAt @db.Timestamptz(6)
   checkout_url        String?
-  payment_type        String         @default("RENT")
-  addon_pack          String?        // "200" | "500" — set when payment_type = "ADDON"
-  obligation          RentObligation? @relation(fields: [obligation_id], references: [id])
-  invoice             OwnerInvoice?   @relation(fields: [invoice_id], references: [id], onDelete: SetNull)
-  tenant              Tenant?         @relation(fields: [tenant_id], references: [id])
+  payment_type        String                     @default("RENT")
+  addon_pack          String?
+  obligations         PaymentAttemptObligation[]
+  invoice             OwnerInvoice?              @relation(fields: [invoice_id], references: [id])
+  obligation          RentObligation?            @relation(fields: [obligation_id], references: [id])
+  tenant              Tenant?                    @relation(fields: [tenant_id], references: [id])
   payments            Payment[]
-  obligations        PaymentAttemptObligation[]
 
   @@map("payment_attempts")
   @@schema("public")
 }
 
 model PaymentAttemptObligation {
-  id                String        @id @default(uuid()) @db.Uuid
-  payment_attempt_id String        @db.Uuid
-  obligation_id    String        @db.Uuid
-  amount           Decimal       @db.Decimal(10, 2)
-  created_at        DateTime      @default(now()) @db.Timestamptz(6)
-
-  payment_attempt   PaymentAttempt @relation(fields: [payment_attempt_id], references: [id], onDelete: Cascade)
-  obligation      RentObligation  @relation(fields: [obligation_id], references: [id])
+  id                 String         @id @default(uuid()) @db.Uuid
+  payment_attempt_id String         @db.Uuid
+  obligation_id      String         @db.Uuid
+  amount             Decimal        @db.Decimal(10, 2)
+  created_at         DateTime       @default(now()) @db.Timestamptz(6)
+  obligation         RentObligation @relation(fields: [obligation_id], references: [id])
+  payment_attempt    PaymentAttempt @relation(fields: [payment_attempt_id], references: [id], onDelete: Cascade)
 
   @@unique([payment_attempt_id, obligation_id])
   @@map("payment_attempt_obligations")
@@ -367,7 +365,7 @@ model IdentificationDocument {
   /// ImageKit fileId for deletion
   file_id          String?
   rejection_reason String?
-  tenant          Tenant        @relation(fields: [tenant_id], references: [id])
+  tenant           Tenant         @relation(fields: [tenant_id], references: [id])
 
   @@index([document_status])
   @@map("identification_documents")
@@ -376,7 +374,7 @@ model IdentificationDocument {
 
 model ReactivationRequest {
   id                      String    @id @default(uuid()) @db.Uuid
-  tenant_id              String    @db.Uuid
+  tenant_id               String    @db.Uuid
   owner_id                String    @db.Uuid
   requested_by_profile_id String    @db.Uuid
   current_status          String
@@ -385,7 +383,7 @@ model ReactivationRequest {
   processed_at            DateTime? @db.Timestamptz(6)
   processed_by            String?   @db.Uuid
   created_at              DateTime  @default(now()) @db.Timestamptz(6)
-  tenant                 Tenant   @relation(fields: [tenant_id], references: [id])
+  tenant                  Tenant    @relation(fields: [tenant_id], references: [id])
 
   @@map("reactivation_requests")
   @@schema("public")
@@ -421,7 +419,6 @@ model RefreshToken {
   token_hash String   @unique
   expires_at DateTime @db.Timestamptz(6)
   created_at DateTime @default(now()) @db.Timestamptz(6)
-
   profile    Profile  @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@index([user_id])
@@ -464,7 +461,7 @@ model Expense {
 
 model Complaint {
   id          String    @id @default(uuid()) @db.Uuid
-  tenant_id  String    @db.Uuid
+  tenant_id   String    @db.Uuid
   owner_id    String    @db.Uuid
   title       String
   description String
@@ -475,29 +472,29 @@ model Complaint {
   comment     String?
   created_at  DateTime  @default(now()) @db.Timestamptz(6)
   updated_at  DateTime? @updatedAt @db.Timestamptz(6)
-  tenant     Tenant   @relation(fields: [tenant_id], references: [id])
+  tenant      Tenant    @relation(fields: [tenant_id], references: [id])
 
   @@map("complaints")
   @@schema("public")
 }
 
 model Receipt {
-  id             String    @id @default(uuid()) @db.Uuid
-  receipt_number String    @unique
-  payment_id     String    @unique @db.Uuid
-  tenant_id     String    @db.Uuid
-  owner_id       String?   @db.Uuid
-  amount         Decimal   @db.Decimal(10, 2)
-  payment_method String
-  transaction_id String?
-  hostel_name     String?
-  tenant_name     String?
-  rent_month      DateTime? @db.Date
-  issued_at       DateTime  @default(now()) @db.Timestamptz(6)
-  invoice_pdf_url          String?  // ✅ Final PDF storage
-  invoice_template_version Int?     // ✅ Template version for cache-busting
-  payment         Payment   @relation(fields: [payment_id], references: [id])
-  tenant         Tenant   @relation(fields: [tenant_id], references: [id])
+  id                       String    @id @default(uuid()) @db.Uuid
+  receipt_number           String    @unique
+  payment_id               String    @unique @db.Uuid
+  tenant_id                String    @db.Uuid
+  owner_id                 String?   @db.Uuid
+  amount                   Decimal   @db.Decimal(10, 2)
+  payment_method           String
+  transaction_id           String?
+  hostel_name              String?
+  tenant_name              String?
+  rent_month               DateTime? @db.Date
+  issued_at                DateTime  @default(now()) @db.Timestamptz(6)
+  invoice_pdf_url          String?
+  invoice_template_version Int?
+  payment                  Payment   @relation(fields: [payment_id], references: [id])
+  tenant                   Tenant    @relation(fields: [tenant_id], references: [id])
 
   @@map("receipts")
   @@schema("public")
@@ -507,7 +504,7 @@ model SystemEventLog {
   id         String   @id @default(uuid()) @db.Uuid
   event_type String
   owner_id   String?  @db.Uuid
-  tenant_id String?  @db.Uuid
+  tenant_id  String?  @db.Uuid
   metadata   Json?
   created_at DateTime @default(now()) @db.Timestamptz(6)
 
@@ -518,25 +515,20 @@ model SystemEventLog {
   @@schema("public")
 }
 
-// ─── SaaS Billing ─────────────────────────────────────────────
-
-// Legacy Plan Model Removed, use the one at EOF
-
 model OwnerSubscription {
-  id                String       @id @default(uuid()) @db.Uuid
-  owner_id          String       @db.Uuid
-  plan_id           String       
-  status            String       @default("FREE")
-  start_date        DateTime     @db.Date
-  end_date          DateTime?    @db.Date
-  auto_renew        Boolean      @default(true)
-  created_at        DateTime     @default(now()) @db.Timestamptz(6)
-  updated_at        DateTime?    @updatedAt @db.Timestamptz(6)
-  owner             Profile      @relation(fields: [owner_id], references: [id], onDelete: Cascade)
-  plan              Plan         @relation(fields: [plan_id], references: [id])
-  invoices          OwnerInvoice[]
+  id         String         @id @default(uuid()) @db.Uuid
+  owner_id   String         @unique @db.Uuid
+  plan_id    String
+  status     String         @default("FREE")
+  start_date DateTime       @db.Date
+  end_date   DateTime?      @db.Date
+  auto_renew Boolean        @default(true)
+  created_at DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at DateTime?      @updatedAt @db.Timestamptz(6)
+  invoices   OwnerInvoice[]
+  owner      Profile        @relation(fields: [owner_id], references: [id], onDelete: Cascade)
+  plan       Plan           @relation(fields: [plan_id], references: [id])
 
-  @@unique([owner_id])
   @@index([owner_id])
   @@index([status])
   @@map("owner_subscriptions")
@@ -547,7 +539,7 @@ model OwnerInvoice {
   id              String             @id @default(uuid()) @db.Uuid
   owner_id        String             @db.Uuid
   subscription_id String?            @db.Uuid
-  plan_id         String?            
+  plan_id         String?
   invoice_number  String?            @unique
   amount_paise    Int
   status          String             @default("PENDING")
@@ -557,8 +549,8 @@ model OwnerInvoice {
   paid_at         DateTime?          @db.Timestamptz(6)
   created_at      DateTime           @default(now()) @db.Timestamptz(6)
   owner           Profile            @relation(fields: [owner_id], references: [id], onDelete: Cascade)
-  subscription    OwnerSubscription? @relation(fields: [subscription_id], references: [id], onDelete: SetNull)
-  plan            Plan?              @relation(fields: [plan_id], references: [id], onDelete: SetNull)
+  plan            Plan?              @relation(fields: [plan_id], references: [id])
+  subscription    OwnerSubscription? @relation(fields: [subscription_id], references: [id])
   attempts        PaymentAttempt[]
 
   @@index([owner_id, created_at(sort: Desc)])
@@ -567,7 +559,120 @@ model OwnerInvoice {
   @@schema("public")
 }
 
-// ──────────────────────────────────────────────────────────────
+model Plan {
+  id                  String              @id
+  name                String
+  price_inr           Int                 @default(0)
+  tenant_limit        Int                 @default(0)
+  hostel_limit        Int                 @default(0)
+  automation          Boolean             @default(false)
+  multi_hostel        Boolean             @default(false)
+  analytics           Boolean             @default(false)
+  is_custom           Boolean             @default(false)
+  created_at          DateTime            @default(now()) @db.Timestamptz(6)
+  features            Json?
+  invoices            OwnerInvoice[]
+  owner_subscriptions OwnerSubscription[]
+  subscriptions       Subscription[]
+
+  @@map("plans")
+  @@schema("public")
+}
+
+model Subscription {
+  id               String           @id @default(uuid()) @db.Uuid
+  owner_id         String           @unique @db.Uuid
+  plan_id          String
+  status           String           @default("TRIAL")
+  trial_ends_at    DateTime?        @db.Timestamptz(6)
+  start_date       DateTime         @default(now()) @db.Timestamptz(6)
+  next_billing_at  DateTime?        @db.Timestamptz(6)
+  autopay_enabled  Boolean          @default(true)
+  grace_started_at DateTime?        @db.Timestamptz(6)
+  grace_ends_at    DateTime?        @db.Timestamptz(6)
+  created_at       DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime         @default(now()) @updatedAt @db.Timestamptz(6)
+  autopay_attempts AutopayAttempt[]
+  plan             Plan             @relation(fields: [plan_id], references: [id])
+
+  @@map("subscriptions")
+  @@schema("public")
+}
+
+model MessagePack {
+  id                 String   @id @default(uuid()) @db.Uuid
+  owner_id           String   @db.Uuid
+  purchased_at       DateTime @default(now()) @db.Timestamptz(6)
+  messages_total     Int
+  messages_remaining Int
+  price_inr          Int
+  notes              String?
+
+  @@map("message_packs")
+  @@schema("public")
+}
+
+model MessageLog {
+  id                String   @id @default(uuid()) @db.Uuid
+  owner_id          String?  @db.Uuid
+  sent_at           DateTime @default(now()) @db.Timestamptz(6)
+  channel           String?
+  template          String?
+  recipient         String?
+  success           Boolean?
+  status            String   @default("SUCCESS")
+  idempotency_key   String?  @unique
+  pack_id           String?  @db.Uuid
+  deduction         Int      @default(0)
+  provider_response String?
+
+  @@map("message_logs")
+  @@schema("public")
+}
+
+model AutopayAttempt {
+  id                String       @id @default(uuid()) @db.Uuid
+  subscription_id   String       @db.Uuid
+  attempt_at        DateTime     @default(now()) @db.Timestamptz(6)
+  result            String
+  provider_response String?
+  subscription      Subscription @relation(fields: [subscription_id], references: [id], onDelete: Cascade)
+
+  @@map("autopay_attempts")
+  @@schema("public")
+}
+
+model UsageTracking {
+  owner_id      String @id @db.Uuid
+  tenants_count Int    @default(0)
+  hostels_count Int    @default(0)
+
+  @@map("usage_tracking")
+  @@schema("public")
+}
+
+model AddonUsage {
+  owner_id            String  @id @db.Uuid
+  reminders_remaining Int     @default(0)
+  reminders_used      Int     @default(0)
+  auto_topup          Boolean @default(false)
+
+  @@map("addon_usage")
+  @@schema("public")
+}
+
+model AddonTransaction {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  owner_id           String   @db.Uuid
+  payment_attempt_id String?  @db.Uuid
+  pack               String
+  credits_added      Int
+  created_at         DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([owner_id])
+  @@map("addon_transactions")
+  @@schema("public")
+}
 
 enum Role {
   ADMIN
@@ -631,124 +736,5 @@ enum AdvanceLedgerReason {
   REFUND
   CORRECTION
 
-  @@schema("public")
-}
-
-// ─────────────────────────────────────────────────────────
-// Subscription / Billing Models
-// ─────────────────────────────────────────────────────────
-
-model Plan {
-  id              String        @id // e.g., "FREE", "STARTER", "GROWTH", "BUSINESS", "SCALE"
-  name            String
-  price_inr       Int           @default(0)
-  tenant_limit    Int           @default(0)
-  hostel_limit    Int           @default(0)
-  automation      Boolean       @default(false)
-  multi_hostel    Boolean       @default(false)
-  analytics       Boolean       @default(false)
-  is_custom       Boolean       @default(false)
-  created_at      DateTime      @default(now()) @db.Timestamptz(6)
-  features        Json?
-  subscriptions   Subscription[]
-  owner_subscriptions OwnerSubscription[]
-  invoices            OwnerInvoice[]
-
-  @@map("plans")
-  @@schema("public")
-}
-
-model Subscription {
-  id                String         @id @default(uuid()) @db.Uuid
-  owner_id          String         @unique @db.Uuid
-  plan_id           String
-  status            String         @default("TRIAL") // TRIAL, ACTIVE, GRACE, EXPIRED, LIMITED
-  trial_ends_at     DateTime?      @db.Timestamptz(6)
-  start_date        DateTime       @default(now()) @db.Timestamptz(6)
-  next_billing_at   DateTime?      @db.Timestamptz(6)
-  autopay_enabled   Boolean        @default(true)
-  grace_started_at  DateTime?      @db.Timestamptz(6)
-  grace_ends_at     DateTime?      @db.Timestamptz(6)
-  created_at        DateTime       @default(now()) @db.Timestamptz(6)
-  updated_at        DateTime       @default(now()) @updatedAt @db.Timestamptz(6)
-  plan              Plan           @relation(fields: [plan_id], references: [id])
-  autopay_attempts  AutopayAttempt[]
-
-  @@map("subscriptions")
-  @@schema("public")
-}
-
-model MessagePack {
-  id                String         @id @default(uuid()) @db.Uuid
-  owner_id          String         @db.Uuid
-  purchased_at      DateTime       @default(now()) @db.Timestamptz(6)
-  messages_total    Int
-  messages_remaining Int
-  price_inr         Int
-  notes             String?
-
-  @@map("message_packs")
-  @@schema("public")
-}
-
-model MessageLog {
-  id                String         @id @default(uuid()) @db.Uuid
-  owner_id          String?        @db.Uuid
-  sent_at           DateTime       @default(now()) @db.Timestamptz(6)
-  channel           String?
-  template          String?
-  recipient         String?
-  success           Boolean?
-  status            String         @default("SUCCESS")
-  idempotency_key   String?        @unique
-  pack_id           String?        @db.Uuid
-  deduction         Int            @default(0)
-  provider_response String?
-
-  @@map("message_logs")
-  @@schema("public")
-}
-
-model AutopayAttempt {
-  id                String         @id @default(uuid()) @db.Uuid
-  subscription_id   String         @db.Uuid
-  attempt_at        DateTime       @default(now()) @db.Timestamptz(6)
-  result            String
-  provider_response String?
-  subscription      Subscription   @relation(fields: [subscription_id], references: [id], onDelete: Cascade)
-
-  @@map("autopay_attempts")
-  @@schema("public")
-}
-
-model UsageTracking {
-  owner_id      String  @id @db.Uuid
-  tenants_count Int     @default(0)
-  hostels_count Int     @default(0)
-
-  @@map("usage_tracking")
-  @@schema("public")
-}
-
-model AddonUsage {
-  owner_id            String  @id @db.Uuid
-  reminders_remaining Int     @default(0)
-  reminders_used      Int     @default(0)
-  auto_topup          Boolean @default(false)  // auto-buy 200 credits when balance hits 0
-
-  @@map("addon_usage")
-  @@schema("public")
-}
-
-model AddonTransaction {
-  id                 String   @id @default(uuid()) @db.Uuid
-  owner_id           String   @db.Uuid
-  payment_attempt_id String?  @db.Uuid
-  pack               String   // "200" | "500"
-  credits_added      Int
-  created_at         DateTime @default(now()) @db.Timestamptz(6)
-
-  @@index([owner_id])
-  @@map("addon_transactions")
   @@schema("public")
 }

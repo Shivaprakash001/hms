@@ -106,14 +106,14 @@ export async function consumeReminder(ownerId: string): Promise<void> {
   checkRateLimit(ownerId);
 
   // 2. Fetch current balance
-  const usage = await (prisma.addonUsage as any).findUnique({
+  const usage = await prisma.addonUsage.findUnique({
     where: { owner_id: ownerId },
     select: { reminders_remaining: true, auto_topup: true },
   });
 
   if (!usage || Number(usage.reminders_remaining) <= 0) {
     // 3. Auto-topup: fire-and-forget purchase intent if owner opted in
-    if ((usage as any)?.auto_topup) {
+    if (usage?.auto_topup) {
       triggerAutoTopup(ownerId).catch((err) =>
         logger.error("auto_topup.failed", { owner_id: ownerId, error: err?.message })
       );
@@ -203,7 +203,7 @@ export async function reconcileAddonCredits(ownerId: string): Promise<{
       where: { owner_id: ownerId },
       select: { reminders_remaining: true, reminders_used: true },
     }),
-    (prisma as any).addonTransaction.aggregate({
+    prisma.addonTransaction.aggregate({
       where: { owner_id: ownerId },
       _sum: { credits_added: true },
     }),
