@@ -25,9 +25,10 @@ export async function GET() {
       return apiResponse(
         plans.map((p) => ({
           ...p,
-          price: p.price_inr,
+          price: p.price_inr / 100,      // rupees for display (499, 1499, ...)
+          amount_paise: p.price_inr,     // raw paise for payment intent creation
           currency: "INR",
-          is_popular: p.id === "GROWTH" || p.id === "PRO",
+          is_popular: p.id === "GROWTH",
         }))
       );
     } catch (error: any) {

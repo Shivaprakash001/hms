@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    if (!profile) return apiError("User not found", "NOT_FOUND", 404);
+    if (!profile) return apiError("Session expired. Please log in again.", "UNAUTHORIZED", 401);
 
     const extra: any = {};
     let tenantId: string | null = null;

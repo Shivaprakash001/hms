@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
     });
 
     if (!owner) {
-      return apiError("Owner profile not found", "NOT_FOUND", 404);
+      return apiError("Session expired. Please log in again.", "UNAUTHORIZED", 401);
     }
 
     // 4. Validate payment provider config BEFORE creating any DB records
