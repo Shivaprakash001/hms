@@ -7,6 +7,7 @@ const PUBLIC_ROUTES = [
   "/api/auth/register",
   "/api/auth/refresh",
   "/api/auth/google-callback",
+  "/api/tenants/activate",
   "/api/webhooks/payments/phonepe",
   "/api/plans",
   // Vercel-Cron hits these with `Authorization: Bearer $CRON_SECRET`,
