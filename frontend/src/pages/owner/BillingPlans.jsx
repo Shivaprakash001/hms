@@ -102,20 +102,27 @@ function PlanCard({ plan, isCurrent, isUpgrade, upgrading, onUpgrade }) {
 
     return (
         <div className={`relative flex flex-col rounded-2xl border p-5 transition-shadow ${
-            isCurrent
+            isScale 
+                ? 'border-slate-200 bg-slate-50'
+                : isCurrent
                 ? 'border-indigo-300 bg-indigo-50 ring-2 ring-indigo-200'
                 : isPopular
                     ? 'border-violet-200 bg-white shadow-lg'
                     : 'border-slate-200 bg-white hover:shadow-md'
         }`}>
-            {isCurrent && (
+            {isCurrent && !isScale && (
                 <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-white text-[9px] font-bold uppercase tracking-wider px-3 py-0.5 rounded-full whitespace-nowrap">
                     Current Plan
                 </span>
             )}
-            {!isCurrent && isPopular && (
+            {!isCurrent && isPopular && !isScale && (
                 <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-violet-600 text-white text-[9px] font-bold uppercase tracking-wider px-3 py-0.5 rounded-full">
                     Popular
+                </span>
+            )}
+            {isScale && (
+                <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-slate-700 text-white text-[9px] font-bold uppercase tracking-wider px-3 py-0.5 rounded-full whitespace-nowrap">
+                    For large PG chains
                 </span>
             )}
 
@@ -259,7 +266,12 @@ export default function BillingPlans() {
                 billingService.getPlans(),
             ]);
             setSubscription(subData || null);
-            setPlans(Array.isArray(plansData) ? plansData : (plansData?.data || []));
+
+            let fetchedPlans = Array.isArray(plansData) ? plansData : (plansData?.data || []);
+            const sortedPlans = [...fetchedPlans].sort(
+                (a, b) => PLAN_ORDER.indexOf(a.id) - PLAN_ORDER.indexOf(b.id)
+            );
+            setPlans(sortedPlans);
         } catch (e) {
             setError(e?.response?.data?.error?.message || e?.message || 'Failed to load billing data');
         } finally {
@@ -388,8 +400,8 @@ export default function BillingPlans() {
             {plans.length > 0 && (
                 <section>
                     <h3 className="text-lg font-bold text-slate-900 mb-4">Available Plans</h3>
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                        {plans.map(plan => {
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {plans.filter(p => p.id !== 'SCALE').map(plan => {
                             const idx = PLAN_ORDER.indexOf(plan.id);
                             return (
                                 <PlanCard
@@ -403,6 +415,25 @@ export default function BillingPlans() {
                             );
                         })}
                     </div>
+                    
+                    {plans.find(p => p.id === 'SCALE') && (() => {
+                        const plan = plans.find(p => p.id === 'SCALE');
+                        return (
+                            <div className="mt-8 max-w-sm mx-auto flex flex-col items-center">
+                                <p className="text-sm font-semibold text-slate-500 mb-3 uppercase tracking-wide">Need more?</p>
+                                <div className="w-full">
+                                    <PlanCard
+                                        key={plan.id}
+                                        plan={plan}
+                                        isCurrent={plan.id === currentPlanId}
+                                        isUpgrade={false}
+                                        upgrading={false}
+                                        onUpgrade={handleUpgrade}
+                                    />
+                                </div>
+                            </div>
+                        );
+                    })()}
                 </section>
             )}
 
