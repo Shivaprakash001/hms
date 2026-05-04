@@ -10,6 +10,7 @@ import { formatCurrency, formatMonthYear } from "../format";
 import { eventLog } from "./event-log-service";
 import { getLogger } from "../logger";
 import { incrementPayment, incrementWebhook } from "../metrics";
+import { tenantAnalyticsService } from "./tenant-analytics-service";
 
 const logger = getLogger("payment.service");
 
@@ -105,6 +106,18 @@ export class PaymentService {
         amount: data.amountPaid,
         method: data.paymentMethod
       });
+
+      // 📊 ANALYTICS: Track Reminder -> Payment Conversion & update score
+      if (res.payment?.id && data.paymentDate) {
+        await tenantAnalyticsService.markReminderConversion(data.obligationId, new Date(data.paymentDate));
+      } else if (res.payment?.id) {
+        await tenantAnalyticsService.markReminderConversion(data.obligationId, new Date());
+      }
+      
+      if (res.payment?.tenant_id) {
+        // Fire and forget behavior score update
+        tenantAnalyticsService.calculateTenantScore(res.payment.tenant_id).catch(e => logger.error("tenantScore.failed", { err: e.message }));
+      }
 
       // 🔧 FIX C3: Create receipt for ALL payment paths (manual + UPI)
       // Previously only the UPI finalization path created receipts.
