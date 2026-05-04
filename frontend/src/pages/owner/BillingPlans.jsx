@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { billingService } from '../../api/services';
 import api from '../../api/axios';
+import BuyRemindersModal from '../../components/owner/BuyRemindersModal';
 
 // Plan tier order — used to determine upgrade vs downgrade
 const PLAN_ORDER = ['FREE', 'STARTER', 'GROWTH', 'BUSINESS', 'SCALE'];
@@ -88,7 +89,7 @@ function UsageBar({ label, used, limit, Icon }) {
     );
 }
 
-function PlanCard({ plan, isCurrent, isUpgrade, upgrading, onUpgrade }) {
+function PlanCard({ plan, isCurrent, isUpgrade, upgrading, onUpgrade, onBuyCredits }) {
     const isScale = plan.id === 'SCALE';
     const isPopular = !!plan.is_popular;
 
@@ -98,6 +99,7 @@ function PlanCard({ plan, isCurrent, isUpgrade, upgrading, onUpgrade }) {
         { Icon: Zap,       label: 'Automation',  ok: plan.automation },
         { Icon: Layout,    label: 'Multi-hostel', ok: plan.multi_hostel },
         { Icon: BarChart3, label: 'Analytics',   ok: plan.analytics },
+        { Icon: MessageSquare, label: 'Send reminders using credits', ok: true },
     ];
 
     return (
@@ -145,9 +147,23 @@ function PlanCard({ plan, isCurrent, isUpgrade, upgrading, onUpgrade }) {
 
             <div className="mt-5">
                 {isCurrent ? (
-                    <div className="w-full py-2 rounded-xl bg-indigo-100 text-indigo-600 text-sm font-semibold text-center cursor-default">
-                        Current Plan
-                    </div>
+                    plan.id === 'FREE' ? (
+                        <div className="space-y-2">
+                            <div className="w-full py-2 rounded-xl bg-indigo-100 text-indigo-600 text-sm font-semibold text-center cursor-default">
+                                Current Plan
+                            </div>
+                            <button
+                                onClick={onBuyCredits}
+                                className="w-full py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700 transition-colors"
+                            >
+                                Buy Credits
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="w-full py-2 rounded-xl bg-indigo-100 text-indigo-600 text-sm font-semibold text-center cursor-default">
+                            Current Plan
+                        </div>
+                    )
                 ) : isScale ? (
                     <a
                         href="mailto:hello@trishul.solutions?subject=SCALE%20Plan%20Enquiry"
@@ -182,7 +198,7 @@ function ComparisonTable({ plans, currentPlanId }) {
         { label: 'Automation',   bool: 'automation' },
         { label: 'Multi-hostel', bool: 'multi_hostel' },
         { label: 'Analytics',    bool: 'analytics' },
-        { label: 'Add-ons available', bool: 'addons_enabled' },
+        { label: 'Pay-per-use features (Reminders, Messaging)', alwaysTrue: true },
     ];
     return (
         <div className="overflow-x-auto">
@@ -204,7 +220,9 @@ function ComparisonTable({ plans, currentPlanId }) {
                             <td className="py-3 pr-6 text-xs font-semibold text-slate-600">{row.label}</td>
                             {plans.map(p => (
                                 <td key={p.id} className={`py-3 px-3 text-center ${p.id === currentPlanId ? 'bg-indigo-50/40' : ''}`}>
-                                    {row.bool
+                                    {row.alwaysTrue
+                                        ? <div className="flex justify-center"><FeatureCheck enabled={true} /></div>
+                                        : row.bool
                                         ? <div className="flex justify-center"><FeatureCheck enabled={!!p[row.bool]} /></div>
                                         : <span className="text-xs font-semibold text-slate-700">{row.render(p)}</span>
                                     }
@@ -256,6 +274,7 @@ export default function BillingPlans() {
     const [plans, setPlans]           = useState([]);
     const [upgrading, setUpgrading]   = useState(null);
     const [upgradeError, setUpgradeError] = useState('');
+    const [buyModalOpen, setBuyModalOpen] = useState(false);
 
     const load = async () => {
         setLoading(true);
@@ -411,6 +430,7 @@ export default function BillingPlans() {
                                     isUpgrade={idx > currentPlanIndex && idx !== -1}
                                     upgrading={upgrading === plan.id}
                                     onUpgrade={handleUpgrade}
+                                    onBuyCredits={() => setBuyModalOpen(true)}
                                 />
                             );
                         })}
@@ -451,6 +471,10 @@ export default function BillingPlans() {
                 <BillingHistory items={history} />
             </section>
 
+            {/* Modals */}
+            {buyModalOpen && (
+                <BuyRemindersModal onClose={() => setBuyModalOpen(false)} trigger="billing_page_free_tier" />
+            )}
         </div>
     );
 }
