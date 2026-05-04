@@ -112,24 +112,6 @@ export class PropertyService {
   }
 
   async updatePreferences(userId: string, data: any) {
-    // ---- Plan Limits Enforcement ----
-    const reqAutomation = (data.auto_generate_rent === true) || 
-                          (data.auto_apply_late_fees === true) || 
-                          (data.auto_send_reminders === true);
-    
-    if (reqAutomation) {
-      await planGate.assertFeatureAllowed(userId, "automation");
-    }
-
-    const reqReminders = (data.reminder_day_1 === true) ||
-                         (data.reminder_day_5 === true) ||
-                         (data.reminder_day_10 === true);
-                         
-    if (reqReminders) {
-      await planGate.assertRemindersAllowed(userId);
-    }
-    // ---------------------------------
-
     const profile = await prisma.profile.findUnique({
       where: { id: userId },
       include: { hostels: { where: { is_active: true }, take: 1 } },
