@@ -81,7 +81,8 @@ export default function BuyRemindersModal({ onClose, trigger = 'manual', current
         setLoading(true);
         setError('');
         try {
-            const result = await addonService.purchasePack(selected);
+            // Pass trigger context for analytics (empty | low | manual)
+            const result = await addonService.purchasePack(selected, trigger);
             if (!result?.checkout_url) {
                 setError('Could not create payment. Please try again.');
                 setLoading(false);

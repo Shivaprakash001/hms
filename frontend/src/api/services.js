@@ -161,14 +161,22 @@ export const addonService = {
         const response = await api.get('/addons/usage');
         return response.data;
     },
-    purchasePack: async (pack) => {
-        const response = await api.post('/addons/purchase', { pack });
+    purchasePack: async (pack, trigger = 'manual') => {
+        const response = await api.post('/addons/purchase', { pack, trigger });
         return response.data; // { checkout_url, attempt_id, amount, credits, pack }
     },
-    buyPack: async (pack) => {
-        const response = await api.post('/addons', { pack });
+    getAutoTopup: async () => {
+        const response = await api.get('/addons/usage');
+        return response.data?.auto_topup ?? false;
+    },
+    setAutoTopup: async (enabled, trigger = 'settings') => {
+        const response = await api.patch('/addons/usage', { auto_topup: enabled, trigger });
         return response.data;
-    }
+    },
+    verifyPayment: async (attemptId) => {
+        const response = await api.post('/addons/verify', { attempt_id: attemptId });
+        return response.data; // { verified, already_credited, credits_remaining }
+    },
 };
 
 // --- Tenant Services ---

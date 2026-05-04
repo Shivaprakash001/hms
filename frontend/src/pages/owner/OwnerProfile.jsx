@@ -54,6 +54,8 @@ export default function OwnerProfile() {
     const [upgradeModal, setUpgradeModal] = useState(null); // { feature, requiredPlan }
     const [buyCreditsModal, setBuyCreditsModal] = useState(null); // null | 'empty' | 'low' | 'manual'
     const [reminderCredits, setReminderCredits] = useState(null); // null = loading
+    const [cronStopped, setCronStopped] = useState(false);        // cron paused due to 0 credits
+    const [autoTopup, setAutoTopup] = useState(false);            // owner's auto-topup preference
     const [retryToast, setRetryToast] = useState(null); // { action, label } | null
 
     const [ownerForm, setOwnerForm] = useState({ name: '', email: '', phone: '' });
@@ -99,22 +101,34 @@ export default function OwnerProfile() {
                 }
                 const credits = addonData?.reminders_remaining ?? 0;
                 setReminderCredits(credits);
+                setCronStopped(addonData?.cron_stopped ?? false);
+                setAutoTopup(addonData?.auto_topup ?? false);
 
                 // Handle return from PhonePe addon payment
                 const params = new URLSearchParams(window.location.search);
                 if (params.get('status') === 'addon_success') {
-                    const addedCredits = parseInt(params.get('credits') || '0', 10);
-                    // Re-fetch fresh balance (webhook may have already credited)
-                    addonService.getUsage().then(d => setReminderCredits(d?.reminders_remaining ?? 0)).catch(() => {});
-                    // Clean URL without reload
+                    const attemptId = params.get('attempt_id');
                     window.history.replaceState({}, '', window.location.pathname);
-                    // Show retry toast instead of silent auto-retry (handles network failures gracefully)
+
+                    // Verify fallback: call /api/addons/verify in case webhook missed
+                    // This is idempotent — safe even if webhook already ran
+                    try {
+                        const verifyResult = await addonService.verifyPayment(attemptId);
+                        const freshCredits = verifyResult?.credits_remaining ?? null;
+                        if (freshCredits !== null) setReminderCredits(freshCredits);
+                    } catch {
+                        // Non-critical: fall back to getUsage
+                        addonService.getUsage().then(d => setReminderCredits(d?.reminders_remaining ?? 0)).catch(() => {});
+                    }
+
+                    // Show retry toast if user had a pending action before buying
                     const pendingAction = sessionStorage.getItem('pending_reminder_action');
                     if (pendingAction) {
                         sessionStorage.removeItem('pending_reminder_action');
+                        const addedCredits = parseInt(params.get('credits') || '0', 10);
                         setRetryToast({
                             action: pendingAction,
-                            label: `✅ ${addedCredits} credits added. Click to retry sending reminder.`,
+                            label: `✅ ${addedCredits || 'Credits'} added. Click to retry sending reminder.`,
                         });
                         setTimeout(() => setRetryToast(null), 8000);
                     }
@@ -462,7 +476,7 @@ export default function OwnerProfile() {
                                     <div className="px-4 pb-4 pt-1 border-t border-slate-100 space-y-4">
                                         {mod.key === 'billing' && <BillingModule prefs={preferences} updatePref={updatePref} />}
                                         {mod.key === 'payments' && <PaymentsModule prefs={preferences} updatePref={updatePref} />}
-                                        {mod.key === 'notifications' && <NotificationsModule prefs={preferences} updatePref={updatePref} reminderCredits={reminderCredits} onBuyCredits={(t) => setBuyCreditsModal(t || 'empty')} onCreditsRefresh={(c) => setReminderCredits(c)} />}
+                                        {mod.key === 'notifications' && <NotificationsModule prefs={preferences} updatePref={updatePref} reminderCredits={reminderCredits} cronStopped={cronStopped} autoTopup={autoTopup} onAutoTopupChange={setAutoTopup} onBuyCredits={(t) => setBuyCreditsModal(t || 'empty')} onCreditsRefresh={(c) => setReminderCredits(c)} />}
                                         {mod.key === 'automation' && <AutomationModule prefs={preferences} updatePref={updatePref} plan={currentPlan} onLockedClick={(feature, reqPlan) => setUpgradeModal({ feature, requiredPlan: reqPlan })} />}
                                         {mod.key === 'receipts' && <ReceiptsModule prefs={preferences} updatePref={updatePref} />}
                                         {mod.key === 'security' && <SecurityModule prefs={preferences} updatePref={updatePref} />}
@@ -826,12 +840,13 @@ function PaymentsModule({ prefs, updatePref }) {
     );
 }
 
-function NotificationsModule({ prefs, updatePref, reminderCredits, onBuyCredits, onCreditsRefresh }) {
+function NotificationsModule({ prefs, updatePref, reminderCredits, cronStopped, autoTopup, onAutoTopupChange, onBuyCredits, onCreditsRefresh }) {
     const [testSending, setTestSending] = useState(false);
     const [testSent, setTestSent] = useState(false);
     const [testResult, setTestResult] = useState('');
+    const [togglingAutoTopup, setTogglingAutoTopup] = useState(false);
 
-    const noCredits = reminderCredits !== null && reminderCredits <= 0;
+    const noCredits  = reminderCredits !== null && reminderCredits <= 0;
     const lowCredits = reminderCredits !== null && reminderCredits > 0 && reminderCredits <= 20;
 
     const sendTestReminder = async () => {
@@ -843,10 +858,11 @@ function NotificationsModule({ prefs, updatePref, reminderCredits, onBuyCredits,
             setTestResult(res?.message || 'Test reminder sent!');
         } catch (e) {
             const errData = e?.response?.data;
-            if (errData?.error === 'NO_REMINDERS_LEFT') {
-                // Save intent and open buy modal
+            if (errData?.error === 'NO_REMINDERS_LEFT' || errData?.code === 'NO_REMINDERS_LEFT') {
                 sessionStorage.setItem('pending_reminder_action', 'send_test_reminder');
                 onBuyCredits('empty');
+            } else if (errData?.code === 'RATE_LIMIT_EXCEEDED') {
+                setTestResult('Rate limit: max 10 reminders per minute. Please wait.');
             } else {
                 const detail = errData?.detail;
                 setTestResult(typeof detail === 'string' ? detail : (detail?.message || 'Failed to send test reminder'));
@@ -857,10 +873,37 @@ function NotificationsModule({ prefs, updatePref, reminderCredits, onBuyCredits,
         }
     };
 
+    const handleAutoTopup = async (enabled) => {
+        setTogglingAutoTopup(true);
+        try {
+            await addonService.setAutoTopup(enabled, 'settings');
+            onAutoTopupChange(enabled);
+        } catch {
+            // silently revert
+        } finally {
+            setTogglingAutoTopup(false);
+        }
+    };
+
     return (
         <div className="space-y-3">
+            {/* Cron-stopped critical alert (auto reminders paused) */}
+            {cronStopped && (
+                <div className="flex items-start gap-2.5 bg-rose-50 border border-rose-300 rounded-xl px-3.5 py-3">
+                    <AlertTriangle size={15} className="text-rose-500 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                        <p className="text-sm font-bold text-rose-800">⚠️ Automatic reminders are paused</p>
+                        <p className="text-xs text-rose-600 mt-0.5">The daily reminder cron stopped because credits ran out. Tenants may be missing payment reminders.</p>
+                    </div>
+                    <button onClick={() => onBuyCredits('empty')}
+                        className="flex-shrink-0 text-xs font-bold text-rose-700 bg-rose-100 hover:bg-rose-200 px-2.5 py-1.5 rounded-lg transition whitespace-nowrap">
+                        Fix Now
+                    </button>
+                </div>
+            )}
+
             {/* Zero-credit banner */}
-            {noCredits && (
+            {noCredits && !cronStopped && (
                 <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-3">
                     <AlertTriangle size={15} className="text-amber-500 mt-0.5 flex-shrink-0" />
                     <div className="flex-1">
@@ -879,7 +922,7 @@ function NotificationsModule({ prefs, updatePref, reminderCredits, onBuyCredits,
                 <div className="flex items-center gap-2.5 bg-orange-50 border border-orange-200 rounded-xl px-3.5 py-2.5">
                     <AlertTriangle size={14} className="text-orange-400 flex-shrink-0" />
                     <p className="text-xs text-orange-700 flex-1">
-                        Only <span className="font-bold">{reminderCredits}</span> reminder credits left
+                        Only <span className="font-bold">{reminderCredits}</span> credits left — ~{Math.floor(reminderCredits / 10)} days of reminders
                     </p>
                     <button onClick={() => onBuyCredits('low')}
                         className="text-xs font-bold text-orange-600 hover:text-orange-700 underline underline-offset-2 whitespace-nowrap transition">
@@ -893,10 +936,26 @@ function NotificationsModule({ prefs, updatePref, reminderCredits, onBuyCredits,
                 <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3.5 py-2.5">
                     <CheckCircle2 size={14} className="text-emerald-500 flex-shrink-0" />
                     <p className="text-xs font-medium text-emerald-700">
-                        <span className="font-bold">{reminderCredits}</span> reminder credits remaining
+                        <span className="font-bold">{reminderCredits}</span> credits · ~{Math.floor(reminderCredits / 10)} days of reminders
                     </p>
+                    <button onClick={() => onBuyCredits('manual')} className="ml-auto text-xs text-slate-400 hover:text-slate-600 transition">
+                        + Buy more
+                    </button>
                 </div>
             )}
+
+            {/* Auto-topup toggle */}
+            <div className="flex items-center gap-3 bg-violet-50 border border-violet-200 rounded-xl px-3.5 py-3">
+                <div className="flex-1">
+                    <p className="text-sm font-semibold text-violet-800">Auto top-up</p>
+                    <p className="text-xs text-violet-500 mt-0.5">Automatically buy 200 credits when balance hits 0</p>
+                </div>
+                <button type="button" disabled={togglingAutoTopup}
+                    onClick={() => handleAutoTopup(!autoTopup)}
+                    className={`relative flex-shrink-0 w-10 h-5.5 rounded-full transition-colors duration-200 disabled:opacity-50 ${autoTopup ? 'bg-violet-500' : 'bg-slate-300'}`}>
+                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${autoTopup ? 'translate-x-4.5' : 'translate-x-0'}`} />
+                </button>
+            </div>
 
             <Divider label="Channels" />
             <ToggleField label="Email" desc="Send reminders via email" value={prefs.reminder_email}

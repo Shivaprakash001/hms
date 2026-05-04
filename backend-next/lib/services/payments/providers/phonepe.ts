@@ -114,7 +114,18 @@ export class PhonePeProvider extends PaymentProvider {
       process.env.PHONEPE_REDIRECT_URL ||
       `${process.env.NEXT_PUBLIC_FRONTEND_URL || "https://trishul.solutions"}/payment-return`;
     const sep = returnBase.includes("?") ? "&" : "?";
-    const redirectUrl = `${returnBase}${sep}merchant_txn_id=${encodeURIComponent(data.merchant_txn_id)}`;
+    // For ADDON payments, embed attempt_id so the frontend can run the verify fallback
+    // and show the correct success state without relying solely on sessionStorage.
+    const attemptIdParam = data.metadata?.attempt_id
+      ? `&attempt_id=${encodeURIComponent(data.metadata.attempt_id)}`
+      : "";
+    const paymentTypeParam = data.metadata?.payment_type
+      ? `&payment_type=${encodeURIComponent(data.metadata.payment_type)}`
+      : "";
+    const creditsParam = data.metadata?.credits
+      ? `&credits=${encodeURIComponent(data.metadata.credits)}`
+      : "";
+    const redirectUrl = `${returnBase}${sep}merchant_txn_id=${encodeURIComponent(data.merchant_txn_id)}${attemptIdParam}${paymentTypeParam}${creditsParam}`;
 
     // Clean v2 payload — no v1 fields (paymentInstrument, top-level redirectUrl/redirectMode/callbackUrl).
     // Having both paymentInstrument (v1) and paymentFlow (v2) causes the API to ignore paymentFlow

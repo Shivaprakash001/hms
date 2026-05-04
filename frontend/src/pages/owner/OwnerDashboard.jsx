@@ -1,13 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
     ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip
 } from 'recharts';
 import {
-    Users, BedDouble, Bed, Clock, ArrowUpRight, LayoutGrid, CreditCard
+    Users, BedDouble, Bed, Clock, ArrowUpRight, LayoutGrid, CreditCard, AlertTriangle, X
 } from 'lucide-react';
-import { dashboardService } from '../../api/services';
+import { dashboardService, addonService } from '../../api/services';
 import { useAppPreferences } from '../../context/AppPreferencesContext';
 import { formatCurrency, formatDate } from '../../utils/format';
 
@@ -19,8 +19,17 @@ const OwnerDashboard = () => {
     const { data: unifiedRes, isLoading: loading } = useQuery({
         queryKey: ['dashboard', months],
         queryFn: () => dashboardService.getUnified(months),
-        staleTime: 5 * 60 * 1000, // 5 minutes — page switches are instant
+        staleTime: 5 * 60 * 1000,
     });
+
+    const { data: addonData } = useQuery({
+        queryKey: ['addon-usage'],
+        queryFn: () => addonService.getUsage(),
+        staleTime: 2 * 60 * 1000,
+    });
+
+    const [alertDismissed, setAlertDismissed] = useState(false);
+    const cronStopped = !alertDismissed && (addonData?.cron_stopped === true);
 
     const summary = useMemo(() => {
         const s = unifiedRes?.stats;
@@ -68,6 +77,25 @@ const OwnerDashboard = () => {
 
     return (
         <div className="space-y-8 relative pb-20">
+            {/* Cron-stopped alert banner */}
+            {cronStopped && (
+                <div className="flex items-start gap-3 bg-rose-50 border border-rose-200 rounded-2xl px-4 py-3.5">
+                    <AlertTriangle size={18} className="text-rose-500 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                        <p className="text-sm font-bold text-rose-800">⚠️ Automatic reminders are paused</p>
+                        <p className="text-xs text-rose-600 mt-0.5">Reminders stopped because you ran out of credits. Tenants may miss payment deadlines.</p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                        <button onClick={() => navigate('/owner/settings')} className="text-xs font-bold text-rose-700 bg-rose-100 hover:bg-rose-200 px-3 py-1.5 rounded-lg transition whitespace-nowrap">
+                            Buy Credits
+                        </button>
+                        <button onClick={() => setAlertDismissed(true)} className="text-rose-400 hover:text-rose-600 transition">
+                            <X size={14} />
+                        </button>
+                    </div>
+                </div>
+            )}
+
             <div className="flex items-center justify-between">
                 <div>
                     <h2 className="text-3xl font-black text-slate-900 tracking-tight">Dashboard Overview</h2>

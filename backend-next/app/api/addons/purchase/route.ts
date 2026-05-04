@@ -6,6 +6,7 @@ import { getSession } from "@/lib/auth-edge";
 import { prisma } from "@/lib/db";
 import { PaymentProviderFactory } from "@/lib/services/payments/provider-factory";
 import { getLogger } from "@/lib/logger";
+import { eventLog } from "@/lib/services/event-log-service";
 import crypto from "crypto";
 
 const logger = getLogger("addons.purchase");
@@ -86,6 +87,7 @@ export async function POST(req: NextRequest) {
         addon_pack: pack,
         owner_id: user.sub,
         attempt_id: attempt.id,
+        credits: packDef.credits,
       },
     });
 
@@ -104,6 +106,16 @@ export async function POST(req: NextRequest) {
       attempt_id: attempt.id,
       checkout_url: result.checkout_url ? "present" : "missing",
     });
+
+    // Analytics: log purchase trigger for conversion funnel analysis
+    const trigger = body?.trigger || "manual"; // 'empty' | 'low' | 'manual'
+    await eventLog.log("ADDON_PURCHASE_INITIATED", user.sub, {
+      pack,
+      amount: packDef.amount,
+      credits: packDef.credits,
+      trigger,
+      attempt_id: updated.id,
+    }).catch(() => {});
 
     return NextResponse.json({
       checkout_url: result.checkout_url,
