@@ -2,12 +2,14 @@ import { prisma } from "../db";
 
 const STARTER_FALLBACK = {
   id: null as string | null,
-  code: "STARTER",
   name: "Starter",
   price_inr: 49900,
   tenant_limit: 25,
   hostel_limit: 1,
-  features: ["1 Hostel", "Up to 25 tenants", "Payments & receipts"],
+  automation: false,
+  messaging: false,
+  multi_hostel: false,
+  analytics: false,
 };
 
 export class BillingService {
@@ -72,7 +74,10 @@ export class BillingService {
         currency: "INR",
         tenant_limit: plan.tenant_limit,
         hostel_limit: plan.hostel_limit,
-        features: plan.features,
+        automation: plan.automation,
+        messaging: plan.messaging,
+        multi_hostel: plan.multi_hostel,
+        analytics: plan.analytics,
       },
       subscription: {
         status: sub?.status ?? "FREE",

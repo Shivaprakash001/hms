@@ -290,7 +290,7 @@ export class ReminderService {
     // 3️⃣ WhatsApp/SMS Notification (if enabled) — deduct quota
     if ((config.reminder_whatsapp ?? false) && tenant.profile?.phone) {
       try {
-        await messageService.sendMessage(tenant.owner_id, "WHATSAPP", tenant.profile.phone, type, `Reminder: ${mailData.type} for ${mailData.rentMonth}`);
+        await messageService.sendMessage(tenant.owner_id, "WHATSAPP", tenant.profile.phone, type, `Reminder: ${type} for ${formatMonthYear(obligation.rent_month, config)}`);
       } catch (err: any) {
         // If message quota exhausted, log and trigger owner notification elsewhere
         console.warn(`[NOTIFY] WhatsApp/SMS send failed for ${tenant.id}:`, err?.message || err);
