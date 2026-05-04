@@ -21,9 +21,12 @@ async function getEffectiveLimits(ownerId: string) {
     include: { plan: { select: { tenant_limit: true, hostel_limit: true } } },
   });
 
-  // No subscription or subscription expired/cancelled → fall back to Starter
-  if (!sub || sub.status === "EXPIRED" || sub.status === "CANCELLED") {
-    return STARTER_LIMITS;
+  if (!sub) {
+    throw new Error(`PLAN_LIMIT: FORBIDDEN. No active subscription found for owner. Plan enforcement failed.`);
+  }
+
+  if (sub.status === "EXPIRED" || sub.status === "CANCELLED" || sub.status === "LIMITED") {
+    throw new Error(`PLAN_LIMIT: FORBIDDEN. Account in ${sub.status} mode. Upgrade required.`);
   }
 
   return {

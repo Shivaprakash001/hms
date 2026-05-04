@@ -519,28 +519,12 @@ model SystemEventLog {
 
 // ─── SaaS Billing ─────────────────────────────────────────────
 
-model Plan {
-  id            String             @id @default(uuid()) @db.Uuid
-  code          String             @unique
-  name          String
-  price_paise   Int                // price in INR paise (₹499 = 49900)
-  tenant_limit  Int?               // null = unlimited
-  hostel_limit  Int?               // null = unlimited
-  features      Json               @default("[]")
-  is_active     Boolean            @default(true)
-  display_order Int                @default(0)
-  created_at    DateTime           @default(now()) @db.Timestamptz(6)
-  subscriptions OwnerSubscription[]
-  invoices      OwnerInvoice[]
-
-  @@map("plans")
-  @@schema("public")
-}
+// Legacy Plan Model Removed, use the one at EOF
 
 model OwnerSubscription {
   id                String       @id @default(uuid()) @db.Uuid
   owner_id          String       @db.Uuid
-  plan_id           String       @db.Uuid
+  plan_id           String       
   status            String       @default("FREE")
   start_date        DateTime     @db.Date
   end_date          DateTime?    @db.Date
@@ -562,7 +546,7 @@ model OwnerInvoice {
   id              String             @id @default(uuid()) @db.Uuid
   owner_id        String             @db.Uuid
   subscription_id String?            @db.Uuid
-  plan_id         String?            @db.Uuid
+  plan_id         String?            
   invoice_number  String?            @unique
   amount_paise    Int
   status          String             @default("PENDING")
@@ -647,3 +631,91 @@ enum AdvanceLedgerReason {
 
   @@schema("public")
 }
+
+// ─────────────────────────────────────────────────────────
+// Subscription / Billing Models
+// ─────────────────────────────────────────────────────────
+
+model Plan {
+  id              String        @id // e.g., "FREE", "STARTER", "GROWTH", "BUSINESS", "SCALE"
+  name            String
+  price_inr       Int           @default(0)
+  tenant_limit    Int           @default(0)
+  hostel_limit    Int           @default(0)
+  automation      Boolean       @default(false)
+  messaging       Boolean       @default(false)
+  multi_hostel    Boolean       @default(false)
+  analytics       Boolean       @default(false)
+  is_custom       Boolean       @default(false)
+  created_at      DateTime      @default(now()) @db.Timestamptz(6)
+  subscriptions   Subscription[]
+  owner_subscriptions OwnerSubscription[]
+  invoices            OwnerInvoice[]
+
+  @@map("plans")
+  @@schema("public")
+}
+
+model Subscription {
+  id                String         @id @default(uuid()) @db.Uuid
+  owner_id          String         @unique @db.Uuid
+  plan_id           String
+  status            String         @default("TRIAL") // TRIAL, ACTIVE, GRACE, EXPIRED, LIMITED
+  trial_ends_at     DateTime?      @db.Timestamptz(6)
+  start_date        DateTime       @default(now()) @db.Timestamptz(6)
+  next_billing_at   DateTime?      @db.Timestamptz(6)
+  autopay_enabled   Boolean        @default(true)
+  grace_started_at  DateTime?      @db.Timestamptz(6)
+  grace_ends_at     DateTime?      @db.Timestamptz(6)
+  created_at        DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime       @default(now()) @updatedAt @db.Timestamptz(6)
+  plan              Plan           @relation(fields: [plan_id], references: [id])
+  autopay_attempts  AutopayAttempt[]
+
+  @@map("subscriptions")
+  @@schema("public")
+}
+
+model MessagePack {
+  id                String         @id @default(uuid()) @db.Uuid
+  owner_id          String         @db.Uuid
+  purchased_at      DateTime       @default(now()) @db.Timestamptz(6)
+  messages_total    Int
+  messages_remaining Int
+  price_inr         Int
+  notes             String?
+
+  @@map("message_packs")
+  @@schema("public")
+}
+
+model MessageLog {
+  id                String         @id @default(uuid()) @db.Uuid
+  owner_id          String?        @db.Uuid
+  sent_at           DateTime       @default(now()) @db.Timestamptz(6)
+  channel           String?
+  template          String?
+  recipient         String?
+  success           Boolean?
+  status            String         @default("SUCCESS")
+  idempotency_key   String?        @unique
+  pack_id           String?        @db.Uuid
+  deduction         Int            @default(0)
+  provider_response String?
+
+  @@map("message_logs")
+  @@schema("public")
+}
+
+model AutopayAttempt {
+  id                String         @id @default(uuid()) @db.Uuid
+  subscription_id   String         @db.Uuid
+  attempt_at        DateTime       @default(now()) @db.Timestamptz(6)
+  result            String
+  provider_response String?
+  subscription      Subscription   @relation(fields: [subscription_id], references: [id], onDelete: Cascade)
+
+  @@map("autopay_attempts")
+  @@schema("public")
+}
+

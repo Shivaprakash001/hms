@@ -1,6 +1,7 @@
 import { prisma } from "../db";
 import { eventSystem } from "../events";
 import { EmailService } from "./email-service";
+import { messageService } from "./message-service";
 import { eventLog } from "./event-log-service";
 import { resolveRules, calculateSingleRuleFee } from "../billing/engine";
 import { resolvePreferences } from "../preferences";
@@ -283,6 +284,16 @@ export class ReminderService {
         await EmailService.sendReminderBatch(mailData);
       } catch (err) {
         console.error(`[NOTIFY] Email failed for ${tenant.id}:`, err);
+      }
+    }
+
+    // 3️⃣ WhatsApp/SMS Notification (if enabled) — deduct quota
+    if ((config.reminder_whatsapp ?? false) && tenant.profile?.phone) {
+      try {
+        await messageService.sendMessage(tenant.owner_id, "WHATSAPP", tenant.profile.phone, type, `Reminder: ${mailData.type} for ${mailData.rentMonth}`);
+      } catch (err: any) {
+        // If message quota exhausted, log and trigger owner notification elsewhere
+        console.warn(`[NOTIFY] WhatsApp/SMS send failed for ${tenant.id}:`, err?.message || err);
       }
     }
 

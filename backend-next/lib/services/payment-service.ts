@@ -1351,15 +1351,26 @@ export class PaymentService {
       throw new Error(`BAD_REQUEST: Webhook provider ${providerStr} does not match attempt provider ${attempt.provider}`);
     }
 
-    // Idempotency check
-    if (attempt.status !== "PENDING") {
-      logger.info("payments.webhook.attempt_already_processed", {
+    // Idempotency check with ATOMIC LOCKING
+    const lockResult = await prisma.paymentAttempt.updateMany({
+      where: { 
+        id: attempt.id, 
+        status: { in: ["PENDING", "CREATED"] } 
+      },
+      data: { 
+        status: "PENDING_VERIFICATION",
+        updated_at: new Date()
+      }
+    });
+
+    if (lockResult.count === 0) {
+      logger.info("payments.webhook.attempt_already_processed_or_locked", {
         ...requestMeta,
         attemptId: attempt.id,
         status: attempt.status,
       });
       incrementWebhook(true); // Already processed, not an error
-      return { success: true, message: `Attempt already in ${attempt.status} state` };
+      return { success: true, message: `Attempt already processed or locked` };
     }
 
     logger.info("payments.webhook.attempt_matched", {

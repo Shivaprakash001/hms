@@ -1,4 +1,5 @@
 import { prisma } from "../db";
+import { planEnforcementService } from "./plan-enforcement-service";
 
 
 export class PropertyService {
@@ -92,6 +93,9 @@ export class PropertyService {
         data: mapped,
       });
     } else {
+      // Enforcement: creating a new hostel requires active subscription and available hostel slots
+      await planEnforcementService.assertSubscriptionActive(userId);
+      await planEnforcementService.assertHostelLimit(userId);
       await prisma.hostel.create({
         data: {
           owner_id: userId,

@@ -4,6 +4,7 @@ import { invalidateDashboardCache } from "../cache/dashboard-cache";
 import { eventLog } from "./event-log-service";
 import { resolvePreferences } from "../preferences";
 import { getDayInTimezone } from "../timezone";
+import { planEnforcementService } from "./plan-enforcement-service";
 
 /**
  * 🏦 Rent Generation Service
@@ -119,6 +120,15 @@ export class RentGenerationService {
         const ownerId = alloc.tenant.owner_id;
         if (!ownerId) {
           console.warn(`[RENT] Skipping allocation ${alloc.id} — missing owner_id`);
+          skipped++;
+          continue;
+        }
+
+        // 0️⃣ Enforcement: Check plan allows automation feature
+        try {
+          await planEnforcementService.assertFeature(ownerId, "automation");
+        } catch (err: any) {
+          console.warn(`[RENT] Skipping owner ${ownerId} — automation feature not available: ${err?.message}`);
           skipped++;
           continue;
         }
