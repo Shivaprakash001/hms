@@ -43,6 +43,24 @@ export class PhonePeProvider extends PaymentProvider {
     return process.env.PHONEPE_CLIENT_VERSION || "1";
   }
 
+  // ─── Credential guard ────────────────────────────────────────
+  private assertCredentials() {
+    if (!this.clientId || !this.clientSecret) {
+      throw new Error(
+        "PhonePe credentials not configured. " +
+        "Set PHONEPE_CLIENT_ID, PHONEPE_CLIENT_SECRET, and PHONEPE_ENV=production " +
+        "in your Vercel environment variables."
+      );
+    }
+    if (!this.isProduction) {
+      console.warn(
+        "[PhonePe] ⚠️  PHONEPE_ENV is not 'production'. " +
+        "Using sandbox endpoint — real PhonePe accounts cannot complete sandbox payments. " +
+        "Set PHONEPE_ENV=production for live payments."
+      );
+    }
+  }
+
   // ─── OAuth Token ───────────────────────────────────────────────
   private cachedToken: { token: string; expiresAt: number } | null = null;
 
@@ -84,6 +102,7 @@ export class PhonePeProvider extends PaymentProvider {
 
   // ─── Create Order ──────────────────────────────────────────────
   async createIntent(data: any): Promise<CreateIntentResult> {
+    this.assertCredentials();
     const accessToken = await this.getAccessToken();
     const amountInPaise = Math.round(data.amount * 100);
 
@@ -100,9 +119,18 @@ export class PhonePeProvider extends PaymentProvider {
     // Clean v2 payload — no v1 fields (paymentInstrument, top-level redirectUrl/redirectMode/callbackUrl).
     // Having both paymentInstrument (v1) and paymentFlow (v2) causes the API to ignore paymentFlow
     // and return a minimal response that echoes our redirectUrl instead of a checkout page URL.
+    // merchantUserId: use tenant_id (rent) or invoice_id (billing) from metadata.
+    // data.tenant_id is never set — it lives in data.metadata.
+    const merchantUserId =
+      data.metadata?.tenant_id ||
+      data.metadata?.invoice_id ||
+      "unknown-user";
+
+    console.info("[PhonePe] Environment:", this.isProduction ? "PRODUCTION" : "SANDBOX", "|", this.baseUrl);
+
     const payload: any = {
       merchantOrderId: data.merchant_txn_id,
-      merchantUserId: data.tenant_id || "unknown-tenant",
+      merchantUserId,
       amount: amountInPaise,
       expireAfter: 1800,
       paymentFlow: {
