@@ -51,11 +51,11 @@ jobs:
           hostport="${hp%%/*}"
           host="${hostport%%:*}"
           echo "Resolving IPv4 for: $host"
-          out=$(getent ahostsv4 "$host" 2>/dev/null || true)
-          ipv4=$(awk '{print $1; exit}' <<<"$out")
+          out=$(getent hosts "$host" 2>/dev/null || true)
+          ipv4=$(awk '$1 !~ /:/{print $1; exit}' <<<"$out")
           if [ -z "${ipv4:-}" ]; then
-            out=$(getent hosts "$host" 2>/dev/null || true)
-            ipv4=$(awk '$1 !~ /:/{print $1; exit}' <<<"$out")
+            out=$(getent ahostsv4 "$host" 2>/dev/null || true)
+            ipv4=$(awk '{print $1; exit}' <<<"$out")
           fi
           if [ -z "${ipv4:-}" ]; then echo "❌ Could not resolve IPv4 for $host" >&2; exit 1; fi
           echo "Using IPv4 $ipv4"
