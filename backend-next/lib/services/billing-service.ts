@@ -1,10 +1,10 @@
 import { prisma } from "../db";
 
-const STARTER_FALLBACK = {
-  id: null as string | null,
-  name: "Starter",
-  price_inr: 49900,
-  tenant_limit: 25,
+const FREE_FALLBACK = {
+  id: "FREE" as string | null,
+  name: "Free",
+  price_inr: 0,
+  tenant_limit: 15,
   hostel_limit: 1,
   automation: false,
   messaging: false,
@@ -18,7 +18,7 @@ export class BillingService {
       where: { owner_id: ownerId },
       include: { plan: true },
     });
-    if (!sub) return STARTER_FALLBACK;
+    if (!sub) return FREE_FALLBACK;
     return {
       ...sub.plan,
       subscription_status: sub.status,
@@ -62,7 +62,7 @@ export class BillingService {
       },
     });
 
-    const plan = sub?.plan ?? STARTER_FALLBACK;
+    const plan = sub?.plan ?? FREE_FALLBACK;
 
     return {
       current_plan: {

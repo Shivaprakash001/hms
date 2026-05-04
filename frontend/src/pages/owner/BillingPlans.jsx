@@ -1,209 +1,428 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { CreditCard, Wallet, CalendarDays, CheckCircle2, Clock3 } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import {
+    CreditCard, Users, Building2, CheckCircle2, XCircle,
+    Clock3, CalendarDays, TrendingUp, Loader2, RefreshCw,
+    Zap, MessageSquare, BarChart3, Layout, AlertTriangle, PhoneCall
+} from 'lucide-react';
 import { billingService } from '../../api/services';
+import api from '../../api/axios';
 
-export default function BillingPlans() {
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
-    const [subscription, setSubscription] = useState(null);
-    const [plans, setPlans] = useState([]);
+// Plan tier order — used to determine upgrade vs downgrade
+const PLAN_ORDER = ['FREE', 'STARTER', 'GROWTH', 'BUSINESS', 'SCALE'];
 
-    useEffect(() => {
-        const load = async () => {
-            setLoading(true);
-            setError('');
-            try {
-                const [subData, plansData] = await Promise.all([
-                    billingService.getSubscription(),
-                    billingService.getPlans()
-                ]);
-                setSubscription(subData || null);
-                setPlans(Array.isArray(plansData) ? plansData : []);
-            } catch (e) {
-                const detail = e?.response?.data?.detail;
-                setError(typeof detail === 'string' ? detail : (detail?.message || 'Failed to load billing data'));
-            } finally {
-                setLoading(false);
-            }
-        };
-        load();
-    }, []);
+function limitDisplay(val) {
+    if (val === 0 || val === null || val === undefined) return 'Unlimited';
+    return String(val);
+}
 
-    const currentPlan = subscription?.current_plan || {
-        name: 'Starter',
-        price: 0,
-        currency: 'INR',
-        room_limit: 50,
-        hostel_limit: 1,
-        next_billing_date: null,
+function fmtPrice(plan) {
+    if (!plan) return 'Free';
+    if (plan.is_custom_pricing || plan.id === 'SCALE') return "Let's talk";
+    if (!plan.price || plan.price === 0) return 'Free';
+    return `₹${Number(plan.price).toLocaleString('en-IN')}/mo`;
+}
+
+function fmtDate(d) {
+    if (!d) return 'N/A';
+    return new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function StatusBadge({ status }) {
+    const map = {
+        FREE:     'bg-slate-100 text-slate-600',
+        ACTIVE:   'bg-emerald-100 text-emerald-700',
+        TRIAL:    'bg-blue-100 text-blue-700',
+        GRACE:    'bg-amber-100 text-amber-700',
+        PAST_DUE: 'bg-amber-100 text-amber-700',
+        EXPIRED:  'bg-rose-100 text-rose-700',
+        LIMITED:  'bg-orange-100 text-orange-700',
     };
-
-    const usage = subscription?.usage || {
-        rooms: { used: 0, limit: 50 },
-        tenants: { used: 0, limit: null },
-        storage: { used_mb: 0, limit_mb: 500 },
-        hostels: { used: 1, limit: 1 }
-    };
-
-    const billingHistory = subscription?.billing_history || [];
-    const paymentMethod = subscription?.payment_method || { label: 'No payment method added' };
-    const subscriptionMeta = subscription?.subscription || { status: 'FREE', start_date: null, next_billing_date: null, renewal_required: false };
-
-    const availablePlans = useMemo(() => {
-        if (plans.length > 0) return plans;
-        return [
-            { code: 'STARTER', name: 'Starter', price: 0, currency: 'INR', room_limit: 50, hostel_limit: 1, features: ['1 Hostel', '50 Rooms'] },
-            { code: 'PRO', name: 'Pro', price: 999, currency: 'INR', room_limit: 200, hostel_limit: 3, features: ['3 Hostels', '200 Rooms'] },
-            { code: 'BUSINESS', name: 'Business', price: 2499, currency: 'INR', room_limit: null, hostel_limit: null, features: ['Unlimited Hostels', 'Unlimited Rooms', 'Priority Support'] },
-        ];
-    }, [plans]);
-
-    if (loading) {
-        return <div className="p-6 text-slate-500">Loading billing and plans...</div>;
-    }
-
+    const label = { FREE: 'Free', ACTIVE: 'Active', TRIAL: 'Trial', GRACE: 'Grace Period', PAST_DUE: 'Past Due', EXPIRED: 'Expired', LIMITED: 'Limited' };
+    const s = (status || 'FREE').toUpperCase();
     return (
-        <div className="space-y-6">
-            <div>
-                <h2 className="text-2xl font-bold text-slate-900">Billing & Plans</h2>
-                <p className="text-sm text-slate-500 mt-1">Track plan, usage, and billing readiness for Razorpay launch.</p>
-            </div>
-
-            {error && <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-xl px-4 py-3">{error}</div>}
-
-            <section className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-base font-bold text-slate-900">Current Plan</h3>
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
-                        {currentPlan.name}
-                    </span>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    <Info label="Plan" value={`${currentPlan.name} Plan`} />
-                    <Info label="Price" value={`${symbolFor(currentPlan.currency)}${currentPlan.price} / month`} />
-                    <Info label="Rooms Allowed" value={limitText(currentPlan.room_limit)} />
-                    <Info label="Tenants Allowed" value={'Unlimited'} />
-                    <Info label="Hostels Allowed" value={limitText(currentPlan.hostel_limit)} />
-                    <Info label="Next Billing Date" value={currentPlan.next_billing_date || 'N/A'} />
-                </div>
-                <button className="mt-4 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-semibold opacity-80 cursor-not-allowed">
-                    <CreditCard size={16} /> Upgrade coming soon
-                </button>
-            </section>
-
-            <section className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
-                <h3 className="text-base font-bold text-slate-900 mb-4">Usage Limits</h3>
-                <div className="space-y-4">
-                    <UsageBar label="Rooms Used" used={usage.rooms?.used || 0} limit={usage.rooms?.limit} />
-                    <UsageBar label="Tenants" used={usage.tenants?.used || 0} limit={usage.tenants?.limit} />
-                    <UsageBar label="Hostels" used={usage.hostels?.used || 0} limit={usage.hostels?.limit} />
-                    <UsageBar label="Storage" used={usage.storage?.used_mb || 0} limit={usage.storage?.limit_mb} unit="MB" />
-                </div>
-            </section>
-
-            <section className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
-                <h3 className="text-base font-bold text-slate-900 mb-4">Available Plans</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {availablePlans.map((plan) => (
-                        <div key={plan.code || plan.id} className="border border-slate-200 rounded-xl p-4 bg-slate-50">
-                            <p className="text-sm font-bold text-slate-900">{plan.name}</p>
-                            <p className="text-xl font-extrabold text-slate-900 mt-1">{symbolFor(plan.currency)}{plan.price}<span className="text-xs font-medium text-slate-500">/month</span></p>
-                            <ul className="mt-3 space-y-1.5 text-xs text-slate-600">
-                                <li className="flex items-center gap-1.5"><CheckCircle2 size={14} className="text-emerald-500" /> {limitText(plan.hostel_limit)} Hostels</li>
-                                <li className="flex items-center gap-1.5"><CheckCircle2 size={14} className="text-emerald-500" /> {limitText(plan.room_limit)} Rooms</li>
-                            </ul>
-                            <button className="mt-4 w-full py-2 rounded-lg bg-white border border-slate-200 text-slate-500 text-sm font-semibold cursor-not-allowed">Upgrade coming soon</button>
-                        </div>
-                    ))}
-                </div>
-            </section>
-
-            <section className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
-                <h3 className="text-base font-bold text-slate-900 mb-4">Billing History</h3>
-                {billingHistory.length === 0 ? (
-                    <div className="text-sm text-slate-500">Starter plan active. No paid invoices yet.</div>
-                ) : (
-                    <div className="space-y-2">
-                        {billingHistory.map((item) => (
-                            <div key={item.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-slate-50">
-                                <div>
-                                    <p className="text-sm font-semibold text-slate-900">{item.invoice_number || 'Invoice'}</p>
-                                    <p className="text-xs text-slate-500">{item.billing_month || item.created_at}</p>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-sm font-bold text-slate-900">{symbolFor(item.currency)}{item.amount}</p>
-                                    <p className="text-xs text-slate-500 uppercase">{item.status}</p>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </section>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <section className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
-                    <h3 className="text-base font-bold text-slate-900 mb-3">Payment Method</h3>
-                    <div className="flex items-center gap-2 text-sm text-slate-600">
-                        <Wallet size={16} /> {paymentMethod.label || 'No payment method added'}
-                    </div>
-                    <button className="mt-4 px-4 py-2 rounded-lg border border-slate-200 text-sm font-semibold text-slate-500 cursor-not-allowed">Update payment method (coming soon)</button>
-                </section>
-
-                <section className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
-                    <h3 className="text-base font-bold text-slate-900 mb-3">Subscription Status</h3>
-                    <div className="space-y-2 text-sm text-slate-600">
-                        <p className="flex items-center gap-2"><CheckCircle2 size={16} className="text-emerald-500" /> Status: {subscriptionMeta.status || 'FREE'}</p>
-                        <p className="flex items-center gap-2"><Clock3 size={16} className="text-slate-500" /> Started: {subscriptionMeta.start_date || 'N/A'}</p>
-                        <p className="flex items-center gap-2"><CalendarDays size={16} className="text-slate-500" /> Renewal: {subscriptionMeta.next_billing_date || 'No renewal required'}</p>
-                    </div>
-                </section>
-            </div>
-        </div>
+        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${map[s] || map.FREE}`}>
+            {label[s] || s}
+        </span>
     );
 }
 
-function Info({ label, value }) {
+function FeatureCheck({ enabled }) {
+    return enabled
+        ? <CheckCircle2 size={15} className="text-emerald-500 flex-shrink-0" />
+        : <XCircle size={15} className="text-slate-300 flex-shrink-0" />;
+}
+
+function InfoBox({ label, value, ok }) {
     return (
         <div className="bg-slate-50 border border-slate-100 rounded-xl p-3">
             <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">{label}</p>
-            <p className="text-slate-800 font-semibold mt-1">{value}</p>
+            <p className={`font-semibold mt-1 text-sm ${ok === true ? 'text-emerald-700' : ok === false ? 'text-slate-400' : 'text-slate-800'}`}>
+                {value}
+            </p>
         </div>
     );
 }
 
-function UsageBar({ label, used, limit, unit = '' }) {
-    const percentage = typeof limit === 'number' && limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+function UsageBar({ label, used, limit, Icon }) {
+    const hasLimit = typeof limit === 'number' && limit > 0;
+    const pct = hasLimit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+    const barColor = pct >= 90 ? 'bg-rose-500' : pct >= 75 ? 'bg-amber-400' : 'bg-indigo-500';
     return (
         <div>
-            <div className="flex justify-between text-sm mb-1">
-                <span className="font-semibold text-slate-800">{label}</span>
-                <span className="text-slate-500">{displayUsage(used, limit, unit)}</span>
-            </div>
-            {typeof limit === 'number' && limit > 0 ? (
-                <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
-                    <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${percentage}%` }} />
+            <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-700">
+                    {Icon && <Icon size={14} className="text-slate-400" />}
+                    {label}
                 </div>
-            ) : (
-                <p className="text-xs text-slate-400">Unlimited</p>
-            )}
+                <span className="text-xs text-slate-500">{used} / {hasLimit ? limit : '∞'}</span>
+            </div>
+            <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                {hasLimit
+                    ? <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+                    : <div className="h-full rounded-full bg-emerald-400 opacity-30 w-full" />
+                }
+            </div>
         </div>
     );
 }
 
-function displayUsage(used, limit, unit) {
-    const suffix = unit ? ` ${unit}` : '';
-    if (typeof limit === 'number') return `${used}${suffix} / ${limit}${suffix}`;
-    return `${used}${suffix} / Unlimited`;
+function PlanCard({ plan, isCurrent, isUpgrade, upgrading, onUpgrade }) {
+    const isScale = plan.id === 'SCALE';
+    const isPopular = !!plan.is_popular;
+
+    const features = [
+        { Icon: Building2, label: `${limitDisplay(plan.hostel_limit)} Hostel${plan.hostel_limit === 1 ? '' : 's'}`, ok: true },
+        { Icon: Users,     label: `${limitDisplay(plan.tenant_limit)} Tenants`, ok: true },
+        { Icon: Zap,       label: 'Automation',  ok: plan.automation },
+        { Icon: MessageSquare, label: 'Messaging', ok: plan.messaging },
+        { Icon: Layout,    label: 'Multi-hostel', ok: plan.multi_hostel },
+        { Icon: BarChart3, label: 'Analytics',   ok: plan.analytics },
+    ];
+
+    return (
+        <div className={`relative flex flex-col rounded-2xl border p-5 transition-shadow ${
+            isCurrent
+                ? 'border-indigo-300 bg-indigo-50 ring-2 ring-indigo-200'
+                : isPopular
+                    ? 'border-violet-200 bg-white shadow-lg'
+                    : 'border-slate-200 bg-white hover:shadow-md'
+        }`}>
+            {isCurrent && (
+                <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-white text-[9px] font-bold uppercase tracking-wider px-3 py-0.5 rounded-full whitespace-nowrap">
+                    Current Plan
+                </span>
+            )}
+            {!isCurrent && isPopular && (
+                <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-violet-600 text-white text-[9px] font-bold uppercase tracking-wider px-3 py-0.5 rounded-full">
+                    Popular
+                </span>
+            )}
+
+            <p className="text-sm font-bold text-slate-900">{plan.name}</p>
+            <p className={`text-xl font-extrabold mt-1 ${isScale ? 'text-slate-500 text-base' : 'text-slate-900'}`}>
+                {fmtPrice(plan)}
+            </p>
+            {!isScale && plan.price > 0 && (
+                <p className="text-[10px] text-slate-400">billed monthly</p>
+            )}
+
+            <ul className="mt-4 space-y-2 flex-1">
+                {features.map(f => (
+                    <li key={f.label} className={`flex items-center gap-2 text-xs ${f.ok ? 'text-slate-700' : 'text-slate-400'}`}>
+                        <FeatureCheck enabled={f.ok} />
+                        {f.label}
+                    </li>
+                ))}
+            </ul>
+
+            <div className="mt-5">
+                {isCurrent ? (
+                    <div className="w-full py-2 rounded-xl bg-indigo-100 text-indigo-600 text-sm font-semibold text-center cursor-default">
+                        Current Plan
+                    </div>
+                ) : isScale ? (
+                    <a
+                        href="mailto:hello@trishul.solutions?subject=SCALE%20Plan%20Enquiry"
+                        className="flex items-center justify-center gap-1.5 w-full py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700 transition-colors"
+                    >
+                        <PhoneCall size={13} /> Contact Us
+                    </a>
+                ) : isUpgrade ? (
+                    <button
+                        onClick={() => onUpgrade(plan.id)}
+                        disabled={!!upgrading}
+                        className="w-full py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                    >
+                        {upgrading ? <Loader2 size={14} className="animate-spin" /> : <TrendingUp size={14} />}
+                        {upgrading ? 'Processing…' : 'Upgrade'}
+                    </button>
+                ) : (
+                    <div className="w-full py-2 rounded-xl border border-slate-200 text-slate-400 text-sm font-semibold text-center cursor-not-allowed">
+                        Downgrade
+                    </div>
+                )}
+            </div>
+        </div>
+    );
 }
 
-function limitText(value) {
-    return (typeof value === 'number' && value > 0) ? `${value}` : 'Unlimited';
+function ComparisonTable({ plans, currentPlanId }) {
+    if (!plans.length) return null;
+    const rows = [
+        { label: 'Hostels',      render: p => limitDisplay(p.hostel_limit) },
+        { label: 'Tenants',      render: p => limitDisplay(p.tenant_limit) },
+        { label: 'Automation',   bool: 'automation' },
+        { label: 'Messaging',    bool: 'messaging' },
+        { label: 'Multi-hostel', bool: 'multi_hostel' },
+        { label: 'Analytics',    bool: 'analytics' },
+        { label: 'Add-ons',      bool: 'addons_enabled' },
+    ];
+    return (
+        <div className="overflow-x-auto">
+            <table className="w-full min-w-[480px] text-sm">
+                <thead>
+                    <tr className="border-b border-slate-100">
+                        <th className="text-left py-2 pr-6 text-xs font-bold text-slate-400 uppercase tracking-wide w-32">Feature</th>
+                        {plans.map(p => (
+                            <th key={p.id} className={`py-2 px-3 text-center text-xs font-bold uppercase tracking-wide ${p.id === currentPlanId ? 'text-indigo-700' : 'text-slate-500'}`}>
+                                {p.name}
+                                {p.id === currentPlanId && <span className="ml-1 text-[9px] bg-indigo-100 text-indigo-600 px-1 rounded-full align-middle">you</span>}
+                            </th>
+                        ))}
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                    {rows.map(row => (
+                        <tr key={row.label} className="hover:bg-slate-50/70">
+                            <td className="py-3 pr-6 text-xs font-semibold text-slate-600">{row.label}</td>
+                            {plans.map(p => (
+                                <td key={p.id} className={`py-3 px-3 text-center ${p.id === currentPlanId ? 'bg-indigo-50/40' : ''}`}>
+                                    {row.bool
+                                        ? <div className="flex justify-center"><FeatureCheck enabled={!!p[row.bool]} /></div>
+                                        : <span className="text-xs font-semibold text-slate-700">{row.render(p)}</span>
+                                    }
+                                </td>
+                            ))}
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
 }
 
-function symbolFor(currency) {
-    if (currency === 'INR') return '₹';
-    if (currency === 'USD') return '$';
-    if (currency === 'EUR') return '€';
-    if (currency === 'GBP') return '£';
-    return '₹';
+function BillingHistory({ items }) {
+    if (!items.length) {
+        return <p className="text-sm text-slate-400">No invoices yet. Upgrade to a paid plan to see billing history.</p>;
+    }
+    const statusStyle = {
+        PAID:    'bg-emerald-50 text-emerald-600',
+        PENDING: 'bg-amber-50 text-amber-600',
+        FAILED:  'bg-rose-50 text-rose-600',
+    };
+    return (
+        <div className="space-y-2">
+            {items.map(item => (
+                <div key={item.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors">
+                    <div>
+                        <p className="text-sm font-semibold text-slate-900">{item.invoice_number || 'Invoice'}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">{fmtDate(item.billing_month || item.created_at)}</p>
+                    </div>
+                    <div className="text-right">
+                        <p className="text-sm font-bold text-slate-900">₹{Number(item.amount || 0).toLocaleString('en-IN')}</p>
+                        <span className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full ${statusStyle[item.status] || 'bg-slate-100 text-slate-500'}`}>
+                            {item.status}
+                        </span>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
+export default function BillingPlans() {
+    const [loading, setLoading]       = useState(true);
+    const [error, setError]           = useState('');
+    const [subscription, setSubscription] = useState(null);
+    const [plans, setPlans]           = useState([]);
+    const [upgrading, setUpgrading]   = useState(null);
+    const [upgradeError, setUpgradeError] = useState('');
+
+    const load = async () => {
+        setLoading(true);
+        setError('');
+        try {
+            const [subData, plansData] = await Promise.all([
+                billingService.getSubscription(),
+                billingService.getPlans(),
+            ]);
+            setSubscription(subData || null);
+            setPlans(Array.isArray(plansData) ? plansData : (plansData?.data || []));
+        } catch (e) {
+            setError(e?.response?.data?.error?.message || e?.message || 'Failed to load billing data');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => { load(); }, []);
+
+    const handleUpgrade = async (planId) => {
+        setUpgrading(planId);
+        setUpgradeError('');
+        try {
+            const res = await api.post('/billing/upgrade', { plan_id: planId });
+            const d = res.data?.data || res.data;
+            const url = d?.payment?.checkout_url || d?.payment?.upi_intent_url;
+            if (url) {
+                window.location.href = url;
+            } else {
+                setUpgradeError('Payment provider returned no checkout URL. Check PhonePe configuration in Vercel.');
+            }
+        } catch (e) {
+            setUpgradeError(e?.response?.data?.error?.message || e?.message || 'Upgrade failed. Please try again.');
+        } finally {
+            setUpgrading(null);
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center p-16">
+                <Loader2 className="animate-spin text-indigo-500 mr-3" size={28} />
+                <span className="text-slate-500 text-sm">Loading billing data…</span>
+            </div>
+        );
+    }
+
+    const currentPlan  = subscription?.current_plan || {};
+    const currentPlanId = currentPlan.id || 'FREE';
+    const currentPlanIndex = PLAN_ORDER.indexOf(currentPlanId);
+    const usage        = subscription?.usage || { tenants: { used: 0, limit: 15 }, hostels: { used: 0, limit: 1 } };
+    const subMeta      = subscription?.subscription || { status: 'FREE' };
+    const history      = subscription?.billing_history || [];
+
+    return (
+        <div className="space-y-6 max-w-6xl">
+
+            {/* Header */}
+            <div>
+                <h2 className="text-2xl font-bold text-slate-900">Billing & Plans</h2>
+                <p className="text-sm text-slate-500 mt-1">Manage your subscription, usage limits, and payment history.</p>
+            </div>
+
+            {error && (
+                <div className="flex items-center gap-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-xl px-4 py-3">
+                    <AlertTriangle size={15} className="flex-shrink-0" />
+                    <span className="flex-1">{error}</span>
+                    <button onClick={load} className="flex items-center gap-1 text-xs font-semibold hover:underline ml-auto">
+                        <RefreshCw size={12} /> Retry
+                    </button>
+                </div>
+            )}
+
+            {upgradeError && (
+                <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 text-amber-700 text-sm rounded-xl px-4 py-3">
+                    <AlertTriangle size={15} className="flex-shrink-0" />
+                    <span>{upgradeError}</span>
+                </div>
+            )}
+
+            {/* Current Plan + Subscription Status */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                <div className="lg:col-span-2 bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
+                    <div className="flex items-center justify-between mb-5">
+                        <h3 className="text-base font-bold text-slate-900">Current Plan</h3>
+                        <StatusBadge status={subMeta.status} />
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        <InfoBox label="Plan"             value={currentPlan.name || 'Free'} />
+                        <InfoBox label="Price"            value={fmtPrice(currentPlan)} />
+                        <InfoBox label="Hostels Allowed"  value={limitDisplay(currentPlan.hostel_limit)} />
+                        <InfoBox label="Tenants Allowed"  value={limitDisplay(currentPlan.tenant_limit)} />
+                        <InfoBox label="Automation"       value={currentPlan.automation ? 'Enabled' : 'Disabled'} ok={currentPlan.automation} />
+                        <InfoBox label="Messaging"        value={currentPlan.messaging   ? 'Enabled' : 'Disabled'} ok={currentPlan.messaging} />
+                    </div>
+                </div>
+
+                <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
+                    <h3 className="text-base font-bold text-slate-900 mb-4">Subscription</h3>
+                    <div className="space-y-3 text-sm">
+                        <div className="flex items-center gap-2">
+                            <CreditCard size={14} className="text-slate-400" />
+                            <span className="text-slate-500 font-medium">Status</span>
+                            <StatusBadge status={subMeta.status} />
+                        </div>
+                        <div className="flex items-center gap-2 text-slate-600">
+                            <Clock3 size={14} className="text-slate-400" />
+                            <span className="text-slate-500 font-medium">Started</span>
+                            <span>{fmtDate(subMeta.start_date)}</span>
+                        </div>
+                        {subMeta.end_date && (
+                            <div className="flex items-center gap-2 text-slate-600">
+                                <CalendarDays size={14} className="text-slate-400" />
+                                <span className="text-slate-500 font-medium">Ends</span>
+                                <span>{fmtDate(subMeta.end_date)}</span>
+                            </div>
+                        )}
+                        {subMeta.renewal_required && (
+                            <div className="mt-2 p-2 bg-amber-50 border border-amber-100 rounded-lg text-xs text-amber-700 flex items-center gap-1.5">
+                                <AlertTriangle size={12} /> Renewal required to maintain access
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Usage */}
+            <section className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
+                <h3 className="text-base font-bold text-slate-900 mb-5">Usage</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <UsageBar label="Tenants" used={usage.tenants?.used || 0} limit={usage.tenants?.limit} Icon={Users} />
+                    <UsageBar label="Hostels"  used={usage.hostels?.used || 0}  limit={usage.hostels?.limit}  Icon={Building2} />
+                </div>
+            </section>
+
+            {/* Available Plans */}
+            {plans.length > 0 && (
+                <section>
+                    <h3 className="text-lg font-bold text-slate-900 mb-4">Available Plans</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                        {plans.map(plan => {
+                            const idx = PLAN_ORDER.indexOf(plan.id);
+                            return (
+                                <PlanCard
+                                    key={plan.id}
+                                    plan={plan}
+                                    isCurrent={plan.id === currentPlanId}
+                                    isUpgrade={idx > currentPlanIndex && idx !== -1}
+                                    upgrading={upgrading === plan.id}
+                                    onUpgrade={handleUpgrade}
+                                />
+                            );
+                        })}
+                    </div>
+                </section>
+            )}
+
+            {/* Feature Comparison */}
+            {plans.length > 0 && (
+                <section className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
+                    <h3 className="text-base font-bold text-slate-900 mb-4">Feature Comparison</h3>
+                    <ComparisonTable plans={plans} currentPlanId={currentPlanId} />
+                </section>
+            )}
+
+            {/* Billing History */}
+            <section className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
+                <h3 className="text-base font-bold text-slate-900 mb-4">Billing History</h3>
+                <BillingHistory items={history} />
+            </section>
+
+        </div>
+    );
 }
