@@ -25,8 +25,16 @@ async function getEffectiveLimits(ownerId: string) {
     throw new Error(`PLAN_LIMIT: FORBIDDEN. No active subscription found for owner. Plan enforcement failed.`);
   }
 
-  if (sub.status === "EXPIRED" || sub.status === "CANCELLED" || sub.status === "LIMITED") {
-    throw new Error(`PLAN_LIMIT: FORBIDDEN. Account in ${sub.status} mode. Upgrade required.`);
+  // Treat ACTIVE subscriptions whose end_date has lapsed as EXPIRED.
+  // The cron reconciler is authoritative, but enforcement must not grant writes
+  // to subscriptions that should have already expired.
+  const effectiveStatus =
+    sub.status === "ACTIVE" && sub.end_date && new Date() > sub.end_date
+      ? "EXPIRED"
+      : sub.status;
+
+  if (effectiveStatus === "EXPIRED" || effectiveStatus === "CANCELLED" || effectiveStatus === "LIMITED") {
+    throw new Error(`PLAN_LIMIT: FORBIDDEN. Account in ${effectiveStatus} mode. Upgrade required.`);
   }
 
   return {

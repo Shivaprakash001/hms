@@ -1007,7 +1007,7 @@ export class PaymentService {
           status,
         });
         return await prisma.paymentAttempt.update({
-          where: { id: attemptId, status: "PENDING" },
+          where: { id: attemptId, status: { in: ["PENDING", "PENDING_VERIFICATION"] } },
           data: { status: status as any, gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null }
         }).catch(() => attempt);
       }
@@ -1136,15 +1136,15 @@ export class PaymentService {
         });
 
         // Mark attempt SUCCESS
-        await tx.paymentAttempt.update({
-          where: { id: attemptId, status: "PENDING" },
+        await tx.paymentAttempt.updateMany({
+          where: { id: attemptId, status: { in: ["PENDING", "PENDING_VERIFICATION"] } },
           data: {
             status: "SUCCESS",
             gateway_txn_id: gatewayTxnId,
             raw_webhook_payload: rawPayload || null,
             confirmed_at: now
           }
-        }).catch(() => {}); // Idempotent: ignore if already SUCCESS
+        });
 
         logger.info("billing.webhook.subscription_activated", {
           ...requestMeta,
@@ -1182,11 +1182,11 @@ export class PaymentService {
     // ──────────────────────────────────────────────────────────────
 
     if (status !== "SUCCESS") {
-      // Atomic status transition — WHERE includes status:PENDING so concurrent webhook
-      // can't double-update. On miss, re-read fresh state rather than returning stale object.
+      // Atomic status transition — WHERE includes PENDING_VERIFICATION (set by webhook mutex)
+      // so concurrent webhook can't double-update. On miss, re-read fresh state.
       try {
         return await prisma.paymentAttempt.update({
-          where: { id: attemptId, status: "PENDING" },
+          where: { id: attemptId, status: { in: ["PENDING", "PENDING_VERIFICATION"] } },
           data: { status: status as any, gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null }
         });
       } catch (e) {
@@ -1194,11 +1194,13 @@ export class PaymentService {
       }
     }
 
-    // Success path - atomic transition
+    // Success path - atomic transition.
+    // WHERE includes PENDING_VERIFICATION because handlePaymentWebhook transitions to
+    // PENDING_VERIFICATION first (as a mutex) before calling this function.
     let updatedAttempt;
     try {
       updatedAttempt = await prisma.paymentAttempt.update({
-        where: { id: attemptId, status: "PENDING" },
+        where: { id: attemptId, status: { in: ["PENDING", "PENDING_VERIFICATION"] } },
         data: { status: "SUCCESS", gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null, confirmed_at: new Date() }
       });
     } catch (e) {
