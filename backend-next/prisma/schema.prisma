@@ -597,11 +597,12 @@ enum PaymentStatus {
 enum AttemptStatus {
   CREATED
   PENDING
+  PENDING_VERIFICATION
+  PROCESSING
   SUCCESS
   FAILED
   EXPIRED
   CANCELLED
-  PENDING_VERIFICATION
 
   @@schema("public")
 }

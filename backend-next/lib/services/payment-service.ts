@@ -68,6 +68,9 @@ export class PaymentService {
         reference_number: data.referenceNumber,
         payment_date: data.paymentDate || new Date(),
         payment_attempt_id: data.paymentAttemptId || null,
+        idempotency_key: data.paymentAttemptId
+          ? `pay:${data.paymentAttemptId}:${data.obligationId}`
+          : null,
       }
     });
 
@@ -968,14 +971,41 @@ export class PaymentService {
     context?: { requestId?: string }
   ) {
     const requestMeta = context?.requestId ? { request_id: context.requestId } : {};
-    // 1. Use atomic update to prevent double-crediting race conditions
+
+    // ── Step 1: Acquire exclusive PROCESSING lock ──────────────────────────────
+    // Atomically claim the attempt before reading or writing anything.
+    // Only PENDING and PENDING_VERIFICATION can transition to PROCESSING:
+    //   PENDING            → still waiting for webhook/verify
+    //   PENDING_VERIFICATION → webhook claimed it, now we finalize
+    // If count === 0 the attempt is already PROCESSING (another caller beat us)
+    // or already terminal (SUCCESS/FAILED/etc.). Re-read and return — no work.
+    const lockResult = await prisma.paymentAttempt.updateMany({
+      where: { id: attemptId, status: { in: ["PENDING", "PENDING_VERIFICATION"] } },
+      data: { status: "PROCESSING" },
+    });
+
+    if (lockResult.count === 0) {
+      const fresh = await prisma.paymentAttempt.findUnique({
+        where: { id: attemptId },
+        include: { payments: true, invoice: true },
+      });
+      if (!fresh) throw new Error("NOT_FOUND: Attempt not found");
+      if (["SUCCESS", "FAILED", "EXPIRED", "CANCELLED"].includes(fresh.status)) {
+        logger.info("payments.finalize.already_terminal", { ...requestMeta, attempt_id: attemptId, status: fresh.status });
+      } else {
+        logger.info("payments.finalize.lock_contention", { ...requestMeta, attempt_id: attemptId, status: fresh.status });
+      }
+      return fresh;
+    }
+
+    logger.info("payments.finalize.lock_acquired", { ...requestMeta, attempt_id: attemptId, incoming_status: status });
+
+    // ── Step 2: Read current state (status = PROCESSING — we own the lock) ─────
     const attempt = await prisma.paymentAttempt.findUnique({
       where: { id: attemptId },
       include: { payments: true, invoice: true }
     });
-
     if (!attempt) throw new Error("NOT_FOUND: Attempt not found");
-    if (attempt.status === "SUCCESS" || attempt.status === "FAILED") return attempt;
 
     // ──────────────────────────────────────────────────────────────
     // 🧾 BILLING PATH: Invoice payment (plan upgrade/renewal)
@@ -990,26 +1020,20 @@ export class PaymentService {
           invoice_id: invoice.id,
           attempt_id: attemptId,
         });
-        if (attempt.status === "PENDING") {
-          await prisma.paymentAttempt.update({
-            where: { id: attemptId, status: "PENDING" },
-            data: { status: "SUCCESS", gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null, confirmed_at: new Date() }
-          }).catch(() => {});
-        }
+        await prisma.paymentAttempt.update({
+          where: { id: attemptId },
+          data: { status: "SUCCESS", gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null, confirmed_at: new Date() }
+        }).catch(() => {});
         return attempt;
       }
 
       // SAFETY 2: Non-SUCCESS statuses → mark attempt but leave invoice PENDING
       if (status !== "SUCCESS") {
-        logger.info("billing.webhook.invoice_not_success", {
-          ...requestMeta,
-          attempt_id: attemptId,
-          status,
-        });
+        logger.info("payments.finalize.billing_non_success", { ...requestMeta, attempt_id: attemptId, status });
         return await prisma.paymentAttempt.update({
-          where: { id: attemptId, status: { in: ["PENDING", "PENDING_VERIFICATION"] } },
+          where: { id: attemptId },
           data: { status: status as any, gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null }
-        }).catch(() => attempt);
+        });
       }
 
       // SAFETY 3: Validate amount match (paisa-safe)
@@ -1135,15 +1159,15 @@ export class PaymentService {
           }
         });
 
-        // Mark attempt SUCCESS
-        await tx.paymentAttempt.updateMany({
-          where: { id: attemptId, status: { in: ["PENDING", "PENDING_VERIFICATION"] } },
+        // Mark attempt SUCCESS — we hold the PROCESSING lock, update by id
+        await tx.paymentAttempt.update({
+          where: { id: attemptId },
           data: {
             status: "SUCCESS",
             gateway_txn_id: gatewayTxnId,
             raw_webhook_payload: rawPayload || null,
-            confirmed_at: now
-          }
+            confirmed_at: now,
+          },
         });
 
         logger.info("billing.webhook.subscription_activated", {
@@ -1182,36 +1206,19 @@ export class PaymentService {
     // ──────────────────────────────────────────────────────────────
 
     if (status !== "SUCCESS") {
-      // Atomic status transition — WHERE includes PENDING_VERIFICATION (set by webhook mutex)
-      // so concurrent webhook can't double-update. On miss, re-read fresh state.
-      try {
-        return await prisma.paymentAttempt.update({
-          where: { id: attemptId, status: { in: ["PENDING", "PENDING_VERIFICATION"] } },
-          data: { status: status as any, gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null }
-        });
-      } catch (e) {
-        return await prisma.paymentAttempt.findUnique({ where: { id: attemptId } });
-      }
+      logger.info("payments.finalize.rent_non_success", { ...requestMeta, attempt_id: attemptId, status });
+      return await prisma.paymentAttempt.update({
+        where: { id: attemptId },
+        data: { status: status as any, gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null },
+      });
     }
 
-    // Success path - atomic transition.
-    // WHERE includes PENDING_VERIFICATION because handlePaymentWebhook transitions to
-    // PENDING_VERIFICATION first (as a mutex) before calling this function.
-    let updatedAttempt;
-    try {
-      updatedAttempt = await prisma.paymentAttempt.update({
-        where: { id: attemptId, status: { in: ["PENDING", "PENDING_VERIFICATION"] } },
-        data: { status: "SUCCESS", gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null, confirmed_at: new Date() }
-      });
-    } catch (e) {
-      logger.warn("payments.finalize.race_mitigated", {
-        ...requestMeta,
-        attempt_id: attemptId,
-      });
-      // Re-read fresh state — returning `attempt` here gives caller stale PENDING status
-      // when webhook has already set it to SUCCESS.
-      return await prisma.paymentAttempt.findUnique({ where: { id: attemptId } });
-    }
+    // We hold the PROCESSING lock — no try/catch or status guard needed.
+    const updatedAttempt = await prisma.paymentAttempt.update({
+      where: { id: attemptId },
+      data: { status: "SUCCESS", gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null, confirmed_at: new Date() },
+    });
+    logger.info("payments.finalize.marked_success", { ...requestMeta, attempt_id: attemptId, gateway_txn_id: gatewayTxnId ?? null });
 
     // Single source of truth: check if payments already exist (RENT path)
     if (attempt.payments.length > 0) {
@@ -1905,6 +1912,56 @@ export class PaymentService {
         ] }
       : {};
 
+    // ── Pass 0: Release stale PROCESSING / PENDING_VERIFICATION locks ──────────
+    // If a server crashed while holding PROCESSING (or while PENDING_VERIFICATION
+    // was set by the webhook handler), the attempt is stuck and no future webhook
+    // will ever pick it up. Recovery SLA: 5 minutes.
+    //
+    //   PENDING_VERIFICATION > 5 min → reset to PENDING
+    //     (webhook verification / provider API call likely crashed before completing)
+    //
+    //   PROCESSING > 5 min, payments already committed → mark SUCCESS
+    //     (the payment TX committed but the status update crashed afterward)
+    //
+    //   PROCESSING > 5 min, no payments → reset to PENDING
+    //     (the payment TX never committed; normal reconciliation will retry)
+    const staleLockCutoff = new Date(now.getTime() - 5 * 60 * 1000);
+
+    const stalePendingVerificationResult = await prisma.paymentAttempt.updateMany({
+      where: { status: "PENDING_VERIFICATION", updated_at: { lt: staleLockCutoff }, ...ownerFilter, ...idFilter },
+      data: { status: "PENDING" },
+    });
+
+    const staleProcessingList = await prisma.paymentAttempt.findMany({
+      where: { status: "PROCESSING", updated_at: { lt: staleLockCutoff }, ...ownerFilter, ...idFilter },
+      include: { payments: { select: { id: true } } },
+    });
+
+    let staleProcessingRecovered = 0;
+    let staleProcessingReset = 0;
+    for (const stale of staleProcessingList) {
+      if ((stale as any).payments.length > 0) {
+        await prisma.paymentAttempt.update({ where: { id: stale.id }, data: { status: "SUCCESS" } }).catch(() => {});
+        staleProcessingRecovered++;
+        logger.warn("payments.reconcile.stale_processing_recovered", {
+          attempt_id: stale.id, merchant_txn_id: stale.merchant_txn_id,
+          payment_count: (stale as any).payments.length,
+        });
+      } else {
+        await prisma.paymentAttempt.update({ where: { id: stale.id }, data: { status: "PENDING" } }).catch(() => {});
+        staleProcessingReset++;
+        logger.warn("payments.reconcile.stale_processing_reset", {
+          attempt_id: stale.id, merchant_txn_id: stale.merchant_txn_id,
+        });
+      }
+    }
+
+    logger.info("payments.reconcile.stale_lock_sweep", {
+      pending_verification_reset: stalePendingVerificationResult.count,
+      processing_recovered: staleProcessingRecovered,
+      processing_reset: staleProcessingReset,
+    });
+
     // ── Pass 1: Auto-expire stale CREATED attempts (no provider call needed) ──
     // CREATED = PaymentAttempt was inserted but gateway call never returned / crashed.
     // 10-minute grace window; anything older is a ghost attempt.
@@ -2003,6 +2060,9 @@ export class PaymentService {
 
     return {
       processed: pending.length,
+      stale_pending_verification_reset: stalePendingVerificationResult.count,
+      stale_processing_recovered: staleProcessingRecovered,
+      stale_processing_reset: staleProcessingReset,
       stale_created_expired: staleCreatedResult.count,
       auto_expired: autoExpireResult.count,
       success,
