@@ -1,11 +1,25 @@
-import React, { useEffect, useState, useMemo } from 'react';
-import { User, Building2, Settings, Save, Loader2, ChevronDown, ChevronRight, Receipt, Bell, CreditCard, Shield, Zap, Globe, IndianRupee, Calendar, Clock, FileText, ToggleLeft, ToggleRight, AlertTriangle, CheckCircle2, Send, Lock, Trash2, Plus } from 'lucide-react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import { User, Building2, Settings, Save, Loader2, ChevronDown, ChevronRight, Receipt, Bell, CreditCard, Shield, Zap, Globe, IndianRupee, Calendar, ToggleLeft, ToggleRight, AlertTriangle, CheckCircle2, Send, Lock, Trash2, Plus, ArrowRight, X, ShieldAlert } from 'lucide-react';
 import { migrateLegacyPrefs, createDefaultRule, simulateBilling, calculateWhatIf } from '../../utils/billing-simulator';
-import { useSearchParams } from 'react-router-dom';
-import { ownerService } from '../../api/services';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { ownerService, billingService, addonService } from '../../api/services';
 import ProfileLogoUploader from '../../components/owner/ProfileLogoUploader';
 import { useAppPreferences } from '../../context/AppPreferencesContext';
 import { formatCurrency, formatDateTime } from '../../utils/format';
+
+// ─── Plan access map ──────────────────────────────────────────────────────────
+const PLAN_ACCESS = {
+    free:     { automation: false },
+    starter:  { automation: true },
+    growth:   { automation: true },
+    business: { automation: true },
+    scale:    { automation: true },
+};
+
+function getPlanAccess(planId) {
+    const key = (planId || 'free').toLowerCase();
+    return PLAN_ACCESS[key] || PLAN_ACCESS.free;
+}
 
 const tabs = [
     { key: 'owner', label: 'Owner Profile', icon: User },
@@ -33,6 +47,11 @@ export default function OwnerProfile() {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const navigate = useNavigate();
+
+    const [currentPlan, setCurrentPlan] = useState('FREE');
+    const [upgradeModal, setUpgradeModal] = useState(null); // { feature, requiredPlan }
+    const [reminderCredits, setReminderCredits] = useState(null); // null = loading
 
     const [ownerForm, setOwnerForm] = useState({ name: '', email: '', phone: '' });
     const [hostelForm, setHostelForm] = useState({
@@ -66,7 +85,17 @@ export default function OwnerProfile() {
         const load = async () => {
             setLoading(true); setError('');
             try {
-                const data = await ownerService.getProfile();
+                const [data, subData, addonData] = await Promise.all([
+                    ownerService.getProfile(),
+                    billingService.getSubscription().catch(() => null),
+                    addonService.getUsage().catch(() => null),
+                ]);
+
+                if (subData?.current_plan?.id) {
+                    setCurrentPlan(subData.current_plan.id);
+                }
+                setReminderCredits(addonData?.reminders_remaining ?? 0);
+
                 const owner = data?.owner || {};
                 const hostel = data?.hostel || {};
                 const prefs = data?.preferences || {};
@@ -174,10 +203,31 @@ export default function OwnerProfile() {
         } finally { setSaving(false); }
     };
 
-    // FIX #2: Global save — sends all preferences in one PATCH
+    // Global save — sends all preferences in one PATCH
     const saveAllPreferences = async () => {
         setSaving(true); setError('');
         try {
+            const planAccess = getPlanAccess(currentPlan);
+
+            // 🔒 Block enabling automation on free plan before hitting the backend
+            if (!planAccess.automation) {
+                const tryingAutomation = (
+                    preferences.auto_generate_rent !== savedPreferences?.auto_generate_rent ||
+                    preferences.auto_apply_late_fees !== savedPreferences?.auto_apply_late_fees ||
+                    preferences.auto_send_reminders !== savedPreferences?.auto_send_reminders
+                ) && (
+                    preferences.auto_generate_rent === true ||
+                    preferences.auto_apply_late_fees === true ||
+                    preferences.auto_send_reminders === true
+                );
+
+                if (tryingAutomation) {
+                    setUpgradeModal({ feature: 'automation', requiredPlan: 'starter' });
+                    setSaving(false);
+                    return;
+                }
+            }
+
             // Sync UPI to hostel too
             if (preferences.upi_id !== (savedPreferences?.upi_id || '')) {
                 await ownerService.updateHostel({ upi_id: preferences.upi_id });
@@ -262,6 +312,7 @@ export default function OwnerProfile() {
     }
 
     return (
+        <>
         <div className="space-y-4 pb-24 max-w-2xl mx-auto">
             {/* Header */}
             <div className="px-1">
@@ -387,8 +438,8 @@ export default function OwnerProfile() {
                                     <div className="px-4 pb-4 pt-1 border-t border-slate-100 space-y-4">
                                         {mod.key === 'billing' && <BillingModule prefs={preferences} updatePref={updatePref} />}
                                         {mod.key === 'payments' && <PaymentsModule prefs={preferences} updatePref={updatePref} />}
-                                        {mod.key === 'notifications' && <NotificationsModule prefs={preferences} updatePref={updatePref} />}
-                                        {mod.key === 'automation' && <AutomationModule prefs={preferences} updatePref={updatePref} />}
+                                        {mod.key === 'notifications' && <NotificationsModule prefs={preferences} updatePref={updatePref} reminderCredits={reminderCredits} />}
+                                        {mod.key === 'automation' && <AutomationModule prefs={preferences} updatePref={updatePref} plan={currentPlan} onLockedClick={(feature, reqPlan) => setUpgradeModal({ feature, requiredPlan: reqPlan })} />}
                                         {mod.key === 'receipts' && <ReceiptsModule prefs={preferences} updatePref={updatePref} />}
                                         {mod.key === 'security' && <SecurityModule prefs={preferences} updatePref={updatePref} />}
                                         {mod.key === 'system' && <SystemModule prefs={preferences} updatePref={updatePref} />}
@@ -417,6 +468,16 @@ export default function OwnerProfile() {
                 </div>
             )}
         </div>
+
+        {/* Upgrade Modal */}
+        {upgradeModal && (
+            <UpgradeModal
+                feature={upgradeModal.feature}
+                requiredPlan={upgradeModal.requiredPlan}
+                onClose={() => setUpgradeModal(null)}
+            />
+        )}
+    </>
     );
 }
 
@@ -713,12 +774,13 @@ function PaymentsModule({ prefs, updatePref }) {
     );
 }
 
-function NotificationsModule({ prefs, updatePref }) {
+function NotificationsModule({ prefs, updatePref, reminderCredits }) {
     const [testSending, setTestSending] = useState(false);
     const [testSent, setTestSent] = useState(false);
-
-    // ELITE #2: Test reminder button — wired to real backend
     const [testResult, setTestResult] = useState('');
+
+    const noCredits = reminderCredits !== null && reminderCredits <= 0;
+
     const sendTestReminder = async () => {
         setTestSending(true);
         setTestResult('');
@@ -727,8 +789,13 @@ function NotificationsModule({ prefs, updatePref }) {
             setTestSent(true);
             setTestResult(res?.message || 'Test reminder sent!');
         } catch (e) {
-            const detail = e?.response?.data?.detail;
-            setTestResult(typeof detail === 'string' ? detail : (detail?.message || 'Failed to send test reminder'));
+            const errData = e?.response?.data;
+            if (errData?.error === 'NO_REMINDERS_LEFT') {
+                setTestResult('No reminder credits left. Buy a pack to continue.');
+            } else {
+                const detail = errData?.detail;
+                setTestResult(typeof detail === 'string' ? detail : (detail?.message || 'Failed to send test reminder'));
+            }
         } finally {
             setTestSending(false);
             setTimeout(() => { setTestSent(false); setTestResult(''); }, 5000);
@@ -737,14 +804,32 @@ function NotificationsModule({ prefs, updatePref }) {
 
     return (
         <div className="space-y-3">
+            {/* Reminder credit status */}
+            {noCredits && (
+                <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-3">
+                    <AlertTriangle size={15} className="text-amber-500 mt-0.5 flex-shrink-0" />
+                    <div>
+                        <p className="text-sm font-semibold text-amber-800">No reminder credits left</p>
+                        <p className="text-xs text-amber-600 mt-0.5">Buy a reminder pack to continue sending reminders to tenants.</p>
+                    </div>
+                </div>
+            )}
+            {reminderCredits !== null && reminderCredits > 0 && (
+                <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3.5 py-2.5">
+                    <CheckCircle2 size={14} className="text-emerald-500 flex-shrink-0" />
+                    <p className="text-xs font-medium text-emerald-700">
+                        <span className="font-bold">{reminderCredits}</span> reminder credit{reminderCredits !== 1 ? 's' : ''} remaining
+                    </p>
+                </div>
+            )}
+
             <Divider label="Channels" />
             <ToggleField label="Email" desc="Send reminders via email" value={prefs.reminder_email}
                 onChange={(v) => updatePref('reminder_email', v)} />
             <ToggleField label="In-App" desc="Show in tenant dashboard" value={prefs.reminder_in_app}
                 onChange={(v) => updatePref('reminder_in_app', v)} />
-            {/* ELITE #3: Feature locking — WhatsApp greyed out with roadmap badge */}
             <div className="relative">
-                <ToggleField label="WhatsApp" desc="Send via WhatsApp" value={false} onChange={() => { }} disabled />
+                <ToggleField label="WhatsApp" desc="Send via WhatsApp" value={false} onChange={() => {}} disabled />
                 <span className="absolute top-2.5 right-12 px-2 py-0.5 rounded-md bg-violet-100 text-violet-600 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
                     <Lock size={9} /> Coming Soon
                 </span>
@@ -764,17 +849,25 @@ function NotificationsModule({ prefs, updatePref }) {
             <ToggleField label="Daily Summary" desc="Daily email with collection stats" value={prefs.owner_daily_summary}
                 onChange={(v) => updatePref('owner_daily_summary', v)} />
 
-            {/* ELITE #2: Test Reminder Button */}
+            {/* Test Reminder — disabled only when credits = 0 */}
             <div className="pt-1 space-y-2">
-                <button type="button" onClick={sendTestReminder} disabled={testSending || testSent}
-                    className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-medium transition-all ${testSent
-                        ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 active:bg-slate-200'
-                        } disabled:opacity-60`}>
+                <button type="button" onClick={sendTestReminder}
+                    disabled={testSending || testSent || noCredits}
+                    title={noCredits ? 'No reminder credits remaining' : ''}
+                    className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-medium transition-all ${
+                        noCredits
+                            ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                            : testSent
+                                ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 active:bg-slate-200'
+                    } disabled:opacity-60`}>
                     {testSending ? <Loader2 size={14} className="animate-spin" />
                         : testSent ? <CheckCircle2 size={14} />
                             : <Send size={14} />}
-                    {testSending ? 'Sending...' : testSent ? (testResult || 'Sent!') : 'Send Test Reminder to Myself'}
+                    {testSending ? 'Sending...'
+                        : testSent ? (testResult || 'Sent!')
+                            : noCredits ? 'No Credits — Buy a Pack'
+                                : 'Send Test Reminder to Myself'}
                 </button>
                 {testResult && !testSent && (
                     <p className="text-xs text-rose-600 text-center">{testResult}</p>
@@ -784,15 +877,55 @@ function NotificationsModule({ prefs, updatePref }) {
     );
 }
 
-function AutomationModule({ prefs, updatePref }) {
+function AutomationModule({ prefs, updatePref, plan, onLockedClick }) {
+    const planAccess = getPlanAccess(plan);
+    const hasAutomation = planAccess.automation;
+
+    const handleLockedToggle = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onLockedClick('automation', 'starter');
+    };
+
     return (
         <div className="space-y-3">
-            <ToggleField label="Auto Generate Rent" desc="Monthly rent entries created automatically"
-                value={prefs.auto_generate_rent} onChange={(v) => updatePref('auto_generate_rent', v)} />
-            <ToggleField label="Auto Apply Late Fees" desc="Late fees added after overdue period"
-                value={prefs.auto_apply_late_fees} onChange={(v) => updatePref('auto_apply_late_fees', v)} />
-            <ToggleField label="Auto Send Reminders" desc="Overdue reminders sent on schedule"
-                value={prefs.auto_send_reminders} onChange={(v) => updatePref('auto_send_reminders', v)} />
+            {!hasAutomation && (
+                <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-3">
+                    <ShieldAlert size={16} className="text-amber-500 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-amber-800">Automation requires Starter plan</p>
+                        <p className="text-xs text-amber-600 mt-0.5">Upgrade to automatically generate rent, apply late fees, and send scheduled reminders.</p>
+                    </div>
+                    <button onClick={() => onLockedClick('automation', 'starter')}
+                        className="flex-shrink-0 text-xs font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 px-2.5 py-1.5 rounded-lg transition whitespace-nowrap">
+                        Upgrade
+                    </button>
+                </div>
+            )}
+            <LockedToggleField
+                label="Auto Generate Rent"
+                desc="Monthly rent entries created automatically"
+                value={prefs.auto_generate_rent}
+                locked={!hasAutomation}
+                onChange={(v) => updatePref('auto_generate_rent', v)}
+                onLockedClick={handleLockedToggle}
+            />
+            <LockedToggleField
+                label="Auto Apply Late Fees"
+                desc="Late fees added after overdue period"
+                value={prefs.auto_apply_late_fees}
+                locked={!hasAutomation}
+                onChange={(v) => updatePref('auto_apply_late_fees', v)}
+                onLockedClick={handleLockedToggle}
+            />
+            <LockedToggleField
+                label="Auto Send Reminders"
+                desc="Overdue reminders sent on schedule"
+                value={prefs.auto_send_reminders}
+                locked={!hasAutomation}
+                onChange={(v) => updatePref('auto_send_reminders', v)}
+                onLockedClick={handleLockedToggle}
+            />
             <SelectField label="Auto-Deactivate After" value={String(prefs.auto_deactivate_days)}
                 options={[
                     { value: '0', label: 'Disabled' }, { value: '30', label: '30 days unpaid' },
@@ -940,6 +1073,96 @@ function SaveButton({ saving }) {
             {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
             {saving ? 'Saving...' : 'Save Changes'}
         </button>
+    );
+}
+
+// ──── LOCKED TOGGLE FIELD (plan-gated) ──────────────────────────────────────
+
+function LockedToggleField({ label, desc, value, locked, onChange, onLockedClick }) {
+    if (locked) {
+        return (
+            <button type="button" onClick={onLockedClick}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left border-slate-200 bg-slate-50/50 cursor-pointer hover:bg-amber-50/40 hover:border-amber-200 transition-all group">
+                <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-500">{label}</p>
+                    {desc && <p className="text-xs text-slate-400 truncate">{desc}</p>}
+                </div>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <span className="text-[10px] font-bold text-amber-600 bg-amber-100 group-hover:bg-amber-200 px-1.5 py-0.5 rounded transition">
+                        STARTER+
+                    </span>
+                    <Lock size={14} className="text-slate-400" />
+                </div>
+            </button>
+        );
+    }
+    return <ToggleField label={label} desc={desc} value={value} onChange={onChange} />;
+}
+
+// ──── UPGRADE MODAL ──────────────────────────────────────────────────────────
+
+const UPGRADE_COPY = {
+    automation: {
+        title: 'Unlock Automation',
+        body: 'Automatically generate rent entries, apply late fees on schedule, and dispatch overdue reminders — all without manual effort.',
+        cta: 'Upgrade to Starter',
+    },
+};
+
+function UpgradeModal({ feature, requiredPlan, onClose }) {
+    const copy = UPGRADE_COPY[feature] || {
+        title: 'Upgrade Required',
+        body: 'This feature requires a higher plan.',
+        cta: `Upgrade to ${requiredPlan}`,
+    };
+
+    const handleBackdrop = (e) => {
+        if (e.target === e.currentTarget) onClose();
+    };
+
+    return (
+        <div
+            className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm px-4 pb-6 sm:pb-0"
+            onClick={handleBackdrop}
+        >
+            <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden">
+                {/* Header */}
+                <div className="bg-gradient-to-br from-indigo-600 to-violet-600 px-6 pt-6 pb-8 relative">
+                    <button onClick={onClose}
+                        className="absolute top-4 right-4 p-1.5 rounded-full bg-white/20 hover:bg-white/30 text-white transition">
+                        <X size={14} />
+                    </button>
+                    <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center mb-3">
+                        <Zap size={24} className="text-white" />
+                    </div>
+                    <h2 className="text-lg font-bold text-white">{copy.title}</h2>
+                    <p className="text-sm text-indigo-200 mt-1 leading-relaxed">{copy.body}</p>
+                </div>
+                {/* Plan badge */}
+                <div className="px-6 py-4 border-b border-slate-100">
+                    <div className="flex items-center gap-3 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3">
+                        <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center">
+                            <Zap size={16} className="text-indigo-600" />
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-400">Required plan</p>
+                            <p className="text-sm font-bold text-indigo-700 capitalize">{requiredPlan} Plan</p>
+                        </div>
+                    </div>
+                </div>
+                {/* Actions */}
+                <div className="px-6 py-4 flex flex-col gap-2">
+                    <a href="/owner/billing"
+                        className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold transition-colors">
+                        {copy.cta} <ArrowRight size={16} />
+                    </a>
+                    <button onClick={onClose}
+                        className="w-full px-4 py-2.5 rounded-xl text-sm font-medium text-slate-500 hover:bg-slate-50 transition">
+                        Maybe later
+                    </button>
+                </div>
+            </div>
+        </div>
     );
 }
 

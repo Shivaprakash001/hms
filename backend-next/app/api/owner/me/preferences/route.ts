@@ -1,14 +1,17 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { propertyService } from "@/lib/services/property-service";
 import { getPreferences } from "@/lib/preferences";
+import { planGate } from "@/lib/services/plan-gate-service";
+
+// Automation-related preference keys
+const AUTOMATION_KEYS = ["auto_generate_rent", "auto_apply_late_fees", "auto_send_reminders"] as const;
 
 /**
  * GET — Return resolved preferences (defaults merged with hostel overrides).
- * Used by the invite form to prefill advance/maintenance defaults.
  */
 export async function GET(req: NextRequest) {
   const session = await getSession(req);
@@ -25,7 +28,13 @@ export async function GET(req: NextRequest) {
 
 /**
  * ⚙️ OWNER PREFERENCES
- * PATCH — Update hostel preferences (currency, rent_cycle, timezone, etc.)
+ * PATCH /api/owner/me/preferences
+ *
+ * Plan enforcement:
+ * - Automation keys (auto_generate_rent, auto_apply_late_fees, auto_send_reminders)
+ *   → blocked with 402 if plan does not include automation (FREE plan)
+ * - Reminder keys (reminder_email, reminder_in_app, reminder_day_*, etc.)
+ *   → NEVER blocked — reminder settings are always editable
  */
 export async function PATCH(req: NextRequest) {
   const session = await getSession(req);
@@ -35,6 +44,25 @@ export async function PATCH(req: NextRequest) {
 
   try {
     const body = await req.json();
+
+    // 🔒 Automation save guard — block enabling automation on FREE plan
+    const isTryingToEnableAutomation = AUTOMATION_KEYS.some(
+      (key) => key in body && body[key] === true
+    );
+
+    if (isTryingToEnableAutomation) {
+      const hasAutomation = await planGate.hasFeature(session.sub, "automation");
+      if (!hasAutomation) {
+        return NextResponse.json({
+          error: "FEATURE_NOT_AVAILABLE",
+          feature: "automation",
+          message: "Upgrade to Starter to enable automation",
+          upgrade_required: true,
+          recommended_plan: "starter",
+        }, { status: 402 });
+      }
+    }
+
     const result = await propertyService.updatePreferences(session.sub, body);
     return apiResponse(result);
   } catch (error: any) {

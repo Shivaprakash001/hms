@@ -155,6 +155,18 @@ export const billingService = {
     }
 };
 
+// --- Addon Service ---
+export const addonService = {
+    getUsage: async () => {
+        const response = await api.get('/addons/usage');
+        return response.data;
+    },
+    buyPack: async (pack) => {
+        const response = await api.post('/addons', { pack });
+        return response.data;
+    }
+};
+
 // --- Tenant Services ---
 export const tenantService = {
     getAll: async (params) => {

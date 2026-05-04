@@ -6,6 +6,7 @@ import { eventLog } from "./event-log-service";
 import { resolveRules, calculateSingleRuleFee } from "../billing/engine";
 import { resolvePreferences } from "../preferences";
 import { formatMonthYear, formatDate } from "../format";
+import { requireAutomation, consumeReminder } from "./plan-gate-service";
 
 export class ReminderService {
 
@@ -54,7 +55,16 @@ export class ReminderService {
       const prefs: any = prefsMap.get(ownerId);
       const config = resolvePreferences(prefs);
 
-      // Automation Guards
+      // 🔒 Plan Gate: Automation features require Starter+ plan
+      // If owner is on FREE plan, skip ALL automation (reminders & late fees)
+      try {
+        await requireAutomation(ownerId);
+      } catch {
+        // Owner does not have automation — skip this obligation entirely
+        continue;
+      }
+
+      // Automation Guards (preference-level — only checked if plan allows)
       const autoReminders = config.auto_send_reminders ?? true;
       const autoLateFees = config.auto_apply_late_fees ?? true;
 
@@ -256,22 +266,16 @@ export class ReminderService {
     const ownerId = tenant.owner_id;
 
     if (ownerId) {
-      const addon = await prisma.addonUsage.findUnique({
-        where: { owner_id: ownerId },
-      });
-      
-      if (!addon || addon.reminders_remaining <= 0) {
-        console.warn(`[NOTIFY] Skipped reminder for ${tenant.id}. No more reminders left in add-on packs.`);
-        return;
+      // 🔒 Deduct one reminder credit (addon-based). Skip notification if exhausted.
+      try {
+        await consumeReminder(ownerId);
+      } catch (creditErr: any) {
+        if (creditErr?.code === "NO_REMINDERS_LEFT") {
+          console.warn(`[NOTIFY] Skipped reminder for ${tenant.id}. No reminder credits remaining.`);
+          return;
+        }
+        throw creditErr;
       }
-
-      await prisma.addonUsage.update({
-        where: { owner_id: ownerId },
-        data: {
-          reminders_remaining: { decrement: 1 },
-          reminders_used: { increment: 1 },
-        },
-      });
     }
 
     const canEmail = config.reminder_email ?? true;
