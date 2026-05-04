@@ -65,22 +65,64 @@ export class EmailService {
     roomNumber: string;
     roomRent: number;
     activationLink: string;
+    advanceDeposit?: number;
+    maintenanceCharge?: number;
+    maintenanceType?: string;
+    joiningDate?: Date;
+    roommates?: string[];
     prefs?: Partial<HostelPreferences>;
   }) {
+    const fmt = (n: number) => formatCurrency(n, data.prefs);
+    const maintLabel = data.maintenanceType === "ONE_TIME" ? "One-time" : "Monthly";
+    const joiningStr = data.joiningDate
+      ? data.joiningDate.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })
+      : "To be confirmed";
+    const roommateStr = data.roommates?.length
+      ? data.roommates.join(", ")
+      : "You'll be the first!";
+
+    // Build financial breakdown rows
+    let financialRows = `
+      <tr><td style="padding:8px 0;color:#64748b">Monthly Rent</td><td style="padding:8px 0;text-align:right;font-weight:600">${fmt(data.roomRent)}</td></tr>`;
+    if (data.advanceDeposit && data.advanceDeposit > 0) {
+      financialRows += `
+      <tr><td style="padding:8px 0;color:#64748b">Security Deposit</td><td style="padding:8px 0;text-align:right;font-weight:600">${fmt(data.advanceDeposit)}<br/><span style="font-weight:normal;font-size:11px;color:#94a3b8">Due on joining</span></td></tr>`;
+    }
+    if (data.maintenanceCharge && data.maintenanceCharge > 0) {
+      financialRows += `
+      <tr><td style="padding:8px 0;color:#64748b">Maintenance (${maintLabel})</td><td style="padding:8px 0;text-align:right;font-weight:600">${fmt(data.maintenanceCharge)}</td></tr>`;
+    }
+
     const subject = `You're invited to join ${data.hostelName}`;
     const html = `
-      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <h2>Welcome to ${data.hostelName}</h2>
-        <p>Hello <strong>${data.tenantName}</strong>,</p>
-        <p>${data.ownerName} has invited you to join the hostel management system.</p>
-        <div style="background: #f4f4f4; padding: 15px; border-radius: 8px;">
-          <p><strong>Room:</strong> ${data.roomNumber}</p>
-          <p><strong>Rent:</strong> ${formatCurrency(data.roomRent, data.prefs)}</p>
+      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;">
+        <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:28px 24px;color:#fff;">
+          <h1 style="margin:0;font-size:22px;">Welcome to ${data.hostelName}</h1>
+          <p style="margin:8px 0 0;opacity:0.9;font-size:14px;">Your new home is ready</p>
         </div>
-        <p style="text-align: center; margin: 30px 0;">
-          <a href="${data.activationLink}" style="background: #6366f1; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">Activate Account</a>
-        </p>
-        <p style="font-size: 12px; color: #666;">This link expires in 48 hours.</p>
+
+        <div style="padding:24px;color:#1e293b;line-height:1.6;">
+          <p>Hello <strong>${data.tenantName}</strong>,</p>
+          <p><strong>${data.ownerName}</strong> has invited you to join. Here are your details:</p>
+
+          <div style="background:#f8fafc;border-radius:12px;padding:16px;margin:20px 0;border:1px solid #e2e8f0;">
+            <table style="width:100%;border-collapse:collapse;font-size:14px;">
+              <tr><td style="padding:8px 0;color:#64748b">Room</td><td style="padding:8px 0;text-align:right;font-weight:600">${data.roomNumber}</td></tr>
+              <tr><td style="padding:8px 0;color:#64748b">Roommates</td><td style="padding:8px 0;text-align:right;font-size:13px">${roommateStr}</td></tr>
+              <tr><td style="padding:8px 0;color:#64748b">Joining Date</td><td style="padding:8px 0;text-align:right;font-weight:600">${joiningStr}</td></tr>
+              <tr><td colspan="2" style="border-top:1px solid #e2e8f0;padding:0;height:8px"></td></tr>
+              ${financialRows}
+            </table>
+          </div>
+
+          <div style="text-align:center;margin:28px 0;">
+            <a href="${data.activationLink}" style="display:inline-block;background:#6366f1;color:#fff;padding:14px 32px;text-decoration:none;border-radius:10px;font-weight:700;font-size:16px;">
+              Activate Your Account
+            </a>
+          </div>
+
+          <p style="font-size:12px;color:#94a3b8;text-align:center;">This link expires in 48 hours. Contact your hostel owner if you need assistance.</p>
+        </div>
       </div>
     `;
     return this.sendEmail(data.toEmail, subject, html);

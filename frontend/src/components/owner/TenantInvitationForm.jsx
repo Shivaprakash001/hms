@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Mail, Home, Loader2, Send, X, CheckCircle2, AlertCircle, Phone, CreditCard, Wallet, Wrench } from 'lucide-react';
+import { User, Mail, Home, Loader2, Send, X, CheckCircle2, AlertCircle, Phone, CreditCard, Wallet, Wrench, Calendar, Settings2 } from 'lucide-react';
 import api from '../../api/axios';
 
 const SkeletonField = () => (
@@ -24,6 +24,8 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
     const [successData, setSuccessData] = useState(null);
     const [advanceAmount, setAdvanceAmount] = useState('');
     const [maintenanceAmount, setMaintenanceAmount] = useState('');
+    const [maintenanceType, setMaintenanceType] = useState('MONTHLY');
+    const [joiningDate, setJoiningDate] = useState(() => new Date().toISOString().split('T')[0]);
     const [prefs, setPrefs] = useState(null);
 
     const isInitializing = loadingRooms || loadingPrefs;
@@ -39,6 +41,8 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
             setRoomId('');
             setAdvanceAmount('');
             setMaintenanceAmount('');
+            setMaintenanceType('MONTHLY');
+            setJoiningDate(new Date().toISOString().split('T')[0]);
             setPrefs(null);
             setLoadingRooms(true);
             setLoadingPrefs(true);
@@ -54,6 +58,7 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
             setPrefs(p);
             setAdvanceAmount(String(p.advance_amount_default ?? 0));
             setMaintenanceAmount(String(p.maintenance_amount_default ?? 0));
+            if (p.maintenance_type) setMaintenanceType(p.maintenance_type);
         } catch {
             setPrefs({ advance_enabled: false, maintenance_enabled: false });
         } finally {
@@ -94,6 +99,8 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                 room_id: roomId,
                 advance_amount:     advanceAmount     ? parseFloat(advanceAmount)     : 0,
                 maintenance_amount: maintenanceAmount ? parseFloat(maintenanceAmount) : 0,
+                maintenance_type:   maintenanceType,
+                joining_date:       joiningDate,
             });
             setSuccessData(response.data);
             if (onInviteSuccess) onInviteSuccess(response.data);
@@ -245,7 +252,19 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                     </div>
                                 </div>
 
-                                {/* Advance Deposit — always visible, prefilled from preferences */}
+                                {/* Joining Date */}
+                                <div className="space-y-2">
+                                    <label className={labelCls}>Joining Date *</label>
+                                    <div className="relative group">
+                                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                            <Calendar className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+                                        </div>
+                                        <input type="date" value={joiningDate} onChange={e => setJoiningDate(e.target.value)} className={inputCls} required />
+                                    </div>
+                                    <p className="text-xs text-slate-400 ml-1">Billing starts from this date. Obligations are generated accordingly.</p>
+                                </div>
+
+                                {/* Advance Deposit */}
                                 <div className="space-y-2">
                                     <label className={labelCls}>
                                         Advance / Security Deposit (₹)
@@ -257,23 +276,39 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                         </div>
                                         <input type="number" min="0" value={advanceAmount} onChange={e => setAdvanceAmount(e.target.value)} className={inputCls} placeholder="0" />
                                     </div>
-                                    <p className="text-xs text-slate-400 ml-1">One-time refundable deposit. Set 0 if not applicable.</p>
+                                    <p className="text-xs text-slate-400 ml-1">One-time refundable deposit. Due on joining date.</p>
                                 </div>
 
-                                {/* Maintenance Charge — always visible, prefilled from preferences */}
-                                <div className="space-y-2">
-                                    <label className={labelCls}>
-                                        Monthly Maintenance (₹)
-                                        {prefs && <span className="ml-1 normal-case font-normal text-indigo-400">from settings</span>}
-                                    </label>
-                                    <div className="relative group">
-                                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                            <Wrench className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+                                {/* Maintenance Charge + Type */}
+                                <div className="grid grid-cols-3 gap-4">
+                                    <div className="col-span-2 space-y-2">
+                                        <label className={labelCls}>
+                                            Maintenance (₹)
+                                            {prefs && <span className="ml-1 normal-case font-normal text-indigo-400">from settings</span>}
+                                        </label>
+                                        <div className="relative group">
+                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                                <Wrench className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+                                            </div>
+                                            <input type="number" min="0" value={maintenanceAmount} onChange={e => setMaintenanceAmount(e.target.value)} className={inputCls} placeholder="0" />
                                         </div>
-                                        <input type="number" min="0" value={maintenanceAmount} onChange={e => setMaintenanceAmount(e.target.value)} className={inputCls} placeholder="0" />
                                     </div>
-                                    <p className="text-xs text-slate-400 ml-1">Monthly maintenance charge. Set 0 if not applicable.</p>
+                                    <div className="space-y-2">
+                                        <label className={labelCls}>Type</label>
+                                        <div className="relative group">
+                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                                <Settings2 className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+                                            </div>
+                                            <select value={maintenanceType} onChange={e => setMaintenanceType(e.target.value)} className={`${inputCls} appearance-none`}>
+                                                <option value="MONTHLY">Monthly</option>
+                                                <option value="ONE_TIME">One-time</option>
+                                            </select>
+                                        </div>
+                                    </div>
                                 </div>
+                                <p className="text-xs text-slate-400 ml-1 -mt-3">
+                                    {maintenanceType === 'MONTHLY' ? 'Added to every rent cycle alongside rent.' : 'Single charge due on joining date.'}
+                                </p>
 
                                 <button
                                     type="submit"

@@ -75,6 +75,8 @@ model Tenant {
   date_of_birth         DateTime?                @db.Date
   advance_deposit       Decimal                  @default(0) @db.Decimal(10, 2)
   maintenance_charge    Decimal                  @default(0) @db.Decimal(10, 2)
+  maintenance_type      String                   @default("MONTHLY")
+  billing_start_date    DateTime?                @db.Date
   permanent_address     String?
   temporary_address     String?
   aadhaar_number        String?                  @unique

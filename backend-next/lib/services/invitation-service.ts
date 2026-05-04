@@ -10,18 +10,22 @@ const logger = getLogger("invitation-service");
 export class InvitationService {
   async inviteTenant(data: any, ownerId: string) {
     const { email, name, phone, room_id, monthly_rent } = data;
-    let advance_amount    = data.advance_amount    as number | undefined;
-    let maintenance_amount = data.maintenance_amount as number | undefined;
 
-    // Backend safety: if frontend omits values, fall back to owner preferences
-    if (advance_amount === undefined || maintenance_amount === undefined) {
-      const { getPreferences } = await import("../preferences");
-      const prefs = await getPreferences(ownerId);
-      if (advance_amount    === undefined) advance_amount    = prefs.advance_amount_default    ?? 0;
-      if (maintenance_amount === undefined) maintenance_amount = prefs.maintenance_amount_default ?? 0;
-    }
+    // ── Resolve financial defaults from owner preferences ────────
+    const { getPreferences } = await import("../preferences");
+    const prefs = await getPreferences(ownerId);
+
+    const advance_amount     = Number(data.advance_amount     ?? prefs.advance_amount_default     ?? 0);
+    const maintenance_amount = Number(data.maintenance_amount ?? prefs.maintenance_amount_default ?? 0);
+    const maintenance_type   = data.maintenance_type || prefs.maintenance_type || "MONTHLY";
+
+    // ── Resolve joining date + billing start ─────────────────────
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const joiningDate = data.joining_date ? new Date(data.joining_date) : today;
+    const billingStartDate = joiningDate > today ? joiningDate : today;
+
     const normalizedEmail = String(email || "").trim().toLowerCase();
-
     logger.info(`Starting invitation process for email: ${normalizedEmail} by owner: ${ownerId}`);
 
     // 1. Duplicate check
@@ -30,7 +34,6 @@ export class InvitationService {
       include: { tenant_details: true },
     });
     if (existingProfile) {
-      // If a tenant is still invited, treat repeated invite as a resend action.
       if (
         existingProfile.role === "TENANT" &&
         existingProfile.owner_id === ownerId &&
@@ -38,13 +41,9 @@ export class InvitationService {
       ) {
         logger.info(`Existing INVITED tenant found for ${normalizedEmail}; converting invite to resend.`);
         return this.resendInvitation(normalizedEmail, { id: ownerId, role: "OWNER" }, {
-          name,
-          phone,
-          room_id,
-          monthly_rent,
+          name, phone, room_id, monthly_rent,
         });
       }
-
       logger.warn(`Attempted to invite existing email: ${normalizedEmail}`);
       throw new Error("ALREADY_EXISTS: User with this email already exists");
     }
@@ -52,36 +51,40 @@ export class InvitationService {
     // 2. Room and Owner check
     const room = await prisma.room.findUnique({
       where: { id: room_id },
-      include: { hostel: true },
+      include: {
+        hostel: true,
+        allocations: {
+          where: { is_active: true },
+          include: { tenant: { include: { profile: { select: { name: true } } } } },
+        },
+      },
     });
-    if (!room) {
-      logger.error(`Room not found for id: ${room_id}`);
-      throw new Error("NOT_FOUND: Target room not found");
-    }
-    if (!room.hostel) {
-      logger.error(`Hostel not found for room id: ${room_id}`);
-      throw new Error("NOT_FOUND: Associated hostel not found");
-    }
+    if (!room) throw new Error("NOT_FOUND: Target room not found");
+    if (!room.hostel) throw new Error("NOT_FOUND: Associated hostel not found");
 
     const owner = await prisma.profile.findUnique({ where: { id: ownerId } });
-    if (!owner) {
-      logger.error(`Owner not found for id: ${ownerId}`);
-      throw new Error("NOT_FOUND: Owner profile not found");
-    }
+    if (!owner) throw new Error("NOT_FOUND: Owner profile not found");
+
+    // Roommate names for the invite email
+    const roommates = (room.allocations || [])
+      .map((a: any) => a.tenant?.profile?.name)
+      .filter(Boolean) as string[];
 
     // 3. Generate Token (48h)
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
 
-    // 4. Create Profile + Tenant + Allocation atomically
-    const { profile: newProfile, tenant: newTenant } = await prisma.$transaction(async (tx) => {
+    // 4. Atomic: Profile + Tenant + Allocation + Initial Obligations
+    const { obligationEngine } = await import("./obligation-engine");
+
+    const { profile: newProfile, tenant: newTenant, obligations } = await prisma.$transaction(async (tx) => {
       const profile = await tx.profile.create({
         data: {
           email: normalizedEmail,
           name,
           phone,
           role: "TENANT",
-          is_active: false, // Tenant remains inactive until activation
+          is_active: false,
           owner_id: ownerId,
           invitation_token: token,
           invitation_expires_at: expiresAt,
@@ -94,27 +97,39 @@ export class InvitationService {
           profile_id: profile.id,
           owner_id: ownerId,
           monthly_rent: Number(monthly_rent),
-          joined_on: new Date(),
+          joined_on: joiningDate,
+          billing_start_date: billingStartDate,
           status: "INVITED",
-          advance_deposit:    Number(advance_amount    ?? 0),
-          maintenance_charge: Number(maintenance_amount ?? 0),
+          advance_deposit:    advance_amount,
+          maintenance_charge: maintenance_amount,
+          maintenance_type,
         } as any,
       });
 
-      // Reserve/track room assignment for invited tenant so resend + lifecycle remain consistent.
-      await tx.roomAllocation.create({
+      const allocation = await tx.roomAllocation.create({
         data: {
           tenant_id: tenant.id,
           room_id,
-          start_date: new Date(),
+          start_date: joiningDate,
           is_active: true,
         },
       });
 
-      return { profile, tenant };
+      // ── Financial obligations (ADVANCE + one-time MAINTENANCE) ──
+      const created = await obligationEngine.createInitialObligations(tx, {
+        tenantId: tenant.id,
+        allocationId: allocation.id,
+        ownerId,
+        joiningDate,
+        advanceDeposit: advance_amount,
+        maintenanceCharge: maintenance_amount,
+        maintenanceType: maintenance_type,
+      });
+
+      return { profile, tenant, obligations: created };
     });
 
-    logger.info(`Successfully created profile ${newProfile.id} and tenant record ${newTenant.id} with status INVITED`);
+    logger.info(`Created profile ${newProfile.id}, tenant ${newTenant.id} [INVITED], obligations: [${obligations.join(", ") || "none"}]`);
 
     // 5. Log Activity
     await eventSystem.trigger("tenant_created", {
@@ -124,11 +139,10 @@ export class InvitationService {
       creator_id: ownerId,
     });
 
-    // 6. Prepare and Send Email
+    // 6. Send enhanced invitation email
     const baseUrl = process.env.NEXT_PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || "http://localhost:3000";
     const activationLink = `${baseUrl}/activate?token=${token}`;
 
-    logger.info(`Attempting to send invitation email to ${normalizedEmail}`);
     const emailResult = await EmailService.sendInvitation({
       toEmail: normalizedEmail,
       tenantName: name,
@@ -137,6 +151,12 @@ export class InvitationService {
       roomNumber: room.room_no,
       roomRent: Number(monthly_rent),
       activationLink,
+      advanceDeposit: advance_amount,
+      maintenanceCharge: maintenance_amount,
+      maintenanceType: maintenance_type,
+      joiningDate,
+      roommates,
+      prefs,
     });
     if (!emailResult.sent) {
       logger.error(`Failed to send invitation email to ${normalizedEmail}: ${String(emailResult.error || "unknown")}`);
@@ -147,8 +167,9 @@ export class InvitationService {
     return {
       tenant_id: newTenant.id,
       email: normalizedEmail,
-      activation_link: activationLink, // For dev/testing purposes
+      activation_link: activationLink,
       action: "INVITED",
+      obligations,
     };
   }
 

@@ -39,6 +39,7 @@ export interface HostelPreferences {
   // Maintenance
   maintenance_enabled: boolean;
   maintenance_amount_default: number;
+  maintenance_type: string;  // "MONTHLY" | "ONE_TIME"
 
   // Notifications
   reminder_email: boolean;
@@ -97,6 +98,7 @@ const DEFAULTS: HostelPreferences = {
 
   maintenance_enabled: false,
   maintenance_amount_default: 0,
+  maintenance_type: "MONTHLY",
 
   reminder_email: true,
   reminder_in_app: true,

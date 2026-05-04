@@ -88,7 +88,7 @@ export class RentGenerationService {
         where: whereClause,
         include: {
           tenant: {
-            select: { id: true, monthly_rent: true, owner_id: true }
+            select: { id: true, monthly_rent: true, owner_id: true, maintenance_charge: true, maintenance_type: true }
           },
           room: {
             select: { base_rent: true }
@@ -170,7 +170,7 @@ export class RentGenerationService {
         }
 
         try {
-          // Idempotency check: Guard against duplicate rent for the same tenant & month
+          // ── RENT obligation ──────────────────────────────────────
           const existingRent = await prisma.rentObligation.findFirst({
             where: {
               tenant_id: alloc.tenant.id,
@@ -182,26 +182,53 @@ export class RentGenerationService {
           if (existingRent) {
             console.info(`[RENT] Already generated for tenant ${alloc.tenant.id}, month ${rentMonth.toISOString()}`);
             skipped++;
-            continue;
+          } else {
+            await prisma.rentObligation.create({
+              data: {
+                tenant_id: alloc.tenant.id,
+                allocation_id: alloc.id,
+                owner_id: alloc.tenant.owner_id,
+                rent_month: rentMonth,
+                amount: rentAmount,
+                total_amount: rentAmount,
+                due_date: tenantDueDate,
+                status: "PENDING"
+              }
+            });
+            created++;
           }
 
-          await prisma.rentObligation.create({
-            data: {
-              tenant_id: alloc.tenant.id,
-              allocation_id: alloc.id,
-              owner_id: alloc.tenant.owner_id,
-              rent_month: rentMonth,
-              amount: rentAmount,
-              total_amount: rentAmount,
-              due_date: tenantDueDate,
-              status: "PENDING"
+          // ── MONTHLY MAINTENANCE obligation ───────────────────────
+          const maintAmount = Number((alloc.tenant as any).maintenance_charge) || 0;
+          const maintType   = (alloc.tenant as any).maintenance_type || "MONTHLY";
+          if (maintAmount > 0 && maintType === "MONTHLY") {
+            const existingMaint = await prisma.rentObligation.findFirst({
+              where: {
+                tenant_id: alloc.tenant.id,
+                rent_month: rentMonth,
+                obligation_type: "MAINTENANCE"
+              }
+            });
+            if (!existingMaint) {
+              await prisma.rentObligation.create({
+                data: {
+                  tenant_id: alloc.tenant.id,
+                  allocation_id: alloc.id,
+                  owner_id: alloc.tenant.owner_id,
+                  rent_month: rentMonth,
+                  amount: maintAmount,
+                  total_amount: maintAmount,
+                  due_date: tenantDueDate,
+                  status: "PENDING",
+                  obligation_type: "MAINTENANCE",
+                }
+              });
+              created++;
             }
-          });
-          created++;
+          }
         } catch (err: any) {
           if (err?.code === "P2002") {
-            // Unique constraint — already generated, idempotent skip
-            console.info(`[RENT] Already generated for allocation ${alloc.id}, month ${rentMonth.toISOString()}`);
+            console.info(`[RENT] Idempotent skip for allocation ${alloc.id}, month ${rentMonth.toISOString()}`);
             skipped++;
           } else {
             console.error(`[RENT] Failed for allocation ${alloc.id}:`, err.message);
