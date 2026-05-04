@@ -51,9 +51,11 @@ jobs:
           hostport="${hp%%/*}"
           host="${hostport%%:*}"
           echo "Resolving IPv4 for: $host"
-          ipv4=$(getent ahostsv4 "$host" | awk '{print $1; exit}')
+          out=$(getent ahostsv4 "$host" 2>/dev/null || true)
+          ipv4=$(awk '{print $1; exit}' <<<"$out")
           if [ -z "${ipv4:-}" ]; then
-            ipv4=$(getent hosts "$host" | awk '$1 !~ /:/{print $1; exit}')
+            out=$(getent hosts "$host" 2>/dev/null || true)
+            ipv4=$(awk '$1 !~ /:/{print $1; exit}' <<<"$out")
           fi
           if [ -z "${ipv4:-}" ]; then echo "❌ Could not resolve IPv4 for $host" >&2; exit 1; fi
           echo "Using IPv4 $ipv4"
@@ -80,16 +82,17 @@ jobs:
           hp="${DIRECT_URL#*@}"
           hostport="${hp%%/*}"
           host="${hostport%%:*}"
-          ipv4=$(getent ahostsv4 "$host" | awk '{print $1; exit}')
+          out=$(getent ahostsv4 "$host" 2>/dev/null || true)
+          ipv4=$(awk '{print $1; exit}' <<<"$out")
           if [ -z "${ipv4:-}" ]; then
-            ipv4=$(getent hosts "$host" | awk '$1 !~ /:/{print $1; exit}')
+            out=$(getent hosts "$host" 2>/dev/null || true)
+            ipv4=$(awk '$1 !~ /:/{print $1; exit}' <<<"$out")
           fi
           if [ -z "${ipv4:-}" ]; then echo "❌ Could not resolve IPv4 for $host" >&2; exit 1; fi
           echo "Using IPv4 $ipv4 for pg_dump (monthly)"
-          up="${DIRECT_URL#postgresql://}"; up="${up%@*}"
-          dbn="${DIRECT_URL##*/}"; dbn="${dbn%%\?*}"
-          IP_DSN="postgresql://${up}@${ipv4}:5432/${dbn}?sslmode=require"
-          pg_dump "$IP_DSN" \
+          sep=$( [[ "$DIRECT_URL" == *\?* ]] && echo '&' || echo '?' )
+          HOSTADDR_DSN="${DIRECT_URL}${sep}hostaddr=${ipv4}"
+          pg_dump "$HOSTADDR_DSN" \
             --no-owner \
             --no-privileges \
             --clean \
@@ -106,16 +109,17 @@ jobs:
           hp="${DIRECT_URL#*@}"
           hostport="${hp%%/*}"
           host="${hostport%%:*}"
-          ipv4=$(getent ahostsv4 "$host" | awk '{print $1; exit}')
+          out=$(getent ahostsv4 "$host" 2>/dev/null || true)
+          ipv4=$(awk '{print $1; exit}' <<<"$out")
           if [ -z "${ipv4:-}" ]; then
-            ipv4=$(getent hosts "$host" | awk '$1 !~ /:/{print $1; exit}')
+            out=$(getent hosts "$host" 2>/dev/null || true)
+            ipv4=$(awk '$1 !~ /:/{print $1; exit}' <<<"$out")
           fi
           if [ -z "${ipv4:-}" ]; then echo "❌ Could not resolve IPv4 for $host" >&2; exit 1; fi
           echo "Using IPv4 $ipv4 for pg_dump (monthly SQL)"
-          up="${DIRECT_URL#postgresql://}"; up="${up%@*}"
-          dbn="${DIRECT_URL##*/}"; dbn="${dbn%%\?*}"
-          IP_DSN="postgresql://${up}@${ipv4}:5432/${dbn}?sslmode=require"
-          pg_dump "$IP_DSN" \
+          sep=$( [[ "$DIRECT_URL" == *\?* ]] && echo '&' || echo '?' )
+          HOSTADDR_DSN="${DIRECT_URL}${sep}hostaddr=${ipv4}"
+          pg_dump "$HOSTADDR_DSN" \
             --no-owner \
             --no-privileges \
             --clean \
@@ -193,9 +197,11 @@ jobs:
           hostport="${hp%%/*}"
           host="${hostport%%:*}"
           echo "Resolving IPv4 for: $host"
-          ipv4=$(getent ahostsv4 "$host" | awk '{print $1; exit}')
+          out=$(getent ahostsv4 "$host" 2>/dev/null || true)
+          ipv4=$(awk '{print $1; exit}' <<<"$out")
           if [ -z "${ipv4:-}" ]; then
-            ipv4=$(getent hosts "$host" | awk '$1 !~ /:/{print $1; exit}')
+            out=$(getent hosts "$host" 2>/dev/null || true)
+            ipv4=$(awk '$1 !~ /:/{print $1; exit}' <<<"$out")
           fi
           if [ -z "${ipv4:-}" ]; then echo "❌ Could not resolve IPv4 for $host" >&2; exit 1; fi
           echo "Using IPv4 $ipv4"
@@ -229,17 +235,18 @@ jobs:
           echo "Resolving IPv4 and testing DB connectivity (no secrets logged)..."
           # Resolve hostname -> IPv4
           host="${hostport%%:*}"
-          ipv4=$(getent ahostsv4 "$host" | awk '{print $1; exit}')
+          out=$(getent ahostsv4 "$host" 2>/dev/null || true)
+          ipv4=$(awk '{print $1; exit}' <<<"$out")
           if [ -z "${ipv4:-}" ]; then
-            ipv4=$(getent hosts "$host" | awk '$1 !~ /:/{print $1; exit}')
+            out=$(getent hosts "$host" 2>/dev/null || true)
+            ipv4=$(awk '$1 !~ /:/{print $1; exit}' <<<"$out")
           fi
           if [ -z "${ipv4:-}" ]; then echo "❌ Could not resolve IPv4 for $host" >&2; exit 1; fi
           echo "Using IPv4 $ipv4"
-          # Build IP-based DSN: postgresql://USER:PASS@IP:5432/DB?sslmode=require
-          up="${DIRECT_URL#postgresql://}"; up="${up%@*}"
-          dbn="${DIRECT_URL##*/}"; dbn="${dbn%%\?*}"
-          IP_DSN="postgresql://${up}@${ipv4}:5432/${dbn}?sslmode=require"
-          psql "$IP_DSN" -c "select now();" >/dev/null
+          # Build hostname DSN with hostaddr=IPv4 to force IPv4 while keeping LB/TLS semantics
+          sep=$( [[ "$DIRECT_URL" == *\?* ]] && echo '&' || echo '?' )
+          HOSTADDR_DSN="${DIRECT_URL}${sep}hostaddr=${ipv4}"
+          psql "$HOSTADDR_DSN" -c "select now();" >/dev/null
 
       - name: Create backup directory
         run: mkdir -p backups
@@ -249,13 +256,16 @@ jobs:
           set -euo pipefail
           # Build IP-based DSN
           hostport="${DIRECT_URL#*@}"; hostport="${hostport%%/*}"; host="${hostport%%:*}"
-          ipv4=$(getent ahostsv4 "$host" | awk '{print $1; exit}')
-          if [ -z "${ipv4:-}" ]; then ipv4=$(getent hosts "$host" | awk '$1 !~ /:/{print $1; exit}'); fi
+          out=$(getent ahostsv4 "$host" 2>/dev/null || true)
+          ipv4=$(awk '{print $1; exit}' <<<"$out")
+          if [ -z "${ipv4:-}" ]; then
+            out=$(getent hosts "$host" 2>/dev/null || true)
+            ipv4=$(awk '$1 !~ /:/{print $1; exit}' <<<"$out")
+          fi
           if [ -z "${ipv4:-}" ]; then echo "❌ Could not resolve IPv4 for $host" >&2; exit 1; fi
-          up="${DIRECT_URL#postgresql://}"; up="${up%@*}"
-          dbn="${DIRECT_URL##*/}"; dbn="${dbn%%\?*}"
-          IP_DSN="postgresql://${up}@${ipv4}:5432/${dbn}?sslmode=require"
-          pg_dump "$IP_DSN" \
+          sep=$( [[ "$DIRECT_URL" == *\?* ]] && echo '&' || echo '?' )
+          HOSTADDR_DSN="${DIRECT_URL}${sep}hostaddr=${ipv4}"
+          pg_dump "$HOSTADDR_DSN" \
             --no-owner \
             --no-privileges \
             --clean \
@@ -270,13 +280,16 @@ jobs:
           set -euo pipefail
           # Build IP-based DSN
           hostport="${DIRECT_URL#*@}"; hostport="${hostport%%/*}"; host="${hostport%%:*}"
-          ipv4=$(getent ahostsv4 "$host" | awk '{print $1; exit}')
-          if [ -z "${ipv4:-}" ]; then ipv4=$(getent hosts "$host" | awk '$1 !~ /:/{print $1; exit}'); fi
+          out=$(getent ahostsv4 "$host" 2>/dev/null || true)
+          ipv4=$(awk '{print $1; exit}' <<<"$out")
+          if [ -z "${ipv4:-}" ]; then
+            out=$(getent hosts "$host" 2>/dev/null || true)
+            ipv4=$(awk '$1 !~ /:/{print $1; exit}' <<<"$out")
+          fi
           if [ -z "${ipv4:-}" ]; then echo "❌ Could not resolve IPv4 for $host" >&2; exit 1; fi
-          up="${DIRECT_URL#postgresql://}"; up="${up%@*}"
-          dbn="${DIRECT_URL##*/}"; dbn="${dbn%%\?*}"
-          IP_DSN="postgresql://${up}@${ipv4}:5432/${dbn}?sslmode=require"
-          pg_dump "$IP_DSN" \
+          sep=$( [[ "$DIRECT_URL" == *\?* ]] && echo '&' || echo '?' )
+          HOSTADDR_DSN="${DIRECT_URL}${sep}hostaddr=${ipv4}"
+          pg_dump "$HOSTADDR_DSN" \
             --no-owner \
             --no-privileges \
             --clean \
@@ -325,13 +338,16 @@ jobs:
         run: |
           set -euo pipefail
           hp="${DIRECT_URL#*@}"; hostport="${hp%%/*}"; host="${hostport%%:*}"
-          ipv4=$(getent ahostsv4 "$host" | awk '{print $1; exit}')
-          if [ -z "${ipv4:-}" ]; then ipv4=$(getent hosts "$host" | awk '$1 !~ /:/{print $1; exit}'); fi
+          out=$(getent ahostsv4 "$host" 2>/dev/null || true)
+          ipv4=$(awk '{print $1; exit}' <<<"$out")
+          if [ -z "${ipv4:-}" ]; then
+            out=$(getent hosts "$host" 2>/dev/null || true)
+            ipv4=$(awk '$1 !~ /:/{print $1; exit}' <<<"$out")
+          fi
           if [ -z "${ipv4:-}" ]; then echo "❌ Could not resolve IPv4 for $host" >&2; exit 1; fi
-          up="${DIRECT_URL#postgresql://}"; up="${up%@*}"
-          dbn="${DIRECT_URL##*/}"; dbn="${dbn%%\?*}"
-          IP_DSN="postgresql://${up}@${ipv4}:5432/${dbn}?sslmode=require"
-          pg_dump "$IP_DSN" \
+          sep=$( [[ "$DIRECT_URL" == *\?* ]] && echo '&' || echo '?' )
+          HOSTADDR_DSN="${DIRECT_URL}${sep}hostaddr=${ipv4}"
+          pg_dump "$HOSTADDR_DSN" \
             --no-owner \
             --no-privileges \
             --clean \
@@ -348,13 +364,16 @@ jobs:
         run: |
           set -euo pipefail
           hp="${DIRECT_URL#*@}"; hostport="${hp%%/*}"; host="${hostport%%:*}"
-          ipv4=$(getent ahostsv4 "$host" | awk '{print $1; exit}')
-          if [ -z "${ipv4:-}" ]; then ipv4=$(getent hosts "$host" | awk '$1 !~ /:/{print $1; exit}'); fi
+          out=$(getent ahostsv4 "$host" 2>/dev/null || true)
+          ipv4=$(awk '{print $1; exit}' <<<"$out")
+          if [ -z "${ipv4:-}" ]; then
+            out=$(getent hosts "$host" 2>/dev/null || true)
+            ipv4=$(awk '$1 !~ /:/{print $1; exit}' <<<"$out")
+          fi
           if [ -z "${ipv4:-}" ]; then echo "❌ Could not resolve IPv4 for $host" >&2; exit 1; fi
-          up="${DIRECT_URL#postgresql://}"; up="${up%@*}"
-          dbn="${DIRECT_URL##*/}"; dbn="${dbn%%\?*}"
-          IP_DSN="postgresql://${up}@${ipv4}:5432/${dbn}?sslmode=require"
-          psql "$IP_DSN" -c "\COPY (
+          sep=$( [[ "$DIRECT_URL" == *\?* ]] && echo '&' || echo '?' )
+          HOSTADDR_DSN="${DIRECT_URL}${sep}hostaddr=${ipv4}"
+          psql "$HOSTADDR_DSN" -c "\COPY (
             SELECT 
               p.id,
               p.student_id,
@@ -377,13 +396,16 @@ jobs:
         run: |
           set -euo pipefail
           hp="${DIRECT_URL#*@}"; hostport="${hp%%/*}"; host="${hostport%%:*}"
-          ipv4=$(getent ahostsv4 "$host" | awk '{print $1; exit}')
-          if [ -z "${ipv4:-}" ]; then ipv4=$(getent hosts "$host" | awk '$1 !~ /:/{print $1; exit}'); fi
+          out=$(getent ahostsv4 "$host" 2>/dev/null || true)
+          ipv4=$(awk '{print $1; exit}' <<<"$out")
+          if [ -z "${ipv4:-}" ]; then
+            out=$(getent hosts "$host" 2>/dev/null || true)
+            ipv4=$(awk '$1 !~ /:/{print $1; exit}' <<<"$out")
+          fi
           if [ -z "${ipv4:-}" ]; then echo "❌ Could not resolve IPv4 for $host" >&2; exit 1; fi
-          up="${DIRECT_URL#postgresql://}"; up="${up%@*}"
-          dbn="${DIRECT_URL##*/}"; dbn="${dbn%%\?*}"
-          IP_DSN="postgresql://${up}@${ipv4}:5432/${dbn}?sslmode=require"
-          psql "$IP_DSN" -c "\COPY (
+          sep=$( [[ "$DIRECT_URL" == *\?* ]] && echo '&' || echo '?' )
+          HOSTADDR_DSN="${DIRECT_URL}${sep}hostaddr=${ipv4}"
+          psql "$HOSTADDR_DSN" -c "\COPY (
             SELECT * FROM rent_obligations ORDER BY created_at DESC
           ) TO STDOUT WITH CSV HEADER" > backups/finance/rent_obligations_$(date +%F).csv
         env:
@@ -539,16 +561,19 @@ jobs:
           tables=(payments payment_attempts payment_webhook_events rent_obligations profiles students rooms hostels)
           echo "Resolving IPv4 for source and collecting counts..."
           hp="${SOURCE_DB_URL#*@}"; hostport="${hp%%/*}"; host="${hostport%%:*}"
-          ipv4=$(getent ahostsv4 "$host" | awk '{print $1; exit}')
-          if [ -z "${ipv4:-}" ]; then ipv4=$(getent hosts "$host" | awk '$1 !~ /:/{print $1; exit}'); fi
+          out=$(getent ahostsv4 "$host" 2>/dev/null || true)
+          ipv4=$(awk '{print $1; exit}' <<<"$out")
+          if [ -z "${ipv4:-}" ]; then
+            out=$(getent hosts "$host" 2>/dev/null || true)
+            ipv4=$(awk '$1 !~ /:/{print $1; exit}' <<<"$out")
+          fi
           if [ -z "${ipv4:-}" ]; then echo "❌ Could not resolve IPv4 for $host" >&2; exit 1; fi
-          up="${SOURCE_DB_URL#postgresql://}"; up="${up%@*}"
-          dbn="${SOURCE_DB_URL##*/}"; dbn="${dbn%%\?*}"
-          SRC_IP_DSN="postgresql://${up}@${ipv4}:5432/${dbn}?sslmode=require"
-          echo "Collecting counts from source (IPv4 DSN)..."
+          sep=$( [[ "$SOURCE_DB_URL" == *\?* ]] && echo '&' || echo '?' )
+          HOSTADDR_DSN="${SOURCE_DB_URL}${sep}hostaddr=${ipv4}"
+          echo "Collecting counts from source (hostaddr DSN)..."
           : > source_counts.txt
           for t in "${tables[@]}"; do
-            c=$(psql "$SRC_IP_DSN" -At -c "SELECT COUNT(*) FROM $t;" 2>/dev/null || echo "N/A")
+            c=$(psql "$HOSTADDR_DSN" -At -c "SELECT COUNT(*) FROM $t;" 2>/dev/null || echo "N/A")
             echo "$t $c" >> source_counts.txt
           done
           echo "Collecting counts from restore..."
