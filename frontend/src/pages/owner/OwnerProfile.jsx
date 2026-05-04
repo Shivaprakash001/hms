@@ -54,6 +54,7 @@ export default function OwnerProfile() {
     const [upgradeModal, setUpgradeModal] = useState(null); // { feature, requiredPlan }
     const [buyCreditsModal, setBuyCreditsModal] = useState(null); // null | 'empty' | 'low' | 'manual'
     const [reminderCredits, setReminderCredits] = useState(null); // null = loading
+    const [retryToast, setRetryToast] = useState(null); // { action, label } | null
 
     const [ownerForm, setOwnerForm] = useState({ name: '', email: '', phone: '' });
     const [hostelForm, setHostelForm] = useState({
@@ -99,23 +100,23 @@ export default function OwnerProfile() {
                 const credits = addonData?.reminders_remaining ?? 0;
                 setReminderCredits(credits);
 
-                // Auto-open buy modal for returned payment success
+                // Handle return from PhonePe addon payment
                 const params = new URLSearchParams(window.location.search);
                 if (params.get('status') === 'addon_success') {
-                    const addedCredits = params.get('credits');
-                    if (addedCredits) {
-                        // Show success toast-like indicator by refreshing state
-                        // (credits already allocated via webhook)
-                        addonService.getUsage().then(d => setReminderCredits(d?.reminders_remaining ?? 0)).catch(() => {});
-                    }
+                    const addedCredits = parseInt(params.get('credits') || '0', 10);
+                    // Re-fetch fresh balance (webhook may have already credited)
+                    addonService.getUsage().then(d => setReminderCredits(d?.reminders_remaining ?? 0)).catch(() => {});
                     // Clean URL without reload
                     window.history.replaceState({}, '', window.location.pathname);
-                    // Auto-retry pending action
+                    // Show retry toast instead of silent auto-retry (handles network failures gracefully)
                     const pendingAction = sessionStorage.getItem('pending_reminder_action');
-                    if (pendingAction === 'send_test_reminder') {
+                    if (pendingAction) {
                         sessionStorage.removeItem('pending_reminder_action');
-                        // Signal to NotificationsModule via a flag
-                        window.__pendingRetryReminder = true;
+                        setRetryToast({
+                            action: pendingAction,
+                            label: `✅ ${addedCredits} credits added. Click to retry sending reminder.`,
+                        });
+                        setTimeout(() => setRetryToast(null), 8000);
                     }
                 }
 
@@ -505,8 +506,28 @@ export default function OwnerProfile() {
         {buyCreditsModal && (
             <BuyRemindersModal
                 trigger={buyCreditsModal}
+                currentCredits={reminderCredits}
                 onClose={() => setBuyCreditsModal(null)}
             />
+        )}
+
+        {/* Retry toast after payment return */}
+        {retryToast && (
+            <div
+                className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[120] flex items-center gap-3 bg-slate-900 text-white text-sm font-medium px-4 py-3 rounded-2xl shadow-2xl cursor-pointer max-w-xs w-full"
+                onClick={() => {
+                    setRetryToast(null);
+                    if (retryToast.action === 'send_test_reminder') {
+                        window.__pendingRetryReminder = true;
+                    }
+                }}
+            >
+                <span className="flex-1">{retryToast.label}</span>
+                <button onClick={(e) => { e.stopPropagation(); setRetryToast(null); }}
+                    className="text-white/60 hover:text-white transition">
+                    <X size={14} />
+                </button>
+            </div>
         )}
     </>
     );
@@ -812,14 +833,6 @@ function NotificationsModule({ prefs, updatePref, reminderCredits, onBuyCredits,
 
     const noCredits = reminderCredits !== null && reminderCredits <= 0;
     const lowCredits = reminderCredits !== null && reminderCredits > 0 && reminderCredits <= 20;
-
-    // Auto-retry after payment return
-    useEffect(() => {
-        if (window.__pendingRetryReminder && reminderCredits > 0) {
-            window.__pendingRetryReminder = false;
-            sendTestReminder();
-        }
-    }, [reminderCredits]);
 
     const sendTestReminder = async () => {
         setTestSending(true);

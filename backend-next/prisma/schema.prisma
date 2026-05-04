@@ -734,7 +734,21 @@ model AddonUsage {
   owner_id            String  @id @db.Uuid
   reminders_remaining Int     @default(0)
   reminders_used      Int     @default(0)
+  auto_topup          Boolean @default(false)  // auto-buy 200 credits when balance hits 0
 
   @@map("addon_usage")
+  @@schema("public")
+}
+
+model AddonTransaction {
+  id                 String   @id @default(uuid()) @db.Uuid
+  owner_id           String   @db.Uuid
+  payment_attempt_id String?  @db.Uuid
+  pack               String   // "200" | "500"
+  credits_added      Int
+  created_at         DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([owner_id])
+  @@map("addon_transactions")
   @@schema("public")
 }

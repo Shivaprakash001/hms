@@ -1011,38 +1011,58 @@ export class PaymentService {
     // 🎁 ADDON PATH: Reminder pack credit allocation
     // ──────────────────────────────────────────────────────────────
     if ((attempt as any).payment_type === "ADDON") {
+      // Non-success statuses: record and exit
       if (status !== "SUCCESS") {
+        logger.info("addons.webhook.non_success", { ...requestMeta, attempt_id: attemptId, status });
         return await prisma.paymentAttempt.update({
           where: { id: attemptId },
           data: { status: status as any, gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null },
         });
       }
 
-      const pack = (attempt as any).addon_pack || "500";
-      const PACK_CREDITS: Record<string, number> = { "200": 200, "500": 500 };
-      const credits = PACK_CREDITS[pack] ?? 500;
+      // ── Security: validate pack is from allow-list ────────────────
+      const pack = (attempt as any).addon_pack as string | null;
+      const PACK_MAP: Record<string, { credits: number; amount: number }> = {
+        "200": { credits: 200, amount: 99 },
+        "500": { credits: 500, amount: 199 },
+      };
 
+      if (!pack || !PACK_MAP[pack]) {
+        logger.error("addons.webhook.invalid_pack", { ...requestMeta, attempt_id: attemptId, pack });
+        throw new Error(`VALIDATION_ERROR: Unknown addon pack: "${pack}"`);
+      }
+
+      // ── Security: validate payment amount matches pack price ──────
+      // This closes the fraud hole where someone tampers the checkout amount.
+      const expectedAmount = PACK_MAP[pack].amount;
+      const actualAmountPaisa   = Math.round(Number(attempt.amount) * 100);
+      const expectedAmountPaisa = Math.round(expectedAmount * 100);
+
+      if (actualAmountPaisa !== expectedAmountPaisa) {
+        logger.error("addons.webhook.amount_mismatch", {
+          ...requestMeta,
+          attempt_id: attemptId,
+          pack,
+          expected_paise: expectedAmountPaisa,
+          actual_paise: actualAmountPaisa,
+        });
+        // Mark attempt FAILED — do NOT credit
+        await prisma.paymentAttempt.update({
+          where: { id: attemptId },
+          data: { status: "FAILED", raw_webhook_payload: rawPayload || null },
+        });
+        throw new Error(`VALIDATION_ERROR: Amount mismatch for addon pack "${pack}". Expected ₹${expectedAmount}, got ₹${Number(attempt.amount)}.`);
+      }
+
+      const credits = PACK_MAP[pack].credits;
+
+      // ── Atomic: updateMany as idempotency gate ────────────────────
+      // updateMany returns count=0 if status is already SUCCESS/FAILED/etc.
+      // This makes double-crediting structurally impossible — not just a runtime check.
+      let credited = false;
       await prisma.$transaction(async (tx) => {
-        // Idempotency: skip if already SUCCESS
-        const fresh = await tx.paymentAttempt.findUnique({
-          where: { id: attemptId },
-          select: { status: true },
-        });
-        if (fresh?.status === "SUCCESS") return;
-
-        // Atomically increment credits
-        await tx.addonUsage.upsert({
-          where: { owner_id: attempt.owner_id },
-          update: { reminders_remaining: { increment: credits } },
-          create: {
-            owner_id: attempt.owner_id,
-            reminders_remaining: credits,
-            reminders_used: 0,
-          },
-        });
-
-        await tx.paymentAttempt.update({
-          where: { id: attemptId },
+        const gate = await tx.paymentAttempt.updateMany({
+          where: { id: attemptId, status: { in: ["PENDING", "PROCESSING"] } },
           data: {
             status: "SUCCESS",
             gateway_txn_id: gatewayTxnId,
@@ -1050,25 +1070,70 @@ export class PaymentService {
             confirmed_at: new Date(),
           },
         });
-      });
 
-      logger.info("addons.credits_allocated", {
-        ...requestMeta,
-        attempt_id: attemptId,
-        owner_id: attempt.owner_id,
-        pack,
-        credits,
-      });
+        // gate.count === 0 → already finalized → no credit
+        if (gate.count === 0) {
+          logger.info("addons.webhook.idempotent_skip", { ...requestMeta, attempt_id: attemptId });
+          return;
+        }
 
-      await eventLog.log("ADDON_CREDITS_ADDED", attempt.owner_id, {
-        pack,
-        credits,
-        payment_attempt_id: attemptId,
-        gateway_txn_id: gatewayTxnId,
-      }).catch(() => {});
+        // ── Soft cap: prevent abuse / overflow ────────────────────
+        const current = await tx.addonUsage.findUnique({
+          where: { owner_id: attempt.owner_id },
+          select: { reminders_remaining: true },
+        });
+        const currentBalance = current?.reminders_remaining ?? 0;
+        const CREDIT_CAP = 10_000;
+
+        if (currentBalance + credits > CREDIT_CAP) {
+          logger.warn("addons.webhook.cap_exceeded", {
+            ...requestMeta,
+            attempt_id: attemptId,
+            owner_id: attempt.owner_id,
+            current_balance: currentBalance,
+            credits,
+          });
+          throw new Error(`CREDIT_CAP_EXCEEDED: Balance would exceed ${CREDIT_CAP.toLocaleString()} credits. Current: ${currentBalance}.`);
+        }
+
+        // Credit the account
+        await tx.addonUsage.upsert({
+          where: { owner_id: attempt.owner_id },
+          update: { reminders_remaining: { increment: credits } },
+          create: { owner_id: attempt.owner_id, reminders_remaining: credits, reminders_used: 0 },
+        });
+
+        // Audit trail: immutable ledger entry
+        await (tx as any).addonTransaction.create({
+          data: {
+            owner_id: attempt.owner_id,
+            payment_attempt_id: attemptId,
+            pack,
+            credits_added: credits,
+          },
+        });
+
+        credited = true;
+      }); // end $transaction
+
+      if (credited) {
+        logger.info("addons.credits_allocated", {
+          ...requestMeta,
+          attempt_id: attemptId,
+          owner_id: attempt.owner_id,
+          pack,
+          credits,
+        });
+        await eventLog.log("ADDON_CREDITS_ADDED", attempt.owner_id, {
+          pack,
+          credits,
+          payment_attempt_id: attemptId,
+          gateway_txn_id: gatewayTxnId,
+        }).catch(() => {});
+      }
 
       return await prisma.paymentAttempt.findUnique({ where: { id: attemptId } });
-    }
+    } // end ADDON PATH
 
     // ──────────────────────────────────────────────────────────────
     // 🧾 BILLING PATH: Invoice payment (plan upgrade/renewal)
