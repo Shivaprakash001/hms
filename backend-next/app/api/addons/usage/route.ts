@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
 
     if (!addon) {
       addon = await prisma.addonUsage.create({
-        data: { owner_id: user.sub, reminders_remaining: 0, reminders_used: 0 },
+        data: { owner_id: user.sub, reminders_remaining: 5, reminders_used: 0 },
       });
     }
 
@@ -83,7 +83,7 @@ export async function PATCH(req: NextRequest) {
     await prisma.addonUsage.upsert({
       where: { owner_id: user.sub },
       update: { auto_topup },
-      create: { owner_id: user.sub, reminders_remaining: 0, reminders_used: 0, auto_topup },
+      create: { owner_id: user.sub, reminders_remaining: 5, reminders_used: 0, auto_topup },
     });
 
     // Analytics: log auto-topup toggle

@@ -148,7 +148,10 @@ function PlanCard({ plan, isCurrent, isUpgrade, upgrading, onUpgrade, onBuyCredi
             <div className="mt-5">
                 {isCurrent ? (
                     plan.id === 'FREE' ? (
-                        <div className="space-y-2">
+                        <div className="space-y-3">
+                            <div className="bg-amber-50 text-amber-700 text-[11px] font-semibold p-2 rounded-lg leading-tight">
+                                ⚠️ Late payments increase by 40% when reminders are missed.
+                            </div>
                             <div className="w-full py-2 rounded-xl bg-indigo-100 text-indigo-600 text-sm font-semibold text-center cursor-default">
                                 Current Plan
                             </div>
@@ -156,7 +159,7 @@ function PlanCard({ plan, isCurrent, isUpgrade, upgrading, onUpgrade, onBuyCredi
                                 onClick={onBuyCredits}
                                 className="w-full py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700 transition-colors"
                             >
-                                Buy Credits
+                                ⚡ Collect rent faster → Buy reminders
                             </button>
                         </div>
                     ) : (

@@ -1100,7 +1100,7 @@ export class PaymentService {
         await tx.addonUsage.upsert({
           where: { owner_id: attempt.owner_id },
           update: { reminders_remaining: { increment: credits } },
-          create: { owner_id: attempt.owner_id, reminders_remaining: credits, reminders_used: 0 },
+          create: { owner_id: attempt.owner_id, reminders_remaining: credits + 5, reminders_used: 0 },
         });
 
         // Audit trail: immutable ledger entry

@@ -48,8 +48,8 @@ function daysLabel(credits) {
 
 const URGENCY = {
     empty: {
-        title: '⚠️ Rent reminders are paused',
-        body: 'Tenants may miss payments. Buy credits now to resume sending reminders.',
+        title: 'You’re out of reminder credits',
+        body: 'Tenants may miss payments without reminders. Buy credits now to resume.',
         color: 'from-rose-600 to-orange-600',
     },
     low: {

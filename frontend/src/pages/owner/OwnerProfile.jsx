@@ -54,6 +54,7 @@ export default function OwnerProfile() {
     const [upgradeModal, setUpgradeModal] = useState(null); // { feature, requiredPlan }
     const [buyCreditsModal, setBuyCreditsModal] = useState(null); // null | 'empty' | 'low' | 'manual'
     const [reminderCredits, setReminderCredits] = useState(null); // null = loading
+    const [remindersUsed, setRemindersUsed] = useState(0);
     const [cronStopped, setCronStopped] = useState(false);        // cron paused due to 0 credits
     const [autoTopup, setAutoTopup] = useState(false);            // owner's auto-topup preference
     const [retryToast, setRetryToast] = useState(null); // { action, label } | null
@@ -101,6 +102,7 @@ export default function OwnerProfile() {
                 }
                 const credits = addonData?.reminders_remaining ?? 0;
                 setReminderCredits(credits);
+                setRemindersUsed(addonData?.reminders_used ?? 0);
                 setCronStopped(addonData?.cron_stopped ?? false);
                 setAutoTopup(addonData?.auto_topup ?? false);
 
@@ -117,8 +119,10 @@ export default function OwnerProfile() {
                         const freshCredits = verifyResult?.credits_remaining ?? null;
                         if (freshCredits !== null) setReminderCredits(freshCredits);
                     } catch {
-                        // Non-critical: fall back to getUsage
-                        addonService.getUsage().then(d => setReminderCredits(d?.reminders_remaining ?? 0)).catch(() => {});
+                        addonService.getUsage().then(d => {
+                            setReminderCredits(d?.reminders_remaining ?? 0);
+                            setRemindersUsed(d?.reminders_used ?? 0);
+                        }).catch(() => {});
                     }
 
                     // Show retry toast if user had a pending action before buying
@@ -476,7 +480,7 @@ export default function OwnerProfile() {
                                     <div className="px-4 pb-4 pt-1 border-t border-slate-100 space-y-4">
                                         {mod.key === 'billing' && <BillingModule prefs={preferences} updatePref={updatePref} />}
                                         {mod.key === 'payments' && <PaymentsModule prefs={preferences} updatePref={updatePref} />}
-                                        {mod.key === 'notifications' && <NotificationsModule prefs={preferences} updatePref={updatePref} reminderCredits={reminderCredits} cronStopped={cronStopped} autoTopup={autoTopup} onAutoTopupChange={setAutoTopup} onBuyCredits={(t) => setBuyCreditsModal(t || 'empty')} onCreditsRefresh={(c) => setReminderCredits(c)} />}
+                                        {mod.key === 'notifications' && <NotificationsModule prefs={preferences} updatePref={updatePref} reminderCredits={reminderCredits} remindersUsed={remindersUsed} cronStopped={cronStopped} autoTopup={autoTopup} onAutoTopupChange={setAutoTopup} onBuyCredits={(t) => setBuyCreditsModal(t || 'empty')} onCreditsRefresh={(c) => setReminderCredits(c)} />}
                                         {mod.key === 'automation' && <AutomationModule prefs={preferences} updatePref={updatePref} plan={currentPlan} onLockedClick={(feature, reqPlan) => setUpgradeModal({ feature, requiredPlan: reqPlan })} />}
                                         {mod.key === 'receipts' && <ReceiptsModule prefs={preferences} updatePref={updatePref} />}
                                         {mod.key === 'security' && <SecurityModule prefs={preferences} updatePref={updatePref} />}
@@ -840,7 +844,7 @@ function PaymentsModule({ prefs, updatePref }) {
     );
 }
 
-function NotificationsModule({ prefs, updatePref, reminderCredits, cronStopped, autoTopup, onAutoTopupChange, onBuyCredits, onCreditsRefresh }) {
+function NotificationsModule({ prefs, updatePref, reminderCredits, remindersUsed, cronStopped, autoTopup, onAutoTopupChange, onBuyCredits, onCreditsRefresh }) {
     const [testSending, setTestSending] = useState(false);
     const [testSent, setTestSent] = useState(false);
     const [testResult, setTestResult] = useState('');
@@ -938,6 +942,11 @@ function NotificationsModule({ prefs, updatePref, reminderCredits, cronStopped, 
                     <p className="text-xs font-medium text-emerald-700">
                         <span className="font-bold">{reminderCredits}</span> credits · ~{Math.floor(reminderCredits / 10)} days of reminders
                     </p>
+                    {remindersUsed > 0 && (
+                        <span className="ml-2 text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">
+                            🚀 {remindersUsed} reminders sent to date
+                        </span>
+                    )}
                     <button onClick={() => onBuyCredits('manual')} className="ml-auto text-xs text-slate-400 hover:text-slate-600 transition">
                         + Buy more
                     </button>
