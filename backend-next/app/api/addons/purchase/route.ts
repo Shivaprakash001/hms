@@ -13,7 +13,7 @@ const logger = getLogger("addons.purchase");
 
 // ─── Addon pack catalog ───────────────────────────────────────────────────────
 
-export const ADDON_PACKS: Record<string, { credits: number; amount: number; label: string }> = {
+const ADDON_PACKS: Record<string, { credits: number; amount: number; label: string }> = {
   "200": { credits: 200, amount:  99, label: "200 Reminders — ₹99" },
   "500": { credits: 500, amount: 199, label: "500 Reminders — ₹199" },
 };
