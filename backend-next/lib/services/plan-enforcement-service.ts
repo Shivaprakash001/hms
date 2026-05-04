@@ -59,13 +59,6 @@ export class PlanEnforcementService {
     return prisma.hostel.count({ where: { owner_id: ownerId, is_active: true } });
   }
 
-  async _messageCredits(ownerId: string) {
-    const res = await prisma.messagePack.aggregate({
-      _sum: { messages_remaining: true },
-      where: { owner_id: ownerId },
-    });
-    return Number(res._sum.messages_remaining ?? 0);
-  }
 
   async assertSubscriptionActive(ownerId: string) {
     const sub = await this._getOwnerSubscription(ownerId);

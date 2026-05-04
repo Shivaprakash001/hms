@@ -16,7 +16,6 @@ export async function GET() {
           tenant_limit: true,
           hostel_limit: true,
           automation: true,
-          messaging: true,
           multi_hostel: true,
           analytics: true,
         },
@@ -28,7 +27,7 @@ export async function GET() {
           price: p.price_inr / 100,
           amount_paise: p.price_inr,
           currency: "INR",
-          addons_enabled: p.automation,
+          addons_enabled: p.id !== "FREE",
           is_custom_pricing: p.id === "SCALE",
           is_popular: p.id === "GROWTH",
         }))
