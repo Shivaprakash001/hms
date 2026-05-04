@@ -4,7 +4,7 @@ const STARTER_FALLBACK = {
   id: null as string | null,
   code: "STARTER",
   name: "Starter",
-  price_paise: 49900,
+  price_inr: 49900,
   tenant_limit: 25,
   hostel_limit: 1,
   features: ["1 Hostel", "Up to 25 tenants", "Payments & receipts"],
@@ -66,9 +66,9 @@ export class BillingService {
       current_plan: {
         id: plan.id,
         name: plan.name,
-        code: plan.code,
-        price: plan.price_paise / 100,
-        price_paise: plan.price_paise,
+        
+        price: plan.price_inr / 100,
+        price_inr: plan.price_inr,
         currency: "INR",
         tenant_limit: plan.tenant_limit,
         hostel_limit: plan.hostel_limit,

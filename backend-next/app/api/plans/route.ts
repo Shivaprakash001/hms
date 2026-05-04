@@ -8,28 +8,29 @@ import { prisma } from "@/lib/db";
 export async function GET() {
   try {
     const plans = await prisma.plan.findMany({
-      where: { is_active: true },
-      orderBy: { display_order: "asc" },
-      select: {
-        id: true,
-        code: true,
-        name: true,
-        price_paise: true,
-        tenant_limit: true,
-        hostel_limit: true,
-        features: true,
-      },
-    });
+        orderBy: { price_inr: "asc" },
+        select: {
+          id: true,
+          name: true,
+          price_inr: true,
+          tenant_limit: true,
+          hostel_limit: true,
+          automation: true,
+          messaging: true,
+          multi_hostel: true,
+          analytics: true,
+        },
+      });
 
-    return apiResponse(
-      plans.map((p) => ({
-        ...p,
-        price: p.price_paise / 100,
-        currency: "INR",
-        is_popular: p.code === "PRO",
-      }))
-    );
-  } catch (error: any) {
-    return apiError(error.message || "Failed to fetch plans");
+      return apiResponse(
+        plans.map((p) => ({
+          ...p,
+          price: p.price_inr,
+          currency: "INR",
+          is_popular: p.id === "GROWTH" || p.id === "PRO",
+        }))
+      );
+    } catch (error: any) {
+      return apiError(error.message || "Failed to fetch plans");
+    }
   }
-}

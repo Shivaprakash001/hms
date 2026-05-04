@@ -42,26 +42,26 @@ export async function POST(req: NextRequest) {
     // 1. Validate plan exists and is active
     const plan = await prisma.plan.findUnique({
       where: { id: plan_id },
-      select: { id: true, code: true, name: true, price_paise: true, is_active: true }
-    });
+        select: { id: true, name: true, price_inr: true }
+      });
 
-    if (!plan || !plan.is_active) {
-      return apiError("Plan not found or inactive", "NOT_FOUND", 404);
-    }
+      if (!plan) {
+        return apiError("Plan not found or inactive", "NOT_FOUND", 404);
+      }
 
-    // 2. Check if owner already has this plan active
-    const currentSub = await prisma.ownerSubscription.findUnique({
-      where: { owner_id: session.sub },
-      include: { plan: { select: { id: true, code: true } } }
-    });
+      // 2. Check if owner already has this plan active
+      const currentSub = await prisma.ownerSubscription.findUnique({
+        where: { owner_id: session.sub },
+        include: { plan: { select: { id: true } } }
+      });
 
-    if (currentSub && currentSub.plan_id === plan_id && currentSub.status === "ACTIVE") {
-      return apiError(
-        `You already have an active ${plan.name} subscription`,
-        "ALREADY_EXISTS",
-        409
-      );
-    }
+      if (currentSub && currentSub.plan_id === plan_id && currentSub.status === "ACTIVE") {
+        return apiError(
+          `You already have an active ${plan.name} subscription`,
+          "ALREADY_EXISTS",
+          409
+        );
+      }
 
     // 3. Get owner profile for payment metadata
     const owner = await prisma.profile.findUnique({
@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
         owner_id: session.sub,
         plan_id: plan.id,
         invoice_number: invoiceNumber,
-        amount_paise: plan.price_paise,
+        amount_paise: (plan.price_inr || 0) * 100,
         status: "PENDING",
         billing_month: now,
         due_date: dueDate,
@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
 
     // 6. Create payment attempt (invoice_id, NO obligation_id)
     const merchantTxnId = `hms_billing_${invoice.id.replace(/-/g, "").substring(0, 12)}_${crypto.randomBytes(4).toString("hex")}`;
-    const amountRupees = plan.price_paise / 100;
+    const amountRupees = (plan.price_inr || 0) * 100 / 100;
 
     const attempt = await prisma.paymentAttempt.create({
       data: {
@@ -166,11 +166,11 @@ export async function POST(req: NextRequest) {
       // Audit log: plan upgrade initiated
       await eventLog.log("PLAN_UPGRADE_INITIATED", session.sub, {
         plan_id: plan.id,
-        plan_code: plan.code,
+        
         plan_name: plan.name,
         invoice_id: invoice.id,
         invoice_number: invoiceNumber,
-        amount_paise: plan.price_paise,
+        amount_paise: (plan.price_inr || 0) * 100,
         payment_attempt_id: updatedAttempt.id
       });
 
@@ -179,7 +179,7 @@ export async function POST(req: NextRequest) {
         invoice_number: invoiceNumber,
         plan: {
           id: plan.id,
-          code: plan.code,
+          
           name: plan.name,
           price: amountRupees
         },
