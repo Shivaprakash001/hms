@@ -223,6 +223,11 @@ export class TenantService {
       tenantUpdate.gender = null;
     }
 
+    // Sanitize aadhaar: empty string or null → skip (don't overwrite existing value with blank)
+    if ("aadhaar_number" in tenantUpdate && !tenantUpdate.aadhaar_number) {
+      delete tenantUpdate.aadhaar_number;
+    }
+
     // Legacy address mapping
     if (data.address) {
       tenantUpdate.temporary_address = data.address;
@@ -243,7 +248,11 @@ export class TenantService {
           data: tenantUpdate,
         });
       } catch (error: any) {
-        const msg = String(error?.message || error);
+        const code = (error as any)?.code;
+        const msg  = String(error?.message || error);
+        if (code === "P2002" || msg.includes("aadhaar_number")) {
+          throw new Error("VALIDATION: This Aadhaar number is already registered with another account.");
+        }
         if (msg.includes("tenants.gender") && Object.prototype.hasOwnProperty.call(tenantUpdate, "gender")) {
           delete tenantUpdate.gender;
           await prisma.tenant.update({

@@ -34,10 +34,10 @@ export const TenantProfileUpdateSchema = z.object({
   phone_1: z.string().optional(),
   phone_2: z.string().optional(),
   phone_3: z.string().optional(),
-  aadhaar_number: z.string()
-    .transform((v) => v.replace(/\s+/g, ""))
-    .refine((v) => /^\d{12}$/.test(v), "Aadhaar number must be exactly 12 digits")
-    .optional(),
+  aadhaar_number: z.preprocess(
+    (v) => (typeof v === "string" ? v.replace(/\s+/g, "") || undefined : v),
+    z.string().refine((v) => /^\d{12}$/.test(v), "Aadhaar number must be exactly 12 digits").optional()
+  ),
   personal_email: z.string().trim().email().optional().nullable(),
   college_name: z.string().optional(),
   roll_number: z.string().optional(),

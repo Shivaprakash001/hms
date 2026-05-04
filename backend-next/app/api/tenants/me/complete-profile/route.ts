@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
           office_location: payload.office_location || null,
           job_role: payload.job_role || null,
           
-          aadhaar_number: payload.aadhaar_number || null,
+          aadhaar_number: payload.aadhaar_number ?? undefined,
           profile_completed: true,
         }
       });
@@ -122,6 +122,10 @@ export async function POST(req: NextRequest) {
     return apiResponse(updated, 201);
   } catch (error: any) {
     console.error(error);
+    const msg = String(error?.message || "");
+    if (error?.code === "P2002" || msg.includes("aadhaar_number")) {
+      return apiError("This Aadhaar number is already registered with another account.", "DUPLICATE", 409);
+    }
     return apiError(error?.message || "Failed to complete profile");
   }
 }
