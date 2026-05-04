@@ -1229,11 +1229,15 @@ export class PaymentService {
     // 💎 ADVANCE PATH: Gateway-driven deposit, no obligation linkage
     // ──────────────────────────────────────────────────────────────
     if ((attempt as any).payment_type === "ADVANCE") {
+      if (!attempt.tenant_id) {
+        throw new Error("INTERNAL: ADVANCE payment attempt is missing tenant_id");
+      }
+      const advanceTenantId: string = attempt.tenant_id;
       await prisma.$transaction(async (tx) => {
         // Lock ordering: tenant row first (consistent with adjustAgainstObligation)
-        await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${attempt.tenant_id}::uuid FOR UPDATE`;
+        await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${advanceTenantId}::uuid FOR UPDATE`;
         await tenantAdvanceService.creditIdempotentInTx(tx, {
-          tenantId: attempt.tenant_id,
+          tenantId: advanceTenantId,
           ownerId: attempt.owner_id,
           amount: Number(attempt.amount),
           referenceId: attempt.id,

@@ -179,6 +179,21 @@ export class AuthService {
         },
         include: { hostels: true },
       });
+
+      // Every new owner gets a FREE subscription row immediately.
+      // Without this, all plan enforcement throws "No subscription found".
+      await prisma.ownerSubscription.upsert({
+        where: { owner_id: userId },
+        update: {},
+        create: {
+          owner_id: userId,
+          plan_id: "FREE",
+          status: "FREE",
+          start_date: new Date(),
+          auto_renew: false,
+        },
+      });
+
       return profile;
     } catch (dbError) {
       // Rollback Supabase user creation if Prisma transaction fails
@@ -291,6 +306,19 @@ export class AuthService {
           owner_id: newProfileId,
         },
         include: { tenant_details: true }
+      });
+
+      // Bootstrap FREE subscription for Google OAuth owners, same as email registration.
+      await prisma.ownerSubscription.upsert({
+        where: { owner_id: newProfileId },
+        update: {},
+        create: {
+          owner_id: newProfileId,
+          plan_id: "FREE",
+          status: "FREE",
+          start_date: new Date(),
+          auto_renew: false,
+        },
       });
     }
 

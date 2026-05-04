@@ -73,28 +73,8 @@ export async function POST(req: NextRequest) {
       return apiError("Owner profile not found", "NOT_FOUND", 404);
     }
 
-    // 4. Create invoice (PENDING)
-    const invoiceNumber = `INV-${Date.now()}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
-    const now = new Date();
-    const dueDate = new Date(now);
-    dueDate.setDate(dueDate.getDate() + 7); // 7 days to pay
-    const expiresAt = new Date(now);
-    expiresAt.setDate(expiresAt.getDate() + 30); // 30 days payment window
-
-    const invoice = await prisma.ownerInvoice.create({
-      data: {
-        owner_id: session.sub,
-        plan_id: plan.id,
-        invoice_number: invoiceNumber,
-        amount_paise: (plan.price_inr || 0) * 100,
-        status: "PENDING",
-        billing_month: now,
-        due_date: dueDate,
-        expires_at: expiresAt
-      }
-    });
-
-    // 5. Get payment provider config (from hostel UPI)
+    // 4. Validate payment provider config BEFORE creating any DB records
+    // (prevents orphaned PENDING invoices when UPI is missing)
     const hostel = await prisma.hostel.findFirst({
       where: { owner_id: session.sub },
       select: { id: true, name: true, upi_id: true }
@@ -108,6 +88,29 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 5. Create invoice (PENDING)
+    // price_inr stores the value in PAISE (same unit as old price_paise column).
+    // amount_paise = price_inr directly — do NOT multiply by 100.
+    const invoiceNumber = `INV-${Date.now()}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
+    const now = new Date();
+    const dueDate = new Date(now);
+    dueDate.setDate(dueDate.getDate() + 7);
+    const expiresAt = new Date(now);
+    expiresAt.setDate(expiresAt.getDate() + 30);
+
+    const invoice = await prisma.ownerInvoice.create({
+      data: {
+        owner_id: session.sub,
+        plan_id: plan.id,
+        invoice_number: invoiceNumber,
+        amount_paise: plan.price_inr,
+        status: "PENDING",
+        billing_month: now,
+        due_date: dueDate,
+        expires_at: expiresAt
+      }
+    });
+
     const provider = "PHONEPE";
     const config = {
       owner_upi_id: hostel.upi_id,
@@ -115,14 +118,16 @@ export async function POST(req: NextRequest) {
       hostel_id: hostel.id
     };
 
-    // 6. Create payment attempt (invoice_id, NO obligation_id)
+    // 6. Create payment attempt (invoice_id, NO obligation_id, NO tenant_id)
+    // Billing attempts have no associated tenant — tenant_id is nullable for this case.
+    // price_inr is in paise; divide by 100 to get rupees for the amount column.
     const merchantTxnId = `hms_billing_${invoice.id.replace(/-/g, "").substring(0, 12)}_${crypto.randomBytes(4).toString("hex")}`;
-    const amountRupees = (plan.price_inr || 0) * 100 / 100;
+    const amountRupees = plan.price_inr / 100;
 
     const attempt = await prisma.paymentAttempt.create({
       data: {
         invoice_id: invoice.id,
-        tenant_id: session.sub, // For billing, tenant_id = owner_id (schema constraint)
+        tenant_id: null,
         owner_id: session.sub,
         provider: provider,
         merchant_txn_id: merchantTxnId,

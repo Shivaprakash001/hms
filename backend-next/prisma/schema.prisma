@@ -311,7 +311,7 @@ model PaymentAttempt {
   id                  String         @id @default(uuid()) @db.Uuid
   obligation_id       String?        @db.Uuid
   invoice_id          String?        @db.Uuid
-  tenant_id           String         @db.Uuid
+  tenant_id           String?        @db.Uuid
   owner_id            String         @db.Uuid
   provider            String
   merchant_txn_id     String         @unique
@@ -330,7 +330,7 @@ model PaymentAttempt {
   payment_type        String         @default("RENT")
   obligation          RentObligation? @relation(fields: [obligation_id], references: [id])
   invoice             OwnerInvoice?   @relation(fields: [invoice_id], references: [id], onDelete: SetNull)
-  tenant              Tenant          @relation(fields: [tenant_id], references: [id])
+  tenant              Tenant?         @relation(fields: [tenant_id], references: [id])
   payments            Payment[]
   obligations        PaymentAttemptObligation[]
 
