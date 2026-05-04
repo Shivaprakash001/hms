@@ -7,7 +7,6 @@ const FREE_FALLBACK = {
   tenant_limit: 15,
   hostel_limit: 1,
   automation: false,
-  messaging: false,
   multi_hostel: false,
   analytics: false,
 };
@@ -75,7 +74,6 @@ export class BillingService {
         tenant_limit: plan.tenant_limit,
         hostel_limit: plan.hostel_limit,
         automation: plan.automation,
-        messaging: plan.messaging,
         multi_hostel: plan.multi_hostel,
         analytics: plan.analytics,
       },

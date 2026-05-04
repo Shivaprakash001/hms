@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
         ...p,
         price: p.price_inr / 100,
         amount_paise: p.price_inr,
-        addons_enabled: p.automation,
+        addons_enabled: p.id !== "FREE",
         is_custom_pricing: p.id === "SCALE",
         is_popular: p.id === "GROWTH",
       })),

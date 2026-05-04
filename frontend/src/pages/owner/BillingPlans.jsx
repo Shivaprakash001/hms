@@ -96,7 +96,6 @@ function PlanCard({ plan, isCurrent, isUpgrade, upgrading, onUpgrade }) {
         { Icon: Building2, label: `${limitDisplay(plan.hostel_limit)} Hostel${plan.hostel_limit === 1 ? '' : 's'}`, ok: true },
         { Icon: Users,     label: `${limitDisplay(plan.tenant_limit)} Tenants`, ok: true },
         { Icon: Zap,       label: 'Automation',  ok: plan.automation },
-        { Icon: MessageSquare, label: 'Messaging', ok: plan.messaging },
         { Icon: Layout,    label: 'Multi-hostel', ok: plan.multi_hostel },
         { Icon: BarChart3, label: 'Analytics',   ok: plan.analytics },
     ];
@@ -174,10 +173,9 @@ function ComparisonTable({ plans, currentPlanId }) {
         { label: 'Hostels',      render: p => limitDisplay(p.hostel_limit) },
         { label: 'Tenants',      render: p => limitDisplay(p.tenant_limit) },
         { label: 'Automation',   bool: 'automation' },
-        { label: 'Messaging',    bool: 'messaging' },
         { label: 'Multi-hostel', bool: 'multi_hostel' },
         { label: 'Analytics',    bool: 'analytics' },
-        { label: 'Add-ons',      bool: 'addons_enabled' },
+        { label: 'Add-ons available', bool: 'addons_enabled' },
     ];
     return (
         <div className="overflow-x-auto">
@@ -345,7 +343,6 @@ export default function BillingPlans() {
                         <InfoBox label="Hostels Allowed"  value={limitDisplay(currentPlan.hostel_limit)} />
                         <InfoBox label="Tenants Allowed"  value={limitDisplay(currentPlan.tenant_limit)} />
                         <InfoBox label="Automation"       value={currentPlan.automation ? 'Enabled' : 'Disabled'} ok={currentPlan.automation} />
-                        <InfoBox label="Messaging"        value={currentPlan.messaging   ? 'Enabled' : 'Disabled'} ok={currentPlan.messaging} />
                     </div>
                 </div>
 

@@ -60,8 +60,8 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     // Enhanced 402 for plan limits
     if (error.message?.startsWith("PLAN_LIMIT:")) {
-      const message = error.message.replace("PLAN_LIMIT:", "").trim();
-      return apiError(message, "PLAN_LIMIT", 402);
+      const code = error.message.replace("PLAN_LIMIT:", "").trim();
+      return apiError(code, code, 402);
     }
     return apiError(error.message || "Failed to create tenant enrollment");
   }

@@ -22,6 +22,10 @@ export async function PATCH(req: NextRequest) {
     return apiResponse(result);
   } catch (error: any) {
     const msg = typeof error === "string" ? error : (error && typeof error.message === "string" ? error.message : String(error));
+    if (msg.startsWith("PLAN_LIMIT:")) {
+      const code = msg.replace("PLAN_LIMIT:", "").trim();
+      return apiError(code, code, 402);
+    }
     if (msg.startsWith("NOT_FOUND"))
       return apiError(msg.split(": ")[1] ?? msg, "NOT_FOUND", 404);
     return apiError(msg || "Failed to update hostel details");

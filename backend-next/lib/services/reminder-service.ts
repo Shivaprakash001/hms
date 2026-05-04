@@ -253,6 +253,27 @@ export class ReminderService {
 
   private async triggerNotification(obligation: any, type: string, config: any) {
     const tenant = obligation.tenant;
+    const ownerId = tenant.owner_id;
+
+    if (ownerId) {
+      const addon = await prisma.addonUsage.findUnique({
+        where: { owner_id: ownerId },
+      });
+      
+      if (!addon || addon.reminders_remaining <= 0) {
+        console.warn(`[NOTIFY] Skipped reminder for ${tenant.id}. No more reminders left in add-on packs.`);
+        return;
+      }
+
+      await prisma.addonUsage.update({
+        where: { owner_id: ownerId },
+        data: {
+          reminders_remaining: { decrement: 1 },
+          reminders_used: { increment: 1 },
+        },
+      });
+    }
+
     const canEmail = config.reminder_email ?? true;
     const canInApp = config.reminder_in_app ?? true;
 

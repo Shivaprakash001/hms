@@ -644,11 +644,11 @@ model Plan {
   tenant_limit    Int           @default(0)
   hostel_limit    Int           @default(0)
   automation      Boolean       @default(false)
-  messaging       Boolean       @default(false)
   multi_hostel    Boolean       @default(false)
   analytics       Boolean       @default(false)
   is_custom       Boolean       @default(false)
   created_at      DateTime      @default(now()) @db.Timestamptz(6)
+  features        Json?
   subscriptions   Subscription[]
   owner_subscriptions OwnerSubscription[]
   invoices            OwnerInvoice[]
@@ -720,3 +720,20 @@ model AutopayAttempt {
   @@schema("public")
 }
 
+model UsageTracking {
+  owner_id      String  @id @db.Uuid
+  tenants_count Int     @default(0)
+  hostels_count Int     @default(0)
+
+  @@map("usage_tracking")
+  @@schema("public")
+}
+
+model AddonUsage {
+  owner_id            String  @id @db.Uuid
+  reminders_remaining Int     @default(0)
+  reminders_used      Int     @default(0)
+
+  @@map("addon_usage")
+  @@schema("public")
+}

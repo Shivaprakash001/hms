@@ -11,7 +11,6 @@ type PlanRecord = {
   tenant_limit: number;
   hostel_limit: number;
   automation: boolean;
-  messaging: boolean;
   multi_hostel: boolean;
   analytics: boolean;
   is_custom: boolean;
@@ -82,11 +81,12 @@ export class PlanEnforcementService {
       throw new Error(`FORBIDDEN: Account in ${sub.status} mode. Upgrade required`);
     }
     const plan = await this._resolvePlan(sub.plan_id);
+    if (!plan) return true;
     if (plan.is_custom) return true;
     if (Number(plan.tenant_limit) <= 0) return true; // unbounded (NULL / 0 = unlimited)
     const count = await this._countActiveTenants(ownerId);
     if (count >= Number(plan.tenant_limit)) {
-      throw new Error("FORBIDDEN: Tenant limit reached for your plan");
+      throw new Error("PLAN_LIMIT: TENANT_LIMIT_REACHED");
     }
     return true;
   }
@@ -97,40 +97,38 @@ export class PlanEnforcementService {
       throw new Error(`FORBIDDEN: Account in ${sub.status} mode. Upgrade required`);
     }
     const plan = await this._resolvePlan(sub.plan_id);
+    if (!plan) return true;
     if (plan.is_custom) return true;
     if (Number(plan.hostel_limit) <= 0) return true;
     const count = await this._countHostels(ownerId);
     if (count >= Number(plan.hostel_limit)) {
-      throw new Error("FORBIDDEN: Hostel limit reached for your plan");
+      throw new Error("PLAN_LIMIT: HOSTEL_LIMIT_REACHED");
     }
     return true;
   }
 
-  async assertFeature(ownerId: string, feature: "automation" | "messaging" | "multi_hostel" | "analytics") {
+  async assertFeature(ownerId: string, feature: "automation" | "multi_hostel" | "analytics") {
     const sub = await this._getOwnerSubscription(ownerId);
     if (BLOCKED_STATUSES.includes(sub.status)) {
       throw new Error(`FORBIDDEN: Account in ${sub.status} mode. Upgrade required`);
     }
     const plan = await this._resolvePlan(sub.plan_id);
-    if (plan[feature]) return true;
-    throw new Error(`FORBIDDEN: Feature '${feature}' not available on your plan`);
+    if (plan && plan[feature]) return true;
+    throw new Error(`PLAN_LIMIT: FEATURE_NOT_AVAILABLE`);
+  }
+
+  async _messageCredits(ownerId: string) {
+    const res = await prisma.addonUsage.findUnique({
+      where: { owner_id: ownerId },
+      select: { reminders_remaining: true },
+    });
+    return Number(res?.reminders_remaining ?? 0);
   }
 
   async assertMessageQuota(ownerId: string, warnThresholdPercent = 20) {
     const credits = await this._messageCredits(ownerId);
     if (credits <= 0) {
-      throw new Error("FORBIDDEN: Message quota exhausted");
-    }
-    const totalPurchased = await prisma.messagePack.aggregate({
-      _sum: { messages_total: true },
-      where: { owner_id: ownerId },
-    });
-    const total = Number(totalPurchased._sum.messages_total ?? 0);
-    if (total > 0) {
-      const pct = Math.round((credits / total) * 100);
-      if (pct <= warnThresholdPercent) {
-        logger.warn(`Owner ${ownerId} message quota below ${warnThresholdPercent}%. Remaining ${credits}/${total}`);
-      }
+      throw new Error("FORBIDDEN: Reminder quota exhausted");
     }
     return credits;
   }

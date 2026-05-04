@@ -13,21 +13,16 @@
 
 import { prisma } from "../db";
 
-const STARTER_LIMITS = { tenant_limit: 25, hostel_limit: 1 };
-
-async function getEffectiveLimits(ownerId: string) {
+async function getEffectivePlan(ownerId: string) {
   const sub = await prisma.ownerSubscription.findUnique({
     where: { owner_id: ownerId },
-    include: { plan: { select: { tenant_limit: true, hostel_limit: true } } },
+    include: { plan: true },
   });
 
   if (!sub) {
     throw new Error(`PLAN_LIMIT: FORBIDDEN. No active subscription found for owner. Plan enforcement failed.`);
   }
 
-  // Treat ACTIVE subscriptions whose end_date has lapsed as EXPIRED.
-  // The cron reconciler is authoritative, but enforcement must not grant writes
-  // to subscriptions that should have already expired.
   const effectiveStatus =
     sub.status === "ACTIVE" && sub.end_date && new Date() > sub.end_date
       ? "EXPIRED"
@@ -37,50 +32,56 @@ async function getEffectiveLimits(ownerId: string) {
     throw new Error(`PLAN_LIMIT: FORBIDDEN. Account in ${effectiveStatus} mode. Upgrade required.`);
   }
 
-  return {
-    tenant_limit: sub.plan.tenant_limit,   // null = unlimited
-    hostel_limit: sub.plan.hostel_limit,
-  };
+  return sub.plan;
 }
 
 export const planGate = {
-  /**
-   * Assert the owner can add one more tenant.
-   * Call this BEFORE creating a tenant record.
-   */
   async assertTenantLimit(ownerId: string): Promise<void> {
-    const limits = await getEffectiveLimits(ownerId);
-    if (limits.tenant_limit === null) return; // unlimited
+    const plan = await getEffectivePlan(ownerId);
+    if (plan.tenant_limit === 0) return; // 0 = unlimited
 
     const current = await prisma.tenant.count({
       where: { owner_id: ownerId, status: { not: "LEFT" } },
     });
 
-    if (current >= limits.tenant_limit) {
-      throw new Error(
-        `PLAN_LIMIT: You've reached your plan limit of ${limits.tenant_limit} tenants. ` +
-        `Upgrade to Pro or Business to add more.`
-      );
+    if (current >= plan.tenant_limit) {
+      throw new Error(`PLAN_LIMIT: TENANT_LIMIT_REACHED`);
     }
   },
 
-  /**
-   * Assert the owner can add one more hostel.
-   * Call this BEFORE creating a hostel record.
-   */
   async assertHostelLimit(ownerId: string): Promise<void> {
-    const limits = await getEffectiveLimits(ownerId);
-    if (limits.hostel_limit === null) return; // unlimited
+    const plan = await getEffectivePlan(ownerId);
+    if (plan.hostel_limit === 0) return; // 0 = unlimited
 
     const current = await prisma.hostel.count({
       where: { owner_id: ownerId, is_active: true },
     });
 
-    if (current >= limits.hostel_limit) {
-      throw new Error(
-        `PLAN_LIMIT: You've reached your plan limit of ${limits.hostel_limit} hostel(s). ` +
-        `Upgrade to Pro or Business to add more.`
-      );
+    if (current >= plan.hostel_limit) {
+      throw new Error(`PLAN_LIMIT: HOSTEL_LIMIT_REACHED`);
     }
   },
+
+  async assertFeatureAllowed(ownerId: string, feature: "automation" | "multi_hostel" | "analytics"): Promise<void> {
+    const plan = await getEffectivePlan(ownerId);
+    
+    if (!plan[feature]) {
+      throw new Error(`PLAN_LIMIT: FEATURE_NOT_AVAILABLE`);
+    }
+  },
+
+  async updateUsage(ownerId: string): Promise<void> {
+    const tenants_count = await prisma.tenant.count({
+      where: { owner_id: ownerId, status: { not: "LEFT" } },
+    });
+    const hostels_count = await prisma.hostel.count({
+      where: { owner_id: ownerId, is_active: true },
+    });
+
+    await prisma.usageTracking.upsert({
+      where: { owner_id: ownerId },
+      update: { tenants_count, hostels_count },
+      create: { owner_id: ownerId, tenants_count, hostels_count },
+    });
+  }
 };
