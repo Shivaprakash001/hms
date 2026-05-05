@@ -65,6 +65,9 @@ export class InvitationService {
     });
     if (!room) throw new Error("NOT_FOUND: Target room not found");
     if (!room.hostel) throw new Error("NOT_FOUND: Associated hostel not found");
+    if (room.allocations.length >= room.capacity) {
+      throw new Error("CAPACITY_EXCEEDED: Room is already at full capacity");
+    }
 
     const owner = await prisma.profile.findUnique({ where: { id: ownerId } });
     if (!owner) throw new Error("NOT_FOUND: Owner profile not found");
@@ -284,7 +287,10 @@ export class InvitationService {
         if (roomIdOverride) {
           const targetRoom = await tx.room.findUnique({
             where: { id: roomIdOverride },
-            include: { hostel: true },
+            include: {
+              hostel: true,
+              allocations: { where: { is_active: true } },
+            },
           });
           if (!targetRoom || !targetRoom.hostel) {
             throw new Error("NOT_FOUND: Target room not found");
@@ -292,10 +298,16 @@ export class InvitationService {
           if (profile.owner_id && targetRoom.hostel.owner_id !== profile.owner_id) {
             throw new Error("FORBIDDEN: Cannot assign room from another owner");
           }
-
+          
+          // Only check capacity if we're actually changing rooms
           const activeAllocation = await tx.roomAllocation.findFirst({
             where: { tenant_id: profile.tenant_details!.id, is_active: true },
           });
+          if (!activeAllocation || activeAllocation.room_id !== roomIdOverride) {
+            if (targetRoom.allocations.length >= targetRoom.capacity) {
+              throw new Error("CAPACITY_EXCEEDED: Target room is already at full capacity");
+            }
+          }
 
           if (activeAllocation) {
             await tx.roomAllocation.update({
@@ -336,7 +348,12 @@ export class InvitationService {
     // 2. Generate new token
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
-    const baseUrl = process.env.NEXT_PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || "http://localhost:3000";
+    let baseUrl = process.env.NEXT_PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || "https://trishul.solutions";
+    if (!baseUrl.startsWith("http")) {
+      baseUrl = `https://${baseUrl}`;
+    } else if (baseUrl.startsWith("http://") && !baseUrl.includes("localhost")) {
+      baseUrl = baseUrl.replace("http://", "https://");
+    }
     const activationLink = `${baseUrl}/activate?token=${token}`;
 
     await prisma.profile.update({
