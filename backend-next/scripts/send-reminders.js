@@ -128,12 +128,19 @@ function pickTemplate(daysDiff) {
   return null;
 }
 
+// ─── test guards (removed before GitHub Actions) ───────────────────────────
+
+const TEST_PHONE = process.env.TEST_PHONE || null; // e.g. '919876543210' — limits run to one number
+const DRY_RUN    = process.env.DRY_RUN === 'true'; // log payload only, skip API call
+
 // ─── main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
   const client = await pool.connect();
   const counts = { sent: 0, skipped: 0, failed: 0 };
   const tag = `[WhatsApp Reminders] ${new Date().toISOString()}`;
+  if (TEST_PHONE) console.log(`${tag} — TEST MODE : only → ${TEST_PHONE}`);
+  if (DRY_RUN)    console.log(`${tag} — DRY RUN   : no API calls`);
 
   try {
     await ensureLogTable(client);
@@ -149,6 +156,13 @@ async function main() {
         continue;
       }
 
+      // ── TEST GUARD ──────────────────────────────────────────────────────────
+      if (TEST_PHONE) {
+        const digits = String(row.phone || '').replace(/\D/g, '');
+        const e164   = digits.startsWith('91') && digits.length === 12 ? digits : `91${digits}`;
+        if (e164 !== TEST_PHONE) { counts.skipped++; continue; }
+      }
+
       const isDuplicate = await alreadySentToday(client, row.obligation_id, template);
       if (isDuplicate) {
         console.log(`  SKIP  [${row.obligation_id}] ${row.tenant_name} — already sent today`);
@@ -156,17 +170,31 @@ async function main() {
         continue;
       }
 
-      // Template variable 4 differs by reminder type
-      const var4 = row.days_diff >= 2
-        ? `${row.days_diff} days`   // e.g. "3 days" for overdue message
-        : row.due_date_fmt;          // e.g. "15-06-2025" for upcoming/today
+      // Variable 6 differs by reminder type
+      const var6 = row.days_diff >= 2
+        ? `${row.days_diff} days`
+        : row.due_date_fmt;
 
+      // Template variables — positional order matches approved templates:
+      // {{1}} obligation_id  {{2}} name  {{3}} hostel  {{4}} amount  {{5}} rent_month  {{6}} due_date/days
       const variables = [
+        row.obligation_id,
         row.tenant_name,
         row.hostel_name,
         `₹${Number(row.amount).toLocaleString('en-IN')}`,
-        var4,
+        row.rent_month,
+        var6,
       ];
+
+      // ── DRY RUN ─────────────────────────────────────────────────────────────
+      if (DRY_RUN) {
+        console.log(`  DRY   [${row.obligation_id}] ${row.tenant_name}`);
+        console.log(`          to:           ${row.phone}`);
+        console.log(`          templateName: ${template}`);
+        console.log(`          variables:   `, variables);
+        counts.skipped++;
+        continue;
+      }
 
       try {
         await sendWithRetry(row.phone, template, variables);

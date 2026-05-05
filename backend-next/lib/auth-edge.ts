@@ -76,12 +76,24 @@ export async function getSession(req: NextRequest): Promise<AuthPayload | null> 
 }
 
 /**
- * Generate a 2-minute identity confirmation token for high-risk actions.
- * The `purpose` claim scopes it — a regular auth token can never pass as an
- * identity token, and this token can never pass as a regular auth token.
+ * Generate a 2-minute single-use identity confirmation token.
+ *
+ * Claims:
+ *  - jti:     unique token ID — persisted in DB and consumed on first use
+ *  - purpose: broad scope ("OFFLINE_PAYMENT") — matches DB record
+ *  - action:  specific operation ("record_offline_payment") — prevents reuse
+ *             across future sensitive actions even with the same purpose
+ *
+ * A regular session token never carries these claims, and this token never
+ * carries role/email — the two types are fully disjoint.
  */
-export async function generateIdentityToken(userId: string, purpose: string): Promise<string> {
-  return new SignJWT({ sub: userId, purpose })
+export async function generateIdentityToken(
+  userId: string,
+  purpose: string,
+  jti: string,
+  action: string
+): Promise<string> {
+  return new SignJWT({ sub: userId, purpose, action, jti })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("2m")
@@ -89,15 +101,25 @@ export async function generateIdentityToken(userId: string, purpose: string): Pr
 }
 
 /**
- * Verify an identity token and confirm it carries the expected purpose.
- * Returns the userId on success, null on any failure (expired, wrong purpose, tampered).
+ * Verify an identity token and confirm purpose + action claims.
+ * Returns { userId, jti, action } on success; null on any failure.
+ * The caller is responsible for DB-level single-use enforcement using the jti.
  */
-export async function verifyIdentityToken(token: string, expectedPurpose: string): Promise<{ userId: string } | null> {
+export async function verifyIdentityToken(
+  token: string,
+  expectedPurpose: string,
+  expectedAction: string
+): Promise<{ userId: string; jti: string; action: string } | null> {
   try {
     const { payload } = await jwtVerify(token, JWT_SECRET);
     if (payload.purpose !== expectedPurpose) return null;
-    if (!payload.sub) return null;
-    return { userId: payload.sub as string };
+    if (payload.action !== expectedAction) return null;
+    if (!payload.sub || !payload.jti) return null;
+    return {
+      userId: payload.sub as string,
+      jti: payload.jti as string,
+      action: payload.action as string,
+    };
   } catch {
     return null;
   }

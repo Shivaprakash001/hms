@@ -95,6 +95,110 @@ export class PaymentService {
     return { payment, newStatus, tenantId: obligation.tenant_id, ownerId: obligation.owner_id };
   }
 
+  /**
+   * Secure offline payment recording — atomically consumes a single-use identity
+   * token and records the payment in one DB transaction.
+   *
+   * Atomicity guarantee:
+   *   - Token consumed (used=true)  ┐
+   *   - Payment row created         ├── all-or-nothing
+   *   - Obligation status updated   ┘
+   *
+   * If the payment fails for any reason (over-payment, already PAID, DB error),
+   * the transaction rolls back and the identity token remains UNUSED — the owner
+   * can retry without re-entering their password.
+   */
+  async recordOfflinePaymentWithToken(jti: string, data: {
+    obligationId: string;
+    amountPaid: number;
+    paymentMethod: string;
+    referenceNumber?: string;
+    paymentDate?: Date;
+    userId: string;
+    offlineRecordedBy: string;
+    offlineRecordedAt: Date;
+    offlineRecordedIp?: string;
+    offlineNote?: string;
+  }) {
+    return prisma.$transaction(async (tx: any) => {
+      // ── Consume the identity token (atomic, single-use enforcement) ───────
+      const consumed = await tx.identityToken.updateMany({
+        where: {
+          jti,
+          used: false,
+          expires_at: { gt: new Date() },
+        },
+        data: { used: true, used_at: new Date() },
+      });
+
+      if (consumed.count === 0) {
+        // Either already used, expired, or jti doesn't exist — all treated the same
+        throw new Error("FORBIDDEN: Identity token has already been used or has expired. Please re-confirm your password.");
+      }
+
+      // ── Record payment (includes FOR UPDATE lock + balance validation) ────
+      return this._applyPaymentInTx(tx, data);
+    }).then(async (res: any) => {
+      await eventSystem.trigger("payment_recorded", {
+        payment_id: res.payment.id,
+        obligation_id: data.obligationId,
+        tenant_id: res.payment.tenant_id,
+        owner_id: res.payment.owner_id,
+        amount: data.amountPaid,
+        method: data.paymentMethod,
+      });
+
+      if (res.payment?.tenant_id) {
+        await tenantAnalyticsService.markReminderConversion(data.obligationId, data.paymentDate || new Date());
+        tenantAnalyticsService.calculateTenantScore(res.payment.tenant_id).catch((e: any) =>
+          logger.error("tenantScore.failed", { err: e.message })
+        );
+      }
+
+      receiptService.createReceipt(res.payment.id).then(async (receipt: any) => {
+        try {
+          const prefs = await getPreferences(res.payment.owner_id || "");
+          if (!prefs.auto_email_receipt) return;
+          const renderContext = receipt._renderContext || {
+            footer: prefs.receipt_footer || null,
+            currency: prefs.currency,
+            timezone: prefs.timezone,
+          };
+          const pdfBuffer = await receiptService.renderReceiptPdf(receipt, renderContext);
+          const tenant = await prisma.tenant.findUnique({
+            where: { id: res.payment.tenant_id },
+            include: { profile: true },
+          });
+          if (tenant?.profile?.email) {
+            const rentMonth = formatMonthYear(receipt.rent_month, prefs);
+            await EmailService.sendReceipt({
+              toEmail: tenant.profile.email,
+              name: tenant.profile.name,
+              amount: data.amountPaid,
+              rentMonth,
+              reference: receipt.receipt_number,
+              pdfBuffer,
+            });
+          }
+        } catch (err) {
+          logger.error("recordOfflinePaymentWithToken.receipt_email_failed", { err });
+        }
+      }).catch((err: any) => logger.error("recordOfflinePaymentWithToken.receipt_failed", { err }));
+
+      await eventLog.log("OFFLINE_PAYMENT_RECORDED", data.userId, {
+        payment_id: res.payment.id,
+        obligation_id: data.obligationId,
+        amount: data.amountPaid,
+        method: data.paymentMethod,
+        jti,
+        ip: data.offlineRecordedIp || null,
+        note: data.offlineNote || null,
+      });
+
+      return res;
+    });
+  }
+
   async recordPayment(data: {
     obligationId: string;
     amountPaid: number;

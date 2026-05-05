@@ -2,52 +2,39 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { authService } from "@/lib/services/auth-service";
 import { generateIdentityToken } from "@/lib/auth-edge";
 import { apiError } from "@/lib/utils/api-utils";
+import { prisma } from "@/lib/db";
 import { getLogger } from "@/lib/logger";
 
 const logger = getLogger("auth.confirm-identity");
 
-const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
-const RATE_LIMIT_MAX       = 5;       // max attempts per window
+const IDENTITY_ACTION  = "record_offline_payment";
+const IDENTITY_PURPOSE = "OFFLINE_PAYMENT";
+const TOKEN_TTL_MS     = 2 * 60 * 1000; // 2 minutes
 
-// Simple in-memory attempt tracker — good enough for a Node.js single-process route.
-// For multi-instance deployments this should be moved to Redis or action_logs table.
-const attemptMap = new Map<string, { count: number; windowStart: number }>();
-
-function isRateLimited(userId: string): boolean {
-  const now = Date.now();
-  const entry = attemptMap.get(userId);
-
-  if (!entry || now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
-    attemptMap.set(userId, { count: 1, windowStart: now });
-    return false;
-  }
-
-  entry.count++;
-  if (entry.count > RATE_LIMIT_MAX) return true;
-  return false;
-}
+// DB-based rate limit — survives deploys and works across all instances.
+// Tracks failed attempts only; success clears the concern naturally.
+const FAIL_WINDOW_MS = 60_000;
+const FAIL_MAX       = 5;
 
 /**
  * POST /api/auth/confirm-identity
  *
  * Step 1 of secure offline payment flow.
- * Verifies the authenticated owner's password and issues a short-lived
- * identity token (2 min, purpose-scoped to OFFLINE_PAYMENT).
  *
- * The token:
- *  - Cannot be used as a session token (no role/email claims)
- *  - Cannot be reused after expiry
- *  - Is scoped to a single purpose — useless for any other endpoint
- *  - Is signed with the same JWT_SECRET so it degrades to zero-trust if the
- *    secret rotates (which automatically invalidates all tokens)
+ * Issues a SHORT-LIVED, SINGLE-USE identity token:
+ *  - jti persisted in identity_tokens table (consumed atomically with payment)
+ *  - purpose + action claims bind it to exactly one operation
+ *  - 2-minute TTL — short enough to be useless if intercepted
+ *  - No role/email claims — cannot be used as a session token
  *
- * Security:
- *  - Requires valid session (middleware enforces JWT auth)
- *  - Rate-limited: max 5 wrong-password attempts per minute
- *  - Wrong password → generic 401 (no user enumeration)
+ * Rate limiting: DB-based (ActionLog action=IDENTITY_FAIL)
+ *  - Works across all server instances / deploys
+ *  - 5 failed attempts per minute → 429
+ *  - Failed attempt logged; success does NOT log (avoid polluting audit trail)
  */
 export async function POST(req: Request) {
   try {
@@ -57,9 +44,14 @@ export async function POST(req: Request) {
       return apiError("Only owners can perform this action", "FORBIDDEN", 403);
     }
 
-    if (isRateLimited(user.id)) {
-      logger.warn("auth.confirm_identity.rate_limited", { user_id: user.id });
-      return apiError("Too many attempts. Please wait a moment.", "RATE_LIMIT", 429);
+    // ── DB-based rate limit: count recent IDENTITY_FAIL actions ──────────────
+    const failWindowStart = new Date(Date.now() - FAIL_WINDOW_MS);
+    const recentFails = await prisma.actionLog.count({
+      where: { owner_id: user.id, action: "IDENTITY_FAIL", created_at: { gte: failWindowStart } },
+    });
+    if (recentFails >= FAIL_MAX) {
+      logger.warn("auth.confirm_identity.rate_limited", { user_id: user.id, recent_fails: recentFails });
+      return apiError("Too many failed attempts. Please wait a minute before trying again.", "RATE_LIMIT", 429);
     }
 
     const body = await req.json().catch(() => ({}));
@@ -72,21 +64,38 @@ export async function POST(req: Request) {
     const isValid = await authService.verifyUserPassword(user.id, password);
 
     if (!isValid) {
+      // Log the failure — contributes to the rate-limit window
+      await prisma.actionLog.create({ data: { owner_id: user.id, action: "IDENTITY_FAIL" } });
       logger.warn("auth.confirm_identity.invalid_password", { user_id: user.id });
       return apiError("Invalid credentials", "UNAUTHORIZED", 401);
     }
 
-    // Clear the rate-limit counter on success (optional — prevents lockout on one typo)
-    attemptMap.delete(user.id);
+    // ── Issue single-use identity token ──────────────────────────────────────
+    const jti       = randomUUID();
+    const expiresAt = new Date(Date.now() + TOKEN_TTL_MS);
 
-    const identityToken = await generateIdentityToken(user.id, "OFFLINE_PAYMENT");
+    // Persist the token record BEFORE signing — if DB write fails, no JWT is issued
+    await prisma.identityToken.create({
+      data: {
+        jti,
+        user_id: user.id,
+        purpose: IDENTITY_PURPOSE,
+        action: IDENTITY_ACTION,
+        expires_at: expiresAt,
+        used: false,
+      },
+    });
 
-    logger.info("auth.confirm_identity.issued", { user_id: user.id });
+    const identityToken = await generateIdentityToken(
+      user.id, IDENTITY_PURPOSE, jti, IDENTITY_ACTION
+    );
+
+    logger.info("auth.confirm_identity.issued", { user_id: user.id, jti });
 
     return NextResponse.json({
       identity_token: identityToken,
       expires_in: 120,
-      purpose: "OFFLINE_PAYMENT",
+      purpose: IDENTITY_PURPOSE,
     });
   } catch (error: any) {
     logger.error("auth.confirm_identity.error", { error: error.message });

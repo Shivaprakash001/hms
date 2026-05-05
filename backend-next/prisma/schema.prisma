@@ -377,6 +377,21 @@ model ActionLog {
   @@schema("public")
 }
 
+model IdentityToken {
+  jti        String    @id
+  user_id    String    @db.Uuid
+  purpose    String
+  action     String
+  expires_at DateTime  @db.Timestamptz(6)
+  used       Boolean   @default(false)
+  used_at    DateTime? @db.Timestamptz(6)
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@index([user_id, used, expires_at])
+  @@map("identity_tokens")
+  @@schema("public")
+}
+
 model WhatsappLog {
   id            String   @id @default(uuid()) @db.Uuid
   phone         String

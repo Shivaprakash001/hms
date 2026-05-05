@@ -7,8 +7,11 @@ import { authService } from "@/lib/services/auth-service";
 import { verifyIdentityToken } from "@/lib/auth-edge";
 import { apiError } from "@/lib/utils/api-utils";
 import { prisma } from "@/lib/db";
-import { eventLog } from "@/lib/services/event-log-service";
 import { getLogger } from "@/lib/logger";
+
+const IDENTITY_PURPOSE     = "OFFLINE_PAYMENT";
+const IDENTITY_ACTION      = "record_offline_payment";
+const ANOMALY_DAILY_LIMIT  = 20; // soft-warn if owner records more than this per day
 
 const logger = getLogger("payments.record-offline");
 
@@ -52,7 +55,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const identity = await verifyIdentityToken(identity_token, "OFFLINE_PAYMENT");
+    const identity = await verifyIdentityToken(identity_token, IDENTITY_PURPOSE, IDENTITY_ACTION);
     if (!identity) {
       return apiError(
         "Identity token is invalid or expired. Please re-confirm your password.",
@@ -133,10 +136,33 @@ export async function POST(req: Request) {
       ip: clientIp,
     });
 
-    // ── 7 + 8. Atomic payment + audit (FOR UPDATE lock inside _applyPaymentInTx) ─
+    // ── Anomaly detection (soft guard — logs + warns, does not block) ─────────
+    const dayStart = new Date();
+    dayStart.setHours(0, 0, 0, 0);
+    const todayCount = await prisma.actionLog.count({
+      where: { owner_id: user.id, action: "OFFLINE_PAYMENT", created_at: { gte: dayStart } },
+    });
+    if (todayCount >= ANOMALY_DAILY_LIMIT) {
+      logger.warn("payments.record_offline.anomaly", {
+        owner_id: user.id,
+        today_count: todayCount,
+        threshold: ANOMALY_DAILY_LIMIT,
+        obligation_id,
+        amount: parsedAmount,
+      });
+    }
+
+    // ── 7 + 8. Atomic: consume identity token + write payment in ONE transaction ─
+    // recordOfflinePaymentWithToken:
+    //   1. UPDATE identity_tokens SET used=true WHERE jti AND used=false AND not expired
+    //   2. FOR UPDATE lock on obligation row
+    //   3. Validate remaining balance (over-payment → throws BAD_REQUEST)
+    //   4. INSERT payment with audit fields
+    //   5. UPDATE obligation status
+    // All-or-nothing — token stays unused if payment fails.
     const parsedDate = payment_date ? new Date(payment_date) : undefined;
 
-    const result = await paymentService.recordPayment({
+    const result = await paymentService.recordOfflinePaymentWithToken(identity.jti, {
       obligationId: obligation_id,
       amountPaid: parsedAmount,
       paymentMethod: method,
@@ -147,15 +173,6 @@ export async function POST(req: Request) {
       offlineRecordedAt: new Date(),
       offlineRecordedIp: clientIp ?? undefined,
       offlineNote: note || undefined,
-    });
-
-    await eventLog.log("OFFLINE_PAYMENT_RECORDED", user.id, {
-      obligation_id,
-      payment_id: result.payment.id,
-      amount: parsedAmount,
-      method,
-      ip: clientIp,
-      note: note || null,
     });
 
     logger.info("payments.record_offline.success", {
