@@ -216,7 +216,7 @@ export class AnalyticsService {
             COUNT(CASE WHEN rl.obligation_id IS NOT NULL THEN 1 END) AS with_reminder
           FROM paid
           LEFT JOIN LATERAL (
-            SELECT 1 FROM reminder_logs rl WHERE rl.obligation_id = paid.obligation_id LIMIT 1
+            SELECT obligation_id FROM reminder_logs WHERE obligation_id = paid.obligation_id LIMIT 1
           ) rl ON true
         `,
         prisma.$queryRaw<{ reason: string; count: bigint }[]>`
