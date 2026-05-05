@@ -144,7 +144,12 @@ export class InvitationService {
     });
 
     // 6. Send enhanced invitation email
-    const baseUrl = process.env.NEXT_PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || "http://localhost:3000";
+    let baseUrl = process.env.NEXT_PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || "https://trishul.solutions";
+    if (!baseUrl.startsWith("http")) {
+      baseUrl = `https://${baseUrl}`;
+    } else if (baseUrl.startsWith("http://") && !baseUrl.includes("localhost")) {
+      baseUrl = baseUrl.replace("http://", "https://");
+    }
     const activationLink = `${baseUrl}/activate?token=${token}`;
 
     const emailResult = await EmailService.sendInvitation({

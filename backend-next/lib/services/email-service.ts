@@ -116,7 +116,7 @@ export class EmailService {
           </div>
 
           <div style="text-align:center;margin:28px 0;">
-            <a href="${data.activationLink}" style="display:inline-block;background:#6366f1;color:#fff;padding:14px 32px;text-decoration:none;border-radius:10px;font-weight:700;font-size:16px;">
+            <a href="${data.activationLink}" target="_blank" style="display:inline-block;background:#6366f1;color:#fff;padding:14px 32px;text-decoration:none;border-radius:10px;font-weight:700;font-size:16px;">
               Activate Your Account
             </a>
           </div>
@@ -214,7 +214,7 @@ export class EmailService {
             You can pay directly via the tenant dashboard or using the hostel UPI ID.
           </p>
           <div style="text-align: center; margin-top: 10px; margin-bottom: 10px;">
-            <a href="https://trishul.solutions/login" style="display: inline-block; padding: 12px 24px; background-color: ${color}; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
+            <a href="https://trishul.solutions/login" target="_blank" style="display: inline-block; padding: 12px 24px; background-color: ${color}; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
               Pay Now
             </a>
           </div>
