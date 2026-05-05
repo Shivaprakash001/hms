@@ -6,8 +6,15 @@ import { formatCurrency } from '../../utils/format';
 
 const RoomDetailsView = ({ room, onBack, onAddTenant, onShiftTenant, onRemoveTenant }) => {
     const { preferences } = useAppPreferences();
+    if (!room || !room.tenants) return null; // Safe guard
+
+    const safeTenants = room.tenants || [];
+    if (safeTenants.length > room.capacity) {
+        console.warn(`[WARNING] Room capacity exceeded: ${safeTenants.length}/${room.capacity}`);
+    }
+
     const vacantBeds = room.capacity - room.occupied;
-    const totalRent = room?.tenants?.reduce((sum, t) => sum + (t?.rent || 0), 0) || 0;
+    const totalRent = safeTenants.reduce((sum, t) => sum + (t?.rent || 0), 0) || 0;
 
     const containerVariants = {
         hidden: { opacity: 0, y: 20 },
@@ -147,7 +154,7 @@ const RoomDetailsView = ({ room, onBack, onAddTenant, onShiftTenant, onRemoveTen
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                                {room.tenants.map((tenant) => (
+                                {safeTenants.map((tenant) => (
                                     <div key={tenant.id} className="group relative bg-white border border-slate-200 rounded-2xl p-5 hover:shadow-lg hover:border-indigo-100 transition-all duration-300">
                                         <div className="flex items-start gap-4 mb-6">
                                             <div className="w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xl font-bold shadow-md ring-4 ring-slate-50">
@@ -166,7 +173,7 @@ const RoomDetailsView = ({ room, onBack, onAddTenant, onShiftTenant, onRemoveTen
                                             </div>
                                             <div className="flex items-center justify-between text-sm">
                                                 <span className="text-slate-500 font-medium flex items-center gap-2"><CreditCard size={14} /> Rent</span>
-                                                <span className="text-slate-900 font-bold">{formatCurrency(tenant.rent, preferences)}</span>
+                                                <span className="text-slate-900 font-bold">{formatCurrency(tenant.rent || 0, preferences || {})}</span>
                                             </div>
                                             <div className="flex items-center justify-between text-sm">
                                                 <span className="text-slate-500 font-medium flex items-center gap-2"><Calendar size={14} /> Joined</span>

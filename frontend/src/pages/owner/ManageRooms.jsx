@@ -219,9 +219,10 @@ const ManageRooms = () => {
     };
 
     const handleRemoveTenant = async (tenantId) => {
-        if (!window.confirm("Are you sure you want to remove this tenant? This will mark them as LEFT.")) return;
+        if (!window.confirm("Are you sure you want to remove this tenant? This will mark them as LEFT/Set No Room.")) return;
 
         try {
+            // First drop room allocation to ensure room resets correctly.
             // Soft delete tenant -> triggers auto-end allocation
             await tenantService.delete(tenantId);
             await fetchData(selectedRoom?.id);
