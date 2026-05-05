@@ -32,6 +32,10 @@ export class PaymentService {
     referenceNumber?: string;
     paymentDate?: Date;
     paymentAttemptId?: string;
+    offlineRecordedBy?: string;
+    offlineRecordedAt?: Date;
+    offlineRecordedIp?: string;
+    offlineNote?: string;
   }) {
     await tx.$queryRaw`
       SELECT id FROM rent_obligations WHERE id = ${data.obligationId}::uuid FOR UPDATE
@@ -73,6 +77,10 @@ export class PaymentService {
         idempotency_key: data.paymentAttemptId
           ? `pay:${data.paymentAttemptId}:${data.obligationId}`
           : null,
+        offline_recorded_by: data.offlineRecordedBy || null,
+        offline_recorded_at: data.offlineRecordedAt || null,
+        offline_recorded_ip: data.offlineRecordedIp || null,
+        offline_note: data.offlineNote || null,
       }
     });
 
@@ -95,6 +103,10 @@ export class PaymentService {
     paymentDate?: Date;
     userId?: string;
     paymentAttemptId?: string;
+    offlineRecordedBy?: string;
+    offlineRecordedAt?: Date;
+    offlineRecordedIp?: string;
+    offlineNote?: string;
   }) {
     return prisma.$transaction(async (tx: any) => {
       return this._applyPaymentInTx(tx, data);

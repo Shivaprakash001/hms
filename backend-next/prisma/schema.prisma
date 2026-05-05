@@ -310,12 +310,16 @@ model Payment {
   payment_date       DateTime        @db.Date
   payment_attempt_id String?         @db.Uuid
   payment_group_id   String?         @db.Uuid
-  idempotency_key    String?         @unique
-  created_at         DateTime        @default(now()) @db.Timestamptz(6)
-  obligation         RentObligation  @relation(fields: [obligation_id], references: [id])
-  attempt            PaymentAttempt? @relation(fields: [payment_attempt_id], references: [id])
-  tenant             Tenant          @relation(fields: [tenant_id], references: [id])
-  receipts           Receipt?
+  idempotency_key      String?         @unique
+  offline_recorded_by  String?         @db.Uuid
+  offline_recorded_at  DateTime?       @db.Timestamptz(6)
+  offline_recorded_ip  String?
+  offline_note         String?
+  created_at           DateTime        @default(now()) @db.Timestamptz(6)
+  obligation           RentObligation  @relation(fields: [obligation_id], references: [id])
+  attempt              PaymentAttempt? @relation(fields: [payment_attempt_id], references: [id])
+  tenant               Tenant          @relation(fields: [tenant_id], references: [id])
+  receipts             Receipt?
 
   @@index([owner_id])
   @@index([tenant_id])

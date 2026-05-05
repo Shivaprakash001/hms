@@ -75,6 +75,34 @@ export async function getSession(req: NextRequest): Promise<AuthPayload | null> 
   };
 }
 
+/**
+ * Generate a 2-minute identity confirmation token for high-risk actions.
+ * The `purpose` claim scopes it — a regular auth token can never pass as an
+ * identity token, and this token can never pass as a regular auth token.
+ */
+export async function generateIdentityToken(userId: string, purpose: string): Promise<string> {
+  return new SignJWT({ sub: userId, purpose })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("2m")
+    .sign(JWT_SECRET);
+}
+
+/**
+ * Verify an identity token and confirm it carries the expected purpose.
+ * Returns the userId on success, null on any failure (expired, wrong purpose, tampered).
+ */
+export async function verifyIdentityToken(token: string, expectedPurpose: string): Promise<{ userId: string } | null> {
+  try {
+    const { payload } = await jwtVerify(token, JWT_SECRET);
+    if (payload.purpose !== expectedPurpose) return null;
+    if (!payload.sub) return null;
+    return { userId: payload.sub as string };
+  } catch {
+    return null;
+  }
+}
+
 export function apiResponse(data: any, status = 200) {
   return NextResponse.json(data, { status });
 }

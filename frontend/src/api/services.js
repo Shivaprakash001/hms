@@ -332,6 +332,14 @@ export const allocationService = {
 };
 
 
+// --- Secure Identity Confirmation ---
+export const identityService = {
+    confirmIdentity: async (password) => {
+        const response = await api.post('/auth/confirm-identity', { password });
+        return response.data; // { identity_token, expires_in, purpose }
+    },
+};
+
 // --- Payment Services ---
 export const paymentService = {
     getAll: async (params) => {
@@ -422,6 +430,18 @@ export const paymentService = {
             }
             throw error;
         }
+    },
+    recordOfflinePayment: async ({ identityToken, obligationId, amountPaid, paymentMethod, referenceNumber, paymentDate, note }) => {
+        const response = await api.post('/payments/record-offline', {
+            identity_token: identityToken,
+            obligation_id: obligationId,
+            amount_paid: amountPaid,
+            payment_method: paymentMethod,
+            reference_number: referenceNumber,
+            payment_date: paymentDate,
+            note,
+        });
+        return response.data;
     },
     initiatePayment: async (data) => {
         const response = await api.post('/payments/initiate', data);

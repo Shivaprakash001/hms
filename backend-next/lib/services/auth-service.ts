@@ -240,6 +240,15 @@ export class AuthService {
     return { success: true };
   }
 
+  async verifyUserPassword(userId: string, password: string): Promise<boolean> {
+    const profile = await prisma.profile.findUnique({
+      where: { id: userId },
+      select: { id: true, password_hash: true },
+    });
+    if (!profile) return false;
+    return this.verifyOrMigrateLegacyPassword(profile, password);
+  }
+
   async getCurrentUser(req: Request) {
     const { getSession } = await import("../auth-edge");
     const session = await getSession(req as any);
