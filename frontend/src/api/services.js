@@ -1,4 +1,5 @@
 import api from './axios';
+import axios from 'axios';
 
 // --- Auth Services ---
 export const authService = {
@@ -421,18 +422,19 @@ export const paymentService = {
     },
     recordPayment: async (data) => {
         try {
-            const response = await api.post('/owner/payments/offline', data);
+            const response = await axios.post('/api/payments/record-offline', data, { withCredentials: true });
             return response.data;
         } catch (error) {
+            // Keep original fallback behavior just in case
             if (error?.response?.status === 404) {
-                const fallback = await api.post('/payments/offline', data);
+                const fallback = await axios.post('/api/payments/record-offline', data, { withCredentials: true });
                 return fallback.data;
             }
             throw error;
         }
     },
     recordOfflinePayment: async ({ identityToken, obligationId, amountPaid, paymentMethod, referenceNumber, paymentDate, note }) => {
-        const response = await api.post('/payments/record-offline', {
+        const response = await axios.post('/api/payments/record-offline', {
             identity_token: identityToken,
             obligation_id: obligationId,
             amount_paid: amountPaid,
@@ -440,7 +442,7 @@ export const paymentService = {
             reference_number: referenceNumber,
             payment_date: paymentDate,
             note,
-        });
+        }, { withCredentials: true });
         return response.data;
     },
     initiatePayment: async (data) => {
