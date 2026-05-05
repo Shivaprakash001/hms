@@ -1,0 +1,38 @@
+name: WhatsApp Rent Reminders
+
+on:
+  schedule:
+    - cron: '30 3 * * *'    # 09:00 IST (03:30 UTC) every day
+  workflow_dispatch:          # manual trigger from GitHub Actions UI
+
+jobs:
+  send-reminders:
+    name: Send Rent Reminders
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend-next/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --omit=dev
+        working-directory: backend-next
+
+      - name: Send WhatsApp reminders
+        run: node scripts/send-reminders.js
+        working-directory: backend-next
+        env:
+          DATABASE_URL:    ${{ secrets.DATABASE_URL }}
+          WHATSAPP_TOKEN:  ${{ secrets.WHATSAPP_TOKEN }}
+          PHONE_NUMBER_ID: ${{ secrets.PHONE_NUMBER_ID }}
+          WHATSAPP_API:    https://graph.facebook.com/v19.0
+          NODE_ENV:        production
+          DB_SSL:          'true'

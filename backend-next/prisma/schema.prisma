@@ -373,6 +373,20 @@ model ActionLog {
   @@schema("public")
 }
 
+model WhatsappLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  phone         String
+  template      String
+  obligation_id String?  @db.Uuid
+  status        String
+  error_message String?
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([obligation_id, template, created_at])
+  @@map("whatsapp_logs")
+  @@schema("public")
+}
+
 model PaymentAttemptObligation {
   id                 String         @id @default(uuid()) @db.Uuid
   payment_attempt_id String         @db.Uuid
