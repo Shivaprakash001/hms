@@ -468,6 +468,10 @@ export const paymentService = {
         const response = await api.get('/payments/pending-verification');
         return response.data;
     },
+    manualConfirmPayment: async (attemptId) => {
+        const response = await api.post('/payments/manual-confirm', { attempt_id: attemptId });
+        return response.data;
+    },
     generateRent: async (month) => {
         const response = await api.post('/rent/generate', { month });
         return response.data;
@@ -661,4 +665,52 @@ export const sseService = {
         const response = await api.get('/events-token');
         return response.data.token;
     }
+};
+
+// --- Analytics Dashboard Service (dedicated endpoints, backend-next) ---
+export const analyticsService = {
+    getCashflow: async (from, to) => {
+        const params = {};
+        if (from) params.from = from;
+        if (to)   params.to   = to;
+        const response = await api.get('/dashboard/cashflow', { params });
+        return response.data;
+    },
+    getTenants: async (from, to) => {
+        const params = {};
+        if (from) params.from = from;
+        if (to)   params.to   = to;
+        const response = await api.get('/dashboard/tenants', { params });
+        return response.data;
+    },
+    getFunnel: async (from, to) => {
+        const params = {};
+        if (from) params.from = from;
+        if (to)   params.to   = to;
+        const response = await api.get('/dashboard/funnel', { params });
+        return response.data;
+    },
+    getOperations: async (from, to) => {
+        const params = {};
+        if (from) params.from = from;
+        if (to)   params.to   = to;
+        const response = await api.get('/dashboard/operations', { params });
+        return response.data;
+    },
+};
+
+// --- Reminder Service ---
+export const reminderService = {
+    sendToTenant: async (tenantId) => {
+        const response = await api.post('/notifications/send-reminder', { tenant_id: tenantId });
+        return response.data;
+    },
+    sendBulk: async (tenants) => {
+        const results = await Promise.allSettled(
+            tenants.map(id => api.post('/notifications/send-reminder', { tenant_id: id }).then(r => r.data))
+        );
+        const sent = results.filter(r => r.status === 'fulfilled' && r.value?.success).length;
+        const failed = results.length - sent;
+        return { sent, failed, total: results.length };
+    },
 };

@@ -346,16 +346,30 @@ model PaymentAttempt {
   raw_webhook_payload Json?
   created_at          DateTime                   @default(now()) @db.Timestamptz(6)
   updated_at          DateTime?                  @updatedAt @db.Timestamptz(6)
-  checkout_url        String?
-  payment_type        String                     @default("RENT")
-  addon_pack          String?
-  obligations         PaymentAttemptObligation[]
+  checkout_url          String?
+  payment_type          String                     @default("RENT")
+  addon_pack            String?
+  manual_confirmed_by   String?                    @db.Uuid
+  manual_confirmed_at   DateTime?                  @db.Timestamptz(6)
+  manual_confirm_ip     String?
+  obligations           PaymentAttemptObligation[]
   invoice             OwnerInvoice?              @relation(fields: [invoice_id], references: [id])
   obligation          RentObligation?            @relation(fields: [obligation_id], references: [id])
   tenant              Tenant?                    @relation(fields: [tenant_id], references: [id])
   payments            Payment[]
 
   @@map("payment_attempts")
+  @@schema("public")
+}
+
+model ActionLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  owner_id   String   @db.Uuid
+  action     String
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([owner_id, action, created_at(sort: Desc)])
+  @@map("action_logs")
   @@schema("public")
 }
 
@@ -725,6 +739,7 @@ enum AttemptStatus {
   CREATED
   PENDING
   PENDING_VERIFICATION
+  PENDING_MANUAL_CONFIRMATION
   PROCESSING
   SUCCESS
   FAILED

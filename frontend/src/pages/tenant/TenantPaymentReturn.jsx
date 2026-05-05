@@ -4,7 +4,7 @@ import { AlertCircle, CheckCircle2, Clock, Loader2, RefreshCw, XCircle } from 'l
 
 import { paymentService } from '../../api/services';
 
-const TERMINAL_STATUSES = ['SUCCESS', 'FAILED', 'EXPIRED', 'CANCELLED'];
+const TERMINAL_STATUSES = ['SUCCESS', 'FAILED', 'EXPIRED', 'CANCELLED', 'PENDING_MANUAL_CONFIRMATION'];
 const MAX_POLL_ATTEMPTS = 10;
 const POLL_INTERVAL_MS = 4000;
 
@@ -258,6 +258,54 @@ const TenantPaymentReturn = () => {
                             Back to Payments
                         </Link>
                     </div>
+                </div>
+            </div>
+        );
+    }
+
+    // ── Awaiting owner confirmation (FREE plan) ─────────────────────────────
+    if (currentStatus === 'PENDING_MANUAL_CONFIRMATION') {
+        return (
+            <div className="min-h-screen bg-slate-50 px-4 py-10">
+                <div className="mx-auto max-w-xl rounded-3xl border border-amber-200 bg-white p-8 shadow-sm">
+                    <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-600">Payment Received</p>
+                    <h1 className="mt-3 text-3xl font-black text-slate-900">Awaiting Confirmation</h1>
+                    <p className="mt-2 text-sm text-slate-500">
+                        Your payment reached us successfully. Your hostel owner needs to review
+                        and confirm it before your rent is marked as paid.
+                    </p>
+
+                    <div className="mt-8 rounded-2xl border border-amber-100 bg-amber-50 p-5">
+                        <div className="flex items-center gap-3 text-amber-700">
+                            <Clock size={20} />
+                            <span className="font-medium">Payment received — owner confirmation pending</span>
+                        </div>
+                        {attempt && (
+                            <div className="mt-4 space-y-2 text-sm text-slate-600">
+                                <div className="flex justify-between">
+                                    <span className="font-semibold text-slate-800">Reference</span>
+                                    <span className="font-mono">{attempt.merchant_txn_id || 'N/A'}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="font-semibold text-slate-800">Amount</span>
+                                    <span className="font-medium">₹{Number(attempt.amount || 0).toLocaleString('en-IN')}</span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-500 space-y-1">
+                        <p>✅ Your money has been received by the payment gateway.</p>
+                        <p>⏳ Your owner will review and confirm shortly.</p>
+                        <p>📩 You'll see the update reflected in your payment history.</p>
+                    </div>
+
+                    <Link
+                        to="/tenant/payments"
+                        className="mt-6 block w-full rounded-2xl bg-slate-900 px-5 py-3 text-center text-sm font-bold text-white hover:bg-slate-800"
+                    >
+                        Back to Payments
+                    </Link>
                 </div>
             </div>
         );

@@ -59,16 +59,32 @@ export async function POST(req: Request) {
       });
     }
 
+    const CONFIRMABLE = ["PENDING_MANUAL_CONFIRMATION", "PENDING_VERIFICATION"];
+    if (!CONFIRMABLE.includes(attempt.status) && action === "confirm") {
+      return apiError(
+        `Cannot confirm a payment in status '${attempt.status}'. Expected PENDING_MANUAL_CONFIRMATION.`,
+        "BAD_REQUEST",
+        400
+      );
+    }
+
     if (action === "confirm") {
-      // Finalize as SUCCESS — records the payment and updates obligation
+      // Finalize as SUCCESS — records the payment and updates obligation.
+      // isManualConfirm:true bypasses the plan gate in finalizePaymentAttempt
+      // so the owner can always settle a parked PENDING_MANUAL_CONFIRMATION attempt.
+      const clientIp =
+        req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+        req.headers.get("x-real-ip") ||
+        undefined;
+
       const finalized = await paymentService.finalizePaymentAttempt(
         attempt_id,
         "SUCCESS",
         attempt.gateway_txn_id || undefined,
+        { source: "confirm_route", confirmed_at: new Date().toISOString() },
         {
-          source: "owner_confirmation",
-          confirmed_by: user.id,
-          confirmed_at: new Date().toISOString(),
+          source: "MANUAL_CONFIRM",
+          actor: { id: user.id, ip: clientIp },
         }
       );
 

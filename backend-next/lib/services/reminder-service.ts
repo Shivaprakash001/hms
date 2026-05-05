@@ -266,6 +266,44 @@ export class ReminderService {
     return summary;
   }
 
+  /**
+   * Manual one-tap reminder triggered by owner from the dashboard.
+   * Sends to the oldest unpaid obligation for the tenant.
+   * Security: verifies tenant.owner_id === ownerId before sending.
+   */
+  async sendManualReminder(tenantId: string, ownerId: string): Promise<{ sent: number; tenant_name: string }> {
+    const tenant = await prisma.tenant.findFirst({
+      where: { id: tenantId, owner_id: ownerId, status: "ACTIVE" },
+      select: { id: true, personal_email: true, owner_id: true, profile: { select: { name: true, phone: true } } },
+    });
+    if (!tenant) {
+      const err: any = new Error("Tenant not found or access denied");
+      err.httpStatus = 404;
+      throw err;
+    }
+
+    const obligation = await prisma.rentObligation.findFirst({
+      where: {
+        tenant_id: tenantId,
+        owner_id: ownerId,
+        status: { notIn: ["PAID", "WAIVED"] },
+        due_date: { lt: new Date() },
+      },
+      orderBy: { due_date: "asc" },
+    });
+
+    if (!obligation) return { sent: 0, tenant_name: tenant.profile?.name ?? "Tenant" };
+
+    const hostel = await prisma.hostel.findFirst({ where: { owner_id: ownerId, is_active: true } });
+    const config = resolvePreferences(hostel);
+
+    await this.triggerNotification({ ...obligation, tenant }, "WARNING", config);
+
+    eventSystem.trigger("dashboard_updated", { reason: "manual_reminder_sent", ownerId });
+
+    return { sent: 1, tenant_name: tenant.profile?.name ?? "Tenant" };
+  }
+
   private async triggerNotification(obligation: any, type: string, config: any) {
     const tenant = obligation.tenant;
     const ownerId = tenant.owner_id;

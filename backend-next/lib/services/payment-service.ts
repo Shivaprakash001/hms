@@ -11,6 +11,7 @@ import { eventLog } from "./event-log-service";
 import { getLogger } from "../logger";
 import { incrementPayment, incrementWebhook } from "../metrics";
 import { tenantAnalyticsService } from "./tenant-analytics-service";
+import { planEnforcementService } from "./plan-enforcement-service";
 
 const logger = getLogger("payment.service");
 
@@ -981,7 +982,7 @@ export class PaymentService {
     status: string,
     gatewayTxnId?: string,
     rawPayload?: any,
-    context?: { requestId?: string }
+    context?: { requestId?: string; source?: string; actor?: { id: string; ip?: string } }
   ) {
     const requestMeta = context?.requestId ? { request_id: context.requestId } : {};
 
@@ -993,7 +994,7 @@ export class PaymentService {
     // If count === 0 the attempt is already PROCESSING (another caller beat us)
     // or already terminal (SUCCESS/FAILED/etc.). Re-read and return — no work.
     const lockResult = await prisma.paymentAttempt.updateMany({
-      where: { id: attemptId, status: { in: ["PENDING", "PENDING_VERIFICATION"] } },
+      where: { id: attemptId, status: { in: ["PENDING", "PENDING_VERIFICATION", "PENDING_MANUAL_CONFIRMATION"] } },
       data: { status: "PROCESSING" },
     });
 
@@ -1354,12 +1355,50 @@ export class PaymentService {
       });
     }
 
+    // 🔒 PLAN GATE — Revenue protection enforcement
+    // Automatic settlement (webhook / verify) is a STARTER+ feature.
+    // FREE plan: park the attempt in PENDING_MANUAL_CONFIRMATION so the owner
+    // reviews and clicks "Confirm" before the obligation is marked PAID.
+    // isManualConfirm is derived ONLY from the server-controlled context.source —
+    // never from user-supplied input, making it impossible to spoof.
+    const isManualConfirm = context?.source === "MANUAL_CONFIRM";
+    if (!isManualConfirm) {
+      const autoEnabled = await planEnforcementService.hasFeature(attempt.owner_id, "automation");
+      if (!autoEnabled) {
+        logger.info("payments.finalize.plan_gate.manual_confirmation_required", {
+          ...requestMeta,
+          attempt_id: attemptId,
+          owner_id: attempt.owner_id,
+        });
+        // We hold the PROCESSING lock — update by id is safe.
+        return await prisma.paymentAttempt.update({
+          where: { id: attemptId },
+          data: {
+            status: "PENDING_MANUAL_CONFIRMATION",
+            gateway_txn_id: gatewayTxnId ?? null,
+            raw_webhook_payload: rawPayload ?? null,
+          },
+        });
+      }
+    }
+
     // We hold the PROCESSING lock — no try/catch or status guard needed.
     const updatedAttempt = await prisma.paymentAttempt.update({
       where: { id: attemptId },
-      data: { status: "SUCCESS", gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null, confirmed_at: new Date() },
+      data: {
+        status: "SUCCESS",
+        gateway_txn_id: gatewayTxnId,
+        raw_webhook_payload: rawPayload || null,
+        confirmed_at: new Date(),
+        // Audit trail — populated only for owner manual confirmations
+        ...(isManualConfirm && context?.actor ? {
+          manual_confirmed_by: context.actor.id,
+          manual_confirmed_at: new Date(),
+          manual_confirm_ip: context.actor.ip ?? null,
+        } : {}),
+      },
     });
-    logger.info("payments.finalize.marked_success", { ...requestMeta, attempt_id: attemptId, gateway_txn_id: gatewayTxnId ?? null });
+    logger.info("payments.finalize.marked_success", { ...requestMeta, attempt_id: attemptId, gateway_txn_id: gatewayTxnId ?? null, source: context?.source ?? "auto" });
 
     // Single source of truth: check if payments already exist (RENT path)
     if (attempt.payments.length > 0) {
@@ -1666,7 +1705,7 @@ export class PaymentService {
       role,
     });
 
-    if (["SUCCESS", "FAILED", "EXPIRED", "CANCELLED"].includes(attempt.status)) {
+    if (["SUCCESS", "FAILED", "EXPIRED", "CANCELLED", "PENDING_MANUAL_CONFIRMATION"].includes(attempt.status)) {
       return {
         attempt,
         status: attempt.status,

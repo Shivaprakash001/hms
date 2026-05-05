@@ -100,6 +100,27 @@ export class PlanEnforcementService {
     return true;
   }
 
+  /**
+   * Returns true only when the owner's active plan has the given feature enabled.
+   * Returns false for FREE plan, expired subscriptions, or any DB error.
+   * Does NOT throw — use for conditional branching, not enforcement.
+   */
+  async hasFeature(ownerId: string, feature: "automation" | "multi_hostel" | "analytics"): Promise<boolean> {
+    try {
+      const sub = await this._getOwnerSubscription(ownerId);
+      if (BLOCKED_STATUSES.includes(sub.status)) return false;
+      const plan = await this._resolvePlan(sub.plan_id);
+      return Boolean(plan?.[feature]);
+    } catch {
+      return false;
+    }
+  }
+
+  /** Convenience alias — kept for any callers added before hasFeature existed. */
+  async hasAutomation(ownerId: string): Promise<boolean> {
+    return this.hasFeature(ownerId, "automation");
+  }
+
   async assertFeature(ownerId: string, feature: "automation" | "multi_hostel" | "analytics") {
     const sub = await this._getOwnerSubscription(ownerId);
     if (BLOCKED_STATUSES.includes(sub.status)) {

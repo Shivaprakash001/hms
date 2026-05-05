@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Search, Download, TrendingUp, TrendingDown, DollarSign, Zap, CheckCircle2, AlertCircle, X, Loader2 } from 'lucide-react';
+import { Search, Download, TrendingUp, TrendingDown, DollarSign, Zap, CheckCircle2, AlertCircle, X, Loader2, Clock, UserCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 
@@ -52,6 +52,9 @@ const Payments = () => {
     const [previewLoading, setPreviewLoading] = useState(false);
     const [previewData, setPreviewData] = useState(null);
     const [exportLoading, setExportLoading] = useState(false);
+    const [pendingConfirmations, setPendingConfirmations] = useState([]);
+    const [confirmingId, setConfirmingId] = useState(null);
+    const [confirmToast, setConfirmToast] = useState(null);
 
     const paymentFilters = useMemo(() => ({
         tenantId: tenantFilter !== 'all' ? tenantFilter : undefined,
@@ -139,6 +142,22 @@ const Payments = () => {
     useEffect(() => {
         loadLedger();
     }, [loadLedger]);
+
+    const loadPendingConfirmations = useCallback(async () => {
+        try {
+            const data = await paymentService.getPendingVerifications();
+            // Backend returns both PENDING_VERIFICATION and PENDING_MANUAL_CONFIRMATION.
+            // Show only the ones requiring owner manual confirmation here.
+            const manual = (data?.items || []).filter(i => i.status === 'PENDING_MANUAL_CONFIRMATION');
+            setPendingConfirmations(manual);
+        } catch (_) {
+            setPendingConfirmations([]);
+        }
+    }, []);
+
+    useEffect(() => {
+        loadPendingConfirmations();
+    }, [loadPendingConfirmations]);
 
     const filteredData = useMemo(() => {
         return ledgerRows.filter(item => {
@@ -358,6 +377,23 @@ const Payments = () => {
         loadLedger();
     };
 
+    const handleManualConfirm = async (attemptId) => {
+        setConfirmingId(attemptId);
+        setConfirmToast(null);
+        try {
+            await paymentService.manualConfirmPayment(attemptId);
+            setConfirmToast({ type: 'success', msg: 'Payment confirmed. Rent marked as paid.' });
+            setPendingConfirmations(prev => prev.filter(p => p.attempt_id !== attemptId));
+            loadLedger();
+        } catch (err) {
+            const msg = err?.response?.data?.error || err?.response?.data?.message || 'Confirmation failed. Please try again.';
+            setConfirmToast({ type: 'error', msg });
+        } finally {
+            setConfirmingId(null);
+            setTimeout(() => setConfirmToast(null), 4000);
+        }
+    };
+
     const availableTenants = useMemo(() => {
         const map = new Map();
         ledgerRows.forEach((row) => {
@@ -417,6 +453,78 @@ const Payments = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Pending Manual Confirmations Panel */}
+            {pendingConfirmations.length > 0 && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                            <Clock size={18} className="text-amber-600" />
+                            <h2 className="font-bold text-slate-900 text-base">
+                                Payments Awaiting Confirmation
+                            </h2>
+                            <span className="ml-1 inline-flex items-center justify-center rounded-full bg-amber-500 text-white text-xs font-bold w-5 h-5">
+                                {pendingConfirmations.length}
+                            </span>
+                        </div>
+                        <p className="text-xs text-amber-700 hidden sm:block">
+                            These UPI payments were received but require your manual approval (FREE plan).
+                        </p>
+                    </div>
+
+                    {confirmToast && (
+                        <div className={`mb-3 flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium ${
+                            confirmToast.type === 'success'
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                : 'bg-rose-100 text-rose-800 border border-rose-200'
+                        }`}>
+                            {confirmToast.type === 'success' ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
+                            {confirmToast.msg}
+                        </div>
+                    )}
+
+                    <div className="space-y-3">
+                        {pendingConfirmations.map((item) => (
+                            <div
+                                key={item.attempt_id}
+                                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-amber-200 bg-white p-4"
+                            >
+                                <div className="min-w-0">
+                                    <div className="flex items-center gap-2">
+                                        <UserCheck size={15} className="text-amber-600 shrink-0" />
+                                        <span className="font-semibold text-slate-900 truncate">{item.tenant_name}</span>
+                                        {item.room_no && item.room_no !== 'N/A' && (
+                                            <span className="text-xs text-slate-500">Room {item.room_no}</span>
+                                        )}
+                                    </div>
+                                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-500">
+                                        <span>₹{Number(item.amount || 0).toLocaleString('en-IN')}</span>
+                                        {item.upi_reference && item.upi_reference !== '—' && (
+                                            <span className="font-mono">Ref: {item.upi_reference}</span>
+                                        )}
+                                        {item.rent_month && (
+                                            <span>{new Date(item.rent_month).toLocaleString('en-IN', { month: 'short', year: 'numeric' })}</span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-2 shrink-0">
+                                    <button
+                                        onClick={() => handleManualConfirm(item.attempt_id)}
+                                        disabled={confirmingId === item.attempt_id}
+                                        className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                                    >
+                                        {confirmingId === item.attempt_id
+                                            ? <Loader2 size={14} className="animate-spin" />
+                                            : <CheckCircle2 size={14} />}
+                                        Confirm
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* KPI Cards */}
             <div className="grid grid-cols-2 gap-4 sm:gap-6">

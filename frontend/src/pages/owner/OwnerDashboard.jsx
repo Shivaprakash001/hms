@@ -1,264 +1,694 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { AreaChart, Area, ResponsiveContainer } from 'recharts';
 import {
-    ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip
-} from 'recharts';
-import {
-    Users, BedDouble, Bed, Clock, ArrowUpRight, LayoutGrid, CreditCard, AlertTriangle, X
+    AlertTriangle, X, Bell, Users, BedDouble, ArrowUpRight,
+    Home, BarChart2, Zap, RefreshCw, ShieldAlert, TrendingUp,
+    TrendingDown, ChevronRight, Target, Activity, Wallet,
+    CheckCircle2, Clock, LayoutDashboard
 } from 'lucide-react';
-import { dashboardService, addonService } from '../../api/services';
+import { analyticsService, addonService, reminderService } from '../../api/services';
 import { useAppPreferences } from '../../context/AppPreferencesContext';
-import { formatCurrency, formatDate } from '../../utils/format';
+import { formatCurrency } from '../../utils/format';
 
+// ─── helpers ────────────────────────────────────────────────────────────────
+// Field names from /dashboard/cashflow  → top_defaulters[].pending_amount, .days_overdue, .name
+// Field names from /dashboard/tenants  → risky_tenants[].pending_amount, .avg_delay_days, .score, .name
+const dAmt  = d => Number(d?.pending_amount  ?? 0);
+const dDays = d => Number(d?.days_overdue    ?? d?.avg_delay_days ?? 0);
+const dName = d => d?.name ?? 'Tenant';
+const dId   = d => d?.tenant_id ?? d?.id ?? '';
+
+const riskBadge = d => {
+    const days = dDays(d), amt = dAmt(d);
+    if (days > 15 || amt > 8000) return 'HIGH';
+    if (days > 7  || amt > 3000) return 'MEDIUM';
+    return 'LOW';
+};
+const RC = {
+    HIGH:   'bg-rose-100 text-rose-700 border-rose-200',
+    MEDIUM: 'bg-amber-100 text-amber-700 border-amber-200',
+    LOW:    'bg-emerald-100 text-emerald-700 border-emerald-200',
+};
+
+// ─── main ───────────────────────────────────────────────────────────────────
 const OwnerDashboard = () => {
     const navigate = useNavigate();
     const { preferences } = useAppPreferences();
-    const [months, setMonths] = useState(6);
+    const [tab, setTab]           = useState('cashflow');
+    const [dismissed, setDismissed] = useState(false);
 
-    const { data: unifiedRes, isLoading: loading } = useQuery({
-        queryKey: ['dashboard', months],
-        queryFn: () => dashboardService.getUnified(months),
+    // Always-on: cashflow + addon
+    const { data: cf, isLoading } = useQuery({
+        queryKey: ['analytics-cashflow'],
+        queryFn:  () => analyticsService.getCashflow(),
         staleTime: 5 * 60 * 1000,
     });
-
     const { data: addonData } = useQuery({
         queryKey: ['addon-usage'],
-        queryFn: () => addonService.getUsage(),
+        queryFn:  () => addonService.getUsage(),
         staleTime: 2 * 60 * 1000,
     });
 
-    const [alertDismissed, setAlertDismissed] = useState(false);
-    const cronStopped = !alertDismissed && (addonData?.cron_stopped === true);
+    // Tab-specific: lazy-loaded
+    const { data: ti, isLoading: tiLoading } = useQuery({
+        queryKey: ['analytics-tenants'],
+        queryFn:  () => analyticsService.getTenants(),
+        enabled:  tab === 'tenants',
+        staleTime: 5 * 60 * 1000,
+    });
+    const { data: fn, isLoading: fnLoading } = useQuery({
+        queryKey: ['analytics-funnel'],
+        queryFn:  () => analyticsService.getFunnel(),
+        enabled:  tab === 'funnel',
+        staleTime: 5 * 60 * 1000,
+    });
+    const { data: op, isLoading: opLoading } = useQuery({
+        queryKey: ['analytics-operations'],
+        queryFn:  () => analyticsService.getOperations(),
+        enabled:  tab === 'operations',
+        staleTime: 5 * 60 * 1000,
+    });
 
-    const summary = useMemo(() => {
-        const s = unifiedRes?.stats;
-        if (!s) return {
-            total_tenants: 0, active_tenants: 0, total_capacity: 0, vacant_beds: 0,
-            pending_dues: 0, overdue_amount: 0, overdue_count: 0,
-            rent_collected_this_month: 0, occupancy_rate: 0, net_profit: 0,
-        };
-        const revenue = Number(s.rent_collected_this_month ?? s.revenue ?? 0);
-        const expensesThisMonth = Number(s.expenses_this_month ?? 0);
-        return {
-            total_tenants: s.total_tenants || 0,
-            active_tenants: s.active_tenants || 0,
-            total_capacity: s.total_capacity || 0,
-            vacant_beds: s.vacant_beds || 0,
-            pending_dues: s.pending_dues || 0,
-            overdue_amount: s.overdue_amount || 0,
-            overdue_count: s.overdue_count || 0,
-            rent_collected_this_month: revenue,
-            occupancy_rate: s.occupancy_rate || 0,
-            net_profit: Number(s.net_profit ?? (revenue - expensesThisMonth)),
-        };
-    }, [unifiedRes]);
+    // Cashflow data shape from /dashboard/cashflow
+    const cfd = cf?.data ?? {};
+    const cfStats = useMemo(() => ({
+        expected:      Number(cfd.expected_rent         ?? 0),
+        collected:     Number(cfd.collected_amount      ?? 0),
+        pending:       Number(cfd.pending_amount        ?? 0),
+        rate:          Number(cfd.collection_rate       ?? 0),
+        overdueAmt:    Number(cfd.overdue_amount        ?? 0),
+        overdueCount:  Number(cfd.overdue_tenants_count ?? 0),
+        topDefaulters: Array.isArray(cfd.top_defaulters) ? cfd.top_defaulters : [],
+        daily:         Array.isArray(cfd.daily_collection) ? cfd.daily_collection.map(r => ({ label: r.date?.slice(5), v: Number(r.amount) })) : [],
+    }), [cfd]);
 
-    const collectionData = useMemo(() => {
-        const m = unifiedRes?.collectionData;
-        if (!Array.isArray(m)) return [];
-        return m.map((item) => ({
-            month: item.month,
-            collected: Number(item.collected ?? item.income ?? 0),
-            due: Number(item.due ?? item.expenses ?? 0),
-        }));
-    }, [unifiedRes]);
+    const cronStopped = !dismissed && addonData?.cron_stopped === true;
+    const creditsLow  = !dismissed && Number(addonData?.credits_remaining ?? addonData?.remaining ?? 999) < 5;
+    const showBanner  = cronStopped || creditsLow || (!dismissed && cfStats.overdueCount > 0);
 
-    const recentActivity = useMemo(() => {
-        const a = unifiedRes?.recentActivity;
-        return Array.isArray(a) ? a : [];
-    }, [unifiedRes]);
-
-    if (loading) return <div className="p-8 text-center text-slate-400">Loading dashboard...</div>;
-
-    const hasFinancialData = collectionData.some(
-        (item) => Number(item.collected) > 0 || Number(item.due) > 0
+    if (isLoading) return (
+        <div className="min-h-[60vh] flex items-center justify-center">
+            <RefreshCw size={24} className="text-indigo-400 animate-spin" />
+        </div>
     );
 
     return (
-        <div className="space-y-8 relative pb-20">
-            {/* Cron-stopped alert banner */}
-            {cronStopped && (
-                <div className="flex items-start gap-3 bg-rose-50 border border-rose-200 rounded-2xl px-4 py-3.5">
-                    <AlertTriangle size={18} className="text-rose-500 mt-0.5 flex-shrink-0" />
-                    <div className="flex-1">
-                        <p className="text-sm font-bold text-rose-800">⚠️ Automatic reminders are paused</p>
-                        <p className="text-xs text-rose-600 mt-0.5">Reminders stopped because you ran out of credits. Tenants may miss payment deadlines.</p>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                        <button onClick={() => navigate('/owner/settings')} className="text-xs font-bold text-rose-700 bg-rose-100 hover:bg-rose-200 px-3 py-1.5 rounded-lg transition whitespace-nowrap">
-                            Buy Credits
-                        </button>
-                        <button onClick={() => setAlertDismissed(true)} className="text-rose-400 hover:text-rose-600 transition">
-                            <X size={14} />
-                        </button>
-                    </div>
-                </div>
+        <div className="relative pb-28 bg-slate-50 min-h-screen -mx-3 sm:-mx-8 -mt-3 sm:-mt-8">
+            {showBanner && (
+                <AlertBanner
+                    cronStopped={cronStopped} creditsLow={creditsLow}
+                    cfStats={cfStats} preferences={preferences}
+                    onDismiss={() => setDismissed(true)}
+                    onBuyCredits={() => navigate('/owner/billing')}
+                    onView={() => setTab('tenants')}
+                />
             )}
-
-            <div className="flex items-center justify-between">
-                <div>
-                    <h2 className="text-3xl font-black text-slate-900 tracking-tight">Dashboard Overview</h2>
-                    <p className="text-sm font-semibold text-slate-400 mt-1">Real-time property insights and performance.</p>
-                </div>
+            <div className="px-4 pt-3">
+                {tab === 'cashflow'    && <S1_Cashflow   cfStats={cfStats} cfSeverity={cf?.severity} cfInsights={cf?.insights ?? []} preferences={preferences} navigate={navigate} />}
+                {tab === 'tenants'     && <S2_Tenants    data={ti?.data}   severity={ti?.severity}   insights={ti?.insights ?? []}  loading={tiLoading} preferences={preferences} navigate={navigate} />}
+                {tab === 'funnel'      && <S3_Funnel     data={fn?.data}   severity={fn?.severity}   insights={fn?.insights ?? []}  loading={fnLoading} preferences={preferences} navigate={navigate} />}
+                {tab === 'operations'  && <S4_Operations data={op?.data}   severity={op?.severity}   insights={op?.insights ?? []}  loading={opLoading} preferences={preferences} navigate={navigate} />}
             </div>
+            <TabBar active={tab} onChange={setTab} badge={cfStats.overdueCount} />
+        </div>
+    );
+};
 
-            {/* Target 4 Metric Boxes */}
-            <div className="grid grid-cols-2 gap-4">
-                <StatCard 
-                    icon={<ArrowUpRight />} 
-                    label="Total Revenue" 
-                    value={formatCurrency(summary.rent_collected_this_month, preferences)} 
-                    color="emerald" 
-                    badge={{ text: '+0%', type: 'success' }}
-                />
-                <StatCard 
-                    icon={<Users />} 
-                    label="Occupancy Rate" 
-                    value={`${summary.occupancy_rate || 0}%`} 
-                    color="purple" 
-                    badge={{ text: `${summary.active_tenants} active`, type: 'info' }}
-                />
-                <StatCard 
-                    icon={<Clock />} 
-                    label="Pending Dues" 
-                    value={formatCurrency(summary.pending_dues, preferences)} 
-                    color="rose" 
-                    badge={{ text: '0%', type: 'danger' }}
-                />
-                <StatCard 
-                    icon={<LayoutGrid />} 
-                    label="Net Profit" 
-                    value={formatCurrency(summary.net_profit || 0, preferences)} 
-                    color="pink" 
-                    badge={{ text: '0%', type: 'info' }}
-                />
+// ─── alert banner ───────────────────────────────────────────────────────────
+const AlertBanner = ({ cronStopped, creditsLow, cfStats, preferences, onDismiss, onBuyCredits, onView }) => {
+    const crit = cronStopped || cfStats.overdueCount > 5;
+    const b = crit ? { wrap: 'bg-rose-50 border-rose-200', icon: 'text-rose-500', title: 'text-rose-800', sub: 'text-rose-600', x: 'text-rose-300' } : { wrap: 'bg-amber-50 border-amber-200', icon: 'text-amber-500', title: 'text-amber-800', sub: 'text-amber-600', x: 'text-amber-300' };
+    const title = cronStopped ? 'Reminders paused — credits exhausted' : creditsLow ? 'Credits running low — reminders may stop' : `${formatCurrency(cfStats.overdueAmt, preferences)} overdue — collect now`;
+    const sub   = cronStopped ? 'Tenants may miss deadlines. Buy credits immediately.' : creditsLow ? 'Auto-reminders will stop soon.' : `${cfStats.overdueCount} tenant${cfStats.overdueCount !== 1 ? 's' : ''} haven't paid this month.`;
+    return (
+        <div className={`mx-4 mt-4 mb-1 rounded-2xl border p-4 ${b.wrap}`}>
+            <div className="flex items-start gap-3">
+                <AlertTriangle size={17} className={`shrink-0 mt-0.5 ${b.icon}`} />
+                <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-extrabold ${b.title}`}>{title}</p>
+                    <p className={`text-xs mt-0.5 ${b.sub}`}>{sub}</p>
+                </div>
+                <button onClick={onDismiss} className={`shrink-0 ${b.x}`}><X size={14} /></button>
             </div>
-
-            <div className="grid grid-cols-1 gap-6">
-                {/* Collection chart */}
-                <div className="bg-white p-6 sm:p-7 rounded-[28px] border border-slate-100 shadow-sm min-w-0">
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
-                        <div>
-                            <h3 className="font-black text-slate-900 text-xl tracking-tight">Financial Performance</h3>
-                            <p className="text-sm font-semibold text-slate-400 mt-1">Income vs Expenses over time</p>
-                        </div>
-                        <select
-                            value={months}
-                            onChange={(e) => setMonths(Number(e.target.value))}
-                            className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all cursor-pointer"
-                        >
-                            <option value={3}>Last 3 months</option>
-                            <option value={6}>Last 6 months</option>
-                            <option value={12}>Last 12 months</option>
-                        </select>
-                    </div>
-                    <div className="h-[320px] min-h-[320px] w-full min-w-0">
-                        {!hasFinancialData ? (
-                            <div className="h-full w-full rounded-2xl border-2 border-dashed border-slate-100 bg-slate-50/50 flex items-center justify-center text-center px-6">
-                                <div>
-                                    <p className="text-sm font-extrabold text-slate-500">No financial data yet</p>
-                                    <p className="text-xs font-semibold text-slate-400 mt-1">Add tenants, generate rent, or record payments to see trends.</p>
-                                </div>
-                            </div>
-                        ) : (
-                            <ResponsiveContainer width="100%" height="100%" minWidth={280} minHeight={320} debounce={50}>
-                                <BarChart data={collectionData} barGap={10} margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 700, fill: '#94a3b8' }} />
-                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 700, fill: '#94a3b8' }} tickFormatter={(v) => formatCurrency(Math.round(v / 1000) * 1000, preferences)} width={120} />
-                                    <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '1.25rem', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '16px' }} formatter={(v) => formatCurrency(v, preferences)} />
-                                    <Bar dataKey="due" name="Dues" fill="#e2e8f0" radius={[8, 8, 0, 0]} maxBarSize={40} />
-                                    <Bar dataKey="collected" name="Collected" fill="#6366f1" radius={[8, 8, 0, 0]} maxBarSize={40} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        )}
-                    </div>
-                </div>
-            </div>
-
-            {/* Recent Activity */}
-            <div className="bg-white p-6 sm:p-7 rounded-[28px] border border-slate-100 shadow-sm">
-                <div className="flex items-center justify-between mb-8">
-                    <div>
-                        <h3 className="font-black text-slate-900 text-xl tracking-tight">Recent Activity</h3>
-                        <p className="text-sm font-semibold text-slate-400 mt-1">Key movements and financial updates.</p>
-                    </div>
-                    <button
-                        onClick={() => navigate('/owner/activities')}
-                        className="p-2.5 bg-slate-50 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
-                    >
-                        <ArrowUpRight size={22} />
-                    </button>
-                </div>
-                
-                <div className="space-y-4">
-                    {recentActivity.length === 0 ? (
-                        <div className="py-10 text-center border-2 border-dashed border-slate-50 rounded-24px">
-                            <Clock size={40} className="mx-auto mb-3 text-slate-100" />
-                            <p className="text-sm font-bold text-slate-300">No recent activity detected.</p>
-                        </div>
-                    ) : recentActivity.map((activity) => (
-                        <div key={activity.id} className="flex gap-4 p-4 rounded-2xl bg-slate-50/50 border border-slate-50 hover:bg-white hover:shadow-sm transition-all group">
-                            <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 bg-white border border-slate-200 text-indigo-600 shadow-sm group-hover:scale-105 transition-transform">
-                                <ArrowUpRight size={18} />
-                            </div>
-                            <div className="flex-1">
-                                <div className="flex justify-between items-start mb-0.5">
-                                    <p className="text-sm font-extrabold text-slate-900">{activity.title || activity.event_type}</p>
-                                    <span className="text-[10px] font-black text-slate-400 bg-white px-2 py-0.5 rounded-full border border-slate-100">
-                                        {formatDate(activity.event_at, preferences, '')}
-                                    </span>
-                                </div>
-                                <p className="text-xs font-medium text-slate-500">{activity.detail}</p>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-                <button
-                    onClick={() => navigate('/owner/activities')}
-                    className="mt-8 w-full py-4 text-sm font-black text-indigo-600 bg-indigo-50/50 hover:bg-indigo-100 rounded-2xl transition-all tracking-wide uppercase"
-                >
-                    Browse Full Activity Log
-                </button>
+            <div className="flex gap-2 mt-3">
+                {(cronStopped || creditsLow) && (
+                    <button onClick={onBuyCredits} className="flex-1 py-2 bg-rose-500 text-white text-xs font-black rounded-xl active:scale-95">Buy Credits</button>
+                )}
+                {cfStats.overdueCount > 0 && (
+                    <button onClick={onView} className={`flex-1 py-2 text-xs font-black rounded-xl active:scale-95 ${(cronStopped || creditsLow) ? 'bg-rose-100 text-rose-700' : 'bg-amber-500 text-white'}`}>View Defaulters</button>
+                )}
             </div>
         </div>
     );
 };
 
-const StatCard = ({ icon, label, value, color, badge }) => {
-    const colorMap = {
-        indigo: { bg: 'bg-indigo-50', text: 'text-indigo-600', icon: 'text-indigo-500' },
-        purple: { bg: 'bg-purple-50', text: 'text-purple-600', icon: 'text-purple-500' },
-        blue: { bg: 'bg-blue-50', text: 'text-blue-600', icon: 'text-blue-500' },
-        emerald: { bg: 'bg-emerald-50', text: 'text-emerald-600', icon: 'text-emerald-500' },
-        rose: { bg: 'bg-rose-50', text: 'text-rose-600', icon: 'text-rose-500' },
-        pink: { bg: 'bg-pink-50', text: 'text-pink-600', icon: 'text-pink-500' },
+// ─── optimistic reminder button ─────────────────────────────────────────────
+// States: idle → sending → sent (3s) → idle  |  idle → sending → error (2s) → idle
+const ReminderButton = ({ tenantId, tenantName, onNoCredits }) => {
+    const [s, setS] = useState('idle'); // idle | sent | error
+    const tap = async () => {
+        if (s !== 'idle') return; // block while feedback is showing
+        setS('sent'); // optimistic: ✅ immediately
+        try {
+            const res = await reminderService.sendToTenant(tenantId);
+            if (!res?.success) {
+                setS('error');
+                setTimeout(() => setS('idle'), 2000);
+            } else {
+                setTimeout(() => setS('idle'), 3000);
+            }
+        } catch (err) {
+            if (err?.response?.data?.code === 'NO_REMINDERS_LEFT') { onNoCredits?.(); }
+            setS('error');
+            setTimeout(() => setS('idle'), 2000);
+        }
     };
-    
-    const badgeColors = {
-        success: 'bg-emerald-50 text-emerald-600 border-emerald-100',
-        danger: 'bg-rose-50 text-rose-600 border-rose-100',
-        info: 'bg-indigo-50 text-indigo-600 border-indigo-100',
-    };
+    if (s === 'sent')  return <div className="shrink-0 p-2.5 bg-emerald-50 text-emerald-600 rounded-xl" title={`Reminder sent to ${tenantName}`}><CheckCircle2 size={14} /></div>;
+    if (s === 'error') return <button onClick={() => { setS('idle'); tap(); }} className="shrink-0 p-2.5 bg-rose-50 text-rose-600 rounded-xl active:scale-95" title="Failed — tap to retry"><Bell size={14} /></button>;
+    return (
+        <button onClick={tap} className="shrink-0 p-2.5 bg-indigo-50 text-indigo-600 rounded-xl active:scale-95" title={`Send reminder to ${tenantName}`}>
+            <Bell size={14} />
+        </button>
+    );
+};
 
-    const style = colorMap[color] || colorMap.indigo;
+const RemindAllButton = ({ tenants, onNoCredits }) => {
+    const [s, setS] = useState('idle');
+    const tap = async () => {
+        if (s === 'sending') return;
+        setS('sending');
+        try {
+            const res = await reminderService.sendBulk(tenants.map(dId));
+            setS(res.sent > 0 ? 'sent' : 'error');
+            setTimeout(() => setS('idle'), 3000);
+        } catch (err) {
+            if (err?.response?.data?.code === 'NO_REMINDERS_LEFT') { onNoCredits?.(); }
+            setS('error');
+            setTimeout(() => setS('idle'), 2000);
+        }
+    };
+    const label = s === 'sent' ? 'All Sent ✓' : s === 'error' ? 'Some Failed' : s === 'sending' ? '...' : 'Remind All';
+    return (
+        <button onClick={tap} disabled={s === 'sending'} className={`text-xs font-black px-3 py-1.5 rounded-xl active:scale-95 disabled:opacity-50 transition ${
+            s === 'sent' ? 'bg-emerald-50 text-emerald-700' : s === 'error' ? 'bg-rose-50 text-rose-700' : 'bg-indigo-50 text-indigo-600'
+        }`}>{label}</button>
+    );
+};
+
+// shared loading skeleton
+const TabSkeleton = () => (
+    <div className="space-y-3 pt-4 animate-pulse">
+        <div className="bg-slate-100 rounded-2xl h-28" />
+        <div className="bg-slate-100 rounded-2xl h-20" />
+        <div className="bg-slate-100 rounded-2xl h-20" />
+    </div>
+);
+
+// shared insight strip — uses server-provided insights[] + severity
+const InsightStrip = ({ insights, severity }) => {
+    if (!insights?.length) return null;
+    const cls = severity === 'HIGH' ? 'bg-rose-50 border-rose-100 text-rose-700'
+        : severity === 'MEDIUM'     ? 'bg-amber-50 border-amber-100 text-amber-700'
+        : 'bg-emerald-50 border-emerald-100 text-emerald-700';
+    return (
+        <div className={`rounded-2xl border p-4 ${cls}`}>
+            <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-2">Insights</p>
+            {insights.slice(0, 3).map((ins, i) => (
+                <div key={i} className="flex items-start gap-2 text-xs font-semibold leading-snug mb-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-current mt-1 shrink-0 opacity-60" />{ins}
+                </div>
+            ))}
+        </div>
+    );
+};
+
+// ─── screen 1: cashflow command ───────────────────────────────────────────────
+// Data source: /dashboard/cashflow
+// Fields used: expected_rent, collected_amount, pending_amount, collection_rate,
+//              overdue_amount, overdue_tenants_count,
+//              top_defaulters[]{tenant_id, name, pending_amount, days_overdue},
+//              daily_collection[]{date, amount}
+const S1_Cashflow = ({ cfStats, cfSeverity, cfInsights, preferences, navigate }) => {
+    const highRisk = cfStats.topDefaulters.filter(d => riskBadge(d) === 'HIGH').length;
+    const actionItems = [
+        cfStats.overdueCount > 0 && { id: 'remind',  icon: Bell,       color: 'text-indigo-600 bg-indigo-50',  label: `${cfStats.overdueCount} tenant${cfStats.overdueCount !== 1 ? 's' : ''} unpaid — send reminders`,                    cta: 'Payments',    path: '/owner/payments' },
+        highRisk > 0             && { id: 'high',    icon: ShieldAlert, color: 'text-rose-600 bg-rose-50',      label: `${highRisk} high-risk tenant${highRisk !== 1 ? 's' : ''} — overdue > 10 days`,                                   cta: 'View',        path: '/owner/tenants'  },
+        cfStats.pending > 0      && { id: 'collect', icon: Wallet,      color: 'text-emerald-600 bg-emerald-50', label: `${formatCurrency(cfStats.pending, preferences)} collectible right now`,                                          cta: 'Collect',     path: '/owner/payments' },
+    ].filter(Boolean);
+
+    const last = cfStats.daily[cfStats.daily.length - 1]?.v ?? 0;
+    const prev = cfStats.daily[cfStats.daily.length - 2]?.v ?? 0;
 
     return (
-        <div className={`bg-white p-4 sm:p-5 rounded-2xl sm:rounded-[24px] border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all`}>
-            {badge && (
-                <div className={`absolute top-3 sm:top-4 right-3 sm:right-4 px-1.5 sm:px-2 py-0.5 rounded-lg border ${badgeColors[badge.type] || badgeColors.info} text-[9px] sm:text-[10px] font-black flex items-center gap-1`}>
-                    {badge.type === 'success' && <ArrowUpRight size={10} />}
-                    {badge.type === 'danger' && <ArrowUpRight size={10} className="rotate-90" />}
-                    {badge.text}
+        <div className="space-y-4 pt-2">
+            <div className="flex items-center justify-between py-1">
+                <div>
+                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">Cashflow</h1>
+                    <p className="text-xs font-semibold text-slate-400">Revenue command center</p>
+                </div>
+                <button onClick={() => navigate('/owner/payments')} className="p-2 bg-white rounded-xl border border-slate-200 text-slate-500 active:scale-95">
+                    <ArrowUpRight size={18} />
+                </button>
+            </div>
+
+            {/* money grid — 4 cards from cashflow API */}
+            <div className="grid grid-cols-2 gap-3">
+                {[
+                    { label: 'Expected',  value: formatCurrency(cfStats.expected,   preferences), sub: 'Total this month',              cls: 'bg-indigo-50 text-indigo-700' },
+                    { label: 'Collected', value: formatCurrency(cfStats.collected,  preferences), sub: `${cfStats.rate.toFixed(1)}% rate`, cls: 'bg-emerald-50 text-emerald-700' },
+                    { label: 'Pending',   value: formatCurrency(cfStats.pending,    preferences), sub: `${cfStats.overdueCount} unpaid`,  cls: cfStats.pending > 0 ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200' : 'bg-slate-50 text-slate-600', pulse: cfStats.pending > 0 },
+                    { label: 'Overdue',   value: formatCurrency(cfStats.overdueAmt, preferences), sub: 'Past due date',                   cls: cfStats.overdueAmt > 0 ? 'bg-rose-50 text-rose-700' : 'bg-slate-50 text-slate-600' },
+                ].map(c => (
+                    <button key={c.label} onClick={() => navigate('/owner/payments')} className={`p-4 rounded-2xl text-left active:scale-95 transition-transform ${c.cls}`}>
+                        <p className="text-[10px] font-black uppercase tracking-widest opacity-50 mb-1">{c.label}</p>
+                        <p className="text-[18px] font-black tracking-tight leading-none mb-1">{c.value}</p>
+                        <p className="text-[11px] font-semibold opacity-70">{c.sub}</p>
+                        {c.pulse && <span className="mt-2 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" /><span className="text-[10px] font-black text-rose-500">Action needed</span></span>}
+                    </button>
+                ))}
+            </div>
+
+            {/* top defaulters — fields from API: tenant_id, name, pending_amount, days_overdue */}
+            {cfStats.topDefaulters.length > 0 && (
+                <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-slate-50">
+                        <div className="flex items-center gap-2">
+                            <ShieldAlert size={15} className="text-rose-500" />
+                            <span className="text-sm font-black text-slate-900">Top Defaulters</span>
+                            <span className="text-[11px] font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full">{cfStats.topDefaulters.length}</span>
+                        </div>
+                        <RemindAllButton tenants={cfStats.topDefaulters} onNoCredits={() => navigate('/owner/billing')} />
+                    </div>
+                    <div className="divide-y divide-slate-50">
+                        {cfStats.topDefaulters.map(d => {
+                            const r = riskBadge(d);
+                            return (
+                                <div key={dId(d)} className="flex items-center gap-3 px-4 py-3 active:bg-slate-50">
+                                    <button onClick={() => navigate(`/owner/tenants/${dId(d)}`)} className="flex-1 min-w-0 text-left">
+                                        <div className="flex items-center gap-2 mb-0.5">
+                                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${RC[r]}`}>{r}</span>
+                                            <p className="text-sm font-extrabold text-slate-900 truncate">{dName(d)}</p>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-sm font-black text-rose-600">{formatCurrency(dAmt(d), preferences)}</span>
+                                            {dDays(d) > 0 && <span className="text-xs font-semibold text-slate-400">{dDays(d)}d overdue</span>}
+                                        </div>
+                                    </button>
+                                    <ReminderButton tenantId={dId(d)} tenantName={dName(d)} onNoCredits={() => navigate('/owner/billing')} />
+                                </div>
+                            );
+                        })}
+                    </div>
                 </div>
             )}
-            <div className="relative z-10 pt-1">
-                <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl ${style.bg} flex items-center justify-center ${style.text} mb-3 sm:mb-4 group-hover:scale-110 transition-transform shadow-sm`}>
-                    {React.cloneElement(icon, { size: 20, className: "sm:size-[24px]" })}
+
+            {/* action center */}
+            {actionItems.length > 0 ? (
+                <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
+                    <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-50">
+                        <Zap size={15} className="text-amber-500" />
+                        <span className="text-sm font-black text-slate-900">Action Center</span>
+                        <span className="text-[11px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">{actionItems.length}</span>
+                    </div>
+                    <div className="divide-y divide-slate-50">
+                        {actionItems.map(item => { const Icon = item.icon; return (
+                            <div key={item.id} className="flex items-center gap-3 px-4 py-3">
+                                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${item.color}`}><Icon size={16} /></div>
+                                <p className="flex-1 text-sm font-semibold text-slate-700 leading-snug">{item.label}</p>
+                                <button onClick={() => navigate(item.path)} className="shrink-0 text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-xl active:scale-95 whitespace-nowrap">{item.cta}</button>
+                            </div>
+                        ); })}
+                    </div>
                 </div>
-                <h4 className="text-slate-400 font-extrabold text-[9px] sm:text-[10px] uppercase tracking-wider mb-1">{label}</h4>
-                <div className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">{value}</div>
+            ) : (
+                <div className="bg-white rounded-2xl border border-slate-100 p-6 text-center shadow-sm">
+                    <CheckCircle2 size={28} className="mx-auto mb-2 text-emerald-400" />
+                    <p className="text-sm font-black text-slate-600">All clear — no urgent actions</p>
+                </div>
+            )}
+
+            {/* sparkline — daily_collection from API */}
+            {cfStats.daily.length > 0 && (
+                <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
+                    <div className="flex items-center justify-between mb-3">
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Daily Collection</p>
+                            <p className="text-lg font-black text-slate-900">{formatCurrency(last, preferences)}</p>
+                        </div>
+                        <span className={`flex items-center gap-1 text-xs font-black px-2 py-1 rounded-xl ${last >= prev ? 'text-emerald-600 bg-emerald-50' : 'text-rose-600 bg-rose-50'}`}>
+                            {last >= prev ? <TrendingUp size={13} /> : <TrendingDown size={13} />} vs prev day
+                        </span>
+                    </div>
+                    <div className="h-16">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={cfStats.daily} margin={{ top: 2, right: 2, left: 2, bottom: 0 }}>
+                                <defs>
+                                    <linearGradient id="spark" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%"  stopColor="#6366f1" stopOpacity={0.3} />
+                                        <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                                    </linearGradient>
+                                </defs>
+                                <Area type="monotone" dataKey="v" stroke="#6366f1" strokeWidth={2} fill="url(#spark)" dot={false} />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+            )}
+
+            <InsightStrip insights={cfInsights} severity={cfSeverity} />
+        </div>
+    );
+};
+
+// ─── screen 2: tenant intelligence ───────────────────────────────────────────
+// Data source: /dashboard/tenants
+// Fields: distribution{good,medium,risky}, risky_tenants[]{tenant_id,name,score,pending_amount,avg_delay_days},
+//         payment_behavior{on_time_percentage,avg_delay_days,reminder_dependency_rate},
+//         exit_insights{total_exits,top_reasons[]{reason,count},churn_rate}
+const S2_Tenants = ({ data, severity, insights, loading, preferences, navigate }) => {
+    if (loading || !data) return <TabSkeleton />;
+    const dist  = data.distribution    ?? { good: 0, medium: 0, risky: 0 };
+    const risky = data.risky_tenants   ?? [];
+    const beh   = data.payment_behavior ?? {};
+    const exit  = data.exit_insights    ?? {};
+    const total = (dist.good + dist.medium + dist.risky) || 1;
+
+    return (
+        <div className="space-y-4 pt-2">
+            <div className="flex items-center justify-between py-1">
+                <div>
+                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">Tenant Intel</h1>
+                    <p className="text-xs font-semibold text-slate-400">{total} scored tenants</p>
+                </div>
+                <button onClick={() => navigate('/owner/tenants')} className="p-2 bg-white rounded-xl border border-slate-200 text-slate-500 active:scale-95">
+                    <ArrowUpRight size={18} />
+                </button>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Health Distribution</p>
+                <div className="flex rounded-xl overflow-hidden h-4 gap-0.5 mb-3">
+                    {dist.good   > 0 && <div className="bg-emerald-400 rounded-l-xl" style={{ width: `${(dist.good   / total) * 100}%` }} />}
+                    {dist.medium > 0 && <div className="bg-amber-400"                 style={{ width: `${(dist.medium / total) * 100}%` }} />}
+                    {dist.risky  > 0 && <div className="bg-rose-500 rounded-r-xl"     style={{ width: `${(dist.risky  / total) * 100}%` }} />}
+                </div>
+                <div className="flex justify-between text-[11px] font-black">
+                    <span className="text-emerald-600">{dist.good} Good</span>
+                    <span className="text-amber-600">{dist.medium} Medium</span>
+                    <span className="text-rose-600">{dist.risky} Risky</span>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+                {[
+                    { label: 'On-Time',    value: `${beh.on_time_percentage ?? 0}%`,  cls: (beh.on_time_percentage ?? 0) >= 70 ? 'text-emerald-700 bg-emerald-50' : 'text-rose-700 bg-rose-50' },
+                    { label: 'Avg Delay',  value: (beh.avg_delay_days ?? 0) > 0 ? `${Math.round(beh.avg_delay_days)}d` : '—', cls: (beh.avg_delay_days ?? 0) > 7 ? 'text-rose-700 bg-rose-50' : 'text-slate-700 bg-slate-50' },
+                    { label: 'Need Remind',value: `${beh.reminder_dependency_rate ?? 0}%`, cls: 'text-indigo-700 bg-indigo-50' },
+                ].map(c => (
+                    <div key={c.label} className={`rounded-2xl p-3 text-center ${c.cls}`}>
+                        <p className="text-xl font-black">{c.value}</p>
+                        <p className="text-[9px] font-black uppercase tracking-widest opacity-60 mt-0.5">{c.label}</p>
+                    </div>
+                ))}
+            </div>
+
+            {risky.length > 0 ? (
+                <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
+                    <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-50">
+                        <ShieldAlert size={15} className="text-rose-500" />
+                        <span className="text-sm font-black text-slate-900">Risky Tenants</span>
+                        <span className="text-[11px] font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full">{risky.length}</span>
+                    </div>
+                    <div className="divide-y divide-slate-50">
+                        {risky.map(t => (
+                            <div key={t.tenant_id} className="flex items-center gap-3 px-4 py-3 active:bg-slate-50">
+                                <button onClick={() => navigate(`/owner/tenants/${t.tenant_id}`)} className="flex-1 min-w-0 text-left">
+                                    <div className="flex items-center gap-2 mb-0.5">
+                                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${t.score < 30 ? RC.HIGH : RC.MEDIUM}`}>Score {t.score}</span>
+                                        <p className="text-sm font-extrabold text-slate-900 truncate">{t.name}</p>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        {t.pending_amount > 0 && <span className="text-sm font-black text-rose-600">{formatCurrency(t.pending_amount, preferences)}</span>}
+                                        {t.avg_delay_days > 0 && <span className="text-xs text-slate-400">{Math.round(t.avg_delay_days)}d avg delay</span>}
+                                    </div>
+                                </button>
+                                <div className="flex gap-1.5 shrink-0">
+                                    <ReminderButton tenantId={t.tenant_id} tenantName={t.name ?? 'Tenant'} onNoCredits={() => navigate('/owner/billing')} />
+                                    <button onClick={() => navigate(`/owner/tenants/${t.tenant_id}`)} className="p-2 bg-slate-50 text-slate-500 rounded-xl active:scale-95">
+                                        <ChevronRight size={14} />
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ) : (
+                <div className="bg-white rounded-2xl border border-slate-100 p-8 text-center shadow-sm">
+                    <CheckCircle2 size={32} className="mx-auto mb-2 text-emerald-400" />
+                    <p className="text-sm font-black text-slate-600">No risky tenants — all on track</p>
+                </div>
+            )}
+
+            {exit.total_exits > 0 && (
+                <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Exit Signals</p>
+                    <div className="flex items-center gap-6 mb-3">
+                        <div><p className="text-2xl font-black text-slate-900">{exit.total_exits}</p><p className="text-[10px] font-black text-slate-400 uppercase">Exits</p></div>
+                        <div><p className="text-2xl font-black text-rose-600">{exit.churn_rate}%</p><p className="text-[10px] font-black text-slate-400 uppercase">Churn Rate</p></div>
+                    </div>
+                    {exit.top_reasons?.slice(0, 3).map((r, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs py-1 border-t border-slate-50">
+                            <span className="flex items-center gap-2 font-semibold text-slate-600"><span className="w-1.5 h-1.5 bg-slate-300 rounded-full" />{r.reason}</span>
+                            <span className="font-black text-slate-900">{r.count}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            <InsightStrip insights={insights} severity={severity} />
+        </div>
+    );
+};
+
+// ─── screen 3: funnel ─────────────────────────────────────────────────────────
+// Data source: /dashboard/funnel
+// Fields: reminders_sent, conversions, conversion_rate, revenue_generated,
+//         avg_time_to_pay_hours, channel_performance[]{channel,sent,converted,conversion_rate}
+const S3_Funnel = ({ data, severity, insights, loading, preferences, navigate }) => {
+    if (loading || !data) return <TabSkeleton />;
+    const sent     = data.reminders_sent        ?? 0;
+    const conv     = data.conversions           ?? 0;
+    const rate     = Number(data.conversion_rate       ?? 0);
+    const revenue  = Number(data.revenue_generated     ?? 0);
+    const hours    = Number(data.avg_time_to_pay_hours ?? 0);
+    const channels = data.channel_performance   ?? [];
+
+    return (
+        <div className="space-y-4 pt-2">
+            <div className="py-1">
+                <h1 className="text-2xl font-black text-slate-900 tracking-tight">Revenue Funnel</h1>
+                <p className="text-xs font-semibold text-slate-400">Reminder → payment pipeline</p>
+            </div>
+
+            {sent === 0 ? (
+                <div className="bg-white rounded-2xl border border-slate-100 p-8 text-center shadow-sm">
+                    <Target size={32} className="mx-auto mb-2 text-slate-300" />
+                    <p className="text-sm font-black text-slate-500">No reminders sent this period</p>
+                    <button onClick={() => navigate('/owner/payments')} className="mt-3 px-4 py-2 bg-indigo-500 text-white text-xs font-black rounded-xl active:scale-95">
+                        Go to Payments
+                    </button>
+                </div>
+            ) : (
+                <>
+                    <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm space-y-3">
+                        {[
+                            { label: 'Reminders Sent',     value: sent, pct: 100,                              color: 'bg-indigo-500' },
+                            { label: 'Payments Converted', value: conv, pct: Math.max(Math.round(rate), 4),    color: 'bg-emerald-500' },
+                        ].map((s, i) => (
+                            <div key={i}>
+                                <div className="flex justify-between items-center mb-1">
+                                    <span className="text-xs font-black text-slate-600">{s.label}</span>
+                                    <span className="text-sm font-black text-slate-900">{s.value}</span>
+                                </div>
+                                <div className="h-8 bg-slate-50 rounded-xl overflow-hidden">
+                                    <div className={`h-full ${s.color} rounded-xl flex items-center px-3`} style={{ width: `${s.pct}%` }}>
+                                        <span className="text-[11px] font-black text-white">{s.pct}%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-emerald-50 rounded-2xl p-4">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 opacity-70 mb-1">Revenue via Reminders</p>
+                            <p className="text-xl font-black text-emerald-700">{formatCurrency(revenue, preferences)}</p>
+                            <p className="text-xs font-semibold text-emerald-600 mt-1">{rate.toFixed(1)}% conversion</p>
+                        </div>
+                        <div className="bg-indigo-50 rounded-2xl p-4">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 opacity-70 mb-1">Avg Pay Time</p>
+                            <p className="text-xl font-black text-indigo-700">{hours > 0 ? `${hours.toFixed(1)}h` : '—'}</p>
+                            <p className="text-xs font-semibold text-indigo-600 mt-1">After reminder</p>
+                        </div>
+                    </div>
+
+                    {channels.length > 0 && (
+                        <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Channel Performance</p>
+                            {channels.map((ch, i) => (
+                                <div key={i} className="flex items-center gap-3 mb-2">
+                                    <span className="text-xs font-black text-slate-700 w-24 truncate uppercase">{ch.channel}</span>
+                                    <div className="flex-1 h-2.5 bg-slate-50 rounded-full overflow-hidden">
+                                        <div className="h-full bg-indigo-400 rounded-full" style={{ width: `${Math.max(ch.conversion_rate, 3)}%` }} />
+                                    </div>
+                                    <span className="text-xs font-black text-slate-900 w-10 text-right">{ch.conversion_rate.toFixed(1)}%</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </>
+            )}
+
+            <InsightStrip insights={insights} severity={severity} />
+        </div>
+    );
+};
+
+// ─── screen 4: operations ─────────────────────────────────────────────────────
+// Data source: /dashboard/operations
+// Fields: occupancy_rate, total_rooms, occupied_rooms, avg_vacancy_days,
+//         move_ins, move_outs, revenue, expenses, profit,
+//         complaints{pending,resolved,avg_resolution_time_hours}
+const S4_Operations = ({ data, severity, insights, loading, preferences, navigate }) => {
+    if (loading || !data) return <TabSkeleton />;
+    const occ      = Number(data.occupancy_rate ?? 0);
+    const occupied = Number(data.occupied_rooms ?? 0);
+    const rev      = Number(data.revenue        ?? 0);
+    const exp      = Number(data.expenses       ?? 0);
+    const profit   = Number(data.profit         ?? 0);
+    const cp       = data.complaints ?? {};
+    const vacant   = occ > 0 ? Math.max(0, Math.round(occupied * 100 / occ) - occupied) : 0;
+    const profitPct = rev > 0 ? Math.round((profit / rev) * 100) : 0;
+
+    return (
+        <div className="space-y-4 pt-2">
+            <div className="flex items-center justify-between py-1">
+                <div>
+                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">Operations</h1>
+                    <p className="text-xs font-semibold text-slate-400">Property health overview</p>
+                </div>
+                <button onClick={() => navigate('/owner/rooms')} className="p-2 bg-white rounded-xl border border-slate-200 text-slate-500 active:scale-95">
+                    <ArrowUpRight size={18} />
+                </button>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                    <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Occupancy</p>
+                        <p className="text-3xl font-black text-slate-900 mt-1">{occ.toFixed(1)}%</p>
+                        <p className="text-xs font-semibold text-slate-400 mt-0.5">{occupied} beds occupied · {data.total_rooms} rooms</p>
+                    </div>
+                    {vacant > 0 && (
+                        <div className="text-right">
+                            <p className="text-2xl font-black text-amber-600">{vacant}</p>
+                            <p className="text-xs font-black text-amber-500">vacant</p>
+                        </div>
+                    )}
+                </div>
+                <div className="h-3 bg-slate-100 rounded-full overflow-hidden mb-4">
+                    <div className={`h-full rounded-full transition-all ${occ >= 80 ? 'bg-emerald-500' : occ >= 50 ? 'bg-amber-400' : 'bg-rose-500'}`} style={{ width: `${Math.min(occ, 100)}%` }} />
+                </div>
+                {vacant > 0 && (
+                    <button onClick={() => navigate('/owner/rooms')} className="w-full py-3 text-sm font-black text-white bg-indigo-500 rounded-xl active:scale-95">
+                        Fill {vacant} Vacant {vacant !== 1 ? 'Beds' : 'Bed'}
+                    </button>
+                )}
+                <div className="flex gap-4 mt-3 pt-3 border-t border-slate-50">
+                    <div><p className="text-sm font-black text-emerald-600">+{data.move_ins ?? 0}</p><p className="text-[10px] font-black text-slate-400 uppercase">Move-ins</p></div>
+                    <div><p className="text-sm font-black text-rose-500">-{data.move_outs ?? 0}</p><p className="text-[10px] font-black text-slate-400 uppercase">Move-outs</p></div>
+                    {data.avg_vacancy_days > 0 && <div><p className="text-sm font-black text-amber-600">{data.avg_vacancy_days}d</p><p className="text-[10px] font-black text-slate-400 uppercase">Avg Vacant</p></div>}
+                </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Revenue vs Expenses</p>
+                {[
+                    { label: 'Revenue',  value: rev,    color: 'bg-emerald-500', pct: 100 },
+                    { label: 'Expenses', value: exp,    color: 'bg-rose-400',    pct: rev > 0 ? Math.min(Math.round((exp / rev) * 100), 100) : 0 },
+                    { label: 'Profit',   value: profit, color: profit >= 0 ? 'bg-indigo-500' : 'bg-rose-600', pct: Math.max(Math.abs(profitPct), 4) },
+                ].map(row => (
+                    <div key={row.label} className="mb-3">
+                        <div className="flex justify-between items-center mb-1">
+                            <span className="text-xs font-black text-slate-600">{row.label}</span>
+                            <span className="text-sm font-black text-slate-900">{formatCurrency(row.value, preferences)}</span>
+                        </div>
+                        <div className="h-2.5 bg-slate-50 rounded-full overflow-hidden">
+                            <div className={`h-full ${row.color} rounded-full`} style={{ width: `${Math.min(row.pct, 100)}%` }} />
+                        </div>
+                    </div>
+                ))}
+                <button onClick={() => navigate('/owner/expenses')} className="mt-2 w-full py-2.5 text-xs font-black text-indigo-600 bg-indigo-50 rounded-xl active:scale-95">
+                    Manage Expenses
+                </button>
+            </div>
+
+            {cp.pending > 0 && (
+                <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4">
+                    <div className="flex items-center gap-2 mb-1">
+                        <Clock size={14} className="text-amber-600" />
+                        <p className="text-sm font-extrabold text-amber-800">{cp.pending} complaint{cp.pending !== 1 ? 's' : ''} pending</p>
+                    </div>
+                    <p className="text-xs text-amber-600">Avg resolution: {cp.avg_resolution_time_hours?.toFixed(1)}h · {cp.resolved} resolved</p>
+                </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+                {[
+                    { label: 'All Tenants', icon: Users,     path: '/owner/tenants',     cls: 'bg-indigo-50 text-indigo-600' },
+                    { label: 'All Rooms',   icon: BedDouble,  path: '/owner/rooms',      cls: 'bg-purple-50 text-purple-600' },
+                    { label: 'Payments',    icon: Wallet,     path: '/owner/payments',   cls: 'bg-emerald-50 text-emerald-600' },
+                    { label: 'Activity',    icon: Activity,   path: '/owner/activities', cls: 'bg-slate-50 text-slate-600' },
+                ].map(l => { const Icon = l.icon; return (
+                    <button key={l.label} onClick={() => navigate(l.path)} className={`flex items-center gap-3 p-4 rounded-2xl active:scale-95 transition-transform ${l.cls}`}>
+                        <Icon size={18} /><span className="text-sm font-black">{l.label}</span><ChevronRight size={14} className="ml-auto opacity-50" />
+                    </button>
+                ); })}
+            </div>
+
+            <InsightStrip insights={insights} severity={severity} />
+        </div>
+    );
+};
+
+// ─── bottom tab bar ──────────────────────────────────────────────────────────
+const TabBar = ({ active, onChange, badge }) => {
+    const tabs = [
+        { id: 'cashflow',   label: 'Cashflow',   Icon: LayoutDashboard },
+        { id: 'tenants',    label: 'Tenants',     Icon: Users           },
+        { id: 'funnel',     label: 'Funnel',      Icon: BarChart2       },
+        { id: 'operations', label: 'Operations',  Icon: Home            },
+    ];
+    return (
+        <div className="fixed bottom-0 inset-x-0 z-40 bg-white border-t border-slate-200 safe-bottom">
+            <div className="flex h-16 max-w-lg mx-auto">
+                {tabs.map(t => {
+                    const on = active === t.id;
+                    return (
+                        <button key={t.id} onClick={() => onChange(t.id)} className={`flex-1 flex flex-col items-center justify-center gap-0.5 relative transition-colors active:scale-95 ${on ? 'text-indigo-600' : 'text-slate-400'}`}>
+                            <div className="relative">
+                                <t.Icon size={20} strokeWidth={on ? 2.5 : 1.8} />
+                                {t.id === 'tenants' && badge > 0 && (
+                                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 rounded-full text-[9px] font-black text-white flex items-center justify-center">{badge > 9 ? '9+' : badge}</span>
+                                )}
+                            </div>
+                            <span className={`text-[10px] font-black tracking-wide ${on ? 'text-indigo-600' : 'text-slate-400'}`}>{t.label}</span>
+                            {on && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-0.5 bg-indigo-600 rounded-full" />}
+                        </button>
+                    );
+                })}
             </div>
         </div>
     );

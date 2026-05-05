@@ -26,7 +26,7 @@ export async function GET(req: Request) {
     const attempts = await prisma.paymentAttempt.findMany({
       where: {
         owner_id: user.id,
-        status: "PENDING_VERIFICATION",
+        status: { in: ["PENDING_VERIFICATION", "PENDING_MANUAL_CONFIRMATION"] },
       },
       include: {
         tenant: {
@@ -47,6 +47,7 @@ export async function GET(req: Request) {
 
     const items = attempts.map((a: any) => ({
       attempt_id: a.id,
+      status: a.status,
       tenant_name: a.tenant?.profile?.name || "Unknown",
       tenant_email: a.tenant?.profile?.email || "",
       tenant_phone: a.tenant?.profile?.phone || "",
