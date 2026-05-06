@@ -353,6 +353,7 @@ export class OverflowBillingService {
             name: true,
             price_inr: true,
             tenant_limit: true,
+            is_custom: true,
             features: true,
           },
         },
