@@ -66,8 +66,8 @@ const OwnerLayout = () => {
         // We import services dynamically to avoid circular dependencies if any, 
         // but tenantService and roomService are available. Let's prefetch safely.
         import('../api/services').then(({ roomService, tenantService }) => {
-            queryClient.prefetchQuery({ queryKey: queryKeys.rooms.list(), queryFn: () => roomService.getAll() });
-            queryClient.prefetchQuery({ queryKey: queryKeys.tenants.list(), queryFn: () => tenantService.getAll() });
+            queryClient.prefetchQuery({ queryKey: queryKeys.rooms.list({}), queryFn: () => roomService.getAll() });
+            queryClient.prefetchQuery({ queryKey: queryKeys.tenants.list({}), queryFn: () => tenantService.getAll() });
         });
     }, [queryClient]);
 

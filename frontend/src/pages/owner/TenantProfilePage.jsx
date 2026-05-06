@@ -6,9 +6,10 @@ import {
   MapPin, CreditCard, Calendar, CheckCircle2, AlertCircle, X, 
   Check, Download, ZoomIn
 } from 'lucide-react';
-import api from '../../api/axios'; // Or use services
+import api from '../../api/axios';
 import { useAppPreferences } from '../../context/AppPreferencesContext';
 import { formatCurrency, formatDate } from '../../utils/format';
+import { queryKeys } from '../../lib/query/queryKeys';
 
 // --- Local Service Helper ---
 const fetchTenantFull = async (id) => {
@@ -35,22 +36,24 @@ export default function TenantProfilePage() {
   const [previewDoc, setPreviewDoc] = useState(null);
 
   const { data: tenant, isLoading, isError } = useQuery({
-    queryKey: ['tenant', id],
+    queryKey: queryKeys.tenants.detail(id),
     queryFn: () => fetchTenantFull(id),
-    staleTime: 5 * 60 * 1000 // 5 minutes
+    staleTime: 5 * 60 * 1000,
   });
 
   const verifyMutation = useMutation({
     mutationFn: verifyDocument,
     onSuccess: () => {
-      queryClient.invalidateQueries(['tenant', id]);
+      queryClient.invalidateQueries({ queryKey: queryKeys.tenants.detail(id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tenants.all() });
     }
   });
 
   const rejectMutation = useMutation({
     mutationFn: rejectDocument,
     onSuccess: () => {
-      queryClient.invalidateQueries(['tenant', id]);
+      queryClient.invalidateQueries({ queryKey: queryKeys.tenants.detail(id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tenants.all() });
     }
   });
 

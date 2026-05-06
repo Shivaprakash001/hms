@@ -83,6 +83,7 @@ export const queryKeys = {
   subscription: {
     all:     () => ['subscription'],
     current: () => ['subscription', 'current'],
+    plans:   () => ['subscription', 'plans'],
   },
 
   // ── Activity ─────────────────────────────────────────────────────────────────
