@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { paymentService, identityService } from '../api/services';
 import { queryKeys } from '../lib/query/queryKeys';
 
@@ -8,7 +8,8 @@ export const useTenantPaymentHistory = (tenantId) => {
     queryFn:  () => paymentService.getTenantHistory(tenantId),
     enabled:  !!tenantId,
     staleTime: 2 * 60 * 1000,
-    gcTime:    5 * 60 * 1000,
+    gcTime:    30 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 };
 
@@ -17,7 +18,18 @@ export const useDuesReport = (params) => {
     queryKey: queryKeys.payments.dues(params),
     queryFn:  () => paymentService.getAllDues(params),
     staleTime: 2 * 60 * 1000,
-    gcTime:    5 * 60 * 1000,
+    gcTime:    30 * 60 * 1000,
+    placeholderData: keepPreviousData,
+  });
+};
+
+export const useLedger = (params) => {
+  return useQuery({
+    queryKey: ['payments', 'ledger', params],
+    queryFn:  () => paymentService.getAll({ limit: 1000, ...params }),
+    staleTime: 2 * 60 * 1000,
+    gcTime:    30 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 };
 
@@ -26,7 +38,8 @@ export const usePendingVerifications = () => {
     queryKey: queryKeys.payments.pendingVerification(),
     queryFn:  () => paymentService.getPendingVerifications(),
     staleTime: 60 * 1000,
-    gcTime:    3 * 60 * 1000,
+    gcTime:    30 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 };
 

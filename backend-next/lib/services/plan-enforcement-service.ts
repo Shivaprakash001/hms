@@ -26,7 +26,21 @@ export class PlanEnforcementService {
   async _getOwnerSubscription(ownerId: string) {
     const sub = await prisma.ownerSubscription.findUnique({
       where: { owner_id: ownerId },
-      include: { plan: true },
+      include: {
+        plan: {
+          select: {
+            id: true,
+            tenant_limit: true,
+            hostel_limit: true,
+            automation: true,
+            multi_hostel: true,
+            analytics: true,
+            profile_photo: true,
+            document_verification: true,
+            is_custom: true,
+          },
+        },
+      },
     });
     if (!sub) {
       throw new Error("FORBIDDEN: No active subscription found for owner. Plan enforcement failed.");
@@ -44,11 +58,37 @@ export class PlanEnforcementService {
 
   async _resolvePlan(planId: string | null): Promise<PlanRecord> {
     if (!planId) {
-      const p = await prisma.plan.findUnique({ where: { id: "FREE" } });
+      const p = await prisma.plan.findUnique({
+        where: { id: "FREE" },
+        select: {
+          id: true,
+          tenant_limit: true,
+          hostel_limit: true,
+          automation: true,
+          multi_hostel: true,
+          analytics: true,
+          profile_photo: true,
+          document_verification: true,
+          is_custom: true,
+        },
+      });
       if (!p) throw new Error("CONFIG_ERROR: Missing FREE plan in DB");
       return p as unknown as PlanRecord;
     }
-    const plan = await prisma.plan.findUnique({ where: { id: planId } });
+    const plan = await prisma.plan.findUnique({
+      where: { id: planId },
+      select: {
+        id: true,
+        tenant_limit: true,
+        hostel_limit: true,
+        automation: true,
+        multi_hostel: true,
+        analytics: true,
+        profile_photo: true,
+        document_verification: true,
+        is_custom: true,
+      },
+    });
     if (!plan) throw new Error("NOT_FOUND: Plan not found");
     return plan as unknown as PlanRecord;
   }

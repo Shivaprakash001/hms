@@ -9,7 +9,9 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { useQueryClient } from '@tanstack/react-query';
-import { notificationService, ownerService } from '../api/services';
+import { ownerService } from '../api/services';
+import { useNotifications, useMarkNotificationRead } from '../hooks/useNotifications';
+import { queryKeys } from '../lib/query/queryKeys';
 import SearchResultsDropdown from '../components/owner/SearchResultsDropdown';
 import ProfileMenu from '../components/owner/ProfileMenu';
 import Avatar from '../components/common/Avatar';
@@ -47,7 +49,6 @@ const OwnerLayout = () => {
     const [hostelLogoUrl, setHostelLogoUrl] = useState('');
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-    const [notifications, setNotifications] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState([]);
     const [searchLoading, setSearchLoading] = useState(false);
@@ -55,25 +56,20 @@ const OwnerLayout = () => {
     const [activeSearchIndex, setActiveSearchIndex] = useState(-1);
     const [searchError, setSearchError] = useState(false);
 
-    // Poll for notifications
-    const fetchNotifications = async () => {
-        try {
-            const response = await notificationService.getAll();
-            setNotifications(response);
-        } catch (error) {
-            console.error("Failed to fetch notifications:", error);
-        }
-    };
+    // Use centralized React Query hook for notifications
+    const { data: notificationsData = [] } = useNotifications();
+    const notifications = Array.isArray(notificationsData) ? notificationsData : [];
+    const { mutateAsync: markAsRead } = useMarkNotificationRead();
 
+    // Prefetch high-probability routes
     useEffect(() => {
-        fetchNotifications();
-        const interval = setInterval(() => {
-            if (document.visibilityState === "visible") {
-                fetchNotifications();
-            }
-        }, 300000); // Poll every 5 minutes only when tab is active
-        return () => clearInterval(interval);
-    }, []);
+        // We import services dynamically to avoid circular dependencies if any, 
+        // but tenantService and roomService are available. Let's prefetch safely.
+        import('../api/services').then(({ roomService, tenantService }) => {
+            queryClient.prefetchQuery({ queryKey: queryKeys.rooms.list(), queryFn: () => roomService.getAll() });
+            queryClient.prefetchQuery({ queryKey: queryKeys.tenants.list(), queryFn: () => tenantService.getAll() });
+        });
+    }, [queryClient]);
 
     useEffect(() => {
         let es = null;
@@ -94,19 +90,22 @@ const OwnerLayout = () => {
 
                         // React Query targeted cache invalidation
                         if (data.type === 'payment_recorded') {
-                            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-                            queryClient.invalidateQueries({ queryKey: ['payments'] });
-                            fetchNotifications();
+                            queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
+                            queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all() });
+                            queryClient.invalidateQueries({ queryKey: queryKeys.payments.all() });
+                            queryClient.invalidateQueries({ queryKey: queryKeys.notifications() });
                         } else if (data.type === 'expense_created') {
-                            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-                            queryClient.invalidateQueries({ queryKey: ['expenses'] });
-                            fetchNotifications();
+                            queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
+                            queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all() });
+                            queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all() });
+                            queryClient.invalidateQueries({ queryKey: queryKeys.notifications() });
                         } else if (data.type === 'tenant_created' || data.type === 'tenant_allocated_room') {
-                            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-                            queryClient.invalidateQueries({ queryKey: ['tenants'] });
-                            fetchNotifications();
+                            queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
+                            queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all() });
+                            queryClient.invalidateQueries({ queryKey: queryKeys.tenants.all() });
+                            queryClient.invalidateQueries({ queryKey: queryKeys.notifications() });
                         } else if (data.type === 'reactivation_requested') {
-                            fetchNotifications();
+                            queryClient.invalidateQueries({ queryKey: queryKeys.notifications() });
                         }
                     } catch (err) {
                         console.error('SSE message parse error', err);
@@ -162,8 +161,7 @@ const OwnerLayout = () => {
     const handleMarkAllRead = async () => {
         try {
             const unread = notifications.filter(n => !n.is_read);
-            await Promise.all(unread.map(n => notificationService.markAsRead(n.id)));
-            fetchNotifications();
+            await Promise.all(unread.map(n => markAsRead(n.id)));
         } catch (error) {
             console.error("Failed to mark all read:", error);
         }

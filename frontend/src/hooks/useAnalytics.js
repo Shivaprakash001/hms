@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { analyticsService, addonService } from '../api/services';
 import { queryKeys } from '../lib/query/queryKeys';
 
@@ -12,7 +12,7 @@ export const useCashflow = (range) => {
     queryFn:  () => analyticsService.getCashflow(range?.from, range?.to),
     staleTime: 5 * 60 * 1000,
     gcTime:    10 * 60 * 1000,
-    placeholderData: (prev) => prev,
+    placeholderData: keepPreviousData,
   });
 };
 
@@ -27,7 +27,7 @@ export const useTenantAnalytics = (range, enabled = true) => {
     enabled,
     staleTime: 5 * 60 * 1000,
     gcTime:    10 * 60 * 1000,
-    placeholderData: (prev) => prev,
+    placeholderData: keepPreviousData,
   });
 };
 
@@ -38,7 +38,7 @@ export const useFunnelAnalytics = (range, enabled = true) => {
     enabled,
     staleTime: 5 * 60 * 1000,
     gcTime:    10 * 60 * 1000,
-    placeholderData: (prev) => prev,
+    placeholderData: keepPreviousData,
   });
 };
 
@@ -49,7 +49,7 @@ export const useOperationsAnalytics = (range, enabled = true) => {
     enabled,
     staleTime: 5 * 60 * 1000,
     gcTime:    10 * 60 * 1000,
-    placeholderData: (prev) => prev,
+    placeholderData: keepPreviousData,
   });
 };
 

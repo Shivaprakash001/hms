@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Plus, User, Phone, Home, CreditCard, Calendar, CheckCircle2, AlertCircle, X, Save, History, Trash2, RefreshCw, ToggleLeft, ToggleRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -6,6 +6,8 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } 
 import { useAppPreferences } from '../../context/AppPreferencesContext';
 import { formatDate as globalFormatDate, formatCurrency as globalFormatCurrency } from '../../utils/format';
 import { tenantService, roomService } from '../../api/services';
+import { useTenants } from '../../hooks/useTenants';
+import { useRooms } from '../../hooks/useRooms';
 import TenantHistoryModal from '../../components/owner/payments/TenantHistoryModal';
 import TenantInvitationForm from '../../components/owner/TenantInvitationForm';
 import ExtendedProfileForm from '../../components/TenantManagement/ExtendedProfileForm';
@@ -14,16 +16,37 @@ export default function ManageTenants() {
     const { preferences } = useAppPreferences();
     const location = useLocation();
     const navigate = useNavigate();
-    const [tenants, setTenants] = useState([]);
-    const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [showAddModal, setShowAddModal] = useState(false);
     const [showInviteModal, setShowInviteModal] = useState(false);
     const [tenantToEdit, setTenantToEdit] = useState(null);
     const [historyTenant, setHistoryTenant] = useState(null);
-    const [error, setError] = useState(null);
     const [showLeftTenants, setShowLeftTenants] = useState(false);
     const [extendedProfileTenant, setExtendedProfileTenant] = useState(null);
+
+    const { data: tenantsResponse, isLoading: loading, error, refetch: fetchTenants } = useTenants();
+
+    const tenants = useMemo(() => {
+        if (!tenantsResponse) return [];
+        const tenantsList = Array.isArray(tenantsResponse) ? tenantsResponse : (tenantsResponse.tenants || []);
+        
+        return tenantsList.map(s => ({
+            id: s.id,
+            profileId: s.profile_id,
+            name: s.profile?.name || 'Unknown',
+            email: s.profile?.email,
+            phone: s.profile?.phone || 'N/A',
+            rollNumber: s.roll_number || 'N/A',
+            yearOfStudy: s.year_of_study || null,
+            room: (s.allocations && s.allocations.length > 0 && s.allocations[0].room) ? s.allocations[0].room.room_no : 'N/A',
+            roomId: (s.allocations && s.allocations.length > 0) ? s.allocations[0].room_id : null,
+            floor: (s.allocations && s.allocations.length > 0 && s.allocations[0].room) ? (s.allocations[0].room.floor ?? 'N/A') : 'N/A',
+            status: s.status,
+            rent: s.monthly_rent,
+            joinDate: s.joined_on,
+            paymentSummary: s.payment_summary || {}
+        }));
+    }, [tenantsResponse]);
 
     const handleCallTenant = async (phone, e) => {
         e?.stopPropagation?.();
@@ -46,42 +69,7 @@ export default function ManageTenants() {
         }
     };
 
-    const fetchTenants = async () => {
-        try {
-            setLoading(true);
-            const response = await tenantService.getAll();
-            const tenantsList = Array.isArray(response) ? response : (response.tenants || []);
 
-            const data = tenantsList.map(s => ({
-                id: s.id,
-                profileId: s.profile_id,
-                name: s.profile?.name || 'Unknown',
-                email: s.profile?.email,
-                phone: s.profile?.phone || 'N/A',
-                rollNumber: s.roll_number || 'N/A',
-                yearOfStudy: s.year_of_study || null,
-                room: (s.allocations && s.allocations.length > 0 && s.allocations[0].room) ? s.allocations[0].room.room_no : 'N/A',
-                roomId: (s.allocations && s.allocations.length > 0) ? s.allocations[0].room_id : null,
-                floor: (s.allocations && s.allocations.length > 0 && s.allocations[0].room) ? (s.allocations[0].room.floor ?? 'N/A') : 'N/A',
-                status: s.status,
-                rent: s.monthly_rent,
-                joinDate: s.joined_on,
-                paymentSummary: s.payment_summary || {}
-            }));
-
-            setTenants(data);
-            setError(null);
-        } catch (err) {
-            console.error("Failed to fetch tenants:", err);
-            setError("Failed to load tenants. Please try again.");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchTenants();
-    }, []);
 
     useEffect(() => {
         const selectedTenantId = location.state?.selectedTenantId;
@@ -159,29 +147,26 @@ export default function ManageTenants() {
     };
 
     // Filter Logic
-    const filteredTenants = tenants.filter(tenant => {
-        const matchesSearch = tenant.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            tenant.room.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (tenant.phone && tenant.phone.includes(searchTerm)) ||
-            (tenant.rollNumber && tenant.rollNumber.toLowerCase().includes(searchTerm.toLowerCase()));
+    const filteredTenants = useMemo(() => {
+        return tenants.filter(tenant => {
+            const matchesSearch = tenant.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                tenant.room.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (tenant.phone && tenant.phone.includes(searchTerm)) ||
+                (tenant.rollNumber && tenant.rollNumber.toLowerCase().includes(searchTerm.toLowerCase()));
 
-        if (showLeftTenants) return matchesSearch;
-        return matchesSearch && tenant.status !== 'LEFT';
-    });
+            if (showLeftTenants) return matchesSearch;
+            return matchesSearch && tenant.status !== 'LEFT';
+        });
+    }, [tenants, searchTerm, showLeftTenants]);
 
     // Stats Calculation
-    const stats = {
+    const stats = useMemo(() => ({
         total: tenants.length,
         occupiedRooms: new Set(tenants.filter(s => s.room !== 'N/A').map(s => s.room)).size,
-        paid: tenants.filter(s => s.status === 'Paid').length, // 'Paid' status might need to come from payment history? Or tenant status? Tenant status is ACTIVE/LEFT. 
-        // Wait, existing UI uses 'Paid'/'Pending' as status. Backend uses ACTIVE/LEFT.
-        // Payment status should be separate.
-        // For now, let's map ACTIVE to 'Active' and handle Payment Status separately if we have it?
-        // Or assume tenant.status is overridden logic in frontend?
-        // Let's us ACTIVE for now.
+        paid: tenants.filter(s => s.status === 'Paid').length,
         active: tenants.filter(s => s.status === 'ACTIVE').length,
         left: tenants.filter(s => s.status === 'LEFT').length
-    };
+    }), [tenants]);
 
     const formatDate = (dateString) => globalFormatDate(dateString, preferences);
 
@@ -579,8 +564,20 @@ const StatCard = ({ title, value, icon: Icon, iconBg, iconColor, isCurrency = fa
 );
 
 const AddTenantModal = ({ onClose, initialData, onSave }) => {
-    // We need list of vacant rooms to select from if adding new
-    const [rooms, setRooms] = useState([]);
+    const { data: floorsData, isLoading: loadingRooms } = useRooms({ grouped: true });
+    
+    const rooms = useMemo(() => {
+        let allRooms = [];
+        if (Array.isArray(floorsData)) {
+            for (const floor of floorsData) {
+                if (Array.isArray(floor.rooms)) {
+                    allRooms = allRooms.concat(floor.rooms);
+                }
+            }
+        }
+        return allRooms.filter(r => (r.occupied ?? 0) < (r.capacity ?? Infinity));
+    }, [floorsData]);
+
     const [formData, setFormData] = useState({
         name: initialData?.name || '',
         email: initialData?.email || '',
@@ -590,41 +587,7 @@ const AddTenantModal = ({ onClose, initialData, onSave }) => {
         status: initialData?.status || 'ACTIVE',
         joinDate: initialData?.joinDate || new Date().toISOString().split('T')[0]
     });
-    const [loadingRooms, setLoadingRooms] = useState(false);
     const [submitting, setSubmitting] = useState(false);
-
-    useEffect(() => {
-        if (!initialData) {
-            // Load vacant rooms
-            loadRooms();
-        }
-    }, [initialData]);
-
-    const loadRooms = async () => {
-        setLoadingRooms(true);
-        try {
-            // grouped=true returns floors with nested rooms that include occupancy counts
-            const floors = await roomService.getAll();  // default grouped=true
-
-            // Flatten rooms from all floors
-            let allRooms = [];
-            if (Array.isArray(floors)) {
-                for (const floor of floors) {
-                    if (Array.isArray(floor.rooms)) {
-                        allRooms = allRooms.concat(floor.rooms);
-                    }
-                }
-            }
-
-            // Only show rooms that still have capacity (not fully occupied)
-            const available = allRooms.filter(r => (r.occupied ?? 0) < (r.capacity ?? Infinity));
-            setRooms(available);
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setLoadingRooms(false);
-        }
-    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();

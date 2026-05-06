@@ -14,10 +14,41 @@ const FREE_FALLBACK = {
 };
 
 export class BillingService {
+  private isSchemaDriftError(error: any) {
+    const msg = String(error?.message || error || "").toLowerCase();
+    return msg.includes("does not exist") || msg.includes("column") || msg.includes("p2022");
+  }
+
+  private parseOverflowFlags(plan: any) {
+    const features = (plan as any)?.features && typeof (plan as any).features === "object"
+      ? (plan as any).features
+      : {};
+    return {
+      overflow_enabled: Boolean((plan as any).overflow_enabled ?? features.overflow_enabled ?? false),
+      overflow_price_per_tenant_paise: Number((plan as any).overflow_price_per_tenant_paise ?? features.overflow_price_per_tenant_paise ?? 0),
+      overflow_hard_cap: Number((plan as any).overflow_hard_cap ?? features.overflow_hard_cap ?? 0),
+    };
+  }
+
   async getActivePlan(ownerId: string) {
     const sub = await prisma.ownerSubscription.findUnique({
       where: { owner_id: ownerId },
-      include: { plan: true },
+      include: {
+        plan: {
+          select: {
+            id: true,
+            name: true,
+            price_inr: true,
+            tenant_limit: true,
+            hostel_limit: true,
+            automation: true,
+            multi_hostel: true,
+            analytics: true,
+            can_generate_receipts: true,
+            features: true,
+          },
+        },
+      },
     });
     if (!sub) return FREE_FALLBACK;
     return {
@@ -43,12 +74,52 @@ export class BillingService {
   async getSubscriptionDetails(ownerId: string) {
     const sub = await prisma.ownerSubscription.findUnique({
       where: { owner_id: ownerId },
-      include: { plan: true },
+      include: {
+        plan: {
+          select: {
+            id: true,
+            name: true,
+            price_inr: true,
+            tenant_limit: true,
+            hostel_limit: true,
+            automation: true,
+            multi_hostel: true,
+            analytics: true,
+            can_generate_receipts: true,
+            features: true,
+          },
+        },
+      },
     });
+
+    const plan = sub?.plan ?? FREE_FALLBACK;
 
     const [usage, overflowStatus, invoices] = await Promise.all([
       this.getOwnerUsage(ownerId),
-      overflowBillingService.getOverflowStatus(ownerId),
+      overflowBillingService.getOverflowStatus(ownerId).catch((err: any) => {
+        if (this.isSchemaDriftError(err)) {
+          return {
+            enabled: false,
+            plan_id: plan.id || "FREE",
+            active_tenants: 0,
+            included_limit: plan.tenant_limit || 0,
+            overflow_count: 0,
+            overflow_amount_paise: 0,
+            hard_cap: plan.tenant_limit || 0,
+            percentage_of_included: 0,
+            percentage_of_hard_cap: 0,
+            threshold: "SAFE",
+            upgrade_nudge: {
+              show: false,
+              recommended_plan: null,
+              monthly_overflow_cost: 0,
+              plan_price_gap: 0,
+              message: null,
+            },
+          };
+        }
+        throw err;
+      }),
       prisma.ownerInvoice.findMany({
         where: { owner_id: ownerId },
         orderBy: { created_at: "desc" },
@@ -56,7 +127,7 @@ export class BillingService {
       }),
     ]);
 
-    const plan = sub?.plan ?? FREE_FALLBACK;
+    const overflow = this.parseOverflowFlags(plan);
 
     return {
       current_plan: {
@@ -71,9 +142,9 @@ export class BillingService {
         multi_hostel: plan.multi_hostel,
         analytics: plan.analytics,
         can_generate_receipts: (plan as any).can_generate_receipts ?? false,
-        overflow_enabled: (plan as any).overflow_enabled ?? false,
-        overflow_price_per_tenant_paise: (plan as any).overflow_price_per_tenant_paise ?? 0,
-        overflow_hard_cap: (plan as any).overflow_hard_cap ?? 0,
+        overflow_enabled: overflow.overflow_enabled,
+        overflow_price_per_tenant_paise: overflow.overflow_price_per_tenant_paise,
+        overflow_hard_cap: overflow.overflow_hard_cap,
       },
       subscription: {
         status: sub?.status ?? "FREE",

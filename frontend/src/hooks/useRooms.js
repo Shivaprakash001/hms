@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { roomService, allocationService } from '../api/services';
 import { queryKeys } from '../lib/query/queryKeys';
 
@@ -10,7 +10,8 @@ export const useRooms = (params = {}) => {
     queryKey: queryKeys.rooms.list(params),
     queryFn:  () => roomService.getAll(params),
     staleTime: 5 * 60 * 1000,
-    gcTime:    10 * 60 * 1000,
+    gcTime:    30 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 };
 
@@ -23,7 +24,8 @@ export const useRoom = (roomId) => {
     queryFn:  () => roomService.getById(roomId),
     enabled:  !!roomId,
     staleTime: 5 * 60 * 1000,
-    gcTime:    10 * 60 * 1000,
+    gcTime:    30 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 };
 
@@ -74,7 +76,8 @@ export const useActiveAllocations = () => {
     queryKey: queryKeys.allocations.active(),
     queryFn:  () => allocationService.getAllActive(),
     staleTime: 2 * 60 * 1000,
-    gcTime:    5 * 60 * 1000,
+    gcTime:    30 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 };
 

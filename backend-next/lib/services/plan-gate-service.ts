@@ -23,7 +23,25 @@ const rateLimitMap          = new Map<string, { count: number; windowStart: numb
 async function getEffectivePlan(ownerId: string) {
   const sub = await prisma.ownerSubscription.findUnique({
     where: { owner_id: ownerId },
-    include: { plan: true },
+    include: {
+      plan: {
+        select: {
+          id: true,
+          name: true,
+          price_inr: true,
+          tenant_limit: true,
+          hostel_limit: true,
+          automation: true,
+          multi_hostel: true,
+          analytics: true,
+          profile_photo: true,
+          document_verification: true,
+          is_custom: true,
+          can_generate_receipts: true,
+          features: true,
+        },
+      },
+    },
   });
 
   if (!sub) return null;
@@ -255,7 +273,15 @@ export const planGate = {
   async assertTenantLimit(ownerId: string): Promise<void> {
     const sub = await prisma.ownerSubscription.findUnique({
       where: { owner_id: ownerId },
-      include: { plan: true },
+      include: {
+        plan: {
+          select: {
+            id: true,
+            tenant_limit: true,
+            features: true,
+          },
+        },
+      },
     });
 
     if (!sub) throw new Error("PLAN_LIMIT: FORBIDDEN. No active subscription.");
@@ -279,8 +305,11 @@ export const planGate = {
     });
 
     const includedLimit = plan.tenant_limit;
-    const overflowEnabled = (plan as any).overflow_enabled ?? false;
-    const hardCap = (plan as any).overflow_hard_cap ?? includedLimit;
+    const features = (plan as any)?.features && typeof (plan as any).features === "object"
+      ? (plan as any).features
+      : {};
+    const overflowEnabled = Boolean((plan as any).overflow_enabled ?? features.overflow_enabled ?? false);
+    const hardCap = Number((plan as any).overflow_hard_cap ?? features.overflow_hard_cap ?? includedLimit);
 
     // FREE or overflow-disabled: hard block at plan limit
     if (!overflowEnabled) {

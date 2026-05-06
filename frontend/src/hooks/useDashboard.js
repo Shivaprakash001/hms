@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { dashboardService } from '../api/services';
 import { queryKeys } from '../lib/query/queryKeys';
 
@@ -12,7 +12,8 @@ export const useDashboard = () => {
     queryKey: queryKeys.dashboard.stats(),
     queryFn:  () => dashboardService.getStats(),
     staleTime: 5 * 60 * 1000,
-    gcTime:    10 * 60 * 1000,
+    gcTime:    30 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 };
 
@@ -23,7 +24,8 @@ export const useMonthlyStats = (months = 6) => {
     queryKey: queryKeys.dashboard.monthly(months),
     queryFn:  () => dashboardService.getMonthlyStats(months),
     staleTime: 10 * 60 * 1000,
-    gcTime:    15 * 60 * 1000,
+    gcTime:    30 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 };
 
@@ -32,6 +34,7 @@ export const useDashboardSummary = () => {
     queryKey: queryKeys.dashboard.summary(),
     queryFn:  () => dashboardService.getSummary(),
     staleTime: 5 * 60 * 1000,
-    gcTime:    10 * 60 * 1000,
+    gcTime:    30 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 };

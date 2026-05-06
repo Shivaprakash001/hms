@@ -8,11 +8,16 @@ import {
 // eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from 'framer-motion';
 
-import { expenseService } from '../../api/services';
+import { useExpenses, useCreateExpense, useUpdateExpense, useDeleteExpense } from '../../hooks/useExpenses';
 
 export default function Expenses() {
-    const [expenses, setExpenses] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const { data: expensesData, isLoading } = useExpenses();
+    const expenses = Array.isArray(expensesData) ? expensesData : expensesData?.data || [];
+
+    const createMutation = useCreateExpense();
+    const updateMutation = useUpdateExpense();
+    const deleteMutation = useDeleteExpense();
+
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingExpense, setEditingExpense] = useState(null);
     const [isExporting, setIsExporting] = useState(false);
@@ -26,32 +31,6 @@ export default function Expenses() {
     const [dateFilter, setDateFilter] = useState('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('all');
-
-    // Fetch expenses on mount
-    React.useEffect(() => {
-        loadExpenses();
-    }, []);
-
-    const loadExpenses = async () => {
-        try {
-            setIsLoading(true);
-            const response = await expenseService.getAll();
-            // response is already response.data from axios
-            // Backend wraps as { success: true, data: [...] }
-            // But the router returns the list directly via _handle_response
-            let list = [];
-            if (Array.isArray(response)) {
-                list = response;
-            } else if (Array.isArray(response?.data)) {
-                list = response.data;
-            }
-            setExpenses(list);
-        } catch (error) {
-            console.error("Failed to load expenses:", error);
-        } finally {
-            setIsLoading(false);
-        }
-    };
 
     const resetForm = () => {
         setFormData({
@@ -73,12 +52,10 @@ export default function Expenses() {
 
         try {
             if (editingExpense) {
-                await expenseService.update(editingExpense.id, expenseData);
+                await updateMutation.mutateAsync({ id: editingExpense.id, data: expenseData });
             } else {
-                await expenseService.create(expenseData);
+                await createMutation.mutateAsync(expenseData);
             }
-            // Refresh list
-            loadExpenses();
             setIsModalOpen(false);
             resetForm();
         } catch (error) {
@@ -90,8 +67,7 @@ export default function Expenses() {
     const handleDelete = async (id) => {
         if (window.confirm('Are you sure you want to delete this expense?')) {
             try {
-                await expenseService.delete(id);
-                loadExpenses(); // Refresh
+                await deleteMutation.mutateAsync(id);
             } catch (error) {
                 console.error("Failed to delete expense:", error);
                 alert("Failed to delete expense");
@@ -101,9 +77,7 @@ export default function Expenses() {
 
     const handleMarkAsPaid = async (expense) => {
         try {
-            await expenseService.update(expense.id, { status: 'paid' });
-            // Optimistically update local state until reload
-            setExpenses(prev => prev.map(e => e.id === expense.id ? { ...e, status: 'paid' } : e));
+            await updateMutation.mutateAsync({ id: expense.id, data: { status: 'paid' } });
         } catch (error) {
             console.error("Failed to mark as paid:", error);
             alert("Failed to mark as paid: " + (error.response?.data?.detail || error.message));

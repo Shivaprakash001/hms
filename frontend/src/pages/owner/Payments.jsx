@@ -11,59 +11,43 @@ import PaymentDetailsDrawer from '../../components/owner/payments/PaymentDetails
 import TenantHistoryModal from '../../components/owner/payments/TenantHistoryModal';
 import OnlinePaymentTestModal from '../../components/owner/payments/OnlinePaymentTestModal';
 import { billingService, paymentService } from '../../api/services';
+import { useLedger, usePendingVerifications } from '../../hooks/usePayments';
 import { useAppPreferences } from '../../context/AppPreferencesContext';
 import { formatCurrency, formatMonthYear } from '../../utils/format';
 
 const Payments = () => {
     const navigate = useNavigate();
     const { preferences } = useAppPreferences();
-    const [ledgerRows, setLedgerRows] = useState([]);
-    const [paymentRecords, setPaymentRecords] = useState([]);
-    const [summaryStats, setSummaryStats] = useState({
-        total_collected: 0,
-        pending_dues: 0,
-        overdue_amount: 0,
-        active_tenants: 0,
-        pending_rows: 0,
-        overdue_rows: 0,
-    });
-    const [serverTotal, setServerTotal] = useState(0);
-    const [isLoading, setIsLoading] = useState(true);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [debouncedSearch, setDebouncedSearch] = useState('');
-    const [statusFilter, setStatusFilter] = useState('all');
-    const [monthFilter, setMonthFilter] = useState('all');
-    const [methodFilter, setMethodFilter] = useState('all');
-    const [tenantFilter, setTenantFilter] = useState('all');
-    const [selectedPayment, setSelectedPayment] = useState(null);
-    const [historyTenant, setHistoryTenant] = useState(null);
-    const [onlineTestTarget, setOnlineTestTarget] = useState(null);
-    const [currentPage, setCurrentPage] = useState(1);
-    const [pageSize, setPageSize] = useState(10);
-
-    // Generate rent modal state
-    const [showGenModal, setShowGenModal] = useState(false);
-    const [genMonth, setGenMonth] = useState(() => {
-        const now = new Date();
-        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-    });
-    const [genLoading, setGenLoading] = useState(false);
-    const [genResult, setGenResult] = useState(null); // { success, count, skipped }
-    const [previewLoading, setPreviewLoading] = useState(false);
-    const [previewData, setPreviewData] = useState(null);
-    const [exportLoading, setExportLoading] = useState(false);
-    const [pendingConfirmations, setPendingConfirmations] = useState([]);
     const [confirmingId, setConfirmingId] = useState(null);
     const [confirmToast, setConfirmToast] = useState(null);
     const [canGenerateReceipts, setCanGenerateReceipts] = useState(false);
     const [planName, setPlanName] = useState('Free');
 
     const paymentFilters = useMemo(() => ({
-        tenantId: tenantFilter !== 'all' ? tenantFilter : undefined,
+        tenant_id: tenantFilter !== 'all' ? tenantFilter : undefined,
         status: statusFilter !== 'all' ? statusFilter.toUpperCase() : undefined,
         method: methodFilter !== 'all' ? methodFilter : undefined,
         month: monthFilter !== 'all' ? monthFilter : undefined,
     }), [tenantFilter, statusFilter, methodFilter, monthFilter]);
+
+    const { data: ledgerData, isLoading, refetch: refetchLedger } = useLedger(paymentFilters);
+    const { data: pendingData, refetch: refetchPending } = usePendingVerifications();
+
+    const ledgerRows = ledgerData?.payments || [];
+    const paymentRecords = ledgerData?.payment_records || [];
+    const summaryStats = ledgerData?.stats || {
+        total_collected: 0,
+        pending_dues: 0,
+        overdue_amount: 0,
+        active_tenants: 0,
+        pending_rows: 0,
+        overdue_rows: 0,
+    };
+    const serverTotal = Number(ledgerData?.total || 0);
+
+    const pendingConfirmations = useMemo(() => {
+        return (pendingData?.items || []).filter(i => i.status === 'PENDING_MANUAL_CONFIRMATION');
+    }, [pendingData]);
 
     useEffect(() => {
         const t = setTimeout(() => {
@@ -71,95 +55,6 @@ const Payments = () => {
         }, 300);
         return () => clearTimeout(t);
     }, [searchTerm]);
-
-    const normalizeStatus = (status, dueDate, balance) => {
-        const raw = String(status || '').toUpperCase();
-        if (raw === 'PAID') return 'paid';
-        if (raw === 'WAIVED') return 'waived';
-        if (raw === 'PARTIAL') {
-            if (!dueDate) return 'partial';
-            return new Date(dueDate) < new Date() && Number(balance) > 0 ? 'overdue' : 'partial';
-        }
-        if (!dueDate) return 'pending';
-        return new Date(dueDate) < new Date() && Number(balance) > 0 ? 'overdue' : 'pending';
-    };
-
-    const loadLedger = useCallback(async () => {
-        setIsLoading(true);
-        try {
-            const result = await paymentService.getAll({
-                limit: 1000,
-                tenant_id: paymentFilters.tenantId,
-                status: paymentFilters.status,
-                method: paymentFilters.method,
-                month: paymentFilters.month,
-            });
-
-            setLedgerRows(result?.payments || []);
-            setPaymentRecords(result?.payment_records || []);
-            // TEMP DEBUG: Log filtered payment count and amount for dev verification
-            if (process.env.NODE_ENV === 'development') {
-                const records = result?.payment_records || [];
-                const now = new Date();
-                const currentYear = now.getFullYear();
-                const currentMonth = now.getMonth();
-                const monthPayments = records.filter((p) => {
-                    const paymentDate = p.paymentDate || p.date || p.createdAt;
-                    if (!paymentDate) return false;
-                    const parsed = new Date(paymentDate);
-                    if (Number.isNaN(parsed.getTime())) return false;
-                    return parsed.getFullYear() === currentYear && parsed.getMonth() === currentMonth;
-                });
-                const totalAmount = monthPayments.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
-                // eslint-disable-next-line no-console
-                console.debug('[DEV] Month-filtered payments:', monthPayments.length, 'Total amount:', totalAmount);
-            }
-            setSummaryStats({
-                total_collected: Number(result?.stats?.total_collected || 0),
-                pending_dues: Number(result?.stats?.pending_dues || 0),
-                overdue_amount: Number(result?.stats?.overdue_amount || 0),
-                active_tenants: Number(result?.stats?.active_tenants || 0),
-                pending_rows: Number(result?.stats?.pending_rows || 0),
-                overdue_rows: Number(result?.stats?.overdue_rows || 0),
-            });
-            setServerTotal(Number(result?.total || 0));
-        } catch (error) {
-            console.error('Failed to load ledger:', error);
-            setLedgerRows([]);
-            setPaymentRecords([]);
-            setSummaryStats({
-                total_collected: 0,
-                pending_dues: 0,
-                overdue_amount: 0,
-                active_tenants: 0,
-                pending_rows: 0,
-                overdue_rows: 0,
-            });
-            setServerTotal(0);
-        } finally {
-            setIsLoading(false);
-        }
-    }, [paymentFilters]);
-
-    useEffect(() => {
-        loadLedger();
-    }, [loadLedger]);
-
-    const loadPendingConfirmations = useCallback(async () => {
-        try {
-            const data = await paymentService.getPendingVerifications();
-            // Backend returns both PENDING_VERIFICATION and PENDING_MANUAL_CONFIRMATION.
-            // Show only the ones requiring owner manual confirmation here.
-            const manual = (data?.items || []).filter(i => i.status === 'PENDING_MANUAL_CONFIRMATION');
-            setPendingConfirmations(manual);
-        } catch (_) {
-            setPendingConfirmations([]);
-        }
-    }, []);
-
-    useEffect(() => {
-        loadPendingConfirmations();
-    }, [loadPendingConfirmations]);
 
     useEffect(() => {
         let mounted = true;
@@ -218,7 +113,7 @@ const Payments = () => {
         // Payment is recorded by PaymentDetailsDrawer via the secure /payments/record-offline
         // endpoint (identity-verified, single-use token). This callback only refreshes the
         // ledger and closes the drawer — it must NOT call recordPayment again.
-        loadLedger();
+        refetchLedger();
         setSelectedPayment(null);
     };
 
@@ -300,7 +195,7 @@ const Payments = () => {
         try {
             const data = await paymentService.generateRent(genMonth);
             setGenResult({ success: true, data });
-            loadLedger(); // refresh list
+            refetchLedger(); // refresh list
         } catch (error) {
             console.error("Generate rent failed:", error);
             const errorMessage = error.response?.data?.detail?.message 
@@ -382,7 +277,7 @@ const Payments = () => {
     };
 
     const handleOnlineSettled = () => {
-        loadLedger();
+        refetchLedger();
     };
 
     const handleManualConfirm = async (attemptId) => {
@@ -391,8 +286,8 @@ const Payments = () => {
         try {
             await paymentService.manualConfirmPayment(attemptId);
             setConfirmToast({ type: 'success', msg: 'Payment confirmed. Rent marked as paid.' });
-            setPendingConfirmations(prev => prev.filter(p => p.attempt_id !== attemptId));
-            loadLedger();
+            refetchPending();
+            refetchLedger();
         } catch (err) {
             const msg = err?.response?.data?.error || err?.response?.data?.message || 'Confirmation failed. Please try again.';
             setConfirmToast({ type: 'error', msg });

@@ -48,6 +48,15 @@ interface OverflowCalcResult {
 }
 
 export class OverflowBillingService {
+  private getOverflowConfig(plan: any) {
+    const features = plan?.features && typeof plan.features === "object" ? plan.features : {};
+    return {
+      enabled: Boolean(plan?.overflow_enabled ?? features.overflow_enabled ?? false),
+      pricePerTenantPaise: Number(plan?.overflow_price_per_tenant_paise ?? features.overflow_price_per_tenant_paise ?? 0),
+      hardCap: Number(plan?.overflow_hard_cap ?? features.overflow_hard_cap ?? plan?.tenant_limit ?? 0),
+    };
+  }
+
   /**
    * Returns the first-of-month Date for a given month string (YYYY-MM) or current month.
    */
@@ -67,12 +76,21 @@ export class OverflowBillingService {
   async calculateForOwner(ownerId: string, billingMonth?: string): Promise<OverflowCalcResult | null> {
     const sub = await prisma.ownerSubscription.findUnique({
       where: { owner_id: ownerId },
-      include: { plan: true },
+      include: {
+        plan: {
+          select: {
+            id: true,
+            tenant_limit: true,
+            features: true,
+          },
+        },
+      },
     });
     if (!sub || sub.status !== "ACTIVE") return null;
 
     const plan = sub.plan;
-    if (!plan.overflow_enabled) return null;
+    const cfg = this.getOverflowConfig(plan);
+    if (!cfg.enabled) return null;
     if (plan.tenant_limit <= 0) return null; // unlimited plan — no overflow
 
     const monthDate = this._billingMonthDate(billingMonth);
@@ -83,7 +101,7 @@ export class OverflowBillingService {
     });
 
     const overflowCount = Math.max(0, activeTenants - plan.tenant_limit);
-    const overflowAmountPaise = overflowCount * plan.overflow_price_per_tenant_paise;
+    const overflowAmountPaise = overflowCount * cfg.pricePerTenantPaise;
 
     return {
       owner_id: ownerId,
@@ -92,7 +110,7 @@ export class OverflowBillingService {
       active_tenant_count: activeTenants,
       included_limit: plan.tenant_limit,
       overflow_count: overflowCount,
-      overflow_price_per_tenant_paise: plan.overflow_price_per_tenant_paise,
+      overflow_price_per_tenant_paise: cfg.pricePerTenantPaise,
       overflow_amount_paise: overflowAmountPaise,
       idempotency_key: idempotencyKey,
     };
@@ -268,11 +286,10 @@ export class OverflowBillingService {
     total_overflow_paise: number;
     details: Array<{ owner_id: string; status: string; overflow_count: number; overflow_amount_paise: number }>;
   }> {
-    // Only owners with ACTIVE subscription on overflow-enabled plans
+    // ACTIVE subscriptions only; overflow eligibility is decided in calculateForOwner()
     const eligibleSubs = await prisma.ownerSubscription.findMany({
       where: {
         status: "ACTIVE",
-        plan: { overflow_enabled: true },
       },
       select: { owner_id: true },
     });
@@ -329,7 +346,17 @@ export class OverflowBillingService {
   async getOverflowStatus(ownerId: string): Promise<OverflowStatus> {
     const sub = await prisma.ownerSubscription.findUnique({
       where: { owner_id: ownerId },
-      include: { plan: true },
+      include: {
+        plan: {
+          select: {
+            id: true,
+            name: true,
+            price_inr: true,
+            tenant_limit: true,
+            features: true,
+          },
+        },
+      },
     });
 
     const disabled: OverflowStatus = {
@@ -360,10 +387,11 @@ export class OverflowBillingService {
     }
 
     const includedLimit = plan.tenant_limit;
-    const hardCap = plan.overflow_hard_cap || includedLimit;
-    const overflowEnabled = plan.overflow_enabled;
+    const cfg = this.getOverflowConfig(plan);
+    const hardCap = cfg.hardCap || includedLimit;
+    const overflowEnabled = cfg.enabled;
     const overflowCount = Math.max(0, activeTenants - includedLimit);
-    const overflowAmountPaise = overflowEnabled ? overflowCount * plan.overflow_price_per_tenant_paise : 0;
+    const overflowAmountPaise = overflowEnabled ? overflowCount * cfg.pricePerTenantPaise : 0;
 
     const pctOfIncluded = Math.round((activeTenants / includedLimit) * 100);
     const pctOfHardCap = hardCap > 0 ? Math.round((activeTenants / hardCap) * 100) : 0;

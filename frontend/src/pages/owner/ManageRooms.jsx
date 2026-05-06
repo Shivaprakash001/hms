@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Layers, LayoutGrid, Users, DoorOpen, BedDouble, Trash2, ArrowRightLeft, X, Phone, Calendar, CreditCard, Mail, Loader2 } from 'lucide-react';
 import AddRoomModal from '../../components/owner/rooms/AddRoomModal';
@@ -6,15 +6,13 @@ import AddTenantModal from '../../components/owner/rooms/AddTenantModal';
 import ShiftTenantModal from '../../components/owner/rooms/ShiftTenantModal';
 import EditRoomModal from '../../components/owner/rooms/EditRoomModal';
 import { roomService, allocationService, tenantService } from '../../api/services';
+import { useRooms } from '../../hooks/useRooms';
 import { useAppPreferences } from '../../context/AppPreferencesContext';
 import { formatCurrency, formatDate } from '../../utils/format';
 
 const ManageRooms = () => {
     const { preferences } = useAppPreferences();
     // State
-    const [floors, setFloors] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
     const [selectedRoom, setSelectedRoom] = useState(null);
     const [showAddRoomModal, setShowAddRoomModal] = useState(false);
     const [showAddFloorModal, setShowAddFloorModal] = useState(false); // We'll reuse AddRoomModal for this
@@ -66,34 +64,23 @@ const ManageRooms = () => {
         floorsList.flatMap((floor) => floor.rooms).find((room) => room.id === roomId) || null
     );
 
-    // Fetch Data — grouped rooms is the single source of truth for cards and drawer
-    const fetchData = async (roomIdToKeepOpen = null) => {
-        setLoading(true);
-        try {
-            const floorsData = await roomService.getAll({ grouped: true });
-            const normalised = normalizeFloors(floorsData);
-
-            setFloors(normalised);
-            setError(null);
-
-            const targetRoomId = roomIdToKeepOpen || selectedRoom?.id;
-            if (targetRoomId) {
-                setSelectedRoom(findRoomById(normalised, targetRoomId));
-            }
-
-            return normalised;
-        } catch (err) {
-            console.error("Error fetching room data:", err);
-            setError("Failed to load room data. Please try again.");
-            return [];
-        } finally {
-            setLoading(false);
-        }
-    };
+    const { data: floorsData, isLoading: loading, error: fetchError, refetch: refetchRooms } = useRooms({ grouped: true });
+    
+    const floors = useMemo(() => normalizeFloors(floorsData), [floorsData]);
+    const error = fetchError ? "Failed to load room data. Please try again." : null;
 
     useEffect(() => {
-        fetchData();
-    }, []);
+        if (selectedRoom && floors.length > 0) {
+            const updatedRoom = findRoomById(floors, selectedRoom.id);
+            if (updatedRoom && updatedRoom !== selectedRoom) {
+                setSelectedRoom(updatedRoom);
+            }
+        }
+    }, [floors, selectedRoom?.id]);
+
+    const fetchData = async () => {
+        await refetchRooms();
+    };
 
     const openRoomDetails = async (room) => {
         setSelectedRoom(room);
@@ -208,7 +195,7 @@ const ManageRooms = () => {
                 }
             }
 
-            await fetchData(room.id);
+            await fetchData();
             setShowAddTenantModal(false);
         } catch (err) {
             console.error(err);
@@ -225,7 +212,7 @@ const ManageRooms = () => {
             // First drop room allocation to ensure room resets correctly.
             // Soft delete tenant -> triggers auto-end allocation
             await tenantService.delete(tenantId);
-            await fetchData(selectedRoom?.id);
+            await fetchData();
         } catch (err) {
             alert("Failed to remove tenant: " + err.message);
         }
@@ -240,7 +227,7 @@ const ManageRooms = () => {
                 new_room_id: newRoomId,
                 shift_date: localDate
             });
-            await fetchData(selectedRoom?.id);
+            await fetchData();
             setShowShiftTenantModal(false);
             setSelectedTenantForShift(null);
             alert("Tenant relocated successfully!");
@@ -427,7 +414,7 @@ const ManageRooms = () => {
                     <EditRoomModal
                         room={selectedRoom.room || selectedRoom}
                         onClose={() => setShowEditRoomModal(false)}
-                        onSave={() => fetchData(selectedRoom?.id)}
+                        onSave={() => fetchData()}
                     />
                 )}
                 {showShiftTenantModal && selectedTenantForShift && (

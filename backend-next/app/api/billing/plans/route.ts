@@ -17,12 +17,47 @@ export async function GET(req: NextRequest) {
     }
 
     // Fetch all plans
-    const plans = await prisma.plan.findMany({ orderBy: { price_inr: "asc" } });
+    const plans = await prisma.plan.findMany({
+      orderBy: { price_inr: "asc" },
+      select: {
+        id: true,
+        name: true,
+        price_inr: true,
+        tenant_limit: true,
+        hostel_limit: true,
+        automation: true,
+        multi_hostel: true,
+        analytics: true,
+        profile_photo: true,
+        document_verification: true,
+        is_custom: true,
+        can_generate_receipts: true,
+        features: true,
+      },
+    });
 
     // Fetch owner's current subscription
     const subscription = await prisma.ownerSubscription.findUnique({
       where: { owner_id: user.sub },
-      include: { plan: true }
+      include: {
+        plan: {
+          select: {
+            id: true,
+            name: true,
+            price_inr: true,
+            tenant_limit: true,
+            hostel_limit: true,
+            automation: true,
+            multi_hostel: true,
+            analytics: true,
+            profile_photo: true,
+            document_verification: true,
+            is_custom: true,
+            can_generate_receipts: true,
+            features: true,
+          },
+        },
+      }
     });
 
     return NextResponse.json({

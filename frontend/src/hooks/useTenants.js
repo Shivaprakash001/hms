@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { tenantService } from '../api/services';
 import { queryKeys } from '../lib/query/queryKeys';
 
@@ -7,7 +7,8 @@ export const useTenants = (filters = {}) => {
     queryKey: queryKeys.tenants.list(filters),
     queryFn:  () => tenantService.getAll(filters),
     staleTime: 5 * 60 * 1000,
-    gcTime:    10 * 60 * 1000,
+    gcTime:    30 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 };
 
@@ -17,7 +18,8 @@ export const useTenant = (tenantId) => {
     queryFn:  () => tenantService.getById(tenantId),
     enabled:  !!tenantId,
     staleTime: 5 * 60 * 1000,
-    gcTime:    10 * 60 * 1000,
+    gcTime:    30 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 };
 

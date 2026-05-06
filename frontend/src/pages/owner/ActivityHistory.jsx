@@ -11,48 +11,33 @@ import {
     LogOut,
     X
 } from 'lucide-react';
-import { activityService } from '../../api/services';
+import { useActivities } from '../../hooks/useActivities';
 import { useAppPreferences } from '../../context/AppPreferencesContext';
 import { formatDate } from '../../utils/format';
 
 const ActivityHistory = () => {
     const { preferences } = useAppPreferences();
     const navigate = useNavigate();
-    const [loading, setLoading] = useState(true);
-    const [activities, setActivities] = useState([]);
-    const [total, setTotal] = useState(0);
     const [searchTerm, setSearchTerm] = useState('');
     const [typeFilter, setTypeFilter] = useState('all');
     const [dateFilter, setDateFilter] = useState({ start: '', end: '' });
     const [page, setPage] = useState(1);
     const pageSize = 20;
 
-    const fetchData = async () => {
-        setLoading(true);
-        try {
-            const params = {
-                limit: pageSize,
-                offset: (page - 1) * pageSize
-            };
-
-            if (searchTerm.trim()) params.search = searchTerm.trim();
-            if (typeFilter !== 'all') params.event_type = typeFilter;
-            if (dateFilter.start) params.start_date = dateFilter.start;
-            if (dateFilter.end) params.end_date = dateFilter.end;
-
-            const res = await activityService.getAll(params);
-            setActivities(Array.isArray(res?.items) ? res.items : []);
-            setTotal(Number(res?.total || 0));
-        } catch (error) {
-            console.error('Failed to fetch activity history:', error);
-        } finally {
-            setLoading(false);
-        }
+    const params = {
+        limit: pageSize,
+        offset: (page - 1) * pageSize
     };
 
-    useEffect(() => {
-        fetchData();
-    }, [page, searchTerm, typeFilter, dateFilter]);
+    if (searchTerm.trim()) params.search = searchTerm.trim();
+    if (typeFilter !== 'all') params.event_type = typeFilter;
+    if (dateFilter.start) params.start_date = dateFilter.start;
+    if (dateFilter.end) params.end_date = dateFilter.end;
+
+    const { data: activitiesData, isLoading: loading } = useActivities(params);
+
+    const activities = Array.isArray(activitiesData?.items) ? activitiesData.items : [];
+    const total = Number(activitiesData?.total || 0);
 
     useEffect(() => {
         setPage(1);

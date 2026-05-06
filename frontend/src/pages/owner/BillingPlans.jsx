@@ -7,9 +7,7 @@ import {
 import { billingService } from '../../api/services';
 import api from '../../api/axios';
 import BuyRemindersModal from '../../components/owner/BuyRemindersModal';
-
-// Plan tier order — used to determine upgrade vs downgrade
-const PLAN_ORDER = ['FREE', 'STARTER', 'GROWTH', 'BUSINESS', 'SCALE'];
+import { useSubscription, usePlans } from '../../hooks/useBilling';
 
 function limitDisplay(val) {
     if (val === 0 || val === null || val === undefined) return 'Unlimited';
@@ -271,37 +269,20 @@ function BillingHistory({ items }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function BillingPlans() {
-    const [loading, setLoading]       = useState(true);
-    const [error, setError]           = useState('');
-    const [subscription, setSubscription] = useState(null);
-    const [plans, setPlans]           = useState([]);
+    const { data: subscription, isLoading: subLoading, error: subError, refetch: refetchSub } = useSubscription();
+    const { data: plans = [], isLoading: plansLoading, error: plansError, refetch: refetchPlans } = usePlans();
+    
+    const loading = subLoading || plansLoading;
+    const errorMsg = (subError?.message || plansError?.message || '');
+
     const [upgrading, setUpgrading]   = useState(null);
     const [upgradeError, setUpgradeError] = useState('');
     const [buyModalOpen, setBuyModalOpen] = useState(false);
 
-    const load = async () => {
-        setLoading(true);
-        setError('');
-        try {
-            const [subData, plansData] = await Promise.all([
-                billingService.getSubscription(),
-                billingService.getPlans(),
-            ]);
-            setSubscription(subData || null);
-
-            let fetchedPlans = Array.isArray(plansData) ? plansData : (plansData?.data || []);
-            const sortedPlans = [...fetchedPlans].sort(
-                (a, b) => PLAN_ORDER.indexOf(a.id) - PLAN_ORDER.indexOf(b.id)
-            );
-            setPlans(sortedPlans);
-        } catch (e) {
-            setError(e?.response?.data?.error?.message || e?.message || 'Failed to load billing data');
-        } finally {
-            setLoading(false);
-        }
+    const load = () => {
+        refetchSub();
+        refetchPlans();
     };
-
-    useEffect(() => { load(); }, []);
 
     const handleUpgrade = async (planId) => {
         setUpgrading(planId);
@@ -333,6 +314,7 @@ export default function BillingPlans() {
 
     const currentPlan  = subscription?.current_plan || {};
     const currentPlanId = currentPlan.id || 'FREE';
+    const PLAN_ORDER = ['FREE', 'STARTER', 'GROWTH', 'BUSINESS', 'SCALE'];
     const currentPlanIndex = PLAN_ORDER.indexOf(currentPlanId);
     const usage        = subscription?.usage || { tenants: { used: 0, limit: 15 }, hostels: { used: 0, limit: 1 } };
     const subMeta      = subscription?.subscription || { status: 'FREE' };
@@ -347,10 +329,10 @@ export default function BillingPlans() {
                 <p className="text-sm text-slate-500 mt-1">Manage your subscription, usage limits, and payment history.</p>
             </div>
 
-            {error && (
+            {errorMsg && (
                 <div className="flex items-center gap-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-xl px-4 py-3">
                     <AlertTriangle size={15} className="flex-shrink-0" />
-                    <span className="flex-1">{error}</span>
+                    <span className="flex-1">{errorMsg}</span>
                     <button onClick={load} className="flex items-center gap-1 text-xs font-semibold hover:underline ml-auto">
                         <RefreshCw size={12} /> Retry
                     </button>
@@ -423,14 +405,13 @@ export default function BillingPlans() {
                 <section>
                     <h3 className="text-lg font-bold text-slate-900 mb-4">Available Plans</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        {plans.filter(p => p.id !== 'SCALE').map(plan => {
-                            const idx = PLAN_ORDER.indexOf(plan.id);
+                        {plans.filter(p => p.id !== 'SCALE').map((plan, idx) => {
                             return (
                                 <PlanCard
                                     key={plan.id}
                                     plan={plan}
                                     isCurrent={plan.id === currentPlanId}
-                                    isUpgrade={idx > currentPlanIndex && idx !== -1}
+                                    isUpgrade={idx > currentPlanIndex && currentPlanIndex !== -1}
                                     upgrading={upgrading === plan.id}
                                     onUpgrade={handleUpgrade}
                                     onBuyCredits={() => setBuyModalOpen(true)}
