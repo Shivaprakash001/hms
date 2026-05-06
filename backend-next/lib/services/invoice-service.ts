@@ -4,6 +4,7 @@ import { imagekit } from "../imagekit";
 import { getHostelWithPreferences } from "../preferences";
 import { formatCurrency, formatShortDate, formatMonthYear, getCurrencySymbol } from "../format";
 import { timed } from "../perf";
+import { incrementPdfCache } from "../metrics";
 
 // ── Template Version (bump this when the PDF layout changes) ──
 const INVOICE_TEMPLATE_VERSION = 3;
@@ -74,8 +75,10 @@ export class InvoiceService {
     const cachedUrl = (receipt as any).invoice_pdf_url;
     const cachedVersion = (receipt as any).invoice_template_version;
     if (cachedUrl && cachedVersion === INVOICE_TEMPLATE_VERSION) {
+      incrementPdfCache("invoice_hit");
       return { url: cachedUrl, cached: true };
     }
+    incrementPdfCache("invoice_miss");
 
     const { hostel, prefs } = await getHostelWithPreferences(receipt.tenant.owner_id as string);
     if (!hostel) throw new Error("Hostel details not found");

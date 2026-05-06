@@ -7,8 +7,10 @@
  * 3. Render HTML via receipt-template.ts
  * 4. Convert to PDF via Puppeteer headless browser
  *
- * The old jsPDF-based rendering has been replaced with a headless
- * browser approach for pixel-perfect CSS fidelity.
+ * PDF Cache:
+ * Generated PDFs are stored in ImageKit and the URL is persisted on the
+ * receipt row. Subsequent requests for the same payment return the cached
+ * PDF without running Puppeteer. Template version bumps auto-invalidate.
  */
 
 import { prisma } from "../db";
@@ -17,6 +19,12 @@ import { getHostelWithPreferences } from "../preferences";
 import { htmlToPdf } from "../pdf/browser";
 import { renderReceiptHTML, type ReceiptRenderData } from "../pdf/receipt-template";
 import { timed } from "../perf";
+import { imagekit } from "../imagekit";
+import { incrementPdfCache } from "../metrics";
+
+// ── Template version: bump when receipt HTML/CSS layout changes ──
+// This triggers a one-time Puppeteer re-render for all existing receipts.
+const RECEIPT_TEMPLATE_VERSION = 1;
 
 const RECEIPT_NUMBER_RETRY_LIMIT = 10;
 const PLAN_UPGRADE_REQUIRED_ERROR = "PLAN_UPGRADE_REQUIRED";
@@ -170,6 +178,22 @@ export class ReceiptService {
       throw new Error("NOT_FOUND: Receipt not found");
     }
 
+    // ── PDF Cache check: reuse stored PDF if template version matches ─────────
+    const cachedPdfUrl = (receipt as any).receipt_pdf_url as string | null;
+    const cachedVersion = (receipt as any).receipt_template_version as number | null;
+
+    if (cachedPdfUrl && cachedVersion === RECEIPT_TEMPLATE_VERSION) {
+      incrementPdfCache("receipt_hit");
+      // Fetch from CDN — avoids Puppeteer entirely
+      const res = await fetch(cachedPdfUrl);
+      if (res.ok) {
+        const arrayBuf = await res.arrayBuffer();
+        return Buffer.from(arrayBuf);
+      }
+      // CDN miss (deleted externally) — fall through to re-render
+    }
+    incrementPdfCache("receipt_miss");
+
     // 2. Fetch hostel + preferences + room allocation
     const ownerId = receipt.owner_id || receipt.tenant?.owner_id || "";
     const { hostel, prefs } = await getHostelWithPreferences(ownerId);
@@ -232,13 +256,41 @@ export class ReceiptService {
       footer: prefs.receipt_footer || null,
     };
 
-    // 4. Render HTML → PDF
+    // 4. Render HTML → PDF via Puppeteer
     const html = renderReceiptHTML(renderData);
     const pdfBuffer = await timed(
       "pdf.render.puppeteer",
       () => htmlToPdf(html),
       { payment_id: paymentId, slow_ms: 3_000 }
     );
+
+    // 5. Upload & cache the rendered PDF ──────────────────────────────────────
+    // Best-effort: failure here does not break the response.
+    try {
+      const base64Pdf = pdfBuffer.toString("base64");
+      const uploadRes = await timed(
+        "pdf.receipt.upload",
+        () => imagekit.files.upload({
+          file: base64Pdf,
+          fileName: `receipt_${receipt.receipt_number}.pdf`,
+          folder: "/receipts",
+          tags: ["receipt", receipt.id],
+        }),
+        { payment_id: paymentId, slow_ms: 5_000 }
+      );
+      if (uploadRes.url) {
+        await prisma.receipt.update({
+          where: { id: receipt.id },
+          data: {
+            receipt_pdf_url: uploadRes.url,
+            receipt_template_version: RECEIPT_TEMPLATE_VERSION,
+          } as any,
+        });
+      }
+    } catch (uploadErr: any) {
+      // Non-fatal: log and continue — client still receives the buffer
+      console.warn("[ReceiptService] PDF upload failed (non-fatal):", uploadErr?.message);
+    }
 
     return pdfBuffer;
   }

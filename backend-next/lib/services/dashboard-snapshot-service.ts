@@ -2,6 +2,7 @@ import { prisma } from "../db";
 import { dashboardService } from "./dashboard-service";
 import { getLogger } from "../logger";
 import { timed } from "../perf";
+import { incrementSnapshot } from "../metrics";
 
 const logger = getLogger("dashboard-snapshot-service");
 
@@ -64,10 +65,12 @@ export class DashboardSnapshotService {
     const fresh = row && !row.is_stale && isFresh(statsComputedAt, now);
     if (fresh) {
       logger.info("snapshot_stats_hit", { owner_id: ownerId, age_ms: now.getTime() - statsComputedAt!.getTime() });
+      incrementSnapshot("stats_hit");
       return this.mapStatsRow(row);
     }
 
     logger.info("snapshot_stats_miss", { owner_id: ownerId, is_stale: row?.is_stale ?? null, has_row: !!row });
+    incrementSnapshot("stats_miss");
     await timed("snapshot.stats.recompute", () => this.refreshStats(ownerId, row), { owner_id: ownerId, slow_ms: 3_000 });
     const updated: any = await this.fetchSnapshotRow(ownerId);
     if (updated) return this.mapStatsRow(updated);
@@ -85,10 +88,12 @@ export class DashboardSnapshotService {
     const fresh = row && !row.is_stale && hasCorrectMonths && isFresh(monthlyComputedAt, now);
     if (fresh && Array.isArray(row.monthly_trend)) {
       logger.info("snapshot_monthly_hit", { owner_id: ownerId, months, age_ms: now.getTime() - monthlyComputedAt!.getTime() });
+      incrementSnapshot("monthly_hit");
       return row.monthly_trend as MonthlyPoint[];
     }
 
     logger.info("snapshot_monthly_miss", { owner_id: ownerId, months, is_stale: row?.is_stale ?? null });
+    incrementSnapshot("monthly_miss");
     await timed("snapshot.monthly.recompute", () => this.refreshMonthly(ownerId, months, row), { owner_id: ownerId, months, slow_ms: 3_000 });
     const updatedRows: any[] = await prisma.$queryRaw<any[]>`
       SELECT monthly_trend
@@ -217,6 +222,7 @@ export class DashboardSnapshotService {
       SET locked_at = NOW(), expires_at = NOW() + interval '20 seconds'
       WHERE system_locks.expires_at < NOW()
     `;
+    if (result === 0) incrementSnapshot("lock_contention");
     return result > 0;
   }
 

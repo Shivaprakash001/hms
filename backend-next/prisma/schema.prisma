@@ -603,6 +603,8 @@ model Receipt {
   issued_at                DateTime  @default(now()) @db.Timestamptz(6)
   invoice_pdf_url          String?
   invoice_template_version Int?
+  receipt_pdf_url          String?
+  receipt_template_version Int?
   payment                  Payment   @relation(fields: [payment_id], references: [id])
   tenant                   Tenant    @relation(fields: [tenant_id], references: [id])
 
