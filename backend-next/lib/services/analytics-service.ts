@@ -97,7 +97,7 @@ export class AnalyticsService {
             WHERE owner_id = ${ownerId}::uuid
               AND status NOT IN ('PAID','WAIVED')
               AND due_date < NOW()
-              AND tenant_id = ANY(${ids})
+              AND tenant_id = ANY(${ids}::uuid[])
             GROUP BY tenant_id
           `,
         ])
