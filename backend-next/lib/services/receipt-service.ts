@@ -21,6 +21,7 @@ import { renderReceiptHTML, type ReceiptRenderData } from "../pdf/receipt-templa
 import { timed } from "../perf";
 import { imagekit } from "../imagekit";
 import { incrementPdfCache } from "../metrics";
+import { acquireSystemLock, releaseSystemLock, sleep } from "../lock";
 
 // ── Template version: bump when receipt HTML/CSS layout changes ──
 // This triggers a one-time Puppeteer re-render for all existing receipts.
@@ -194,8 +195,33 @@ export class ReceiptService {
     }
     incrementPdfCache("receipt_miss");
 
-    // 2. Fetch hostel + preferences + room allocation
-    const ownerId = receipt.owner_id || receipt.tenant?.owner_id || "";
+    // 1.5 Concurrency Protection
+    const lockKey = `pdf_receipt_${receipt.id}`;
+    const acquired = await acquireSystemLock(lockKey, 30);
+    
+    if (!acquired) {
+      incrementPdfCache("contention");
+      // Another request is currently rendering this receipt.
+      // Wait up to 3 seconds to see if they finish and cache it.
+      for (let i = 0; i < 6; i++) {
+        await sleep(500);
+        const fresh = await prisma.receipt.findUnique({
+          where: { id: receipt.id },
+          select: { receipt_pdf_url: true, receipt_template_version: true },
+        });
+        if (fresh?.receipt_pdf_url && fresh.receipt_template_version === RECEIPT_TEMPLATE_VERSION) {
+          incrementPdfCache("receipt_hit"); // Delayed hit
+          const res = await fetch(fresh.receipt_pdf_url);
+          if (res.ok) return Buffer.from(await res.arrayBuffer());
+        }
+      }
+      // If we exit the loop, the other request timed out or failed upload.
+      // Proceed to render it ourselves.
+    }
+
+    try {
+      // 2. Fetch hostel + preferences + room allocation
+      const ownerId = receipt.owner_id || receipt.tenant?.owner_id || "";
     const { hostel, prefs } = await getHostelWithPreferences(ownerId);
 
     const allocation = await prisma.roomAllocation.findFirst({
@@ -291,9 +317,14 @@ export class ReceiptService {
       // Non-fatal: log and continue — client still receives the buffer
       console.warn("[ReceiptService] PDF upload failed (non-fatal):", uploadErr?.message);
     }
-
+    
     return pdfBuffer;
+  } finally {
+    if (acquired) {
+      await releaseSystemLock(lockKey);
+    }
   }
+}
 
   /**
    * Render receipt PDF directly from a receipt record with context.

@@ -36,6 +36,7 @@ export async function GET() {
     invoice_pdf_hits:           m.pdf_cache.invoice_hits,
     invoice_pdf_misses:         m.pdf_cache.invoice_misses,
     invoice_pdf_hit_rate_pct:   m.invoice_pdf_hit_rate_pct,
+    pdf_cache_contentions:      m.pdf_cache.contentions,
 
     // ── PDF Render Volume ────────────────────────────────────────
     puppeteer_renders:          m.pdf_renders.puppeteer,

@@ -5,6 +5,7 @@ import { getHostelWithPreferences } from "../preferences";
 import { formatCurrency, formatShortDate, formatMonthYear, getCurrencySymbol } from "../format";
 import { timed } from "../perf";
 import { incrementPdfCache } from "../metrics";
+import { acquireSystemLock, releaseSystemLock, sleep } from "../lock";
 
 // ── Template Version (bump this when the PDF layout changes) ──
 const INVOICE_TEMPLATE_VERSION = 3;
@@ -80,8 +81,30 @@ export class InvoiceService {
     }
     incrementPdfCache("invoice_miss");
 
-    const { hostel, prefs } = await getHostelWithPreferences(receipt.tenant.owner_id as string);
-    if (!hostel) throw new Error("Hostel details not found");
+    // 1.5 Concurrency Protection
+    const lockKey = `pdf_invoice_${receipt.id}`;
+    const acquired = await acquireSystemLock(lockKey, 30);
+    
+    if (!acquired) {
+      incrementPdfCache("contention");
+      // Another request is currently rendering this invoice.
+      for (let i = 0; i < 6; i++) {
+        await sleep(500);
+        const fresh = await prisma.receipt.findUnique({
+          where: { id: receipt.id },
+          select: { invoice_pdf_url: true, invoice_template_version: true },
+        });
+        if (fresh?.invoice_pdf_url && fresh.invoice_template_version === INVOICE_TEMPLATE_VERSION) {
+          incrementPdfCache("invoice_hit");
+          return { url: fresh.invoice_pdf_url, cached: true };
+        }
+      }
+      // Timed out waiting for the other request. Proceed to render.
+    }
+
+    try {
+      const { hostel, prefs } = await getHostelWithPreferences(receipt.tenant.owner_id as string);
+      if (!hostel) throw new Error("Hostel details not found");
 
     const allocation = await prisma.roomAllocation.findFirst({
       where: { tenant_id: receipt.tenant_id },
@@ -318,6 +341,11 @@ export class InvoiceService {
     });
 
     return { url: uploadRes.url, cached: false };
+    } finally {
+      if (acquired) {
+        await releaseSystemLock(lockKey);
+      }
+    }
   }
 }
 

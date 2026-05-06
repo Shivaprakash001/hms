@@ -66,6 +66,7 @@ const metrics = {
     receipt_misses:  0,  // Puppeteer ran — PDF was not cached or version changed
     invoice_hits:    0,  // pdf-lib bypassed — served from ImageKit cache
     invoice_misses:  0,  // pdf-lib ran — PDF was not cached or version changed
+    contentions:     0,  // Concurrent render attempts
   },
   // ── Snapshot observability ─────────────────────────────────────────────────
   snapshot: {
@@ -110,7 +111,8 @@ export function incrementAuth(type: "login_success" | "login_failed" | "refresh_
 
 // ── PDF Cache ────────────────────────────────────────────────────────────────
 
-export function incrementPdfCache(type: "receipt_hit" | "receipt_miss" | "invoice_hit" | "invoice_miss") {
+export function incrementPdfCache(type: "receipt_hit" | "receipt_miss" | "invoice_hit" | "invoice_miss" | "contention") {
+  if (type === "contention")    { metrics.pdf_cache.contentions++; return; }
   if (type === "receipt_hit")   { metrics.pdf_cache.receipt_hits++;   metrics.pdf_renders.puppeteer += 0; return; }
   if (type === "receipt_miss")  { metrics.pdf_cache.receipt_misses++; metrics.pdf_renders.puppeteer++;    return; }
   if (type === "invoice_hit")   { metrics.pdf_cache.invoice_hits++;                                       return; }
@@ -179,6 +181,7 @@ export function resetMetrics() {
   metrics.pdf_cache.receipt_misses = 0;
   metrics.pdf_cache.invoice_hits = 0;
   metrics.pdf_cache.invoice_misses = 0;
+  metrics.pdf_cache.contentions = 0;
   metrics.snapshot.stats_hits = 0;
   metrics.snapshot.stats_misses = 0;
   metrics.snapshot.monthly_hits = 0;

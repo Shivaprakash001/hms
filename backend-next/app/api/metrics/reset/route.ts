@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
       invoice_pdf_hits:              beforeReset.pdf_cache.invoice_hits,
       invoice_pdf_misses:            beforeReset.pdf_cache.invoice_misses,
       invoice_pdf_hit_rate_pct:      beforeReset.invoice_pdf_hit_rate_pct,
+      pdf_cache_contentions:         beforeReset.pdf_cache.contentions,
       puppeteer_renders:             beforeReset.pdf_renders.puppeteer,
       snapshot_stats_hit_rate_pct:   beforeReset.snapshot_stats_hit_rate_pct,
       snapshot_monthly_hit_rate_pct: beforeReset.snapshot_monthly_hit_rate_pct,

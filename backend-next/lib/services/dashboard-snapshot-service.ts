@@ -3,6 +3,7 @@ import { dashboardService } from "./dashboard-service";
 import { getLogger } from "../logger";
 import { timed } from "../perf";
 import { incrementSnapshot } from "../metrics";
+import { acquireSystemLock, releaseSystemLock } from "../lock";
 
 const logger = getLogger("dashboard-snapshot-service");
 
@@ -215,19 +216,13 @@ export class DashboardSnapshotService {
   }
 
   private async acquireLock(key: string) {
-    const result = await prisma.$executeRaw`
-      INSERT INTO system_locks (key, locked_at, expires_at)
-      VALUES (${key}, NOW(), NOW() + interval '20 seconds')
-      ON CONFLICT (key) DO UPDATE
-      SET locked_at = NOW(), expires_at = NOW() + interval '20 seconds'
-      WHERE system_locks.expires_at < NOW()
-    `;
-    if (result === 0) incrementSnapshot("lock_contention");
-    return result > 0;
+    const result = await acquireSystemLock(key, 20);
+    if (!result) incrementSnapshot("lock_contention");
+    return result;
   }
 
   private async releaseLock(key: string) {
-    await prisma.$executeRaw`DELETE FROM system_locks WHERE key = ${key}`.catch(() => {});
+    await releaseSystemLock(key);
   }
 }
 
