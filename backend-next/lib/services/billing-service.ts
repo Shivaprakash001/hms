@@ -125,6 +125,15 @@ export class BillingService {
         where: { owner_id: ownerId },
         orderBy: { created_at: "desc" },
         take: 12,
+        select: {
+          id: true,
+          invoice_number: true,
+          amount_paise: true,
+          status: true,
+          billing_month: true,
+          paid_at: true,
+          created_at: true,
+        },
       }),
     ]);
 
