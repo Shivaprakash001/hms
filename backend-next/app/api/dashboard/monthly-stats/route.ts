@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
-import { dashboardService } from "@/lib/services/dashboard-service";
+import { dashboardSnapshotService } from "@/lib/services/dashboard-snapshot-service";
 
 
 /**
@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const parseResult = parseInt(searchParams.get("months") || "6", 10);
     const months = Number.isNaN(parseResult) ? 6 : Math.max(1, Math.min(36, parseResult));
-    const stats = await dashboardService.getMonthlyStats(session.sub, months);
+    const stats = await dashboardSnapshotService.getMonthlyStats(session.sub, months);
     return apiResponse(stats);
   } catch (error: any) {
     return apiError(error.message || "Failed to fetch monthly stats");

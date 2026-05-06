@@ -1,11 +1,11 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { invitationService } from "@/lib/services/invitation-service";
 import { InvitationSchema } from "@/lib/validators";
-import { planGate } from "@/lib/services/plan-gate-service";
+import { planGate, TenantHardCapError } from "@/lib/services/plan-gate-service";
 
 
 /**
@@ -32,6 +32,18 @@ export async function POST(req: NextRequest) {
     
     return apiResponse(result, 201);
   } catch (error: any) {
+    if (error instanceof TenantHardCapError) {
+      return NextResponse.json({
+        error: {
+          code: "TENANT_HARD_CAP_EXCEEDED",
+          message: `Tenant hard cap reached (${error.current}/${error.hard_cap}). Upgrade to ${error.recommended_plan} to add more tenants.`,
+          upgrade_required: true,
+          recommended_plan: error.recommended_plan,
+          current_count: error.current,
+          hard_cap: error.hard_cap,
+        }
+      }, { status: 402 });
+    }
     const rawMessage = String(error?.message || "Failed to send invitation");
     const [maybeCode, ...rest] = rawMessage.split(":");
     const normalizedCode = maybeCode?.trim();

@@ -89,3 +89,81 @@ WHERE NOT EXISTS (
   SELECT 1 FROM "_prisma_migrations"
   WHERE migration_name = '20260503120000_advance_payment_type_idempotency'
 );
+
+-- ============================================================
+-- MIGRATION: 20260506193000_active_allocation_unique
+-- ============================================================
+
+-- Enforce one ACTIVE allocation per tenant while preserving historical records.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_room_allocations_active_tenant_unique
+  ON public.room_allocations (tenant_id)
+  WHERE is_active = true AND end_date IS NULL;
+
+INSERT INTO "_prisma_migrations"
+  (id, checksum, finished_at, migration_name, logs, rolled_back_at, started_at, applied_steps_count)
+SELECT gen_random_uuid(), 'manual_apply', NOW(),
+  '20260506193000_active_allocation_unique', NULL, NULL, NOW(), 1
+WHERE NOT EXISTS (
+  SELECT 1 FROM "_prisma_migrations"
+  WHERE migration_name = '20260506193000_active_allocation_unique'
+);
+
+-- ============================================================
+-- MIGRATION: 20260506202000_rent_obligations_owner_month_idx
+-- ============================================================
+
+CREATE INDEX IF NOT EXISTS idx_rent_obligations_owner_month
+  ON public.rent_obligations (owner_id, rent_month);
+
+INSERT INTO "_prisma_migrations"
+  (id, checksum, finished_at, migration_name, logs, rolled_back_at, started_at, applied_steps_count)
+SELECT gen_random_uuid(), 'manual_apply', NOW(),
+  '20260506202000_rent_obligations_owner_month_idx', NULL, NULL, NOW(), 1
+WHERE NOT EXISTS (
+  SELECT 1 FROM "_prisma_migrations"
+  WHERE migration_name = '20260506202000_rent_obligations_owner_month_idx'
+);
+
+-- ============================================================
+-- MIGRATION: 20260506213000_owner_dashboard_snapshots
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS public.owner_dashboard_snapshots (
+  owner_id             UUID PRIMARY KEY,
+  snapshot_month       DATE NOT NULL,
+  tenant_count         INTEGER NOT NULL DEFAULT 0,
+  active_tenant_count  INTEGER NOT NULL DEFAULT 0,
+  total_room_count     INTEGER NOT NULL DEFAULT 0,
+  total_capacity       INTEGER NOT NULL DEFAULT 0,
+  vacant_beds          INTEGER NOT NULL DEFAULT 0,
+  occupancy_rate       INTEGER NOT NULL DEFAULT 0,
+  rent_collected_month NUMERIC(12,2) NOT NULL DEFAULT 0,
+  expenses_month       NUMERIC(12,2) NOT NULL DEFAULT 0,
+  pending_dues         NUMERIC(12,2) NOT NULL DEFAULT 0,
+  overdue_total        NUMERIC(12,2) NOT NULL DEFAULT 0,
+  overdue_count        INTEGER NOT NULL DEFAULT 0,
+  collection_rate      INTEGER NOT NULL DEFAULT 0,
+  monthly_trend        JSONB,
+  monthly_trend_months INTEGER NOT NULL DEFAULT 6,
+  stats_computed_at    TIMESTAMPTZ,
+  monthly_computed_at  TIMESTAMPTZ,
+  is_stale             BOOLEAN NOT NULL DEFAULT true,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_owner_dashboard_snapshots_is_stale
+  ON public.owner_dashboard_snapshots(is_stale);
+CREATE INDEX IF NOT EXISTS idx_owner_dashboard_snapshots_stats_computed_at
+  ON public.owner_dashboard_snapshots(stats_computed_at);
+CREATE INDEX IF NOT EXISTS idx_owner_dashboard_snapshots_monthly_computed_at
+  ON public.owner_dashboard_snapshots(monthly_computed_at);
+
+INSERT INTO "_prisma_migrations"
+  (id, checksum, finished_at, migration_name, logs, rolled_back_at, started_at, applied_steps_count)
+SELECT gen_random_uuid(), 'manual_apply', NOW(),
+  '20260506213000_owner_dashboard_snapshots', NULL, NULL, NOW(), 1
+WHERE NOT EXISTS (
+  SELECT 1 FROM "_prisma_migrations"
+  WHERE migration_name = '20260506213000_owner_dashboard_snapshots'
+);

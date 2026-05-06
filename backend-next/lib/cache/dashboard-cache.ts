@@ -1,3 +1,4 @@
+import { dashboardSnapshotService } from "../services/dashboard-snapshot-service";
 const dashboardCache = new Map<string, { data: any, timestamp: number }>();
 
 export function invalidateDashboardCache(ownerId: string) {
@@ -6,6 +7,7 @@ export function invalidateDashboardCache(ownerId: string) {
       dashboardCache.delete(key);
     }
   }
+  dashboardSnapshotService.markOwnerStale(ownerId).catch(() => {});
 }
 
 export function getCachedDashboard(ownerId: string) {

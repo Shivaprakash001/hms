@@ -1,5 +1,17 @@
 import { prisma, supabase } from "../db";
 import { eventSystem } from "../events";
+import { allocationReconciliationService } from "./allocation-reconciliation-service";
+import { getLogger } from "../logger";
+
+const logger = getLogger("room-allocation-service");
+
+function mapAllocationConstraintError(err: any): Error {
+  const msg = String(err?.message || err || "");
+  if (err?.code === "P2002" || msg.includes("idx_room_allocations_active_tenant_unique")) {
+    return new Error("VALIDATION_ERROR: Tenant already has an active allocation");
+  }
+  return err instanceof Error ? err : new Error(msg);
+}
 
 export class RoomAllocationService {
 
@@ -27,42 +39,47 @@ export class RoomAllocationService {
   async allocateRoom(data: { tenantId: string; roomId: string; startDate: string; ownerId: string }) {
     const { tenantId, roomId, startDate, ownerId } = data;
 
-    const allocationData = await prisma.$transaction(async (tx) => {
-      // 1. Check if tenant already has an active allocation
-      const existing = await tx.roomAllocation.findFirst({
-        where: { tenant_id: tenantId, is_active: true, end_date: null }
-      });
-      
-      if (existing) {
-        throw new Error("VALIDATION_ERROR: Tenant is already allocated to a room and checking out is required first");
-      }
+    let allocationData: any;
+    try {
+      allocationData = await prisma.$transaction(async (tx) => {
+        // 1. Check if tenant already has an active allocation
+        const existing = await tx.roomAllocation.findFirst({
+          where: { tenant_id: tenantId, is_active: true, end_date: null }
+        });
+        
+        if (existing) {
+          throw new Error("VALIDATION_ERROR: Tenant is already allocated to a room and checking out is required first");
+        }
 
-      // 2. Check room capacity
-      const room = await tx.room.findUnique({
-        where: { id: roomId },
-        include: {
-          allocations: {
-            where: { end_date: null }
+        // 2. Check room capacity
+        const room = await tx.room.findUnique({
+          where: { id: roomId },
+          include: {
+            allocations: {
+              where: { end_date: null }
+            }
           }
+        });
+        
+        if (!room) {
+          throw new Error("VALIDATION_ERROR: Room not found");
         }
-      });
-      
-      if (!room) {
-        throw new Error("VALIDATION_ERROR: Room not found");
-      }
-      if (room.allocations.length >= room.capacity) {
-        throw new Error("VALIDATION_ERROR: Room is at maximum capacity");
-      }
+        if (room.allocations.length >= room.capacity) {
+          throw new Error("VALIDATION_ERROR: Room is at maximum capacity");
+        }
 
-      // 3. Create allocation
-      return await tx.roomAllocation.create({
-        data: {
-          tenant_id: tenantId,
-          room_id: roomId,
-          start_date: new Date(startDate)
-        }
+        // 3. Create allocation
+        return await tx.roomAllocation.create({
+          data: {
+            tenant_id: tenantId,
+            room_id: roomId,
+            start_date: new Date(startDate)
+          }
+        });
       });
-    });
+    } catch (err: any) {
+      throw mapAllocationConstraintError(err);
+    }
 
     // ✅ Trigger Events
     await eventSystem.trigger("tenant_allocated_room", {
@@ -71,70 +88,88 @@ export class RoomAllocationService {
       allocation_id: allocationData.id,
       owner_id: ownerId
     });
+    await allocationReconciliationService.reconcileAllocation(allocationData.id).catch((err: any) => {
+      logger.error("reconcile_after_allocate_failed", {
+        allocation_id: allocationData.id,
+        error: String(err?.message || err),
+      });
+    });
 
     return allocationData;
   }
 
   // ✅ End Allocation
   async endAllocation(allocationId: string, endDate: string) {
-    return await prisma.roomAllocation.update({
+    const updated = await prisma.roomAllocation.update({
       where: { id: allocationId },
       data: { 
         end_date: new Date(endDate),
         is_active: false
       }
     });
+    await allocationReconciliationService.reconcileAllocation(allocationId).catch((err: any) => {
+      logger.error("reconcile_after_end_failed", {
+        allocation_id: allocationId,
+        error: String(err?.message || err),
+      });
+    });
+    return updated;
   }
 
   // ✅ Shift Room
   async shiftRoom(tenantId: string, newRoomId: string, shiftDate: string, ownerId: string) {
 
-    const shiftData = await prisma.$transaction(async (tx) => {
-      // 1. Find active allocation
-      const active = await tx.roomAllocation.findFirst({
-        where: { tenant_id: tenantId, is_active: true, end_date: null },
-        orderBy: { start_date: "desc" }
-      });
+    let shiftData: any;
+    try {
+      shiftData = await prisma.$transaction(async (tx) => {
+        // 1. Find active allocation
+        const active = await tx.roomAllocation.findFirst({
+          where: { tenant_id: tenantId, is_active: true, end_date: null },
+          orderBy: { start_date: "desc" }
+        });
 
-      if (!active) {
-        throw new Error("NOT_FOUND: No active allocation found for tenant");
-      }
-
-      // 2. End old allocation
-      await tx.roomAllocation.update({
-        where: { id: active.id },
-        data: { 
-          end_date: new Date(shiftDate),
-          is_active: false
+        if (!active) {
+          throw new Error("NOT_FOUND: No active allocation found for tenant");
         }
-      });
 
-      // 3. Check new room capacity
-      const room = await tx.room.findUnique({
-        where: { id: newRoomId },
-        include: {
-          allocations: {
-            where: { end_date: null }
+        // 2. End old allocation first (same transaction, invariant-safe)
+        await tx.roomAllocation.update({
+          where: { id: active.id },
+          data: { 
+            end_date: new Date(shiftDate),
+            is_active: false
           }
-        }
-      });
-      
-      if (!room) {
-        throw new Error("VALIDATION_ERROR: Target room not found");
-      }
-      if (room.allocations.length >= room.capacity) {
-        throw new Error("VALIDATION_ERROR: Target room is at maximum capacity");
-      }
+        });
 
-      // 4. Create new allocation
-      return await tx.roomAllocation.create({
-        data: {
-          tenant_id: tenantId,
-          room_id: newRoomId,
-          start_date: new Date(shiftDate)
+        // 3. Check new room capacity
+        const room = await tx.room.findUnique({
+          where: { id: newRoomId },
+          include: {
+            allocations: {
+              where: { end_date: null }
+            }
+          }
+        });
+        
+        if (!room) {
+          throw new Error("VALIDATION_ERROR: Target room not found");
         }
+        if (room.allocations.length >= room.capacity) {
+          throw new Error("VALIDATION_ERROR: Target room is at maximum capacity");
+        }
+
+        // 4. Create new allocation
+        return await tx.roomAllocation.create({
+          data: {
+            tenant_id: tenantId,
+            room_id: newRoomId,
+            start_date: new Date(shiftDate)
+          }
+        });
       });
-    });
+    } catch (err: any) {
+      throw mapAllocationConstraintError(err);
+    }
 
     // ✅ Trigger Events
     await eventSystem.trigger("tenant_allocated_room", {
@@ -142,6 +177,12 @@ export class RoomAllocationService {
       room_id: newRoomId,
       allocation_id: shiftData.id,
       owner_id: ownerId
+    });
+    await allocationReconciliationService.reconcileAllocation(shiftData.id).catch((err: any) => {
+      logger.error("reconcile_after_shift_failed", {
+        allocation_id: shiftData.id,
+        error: String(err?.message || err),
+      });
     });
 
     return { success: true, new_allocation: shiftData };

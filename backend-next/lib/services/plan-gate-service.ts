@@ -232,18 +232,79 @@ export async function reconcileAddonCredits(ownerId: string): Promise<{
 
 // ─── Legacy planGate object (kept for backward compat with existing callers) ──
 
+export class TenantHardCapError extends Error {
+  readonly current: number;
+  readonly hard_cap: number;
+  readonly recommended_plan: string;
+  constructor(current: number, hard_cap: number, recommended_plan: string) {
+    super("TENANT_HARD_CAP_EXCEEDED");
+    this.name = "TenantHardCapError";
+    this.current = current;
+    this.hard_cap = hard_cap;
+    this.recommended_plan = recommended_plan;
+  }
+}
+
+const NEXT_PLAN_FOR_GATE: Record<string, string> = {
+  FREE: "STARTER",
+  STARTER: "GROWTH",
+  GROWTH: "BUSINESS",
+};
+
 export const planGate = {
   async assertTenantLimit(ownerId: string): Promise<void> {
-    const plan = await getEffectivePlan(ownerId);
-    if (!plan) throw new Error("PLAN_LIMIT: FORBIDDEN. No active subscription.");
-    if (plan.tenant_limit === 0) return; // 0 = unlimited
+    const sub = await prisma.ownerSubscription.findUnique({
+      where: { owner_id: ownerId },
+      include: { plan: true },
+    });
+
+    if (!sub) throw new Error("PLAN_LIMIT: FORBIDDEN. No active subscription.");
+
+    const effectiveStatus =
+      sub.status === "ACTIVE" && sub.end_date && new Date() > sub.end_date
+        ? "EXPIRED"
+        : sub.status;
+
+    if (["EXPIRED", "CANCELLED", "LIMITED"].includes(effectiveStatus)) {
+      throw new Error("PLAN_LIMIT: FORBIDDEN. No active subscription.");
+    }
+
+    const plan = sub.plan;
+
+    // 0 = unlimited (BUSINESS / SCALE / custom)
+    if (plan.tenant_limit === 0 || plan.is_custom) return;
 
     const current = await prisma.tenant.count({
       where: { owner_id: ownerId, status: { not: "LEFT" } },
     });
 
-    if (current >= plan.tenant_limit) {
-      throw new Error("PLAN_LIMIT: TENANT_LIMIT_REACHED");
+    const includedLimit = plan.tenant_limit;
+    const overflowEnabled = (plan as any).overflow_enabled ?? false;
+    const hardCap = (plan as any).overflow_hard_cap ?? includedLimit;
+
+    // FREE or overflow-disabled: hard block at plan limit
+    if (!overflowEnabled) {
+      if (current >= includedLimit) {
+        throw new Error("PLAN_LIMIT: TENANT_LIMIT_REACHED");
+      }
+      return;
+    }
+
+    // Overflow-enabled plan: block only at hard cap
+    if (current >= hardCap) {
+      const recommended = NEXT_PLAN_FOR_GATE[plan.id] ?? "GROWTH";
+      throw new TenantHardCapError(current, hardCap, recommended);
+    }
+
+    // In overflow zone (included < current < hardCap) — allowed, log event
+    if (current >= includedLimit) {
+      prisma.systemEventLog.create({
+        data: {
+          event_type: "TENANT_OVERFLOW_ZONE",
+          owner_id: ownerId,
+          metadata: { current, included_limit: includedLimit, hard_cap: hardCap, plan_id: plan.id } as any,
+        },
+      }).catch(() => {}); // non-critical
     }
   },
 

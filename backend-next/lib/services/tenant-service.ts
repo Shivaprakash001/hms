@@ -3,6 +3,10 @@ import { eventSystem } from "../events";
 import { z } from "zod";
 import { getPreferences } from "../preferences";
 import { documentService } from "./document-service";
+import { allocationReconciliationService } from "./allocation-reconciliation-service";
+import { getLogger } from "../logger";
+
+const logger = getLogger("tenant-service");
 
 export class TenantService {
   async getTenantById(id: string, requestingUser: { sub: string; role: string }) {
@@ -549,11 +553,21 @@ export class TenantService {
       });
     }
 
-    return await prisma.tenant.update({
+    const updated = await prisma.tenant.update({
       where: { id },
       data,
       include: { profile: true },
     });
+    if (typeof data.status !== "undefined") {
+      await allocationReconciliationService.reconcileTenant(id).catch((err: any) => {
+        logger.error("reconcile_after_tenant_update_failed", {
+          tenant_id: id,
+          new_status: data.status,
+          error: String(err?.message || err),
+        });
+      });
+    }
+    return updated;
   }
 
   async deleteTenant(id: string, ownerId: string) {
@@ -570,11 +584,18 @@ export class TenantService {
       data: { is_active: false, end_date: new Date() },
     });
 
-    return await prisma.tenant.update({
+    const updated = await prisma.tenant.update({
       where: { id },
       data: { status: "LEFT" },
       include: { profile: true },
     });
+    await allocationReconciliationService.reconcileTenant(id).catch((err: any) => {
+      logger.error("reconcile_after_tenant_delete_failed", {
+        tenant_id: id,
+        error: String(err?.message || err),
+      });
+    });
+    return updated;
   }
 
   async reactivateTenant(id: string, rent: number, joinedOn: Date, ownerId: string) {
@@ -586,7 +607,7 @@ export class TenantService {
     if (tenant.owner_id !== ownerId) throw new Error("FORBIDDEN: You can only reactivate your own tenants");
     if (tenant.status !== "LEFT") throw new Error("VALIDATION: Only tenants with LEFT status can be reactivated");
 
-    return await prisma.tenant.update({
+    const updated = await prisma.tenant.update({
       where: { id },
       data: {
         status: "ACTIVE",
@@ -595,6 +616,13 @@ export class TenantService {
       },
       include: { profile: true },
     });
+    await allocationReconciliationService.reconcileTenant(id).catch((err: any) => {
+      logger.error("reconcile_after_tenant_reactivate_failed", {
+        tenant_id: id,
+        error: String(err?.message || err),
+      });
+    });
+    return updated;
   }
 }
 

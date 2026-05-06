@@ -5,8 +5,17 @@ import { eventSystem } from "../events";
 import { EmailService } from "./email-service";
 import { getLogger } from "../logger";
 import { planEnforcementService } from "./plan-enforcement-service";
+import { allocationReconciliationService } from "./allocation-reconciliation-service";
 
 const logger = getLogger("invitation-service");
+
+function mapAllocationConstraintError(err: any): Error {
+  const msg = String(err?.message || err || "");
+  if (err?.code === "P2002" || msg.includes("idx_room_allocations_active_tenant_unique")) {
+    return new Error("VALIDATION_ERROR: Tenant already has an active allocation");
+  }
+  return err instanceof Error ? err : new Error(msg);
+}
 
 export class InvitationService {
   async inviteTenant(data: any, ownerId: string) {
@@ -84,8 +93,10 @@ export class InvitationService {
     // 4. Atomic: Profile + Tenant + Allocation + Initial Obligations
     const { obligationEngine } = await import("./obligation-engine");
 
-    const { profile: newProfile, tenant: newTenant, obligations } = await prisma.$transaction(async (tx) => {
-      const profile = await tx.profile.create({
+    let createdBundle: { profile: any; tenant: any; obligations: string[]; allocationId: string };
+    try {
+      createdBundle = await prisma.$transaction(async (tx) => {
+        const profile = await tx.profile.create({
         data: {
           email: normalizedEmail,
           name,
@@ -133,10 +144,21 @@ export class InvitationService {
         maintenanceType: maintenance_type,
       });
 
-      return { profile, tenant, obligations: created };
-    });
+        return { profile, tenant, obligations: created, allocationId: allocation.id };
+      });
+    } catch (err: any) {
+      throw mapAllocationConstraintError(err);
+    }
+    const { profile: newProfile, tenant: newTenant, obligations, allocationId } = createdBundle;
 
     logger.info(`Created profile ${newProfile.id}, tenant ${newTenant.id} [INVITED], obligations: [${obligations.join(", ") || "none"}]`);
+    await allocationReconciliationService.reconcileAllocation(allocationId).catch((err: any) => {
+      logger.error("reconcile_after_invite_failed", {
+        allocation_id: allocationId,
+        tenant_id: newTenant.id,
+        error: String(err?.message || err),
+      });
+    });
 
     // 5. Log Activity
     await eventSystem.trigger("tenant_created", {
@@ -225,6 +247,12 @@ export class InvitationService {
       where: { id: tenant.id },
       data: { status: "ACTIVE" },
     });
+    await allocationReconciliationService.reconcileTenant(tenant.id).catch((err: any) => {
+      logger.error("reconcile_after_activate_failed", {
+        tenant_id: tenant.id,
+        error: String(err?.message || err),
+      });
+    });
     
     logger.info(`Successfully activated account for email: ${profile.email}`);
 
@@ -252,6 +280,7 @@ export class InvitationService {
       logger.warn(`Resend failed: User not found for email ${normalizedEmail}`);
       throw new Error("NOT_FOUND: User not found");
     }
+    const tenantDetails = profile.tenant_details;
 
     if (actor?.role === "OWNER" && profile.owner_id !== actor.id) {
       logger.warn(`Owner ${actor.id} attempted resend for foreign tenant ${normalizedEmail}`);
@@ -266,71 +295,84 @@ export class InvitationService {
     // Optional metadata updates when resend is triggered from invite flow.
     const roomIdOverride = overrides?.room_id ? String(overrides.room_id) : undefined;
     if (overrides?.name || typeof overrides?.phone !== "undefined" || typeof overrides?.monthly_rent !== "undefined" || roomIdOverride) {
-      await prisma.$transaction(async (tx) => {
-        if (overrides?.name || typeof overrides?.phone !== "undefined") {
-          await tx.profile.update({
-            where: { id: profile.id },
-            data: {
-              ...(overrides?.name ? { name: overrides.name } : {}),
-              ...(typeof overrides?.phone !== "undefined" ? { phone: overrides.phone } : {}),
-            },
-          });
-        }
-
-        if (typeof overrides?.monthly_rent !== "undefined") {
-          await tx.tenant.update({
-            where: { id: profile.tenant_details!.id },
-            data: { monthly_rent: Number(overrides.monthly_rent) },
-          });
-        }
-
-        if (roomIdOverride) {
-          const targetRoom = await tx.room.findUnique({
-            where: { id: roomIdOverride },
-            include: {
-              hostel: true,
-              allocations: { where: { is_active: true } },
-            },
-          });
-          if (!targetRoom || !targetRoom.hostel) {
-            throw new Error("NOT_FOUND: Target room not found");
-          }
-          if (profile.owner_id && targetRoom.hostel.owner_id !== profile.owner_id) {
-            throw new Error("FORBIDDEN: Cannot assign room from another owner");
-          }
-          
-          // Only check capacity if we're actually changing rooms
-          const activeAllocation = await tx.roomAllocation.findFirst({
-            where: { tenant_id: profile.tenant_details!.id, is_active: true },
-          });
-          if (!activeAllocation || activeAllocation.room_id !== roomIdOverride) {
-            if (targetRoom.allocations.length >= targetRoom.capacity) {
-              throw new Error("CAPACITY_EXCEEDED: Target room is already at full capacity");
-            }
-          }
-
-          if (activeAllocation) {
-            await tx.roomAllocation.update({
-              where: { id: activeAllocation.id },
-              data: { room_id: roomIdOverride, start_date: new Date() },
-            });
-          } else {
-            await tx.roomAllocation.create({
+      try {
+        await prisma.$transaction(async (tx) => {
+          if (overrides?.name || typeof overrides?.phone !== "undefined") {
+            await tx.profile.update({
+              where: { id: profile.id },
               data: {
-                tenant_id: profile.tenant_details!.id,
-                room_id: roomIdOverride,
-                start_date: new Date(),
-                is_active: true,
+                ...(overrides?.name ? { name: overrides.name } : {}),
+                ...(typeof overrides?.phone !== "undefined" ? { phone: overrides.phone } : {}),
               },
             });
           }
-        }
-      });
+
+          if (typeof overrides?.monthly_rent !== "undefined") {
+            await tx.tenant.update({
+              where: { id: tenantDetails.id },
+              data: { monthly_rent: Number(overrides.monthly_rent) },
+            });
+          }
+
+          if (roomIdOverride) {
+            const targetRoom = await tx.room.findUnique({
+              where: { id: roomIdOverride },
+              include: {
+                hostel: true,
+                allocations: { where: { is_active: true } },
+              },
+            });
+            if (!targetRoom || !targetRoom.hostel) {
+              throw new Error("NOT_FOUND: Target room not found");
+            }
+            if (profile.owner_id && targetRoom.hostel.owner_id !== profile.owner_id) {
+              throw new Error("FORBIDDEN: Cannot assign room from another owner");
+            }
+            
+            // Only check capacity if we're actually changing rooms
+            const activeAllocation = await tx.roomAllocation.findFirst({
+              where: { tenant_id: tenantDetails.id, is_active: true },
+            });
+            if (!activeAllocation || activeAllocation.room_id !== roomIdOverride) {
+              if (targetRoom.allocations.length >= targetRoom.capacity) {
+                throw new Error("CAPACITY_EXCEEDED: Target room is already at full capacity");
+              }
+            }
+
+            if (activeAllocation) {
+              await tx.roomAllocation.update({
+                where: { id: activeAllocation.id },
+                data: { room_id: roomIdOverride, start_date: new Date() },
+              });
+            } else {
+              await tx.roomAllocation.create({
+                data: {
+                  tenant_id: tenantDetails.id,
+                  room_id: roomIdOverride,
+                  start_date: new Date(),
+                  is_active: true,
+                },
+              });
+            }
+          }
+        });
+      } catch (err: any) {
+        throw mapAllocationConstraintError(err);
+      }
+      if (roomIdOverride) {
+        await allocationReconciliationService.reconcileTenant(tenantDetails.id).catch((err: any) => {
+          logger.error("reconcile_after_resend_room_override_failed", {
+            tenant_id: tenantDetails.id,
+            room_id: roomIdOverride,
+            error: String(err?.message || err),
+          });
+        });
+      }
     }
 
     // Additional details needed for email
     const allocation = await prisma.roomAllocation.findFirst({
-      where: { tenant_id: profile.tenant_details.id, is_active: true },
+      where: { tenant_id: tenantDetails.id, is_active: true },
       include: { room: { include: { hostel: true } } },
     });
 
@@ -370,7 +412,7 @@ export class InvitationService {
       ownerName: owner.name,
       hostelName: allocation.room.hostel.name,
       roomNumber: allocation.room.room_no,
-      roomRent: Number(profile.tenant_details.monthly_rent),
+      roomRent: Number(tenantDetails.monthly_rent),
       activationLink,
     });
     if (!emailResult.sent) {

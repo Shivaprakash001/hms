@@ -299,6 +299,36 @@ model SystemLock {
   @@schema("public")
 }
 
+model OwnerDashboardSnapshot {
+  owner_id              String   @id @db.Uuid
+  snapshot_month        DateTime @db.Date
+  tenant_count          Int      @default(0)
+  active_tenant_count   Int      @default(0)
+  total_room_count      Int      @default(0)
+  total_capacity        Int      @default(0)
+  vacant_beds           Int      @default(0)
+  occupancy_rate        Int      @default(0)
+  rent_collected_month  Decimal  @default(0) @db.Decimal(12, 2)
+  expenses_month        Decimal  @default(0) @db.Decimal(12, 2)
+  pending_dues          Decimal  @default(0) @db.Decimal(12, 2)
+  overdue_total         Decimal  @default(0) @db.Decimal(12, 2)
+  overdue_count         Int      @default(0)
+  collection_rate       Int      @default(0)
+  monthly_trend         Json?
+  monthly_trend_months  Int      @default(6)
+  stats_computed_at     DateTime? @db.Timestamptz(6)
+  monthly_computed_at   DateTime? @db.Timestamptz(6)
+  is_stale              Boolean  @default(true)
+  created_at            DateTime @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([is_stale])
+  @@index([stats_computed_at])
+  @@index([monthly_computed_at])
+  @@map("owner_dashboard_snapshots")
+  @@schema("public")
+}
+
 model Payment {
   id                 String          @id @default(uuid()) @db.Uuid
   obligation_id      String          @db.Uuid
@@ -628,10 +658,12 @@ model OwnerInvoice {
   expires_at      DateTime?          @db.Timestamptz(6)
   paid_at         DateTime?          @db.Timestamptz(6)
   created_at      DateTime           @default(now()) @db.Timestamptz(6)
+  line_items      Json?
   owner           Profile            @relation(fields: [owner_id], references: [id], onDelete: Cascade)
   plan            Plan?              @relation(fields: [plan_id], references: [id])
   subscription    OwnerSubscription? @relation(fields: [subscription_id], references: [id])
   attempts        PaymentAttempt[]
+  overflow_ledger OverflowLedger?
 
   @@index([owner_id, created_at(sort: Desc)])
   @@index([status])
@@ -651,7 +683,10 @@ model Plan {
   profile_photo         Boolean             @default(false)
   document_verification Boolean             @default(false)
   is_custom             Boolean             @default(false)
-  can_generate_receipts Boolean             @default(false)
+  can_generate_receipts               Boolean             @default(false)
+  overflow_enabled                    Boolean             @default(false)
+  overflow_price_per_tenant_paise     Int                 @default(0)
+  overflow_hard_cap                   Int                 @default(0)
   created_at          DateTime            @default(now()) @db.Timestamptz(6)
   features            Json?
   invoices            OwnerInvoice[]
@@ -754,6 +789,51 @@ model AddonTransaction {
 
   @@index([owner_id])
   @@map("addon_transactions")
+  @@schema("public")
+}
+
+model OwnerUsageSnapshot {
+  id                    String   @id @default(uuid()) @db.Uuid
+  owner_id              String   @db.Uuid
+  billing_month         DateTime @db.Date
+  plan_id               String
+  active_tenant_count   Int      @default(0)
+  included_limit        Int      @default(0)
+  overflow_tenant_count Int      @default(0)
+  overflow_amount_paise Int      @default(0)
+  peak_tenant_count     Int      @default(0)
+  snapshot_taken_at     DateTime @default(now()) @db.Timestamptz(6)
+  created_at            DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([owner_id, billing_month])
+  @@index([owner_id])
+  @@index([billing_month])
+  @@map("owner_usage_snapshots")
+  @@schema("public")
+}
+
+model OverflowLedger {
+  id                              String        @id @default(uuid()) @db.Uuid
+  owner_id                        String        @db.Uuid
+  billing_month                   DateTime      @db.Date
+  plan_id                         String
+  active_tenant_count             Int
+  included_limit                  Int
+  overflow_count                  Int           @default(0)
+  overflow_price_per_tenant_paise Int           @default(0)
+  overflow_amount_paise           Int           @default(0)
+  invoice_id                      String?       @db.Uuid
+  status                          String        @default("PENDING")
+  idempotency_key                 String        @unique
+  created_at                      DateTime      @default(now()) @db.Timestamptz(6)
+  processed_at                    DateTime?     @db.Timestamptz(6)
+  invoice                         OwnerInvoice? @relation(fields: [invoice_id], references: [id], onDelete: SetNull)
+
+  @@unique([owner_id, billing_month])
+  @@index([owner_id])
+  @@index([billing_month])
+  @@index([status])
+  @@map("overflow_ledger")
   @@schema("public")
 }
 

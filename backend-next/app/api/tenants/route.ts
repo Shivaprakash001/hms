@@ -1,10 +1,10 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { tenantService } from "@/lib/services/tenant-service";
-import { planGate } from "@/lib/services/plan-gate-service";
+import { planGate, TenantHardCapError } from "@/lib/services/plan-gate-service";
 
 
 /**
@@ -58,7 +58,18 @@ export async function POST(req: NextRequest) {
     const tenant = await tenantService.createTenant(body, session.sub);
     return apiResponse(tenant, 201);
   } catch (error: any) {
-    // Enhanced 402 for plan limits
+    if (error instanceof TenantHardCapError) {
+      return NextResponse.json({
+        error: {
+          code: "TENANT_HARD_CAP_EXCEEDED",
+          message: `Tenant hard cap reached (${error.current}/${error.hard_cap}). Upgrade to ${error.recommended_plan} to add more tenants.`,
+          upgrade_required: true,
+          recommended_plan: error.recommended_plan,
+          current_count: error.current,
+          hard_cap: error.hard_cap,
+        }
+      }, { status: 402 });
+    }
     if (error.message?.startsWith("PLAN_LIMIT:")) {
       const code = error.message.replace("PLAN_LIMIT:", "").trim();
       return apiError(code, code, 402);

@@ -11,7 +11,8 @@
     "prisma:push": "DOTENV_CONFIG_PATH=../.env node -r dotenv/config ./node_modules/prisma/build/index.js db push",
     "prisma:studio": "DOTENV_CONFIG_PATH=../.env node -r dotenv/config ./node_modules/prisma/build/index.js studio",
     "postinstall": "DOTENV_CONFIG_PATH=../.env node -r dotenv/config ./node_modules/prisma/build/index.js generate",
-    "seed": "tsx prisma/seed.ts"
+    "seed": "tsx prisma/seed.ts",
+    "reconcile:allocations": "tsx scripts/reconcile-allocations.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

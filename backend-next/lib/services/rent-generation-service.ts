@@ -11,7 +11,7 @@ import { planEnforcementService } from "./plan-enforcement-service";
  * 
  * Idempotent monthly rent obligation generator.
  * Safe to run multiple times — the DB unique constraint
- * on (allocation_id, rent_month) prevents duplicate rows.
+ * on (allocation_id, rent_month, obligation_type) prevents duplicate rows.
  * 
  * Safety features:
  * - Deterministic UTC month keys (YYYY-MM-01T00:00:00Z)
@@ -183,7 +183,7 @@ export class RentGenerationService {
           // ── RENT obligation ──────────────────────────────────────
           const existingRent = await prisma.rentObligation.findFirst({
             where: {
-              tenant_id: alloc.tenant.id,
+              allocation_id: alloc.id,
               rent_month: rentMonth,
               obligation_type: "RENT"
             }
@@ -214,7 +214,7 @@ export class RentGenerationService {
           if (maintAmount > 0 && maintType === "MONTHLY") {
             const existingMaint = await prisma.rentObligation.findFirst({
               where: {
-                tenant_id: alloc.tenant.id,
+                allocation_id: alloc.id,
                 rent_month: rentMonth,
                 obligation_type: "MAINTENANCE"
               }

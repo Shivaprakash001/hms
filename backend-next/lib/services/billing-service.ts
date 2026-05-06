@@ -1,4 +1,5 @@
 import { prisma } from "../db";
+import { overflowBillingService } from "./overflow-billing-service";
 
 const FREE_FALLBACK = {
   id: "FREE" as string | null,
@@ -45,22 +46,15 @@ export class BillingService {
       include: { plan: true },
     });
 
-    const usage = await this.getOwnerUsage(ownerId);
-
-    const invoices = await prisma.ownerInvoice.findMany({
-      where: { owner_id: ownerId },
-      orderBy: { created_at: "desc" },
-      take: 12,
-      select: {
-        id: true,
-        invoice_number: true,
-        amount_paise: true,
-        status: true,
-        billing_month: true,
-        paid_at: true,
-        created_at: true,
-      },
-    });
+    const [usage, overflowStatus, invoices] = await Promise.all([
+      this.getOwnerUsage(ownerId),
+      overflowBillingService.getOverflowStatus(ownerId),
+      prisma.ownerInvoice.findMany({
+        where: { owner_id: ownerId },
+        orderBy: { created_at: "desc" },
+        take: 12,
+      }),
+    ]);
 
     const plan = sub?.plan ?? FREE_FALLBACK;
 
@@ -68,7 +62,6 @@ export class BillingService {
       current_plan: {
         id: plan.id,
         name: plan.name,
-        
         price: plan.price_inr / 100,
         price_inr: plan.price_inr,
         currency: "INR",
@@ -77,7 +70,10 @@ export class BillingService {
         automation: plan.automation,
         multi_hostel: plan.multi_hostel,
         analytics: plan.analytics,
-        can_generate_receipts: plan.can_generate_receipts ?? false,
+        can_generate_receipts: (plan as any).can_generate_receipts ?? false,
+        overflow_enabled: (plan as any).overflow_enabled ?? false,
+        overflow_price_per_tenant_paise: (plan as any).overflow_price_per_tenant_paise ?? 0,
+        overflow_hard_cap: (plan as any).overflow_hard_cap ?? 0,
       },
       subscription: {
         status: sub?.status ?? "FREE",
@@ -87,6 +83,7 @@ export class BillingService {
         renewal_required: sub?.status === "PAST_DUE" || sub?.status === "EXPIRED",
       },
       usage,
+      overflow: overflowStatus,
       billing_history: invoices.map((inv) => ({
         id: inv.id,
         invoice_number: inv.invoice_number,
@@ -95,6 +92,7 @@ export class BillingService {
         billing_month: inv.billing_month,
         paid_at: inv.paid_at,
         created_at: inv.created_at,
+        line_items: (inv as any).line_items ?? null,
       })),
     };
   }
