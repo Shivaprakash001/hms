@@ -13,6 +13,8 @@ type PlanRecord = {
   automation: boolean;
   multi_hostel: boolean;
   analytics: boolean;
+  profile_photo: boolean;
+  document_verification: boolean;
   is_custom: boolean;
 };
 
@@ -44,11 +46,11 @@ export class PlanEnforcementService {
     if (!planId) {
       const p = await prisma.plan.findUnique({ where: { id: "FREE" } });
       if (!p) throw new Error("CONFIG_ERROR: Missing FREE plan in DB");
-      return p as PlanRecord;
+      return p as unknown as PlanRecord;
     }
     const plan = await prisma.plan.findUnique({ where: { id: planId } });
     if (!plan) throw new Error("NOT_FOUND: Plan not found");
-    return plan as PlanRecord;
+    return plan as unknown as PlanRecord;
   }
 
   async _countActiveTenants(ownerId: string) {
@@ -105,6 +107,37 @@ export class PlanEnforcementService {
    * Returns false for FREE plan, expired subscriptions, or any DB error.
    * Does NOT throw — use for conditional branching, not enforcement.
    */
+  /**
+   * Gate document uploads by plan tier.
+   *   FREE    → nothing allowed
+   *   STARTER → PROFILE_PHOTO only
+   *   GROWTH+ → all KYC doc types
+   */
+  async assertDocumentUpload(ownerId: string, docType: string) {
+    let sub: any;
+    try {
+      sub = await this._getOwnerSubscription(ownerId);
+    } catch {
+      throw new Error("PLAN_LIMIT: DOCUMENT_UPLOAD_NOT_ALLOWED: Upgrade your plan to upload documents");
+    }
+    if (BLOCKED_STATUSES.includes(sub.status)) {
+      throw new Error(`FORBIDDEN: Account in ${sub.status} mode. Upgrade required`);
+    }
+    const plan = await this._resolvePlan(sub.plan_id);
+
+    if (docType === "PROFILE_PHOTO") {
+      if (!plan.profile_photo) {
+        throw new Error("PLAN_LIMIT: PROFILE_PHOTO_NOT_ALLOWED: Upgrade to Starter or higher to upload a profile photo");
+      }
+      return true;
+    }
+
+    if (!plan.document_verification) {
+      throw new Error("PLAN_LIMIT: DOCUMENT_VERIFICATION_NOT_ALLOWED: Upgrade to Growth or higher to upload KYC documents");
+    }
+    return true;
+  }
+
   async hasFeature(ownerId: string, feature: "automation" | "multi_hostel" | "analytics"): Promise<boolean> {
     try {
       const sub = await this._getOwnerSubscription(ownerId);
@@ -121,7 +154,7 @@ export class PlanEnforcementService {
     return this.hasFeature(ownerId, "automation");
   }
 
-  async assertFeature(ownerId: string, feature: "automation" | "multi_hostel" | "analytics") {
+  async assertFeature(ownerId: string, feature: "automation" | "multi_hostel" | "analytics" | "profile_photo" | "document_verification") {
     const sub = await this._getOwnerSubscription(ownerId);
     if (BLOCKED_STATUSES.includes(sub.status)) {
       throw new Error(`FORBIDDEN: Account in ${sub.status} mode. Upgrade required`);

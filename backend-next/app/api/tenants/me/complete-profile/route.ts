@@ -7,6 +7,7 @@ import { tenantService } from "@/lib/services/tenant-service";
 import { prisma } from "@/lib/db";
 import { TenantProfileUpdateSchema } from "@/lib/validators";
 import { getPreferences } from "@/lib/preferences";
+import { imagekit, IMAGEKIT_URL_ENDPOINT } from "@/lib/imagekit";
 
 
 /**
@@ -52,24 +53,11 @@ export async function POST(req: NextRequest) {
     const tempAddr = payload.temporary_address || payload.address || null;
     const permAddr = payload.permanent_address || payload.address || null;
 
-    const fileToDataUrl = async (file: File | null): Promise<string | undefined> => {
-      if (!file) return undefined;
-      const buffer = await file.arrayBuffer();
-      const base64Str = Buffer.from(buffer).toString("base64");
-      const mimeType = file.type || "image/jpeg";
-      return `data:${mimeType};base64,${base64Str}`;
-    };
-
-    // File handling before transaction to avoid holding locks during buffer reads
-    let fileUrl: string | undefined = undefined;
-    const aadhaarFile = formData.get("aadhaar_file") as File | null;
-    fileUrl = await fileToDataUrl(aadhaarFile);
-
     const profilePhotoFile = formData.get("profile_photo") as File | null;
 
     const tenantOwner = await prisma.tenant.findUnique({
       where: { profile_id: session.sub },
-      select: { owner_id: true },
+      select: { id: true, owner_id: true },
     });
     const ownerPrefs = tenantOwner?.owner_id ? await getPreferences(tenantOwner.owner_id) : null;
     const profilePhotoRequired = Boolean(ownerPrefs?.require_profile_photo_onboarding);
@@ -86,7 +74,20 @@ export async function POST(req: NextRequest) {
         return apiError("Profile photo must be less than 2MB", "VALIDATION_ERROR", 400);
       }
     }
-    const profilePhotoUrl = await fileToDataUrl(profilePhotoFile);
+
+    // Upload profile photo to ImageKit before the DB transaction
+    let photoUrl: string | undefined;
+    if (profilePhotoFile && tenantOwner) {
+      const photoBuffer = Buffer.from(await profilePhotoFile.arrayBuffer());
+      const upload = await imagekit.files.upload({
+        file:              photoBuffer.toString("base64"),
+        fileName:          profilePhotoFile.name || "profile.jpg",
+        folder:            `owners/${tenantOwner.owner_id}/tenants/${tenantOwner.id}/documents/PROFILE_PHOTO`,
+        useUniqueFileName: true,
+        tags:              ["PROFILE_PHOTO", tenantOwner.id],
+      });
+      photoUrl = upload.url;
+    }
 
     // Atomic onboarding transaction: either all profile completion writes commit, or none do.
     const updated = await prisma.$transaction(async (tx) => {
@@ -126,23 +127,10 @@ export async function POST(req: NextRequest) {
           job_role: payload.job_role || null,
 
           aadhaar_number: payload.aadhaar_number ?? undefined,
-          photo_url: profilePhotoUrl || undefined,
+          photo_url: photoUrl || undefined,
           profile_completed: true,
         }
       });
-
-      if (fileUrl) {
-        await tx.identificationDocument.create({
-          data: {
-            tenant_id: tenantUpdate.id,
-            doc_type: "AADHAAR",
-            doc_number: payload.aadhaar_number || null,
-            file_url: fileUrl,
-            uploaded_by: session.sub,
-            is_verified: false,
-          },
-        });
-      }
 
       return tenantUpdate;
     }, { timeout: 15000 });

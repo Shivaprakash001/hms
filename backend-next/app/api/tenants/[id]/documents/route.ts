@@ -1,7 +1,6 @@
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { documentService } from "@/lib/services/document-service";
-import { prisma } from "@/lib/db";
 
 /**
  * 📄 DOCUMENTS — Get and Upload
@@ -36,17 +35,6 @@ export async function POST(
   const session = await getSession(req);
   if (!session) return apiError("Unauthorized", "UNAUTHORIZED", 401);
 
-  // For tenants, they can only upload to their own account
-  if (session.role === "TENANT") {
-    const me = await prisma.tenant.findUnique({
-      where: { profile_id: session.sub },
-      select: { id: true }
-    });
-    if (!me || me.id !== params.id) {
-      return apiError("Forbidden", "FORBIDDEN", 403);
-    }
-  }
-
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File;
@@ -64,15 +52,18 @@ export async function POST(
       file.name,
       file.type,
       docType,
-      docNumber
+      docNumber,
+      { sub: session.sub, role: session.role }
     );
 
     return apiResponse(doc);
   } catch (error: any) {
     console.error("Upload error:", error);
     const msg = typeof error?.message === "string" ? error.message : String(error);
-    if (msg.startsWith("VALIDATION")) return apiError(msg.split(": ")[1] ?? msg, "VALIDATION", 400);
-    if (msg.startsWith("NOT_FOUND")) return apiError(msg.split(": ")[1] ?? msg, "NOT_FOUND", 404);
+    if (msg.startsWith("VALIDATION"))  return apiError(msg.split(": ")[1] ?? msg, "VALIDATION", 400);
+    if (msg.startsWith("NOT_FOUND"))   return apiError(msg.split(": ")[1] ?? msg, "NOT_FOUND", 404);
+    if (msg.startsWith("FORBIDDEN"))   return apiError(msg.split(": ")[1] ?? msg, "FORBIDDEN", 403);
+    if (msg.startsWith("PLAN_LIMIT"))  return apiError(msg.split(": ").slice(2).join(": ") || msg, "PLAN_LIMIT", 403);
     return apiError(msg || "Failed to upload document");
   }
 }

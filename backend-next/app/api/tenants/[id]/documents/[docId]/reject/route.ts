@@ -20,10 +20,15 @@ export async function PATCH(
     const body = await req.json().catch(() => ({}));
     const reason = body.reason || "Rejected by owner";
 
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+      ?? req.headers.get("x-real-ip")
+      ?? undefined;
+
     const updated = await documentService.rejectDocument(
       docId,
       session.sub,
-      reason
+      reason,
+      ip
     );
 
     return apiResponse({ ...updated, action: "REJECTED", reason });

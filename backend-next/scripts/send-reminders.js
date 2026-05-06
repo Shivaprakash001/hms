@@ -113,8 +113,8 @@ async function alreadySentToday(client, obligationId, template) {
 
 async function logAttempt(client, phone, template, obligationId, status, errorMessage = null) {
   await client.query(
-    `INSERT INTO whatsapp_logs (phone, template, obligation_id, status, error_message)
-     VALUES ($1, $2, $3, $4, $5)`,
+    `INSERT INTO whatsapp_logs (id, phone, template, obligation_id, status, error_message)
+     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)`,
     [phone, template, obligationId, status, errorMessage ? String(errorMessage).slice(0, 500) : null],
   );
 }
