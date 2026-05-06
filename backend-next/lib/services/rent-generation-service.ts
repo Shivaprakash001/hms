@@ -109,6 +109,21 @@ export class RentGenerationService {
       let failed = 0;
       const errors: string[] = [];
 
+      // ── BATCH obligation generation (replaces N×2 per-allocation queries) ──
+      // 1. One round-trip to fetch all existing obligations this rentMonth
+      const allocationIds = allocations.map(a => a.id);
+      const existingObligations = await prisma.rentObligation.findMany({
+        where: { allocation_id: { in: allocationIds }, rent_month: rentMonth },
+        select: { allocation_id: true, obligation_type: true },
+      });
+      // O(1) lookup set: "allocId:obligationType"
+      const existingSet = new Set(
+        existingObligations.map(o => `${o.allocation_id}:${o.obligation_type ?? 'RENT'}`)
+      );
+
+      const rentRows:  any[] = [];
+      const maintRows: any[] = [];
+
       for (const alloc of allocations) {
         // Runaway generation timeout guard
         if (Date.now() - startTime > 30_000) {
@@ -124,11 +139,11 @@ export class RentGenerationService {
           continue;
         }
 
-        // 0️⃣ Enforcement: Check plan allows automation feature
+        // Enforcement: Check plan allows automation feature
         try {
           await planEnforcementService.assertFeature(ownerId, "automation");
         } catch (err: any) {
-          console.warn(`[RENT] Skipping owner ${ownerId} — automation feature not available: ${err?.message}`);
+          console.warn(`[RENT] Skipping owner ${ownerId} — automation not available: ${err?.message}`);
           skipped++;
           continue;
         }
@@ -136,29 +151,23 @@ export class RentGenerationService {
         const prefs: any = prefsMap.get(ownerId);
         const config = resolvePreferences(prefs);
 
-        // 1️⃣ Automation Guard: Skip if owner disabled auto-generation (unless manual trigger)
+        // Automation Guard: Skip if owner disabled auto-generation (unless manual trigger)
         if (triggerType === "cron") {
-          const autoGen = config.auto_generate_rent ?? true; // Default to true for backward compat
+          const autoGen = config.auto_generate_rent ?? true;
           if (!autoGen) {
             console.info(`[RENT] Skipping owner ${ownerId} — auto_generate_rent disabled`);
             skipped++;
             continue;
           }
 
-          // 1️⃣b Per-owner generation-day guard.
-          // The cron runs daily; only process owners whose configured
-          // auto_rent_day matches "today" in THEIR timezone.
+          // Per-owner generation-day guard
           const tz = config.timezone || "Asia/Kolkata";
           const expectedDay = Number(config.auto_rent_day ?? 1);
           const localDay = getDayInTimezone(now, tz);
 
           console.log("[RENT] day-check", {
-            ownerId,
-            utcNow: now.toISOString(),
-            timezone: tz,
-            localDay,
-            expectedDay,
-            willProcess: localDay === expectedDay,
+            ownerId, utcNow: now.toISOString(), timezone: tz,
+            localDay, expectedDay, willProcess: localDay === expectedDay,
           });
 
           if (localDay !== expectedDay) {
@@ -167,11 +176,9 @@ export class RentGenerationService {
           }
         }
 
-        // 2️⃣ Dynamic Due Date from preferences
         const dueDay = config.due_day ?? prefs?.due_day ?? 5;
         const tenantDueDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), dueDay));
 
-        // Rent priority: tenant.monthly_rent > room.base_rent > skip
         const rentAmount = Number(alloc.tenant.monthly_rent) || Number(alloc.room.base_rent) || 0;
         if (rentAmount <= 0) {
           console.info(`[RENT] Skipping allocation ${alloc.id} — zero rent`);
@@ -179,73 +186,43 @@ export class RentGenerationService {
           continue;
         }
 
-        try {
-          // ── RENT obligation ──────────────────────────────────────
-          const existingRent = await prisma.rentObligation.findFirst({
-            where: {
-              allocation_id: alloc.id,
-              rent_month: rentMonth,
-              obligation_type: "RENT"
-            }
+        // Collect RENT row if not already present
+        if (!existingSet.has(`${alloc.id}:RENT`)) {
+          rentRows.push({
+            tenant_id: alloc.tenant.id, allocation_id: alloc.id,
+            owner_id: alloc.tenant.owner_id, rent_month: rentMonth,
+            amount: rentAmount, total_amount: rentAmount,
+            due_date: tenantDueDate, status: "PENDING", obligation_type: "RENT",
           });
+        } else {
+          skipped++;
+        }
 
-          if (existingRent) {
-            console.info(`[RENT] Already generated for tenant ${alloc.tenant.id}, month ${rentMonth.toISOString()}`);
-            skipped++;
-          } else {
-            await prisma.rentObligation.create({
-              data: {
-                tenant_id: alloc.tenant.id,
-                allocation_id: alloc.id,
-                owner_id: alloc.tenant.owner_id,
-                rent_month: rentMonth,
-                amount: rentAmount,
-                total_amount: rentAmount,
-                due_date: tenantDueDate,
-                status: "PENDING"
-              }
+        // Collect MAINTENANCE row if applicable and not already present
+        const maintAmount = Number((alloc.tenant as any).maintenance_charge) || 0;
+        const maintType   = (alloc.tenant as any).maintenance_type || "MONTHLY";
+        if (maintAmount > 0 && maintType === "MONTHLY") {
+          if (!existingSet.has(`${alloc.id}:MAINTENANCE`)) {
+            maintRows.push({
+              tenant_id: alloc.tenant.id, allocation_id: alloc.id,
+              owner_id: alloc.tenant.owner_id, rent_month: rentMonth,
+              amount: maintAmount, total_amount: maintAmount,
+              due_date: tenantDueDate, status: "PENDING", obligation_type: "MAINTENANCE",
             });
-            created++;
-          }
-
-          // ── MONTHLY MAINTENANCE obligation ───────────────────────
-          const maintAmount = Number((alloc.tenant as any).maintenance_charge) || 0;
-          const maintType   = (alloc.tenant as any).maintenance_type || "MONTHLY";
-          if (maintAmount > 0 && maintType === "MONTHLY") {
-            const existingMaint = await prisma.rentObligation.findFirst({
-              where: {
-                allocation_id: alloc.id,
-                rent_month: rentMonth,
-                obligation_type: "MAINTENANCE"
-              }
-            });
-            if (!existingMaint) {
-              await prisma.rentObligation.create({
-                data: {
-                  tenant_id: alloc.tenant.id,
-                  allocation_id: alloc.id,
-                  owner_id: alloc.tenant.owner_id,
-                  rent_month: rentMonth,
-                  amount: maintAmount,
-                  total_amount: maintAmount,
-                  due_date: tenantDueDate,
-                  status: "PENDING",
-                  obligation_type: "MAINTENANCE",
-                }
-              });
-              created++;
-            }
-          }
-        } catch (err: any) {
-          if (err?.code === "P2002") {
-            console.info(`[RENT] Idempotent skip for allocation ${alloc.id}, month ${rentMonth.toISOString()}`);
-            skipped++;
           } else {
-            console.error(`[RENT] Failed for allocation ${alloc.id}:`, err.message);
-            failed++;
-            errors.push(`Allocation ${alloc.id}: ${err.message}`);
+            skipped++;
           }
         }
+      }
+
+      // 2. Two bulk inserts — skipDuplicates handles concurrent races
+      if (rentRows.length > 0) {
+        const result = await prisma.rentObligation.createMany({ data: rentRows, skipDuplicates: true });
+        created += result.count;
+      }
+      if (maintRows.length > 0) {
+        const result = await prisma.rentObligation.createMany({ data: maintRows, skipDuplicates: true });
+        created += result.count;
       }
 
       const durationMs = Date.now() - startTime;

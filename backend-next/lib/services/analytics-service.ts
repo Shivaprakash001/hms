@@ -45,92 +45,101 @@ export class AnalyticsService {
   async getCashflowDashboard(ownerId: string, start: Date, end: Date) {
     const now = new Date();
 
-    const [expectedAgg, collectedAgg, overdueAgg, overdueGroups, topGroups, daily] =
-      await Promise.all([
-        prisma.rentObligation.aggregate({
-          where: { owner_id: ownerId, rent_month: { gte: start, lte: end } },
-          _sum: { total_amount: true },
-        }),
-        prisma.payment.aggregate({
-          where: { owner_id: ownerId, payment_date: { gte: start, lte: end } },
-          _sum: { amount_paid: true },
-        }),
-        prisma.rentObligation.aggregate({
-          where: { owner_id: ownerId, status: { notIn: ["PAID", "WAIVED"] }, due_date: { lt: now } },
-          _sum: { total_amount: true },
-        }),
-        prisma.rentObligation.groupBy({
-          by: ["tenant_id"],
-          where: { owner_id: ownerId, status: { notIn: ["PAID", "WAIVED"] }, due_date: { lt: now } },
-        }),
-        prisma.rentObligation.groupBy({
-          by: ["tenant_id"],
-          where: { owner_id: ownerId, status: { notIn: ["PAID", "WAIVED"] }, due_date: { lt: now } },
-          _sum: { total_amount: true },
-          orderBy: { _sum: { total_amount: "desc" } },
-          take: 5,
-        }),
-        prisma.$queryRaw<{ date: string; amount: number }[]>`
-          SELECT payment_date::text AS date, SUM(amount_paid)::float AS amount
-          FROM payments
-          WHERE owner_id = ${ownerId}::uuid
-            AND payment_date >= ${start}::date
-            AND payment_date <= ${end}::date
-          GROUP BY payment_date ORDER BY payment_date
-        `,
-      ]);
+    // ── Single-pass CTE: replaces 3 separate overdue scans + a tenant findMany ─
+    // Before: overdueAgg (aggregate), overdueGroups (groupBy), dueDates (raw) + tenants (findMany)
+    // After:  one query returning sum + count + top-5 with names + earliest_due
+    const [expectedAgg, collectedAgg, daily, overdueRows] = await Promise.all([
+      prisma.rentObligation.aggregate({
+        where: { owner_id: ownerId, rent_month: { gte: start, lte: end } },
+        _sum: { total_amount: true },
+      }),
+      prisma.payment.aggregate({
+        where: { owner_id: ownerId, payment_date: { gte: start, lte: end } },
+        _sum: { amount_paid: true },
+      }),
+      prisma.$queryRaw<{ date: string; amount: number }[]>`
+        SELECT payment_date::text AS date, SUM(amount_paid)::float AS amount
+        FROM payments
+        WHERE owner_id = ${ownerId}::uuid
+          AND payment_date >= ${start}::date
+          AND payment_date <= ${end}::date
+        GROUP BY payment_date ORDER BY payment_date
+      `,
+      // ── Consolidated overdue CTE ──────────────────────────────────────────────
+      // Replaces: overdueAgg + overdueGroups + topGroups + tenants findMany + dueDates raw
+      prisma.$queryRaw<{
+        overdue_total: number;
+        overdue_tenant_count: number;
+        top_tenant_id: string;
+        top_name: string;
+        top_pending: number;
+        top_days_overdue: number;
+      }[]>`
+        WITH overdue AS (
+          SELECT
+            o.tenant_id,
+            p.name,
+            SUM(o.total_amount)::float           AS pending_amount,
+            MIN(o.due_date)                       AS earliest_due
+          FROM rent_obligations o
+          JOIN tenants t   ON t.id = o.tenant_id
+          JOIN profiles p  ON p.id = t.profile_id
+          WHERE o.owner_id = ${ownerId}::uuid
+            AND o.status NOT IN ('PAID','WAIVED')
+            AND o.due_date < NOW()
+          GROUP BY o.tenant_id, p.name
+        ),
+        summary AS (
+          SELECT
+            COALESCE(SUM(pending_amount), 0)::float AS overdue_total,
+            COUNT(*)::int                            AS overdue_tenant_count
+          FROM overdue
+        ),
+        top5 AS (
+          SELECT tenant_id, name, pending_amount, earliest_due
+          FROM overdue
+          ORDER BY pending_amount DESC
+          LIMIT 5
+        )
+        SELECT
+          s.overdue_total,
+          s.overdue_tenant_count,
+          t5.tenant_id   AS top_tenant_id,
+          t5.name        AS top_name,
+          t5.pending_amount AS top_pending,
+          GREATEST(0, EXTRACT(DAY FROM NOW() - t5.earliest_due))::int AS top_days_overdue
+        FROM summary s
+        CROSS JOIN top5 t5
+      `,
+    ]);
 
     const expected  = Number(expectedAgg._sum.total_amount  ?? 0);
     const collected = Number(collectedAgg._sum.amount_paid  ?? 0);
-    const overdue   = Number(overdueAgg._sum.total_amount   ?? 0);
-    const ids       = topGroups.map((d) => d.tenant_id);
 
-    const [tenants, dueDates] = ids.length
-      ? await Promise.all([
-          prisma.tenant.findMany({
-            where: { id: { in: ids } },
-            select: { id: true, profile: { select: { name: true } } },
-          }),
-          prisma.$queryRaw<{ tenant_id: string; earliest_due: Date }[]>`
-            SELECT tenant_id, MIN(due_date) AS earliest_due
-            FROM rent_obligations
-            WHERE owner_id = ${ownerId}::uuid
-              AND status NOT IN ('PAID','WAIVED')
-              AND due_date < NOW()
-              AND tenant_id = ANY(${ids}::uuid[])
-            GROUP BY tenant_id
-          `,
-        ])
-      : [[], []];
-
-    const nameMap = new Map((tenants as any[]).map((t) => [t.id, t.profile.name]));
-    const dueMap  = new Map((dueDates as any[]).map((r) => [r.tenant_id, r.earliest_due]));
+    // Extract summary from first CTE row (duplicated across top-5 cross join)
+    const overdue              = Number(overdueRows[0]?.overdue_total          ?? 0);
+    const overdueTenantsCount  = Number(overdueRows[0]?.overdue_tenant_count   ?? 0);
+    const top_defaulters = overdueRows.map((r) => ({
+      tenant_id:      r.top_tenant_id,
+      name:           r.top_name,
+      pending_amount: r.top_pending,
+      days_overdue:   r.top_days_overdue,
+    }));
 
     const pending         = Math.max(0, expected - collected);
     const collection_rate = expected > 0 ? Math.round((collected / expected) * 10000) / 100 : 0;
-    const top_defaulters  = topGroups.map((d) => {
-      const earliest = dueMap.get(d.tenant_id);
-      return {
-        tenant_id:      d.tenant_id,
-        name:           nameMap.get(d.tenant_id) ?? "Unknown",
-        pending_amount: Number(d._sum.total_amount ?? 0),
-        days_overdue:   earliest ? Math.floor((now.getTime() - new Date(earliest).getTime()) / 86400000) : 0,
-      };
-    });
 
     // ── Decision layer ────────────────────────────────────────────────────────
-    // severity: "bad direction" = how much of expected is NOT collected
     const uncollectedPct  = expected > 0 ? Math.round((1 - collected / expected) * 100) : 0;
     const severity        = getSeverity(uncollectedPct, { low: 20, high: 50 });
 
-    // Prediction: assume same collection rate applies to remaining pending
     const predicted_collection = Math.round(collected + pending * (collection_rate / 100));
     const expected_loss        = Math.max(0, Math.round(expected - predicted_collection));
 
     const insights: string[] = [];
     insights.push(`Collection rate is ${collection_rate}% — ${fmtAmount(collected)} collected of ${fmtAmount(expected)} expected`);
     if (overdue > 0)
-      insights.push(`${fmtAmount(overdue)} overdue across ${overdueGroups.length} tenant${overdueGroups.length !== 1 ? "s" : ""}`);
+      insights.push(`${fmtAmount(overdue)} overdue across ${overdueTenantsCount} tenant${overdueTenantsCount !== 1 ? "s" : ""}`);
     if (pending > 0)
       insights.push(`${fmtAmount(pending)} still pending this period`);
     if (expected_loss > 0)
@@ -144,8 +153,8 @@ export class AnalyticsService {
         label: `Send reminders to ${top_defaulters.length} top defaulter${top_defaulters.length !== 1 ? "s" : ""}`,
         urgency: severity === "HIGH" ? "HIGH" : "MEDIUM",
       });
-    if (overdueGroups.length > 0)
-      actions.push({ type: "VIEW_DEFAULTERS", label: `Review ${overdueGroups.length} overdue tenant${overdueGroups.length !== 1 ? "s" : ""}` });
+    if (overdueTenantsCount > 0)
+      actions.push({ type: "VIEW_DEFAULTERS", label: `Review ${overdueTenantsCount} overdue tenant${overdueTenantsCount !== 1 ? "s" : ""}` });
 
     return {
       data: {
@@ -154,7 +163,7 @@ export class AnalyticsService {
         pending_amount:         pending,
         collection_rate,
         overdue_amount:         overdue,
-        overdue_tenants_count:  overdueGroups.length,
+        overdue_tenants_count:  overdueTenantsCount,
         predicted_collection,
         expected_loss,
         top_defaulters,

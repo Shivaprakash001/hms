@@ -45,12 +45,17 @@ export class DashboardService {
     const monthStart = new Date(Date.UTC(utcYear, utcMonth, 1, 0, 0, 0, 0));
     const nextMonthStart = new Date(Date.UTC(utcYear, utcMonth + 1, 1, 0, 0, 0, 0));
 
-    const [tenants, rooms, payments, costs] = await Promise.all([
-      prisma.tenant.findMany({ where: { owner_id: userId }, select: { status: true } }),
-      prisma.room.findMany({ where: { hostel: { owner_id: userId } }, select: { capacity: true } }),
+    // ✅ Use count()+aggregate instead of findMany — avoids fetching full rows for JS-side counting
+    const [totalTenants, activeTenants, roomStats, payments, costs] = await Promise.all([
+      prisma.tenant.count({ where: { owner_id: userId } }),
+      prisma.tenant.count({ where: { owner_id: userId, status: "ACTIVE" } }),
+      prisma.$queryRaw<{ total_rooms: number; total_capacity: number }[]>`
+        SELECT COUNT(r.id)::int AS total_rooms, COALESCE(SUM(r.capacity), 0)::int AS total_capacity
+        FROM rooms r JOIN hostels h ON h.id = r.hostel_id
+        WHERE h.owner_id = ${userId}::uuid AND r.is_active = true
+      `,
       // ✅ FIXED: Use payment_date (actual payment date, source of truth)
       // ✅ FIXED: Use nextMonthStart (day 1 of next month, exclusive upper bound)
-      // ✅ Uses aggregate instead of findMany+reduce for DB-level summation
       prisma.payment.aggregate({
         where: {
           owner_id: userId,
@@ -67,9 +72,7 @@ export class DashboardService {
       }),
     ]);
 
-    const totalTenants = tenants.length;
-    const activeTenants = tenants.filter((s: any) => s.status === "ACTIVE").length;
-    const totalCapacity = rooms.reduce((sum: number, r: any) => sum + r.capacity, 0);
+    const totalCapacity = Number(roomStats[0]?.total_capacity ?? 0);
     const currentRevenue = Number(payments._sum.amount_paid || 0);
     const monthlyExpenses = Number(costs?._sum?.amount || 0);
     const occupancyRate = totalCapacity > 0 ? Math.round((activeTenants / totalCapacity) * 100) : 0;
@@ -111,7 +114,7 @@ export class DashboardService {
     const overdueCount = duesRow?.overdue_count ?? 0;
 
     return {
-      total_rooms: rooms.length,
+      total_rooms: Number(roomStats[0]?.total_rooms ?? 0),
       total_tenants: totalTenants,
       active_tenants: activeTenants,
       total_capacity: totalCapacity,
