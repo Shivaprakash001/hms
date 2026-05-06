@@ -74,38 +74,41 @@ export class DashboardService {
     const monthlyExpenses = Number(costs?._sum?.amount || 0);
     const occupancyRate = totalCapacity > 0 ? Math.round((activeTenants / totalCapacity) * 100) : 0;
 
-    // Pending dues calculation
-    // Only consider obligations that are actually unpaid (PENDING or PARTIAL).
-    // Overdue = due_date is strictly before today (comparing DATE values).
-    const unpaidObligations = await prisma.rentObligation.findMany({
-      where: { 
-        owner_id: userId, 
-        status: { in: ["PENDING", "PARTIAL"] }
-      },
-      include: { payments: { select: { amount_paid: true } } }
-    });
-
-    let pendingTotal = 0;
-    let overdueTotal = 0;
-    let overdueCount = 0;
-
-    // Use a UTC-normalized "today" for overdue comparison.
-    // due_date is @db.Date — Prisma returns it as midnight UTC of that date.
-    // We compare against start-of-today UTC so the comparison is DATE-to-DATE clean.
+    // Pending dues calculation — single DB aggregate instead of findMany+include+JS loop.
+    // Logic is identical: remaining = amount - SUM(payments); overdue = due_date < today.
+    // due_date is @db.Date — compare against UTC midnight of today for DATE-to-DATE clean match.
     const todayUTC = new Date(Date.UTC(utcYear, utcMonth, now.getUTCDate(), 0, 0, 0, 0));
 
-    unpaidObligations.forEach((ob: any) => {
-      const paid = ob.payments.reduce((sum: number, p: any) => sum + Number(p.amount_paid), 0);
-      const remaining = Number(ob.amount) - paid;
-      if (remaining > 0) {
-        pendingTotal += remaining;
-        // Overdue if due_date is strictly BEFORE today (not including today itself)
-        if (ob.due_date < todayUTC) {
-          overdueTotal += remaining;
-          overdueCount++;
-        }
-      }
-    });
+    const [duesRow] = await prisma.$queryRaw<
+      { pending_total: number; overdue_total: number; overdue_count: number }[]
+    >`
+      SELECT
+        COALESCE(SUM(o.amount - COALESCE(pay_agg.total_paid, 0)), 0)::float          AS pending_total,
+        COALESCE(SUM(
+          CASE WHEN o.due_date < ${todayUTC}::date
+            THEN o.amount - COALESCE(pay_agg.total_paid, 0)
+            ELSE 0
+          END
+        ), 0)::float                                                                   AS overdue_total,
+        COUNT(
+          CASE WHEN o.due_date < ${todayUTC}::date
+            AND o.amount - COALESCE(pay_agg.total_paid, 0) > 0
+          THEN 1 END
+        )::int                                                                         AS overdue_count
+      FROM rent_obligations o
+      LEFT JOIN (
+        SELECT obligation_id, SUM(amount_paid)::float AS total_paid
+        FROM payments
+        GROUP BY obligation_id
+      ) pay_agg ON pay_agg.obligation_id = o.id
+      WHERE o.owner_id = ${userId}::uuid
+        AND o.status IN ('PENDING', 'PARTIAL')
+        AND o.amount - COALESCE(pay_agg.total_paid, 0) > 0
+    `;
+
+    const pendingTotal = duesRow?.pending_total ?? 0;
+    const overdueTotal = duesRow?.overdue_total ?? 0;
+    const overdueCount = duesRow?.overdue_count ?? 0;
 
     return {
       total_rooms: rooms.length,
@@ -124,39 +127,49 @@ export class DashboardService {
   }
 
   async getMonthlyStats(userId: string, months: number = 6) {
-    const stats = [];
-    for (let i = 0; i < months; i++) {
-        // FIX: Use UTC boundaries to prevent timezone leakage across historical months.
-        const now = new Date();
-        const targetMonth = now.getUTCMonth() - i;
-        const targetYear = now.getUTCFullYear() + Math.floor(targetMonth / 12);
-        const normalizedMonth = ((targetMonth % 12) + 12) % 12;
-        const start = new Date(Date.UTC(targetYear, normalizedMonth, 1, 0, 0, 0, 0));
-        const end = new Date(Date.UTC(targetYear, normalizedMonth + 1, 1, 0, 0, 0, 0));
+    const now = new Date();
 
-        const [collected, due] = await Promise.all([
-            prisma.payment.aggregate({
-                where: { owner_id: userId, payment_date: { gte: start, lt: end } },
-                _sum: { amount_paid: true }
-            }),
-            prisma.rentObligation.aggregate({
-                where: { owner_id: userId, rent_month: { gte: start, lt: end }, status: { not: "WAIVED" } },
-                _sum: { amount: true }
-            })
-        ]);
+    // Build all date ranges first so we can fire every query in one parallel batch
+    // instead of awaiting each iteration serially (was: months × 2 = 12 sequential round trips).
+    const ranges = Array.from({ length: months }, (_, i) => {
+      const targetMonth     = now.getUTCMonth() - i;
+      const targetYear      = now.getUTCFullYear() + Math.floor(targetMonth / 12);
+      const normalizedMonth = ((targetMonth % 12) + 12) % 12;
+      const start = new Date(Date.UTC(targetYear, normalizedMonth, 1, 0, 0, 0, 0));
+      const end   = new Date(Date.UTC(targetYear, normalizedMonth + 1, 1, 0, 0, 0, 0));
+      return { start, end };
+    });
 
-        const collectedAmount = Number(collected._sum.amount_paid || 0);
-        const dueAmount = Number(due._sum.amount || 0);
+    // All 12 queries fire simultaneously — one DB round-trip instead of 6.
+    const results = await Promise.all(
+      ranges.map(({ start, end }) =>
+        Promise.all([
+          prisma.payment.aggregate({
+            where: { owner_id: userId, payment_date: { gte: start, lt: end } },
+            _sum: { amount_paid: true },
+          }),
+          prisma.rentObligation.aggregate({
+            where: { owner_id: userId, rent_month: { gte: start, lt: end }, status: { not: "WAIVED" } },
+            _sum: { amount: true },
+          }),
+        ])
+      )
+    );
 
-        stats.push({
-            month: formatShortMonth(start),
-            year: start.getFullYear(),
-            collected: collectedAmount,
-            due: dueAmount,
-            collection_rate: dueAmount > 0 ? Math.round((collectedAmount / dueAmount) * 100) : 0
-        });
-    }
-    return stats.reverse();
+    return results
+      .map(([collected, due], i) => {
+        const { start }        = ranges[i];
+        const collectedAmount  = Number(collected._sum.amount_paid || 0);
+        const dueAmount        = Number(due._sum.amount || 0);
+        return {
+          month: formatShortMonth(start),
+          year:  start.getFullYear(),
+          collected: collectedAmount,
+          due:       dueAmount,
+          collection_rate: dueAmount > 0 ? Math.round((collectedAmount / dueAmount) * 100) : 0,
+        };
+      })
+      .reverse();
   }
 
   async getTenantStats(profileId: string) {
