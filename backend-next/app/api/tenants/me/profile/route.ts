@@ -78,6 +78,7 @@ export async function GET(req: NextRequest) {
     const profile = tenant.profile;
 
     return apiResponse({
+      ...tenant,
       profile: {
         id: profile.id,
         full_name: profile.name,
@@ -91,7 +92,6 @@ export async function GET(req: NextRequest) {
         gender: tenant.gender,
         date_of_birth: tenant.date_of_birth
       },
-      ...tenant,
       tenant_details: tenant,
       current_room: allocation?.room
         ? {

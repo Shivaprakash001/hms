@@ -214,26 +214,12 @@ const Payments = () => {
     }, [summaryStats]);
 
     // Mark as paid
-    const handleMarkAsPaid = async (formData) => {
-        try {
-            const { paymentId, amount, method, reference_number } = formData;
-            const payment = ledgerRows.find(p => p.id === paymentId);
-            if (payment && payment.status === 'paid') return;
-            const today = new Date();
-            const localDate = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
-            await paymentService.recordPayment({
-                obligation_id: paymentId,
-                amount_paid: amount || payment.amount,
-                payment_method: method || "CASH",
-                reference_number: reference_number || "",
-                payment_date: localDate
-            });
-            loadLedger();
-            setSelectedPayment(null);
-        } catch (error) {
-            console.error("Failed to mark as paid:", error);
-            alert(error.response?.data?.detail?.message || "Failed to record payment");
-        }
+    const handleMarkAsPaid = (_formData) => {
+        // Payment is recorded by PaymentDetailsDrawer via the secure /payments/record-offline
+        // endpoint (identity-verified, single-use token). This callback only refreshes the
+        // ledger and closes the drawer — it must NOT call recordPayment again.
+        loadLedger();
+        setSelectedPayment(null);
     };
 
     const handleDownloadReceipt = async (paymentId) => {
