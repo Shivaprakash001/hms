@@ -77,7 +77,7 @@ export default function OwnerProfile() {
         late_fee_notification: true, owner_daily_summary: false,
         auto_generate_rent: true, auto_apply_late_fees: true, auto_send_reminders: true, auto_deactivate_days: 0,
         receipt_prefix: 'HMS', receipt_format: 'PREFIX-YEAR-SEQ', auto_email_receipt: false, receipt_footer: '',
-        require_doc_approval: false, require_aadhaar: false, allow_tenant_edits: true, data_retention_months: 0,
+        require_doc_approval: false, require_aadhaar: false, allow_tenant_edits: true, require_profile_photo_onboarding: false, data_retention_months: 0,
         timezone: 'Asia/Kolkata', date_format: 'DD/MM/YYYY', time_format: '12h', language: 'en',
     });
 
@@ -182,6 +182,7 @@ export default function OwnerProfile() {
                     ...(prefs.receipt_footer !== undefined && { receipt_footer: prefs.receipt_footer }),
                     ...(prefs.require_doc_approval !== undefined && { require_doc_approval: prefs.require_doc_approval }),
                     ...(prefs.allow_tenant_edits !== undefined && { allow_tenant_edits: prefs.allow_tenant_edits }),
+                    ...(prefs.require_profile_photo_onboarding !== undefined && { require_profile_photo_onboarding: prefs.require_profile_photo_onboarding }),
                     ...(prefs.data_retention_months !== undefined && { data_retention_months: prefs.data_retention_months }),
                     ...(prefs.date_format !== undefined && { date_format: prefs.date_format }),
                     ...(prefs.time_format !== undefined && { time_format: prefs.time_format }),
@@ -286,7 +287,7 @@ export default function OwnerProfile() {
                 auto_send_reminders: preferences.auto_send_reminders, auto_deactivate_days: preferences.auto_deactivate_days,
                 auto_email_receipt: preferences.auto_email_receipt, receipt_format: preferences.receipt_format,
                 receipt_footer: preferences.receipt_footer, require_doc_approval: preferences.require_doc_approval,
-                allow_tenant_edits: preferences.allow_tenant_edits, data_retention_months: preferences.data_retention_months,
+                allow_tenant_edits: preferences.allow_tenant_edits, require_profile_photo_onboarding: preferences.require_profile_photo_onboarding, data_retention_months: preferences.data_retention_months,
                 date_format: preferences.date_format, time_format: preferences.time_format, language: preferences.language,
                 reminder_email: preferences.reminder_email, reminder_in_app: preferences.reminder_in_app,
                 reminder_whatsapp: preferences.reminder_whatsapp, reminder_day_1: preferences.reminder_day_1,
@@ -483,7 +484,7 @@ export default function OwnerProfile() {
                                         {mod.key === 'notifications' && <NotificationsModule prefs={preferences} updatePref={updatePref} reminderCredits={reminderCredits} remindersUsed={remindersUsed} cronStopped={cronStopped} autoTopup={autoTopup} onAutoTopupChange={setAutoTopup} onBuyCredits={(t) => setBuyCreditsModal(t || 'empty')} onCreditsRefresh={(c) => setReminderCredits(c)} />}
                                         {mod.key === 'automation' && <AutomationModule prefs={preferences} updatePref={updatePref} plan={currentPlan} onLockedClick={(feature, reqPlan) => setUpgradeModal({ feature, requiredPlan: reqPlan })} />}
                                         {mod.key === 'receipts' && <ReceiptsModule prefs={preferences} updatePref={updatePref} />}
-                                        {mod.key === 'security' && <SecurityModule prefs={preferences} updatePref={updatePref} />}
+                                        {mod.key === 'security' && <SecurityModule prefs={preferences} updatePref={updatePref} plan={currentPlan} />}
                                         {mod.key === 'system' && <SystemModule prefs={preferences} updatePref={updatePref} />}
                                     </div>
                                 )}
@@ -1112,13 +1113,24 @@ function ReceiptsModule({ prefs, updatePref }) {
     );
 }
 
-function SecurityModule({ prefs, updatePref }) {
+function SecurityModule({ prefs, updatePref, plan }) {
+    const planAccess = getPlanAccess(plan);
+    const hasStarterPlus = planAccess.automation;
+
     return (
         <div className="space-y-3">
             <ToggleField label="Require Document Approval" desc="Owner must approve uploaded documents"
                 value={prefs.require_doc_approval} onChange={(v) => updatePref('require_doc_approval', v)} />
             <ToggleField label="Allow Tenant Profile Edits" desc="Tenants can edit their own profile details"
                 value={prefs.allow_tenant_edits} onChange={(v) => updatePref('allow_tenant_edits', v)} />
+            {hasStarterPlus && (
+                <ToggleField
+                    label="Require Profile Photo On Onboarding"
+                    desc="Tenants must upload a profile photo during onboarding"
+                    value={prefs.require_profile_photo_onboarding}
+                    onChange={(v) => updatePref('require_profile_photo_onboarding', v)}
+                />
+            )}
             <SelectField label="Data Retention" value={String(prefs.data_retention_months)}
                 options={[
                     { value: '0', label: 'Forever' }, { value: '12', label: '12 months' },

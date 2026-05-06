@@ -206,10 +206,11 @@ export const tenantService = {
         const response = await api.patch('/tenants/me/profile', data);
         return response.data;
     },
-    completeMyProfile: async (data, aadhaarFile) => {
+    completeMyProfile: async (data, aadhaarFile, profilePhotoFile = null) => {
         const formData = new FormData();
         formData.append('profile_data', JSON.stringify(data));
         formData.append('aadhaar_file', aadhaarFile);
+        if (profilePhotoFile) formData.append('profile_photo', profilePhotoFile);
         try {
             const response = await api.post('/tenants/me/complete-profile', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
@@ -236,6 +237,14 @@ export const tenantService = {
     },
     getMyRoom: async () => {
         const response = await api.get('/tenants/me/room');
+        return response.data;
+    },
+    getMyOnboardingSettings: async () => {
+        const response = await api.get('/tenants/me/onboarding-settings');
+        return response.data;
+    },
+    getMyScore: async () => {
+        const response = await api.get('/tenants/me/score');
         return response.data;
     },
     create: async (data) => {

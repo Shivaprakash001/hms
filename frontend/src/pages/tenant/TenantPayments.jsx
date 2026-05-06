@@ -3,9 +3,10 @@ import { CreditCard, Calendar, Download, CheckCircle2, Clock, Smartphone, Chevro
 
 import { useAuth } from '../../context/AuthContext';
 import { useAppPreferences } from '../../context/AppPreferencesContext';
-import { paymentService } from '../../api/services';
+import { paymentService, tenantService } from '../../api/services';
 import PaymentModal from '../../components/tenant/payment/PaymentModal';
 import { formatCurrency, formatDate, formatDateTime, formatMonthYear } from '../../utils/format';
+import TenantScoreCard from '../../components/tenant/TenantScoreCard';
 
 const TenantPayments = () => {
     const { user } = useAuth();
@@ -17,6 +18,7 @@ const TenantPayments = () => {
 
     const [history, setHistory] = useState({ payments: [], obligations: [] });
     const [selectedObligations, setSelectedObligations] = useState([]);
+    const [tenantScore, setTenantScore] = useState(null);
 
     // Fetch data
     const loadHistory = useCallback(async () => {
@@ -31,6 +33,7 @@ const TenantPayments = () => {
     useEffect(() => {
         if (user?.tenant_id) {
             loadHistory();
+            tenantService.getMyScore().then(setTenantScore).catch(() => setTenantScore(null));
         }
     }, [user?.tenant_id, loadHistory]);
 
@@ -132,6 +135,7 @@ const TenantPayments = () => {
 
     return (
         <div className="space-y-8 animate-fade-in-up">
+            <TenantScoreCard scoreData={tenantScore} compact />
             <div className="flex justify-between items-center">
                 <div>
                     <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Payments & Dues</h1>

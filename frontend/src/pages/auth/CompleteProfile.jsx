@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, MapPin, Phone, GraduationCap, Loader2, CheckCircle2, Upload, Briefcase, ChevronRight, ChevronLeft } from 'lucide-react';
+import { User, MapPin, Phone, GraduationCap, Loader2, CheckCircle2, Upload, Briefcase, ChevronRight, ChevronLeft, Camera } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { tenantService } from '../../api/services';
 
@@ -36,6 +36,7 @@ const CompleteProfile = () => {
         emergency_contact: '',
         personal_email: user?.email || '',
         gender: '',
+        date_of_birth: '',
         temporary_address: '',
         permanent_address: '',
 
@@ -59,9 +60,12 @@ const CompleteProfile = () => {
 
     const [aadhaarFile, setAadhaarFile] = useState(null);
     const [previewUrl, setPreviewUrl] = useState('');
+    const [profilePhotoFile, setProfilePhotoFile] = useState(null);
+    const [profilePhotoPreview, setProfilePhotoPreview] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [isSuccess, setIsSuccess] = useState(false);
+    const [isProfilePhotoRequired, setIsProfilePhotoRequired] = useState(false);
 
     useEffect(() => {
         setFormData(prev => ({
@@ -70,6 +74,18 @@ const CompleteProfile = () => {
             personal_email: prev.personal_email || user?.email || '',
         }));
     }, [user]);
+
+    useEffect(() => {
+        const loadOnboardingSettings = async () => {
+            try {
+                const settings = await tenantService.getMyOnboardingSettings();
+                setIsProfilePhotoRequired(Boolean(settings?.require_profile_photo_onboarding));
+            } catch {
+                setIsProfilePhotoRequired(false);
+            }
+        };
+        if (!loading && user) loadOnboardingSettings();
+    }, [loading, user]);
 
     if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-600">Loading...</div>;
 
@@ -90,6 +106,19 @@ const CompleteProfile = () => {
         } else {
             setPreviewUrl('');
         }
+    };
+
+    const handleProfilePhotoChange = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (file.size > 2 * 1024 * 1024) return setError('Profile photo size must be < 2MB');
+        if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) return setError('Profile photo must be JPG, PNG, or WEBP');
+
+        setProfilePhotoFile(file);
+        setError('');
+        const reader = new FileReader();
+        reader.onloadend = () => setProfilePhotoPreview(reader.result);
+        reader.readAsDataURL(file);
     };
 
     // Step Validations
@@ -116,6 +145,7 @@ const CompleteProfile = () => {
     const validateStep3 = () => {
         if (!formData.aadhaar_number.trim() || formData.aadhaar_number.length !== 12) return 'A valid 12-digit Aadhaar is required';
         if (!aadhaarFile) return 'Please upload a photo of your ID';
+        if (isProfilePhotoRequired && !profilePhotoFile) return 'Profile photo is required by your hostel owner';
         return null;
     };
 
@@ -151,6 +181,7 @@ const CompleteProfile = () => {
                 emergency_contact: formData.emergency_contact.trim(),
                 gender: formData.gender,
                 personal_email: formData.personal_email?.trim() || null,
+                date_of_birth: formData.date_of_birth || null,
                 address: formData.permanent_address.trim(), // API legacy map
                 temporary_address: formData.temporary_address.trim(),
                 permanent_address: formData.permanent_address.trim(),
@@ -172,7 +203,7 @@ const CompleteProfile = () => {
                 aadhaar_number: formData.aadhaar_number.trim(),
             };
 
-            await tenantService.completeMyProfile(payload, aadhaarFile);
+            await tenantService.completeMyProfile(payload, aadhaarFile, profilePhotoFile);
             setIsSuccess(true);
             setTimeout(() => window.location.href = '/tenant/dashboard', 1500);
         } catch (err) {
@@ -287,6 +318,32 @@ const CompleteProfile = () => {
 
                                             <div className="space-y-5">
                                                 <div>
+                                                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 block">
+                                                        Profile Photo {isProfilePhotoRequired ? '*' : '(Optional)'}
+                                                    </Label>
+                                                    <label className="flex items-center gap-4 p-3 rounded-xl border border-slate-200 bg-slate-50/50 cursor-pointer hover:bg-slate-50 transition-colors">
+                                                        <div className="w-14 h-14 rounded-full overflow-hidden bg-white border border-slate-200 flex items-center justify-center">
+                                                            {profilePhotoPreview ? (
+                                                                <img src={profilePhotoPreview} alt="Profile preview" className="w-full h-full object-cover" />
+                                                            ) : (
+                                                                <Camera size={20} className="text-slate-400" />
+                                                            )}
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <p className="text-sm font-bold text-slate-700">{profilePhotoFile ? 'Photo selected' : 'Upload your photo'}</p>
+                                                            <p className="text-xs text-slate-400">JPG/PNG/WEBP, up to 2MB</p>
+                                                        </div>
+                                                        <Input type="file" className="hidden" accept="image/jpeg,image/png,image/webp" onChange={handleProfilePhotoChange} />
+                                                        <span className="text-xs font-semibold text-indigo-600">Choose</span>
+                                                    </label>
+                                                    {isProfilePhotoRequired && (
+                                                        <p className="text-[11px] text-amber-700 mt-1.5 font-medium">
+                                                            Your hostel owner requires a profile photo to complete onboarding.
+                                                        </p>
+                                                    )}
+                                                </div>
+
+                                                <div>
                                                     <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 block">Full Name</Label>
                                                     <Input name="name" value={formData.name} onChange={handleChange} className="h-12 bg-slate-50/50 border-slate-200" placeholder="Sam Altman" />
                                                 </div>
@@ -310,6 +367,10 @@ const CompleteProfile = () => {
                                                 <div>
                                                     <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 block">Emergency Contact (Parent)</Label>
                                                     <Input name="emergency_contact" value={formData.emergency_contact} onChange={handleChange} className="h-12 bg-slate-50/50" placeholder="Parent's Mobile" />
+                                                </div>
+                                                <div>
+                                                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 block">Date of Birth</Label>
+                                                    <Input name="date_of_birth" type="date" value={formData.date_of_birth} onChange={handleChange} className="h-12 bg-slate-50/50" />
                                                 </div>
 
                                                 <div>

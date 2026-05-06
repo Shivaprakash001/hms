@@ -39,7 +39,9 @@ export class TenantService {
         updated_at: true,
         profile: true,
         allocations: {
-          where: { is_active: true },
+          where: { is_active: true, end_date: null },
+          orderBy: { start_date: "desc" },
+          take: 1,
           include: { room: true },
         },
       }
@@ -89,7 +91,9 @@ export class TenantService {
         updated_at: true,
         profile: true,
         allocations: {
-          where: { is_active: true },
+          where: { is_active: true, end_date: null },
+          orderBy: { start_date: "desc" },
+          take: 1,
           include: { room: true },
         },
       }
@@ -204,11 +208,12 @@ export class TenantService {
       }
     }
 
-    const profileFields = ["name", "email", "phone"];
+    const profileFields = ["name", "email", "phone", "emergency_contact"];
     const tenantFields = [
       "photo_url", "phone_1", "phone_2", "phone_3", "aadhaar_number", "personal_email",
       "college_name", "roll_number", "course", "year_of_study", "section", "branch",
-      "temporary_address", "permanent_address", "gender"
+      "temporary_address", "permanent_address", "gender", "profile_type",
+      "office_name", "office_location", "job_role", "date_of_birth"
     ];
 
     const profileUpdate: any = {};
@@ -233,62 +238,94 @@ export class TenantService {
       tenantUpdate.temporary_address = data.address;
       tenantUpdate.permanent_address = data.address;
     }
-
-    if (Object.keys(profileUpdate).length > 0) {
-      await prisma.profile.update({
-        where: { id: profileId },
-        data: profileUpdate,
-      });
+    if (typeof data.profile_type === "string") {
+      const raw = String(data.profile_type).trim().toUpperCase();
+      if (raw === "WORKING_PROFESSIONAL" || raw === "STUDENT") {
+        tenantUpdate.profile_type = raw;
+      } else {
+        throw new Error("VALIDATION: profile_type must be STUDENT or WORKING_PROFESSIONAL");
+      }
     }
-
-    if (Object.keys(tenantUpdate).length > 0) {
-      try {
-        await prisma.tenant.update({
-          where: { profile_id: profileId },
-          data: tenantUpdate,
+    await prisma.$transaction(async (tx) => {
+      if (Object.keys(profileUpdate).length > 0) {
+        await tx.profile.update({
+          where: { id: profileId },
+          data: profileUpdate,
         });
-      } catch (error: any) {
-        const code = (error as any)?.code;
-        const msg  = String(error?.message || error);
-        if (code === "P2002" || msg.includes("aadhaar_number")) {
-          throw new Error("VALIDATION: This Aadhaar number is already registered with another account.");
-        }
-        if (msg.includes("tenants.gender") && Object.prototype.hasOwnProperty.call(tenantUpdate, "gender")) {
-          delete tenantUpdate.gender;
-          await prisma.tenant.update({
+      }
+
+      if (Object.keys(tenantUpdate).length > 0) {
+        try {
+          await tx.tenant.update({
             where: { profile_id: profileId },
             data: tenantUpdate,
           });
-        } else {
-          throw error;
+        } catch (error: any) {
+          const code = (error as any)?.code;
+          const msg = String(error?.message || error);
+          if (code === "P2002" || msg.includes("aadhaar_number")) {
+            throw new Error("VALIDATION: This Aadhaar number is already registered with another account.");
+          }
+          if (msg.includes("tenants.gender") && Object.prototype.hasOwnProperty.call(tenantUpdate, "gender")) {
+            delete tenantUpdate.gender;
+            await tx.tenant.update({
+              where: { profile_id: profileId },
+              data: tenantUpdate,
+            });
+          } else {
+            throw error;
+          }
         }
       }
-    }
 
-    // Completion check
-    const refreshed = await this.getTenantByProfile(profileId, { sub: profileId, role: "TENANT" });
-    const isComplete = this.checkProfileCompletion(refreshed);
-
-    if (isComplete) {
-      await prisma.tenant.update({
-        where: { id: refreshed.id },
-        data: { profile_completed: true },
+      const current = await tx.tenant.findUnique({
+        where: { profile_id: profileId },
+        select: {
+          id: true,
+          profile_completed: true,
+          phone_1: true,
+          phone_2: true,
+          aadhaar_number: true,
+          college_name: true,
+          roll_number: true,
+          year_of_study: true,
+          branch: true,
+          temporary_address: true,
+          permanent_address: true,
+          profile: {
+            select: {
+              name: true,
+              email: true,
+              phone: true,
+              emergency_contact: true
+            }
+          }
+        }
       });
-      await prisma.profile.update({
-        where: { id: profileId },
-        data: { is_profile_completed: true },
-      });
-      refreshed.profile_completed = true;
-    }
 
-    return refreshed;
+      if (!current) throw new Error("NOT_FOUND: Tenant record not found");
+
+      const isComplete = this.checkProfileCompletion(current);
+      if (isComplete) {
+        await tx.tenant.update({
+          where: { id: current.id },
+          data: { profile_completed: true },
+        });
+        await tx.profile.update({
+          where: { id: profileId },
+          data: { is_profile_completed: true },
+        });
+      }
+    });
+
+    return this.getTenantByProfile(profileId, { sub: profileId, role: "TENANT" });
   }
 
   private checkProfileCompletion(tenant: any) {
     const p = tenant.profile;
     const required = [
       p.name, p.email, p.phone || tenant.phone_1,
-      tenant.phone_2, tenant.aadhaar_number, tenant.college_name,
+      p.emergency_contact, tenant.aadhaar_number, tenant.college_name,
       tenant.roll_number, tenant.year_of_study, tenant.branch,
       tenant.temporary_address || tenant.permanent_address,
     ];

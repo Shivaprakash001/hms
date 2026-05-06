@@ -9,6 +9,7 @@ import { planGate } from "@/lib/services/plan-gate-service";
 
 // Automation-related preference keys
 const AUTOMATION_KEYS = ["auto_generate_rent", "auto_apply_late_fees", "auto_send_reminders"] as const;
+const STARTER_ONLY_KEYS = ["require_profile_photo_onboarding"] as const;
 
 /**
  * GET — Return resolved preferences (defaults merged with hostel overrides).
@@ -58,6 +59,22 @@ export async function PATCH(req: NextRequest) {
           error: "FEATURE_NOT_AVAILABLE",
           feature: "automation",
           message: "Upgrade to Starter to enable automation",
+          upgrade_required: true,
+          recommended_plan: "starter",
+        }, { status: 402 });
+      }
+    }
+
+    const isTryingToEnableStarterOnly = STARTER_ONLY_KEYS.some(
+      (key) => key in body && body[key] === true && currentPrefs[key] !== true
+    );
+    if (isTryingToEnableStarterOnly) {
+      const hasStarterPlus = await planGate.hasFeature(session.sub, "automation");
+      if (!hasStarterPlus) {
+        return NextResponse.json({
+          error: "FEATURE_NOT_AVAILABLE",
+          feature: "require_profile_photo_onboarding",
+          message: "Upgrade to Starter to require profile photo during onboarding",
           upgrade_required: true,
           recommended_plan: "starter",
         }, { status: 402 });

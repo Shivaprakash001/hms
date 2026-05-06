@@ -53,7 +53,7 @@ async function ensureLogTable(client) {
       created_at    TIMESTAMPTZ DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_wl_obligation_template_date
-      ON whatsapp_logs (obligation_id, template, (created_at::date));
+      ON whatsapp_logs (obligation_id, template, created_at);
   `);
 }
 

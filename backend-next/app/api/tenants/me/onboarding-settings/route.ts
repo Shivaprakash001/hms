@@ -1,0 +1,34 @@
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+import { NextRequest } from "next/server";
+import { getSession, apiError, apiResponse } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+import { getPreferences } from "@/lib/preferences";
+
+export async function GET(req: NextRequest) {
+  const session = await getSession(req);
+  if (!session || session.role !== "TENANT") {
+    return apiError("Only tenants can access onboarding settings", "FORBIDDEN", 403);
+  }
+
+  try {
+    const tenant = await prisma.tenant.findUnique({
+      where: { profile_id: session.sub },
+      select: { owner_id: true },
+    });
+
+    if (!tenant) {
+      return apiError("Tenant record not found", "NOT_FOUND", 404);
+    }
+
+    const prefs = tenant.owner_id ? await getPreferences(tenant.owner_id) : null;
+
+    return apiResponse({
+      require_profile_photo_onboarding: Boolean(prefs?.require_profile_photo_onboarding),
+    });
+  } catch (error: any) {
+    return apiError(error?.message || "Failed to fetch onboarding settings");
+  }
+}
+

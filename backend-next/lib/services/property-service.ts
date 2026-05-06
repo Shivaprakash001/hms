@@ -145,7 +145,7 @@ export class PropertyService {
       "late_fee_notification", "owner_daily_summary",
       "auto_generate_rent", "auto_apply_late_fees", "auto_send_reminders", "auto_deactivate_days",
       "auto_email_receipt", "receipt_format", "receipt_footer",
-      "require_doc_approval", "allow_tenant_edits", "data_retention_months",
+      "require_doc_approval", "allow_tenant_edits", "require_profile_photo_onboarding", "data_retention_months",
       "date_format", "time_format", "language",
     ];
 

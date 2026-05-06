@@ -67,6 +67,7 @@ export interface HostelPreferences {
   require_doc_approval: boolean;
   require_aadhaar: boolean;
   allow_tenant_edits: boolean;
+  require_profile_photo_onboarding: boolean;
   data_retention_months: number;
 
   // System / Localization
@@ -122,6 +123,7 @@ const DEFAULTS: HostelPreferences = {
   require_doc_approval: false,
   require_aadhaar: false,
   allow_tenant_edits: true,
+  require_profile_photo_onboarding: false,
   data_retention_months: 0,
 
   currency: "INR",

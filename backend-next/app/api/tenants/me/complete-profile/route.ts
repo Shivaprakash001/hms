@@ -6,6 +6,7 @@ import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { tenantService } from "@/lib/services/tenant-service";
 import { prisma } from "@/lib/db";
 import { TenantProfileUpdateSchema } from "@/lib/validators";
+import { getPreferences } from "@/lib/preferences";
 
 
 /**
@@ -51,20 +52,43 @@ export async function POST(req: NextRequest) {
     const tempAddr = payload.temporary_address || payload.address || null;
     const permAddr = payload.permanent_address || payload.address || null;
 
-    // Aadhaar File Handling before transaction to avoid holding locks during buffer read
+    const fileToDataUrl = async (file: File | null): Promise<string | undefined> => {
+      if (!file) return undefined;
+      const buffer = await file.arrayBuffer();
+      const base64Str = Buffer.from(buffer).toString("base64");
+      const mimeType = file.type || "image/jpeg";
+      return `data:${mimeType};base64,${base64Str}`;
+    };
+
+    // File handling before transaction to avoid holding locks during buffer reads
     let fileUrl: string | undefined = undefined;
     const aadhaarFile = formData.get("aadhaar_file") as File | null;
-    if (aadhaarFile) {
-        const buffer = await aadhaarFile.arrayBuffer();
-        const base64Str = Buffer.from(buffer).toString("base64");
-        const mimeType = aadhaarFile.type || "image/jpeg";
-        fileUrl = `data:${mimeType};base64,${base64Str}`;
+    fileUrl = await fileToDataUrl(aadhaarFile);
+
+    const profilePhotoFile = formData.get("profile_photo") as File | null;
+
+    const tenantOwner = await prisma.tenant.findUnique({
+      where: { profile_id: session.sub },
+      select: { owner_id: true },
+    });
+    const ownerPrefs = tenantOwner?.owner_id ? await getPreferences(tenantOwner.owner_id) : null;
+    const profilePhotoRequired = Boolean(ownerPrefs?.require_profile_photo_onboarding);
+    if (profilePhotoRequired && !profilePhotoFile) {
+      return apiError("Profile photo is required by your hostel owner.", "VALIDATION_ERROR", 400);
     }
 
-    // 🔥 Atomic Transaction — profile + tenant only (doc write is outside to avoid tx timeout)
-    // The base64 file_url can be several MB; inserting it inside a 5 s interactive
-    // transaction reliably blows the limit. Profile+tenant must be atomic; the doc
-    // record is best-effort and can be written after the tx commits.
+    if (profilePhotoFile) {
+      const allowed = ["image/jpeg", "image/png", "image/webp"];
+      if (!allowed.includes(profilePhotoFile.type)) {
+        return apiError("Profile photo must be JPG, PNG, or WEBP", "VALIDATION_ERROR", 400);
+      }
+      if (profilePhotoFile.size > 2 * 1024 * 1024) {
+        return apiError("Profile photo must be less than 2MB", "VALIDATION_ERROR", 400);
+      }
+    }
+    const profilePhotoUrl = await fileToDataUrl(profilePhotoFile);
+
+    // Atomic onboarding transaction: either all profile completion writes commit, or none do.
     const updated = await prisma.$transaction(async (tx) => {
       // 1. Update Profile Layer
       await tx.profile.update({
@@ -73,6 +97,7 @@ export async function POST(req: NextRequest) {
           name: payload.name || undefined,
           email: payload.personal_email || undefined,
           phone: payload.phone || undefined,
+          emergency_contact: payload.emergency_contact || undefined,
           is_profile_completed: true,
         }
       });
@@ -82,9 +107,9 @@ export async function POST(req: NextRequest) {
         where: { profile_id: session.sub },
         data: {
           phone_1: payload.phone || undefined,
-          phone_2: payload.emergency_contact || undefined,
           personal_email: payload.personal_email || undefined,
           gender: gender || undefined,
+          date_of_birth: payload.date_of_birth ? new Date(payload.date_of_birth) : undefined,
           temporary_address: tempAddr || undefined,
           permanent_address: permAddr || undefined,
           profile_type: payload.profile_type || "STUDENT",
@@ -101,26 +126,26 @@ export async function POST(req: NextRequest) {
           job_role: payload.job_role || null,
 
           aadhaar_number: payload.aadhaar_number ?? undefined,
+          photo_url: profilePhotoUrl || undefined,
           profile_completed: true,
         }
       });
 
+      if (fileUrl) {
+        await tx.identificationDocument.create({
+          data: {
+            tenant_id: tenantUpdate.id,
+            doc_type: "AADHAAR",
+            doc_number: payload.aadhaar_number || null,
+            file_url: fileUrl,
+            uploaded_by: session.sub,
+            is_verified: false,
+          },
+        });
+      }
+
       return tenantUpdate;
     }, { timeout: 15000 });
-
-    // 3. Identification Document — written AFTER tx commits (large base64 payload, not latency-critical)
-    if (fileUrl) {
-      await prisma.identificationDocument.create({
-        data: {
-          tenant_id: updated.id,
-          doc_type: "AADHAAR",
-          doc_number: payload.aadhaar_number || null,
-          file_url: fileUrl,
-          uploaded_by: session.sub,
-          is_verified: false,
-        },
-      });
-    }
 
     return apiResponse(updated, 201);
   } catch (error: any) {

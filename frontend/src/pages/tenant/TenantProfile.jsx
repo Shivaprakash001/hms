@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { tenantService } from '../../api/services';
 import DocumentUploadWidget from '../../components/TenantManagement/DocumentUploadWidget';
+import TenantScoreCard from '../../components/tenant/TenantScoreCard';
 
 const TenantProfile = () => {
     const { user } = useAuth();
@@ -15,6 +16,7 @@ const TenantProfile = () => {
     const [loading, setLoading] = useState(true);
     const [saveLoading, setSaveLoading] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
+    const [scoreData, setScoreData] = useState(null);
     const fileInputRef = useRef(null);
 
     // Local State for Form Data
@@ -50,7 +52,12 @@ const TenantProfile = () => {
             try {
                 let meData = null;
                 try {
-                    meData = await tenantService.getMyProfile();
+                    const [profileData, score] = await Promise.all([
+                        tenantService.getMyProfile(),
+                        tenantService.getMyScore().catch(() => null),
+                    ]);
+                    meData = profileData;
+                    setScoreData(score);
                 } catch {
                     meData = await tenantService.getByProfileId(user.id);
                 }
@@ -60,7 +67,7 @@ const TenantProfile = () => {
                 const profRel = meData?.profile || meData?.profiles;
                 const prof = Array.isArray(profRel) ? (profRel[0] || {}) : (profRel || {});
                 setTenantInfo(meData);
-                const inferredType = (tenantRecord.office_name || tenantRecord.job_role || tenantRecord.office_location) ? 'work' : 'tenant';
+                const inferredType = tenantRecord.profile_type === 'WORKING_PROFESSIONAL' ? 'work' : 'tenant';
                 setFormData({
                     name: prof.name || user?.name || '',
                     email: prof.email || user?.email || '',
@@ -82,7 +89,7 @@ const TenantProfile = () => {
                     job_role: tenantRecord.job_role || '',
                     permanent_address: apiProfile.permanent_address || tenantRecord.permanent_address || '',
                     temporary_address: apiProfile.temporary_address || tenantRecord.temporary_address || '',
-                    gender: apiProfile.gender || tenantRecord.gender || '',
+                    gender: tenantRecord.gender || apiProfile.gender || '',
                     photo_url: tenantRecord.photo_url || '',
                     profile_type: inferredType
                 });
@@ -107,7 +114,7 @@ const TenantProfile = () => {
             ? isFilled(formData.office_name) 
             : (isFilled(formData.college_name) || isFilled(formData.course) || isFilled(formData.roll_number));
         const hasVerification = tenantInfo?.document_verified || (tenantInfo?.documents?.length > 0);
-        const hasRoom = tenantInfo?.current_room || user?.room_no;
+        const hasRoom = tenantInfo?.current_room;
 
         const stages = [
             { label: 'Basic Info', done: hasBasic },
@@ -117,7 +124,7 @@ const TenantProfile = () => {
         ];
 
         return { stages };
-    }, [formData, tenantInfo, user]);
+    }, [formData, tenantInfo]);
 
     const handleSave = async () => {
         setSaveLoading(true);
@@ -139,8 +146,9 @@ const TenantProfile = () => {
                 address: optional(formData.address),
                 personal_email: optional(formData.personal_email),
                 phone_1: optional(formData.phone || formData.phone_1),
-                phone_2: optional(formData.emergency_contact || formData.phone_2),
+                phone_2: optional(formData.phone_2),
                 phone_3: null,
+                profile_type: formData.profile_type === 'work' ? 'WORKING_PROFESSIONAL' : 'STUDENT',
                 college_name: optional(formData.profile_type === 'tenant' ? formData.college_name : null),
                 roll_number: optional(formData.profile_type === 'tenant' ? formData.roll_number : null),
                 course: optional(formData.profile_type === 'tenant' ? formData.course : null),
@@ -230,11 +238,12 @@ const TenantProfile = () => {
     if (loading) return <div className="flex items-center justify-center min-h-[400px]">Loading profile...</div>;
 
     const currentRoom = tenantInfo?.current_room || null;
-    const roomNo = currentRoom?.room_no || user?.room_no || 'Unassigned';
-    const floorNo = currentRoom?.floor_id;
+    const roomNo = currentRoom?.room_no || 'Unassigned';
+    const floorNo = currentRoom?.floor ?? null;
 
     return (
         <div className="max-w-4xl mx-auto pb-16 animate-fade-in-up space-y-5">
+            <TenantScoreCard scoreData={scoreData} />
 
             {/* Success Toast */}
             <AnimatePresence>
@@ -312,7 +321,7 @@ const TenantProfile = () => {
                     <InfoField label="Full Name" value={formData.name} icon={User} isEditable={isEditing} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
                     <InfoField label="Email" value={formData.email} icon={Mail} isEditable={isEditing} type="email" onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
                     <InfoField label="Phone" value={formData.phone} icon={Phone} isEditable={isEditing} type="tel" onChange={(e) => setFormData({ ...formData, phone: e.target.value })} />
-                    <InfoField label="Emergency Contact" value={formData.emergency_contact} icon={Phone} isEditable={isEditing} type="tel" onChange={(e) => setFormData({ ...formData, emergency_contact: e.target.value })} />
+                    <InfoField label="Emergency Contact" value={formData.emergency_contact} emptyFallback="Emergency Contact Not Added" icon={Phone} isEditable={isEditing} type="tel" onChange={(e) => setFormData({ ...formData, emergency_contact: e.target.value })} />
                     <InfoField
                         label="Gender"
                         value={formData.gender}
@@ -412,7 +421,7 @@ const TenantProfile = () => {
     );
 };
 
-const InfoField = ({ label, value, icon, isEditable, onChange, type = "text", options = [], selectPlaceholder = "Select" }) => (
+const InfoField = ({ label, value, icon, isEditable, onChange, type = "text", options = [], selectPlaceholder = "Select", emptyFallback = "N/A" }) => (
     <div className="space-y-1.5">
         <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide ml-1">{label}</label>
         {isEditable ? (
@@ -447,7 +456,7 @@ const InfoField = ({ label, value, icon, isEditable, onChange, type = "text", op
                 <div className="text-slate-400">
                     {icon ? React.createElement(icon, { size: 18 }) : null}
                 </div>
-                <span className="font-medium">{value || 'N/A'}</span>
+                <span className="font-medium">{value || emptyFallback}</span>
             </div>
         )}
     </div>

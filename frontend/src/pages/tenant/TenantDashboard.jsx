@@ -7,6 +7,7 @@ import { useAppPreferences } from '../../context/AppPreferencesContext';
 import { paymentService, notificationService, tenantService } from '../../api/services';
 import { formatCurrency, formatDate } from '../../utils/format';
 import api from '../../api/axios';
+import TenantScoreCard from '../../components/tenant/TenantScoreCard';
 
 const getOrdinalDay = (day) => {
     if (!day) return null;
@@ -29,6 +30,7 @@ const TenantDashboard = () => {
     const [announcementsLoading, setAnnouncementsLoading] = useState(true);
     const [announcementsError, setAnnouncementsError] = useState('');
     const [tenantProfile, setTenantProfile] = useState(null);
+    const [tenantScore, setTenantScore] = useState(null);
     const [requestLoading, setRequestLoading] = useState(false);
     const [requestMessage, setRequestMessage] = useState('');
     const [requestError, setRequestError] = useState('');
@@ -42,11 +44,12 @@ const TenantDashboard = () => {
                 return;
             }
             try {
-                const [payRes, roomRes, notifRes, profileRes] = await Promise.allSettled([
+                const [payRes, roomRes, notifRes, profileRes, scoreRes] = await Promise.allSettled([
                     paymentService.getTenantHistory(user.tenant_id),
                     api.get('/allocations/my-room'),
                     notificationService.getAll(),
-                    tenantService.getMyProfile()
+                    tenantService.getMyProfile(),
+                    tenantService.getMyScore()
                 ]);
                 if (payRes.status === 'fulfilled') setDues(payRes.value || { obligations: [], outstanding_balance: 0 });
                 if (roomRes.status === 'fulfilled') setRoomData(roomRes.value?.data || null);
@@ -60,6 +63,9 @@ const TenantDashboard = () => {
 
                 if (profileRes.status === 'fulfilled') {
                     setTenantProfile(profileRes.value || null);
+                }
+                if (scoreRes?.status === 'fulfilled') {
+                    setTenantScore(scoreRes.value || null);
                 }
             } catch (error) {
                 console.error("Failed to fetch dashboard data:", error);
@@ -209,6 +215,7 @@ const TenantDashboard = () => {
     if (!isActiveTenant) {
         return (
             <div className="space-y-6">
+                <TenantScoreCard scoreData={tenantScore} compact />
                 <div>
                     <h1 className="text-2xl font-bold text-slate-900">Hello, {user?.name} 👋</h1>
                     <p className="text-slate-500">Account lifecycle update for your tenancy.</p>
@@ -257,6 +264,7 @@ const TenantDashboard = () => {
 
     return (
         <div className="space-y-8">
+            <TenantScoreCard scoreData={tenantScore} compact />
             {/* Welcome Section */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>

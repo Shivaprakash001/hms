@@ -19,21 +19,6 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const profile = await prisma.profile.findUnique({
-      where: { id: session.sub },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        emergency_contact: true
-      }
-    });
-
-    if (!profile) {
-      return apiError("Tenant profile not found", "NOT_FOUND", 404);
-    }
-
     const tenant = await prisma.tenant.findUnique({
       where: { profile_id: session.sub },
       select: {
@@ -58,14 +43,28 @@ export async function GET(req: NextRequest) {
         office_name: true,
         office_location: true,
         job_role: true,
+        profile_type: true,
+        gender: true,
+        date_of_birth: true,
         permanent_address: true,
         temporary_address: true,
         aadhaar_number: true,
         document_verified: true,
         created_at: true,
         updated_at: true,
+        profile: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            emergency_contact: true
+          }
+        },
         allocations: {
           where: { is_active: true, end_date: null },
+          orderBy: { start_date: "desc" },
+          take: 1,
           include: { room: true }
         }
       }
@@ -76,6 +75,7 @@ export async function GET(req: NextRequest) {
     }
 
     const allocation = tenant.allocations[0];
+    const profile = tenant.profile;
 
     return apiResponse({
       profile: {
@@ -88,10 +88,17 @@ export async function GET(req: NextRequest) {
         personal_email: tenant.personal_email,
         permanent_address: tenant.permanent_address,
         temporary_address: tenant.temporary_address,
-        gender: null
+        gender: tenant.gender,
+        date_of_birth: tenant.date_of_birth
       },
       ...tenant,
       tenant_details: tenant,
+      current_room: allocation?.room
+        ? {
+            room_no: allocation.room.room_no,
+            floor: allocation.room.floor ?? null,
+          }
+        : null,
       room_no: allocation?.room?.room_no || null,
       floor: allocation?.room?.floor ?? null,
       status: tenant.status
