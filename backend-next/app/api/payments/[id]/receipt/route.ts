@@ -15,8 +15,12 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
     const { id: paymentId } = params;
 
-    // Generate the PDF buffer via Puppeteer
-    const pdfBuffer = await receiptService.generatePdfBuffer(paymentId);
+    // Owners/admins may auto-generate new receipts (plan-gated in service).
+    // Tenants can only fetch already-created receipts.
+    const canAutoCreateReceipt = ["OWNER", "ADMIN"].includes(user.role);
+    const pdfBuffer = await receiptService.generatePdfBuffer(paymentId, {
+      autoCreate: canAutoCreateReceipt,
+    });
 
     return new NextResponse(pdfBuffer as any, {
       status: 200,
@@ -29,7 +33,11 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   } catch (error: any) {
     console.error("Error downloading receipt:", error);
     const message = error?.message || "Unknown error";
-    const status = message.includes("NOT_FOUND") ? 404 : 500;
+    const status = message.includes("NOT_FOUND")
+      ? 404
+      : message.includes("PLAN_UPGRADE_REQUIRED")
+        ? 403
+        : 500;
     return new NextResponse(JSON.stringify({ error: message }), { status, headers: { 'Content-Type': 'application/json' } });
   }
 }

@@ -18,6 +18,7 @@ export async function GET() {
           automation: true,
           multi_hostel: true,
           analytics: true,
+          can_generate_receipts: true,
         },
       });
 

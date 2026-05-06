@@ -637,6 +637,7 @@ model Plan {
   multi_hostel        Boolean             @default(false)
   analytics           Boolean             @default(false)
   is_custom           Boolean             @default(false)
+  can_generate_receipts Boolean           @default(false)
   created_at          DateTime            @default(now()) @db.Timestamptz(6)
   features            Json?
   invoices            OwnerInvoice[]

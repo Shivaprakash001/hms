@@ -9,6 +9,7 @@ const FREE_FALLBACK = {
   automation: false,
   multi_hostel: false,
   analytics: false,
+  can_generate_receipts: false,
 };
 
 export class BillingService {
@@ -76,6 +77,7 @@ export class BillingService {
         automation: plan.automation,
         multi_hostel: plan.multi_hostel,
         analytics: plan.analytics,
+        can_generate_receipts: plan.can_generate_receipts ?? false,
       },
       subscription: {
         status: sub?.status ?? "FREE",

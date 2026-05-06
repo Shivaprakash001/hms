@@ -10,7 +10,7 @@ import PaymentTable from '../../components/owner/payments/PaymentTable';
 import PaymentDetailsDrawer from '../../components/owner/payments/PaymentDetailsDrawer';
 import TenantHistoryModal from '../../components/owner/payments/TenantHistoryModal';
 import OnlinePaymentTestModal from '../../components/owner/payments/OnlinePaymentTestModal';
-import { paymentService } from '../../api/services';
+import { billingService, paymentService } from '../../api/services';
 import { useAppPreferences } from '../../context/AppPreferencesContext';
 import { formatCurrency, formatMonthYear } from '../../utils/format';
 
@@ -55,6 +55,8 @@ const Payments = () => {
     const [pendingConfirmations, setPendingConfirmations] = useState([]);
     const [confirmingId, setConfirmingId] = useState(null);
     const [confirmToast, setConfirmToast] = useState(null);
+    const [canGenerateReceipts, setCanGenerateReceipts] = useState(false);
+    const [planName, setPlanName] = useState('Free');
 
     const paymentFilters = useMemo(() => ({
         tenantId: tenantFilter !== 'all' ? tenantFilter : undefined,
@@ -159,6 +161,26 @@ const Payments = () => {
         loadPendingConfirmations();
     }, [loadPendingConfirmations]);
 
+    useEffect(() => {
+        let mounted = true;
+        const loadSubscription = async () => {
+            try {
+                const sub = await billingService.getSubscription();
+                if (!mounted) return;
+                setCanGenerateReceipts(Boolean(sub?.current_plan?.can_generate_receipts));
+                setPlanName(sub?.current_plan?.name || 'Free');
+            } catch (_) {
+                if (!mounted) return;
+                setCanGenerateReceipts(false);
+                setPlanName('Free');
+            }
+        };
+        loadSubscription();
+        return () => {
+            mounted = false;
+        };
+    }, []);
+
     const filteredData = useMemo(() => {
         return ledgerRows.filter(item => {
             const matchesSearch = (item.tenantName || "").toLowerCase().includes(debouncedSearch.toLowerCase()) ||
@@ -235,7 +257,7 @@ const Payments = () => {
             if (error?.response?.status === 404) {
                 errorMessage = 'Receipt not found';
             } else if (error?.response?.status === 403) {
-                errorMessage = 'Unauthorized access';
+                errorMessage = 'Upgrade to Growth plan to generate receipts';
             } else if (error?.response?.status === 500) {
                 errorMessage = 'Server error - please try again';
             }
@@ -523,6 +545,21 @@ const Payments = () => {
                             </div>
                         ))}
                     </div>
+                </div>
+            )}
+
+            {!canGenerateReceipts && (
+                <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div>
+                        <p className="text-sm font-bold text-indigo-900">Receipts are available on Growth and above</p>
+                        <p className="text-xs text-indigo-700 mt-1">You are on {planName}. Existing payment history still works; upgrade to unlock receipt generation.</p>
+                    </div>
+                    <button
+                        onClick={() => navigate('/owner/billing')}
+                        className="inline-flex items-center justify-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700 transition-colors"
+                    >
+                        Upgrade Plan
+                    </button>
                 </div>
             )}
 

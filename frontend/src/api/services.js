@@ -516,9 +516,14 @@ export const paymentService = {
         if (blob.type && blob.type.includes('application/json')) {
             const text = await blob.text();
             let detail = 'Unknown error';
-            try { detail = JSON.parse(text).detail || text; } catch { detail = text; }
+            try {
+                const parsed = JSON.parse(text);
+                detail = parsed?.detail || parsed?.error || text;
+            } catch {
+                detail = text;
+            }
             const err = new Error(detail);
-            err.response = { status: 400, data: { detail } };
+            err.response = { status: response.status, data: { detail } };
             throw err;
         }
 

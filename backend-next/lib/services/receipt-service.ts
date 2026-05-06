@@ -17,26 +17,38 @@ import { getHostelWithPreferences } from "../preferences";
 import { htmlToPdf } from "../pdf/browser";
 import { renderReceiptHTML, type ReceiptRenderData } from "../pdf/receipt-template";
 
+const RECEIPT_NUMBER_RETRY_LIMIT = 10;
+const PLAN_UPGRADE_REQUIRED_ERROR = "PLAN_UPGRADE_REQUIRED";
+
 export class ReceiptService {
+  private async canOwnerGenerateReceipts(ownerId: string): Promise<boolean> {
+    if (!ownerId) return false;
+    const subscription = await prisma.ownerSubscription.findUnique({
+      where: { owner_id: ownerId },
+      include: { plan: true },
+    });
+    return Boolean(subscription?.plan?.can_generate_receipts);
+  }
 
   /**
    * Generate a sequential, race-safe receipt number scoped per hostel + year.
    * Format: PREFIX-YEAR-SEQUENCE (e.g., HMS-2026-00001)
    *
-   * 🔧 FIX C4: Uses atomic PostgreSQL sequence instead of find-max + check-exists.
-   * The old TOCTOU pattern could exhaust retries under concurrency and fall back
-   * to UUID, permanently breaking sequential numbering.
+   * Avoids direct sequence SQL so environments without receipt_seq don't crash.
    */
-  async generateReceiptNumber(ownerId: string): Promise<string> {
+  async generateReceiptNumber(ownerId: string, offset = 0): Promise<string> {
     const { prefs } = await getHostelWithPreferences(ownerId);
     const year = new Date().getFullYear();
     const prefix = `${prefs.receipt_prefix}-${year}-`;
-
-    // Atomic sequence — single round-trip, no race condition
-    const result = await prisma.$queryRaw<[{ nextval: bigint }]>`
-      SELECT nextval('receipt_seq')
-    `;
-    const seq = Number(result[0].nextval);
+    const yearStart = new Date(`${year}-01-01T00:00:00.000Z`);
+    const yearEnd = new Date(`${year + 1}-01-01T00:00:00.000Z`);
+    const existingCount = await prisma.receipt.count({
+      where: {
+        owner_id: ownerId,
+        issued_at: { gte: yearStart, lt: yearEnd },
+      },
+    });
+    const seq = existingCount + offset + 1;
 
     return `${prefix}${seq.toString().padStart(5, "0")}`;
   }
@@ -62,24 +74,52 @@ export class ReceiptService {
     if (!payment) throw new Error("NOT_FOUND: Payment not found");
 
     const ownerId = payment.tenant.owner_id || payment.owner_id || "";
+    const canGenerateReceipts = await this.canOwnerGenerateReceipts(ownerId);
+    if (!canGenerateReceipts) {
+      throw new Error(`${PLAN_UPGRADE_REQUIRED_ERROR}: Upgrade to Growth plan to generate receipts`);
+    }
     const { hostel, prefs } = await getHostelWithPreferences(ownerId);
+    let receipt = null;
 
-    const receiptNumber = await this.generateReceiptNumber(ownerId);
+    for (let attempt = 0; attempt < RECEIPT_NUMBER_RETRY_LIMIT; attempt += 1) {
+      const receiptNumber = await this.generateReceiptNumber(ownerId, attempt);
+      try {
+        receipt = await prisma.receipt.create({
+          data: {
+            receipt_number: receiptNumber,
+            payment_id: payment.id,
+            tenant_id: payment.tenant_id,
+            owner_id: payment.owner_id,
+            amount: payment.amount_paid,
+            payment_method: payment.payment_method,
+            transaction_id: payment.reference_number,
+            hostel_name: hostel?.name || "HMS Hostel",
+            tenant_name: payment.tenant.profile.name,
+            rent_month: payment.obligation.rent_month,
+          },
+        });
+        break;
+      } catch (error: any) {
+        if (error?.code === "P2002") {
+          const target = Array.isArray(error?.meta?.target) ? error.meta.target.join(",") : String(error?.meta?.target || "");
+          if (target.includes("payment_id")) {
+            const duplicate = await prisma.receipt.findFirst({ where: { payment_id: paymentId } });
+            if (duplicate) {
+              receipt = duplicate;
+              break;
+            }
+          }
+          if (target.includes("receipt_number")) {
+            continue;
+          }
+        }
+        throw error;
+      }
+    }
 
-    const receipt = await prisma.receipt.create({
-      data: {
-        receipt_number: receiptNumber,
-        payment_id: payment.id,
-        tenant_id: payment.tenant_id,
-        owner_id: payment.owner_id,
-        amount: payment.amount_paid,
-        payment_method: payment.payment_method,
-        transaction_id: payment.reference_number,
-        hostel_name: hostel?.name || "HMS Hostel",
-        tenant_name: payment.tenant.profile.name,
-        rent_month: payment.obligation.rent_month,
-      },
-    });
+    if (!receipt) {
+      throw new Error("RECEIPT_CREATE_FAILED: Unable to generate unique receipt number");
+    }
 
     return {
       ...receipt,
@@ -100,7 +140,8 @@ export class ReceiptService {
    * 3. Render HTML from template
    * 4. Convert HTML → PDF via headless Chromium
    */
-  async generatePdfBuffer(paymentId: string): Promise<Buffer> {
+  async generatePdfBuffer(paymentId: string, options?: { autoCreate?: boolean }): Promise<Buffer> {
+    const autoCreate = options?.autoCreate ?? true;
     // 1. Get or create receipt
     let receipt = await prisma.receipt.findFirst({
       where: { payment_id: paymentId },
@@ -110,7 +151,7 @@ export class ReceiptService {
       },
     });
 
-    if (!receipt) {
+    if (!receipt && autoCreate) {
       await this.createReceipt(paymentId);
       receipt = await prisma.receipt.findFirst({
         where: { payment_id: paymentId },
@@ -122,7 +163,7 @@ export class ReceiptService {
     }
 
     if (!receipt) {
-      throw new Error("NOT_FOUND: Failed to create or retrieve receipt");
+      throw new Error("NOT_FOUND: Receipt not found");
     }
 
     // 2. Fetch hostel + preferences + room allocation
