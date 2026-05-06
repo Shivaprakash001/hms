@@ -15,11 +15,11 @@ export async function GET(
   if (!session) return apiError("Unauthorized", "UNAUTHORIZED", 401);
 
   try {
-    const docs = await documentService.getTenantDocuments(params.id, {
+    const result = await documentService.getTenantDocuments(params.id, {
       sub: session.sub,
       role: session.role,
     });
-    return apiResponse(docs);
+    return apiResponse(result);
   } catch (error: any) {
     const msg = typeof error?.message === "string" ? error.message : String(error);
     if (msg.startsWith("NOT_FOUND")) return apiError(msg.split(": ")[1] ?? msg, "NOT_FOUND", 404);

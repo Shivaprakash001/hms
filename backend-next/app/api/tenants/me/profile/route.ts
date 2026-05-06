@@ -6,6 +6,7 @@ import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { tenantService } from "@/lib/services/tenant-service";
 import { TenantProfileUpdateSchema } from "@/lib/validators";
+import { documentService } from "@/lib/services/document-service";
 
 
 /**
@@ -77,8 +78,11 @@ export async function GET(req: NextRequest) {
     const allocation = tenant.allocations[0];
     const profile = tenant.profile;
 
+    const verification_badge = await documentService.getVerificationBadge(tenant.id);
+
     return apiResponse({
       ...tenant,
+      verification_badge,
       profile: {
         id: profile.id,
         full_name: profile.name,

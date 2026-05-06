@@ -290,7 +290,7 @@ export class DocumentService {
   async getTenantDocuments(
     tenantId: string,
     requestingUser: { sub: string; role: string }
-  ): Promise<DocResponse[]> {
+  ): Promise<{ docs: DocResponse[]; plan_gate: string | null }> {
     const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId },
       select: { profile_id: true, owner_id: true },
@@ -300,6 +300,19 @@ export class DocumentService {
       throw new Error("FORBIDDEN: You can only view your own documents");
     if (requestingUser.role === "OWNER" && tenant.owner_id !== requestingUser.sub)
       throw new Error("FORBIDDEN: Access denied");
+
+    // Plan gate check — signal to frontend if KYC feature is locked
+    let plan_gate: string | null = null;
+    if (tenant.owner_id) {
+      try {
+        await planEnforcementService.assertDocumentUpload(tenant.owner_id, "AADHAAR");
+      } catch (err: any) {
+        const msg: string = err?.message ?? "";
+        if (msg.startsWith("PLAN_LIMIT")) {
+          plan_gate = msg.split(": ")[1] ?? "DOCUMENT_VERIFICATION_NOT_ALLOWED";
+        }
+      }
+    }
 
     const docs = await prisma.identificationDocument.findMany({
       where:   { tenant_id: tenantId, is_active: true },
@@ -312,14 +325,17 @@ export class DocumentService {
       requireApproval = prefs.require_doc_approval === true;
     }
 
-    return docs.map((doc) => {
-      const accessible = !requireApproval || doc.document_status === "APPROVED";
-      return normalizeDoc(
-        doc,
-        accessible ? buildSignedUrl(doc) : null,
-        accessible ? buildSignedUrl(doc, [{ width: "400" }]) : null
-      );
-    });
+    return {
+      plan_gate,
+      docs: docs.map((doc) => {
+        const accessible = !requireApproval || doc.document_status === "APPROVED";
+        return normalizeDoc(
+          doc,
+          accessible ? buildSignedUrl(doc) : null,
+          accessible ? buildSignedUrl(doc, [{ width: "400" }]) : null
+        );
+      }),
+    };
   }
 
   // ── Verification badge ─────────────────────────────────────
@@ -426,6 +442,8 @@ export class DocumentService {
     }
 
     await prisma.identificationDocument.delete({ where: { id: docId } });
+
+    await this.syncVerificationFlag(doc.tenant_id);
 
     await eventSystem.trigger("document_deleted", {
       doc_id: docId, tenant_id: doc.tenant_id, owner_id: doc.tenant.owner_id, doc_type: doc.doc_type,

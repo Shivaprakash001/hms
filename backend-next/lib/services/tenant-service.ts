@@ -2,6 +2,7 @@ import { prisma } from "../db";
 import { eventSystem } from "../events";
 import { z } from "zod";
 import { getPreferences } from "../preferences";
+import { documentService } from "./document-service";
 
 export class TenantService {
   async getTenantById(id: string, requestingUser: { sub: string; role: string }) {
@@ -53,7 +54,8 @@ export class TenantService {
       throw new Error("FORBIDDEN: You can only view your own record");
     }
 
-    return tenant;
+    const verification_badge = await documentService.getVerificationBadge(id);
+    return { ...tenant, verification_badge };
   }
 
   async getTenantByProfile(profileId: string, requestingUser: { sub: string; role: string }) {
@@ -105,7 +107,8 @@ export class TenantService {
       throw new Error("FORBIDDEN: You can only view your own record");
     }
 
-    return tenant;
+    const verification_badge = await documentService.getVerificationBadge(tenant.id);
+    return { ...tenant, verification_badge };
   }
 
   async getAllTenants(params: {
