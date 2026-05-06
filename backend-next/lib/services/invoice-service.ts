@@ -72,8 +72,8 @@ export class InvoiceService {
     }
 
     // ── CACHE CHECK (version-aware) ──
-    const cachedUrl = (receipt as any).invoice_pdf_url;
-    const cachedVersion = (receipt as any).invoice_template_version;
+    const cachedUrl     = receipt.invoice_pdf_url;
+    const cachedVersion = receipt.invoice_template_version;
     if (cachedUrl && cachedVersion === INVOICE_TEMPLATE_VERSION) {
       incrementPdfCache("invoice_hit");
       return { url: cachedUrl, cached: true };
@@ -312,9 +312,9 @@ export class InvoiceService {
     await prisma.receipt.update({
       where: { id: receipt.id },
       data: {
-        invoice_pdf_url: uploadRes.url,
-        invoice_template_version: INVOICE_TEMPLATE_VERSION
-      } as any
+        invoice_pdf_url:          uploadRes.url,
+        invoice_template_version: INVOICE_TEMPLATE_VERSION,
+      }
     });
 
     return { url: uploadRes.url, cached: false };

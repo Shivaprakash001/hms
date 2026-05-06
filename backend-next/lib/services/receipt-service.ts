@@ -179,8 +179,8 @@ export class ReceiptService {
     }
 
     // ── PDF Cache check: reuse stored PDF if template version matches ─────────
-    const cachedPdfUrl = (receipt as any).receipt_pdf_url as string | null;
-    const cachedVersion = (receipt as any).receipt_template_version as number | null;
+    const cachedPdfUrl    = receipt.receipt_pdf_url;
+    const cachedVersion   = receipt.receipt_template_version;
 
     if (cachedPdfUrl && cachedVersion === RECEIPT_TEMPLATE_VERSION) {
       incrementPdfCache("receipt_hit");
@@ -282,9 +282,9 @@ export class ReceiptService {
         await prisma.receipt.update({
           where: { id: receipt.id },
           data: {
-            receipt_pdf_url: uploadRes.url,
+            receipt_pdf_url:          uploadRes.url,
             receipt_template_version: RECEIPT_TEMPLATE_VERSION,
-          } as any,
+          },
         });
       }
     } catch (uploadErr: any) {
