@@ -35,6 +35,16 @@ function lockKey(ownerId: string, kind: "stats" | "monthly", months?: number) {
 }
 
 export class DashboardSnapshotService {
+  private async fetchSnapshotRow(ownerId: string) {
+    const rows = await prisma.$queryRaw<any[]>`
+      SELECT *
+      FROM owner_dashboard_snapshots
+      WHERE owner_id = ${ownerId}::uuid
+      LIMIT 1
+    `;
+    return rows[0] || null;
+  }
+
   async markOwnerStale(ownerId: string) {
     const month = utcMonthStart(new Date());
     await prisma.$executeRaw`
@@ -47,24 +57,14 @@ export class DashboardSnapshotService {
 
   async getOwnerStats(ownerId: string) {
     const now = new Date();
-    const row: any = await prisma.$queryRaw`
-      SELECT *
-      FROM owner_dashboard_snapshots
-      WHERE owner_id = ${ownerId}::uuid
-      LIMIT 1
-    `.then((r: any[]) => r[0] || null);
+    const row: any = await this.fetchSnapshotRow(ownerId);
 
     const statsComputedAt = toDate(row?.stats_computed_at);
     const fresh = row && !row.is_stale && isFresh(statsComputedAt, now);
     if (fresh) return this.mapStatsRow(row);
 
     await this.refreshStats(ownerId, row);
-    const updated: any = await prisma.$queryRaw`
-      SELECT *
-      FROM owner_dashboard_snapshots
-      WHERE owner_id = ${ownerId}::uuid
-      LIMIT 1
-    `.then((r: any[]) => r[0] || null);
+    const updated: any = await this.fetchSnapshotRow(ownerId);
     if (updated) return this.mapStatsRow(updated);
 
     // Fallback in case lock contention and row not yet present.
@@ -73,12 +73,7 @@ export class DashboardSnapshotService {
 
   async getMonthlyStats(ownerId: string, months: number) {
     const now = new Date();
-    const row: any = await prisma.$queryRaw`
-      SELECT *
-      FROM owner_dashboard_snapshots
-      WHERE owner_id = ${ownerId}::uuid
-      LIMIT 1
-    `.then((r: any[]) => r[0] || null);
+    const row: any = await this.fetchSnapshotRow(ownerId);
 
     const monthlyComputedAt = toDate(row?.monthly_computed_at);
     const hasCorrectMonths = Number(row?.monthly_trend_months || 0) === months;
@@ -86,12 +81,13 @@ export class DashboardSnapshotService {
     if (fresh && Array.isArray(row.monthly_trend)) return row.monthly_trend as MonthlyPoint[];
 
     await this.refreshMonthly(ownerId, months, row);
-    const updated: any = await prisma.$queryRaw`
+    const updatedRows: any[] = await prisma.$queryRaw<any[]>`
       SELECT monthly_trend
       FROM owner_dashboard_snapshots
       WHERE owner_id = ${ownerId}::uuid
       LIMIT 1
-    `.then((r: any[]) => r[0] || null);
+    `;
+    const updated: any = updatedRows[0] || null;
     if (updated?.monthly_trend && Array.isArray(updated.monthly_trend)) {
       return updated.monthly_trend as MonthlyPoint[];
     }
