@@ -24,9 +24,13 @@ export const usePlans = () => {
             const data = await billingService.getPlans();
             const fetchedPlans = Array.isArray(data) ? data : (data?.data || []);
             const PLAN_ORDER = ['FREE', 'STARTER', 'GROWTH', 'BUSINESS', 'SCALE'];
-            return [...fetchedPlans].sort(
-                (a, b) => PLAN_ORDER.indexOf(a.id) - PLAN_ORDER.indexOf(b.id)
-            );
+            return [...fetchedPlans].sort((a, b) => {
+                const ai = PLAN_ORDER.indexOf(a.id);
+                const bi = PLAN_ORDER.indexOf(b.id);
+                const sa = ai === -1 ? PLAN_ORDER.length : ai;
+                const sb = bi === -1 ? PLAN_ORDER.length : bi;
+                return sa - sb;
+            });
         },
         staleTime: 60 * 60 * 1000, // 1 hour for plans
         cacheTime: 60 * 60 * 1000,

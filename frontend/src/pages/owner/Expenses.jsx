@@ -3,7 +3,7 @@ import React, { useState, useMemo } from 'react';
 import {
     Plus, Filter, Trash, Edit, X, IndianRupee, Zap, Wrench, Utensils, Box,
     Search, Calendar, ArrowUpRight, ArrowDownRight, MoreHorizontal, Download,
-    AlertCircle, CheckCircle2
+    AlertCircle, CheckCircle2, Loader2
 } from 'lucide-react';
 // eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from 'framer-motion';
@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useExpenses, useCreateExpense, useUpdateExpense, useDeleteExpense } from '../../hooks/useExpenses';
 
 export default function Expenses() {
-    const { data: expensesData, isLoading } = useExpenses();
+    const { data: expensesData, isLoading, isError } = useExpenses();
     const expenses = Array.isArray(expensesData) ? expensesData : expensesData?.data || [];
 
     const createMutation = useCreateExpense();
@@ -369,7 +369,26 @@ export default function Expenses() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
-                            {filteredExpenses.length === 0 ? (
+                            {isLoading ? (
+                                <tr>
+                                    <td colSpan="6" className="py-16 text-center">
+                                        <div className="flex flex-col items-center justify-center text-slate-400">
+                                            <Loader2 size={32} className="mb-3 animate-spin opacity-40" />
+                                            <p className="text-sm font-semibold text-slate-500">Loading expenses…</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : isError ? (
+                                <tr>
+                                    <td colSpan="6" className="py-16 text-center">
+                                        <div className="flex flex-col items-center justify-center text-slate-400">
+                                            <AlertCircle size={32} className="mb-3 opacity-40 text-rose-400" />
+                                            <p className="text-sm font-semibold text-rose-600">Failed to load expenses</p>
+                                            <p className="text-xs text-slate-400 mt-1">Please refresh the page and try again</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : filteredExpenses.length === 0 ? (
                                 <tr>
                                     <td colSpan="6" className="py-16 text-center">
                                         <div className="flex flex-col items-center justify-center text-slate-400">

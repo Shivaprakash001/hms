@@ -23,6 +23,25 @@ const Payments = () => {
     const [canGenerateReceipts, setCanGenerateReceipts] = useState(false);
     const [planName, setPlanName] = useState('Free');
 
+    const [tenantFilter, setTenantFilter] = useState('all');
+    const [statusFilter, setStatusFilter] = useState('all');
+    const [methodFilter, setMethodFilter] = useState('all');
+    const [monthFilter, setMonthFilter] = useState('all');
+    const [searchTerm, setSearchTerm] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(25);
+    const [selectedPayment, setSelectedPayment] = useState(null);
+    const [historyTenant, setHistoryTenant] = useState(null);
+    const [onlineTestTarget, setOnlineTestTarget] = useState(null);
+    const [exportLoading, setExportLoading] = useState(false);
+    const [showGenModal, setShowGenModal] = useState(false);
+    const [genMonth, setGenMonth] = useState('');
+    const [genLoading, setGenLoading] = useState(false);
+    const [genResult, setGenResult] = useState(null);
+    const [previewData, setPreviewData] = useState(null);
+    const [previewLoading, setPreviewLoading] = useState(false);
+
     const paymentFilters = useMemo(() => ({
         tenant_id: tenantFilter !== 'all' ? tenantFilter : undefined,
         status: statusFilter !== 'all' ? statusFilter.toUpperCase() : undefined,

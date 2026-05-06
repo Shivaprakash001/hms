@@ -72,7 +72,7 @@ const ManageRooms = () => {
     useEffect(() => {
         if (selectedRoom && floors.length > 0) {
             const updatedRoom = findRoomById(floors, selectedRoom.id);
-            if (updatedRoom && updatedRoom !== selectedRoom) {
+            if (updatedRoom && JSON.stringify(updatedRoom) !== JSON.stringify(selectedRoom)) {
                 setSelectedRoom(updatedRoom);
             }
         }

@@ -25,8 +25,8 @@ export const useDuesReport = (params) => {
 
 export const useLedger = (params) => {
   return useQuery({
-    queryKey: ['payments', 'ledger', params],
-    queryFn:  () => paymentService.getAll({ limit: 1000, ...params }),
+    queryKey: queryKeys.payments.ledger(params),
+    queryFn:  () => paymentService.getAll(params),
     staleTime: 2 * 60 * 1000,
     gcTime:    30 * 60 * 1000,
     placeholderData: keepPreviousData,

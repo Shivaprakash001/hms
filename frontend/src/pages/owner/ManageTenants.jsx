@@ -163,7 +163,7 @@ export default function ManageTenants() {
     const stats = useMemo(() => ({
         total: tenants.length,
         occupiedRooms: new Set(tenants.filter(s => s.room !== 'N/A').map(s => s.room)).size,
-        paid: tenants.filter(s => s.status === 'Paid').length,
+        paid: tenants.filter(s => s.paymentSummary?.payment_status === 'PAID').length,
         active: tenants.filter(s => s.status === 'ACTIVE').length,
         left: tenants.filter(s => s.status === 'LEFT').length
     }), [tenants]);
@@ -215,6 +215,15 @@ export default function ManageTenants() {
     return (
         <div className="font-sans pb-20">
             <div className="space-y-8">
+                {/* Error Banner */}
+                {error && (
+                    <div className="flex items-center gap-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-xl px-4 py-3">
+                        <span className="flex-1">{error.message || 'Failed to load tenants'}</span>
+                        <button onClick={fetchTenants} className="text-xs font-semibold underline hover:no-underline">
+                            Retry
+                        </button>
+                    </div>
+                )}
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>

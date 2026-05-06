@@ -15,8 +15,9 @@ const FREE_FALLBACK = {
 
 export class BillingService {
   private isSchemaDriftError(error: any) {
-    const msg = String(error?.message || error || "").toLowerCase();
-    return msg.includes("does not exist") || msg.includes("column") || msg.includes("p2022");
+    if (error?.code === 'P2022') return true;
+    const msg = String(error?.message || error || '');
+    return /column \S+ does not exist|column .* does not exist/i.test(msg);
   }
 
   private parseOverflowFlags(plan: any) {
