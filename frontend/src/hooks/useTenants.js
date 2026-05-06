@@ -1,83 +1,55 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { tenantService } from '../api/services';
+import { queryKeys } from '../lib/query/queryKeys';
 
-/**
- * Fetch all tenants with optional filtering
- */
-export const useTenants = (options = {}) => {
+export const useTenants = (filters = {}) => {
   return useQuery({
-    queryKey: ['tenants', options],
-    queryFn: async () => {
-      return await tenantService.getAll(options);
-    },
+    queryKey: queryKeys.tenants.list(filters),
+    queryFn:  () => tenantService.getAll(filters),
     staleTime: 5 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
+    gcTime:    10 * 60 * 1000,
   });
 };
 
-/**
- * Fetch single tenant by ID
- */
 export const useTenant = (tenantId) => {
   return useQuery({
-    queryKey: ['tenants', tenantId],
-    queryFn: async () => {
-      if (!tenantId) return null;
-      return await tenantService.getById(tenantId);
-    },
-    enabled: !!tenantId,
+    queryKey: queryKeys.tenants.detail(tenantId),
+    queryFn:  () => tenantService.getById(tenantId),
+    enabled:  !!tenantId,
     staleTime: 5 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
+    gcTime:    10 * 60 * 1000,
   });
 };
 
-/**
- * Mutate: Create new tenant
- */
 export const useCreateTenant = () => {
-  const queryClient = useQueryClient();
-  
+  const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (data) => {
-      return await tenantService.create(data);
-    },
+    mutationFn: (data) => tenantService.create(data),
     onSuccess: (newTenant) => {
-      queryClient.invalidateQueries({ queryKey: ['tenants'] });
-      queryClient.setQueryData(['tenants', newTenant.id], newTenant);
+      qc.setQueryData(queryKeys.tenants.detail(newTenant.id), newTenant);
+      qc.invalidateQueries({ queryKey: queryKeys.tenants.all() });
     },
   });
 };
 
-/**
- * Mutate: Update tenant
- */
 export const useUpdateTenant = (tenantId) => {
-  const queryClient = useQueryClient();
-  
+  const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (data) => {
-      return await tenantService.update(tenantId, data);
-    },
-    onSuccess: (updatedTenant) => {
-      queryClient.setQueryData(['tenants', tenantId], updatedTenant);
-      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+    mutationFn: (data) => tenantService.update(tenantId, data),
+    onSuccess: (updated) => {
+      qc.setQueryData(queryKeys.tenants.detail(tenantId), updated);
+      qc.invalidateQueries({ queryKey: queryKeys.tenants.all() });
     },
   });
 };
 
-/**
- * Mutate: Delete tenant
- */
 export const useDeleteTenant = () => {
-  const queryClient = useQueryClient();
-  
+  const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (tenantId) => {
-      return await tenantService.delete(tenantId);
-    },
-    onSuccess: (_data, tenantId) => {
-      queryClient.removeQueries({ queryKey: ['tenants', tenantId] });
-      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+    mutationFn: (id) => tenantService.delete(id),
+    onSuccess: (_data, id) => {
+      qc.removeQueries({ queryKey: queryKeys.tenants.detail(id) });
+      qc.invalidateQueries({ queryKey: queryKeys.tenants.all() });
     },
   });
 };

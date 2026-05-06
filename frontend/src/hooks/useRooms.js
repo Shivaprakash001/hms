@@ -1,17 +1,16 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { roomService, allocationService } from '../api/services';
+import { queryKeys } from '../lib/query/queryKeys';
 
 /**
  * Fetch all rooms with optional filtering
  */
 export const useRooms = (params = {}) => {
   return useQuery({
-    queryKey: ['rooms', params],
-    queryFn: async () => {
-      return await roomService.getAll(params);
-    },
+    queryKey: queryKeys.rooms.list(params),
+    queryFn:  () => roomService.getAll(params),
     staleTime: 5 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
+    gcTime:    10 * 60 * 1000,
   });
 };
 
@@ -20,14 +19,11 @@ export const useRooms = (params = {}) => {
  */
 export const useRoom = (roomId) => {
   return useQuery({
-    queryKey: ['rooms', roomId],
-    queryFn: async () => {
-      if (!roomId) return null;
-      return await roomService.getById(roomId);
-    },
-    enabled: !!roomId,
+    queryKey: queryKeys.rooms.detail(roomId),
+    queryFn:  () => roomService.getById(roomId),
+    enabled:  !!roomId,
     staleTime: 5 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
+    gcTime:    10 * 60 * 1000,
   });
 };
 
@@ -35,15 +31,10 @@ export const useRoom = (roomId) => {
  * Mutate: Create a new room
  */
 export const useCreateRoom = () => {
-  const queryClient = useQueryClient();
-
+  const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (data) => {
-      return await roomService.create(data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['rooms'] });
-    },
+    mutationFn: (data) => roomService.create(data),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: queryKeys.rooms.all() }),
   });
 };
 
@@ -51,15 +42,12 @@ export const useCreateRoom = () => {
  * Mutate: Update a room
  */
 export const useUpdateRoom = (roomId) => {
-  const queryClient = useQueryClient();
-
+  const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (data) => {
-      return await roomService.update(roomId, data);
-    },
-    onSuccess: (updatedRoom) => {
-      queryClient.setQueryData(['rooms', roomId], updatedRoom);
-      queryClient.invalidateQueries({ queryKey: ['rooms'] });
+    mutationFn: (data) => roomService.update(roomId, data),
+    onSuccess:  (updated) => {
+      qc.setQueryData(queryKeys.rooms.detail(roomId), updated);
+      qc.invalidateQueries({ queryKey: queryKeys.rooms.all() });
     },
   });
 };
@@ -68,15 +56,12 @@ export const useUpdateRoom = (roomId) => {
  * Mutate: Delete a room
  */
 export const useDeleteRoom = () => {
-  const queryClient = useQueryClient();
-
+  const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (roomId) => {
-      return await roomService.delete(roomId);
-    },
-    onSuccess: (_data, roomId) => {
-      queryClient.removeQueries({ queryKey: ['rooms', roomId] });
-      queryClient.invalidateQueries({ queryKey: ['rooms'] });
+    mutationFn: (id) => roomService.delete(id),
+    onSuccess:  (_data, id) => {
+      qc.removeQueries({ queryKey: queryKeys.rooms.detail(id) });
+      qc.invalidateQueries({ queryKey: queryKeys.rooms.all() });
     },
   });
 };
@@ -86,12 +71,10 @@ export const useDeleteRoom = () => {
  */
 export const useActiveAllocations = () => {
   return useQuery({
-    queryKey: ['allocations', 'active'],
-    queryFn: async () => {
-      return await allocationService.getAllActive();
-    },
+    queryKey: queryKeys.allocations.active(),
+    queryFn:  () => allocationService.getAllActive(),
     staleTime: 2 * 60 * 1000,
-    gcTime: 5 * 60 * 1000,
+    gcTime:    5 * 60 * 1000,
   });
 };
 
@@ -99,15 +82,12 @@ export const useActiveAllocations = () => {
  * Mutate: Allocate a room to a tenant
  */
 export const useAllocateRoom = () => {
-  const queryClient = useQueryClient();
-
+  const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (data) => {
-      return await allocationService.allocate(data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['allocations'] });
-      queryClient.invalidateQueries({ queryKey: ['rooms'] });
+    mutationFn: (data) => allocationService.allocate(data),
+    onSuccess:  () => {
+      qc.invalidateQueries({ queryKey: queryKeys.allocations.all() });
+      qc.invalidateQueries({ queryKey: queryKeys.rooms.all() });
     },
   });
 };
@@ -116,15 +96,12 @@ export const useAllocateRoom = () => {
  * Mutate: End a room allocation
  */
 export const useEndAllocation = () => {
-  const queryClient = useQueryClient();
-
+  const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ allocationId, data }) => {
-      return await allocationService.end(allocationId, data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['allocations'] });
-      queryClient.invalidateQueries({ queryKey: ['rooms'] });
+    mutationFn: ({ allocationId, data }) => allocationService.end(allocationId, data),
+    onSuccess:  () => {
+      qc.invalidateQueries({ queryKey: queryKeys.allocations.all() });
+      qc.invalidateQueries({ queryKey: queryKeys.rooms.all() });
     },
   });
 };
@@ -133,15 +110,12 @@ export const useEndAllocation = () => {
  * Mutate: Shift a tenant to a new room
  */
 export const useShiftTenant = () => {
-  const queryClient = useQueryClient();
-
+  const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (data) => {
-      return await allocationService.shift(data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['allocations'] });
-      queryClient.invalidateQueries({ queryKey: ['rooms'] });
+    mutationFn: (data) => allocationService.shift(data),
+    onSuccess:  () => {
+      qc.invalidateQueries({ queryKey: queryKeys.allocations.all() });
+      qc.invalidateQueries({ queryKey: queryKeys.rooms.all() });
     },
   });
 };

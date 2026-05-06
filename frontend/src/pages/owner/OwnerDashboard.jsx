@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
 import { AreaChart, Area, ResponsiveContainer } from 'recharts';
 import {
     AlertTriangle, X, Bell, Users, BedDouble, ArrowUpRight,
@@ -8,9 +7,10 @@ import {
     TrendingDown, ChevronRight, Target, Activity, Wallet,
     CheckCircle2, Clock, LayoutDashboard
 } from 'lucide-react';
-import { analyticsService, addonService, reminderService } from '../../api/services';
+import { reminderService } from '../../api/services';
 import { useAppPreferences } from '../../context/AppPreferencesContext';
 import { formatCurrency } from '../../utils/format';
+import { useCashflow, useTenantAnalytics, useFunnelAnalytics, useOperationsAnalytics, useAddonUsage } from '../../hooks/useAnalytics';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 // Field names from /dashboard/cashflow  → top_defaulters[].pending_amount, .days_overdue, .name
@@ -39,37 +39,14 @@ const OwnerDashboard = () => {
     const [tab, setTab]           = useState('cashflow');
     const [dismissed, setDismissed] = useState(false);
 
-    // Always-on: cashflow + addon
-    const { data: cf, isLoading } = useQuery({
-        queryKey: ['analytics-cashflow'],
-        queryFn:  () => analyticsService.getCashflow(),
-        staleTime: 5 * 60 * 1000,
-    });
-    const { data: addonData } = useQuery({
-        queryKey: ['addon-usage'],
-        queryFn:  () => addonService.getUsage(),
-        staleTime: 2 * 60 * 1000,
-    });
+    // Always-on: cashflow + addon (parallel, shared cache)
+    const { data: cf, isLoading } = useCashflow();
+    const { data: addonData }     = useAddonUsage();
 
-    // Tab-specific: lazy-loaded
-    const { data: ti, isLoading: tiLoading } = useQuery({
-        queryKey: ['analytics-tenants'],
-        queryFn:  () => analyticsService.getTenants(),
-        enabled:  tab === 'tenants',
-        staleTime: 5 * 60 * 1000,
-    });
-    const { data: fn, isLoading: fnLoading } = useQuery({
-        queryKey: ['analytics-funnel'],
-        queryFn:  () => analyticsService.getFunnel(),
-        enabled:  tab === 'funnel',
-        staleTime: 5 * 60 * 1000,
-    });
-    const { data: op, isLoading: opLoading } = useQuery({
-        queryKey: ['analytics-operations'],
-        queryFn:  () => analyticsService.getOperations(),
-        enabled:  tab === 'operations',
-        staleTime: 5 * 60 * 1000,
-    });
+    // Tab-specific: lazy-loaded — only fetches when tab becomes active
+    const { data: ti, isLoading: tiLoading } = useTenantAnalytics(undefined, tab === 'tenants');
+    const { data: fn, isLoading: fnLoading } = useFunnelAnalytics(undefined, tab === 'funnel');
+    const { data: op, isLoading: opLoading } = useOperationsAnalytics(undefined, tab === 'operations');
 
     // Cashflow data shape from /dashboard/cashflow
     const cfd = cf?.data ?? {};

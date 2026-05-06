@@ -1,53 +1,39 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { expenseService } from '../api/services';
+import { queryKeys } from '../lib/query/queryKeys';
 
 export const useExpenses = () => {
   return useQuery({
-    queryKey: ['expenses'],
-    queryFn: async () => {
-      return await expenseService.getAll();
-    },
+    queryKey: queryKeys.expenses.list(),
+    queryFn:  () => expenseService.getAll(),
     staleTime: 10 * 60 * 1000,
-    gcTime: 20 * 60 * 1000,
+    gcTime:    20 * 60 * 1000,
   });
 };
 
 export const useCreateExpense = () => {
-  const queryClient = useQueryClient();
-  
+  const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (data) => {
-      return await expenseService.create(data);
-    },
+    mutationFn: (data) => expenseService.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['expenses'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: queryKeys.expenses.all() });
+      qc.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
     },
   });
 };
 
 export const useUpdateExpense = (expenseId) => {
-  const queryClient = useQueryClient();
-  
+  const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (data) => {
-      return await expenseService.update(expenseId, data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['expenses'] });
-    },
+    mutationFn: (data) => expenseService.update(expenseId, data),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: queryKeys.expenses.all() }),
   });
 };
 
 export const useDeleteExpense = () => {
-  const queryClient = useQueryClient();
-  
+  const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (expenseId) => {
-      return await expenseService.delete(expenseId);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['expenses'] });
-    },
+    mutationFn: (id) => expenseService.delete(id),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: queryKeys.expenses.all() }),
   });
 };

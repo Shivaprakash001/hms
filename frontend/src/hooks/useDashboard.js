@@ -1,45 +1,37 @@
 import { useQuery } from '@tanstack/react-query';
 import { dashboardService } from '../api/services';
+import { queryKeys } from '../lib/query/queryKeys';
 
+/**
+ * Owner dashboard stats (KPI cards, occupancy, etc.)
+ * useDashboard and useDashboardStats are aliases — they share the same cache
+ * entry so mounting both in the same render does ONE network request.
+ */
 export const useDashboard = () => {
   return useQuery({
-    queryKey: ['dashboard'],
-    queryFn: async () => {
-      return await dashboardService.getStats();
-    },
+    queryKey: queryKeys.dashboard.stats(),
+    queryFn:  () => dashboardService.getStats(),
     staleTime: 5 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
+    gcTime:    10 * 60 * 1000,
   });
 };
 
-export const useDashboardStats = () => {
-  return useQuery({
-    queryKey: ['dashboard', 'stats'],
-    queryFn: async () => {
-      return await dashboardService.getStats();
-    },
-    staleTime: 5 * 60 * 1000,
-  });
-};
+export const useDashboardStats = useDashboard;
 
 export const useMonthlyStats = (months = 6) => {
   return useQuery({
-    queryKey: ['dashboard', 'monthly', months],
-    queryFn: async () => {
-      return await dashboardService.getMonthlyStats(months);
-    },
+    queryKey: queryKeys.dashboard.monthly(months),
+    queryFn:  () => dashboardService.getMonthlyStats(months),
     staleTime: 10 * 60 * 1000,
+    gcTime:    15 * 60 * 1000,
   });
 };
 
-export const useTenantStats = () => {
+export const useDashboardSummary = () => {
   return useQuery({
-    queryKey: ['dashboard', 'tenant'],
-    queryFn: async () => {
-      // Assuming a service method exists or return placeholder
-      // return await dashboardService.getTenantStats();
-      return await dashboardService.getStats(); 
-    },
+    queryKey: queryKeys.dashboard.summary(),
+    queryFn:  () => dashboardService.getSummary(),
     staleTime: 5 * 60 * 1000,
+    gcTime:    10 * 60 * 1000,
   });
 };
