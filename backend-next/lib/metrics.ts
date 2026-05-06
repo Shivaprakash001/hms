@@ -3,6 +3,43 @@
  * Note: In a multi-instance deployment (e.g., Vercel), counters are per-instance.
  * Values are best-effort for operational visibility, not billing-critical.
  */
+
+// ── Per-operation timing registry ──────────────────────────────────────────────
+interface OperationStats {
+  count:    number;
+  total_ms: number;
+  max_ms:   number;
+}
+
+const timingRegistry = new Map<string, OperationStats>();
+
+export function recordTiming(operation: string, duration_ms: number) {
+  const existing = timingRegistry.get(operation);
+  if (existing) {
+    existing.count    += 1;
+    existing.total_ms += duration_ms;
+    if (duration_ms > existing.max_ms) existing.max_ms = duration_ms;
+  } else {
+    timingRegistry.set(operation, { count: 1, total_ms: duration_ms, max_ms: duration_ms });
+  }
+}
+
+export function getTimingStats(): Record<string, { count: number; avg_ms: number; max_ms: number; total_ms: number }> {
+  const result: Record<string, { count: number; avg_ms: number; max_ms: number; total_ms: number }> = {};
+  Array.from(timingRegistry.entries()).forEach(([op, s]) => {
+    result[op] = {
+      count:    s.count,
+      avg_ms:   s.count > 0 ? Math.round(s.total_ms / s.count) : 0,
+      max_ms:   s.max_ms,
+      total_ms: s.total_ms,
+    };
+  });
+  return result;
+}
+
+function resetTimingStats() {
+  timingRegistry.clear();
+}
 const metrics = {
   webhooks: {
     total: 0,
@@ -151,5 +188,6 @@ export function resetMetrics() {
   metrics.pdf_renders.puppeteer = 0;
   metrics.pdf_renders.invoice = 0;
   metrics.lastReset = new Date().toISOString();
+  resetTimingStats();
 }
 

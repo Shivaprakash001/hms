@@ -2,10 +2,11 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
-import { getMetrics } from "@/lib/metrics";
+import { getMetrics, getTimingStats } from "@/lib/metrics";
 
 export async function GET() {
   const m = getMetrics();
+  const timing = getTimingStats();
 
   return NextResponse.json({
     // ── Webhooks ────────────────────────────────────────────────
@@ -31,12 +32,12 @@ export async function GET() {
     // ── PDF Cache ────────────────────────────────────────────────
     receipt_pdf_hits:           m.pdf_cache.receipt_hits,
     receipt_pdf_misses:         m.pdf_cache.receipt_misses,
-    receipt_pdf_hit_rate_pct:   m.receipt_pdf_hit_rate_pct,  // null until first request
+    receipt_pdf_hit_rate_pct:   m.receipt_pdf_hit_rate_pct,
     invoice_pdf_hits:           m.pdf_cache.invoice_hits,
     invoice_pdf_misses:         m.pdf_cache.invoice_misses,
     invoice_pdf_hit_rate_pct:   m.invoice_pdf_hit_rate_pct,
 
-    // ── PDF Render Volume (costly operations) ────────────────────
+    // ── PDF Render Volume ────────────────────────────────────────
     puppeteer_renders:          m.pdf_renders.puppeteer,
     invoice_renders:            m.pdf_renders.invoice,
 
@@ -49,6 +50,12 @@ export async function GET() {
     snapshot_monthly_hit_rate_pct: m.snapshot_monthly_hit_rate_pct,
     snapshot_recomputes:           m.snapshot.recomputes,
     snapshot_lock_contentions:     m.snapshot.lock_contentions,
+
+    // ── Per-operation Timing (count / avg_ms / max_ms) ───────────
+    // Keyed by operation name from timed() calls.
+    // Only populated after first execution of each operation.
+    // Reset via POST /api/metrics/reset.
+    timing,
 
     // ── Meta ─────────────────────────────────────────────────────
     last_reset:  m.lastReset,

@@ -6,11 +6,13 @@
  *
  * Emits a METRIC log on every call. Emits an additional WARN log when
  * duration exceeds the `slow_ms` threshold (default 2 000 ms).
+ * Records count/avg/max into the in-process timing registry (see metrics.ts).
  *
  * NO external dependencies. NO sampling overhead. Adds ~0.01 ms per call.
  */
 
 import { getLogger } from "./logger";
+import { recordTiming } from "./metrics";
 
 const logger = getLogger("perf");
 
@@ -51,6 +53,7 @@ export async function timed<T>(
       logger.error("operation_failed", { ...logPayload, error: (error as any)?.message });
     } else {
       logger.metrics("operation_complete", logPayload);
+      recordTiming(operation, duration_ms);
       if (duration_ms > slow_ms) {
         logger.warn("slow_operation", { ...logPayload, threshold_ms: slow_ms });
       }
@@ -82,9 +85,14 @@ export function timedSync<T>(
   } finally {
     const duration_ms = Date.now() - t0;
     const logPayload = { operation, duration_ms, ...extraMeta };
-    logger.metrics("operation_complete", logPayload);
-    if (duration_ms > slow_ms) {
-      logger.warn("slow_operation", { ...logPayload, threshold_ms: slow_ms });
+    if (!error) {
+      logger.metrics("operation_complete", logPayload);
+      recordTiming(operation, duration_ms);
+      if (duration_ms > slow_ms) {
+        logger.warn("slow_operation", { ...logPayload, threshold_ms: slow_ms });
+      }
+    } else {
+      logger.error("operation_failed", { ...logPayload, error: (error as any)?.message });
     }
   }
 
