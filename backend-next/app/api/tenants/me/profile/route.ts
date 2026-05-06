@@ -122,7 +122,7 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json();
     const validated = TenantProfileUpdateSchema.safeParse(body);
     if (!validated.success) {
-      return apiError("Validation error", "VALIDATION_ERROR", 400);
+      return apiError(`Validation error: ${validated.error.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join(", ")}`, "VALIDATION_ERROR", 400);
     }
 
     const updated = await tenantService.updateTenantSelfProfile(session.sub, validated.data, session.sub);

@@ -5,6 +5,7 @@ import { getPreferences } from "../preferences";
 import { documentService } from "./document-service";
 import { allocationReconciliationService } from "./allocation-reconciliation-service";
 import { getLogger } from "../logger";
+import { imagekit } from "../imagekit";
 
 const logger = getLogger("tenant-service");
 
@@ -253,6 +254,24 @@ export class TenantService {
         throw new Error("VALIDATION: profile_type must be STUDENT or WORKING_PROFESSIONAL");
       }
     }
+
+    // Intercept Base64 profile photo and upload to ImageKit
+    if (tenantUpdate.photo_url && tenantUpdate.photo_url.startsWith("data:image")) {
+      try {
+        const upload = await imagekit.files.upload({
+          file: tenantUpdate.photo_url,
+          fileName: `profile_${profileId}.jpg`,
+          folder: `owners/${tenantCheck.owner_id}/tenants/${tenantCheck.id}/documents/PROFILE_PHOTO`,
+          useUniqueFileName: true,
+          tags: ["PROFILE_PHOTO", tenantCheck.id],
+        });
+        tenantUpdate.photo_url = upload.url;
+      } catch (err: any) {
+        logger.error("profile_photo_upload_failed", { error: err?.message, tenant_id: tenantCheck.id });
+        delete tenantUpdate.photo_url; // Don't save the massive base64 string
+      }
+    }
+
     await prisma.$transaction(async (tx) => {
       if (Object.keys(profileUpdate).length > 0) {
         await tx.profile.update({

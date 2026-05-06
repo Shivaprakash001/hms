@@ -42,7 +42,7 @@ export const TenantProfileUpdateSchema = z.object({
   college_name: z.string().optional(),
   roll_number: z.string().optional(),
   course: z.string().optional().nullable(),
-  year_of_study: z.coerce.number().int().min(1).max(6).optional(),
+  year_of_study: z.union([z.coerce.number().int().min(1).max(6), z.literal(0)]).optional().nullable(),
   section: z.string().optional().nullable(),
   branch: z.string().optional(),
   address: z.string().optional(),
@@ -54,6 +54,7 @@ export const TenantProfileUpdateSchema = z.object({
   office_name: z.string().optional().nullable(),
   office_location: z.string().optional().nullable(),
   job_role: z.string().optional().nullable(),
+  photo_url: z.string().optional().nullable(),
 });
 
 export const ReactivationRequestSchema = z.object({
