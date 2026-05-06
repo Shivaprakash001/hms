@@ -278,6 +278,7 @@ export const planGate = {
           select: {
             id: true,
             tenant_limit: true,
+            is_custom: true,
             features: true,
           },
         },
