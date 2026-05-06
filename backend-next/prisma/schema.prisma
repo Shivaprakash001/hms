@@ -663,7 +663,7 @@ model OwnerInvoice {
   plan            Plan?              @relation(fields: [plan_id], references: [id])
   subscription    OwnerSubscription? @relation(fields: [subscription_id], references: [id])
   attempts        PaymentAttempt[]
-  overflow_ledger OverflowLedger?
+  overflow_ledgers OverflowLedger[]
 
   @@index([owner_id, created_at(sort: Desc)])
   @@index([status])
