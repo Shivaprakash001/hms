@@ -103,7 +103,17 @@ const OwnerLayout = () => {
                             queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
                             queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all() });
                             queryClient.invalidateQueries({ queryKey: queryKeys.tenants.all() });
+                            queryClient.invalidateQueries({ queryKey: queryKeys.rooms.all() });
                             queryClient.invalidateQueries({ queryKey: queryKeys.notifications() });
+                        } else if (data.type === 'room_allocated' || data.type === 'room_shifted') {
+                            queryClient.invalidateQueries({ queryKey: queryKeys.rooms.all() });
+                            queryClient.invalidateQueries({ queryKey: queryKeys.tenants.all() });
+                            queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
+                        } else if (data.type === 'tenant_removed' || data.type === 'tenant_left') {
+                            queryClient.invalidateQueries({ queryKey: queryKeys.tenants.all() });
+                            queryClient.invalidateQueries({ queryKey: queryKeys.rooms.all() });
+                            queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
+                            queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all() });
                         } else if (data.type === 'reactivation_requested') {
                             queryClient.invalidateQueries({ queryKey: queryKeys.notifications() });
                         }

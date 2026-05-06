@@ -12,12 +12,14 @@ import TenantHistoryModal from '../../components/owner/payments/TenantHistoryMod
 import OnlinePaymentTestModal from '../../components/owner/payments/OnlinePaymentTestModal';
 import { billingService, paymentService } from '../../api/services';
 import { useLedger, usePendingVerifications } from '../../hooks/usePayments';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAppPreferences } from '../../context/AppPreferencesContext';
 import { formatCurrency, formatMonthYear } from '../../utils/format';
 
 const Payments = () => {
     const navigate = useNavigate();
     const { preferences } = useAppPreferences();
+    const qc = useQueryClient();
     const [confirmingId, setConfirmingId] = useState(null);
     const [confirmToast, setConfirmToast] = useState(null);
     const [canGenerateReceipts, setCanGenerateReceipts] = useState(false);
@@ -129,10 +131,11 @@ const Payments = () => {
 
     // Mark as paid
     const handleMarkAsPaid = (_formData) => {
-        // Payment is recorded by PaymentDetailsDrawer via the secure /payments/record-offline
-        // endpoint (identity-verified, single-use token). This callback only refreshes the
-        // ledger and closes the drawer — it must NOT call recordPayment again.
-        refetchLedger();
+        // Payment recorded by PaymentDetailsDrawer. Invalidate all affected cache keys
+        // so every observer (ledger, dashboard, analytics) updates without a manual refresh.
+        qc.invalidateQueries({ queryKey: queryKeys.payments.all() });
+        qc.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
+        qc.invalidateQueries({ queryKey: queryKeys.analytics.all() });
         setSelectedPayment(null);
     };
 

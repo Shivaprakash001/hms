@@ -91,6 +91,8 @@ export const useAllocateRoom = () => {
     onSuccess:  () => {
       qc.invalidateQueries({ queryKey: queryKeys.allocations.all() });
       qc.invalidateQueries({ queryKey: queryKeys.rooms.all() });
+      qc.invalidateQueries({ queryKey: queryKeys.tenants.all() });
+      qc.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
     },
   });
 };
@@ -105,6 +107,8 @@ export const useEndAllocation = () => {
     onSuccess:  () => {
       qc.invalidateQueries({ queryKey: queryKeys.allocations.all() });
       qc.invalidateQueries({ queryKey: queryKeys.rooms.all() });
+      qc.invalidateQueries({ queryKey: queryKeys.tenants.all() });
+      qc.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
     },
   });
 };
@@ -119,6 +123,8 @@ export const useShiftTenant = () => {
     onSuccess:  () => {
       qc.invalidateQueries({ queryKey: queryKeys.allocations.all() });
       qc.invalidateQueries({ queryKey: queryKeys.rooms.all() });
+      qc.invalidateQueries({ queryKey: queryKeys.tenants.all() });
+      qc.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
     },
   });
 };

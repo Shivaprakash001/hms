@@ -23,10 +23,10 @@ export const useCreateExpense = () => {
   });
 };
 
-export const useUpdateExpense = (expenseId) => {
+export const useUpdateExpense = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data) => expenseService.update(expenseId, data),
+    mutationFn: ({ id, data }) => expenseService.update(id, data),
     onSuccess:  () => {
       qc.invalidateQueries({ queryKey: queryKeys.expenses.all() });
       qc.invalidateQueries({ queryKey: queryKeys.dashboard.all() });

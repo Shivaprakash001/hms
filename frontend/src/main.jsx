@@ -12,6 +12,7 @@ const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "YOUR_GOOGLE_C
 import { BrowserRouter } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { QueryClientProvider } from '@tanstack/react-query';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { queryClient } from './config/queryClient';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 
@@ -34,6 +35,9 @@ createRoot(document.getElementById('root')).render(
                 },
               }}
             />
+            {import.meta.env.DEV && (
+              <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />
+            )}
           </BrowserRouter>
         </GoogleOAuthProvider>
       </QueryClientProvider>
