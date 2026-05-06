@@ -178,7 +178,7 @@ export class AnalyticsService {
   // ── Dashboard 2: Tenant Intelligence ──────────────────────────────────────
 
   async getTenantIntelligenceDashboard(ownerId: string, start: Date, end: Date) {
-    const [distRows, riskyRows, behaviorRows, depRows, exitRows, totalExited] =
+    const [distRows, riskyRows, behaviorRows, depRows, exitRows, totalExited, activeCount] =
       await Promise.all([
         prisma.$queryRaw<{ good: bigint; medium: bigint; risky: bigint }[]>`
           SELECT
@@ -238,9 +238,10 @@ export class AnalyticsService {
         prisma.tenant.count({
           where: { owner_id: ownerId, status: "LEFT", exit_date: { gte: start, lte: end } },
         }),
+        // ─ was sequential after the block; now fully parallel ─
+        prisma.tenant.count({ where: { owner_id: ownerId, status: "ACTIVE" } }),
       ]);
 
-    const activeCount = await prisma.tenant.count({ where: { owner_id: ownerId, status: "ACTIVE" } });
     const dist = distRows[0];
     const beh  = behaviorRows[0];
     const dep  = depRows[0];

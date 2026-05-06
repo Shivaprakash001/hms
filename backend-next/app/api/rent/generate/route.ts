@@ -6,6 +6,7 @@ import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { rentGenerationService } from "@/lib/services/rent-generation-service";
 import { requireAutomation } from "@/lib/services/plan-gate-service";
 import { invalidateDashboardCache } from "@/lib/cache/dashboard-cache";
+import { timed } from "@/lib/perf";
 
 /**
  * 🏦 RENT GENERATION — Owner Manual Trigger
@@ -70,7 +71,11 @@ export async function POST(req: NextRequest) {
       targetDate = new Date(Date.UTC(year, month - 1, 1));
     }
 
-    const summary = await rentGenerationService.generateMonthlyRent(targetDate, session.sub, "manual");
+    const summary = await timed(
+      "rent.generate",
+      () => rentGenerationService.generateMonthlyRent(targetDate, session.sub, "manual"),
+      { owner_id: session.sub, slow_ms: 15_000 }
+    );
 
     try { invalidateDashboardCache(session.sub); } catch { /* best-effort */ }
 

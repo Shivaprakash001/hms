@@ -3,6 +3,7 @@ import { prisma } from "../db";
 import { imagekit } from "../imagekit";
 import { getHostelWithPreferences } from "../preferences";
 import { formatCurrency, formatShortDate, formatMonthYear, getCurrencySymbol } from "../format";
+import { timed } from "../perf";
 
 // ── Template Version (bump this when the PDF layout changes) ──
 const INVOICE_TEMPLATE_VERSION = 3;
@@ -285,15 +286,23 @@ export class InvoiceService {
     // ════════════════════════════════════════════════
     // 4. SAVE & UPLOAD
     // ════════════════════════════════════════════════
-    const pdfBytes = await pdfDoc.save();
+    const pdfBytes = await timed(
+      "pdf.invoice.render",
+      async () => pdfDoc.save(),
+      { receipt_id: receipt.id, slow_ms: 2_000 }
+    );
     const base64Pdf = Buffer.from(pdfBytes).toString("base64");
 
-    const uploadRes = await imagekit.files.upload({
-      file: base64Pdf,
-      fileName: `invoice_${receipt.receipt_number}.pdf`,
-      folder: "/invoices",
-      tags: ["invoice", receipt.id]
-    });
+    const uploadRes = await timed(
+      "pdf.invoice.upload",
+      () => imagekit.files.upload({
+        file: base64Pdf,
+        fileName: `invoice_${receipt.receipt_number}.pdf`,
+        folder: "/invoices",
+        tags: ["invoice", receipt.id]
+      }),
+      { receipt_id: receipt.id, slow_ms: 5_000 }
+    );
 
     if (!uploadRes.url) throw new Error("Failed to upload PDF");
 

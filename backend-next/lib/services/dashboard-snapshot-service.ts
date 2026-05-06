@@ -1,6 +1,7 @@
 import { prisma } from "../db";
 import { dashboardService } from "./dashboard-service";
 import { getLogger } from "../logger";
+import { timed } from "../perf";
 
 const logger = getLogger("dashboard-snapshot-service");
 
@@ -61,9 +62,13 @@ export class DashboardSnapshotService {
 
     const statsComputedAt = toDate(row?.stats_computed_at);
     const fresh = row && !row.is_stale && isFresh(statsComputedAt, now);
-    if (fresh) return this.mapStatsRow(row);
+    if (fresh) {
+      logger.info("snapshot_stats_hit", { owner_id: ownerId, age_ms: now.getTime() - statsComputedAt!.getTime() });
+      return this.mapStatsRow(row);
+    }
 
-    await this.refreshStats(ownerId, row);
+    logger.info("snapshot_stats_miss", { owner_id: ownerId, is_stale: row?.is_stale ?? null, has_row: !!row });
+    await timed("snapshot.stats.recompute", () => this.refreshStats(ownerId, row), { owner_id: ownerId, slow_ms: 3_000 });
     const updated: any = await this.fetchSnapshotRow(ownerId);
     if (updated) return this.mapStatsRow(updated);
 
@@ -78,9 +83,13 @@ export class DashboardSnapshotService {
     const monthlyComputedAt = toDate(row?.monthly_computed_at);
     const hasCorrectMonths = Number(row?.monthly_trend_months || 0) === months;
     const fresh = row && !row.is_stale && hasCorrectMonths && isFresh(monthlyComputedAt, now);
-    if (fresh && Array.isArray(row.monthly_trend)) return row.monthly_trend as MonthlyPoint[];
+    if (fresh && Array.isArray(row.monthly_trend)) {
+      logger.info("snapshot_monthly_hit", { owner_id: ownerId, months, age_ms: now.getTime() - monthlyComputedAt!.getTime() });
+      return row.monthly_trend as MonthlyPoint[];
+    }
 
-    await this.refreshMonthly(ownerId, months, row);
+    logger.info("snapshot_monthly_miss", { owner_id: ownerId, months, is_stale: row?.is_stale ?? null });
+    await timed("snapshot.monthly.recompute", () => this.refreshMonthly(ownerId, months, row), { owner_id: ownerId, months, slow_ms: 3_000 });
     const updatedRows: any[] = await prisma.$queryRaw<any[]>`
       SELECT monthly_trend
       FROM owner_dashboard_snapshots

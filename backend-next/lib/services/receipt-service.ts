@@ -16,6 +16,7 @@ import crypto from "crypto";
 import { getHostelWithPreferences } from "../preferences";
 import { htmlToPdf } from "../pdf/browser";
 import { renderReceiptHTML, type ReceiptRenderData } from "../pdf/receipt-template";
+import { timed } from "../perf";
 
 const RECEIPT_NUMBER_RETRY_LIMIT = 10;
 const PLAN_UPGRADE_REQUIRED_ERROR = "PLAN_UPGRADE_REQUIRED";
@@ -142,7 +143,9 @@ export class ReceiptService {
    */
   async generatePdfBuffer(paymentId: string, options?: { autoCreate?: boolean }): Promise<Buffer> {
     const autoCreate = options?.autoCreate ?? true;
-    // 1. Get or create receipt
+
+    // ── Single fetch path (was: findFirst → createReceipt() → findFirst again) ──
+    // Attempt to load existing receipt with all needed relations in one query.
     let receipt = await prisma.receipt.findFirst({
       where: { payment_id: paymentId },
       include: {
@@ -152,6 +155,7 @@ export class ReceiptService {
     });
 
     if (!receipt && autoCreate) {
+      // Create record, then load with relations in a single subsequent fetch.
       await this.createReceipt(paymentId);
       receipt = await prisma.receipt.findFirst({
         where: { payment_id: paymentId },
@@ -230,7 +234,11 @@ export class ReceiptService {
 
     // 4. Render HTML → PDF
     const html = renderReceiptHTML(renderData);
-    const pdfBuffer = await htmlToPdf(html);
+    const pdfBuffer = await timed(
+      "pdf.render.puppeteer",
+      () => htmlToPdf(html),
+      { payment_id: paymentId, slow_ms: 3_000 }
+    );
 
     return pdfBuffer;
   }
