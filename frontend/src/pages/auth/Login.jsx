@@ -248,7 +248,11 @@ const Login = () => {
                         </div>
                         <div className="flex items-center justify-between text-xs text-slate-400 font-bold">
                             <span>&copy; 2026 Trishul</span>
-                            <a href="#" className="hover:text-indigo-600 transition-colors">Privacy</a>
+                            <div className="flex items-center gap-3">
+                                <a href="https://hms-r68g.vercel.app/legal#terms" target="_blank" rel="noopener noreferrer" className="hover:text-indigo-600 transition-colors">Terms</a>
+                                <a href="https://hms-r68g.vercel.app/legal#privacy" target="_blank" rel="noopener noreferrer" className="hover:text-indigo-600 transition-colors">Privacy</a>
+                                <a href="https://hms-r68g.vercel.app/legal#refund" target="_blank" rel="noopener noreferrer" className="hover:text-indigo-600 transition-colors">Refund</a>
+                            </div>
                         </div>
                     </div>
                 </div>
