@@ -7,6 +7,7 @@ import ProtectedOwnerRoute from './components/ProtectedOwnerRoute';
 
 // ── Critical path — loaded eagerly (auth shell, layouts) ─────────────────────
 import Login from './pages/auth/Login.jsx';
+import Legal from './pages/Legal.jsx';
 import OwnerLayout from './layouts/OwnerLayout.jsx';
 import TenantLayout from './layouts/TenantLayout.jsx';
 
@@ -49,6 +50,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Login />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/legal" element={<Legal />} />
             <Route path="/register" element={<Register />} />
             <Route path="/activate" element={<ActivateAccount />} />
             <Route path="/complete-profile" element={<CompleteProfile />} />
