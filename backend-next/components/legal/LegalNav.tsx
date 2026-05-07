@@ -16,21 +16,46 @@ export default function LegalNav({ sections }: LegalNavProps) {
   const [elevated, setElevated] = useState(false)
 
   useEffect(() => {
-    const onScroll = () => setElevated(window.scrollY > 100)
+    const onScroll = () => {
+      const nextElevated = window.scrollY > 100
+      setElevated((prev) => (prev === nextElevated ? prev : nextElevated))
+    }
+    onScroll()
     window.addEventListener("scroll", onScroll, { passive: true })
     return () => window.removeEventListener("scroll", onScroll)
   }, [])
 
   useEffect(() => {
+    const syncFromHash = () => {
+      const hash = window.location.hash.slice(1)
+      if (!hash) return
+      if (sections.some((section) => section.id === hash)) {
+        setActiveId((prev) => (prev === hash ? prev : hash))
+      }
+    }
+
+    syncFromHash()
+    window.addEventListener("hashchange", syncFromHash)
+    return () => window.removeEventListener("hashchange", syncFromHash)
+  }, [sections])
+
+  useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setActiveId(entry.target.id)
-          }
+        const visible = entries.filter((entry) => entry.isIntersecting)
+        if (visible.length === 0) return
+
+        const nearest = visible.reduce((closest, entry) => {
+          return Math.abs(entry.boundingClientRect.top) <
+            Math.abs(closest.boundingClientRect.top)
+            ? entry
+            : closest
         })
+
+        const nextId = nearest.target.id
+        setActiveId((prev) => (prev === nextId ? prev : nextId))
       },
-      { rootMargin: "-15% 0px -75% 0px", threshold: 0 }
+      { rootMargin: "-72px 0px -70% 0px", threshold: [0, 0.25, 0.5, 0.75, 1] }
     )
 
     sections.forEach(({ id }) => {
@@ -41,14 +66,8 @@ export default function LegalNav({ sections }: LegalNavProps) {
     return () => observer.disconnect()
   }, [sections])
 
-  const handleClick = (e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
-    e.preventDefault()
-    const el = document.getElementById(id)
-    if (!el) return
-    const offset = 72
-    const y = el.getBoundingClientRect().top + window.scrollY - offset
-    window.scrollTo({ top: y, behavior: "smooth" })
-    setActiveId(id)
+  const handleClick = (id: string) => {
+    setActiveId((prev) => (prev === id ? prev : id))
   }
 
   return (
@@ -70,7 +89,7 @@ export default function LegalNav({ sections }: LegalNavProps) {
               <li key={id} role="listitem">
                 <a
                   href={`#${id}`}
-                  onClick={(e) => handleClick(e, id)}
+                  onClick={() => handleClick(id)}
                   aria-current={isActive ? "location" : undefined}
                   className={`
                     relative flex items-center py-4 px-5 text-sm font-medium whitespace-nowrap
