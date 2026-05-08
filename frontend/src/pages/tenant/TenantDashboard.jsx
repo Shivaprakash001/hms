@@ -124,12 +124,15 @@ const TenantDashboard = () => {
 
     const normalizedStatus = useMemo(() => {
         const raw = (tenantProfile?.status || user?.tenant_status || '').toString().toUpperCase();
-        if (raw === 'ACTIVE') return 'ACTIVE';
-        if (raw === 'INVITED') return 'INVITED';
+        if (raw === 'ACTIVE')    return 'ACTIVE';
+        if (raw === 'INVITED')   return 'INVITED';
+        if (raw === 'CANCELLED') return 'CANCELLED';
+        if (raw === 'EXPIRED')   return 'EXPIRED';
+        if (raw === 'LEFT')      return 'LEFT';
         if (!raw || ['INACTIVE', 'BLOCKED', 'BLACKLISTED', 'ARCHIVED', 'APPLIED', 'PENDING_APPROVAL'].includes(raw)) {
             return 'LEFT';
         }
-        return raw === 'LEFT' ? 'LEFT' : 'LEFT';
+        return 'LEFT';
     }, [tenantProfile?.status, user?.tenant_status]);
 
     const statusConfig = useMemo(() => {
@@ -150,6 +153,18 @@ const TenantDashboard = () => {
                 title: 'No Active Tenancy',
                 message: 'You are no longer an active tenant of this hostel.',
                 card: 'bg-slate-100 border-slate-300 text-slate-700',
+                button: false
+            },
+            CANCELLED: {
+                title: 'Invitation Cancelled',
+                message: 'Your invitation was cancelled by the owner. Please contact them if you believe this is an error.',
+                card: 'bg-rose-50 border-rose-200 text-rose-800',
+                button: false
+            },
+            EXPIRED: {
+                title: 'Invitation Expired',
+                message: 'Your invitation link has expired. Contact the owner to receive a new invitation.',
+                card: 'bg-amber-50 border-amber-200 text-amber-800',
                 button: false
             },
         };

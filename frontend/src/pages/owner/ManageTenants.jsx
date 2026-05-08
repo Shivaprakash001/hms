@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Plus, User, Phone, Home, CreditCard, Calendar, CheckCircle2, AlertCircle, X, Save, History, Trash2, RefreshCw, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Search, Plus, User, Phone, Home, CreditCard, Calendar, CheckCircle2, AlertCircle, X, Save, History, Trash2, RefreshCw, ToggleLeft, ToggleRight, XCircle, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
@@ -146,8 +146,20 @@ export default function ManageTenants() {
         }
     };
 
+    const handleCancelInvitation = async (tenant, e) => {
+        e.stopPropagation();
+        if (!window.confirm(`Cancel invitation for "${tenant.name}"?\n\nThis will:\n• Free their room allocation immediately\n• Waive any pending obligations\n• Mark them as CANCELLED (not recoverable via this action)`)) return;
+        try {
+            await tenantService.cancelInvitation(tenant.id);
+            fetchTenants();
+        } catch (err) {
+            alert('Error cancelling invitation: ' + (err.response?.data?.error?.message || err.message));
+        }
+    };
+
     // Filter Logic
     const filteredTenants = useMemo(() => {
+        const INACTIVE_STATUSES = ['LEFT', 'CANCELLED', 'EXPIRED'];
         return tenants.filter(tenant => {
             const matchesSearch = tenant.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 tenant.room.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -155,7 +167,7 @@ export default function ManageTenants() {
                 (tenant.rollNumber && tenant.rollNumber.toLowerCase().includes(searchTerm.toLowerCase()));
 
             if (showLeftTenants) return matchesSearch;
-            return matchesSearch && tenant.status !== 'LEFT';
+            return matchesSearch && !INACTIVE_STATUSES.includes(tenant.status);
         });
     }, [tenants, searchTerm, showLeftTenants]);
 
@@ -165,7 +177,7 @@ export default function ManageTenants() {
         occupiedRooms: new Set(tenants.filter(s => s.room !== 'N/A').map(s => s.room)).size,
         paid: tenants.filter(s => s.paymentSummary?.payment_status === 'PAID').length,
         active: tenants.filter(s => s.status === 'ACTIVE').length,
-        left: tenants.filter(s => s.status === 'LEFT').length
+        left: tenants.filter(s => ['LEFT', 'CANCELLED', 'EXPIRED'].includes(s.status)).length
     }), [tenants]);
 
     const formatDate = (dateString) => globalFormatDate(dateString, preferences);
@@ -206,6 +218,18 @@ export default function ManageTenants() {
             INACTIVE: 'bg-slate-50 text-slate-500 border-slate-100'
         };
         return styles[status] || styles.PENDING;
+    };
+
+    const getStatusBadge = (status) => {
+        const cfg = {
+            ACTIVE:    { cls: 'bg-emerald-50 text-emerald-700 border-emerald-100', label: 'Active' },
+            INVITED:   { cls: 'bg-indigo-50 text-indigo-700 border-indigo-100', label: 'Invited' },
+            LEFT:      { cls: 'bg-slate-100 text-slate-500 border-slate-200', label: 'Left' },
+            EXPIRED:   { cls: 'bg-amber-50 text-amber-700 border-amber-100', label: 'Expired' },
+            CANCELLED: { cls: 'bg-rose-50 text-rose-600 border-rose-100', label: 'Cancelled' },
+        };
+        const { cls, label } = cfg[status] || cfg.LEFT;
+        return <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-black border uppercase tracking-wider ${cls}`}>{label}</span>;
     };
 
     const getInitials = (name) => {
@@ -349,7 +373,7 @@ export default function ManageTenants() {
                         <table className="w-full hidden md:table">
                             <thead className="bg-slate-50 border-b border-slate-100">
                                 <tr>
-                                    {['NAME', 'ROOM', 'ROLL NO', 'YEAR', 'RENT', 'LAST PAID', 'PENDING', 'PAYMENT STATUS'].map((header) => (
+                                    {['NAME', 'ROOM', 'ROLL NO', 'YEAR', 'RENT', 'LAST PAID', 'PENDING', 'PAYMENT STATUS', 'STATUS'].map((header) => (
                                         <th key={header} className="px-8 py-5 text-left text-[11px] font-bold text-slate-400 uppercase tracking-widest">
                                             {header}
                                         </th>
@@ -362,13 +386,13 @@ export default function ManageTenants() {
                             <tbody className="divide-y divide-slate-50">
                                 {loading ? (
                                     <tr>
-                                        <td colSpan="9" className="px-8 py-12 text-center text-slate-400 font-medium animate-pulse">
+                                        <td colSpan="10" className="px-8 py-12 text-center text-slate-400 font-medium animate-pulse">
                                             Loading tenants...
                                         </td>
                                     </tr>
                                 ) : filteredTenants.length === 0 ? (
                                     <tr>
-                                        <td colSpan="9" className="px-8 py-16 text-center text-slate-400">
+                                        <td colSpan="10" className="px-8 py-16 text-center text-slate-400">
                                             <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
                                                 <User size={24} className="text-slate-300" />
                                             </div>
@@ -415,17 +439,27 @@ export default function ManageTenants() {
                                                     {tenant.paymentSummary?.payment_status === 'NOT_GENERATED' ? 'NOT GENERATED' : (tenant.paymentSummary?.payment_status || 'PENDING')}
                                                 </span>
                                             </td>
+                                            <td className="px-8 py-5">
+                                                {getStatusBadge(tenant.status)}
+                                            </td>
                                             <td className="px-8 py-5 text-right">
                                                 <div className="flex items-center justify-end gap-1">
-                                                    {tenant.status === 'INVITED' && (
+                                                    {tenant.status === 'INVITED' && (<>
                                                         <button
                                                             onClick={(e) => handleResendInvitation(tenant, e)}
                                                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-indigo-600 hover:bg-indigo-50 border border-indigo-200 bg-indigo-50/50"
                                                             title="Resend Invitation"
                                                         >
-                                                            <RefreshCw size={14} className="animate-spin-hover" /> Resend
+                                                            <RefreshCw size={14} /> Resend
                                                         </button>
-                                                    )}
+                                                        <button
+                                                            onClick={(e) => handleCancelInvitation(tenant, e)}
+                                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-rose-600 hover:bg-rose-50 border border-rose-200 bg-rose-50/50"
+                                                            title="Cancel Invitation"
+                                                        >
+                                                            <XCircle size={14} /> Cancel
+                                                        </button>
+                                                    </>)}
                                                     {(tenant.status === 'ACTIVE' || tenant.status === 'LEFT') && (
                                                         <button
                                                             onClick={(e) => handleToggleStatus(tenant, e)}
@@ -439,6 +473,11 @@ export default function ManageTenants() {
                                                                 ? <><ToggleLeft size={15} /> Mark Left</>
                                                                 : <><ToggleRight size={15} /> Activate</>}
                                                         </button>
+                                                    )}
+                                                    {(tenant.status === 'CANCELLED' || tenant.status === 'EXPIRED') && (
+                                                        <span className="text-xs text-slate-400 font-medium italic">
+                                                            {tenant.status === 'CANCELLED' ? 'Invite cancelled' : 'Invite expired'}
+                                                        </span>
                                                     )}
                                                 </div>
                                             </td>
@@ -497,11 +536,21 @@ export default function ManageTenants() {
                                     </div>
                                     
                                     <div className="mt-5 pt-4 border-t border-slate-50 flex items-center justify-between">
-                                        <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-black border uppercase tracking-wider ${getPaymentBadgeStyles(tenant.paymentSummary?.payment_status)}`}>
-                                            {tenant.paymentSummary?.payment_status || 'PENDING'}
-                                        </span>
-                                        
                                         <div className="flex items-center gap-2">
+                                            <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-black border uppercase tracking-wider ${getPaymentBadgeStyles(tenant.paymentSummary?.payment_status)}`}>
+                                                {tenant.paymentSummary?.payment_status || 'PENDING'}
+                                            </span>
+                                            {getStatusBadge(tenant.status)}
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            {tenant.status === 'INVITED' && (
+                                                <button
+                                                    onClick={(e) => handleCancelInvitation(tenant, e)}
+                                                    className="px-3 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all active:scale-95 bg-rose-50 text-rose-600 border border-rose-100"
+                                                >
+                                                    Cancel Invite
+                                                </button>
+                                            )}
                                             {(tenant.status === 'ACTIVE' || tenant.status === 'LEFT') && (
                                                 <button
                                                     onClick={(e) => handleToggleStatus(tenant, e)}
@@ -692,6 +741,14 @@ const AddTenantModal = ({ onClose, initialData, onSave }) => {
                                     <option value="ACTIVE">ACTIVE</option>
                                     <option value="LEFT">LEFT</option>
                                 </select>
+                            </div>
+                        )}
+                        {initialData && ['INVITED', 'CANCELLED', 'EXPIRED'].includes(initialData.status) && (
+                            <div className="space-y-2">
+                                <label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">Status</label>
+                                <div className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-500">
+                                    {initialData.status} <span className="text-xs font-normal">(read-only)</span>
+                                </div>
                             </div>
                         )}
                     </div>

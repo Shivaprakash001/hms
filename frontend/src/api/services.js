@@ -286,6 +286,10 @@ export const tenantService = {
     resendInvitation: async (email) => {
         const response = await api.post('/tenants/resend-invitation', { email });
         return response.data;
+    },
+    cancelInvitation: async (id) => {
+        const response = await api.post(`/tenants/${id}/cancel-invitation`);
+        return response.data;
     }
 };
 
