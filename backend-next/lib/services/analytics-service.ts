@@ -1,5 +1,6 @@
 import { prisma } from "../db";
 import { financialService } from "./financial-service";
+import { operationalPendingInvariantHolds } from "./financial-invariants";
 
 // ─── Decision Engine ──────────────────────────────────────────────────────────
 
@@ -44,12 +45,11 @@ export class AnalyticsService {
   // ── Dashboard 1: Cashflow ──────────────────────────────────────────────────
 
   async getCashflowDashboard(ownerId: string, start: Date, end: Date) {
-    const now = new Date();
 
     // ── Single-pass CTE: replaces 3 separate overdue scans + a tenant findMany ─
     // Before: overdueAgg (aggregate), overdueGroups (groupBy), dueDates (raw) + tenants (findMany)
     // After:  one query returning sum + count + top-5 with names + earliest_due
-    const [expectedAgg, collectedAgg, daily, dues, topDefaulters, overdueTenantCount] = await Promise.all([
+    const [expectedAgg, collectedAgg, daily, dues, topDefaulters] = await Promise.all([
       prisma.rentObligation.aggregate({
         where: { owner_id: ownerId, rent_month: { gte: start, lte: end } },
         _sum: { amount: true },
@@ -68,25 +68,20 @@ export class AnalyticsService {
       `,
       financialService.getOperationalDues(ownerId),
       financialService.getOperationalDefaulters(ownerId, 5),
-      prisma.tenant.count({
-        where: {
-          owner_id: ownerId,
-          status: "ACTIVE",
-          obligations: {
-            some: {
-              status: { in: ["PENDING", "PARTIAL"] },
-              due_date: { lt: now },
-            },
-          },
-        },
-      }),
     ]);
 
     const expected  = Number(expectedAgg._sum.amount  ?? 0);
     const collected = Number(collectedAgg._sum.amount_paid  ?? 0);
 
     const overdue = Number(dues.overdue_total || 0);
-    const overdueTenantsCount = overdueTenantCount;
+    const canonicalUnpaidTenantCount = operationalPendingInvariantHolds(
+      Number(dues.pending_total || 0),
+      Number(dues.unpaid_tenant_count || 0),
+    ) ? Number(dues.unpaid_tenant_count || 0) : 0;
+    const overdueTenantsCount = Math.min(
+      Number(dues.overdue_tenant_count || 0),
+      canonicalUnpaidTenantCount,
+    );
     const top_defaulters = topDefaulters.map((d) => ({
       tenant_id: d.tenant_id,
       name: d.name,

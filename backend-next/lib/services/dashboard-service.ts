@@ -1,6 +1,7 @@
 import { prisma } from "../db";
 import { formatShortMonth } from "../format";
 import { financialService } from "./financial-service";
+import { operationalPendingInvariantHolds } from "./financial-invariants";
 
 /**
  * 📊 Dashboard Service — Financial Metrics (Source of Truth)
@@ -85,7 +86,10 @@ export class DashboardService {
     const dues = await financialService.getOperationalDues(userId);
     const pendingTotal = dues.pending_total;
     const overdueTotal = dues.overdue_total;
-    const overdueCount = dues.overdue_count;
+    const overdueCount = dues.overdue_tenant_count;
+    const unpaidTenantCount = operationalPendingInvariantHolds(pendingTotal, dues.unpaid_tenant_count)
+      ? dues.unpaid_tenant_count
+      : 0;
 
     return {
       total_rooms: Number(roomStats[0]?.total_rooms ?? 0),
@@ -99,7 +103,8 @@ export class DashboardService {
       rent_collected_this_month: currentRevenue,
       pending_dues: pendingTotal,
       overdue_amount: overdueTotal,
-      overdue_count: overdueCount
+      overdue_count: overdueCount,
+      unpaid_tenant_count: unpaidTenantCount,
     };
   }
 

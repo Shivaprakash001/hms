@@ -27,6 +27,29 @@ import { prisma } from "../db";
  *   Never write a raw obligation aggregate outside this file.
  */
 export class FinancialService {
+  async reconcileSettledOperationalObligations(ownerId: string): Promise<number> {
+    const rows = await prisma.$queryRaw<{ one: number }[]>`
+      WITH pay_agg AS (
+        SELECT obligation_id, SUM(amount_paid)::float AS total_paid
+        FROM payments
+        GROUP BY obligation_id
+      ),
+      to_fix AS (
+        SELECT o.id
+        FROM rent_obligations o
+        LEFT JOIN pay_agg p ON p.obligation_id = o.id
+        WHERE o.owner_id = ${ownerId}::uuid
+          AND o.status IN ('PENDING', 'PARTIAL')
+          AND o.amount - COALESCE(p.total_paid, 0) <= 0
+      )
+      UPDATE rent_obligations o
+      SET status = 'PAID', updated_at = NOW()
+      FROM to_fix f
+      WHERE o.id = f.id
+      RETURNING 1 AS one
+    `;
+    return rows.length;
+  }
 
   /**
    * Operational dues for the dashboard:
@@ -38,7 +61,11 @@ export class FinancialService {
     pending_total: number;
     overdue_total: number;
     overdue_count: number;
+    unpaid_tenant_count: number;
+    overdue_tenant_count: number;
   }> {
+    await this.reconcileSettledOperationalObligations(ownerId);
+
     const now = new Date();
     const todayUTC = new Date(Date.UTC(
       now.getUTCFullYear(),
@@ -47,7 +74,13 @@ export class FinancialService {
     ));
 
     const [row] = await prisma.$queryRaw<
-      { pending_total: number; overdue_total: number; overdue_count: number }[]
+      {
+        pending_total: number;
+        overdue_total: number;
+        overdue_count: number;
+        unpaid_tenant_count: number;
+        overdue_tenant_count: number;
+      }[]
     >`
       SELECT
         COALESCE(SUM(
@@ -63,7 +96,11 @@ export class FinancialService {
           CASE WHEN o.due_date < ${todayUTC}::date
             AND o.amount - COALESCE(pay_agg.total_paid, 0) > 0
           THEN 1 END
-        )::int                                                                        AS overdue_count
+        )::int                                                                        AS overdue_count,
+        COUNT(DISTINCT t.id)::int                                                     AS unpaid_tenant_count,
+        COUNT(DISTINCT CASE
+          WHEN o.due_date < ${todayUTC}::date THEN t.id
+        END)::int                                                                     AS overdue_tenant_count
       FROM rent_obligations o
       JOIN tenants t ON t.id = o.tenant_id
       LEFT JOIN (
@@ -81,6 +118,8 @@ export class FinancialService {
       pending_total: row?.pending_total ?? 0,
       overdue_total: row?.overdue_total ?? 0,
       overdue_count: row?.overdue_count ?? 0,
+      unpaid_tenant_count: row?.unpaid_tenant_count ?? 0,
+      overdue_tenant_count: row?.overdue_tenant_count ?? 0,
     };
   }
 
