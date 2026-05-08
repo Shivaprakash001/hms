@@ -12,6 +12,7 @@ import { getLogger } from "../logger";
 import { incrementPayment, incrementWebhook } from "../metrics";
 import { tenantAnalyticsService } from "./tenant-analytics-service";
 import { planEnforcementService } from "./plan-enforcement-service";
+import { financialService } from "./financial-service";
 
 const logger = getLogger("payment.service");
 
@@ -512,46 +513,7 @@ export class PaymentService {
    *   Total: ₹8,700
    */
   async getTenantTotalDues(tenantId: string) {
-    const obligations = await prisma.rentObligation.findMany({
-      where: {
-        tenant_id: tenantId,
-        status: { in: ["PENDING", "PARTIAL"] },
-      },
-      include: {
-        payments: { select: { amount_paid: true } },
-        allocation: { include: { room: { select: { room_no: true } } } },
-      },
-      orderBy: [{ due_date: "asc" }],
-    });
-
-    const items = obligations.map((ob: any) => {
-      const paid = ob.payments.reduce((s: number, p: any) => s + Number(p.amount_paid), 0);
-      const outstanding = Math.max(Number(ob.amount) - paid, 0);
-      return {
-        obligation_id: ob.id,
-        type: ob.obligation_type,
-        rent_month: ob.rent_month,
-        due_date: ob.due_date,
-        amount: Number(ob.amount),
-        paid,
-        outstanding,
-        status: ob.status,
-        room_no: ob.allocation?.room?.room_no || null,
-      };
-    });
-
-    const totalDue = items.reduce((s, i) => s + i.outstanding, 0);
-    const rentDue = items.filter(i => i.type === "RENT").reduce((s, i) => s + i.outstanding, 0);
-    const lateFeesDue = items.filter(i => i.type === "LATE_FEE").reduce((s, i) => s + i.outstanding, 0);
-
-    return {
-      tenant_id: tenantId,
-      items,
-      total_due: totalDue,
-      rent_due: rentDue,
-      late_fees_due: lateFeesDue,
-      obligation_count: items.length,
-    };
+    return financialService.getTenantDues(tenantId);
   }
 
   async createPaymentIntent(obligationId: string, amount: number | null, userId: string, tenantId?: string) {

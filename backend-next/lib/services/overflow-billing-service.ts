@@ -97,7 +97,7 @@ export class OverflowBillingService {
     const idempotencyKey = `${ownerId}:${monthDate.toISOString().slice(0, 10)}`;
 
     const activeTenants = await prisma.tenant.count({
-      where: { owner_id: ownerId, status: { not: "LEFT" } },
+      where: { owner_id: ownerId, status: { notIn: ["LEFT", "CANCELLED", "EXPIRED"] } },
     });
 
     const overflowCount = Math.max(0, activeTenants - plan.tenant_limit);
@@ -379,7 +379,7 @@ export class OverflowBillingService {
     const plan = sub.plan;
 
     const activeTenants = await prisma.tenant.count({
-      where: { owner_id: ownerId, status: { not: "LEFT" } },
+      where: { owner_id: ownerId, status: { notIn: ["LEFT", "CANCELLED", "EXPIRED"] } },
     });
 
     // Unlimited plans (BUSINESS/SCALE or custom)

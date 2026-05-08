@@ -1,5 +1,6 @@
 import { prisma } from "../db";
 import { formatShortMonth } from "../format";
+import { financialService } from "./financial-service";
 
 /**
  * 📊 Dashboard Service — Financial Metrics (Source of Truth)
@@ -80,38 +81,11 @@ export class DashboardService {
     // Pending dues calculation — single DB aggregate instead of findMany+include+JS loop.
     // Logic is identical: remaining = amount - SUM(payments); overdue = due_date < today.
     // due_date is @db.Date — compare against UTC midnight of today for DATE-to-DATE clean match.
-    const todayUTC = new Date(Date.UTC(utcYear, utcMonth, now.getUTCDate(), 0, 0, 0, 0));
-
-    const [duesRow] = await prisma.$queryRaw<
-      { pending_total: number; overdue_total: number; overdue_count: number }[]
-    >`
-      SELECT
-        COALESCE(SUM(o.amount - COALESCE(pay_agg.total_paid, 0)), 0)::float          AS pending_total,
-        COALESCE(SUM(
-          CASE WHEN o.due_date < ${todayUTC}::date
-            THEN o.amount - COALESCE(pay_agg.total_paid, 0)
-            ELSE 0
-          END
-        ), 0)::float                                                                   AS overdue_total,
-        COUNT(
-          CASE WHEN o.due_date < ${todayUTC}::date
-            AND o.amount - COALESCE(pay_agg.total_paid, 0) > 0
-          THEN 1 END
-        )::int                                                                         AS overdue_count
-      FROM rent_obligations o
-      LEFT JOIN (
-        SELECT obligation_id, SUM(amount_paid)::float AS total_paid
-        FROM payments
-        GROUP BY obligation_id
-      ) pay_agg ON pay_agg.obligation_id = o.id
-      WHERE o.owner_id = ${userId}::uuid
-        AND o.status IN ('PENDING', 'PARTIAL')
-        AND o.amount - COALESCE(pay_agg.total_paid, 0) > 0
-    `;
-
-    const pendingTotal = duesRow?.pending_total ?? 0;
-    const overdueTotal = duesRow?.overdue_total ?? 0;
-    const overdueCount = duesRow?.overdue_count ?? 0;
+    // Operational dues — ACTIVE tenants only (canonical via financialService)
+    const dues = await financialService.getOperationalDues(userId);
+    const pendingTotal = dues.pending_total;
+    const overdueTotal = dues.overdue_total;
+    const overdueCount = dues.overdue_count;
 
     return {
       total_rooms: Number(roomStats[0]?.total_rooms ?? 0),

@@ -852,6 +852,8 @@ enum TenantStatus {
   INVITED
   ACTIVE
   LEFT
+  EXPIRED
+  CANCELLED
 
   @@schema("public")
 }

@@ -4,7 +4,9 @@ import { z } from "zod";
 import { getPreferences } from "../preferences";
 import { documentService } from "./document-service";
 import { allocationReconciliationService } from "./allocation-reconciliation-service";
+import { financialService } from "./financial-service";
 import { getLogger } from "../logger";
+import { eventLog } from "./event-log-service";
 import { imagekit } from "../imagekit";
 
 const logger = getLogger("tenant-service");
@@ -148,8 +150,8 @@ export class TenantService {
             include: { room: true },
           },
           obligations: {
-            where: { status: { not: "WAIVED" } },
-            include: { payments: true }
+            where: { status: { in: ["PENDING", "PARTIAL"] } },
+            include: { payments: { select: { amount_paid: true, payment_date: true } } }
           }
         },
         take: limit,
@@ -160,40 +162,10 @@ export class TenantService {
     ]);
 
     const mappedTenants = tenants.map((s: any) => {
-      let totalAmount = 0;
-      let totalPaid = 0;
-      let lastPaymentDate: string | Date | null = null;
-      let lastPaymentAmount = 0;
-
-      if (s.obligations) {
-        s.obligations.forEach((o: any) => {
-          totalAmount += Number(o.amount);
-          o.payments.forEach((p: any) => {
-             totalPaid += Number(p.amount_paid);
-             if (!lastPaymentDate || new Date(p.payment_date) > new Date(lastPaymentDate)) {
-                 lastPaymentDate = p.payment_date;
-                 lastPaymentAmount = p.amount_paid;
-             }
-          });
-        });
-      }
-
-      const pending_amount = totalAmount - totalPaid;
-      let payment_status = "PENDING";
-      if (pending_amount <= 0 && totalAmount > 0) payment_status = "PAID";
-      else if (totalPaid > 0) payment_status = "PARTIAL";
-      else if (totalAmount === 0) payment_status = "NOT_GENERATED";
-
+      const summary = financialService.getTenantPaymentSummary(s.id, s.obligations ?? []);
       return {
         ...s,
-        payment_summary: {
-           total_amount: totalAmount,
-           total_paid: totalPaid,
-           pending_amount: Math.max(0, pending_amount),
-           last_paid_at: lastPaymentDate,
-           last_payment_amount: lastPaymentAmount,
-           payment_status: payment_status
-        }
+        payment_summary: summary,
       };
     });
 
@@ -482,7 +454,8 @@ export class TenantService {
           include: { room: true },
         },
         obligations: {
-          include: { payments: true }
+          where: { status: { in: ["PENDING", "PARTIAL"] } },
+          include: { payments: { select: { amount_paid: true, payment_date: true, payment_method: true, reference_number: true } } }
         }
       }
     });
@@ -493,20 +466,22 @@ export class TenantService {
     }
 
     const currentRoom = tenant.allocations[0]?.room;
-    
-    // Calculate due and paid amounts
+
+    // Only PENDING/PARTIAL obligations represent outstanding dues.
+    // PAID obligations are settled; including them in totalDue inflates the number.
     let totalDue = 0;
     let totalPaid = 0;
     const allPayments: any[] = [];
-    
+
     tenant.obligations.forEach((o: any) => {
-      if (o.status !== "WAIVED") totalDue += Number(o.amount);
       const paid = o.payments.reduce((sum: number, p: any) => sum + Number(p.amount_paid), 0);
+      const remaining = Math.max(Number(o.amount) - paid, 0);
+      totalDue += remaining;
       totalPaid += paid;
       o.payments.forEach((p: any) => allPayments.push(p));
     });
 
-    const outstanding = totalDue - totalPaid;
+    const outstanding = totalDue;
     const recentPayments = allPayments
       .sort((a, b) => new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime())
       .slice(0, 5)
@@ -556,6 +531,57 @@ export class TenantService {
     });
   }
 
+  async cancelInvitation(tenantId: string, ownerId: string) {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: {
+        id: true,
+        owner_id: true,
+        status: true,
+        allocations: { where: { is_active: true, end_date: null }, select: { id: true } },
+      },
+    });
+    if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
+    if (tenant.owner_id !== ownerId) throw new Error("FORBIDDEN: You can only manage your own tenants");
+    if (tenant.status !== "INVITED") {
+      throw new Error("VALIDATION: Only INVITED tenants can be cancelled. Use checkout for ACTIVE tenants.");
+    }
+
+    const now = new Date();
+    await prisma.$transaction(async (tx) => {
+      await tx.tenant.update({
+        where: { id: tenantId },
+        data: { status: "CANCELLED" as any },
+      });
+      if (tenant.allocations.length > 0) {
+        await tx.roomAllocation.updateMany({
+          where: { tenant_id: tenantId, is_active: true, end_date: null },
+          data: { is_active: false, end_date: now },
+        });
+      }
+      // Waive all pending obligations — a cancelled invitation means
+      // the tenant never moved in; no financial claims should remain.
+      await tx.rentObligation.updateMany({
+        where: { tenant_id: tenantId, status: { in: ["PENDING", "PARTIAL"] } },
+        data: { status: "WAIVED" },
+      });
+    });
+
+    await allocationReconciliationService.reconcileTenant(tenantId).catch((err: any) => {
+      logger.error("reconcile_after_cancel_invitation_failed", {
+        tenant_id: tenantId,
+        error: String(err?.message || err),
+      });
+    });
+
+    await eventLog.log("INVITATION_CANCELLED_BY_OWNER", ownerId, {
+      tenant_id: tenantId,
+      released_allocations: tenant.allocations.length,
+    }, tenantId);
+
+    return { success: true, tenant_id: tenantId, new_status: "CANCELLED" };
+  }
+
   async updateTenant(id: string, data: any, ownerId: string) {
     const tenant = await prisma.tenant.findUnique({
       where: { id },
@@ -564,7 +590,15 @@ export class TenantService {
     if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
     if (tenant.owner_id !== ownerId) throw new Error("FORBIDDEN: You can only update your own tenants");
 
+    if (data.status === "CANCELLED") {
+      // Use dedicated cancelInvitation — it enforces INVITED-only guard
+      return this.cancelInvitation(id, ownerId);
+    }
+
     if (data.status === "LEFT") {
+      if (tenant.status !== "ACTIVE") {
+        throw new Error("VALIDATION: LEFT status is only for previously-ACTIVE tenants. Use cancel-invitation for INVITED tenants.");
+      }
       // Auto-end active allocations if any exists
       await prisma.roomAllocation.updateMany({
         where: { tenant_id: id, is_active: true, end_date: null },
@@ -597,7 +631,13 @@ export class TenantService {
     if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
     if (tenant.owner_id !== ownerId) throw new Error("FORBIDDEN: You can only delete your own tenants");
 
-    // Soft delete: status = LEFT
+    // Lifecycle-correct soft delete:
+    // INVITED => CANCELLED (never activated, treat as cancelled invitation)
+    // ACTIVE  => LEFT      (was active, departed)
+    if (tenant.status === "INVITED") {
+      return this.cancelInvitation(id, ownerId);
+    }
+
     await prisma.roomAllocation.updateMany({
       where: { tenant_id: id, is_active: true, end_date: null },
       data: { is_active: false, end_date: new Date() },

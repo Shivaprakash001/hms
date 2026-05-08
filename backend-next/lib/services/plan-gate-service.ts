@@ -302,7 +302,7 @@ export const planGate = {
     if (plan.tenant_limit === 0 || plan.is_custom) return;
 
     const current = await prisma.tenant.count({
-      where: { owner_id: ownerId, status: { not: "LEFT" } },
+      where: { owner_id: ownerId, status: { notIn: ["LEFT", "CANCELLED", "EXPIRED"] } },
     });
 
     const includedLimit = plan.tenant_limit;
@@ -384,7 +384,7 @@ export const planGate = {
 
   async updateUsage(ownerId: string): Promise<void> {
     const tenants_count = await prisma.tenant.count({
-      where: { owner_id: ownerId, status: { not: "LEFT" } },
+      where: { owner_id: ownerId, status: { notIn: ["LEFT", "CANCELLED", "EXPIRED"] } },
     });
     const hostels_count = await prisma.hostel.count({
       where: { owner_id: ownerId, is_active: true },

@@ -51,7 +51,7 @@ export class AnalyticsService {
     const [expectedAgg, collectedAgg, daily, overdueRows] = await Promise.all([
       prisma.rentObligation.aggregate({
         where: { owner_id: ownerId, rent_month: { gte: start, lte: end } },
-        _sum: { total_amount: true },
+        _sum: { amount: true },
       }),
       prisma.payment.aggregate({
         where: { owner_id: ownerId, payment_date: { gte: start, lte: end } },
@@ -79,14 +79,15 @@ export class AnalyticsService {
           SELECT
             o.tenant_id,
             p.name,
-            SUM(o.total_amount)::float           AS pending_amount,
+            SUM(o.amount)::float                 AS pending_amount,
             MIN(o.due_date)                       AS earliest_due
           FROM rent_obligations o
           JOIN tenants t   ON t.id = o.tenant_id
           JOIN profiles p  ON p.id = t.profile_id
           WHERE o.owner_id = ${ownerId}::uuid
-            AND o.status NOT IN ('PAID','WAIVED')
+            AND o.status IN ('PENDING', 'PARTIAL')
             AND o.due_date < NOW()
+            AND t.status = 'ACTIVE'
           GROUP BY o.tenant_id, p.name
         ),
         summary AS (
@@ -113,7 +114,7 @@ export class AnalyticsService {
       `,
     ]);
 
-    const expected  = Number(expectedAgg._sum.total_amount  ?? 0);
+    const expected  = Number(expectedAgg._sum.amount  ?? 0);
     const collected = Number(collectedAgg._sum.amount_paid  ?? 0);
 
     // Extract summary from first CTE row (duplicated across top-5 cross join)
@@ -191,7 +192,7 @@ export class AnalyticsService {
         `,
         prisma.$queryRaw<{ tenant_id: string; name: string; score: number; pending_amount: number; avg_delay_days: number }[]>`
           SELECT t.id AS tenant_id, p.name, COALESCE(tbs.score, 100) AS score,
-            COALESCE(SUM(CASE WHEN o.status NOT IN ('PAID','WAIVED') THEN o.total_amount ELSE 0 END)::float, 0) AS pending_amount,
+            COALESCE(SUM(CASE WHEN o.status IN ('PENDING','PARTIAL') THEN o.amount ELSE 0 END)::float, 0) AS pending_amount,
             COALESCE(AVG(CASE WHEN pay.payment_date > o.due_date THEN pay.payment_date - o.due_date END), 0)::float AS avg_delay_days
           FROM tenants t
           JOIN profiles p ON p.id = t.profile_id

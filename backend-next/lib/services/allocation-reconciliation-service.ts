@@ -41,7 +41,8 @@ export class AllocationReconciliationService {
     const repairs: string[] = [];
     const now = new Date();
 
-    // 1) Room capacity integrity (ACTIVE + INVITED only)
+    // 1) Room capacity integrity — only ACTIVE + INVITED hold a real bed
+    //    CANCELLED and EXPIRED are non-occupying statuses like LEFT.
     const occupants = await prisma.roomAllocation.count({
       where: {
         room_id: allocation.room_id,
@@ -71,7 +72,8 @@ export class AllocationReconciliationService {
     }
 
     // 2) Tenant lifecycle vs allocation integrity
-    if (!["ACTIVE", "INVITED"].includes(allocation.tenant.status) && allocation.is_active) {
+    //    CANCELLED and EXPIRED must not hold open allocations.
+    if (!['ACTIVE', 'INVITED'].includes(allocation.tenant.status) && allocation.is_active) {
       await prisma.roomAllocation.update({
         where: { id: allocationId },
         data: { is_active: false, end_date: now },
@@ -186,7 +188,10 @@ export class AllocationReconciliationService {
 
   /**
    * Expire stale invitations and release seats.
-   * Rule: tenant INVITED + profile invitation_expired => tenant LEFT + allocation ended.
+   * Rule: tenant INVITED + invitation_expires_at passed => status EXPIRED (not LEFT).
+   *
+   * IMPORTANT: LEFT is reserved for previously-ACTIVE tenants who departed.
+   * A tenant who was never activated goes to EXPIRED, not LEFT.
    */
   async expireStaleInvitations(now: Date = new Date()) {
     const stale = await prisma.tenant.findMany({
@@ -212,17 +217,27 @@ export class AllocationReconciliationService {
       await prisma.$transaction(async (tx) => {
         await tx.tenant.update({
           where: { id: t.id },
-          data: { status: "LEFT" },
+          data: { status: "EXPIRED" as any },
         });
         await tx.roomAllocation.updateMany({
           where: { tenant_id: t.id, is_active: true, end_date: null },
           data: { is_active: false, end_date: now },
+        });
+        // Waive any future unpaid obligations — never activated tenants
+        // should not accumulate financial obligations.
+        await tx.rentObligation.updateMany({
+          where: {
+            tenant_id: t.id,
+            status: { in: ["PENDING", "PARTIAL"] },
+          },
+          data: { status: "WAIVED" },
         });
       });
 
       expired++;
       await eventLog.log("INVITATION_EXPIRED_AUTO_RELEASE", t.owner_id || null, {
         tenant_id: t.id,
+        new_status: "EXPIRED",
         released_allocations: t.allocations.length,
       }, t.id);
     }
