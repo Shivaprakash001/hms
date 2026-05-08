@@ -153,7 +153,11 @@ export const billingService = {
     getUsage: async () => {
         const response = await api.get('/owner/me/usage');
         return response.data;
-    }
+    },
+    getOverflowStatus: async () => {
+        const response = await api.get('/billing/overflow');
+        return response.data;
+    },
 };
 
 // --- Addon Service ---

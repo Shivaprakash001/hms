@@ -1,13 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
     CreditCard, Users, Building2, CheckCircle2, XCircle,
     Clock3, CalendarDays, TrendingUp, Loader2, RefreshCw,
-    Zap, MessageSquare, BarChart3, Layout, AlertTriangle, PhoneCall
+    Zap, MessageSquare, BarChart3, Layout, AlertTriangle, PhoneCall, Receipt
 } from 'lucide-react';
-import { billingService } from '../../api/services';
 import api from '../../api/axios';
 import BuyRemindersModal from '../../components/owner/BuyRemindersModal';
 import { useSubscription, usePlans } from '../../hooks/useBilling';
+import OverflowUsageMeter from '../../components/owner/billing/OverflowUsageMeter';
+import OverflowChargeCard from '../../components/owner/billing/OverflowChargeCard';
+import UpgradeNudgeCard from '../../components/owner/billing/UpgradeNudgeCard';
 
 function limitDisplay(val) {
     if (val === 0 || val === null || val === undefined) return 'Unlimited';
@@ -248,20 +250,48 @@ function BillingHistory({ items }) {
     };
     return (
         <div className="space-y-2">
-            {items.map(item => (
-                <div key={item.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors">
-                    <div>
-                        <p className="text-sm font-semibold text-slate-900">{item.invoice_number || 'Invoice'}</p>
-                        <p className="text-xs text-slate-400 mt-0.5">{fmtDate(item.billing_month || item.created_at)}</p>
+            {items.map(item => {
+                const lineItems = Array.isArray(item.line_items) ? item.line_items : null;
+                const isOverflow = lineItems?.some(li => li.type === 'OVERFLOW');
+                return (
+                    <div key={item.id} className="rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors">
+                        <div className="flex items-center justify-between p-3">
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <p className="text-sm font-semibold text-slate-900">{item.invoice_number || 'Invoice'}</p>
+                                    {isOverflow && (
+                                        <span className="text-[9px] font-bold uppercase bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded-full">
+                                            Extra Usage
+                                        </span>
+                                    )}
+                                </div>
+                                <p className="text-xs text-slate-400 mt-0.5">{fmtDate(item.billing_month || item.created_at)}</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-sm font-bold text-slate-900">₹{Number(item.amount || 0).toLocaleString('en-IN')}</p>
+                                <span className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full ${statusStyle[item.status] || 'bg-slate-100 text-slate-500'}`}>
+                                    {item.status}
+                                </span>
+                            </div>
+                        </div>
+                        {lineItems?.length > 0 && (
+                            <div className="border-t border-slate-100 px-3 pb-3 pt-2 space-y-1">
+                                {lineItems.map((li, i) => (
+                                    <div key={i} className="flex items-center justify-between text-xs text-slate-500">
+                                        <span className="flex items-center gap-1.5">
+                                            <Receipt size={10} className="text-slate-300" />
+                                            {li.description}
+                                        </span>
+                                        <span className="font-semibold text-slate-700">
+                                            ₹{Math.round((li.amount_paise || 0) / 100).toLocaleString('en-IN')}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
-                    <div className="text-right">
-                        <p className="text-sm font-bold text-slate-900">₹{Number(item.amount || 0).toLocaleString('en-IN')}</p>
-                        <span className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full ${statusStyle[item.status] || 'bg-slate-100 text-slate-500'}`}>
-                            {item.status}
-                        </span>
-                    </div>
-                </div>
-            ))}
+                );
+            })}
         </div>
     );
 }
@@ -319,6 +349,7 @@ export default function BillingPlans() {
     const usage        = subscription?.usage || { tenants: { used: 0, limit: 15 }, hostels: { used: 0, limit: 1 } };
     const subMeta      = subscription?.subscription || { status: 'FREE' };
     const history      = subscription?.billing_history || [];
+    const overflow     = subscription?.overflow || null;
 
     return (
         <div className="space-y-6 max-w-6xl">
@@ -395,10 +426,29 @@ export default function BillingPlans() {
             <section className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
                 <h3 className="text-base font-bold text-slate-900 mb-5">Usage</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <UsageBar label="Tenants" used={usage.tenants?.used || 0} limit={usage.tenants?.limit} Icon={Users} />
-                    <UsageBar label="Hostels"  used={usage.hostels?.used || 0}  limit={usage.hostels?.limit}  Icon={Building2} />
+                    {overflow?.enabled
+                        ? <OverflowUsageMeter overflow={overflow} />
+                        : <UsageBar label="Tenants" used={usage.tenants?.used || 0} limit={usage.tenants?.limit} Icon={Users} />
+                    }
+                    <UsageBar label="Hostels" used={usage.hostels?.used || 0} limit={usage.hostels?.limit} Icon={Building2} />
                 </div>
+
+                {/* Overflow charge card — shown when there's active overflow */}
+                {overflow?.overflow_count > 0 && (
+                    <div className="mt-5">
+                        <OverflowChargeCard overflow={overflow} currentPlan={currentPlan} />
+                    </div>
+                )}
             </section>
+
+            {/* Upgrade nudge — shown when overflow cost passes savings threshold */}
+            {overflow?.upgrade_nudge?.show && (
+                <UpgradeNudgeCard
+                    overflow={overflow}
+                    onUpgrade={handleUpgrade}
+                    upgrading={upgrading}
+                />
+            )}
 
             {/* Available Plans */}
             {plans.length > 0 && (
