@@ -7,6 +7,7 @@ import { resolveRules, calculateSingleRuleFee } from "../billing/engine";
 import { resolvePreferences } from "../preferences";
 import { formatMonthYear, formatDate } from "../format";
 import { requireAutomation, consumeReminder } from "./plan-gate-service";
+import { financialService } from "./financial-service";
 
 export class ReminderService {
 
@@ -19,27 +20,20 @@ export class ReminderService {
     // Neutralize to UTC Midnight for accurate day comparison checks
     const todayMid = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
 
-    // 🔒 CRITICAL: Only fetch RENT obligations — late fees NEVER generate late fees.
-    // This is the guard that prevents compounding debt spirals.
-    const overdueObligations = await prisma.rentObligation.findMany({
-      where: {
-        status: "PENDING",
-        obligation_type: "RENT",
-        due_date: { lt: todayMid }
-      },
-      include: {
-        tenant: {
-          select: { id: true, personal_email: true, owner_id: true, profile: { select: { name: true } } }
-        },
-        reminders: {
-          orderBy: { sent_at: 'desc' },
-          take: 1
-        }
-      }
-    });
+    // Canonical source: operational overdue obligations (ACTIVE tenants only).
+    const overdueOperational = await financialService.getOperationalOverdueObligations(todayMid);
+    const obligationIds = overdueOperational.map((o) => o.obligation_id);
+    const lastReminders = obligationIds.length > 0
+      ? await prisma.reminderLog.findMany({
+          where: { obligation_id: { in: obligationIds } },
+          orderBy: { sent_at: "desc" },
+          distinct: ["obligation_id"],
+        })
+      : [];
+    const remindersByObligation = new Map(lastReminders.map((r) => [r.obligation_id, r]));
 
     // Optimization: Batch fetch owner preferences
-    const ownerIds = Array.from(new Set(overdueObligations.map(ob => ob.tenant.owner_id).filter(Boolean))) as string[];
+    const ownerIds = Array.from(new Set(overdueOperational.map((ob) => ob.owner_id).filter(Boolean))) as string[];
     const hostelPrefs: any[] = await prisma.hostel.findMany({
       where: { owner_id: { in: ownerIds }, is_active: true },
     });
@@ -48,8 +42,8 @@ export class ReminderService {
     let remindersSent = 0;
     let lateFeesAdded = 0;
 
-    for (const ob of overdueObligations) {
-      const ownerId = ob.tenant.owner_id;
+    for (const ob of overdueOperational) {
+      const ownerId = ob.owner_id;
       if (!ownerId) continue;
 
       const prefs: any = prefsMap.get(ownerId);
@@ -74,7 +68,19 @@ export class ReminderService {
       const daysOverdue = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
       // Fetch the last reminder type sent for this obligation
-      const lastReminderType = ob.reminders.length > 0 ? ob.reminders[0].reminder_type : null;
+      const lastReminderType = remindersByObligation.get(ob.obligation_id)?.reminder_type ?? null;
+      const reminderTarget = {
+        id: ob.obligation_id,
+        amount: ob.remaining_amount,
+        rent_month: ob.rent_month,
+        due_date: ob.due_date,
+        tenant: {
+          id: ob.tenant_id,
+          owner_id: ob.owner_id,
+          personal_email: ob.personal_email,
+          profile: { name: ob.tenant_name },
+        },
+      };
 
       try {
         // 1️⃣ Automated Tiered Reminders
@@ -84,13 +90,13 @@ export class ReminderService {
           const sendFinal = config.reminder_day_10 ?? true;
 
           if (daysOverdue === 1 && sendGentle && lastReminderType !== "DUE_SOON") {
-            await this.triggerNotification(ob, "DUE_SOON", config);
+            await this.triggerNotification(reminderTarget, "DUE_SOON", config);
             remindersSent++;
           } else if (daysOverdue === 5 && sendWarning && lastReminderType !== "WARNING") {
-            await this.triggerNotification(ob, "WARNING", config);
+            await this.triggerNotification(reminderTarget, "WARNING", config);
             remindersSent++;
           } else if (daysOverdue === 10 && sendFinal && lastReminderType !== "FINAL_NOTICE") {
-            await this.triggerNotification(ob, "FINAL_NOTICE", config);
+            await this.triggerNotification(reminderTarget, "FINAL_NOTICE", config);
             remindersSent++;
           }
         }
@@ -145,7 +151,7 @@ export class ReminderService {
                     try {
                       await prisma.rentObligation.create({
                         data: {
-                          tenant_id: ob.tenant.id,
+                          tenant_id: ob.tenant_id,
                           allocation_id: ob.allocation_id,
                           owner_id: ob.owner_id,
                           rent_month: ob.rent_month,
@@ -158,12 +164,12 @@ export class ReminderService {
                       });
                       accumulatedFees += feeAmount;
                       lateFeesAdded++;
-                      await this.triggerNotification(ob, "LATE_FEE_ADDED", config);
+                      await this.triggerNotification(reminderTarget, "LATE_FEE_ADDED", config);
                       remindersSent++;
                     } catch (feeErr: any) {
                       if (feeErr?.code === "P2002") {
                         // Idempotent skip — duplicate caught by unique index
-                        console.info(`[REMINDER] Duplicate per_day late fee skipped for obligation ${ob.id}`);
+                        console.info(`[REMINDER] Duplicate per_day late fee skipped for obligation ${ob.obligation_id}`);
                       } else {
                         throw feeErr;
                       }
@@ -193,7 +199,7 @@ export class ReminderService {
                     try {
                       await prisma.rentObligation.create({
                         data: {
-                          tenant_id: ob.tenant.id,
+                          tenant_id: ob.tenant_id,
                           allocation_id: ob.allocation_id,
                           owner_id: ob.owner_id,
                           rent_month: ob.rent_month,
@@ -206,12 +212,12 @@ export class ReminderService {
                       });
                       accumulatedFees += feeAmount;
                       lateFeesAdded++;
-                      await this.triggerNotification(ob, "LATE_FEE_ADDED", config);
+                      await this.triggerNotification(reminderTarget, "LATE_FEE_ADDED", config);
                       remindersSent++;
                     } catch (feeErr: any) {
                       if (feeErr?.code === "P2002") {
                         // Idempotent skip — duplicate caught by unique index
-                        console.info(`[REMINDER] Duplicate one-time late fee skipped for obligation ${ob.id}`);
+                        console.info(`[REMINDER] Duplicate one-time late fee skipped for obligation ${ob.obligation_id}`);
                       } else {
                         throw feeErr;
                       }
@@ -228,13 +234,13 @@ export class ReminderService {
           console.warn(`[REMINDER] Credits exhausted for owner ${ownerId}. Stopping obligation loop.`);
           break;
         }
-        console.error(`[REMINDER] Error processing obligation ${ob.id}:`, err?.message);
+        console.error(`[REMINDER] Error processing obligation ${ob.obligation_id}:`, err?.message);
       }
     }
 
     if (remindersSent > 0 || lateFeesAdded > 0) {
       // Trigger live updates to owners dashboard so they see realtime notifications and late fees collected incrementing
-      const affectedOwners = Array.from(new Set(overdueObligations.map(ob => ob.tenant.owner_id).filter(Boolean)));
+      const affectedOwners = Array.from(new Set(overdueOperational.map((ob) => ob.owner_id).filter(Boolean)));
 
       affectedOwners.forEach(ownerId => {
         if (ownerId) {
@@ -244,7 +250,7 @@ export class ReminderService {
     }
 
     const summary = {
-      evaluated_obligations: overdueObligations.length,
+      evaluated_obligations: overdueOperational.length,
       reminders_sent: remindersSent,
       late_fees_added: lateFeesAdded
     };
@@ -252,7 +258,7 @@ export class ReminderService {
     // Write structured audit events
     if (remindersSent > 0) {
       await eventLog.log("REMINDER_SENT", null, {
-        evaluated: overdueObligations.length,
+        evaluated: overdueOperational.length,
         reminders_sent: remindersSent
       });
     }

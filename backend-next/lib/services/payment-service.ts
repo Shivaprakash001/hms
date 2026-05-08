@@ -1992,11 +1992,12 @@ export class PaymentService {
     const pendingEntries = filteredEntries.filter((entry) => ["pending", "partial", "overdue"].includes(entry.row.status));
     const overdueEntries = filteredEntries.filter((entry) => entry.row.status === "overdue");
 
+    const operationalDues = await financialService.getOperationalDues(ownerId);
     const stats = {
       total_collected: Number(filteredEntries.reduce((sum, entry) => sum + Number(entry.row.paidAmount || 0), 0).toFixed(2)),
-      pending_dues: Number(pendingEntries.reduce((sum, entry) => sum + Number(entry.row.balance || 0), 0).toFixed(2)),
-      overdue_amount: Number(overdueEntries.reduce((sum, entry) => sum + Number(entry.row.balance || 0), 0).toFixed(2)),
-      active_tenants: new Set(filteredEntries.map((entry) => entry.row.tenantId).filter(Boolean)).size,
+      pending_dues: Number((operationalDues.pending_total || 0).toFixed(2)),
+      overdue_amount: Number((operationalDues.overdue_total || 0).toFixed(2)),
+      active_tenants: await prisma.tenant.count({ where: { owner_id: ownerId, status: "ACTIVE" } }),
       pending_rows: pendingEntries.length,
       overdue_rows: overdueEntries.length,
     };

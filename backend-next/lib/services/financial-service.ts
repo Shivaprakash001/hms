@@ -85,6 +85,139 @@ export class FinancialService {
   }
 
   /**
+   * Operational defaulters (ACTIVE tenants only), ranked by overdue outstanding.
+   * Uses remaining amount (amount - paid), never raw amount.
+   */
+  async getOperationalDefaulters(
+    ownerId: string,
+    limit: number = 5,
+  ): Promise<Array<{
+    tenant_id: string;
+    name: string;
+    pending_amount: number;
+    days_overdue: number;
+  }>> {
+    const safeLimit = Math.max(1, Math.min(50, Math.floor(limit || 5)));
+    const rows = await prisma.$queryRaw<Array<{
+      tenant_id: string;
+      name: string;
+      pending_amount: number;
+      days_overdue: number;
+    }>>`
+      WITH overdue AS (
+        SELECT
+          o.tenant_id,
+          p.name,
+          SUM(o.amount - COALESCE(pay_agg.total_paid, 0))::float AS pending_amount,
+          MIN(o.due_date)                                         AS earliest_due
+        FROM rent_obligations o
+        JOIN tenants t ON t.id = o.tenant_id
+        JOIN profiles p ON p.id = t.profile_id
+        LEFT JOIN (
+          SELECT obligation_id, SUM(amount_paid)::float AS total_paid
+          FROM payments
+          GROUP BY obligation_id
+        ) pay_agg ON pay_agg.obligation_id = o.id
+        WHERE o.owner_id = ${ownerId}::uuid
+          AND o.status IN ('PENDING', 'PARTIAL')
+          AND t.status = 'ACTIVE'
+          AND o.due_date < CURRENT_DATE
+          AND o.amount - COALESCE(pay_agg.total_paid, 0) > 0
+        GROUP BY o.tenant_id, p.name
+      )
+      SELECT
+        tenant_id,
+        name,
+        pending_amount,
+        GREATEST(0, (CURRENT_DATE - earliest_due::date))::int AS days_overdue
+      FROM overdue
+      ORDER BY pending_amount DESC
+      LIMIT ${safeLimit}
+    `;
+
+    return rows.map((r) => ({
+      tenant_id: r.tenant_id,
+      name: r.name,
+      pending_amount: Number(r.pending_amount || 0),
+      days_overdue: Number(r.days_overdue || 0),
+    }));
+  }
+
+  /**
+   * Overdue operational obligations for reminder engine.
+   * ACTIVE tenants only; excludes cancelled/expired/invited/left lifecycle states.
+   */
+  async getOperationalOverdueObligations(asOfDate: Date = new Date()): Promise<Array<{
+    obligation_id: string;
+    tenant_id: string;
+    owner_id: string;
+    allocation_id: string | null;
+    rent_month: Date;
+    due_date: Date;
+    amount: number;
+    remaining_amount: number;
+    tenant_name: string | null;
+    personal_email: string | null;
+  }>> {
+    const cutoff = new Date(Date.UTC(
+      asOfDate.getUTCFullYear(),
+      asOfDate.getUTCMonth(),
+      asOfDate.getUTCDate(),
+    ));
+
+    const rows = await prisma.$queryRaw<Array<{
+      obligation_id: string;
+      tenant_id: string;
+      owner_id: string;
+      allocation_id: string | null;
+      rent_month: Date;
+      due_date: Date;
+      amount: number;
+      remaining_amount: number;
+      tenant_name: string | null;
+      personal_email: string | null;
+    }>>`
+      SELECT
+        o.id                                                AS obligation_id,
+        o.tenant_id,
+        o.owner_id,
+        o.allocation_id,
+        o.rent_month,
+        o.due_date,
+        o.amount::float                                     AS amount,
+        (o.amount - COALESCE(pay_agg.total_paid, 0))::float AS remaining_amount,
+        p.name                                              AS tenant_name,
+        t.personal_email
+      FROM rent_obligations o
+      JOIN tenants t ON t.id = o.tenant_id
+      JOIN profiles p ON p.id = t.profile_id
+      LEFT JOIN (
+        SELECT obligation_id, SUM(amount_paid)::float AS total_paid
+        FROM payments
+        GROUP BY obligation_id
+      ) pay_agg ON pay_agg.obligation_id = o.id
+      WHERE o.status IN ('PENDING', 'PARTIAL')
+        AND o.obligation_type = 'RENT'
+        AND o.due_date < ${cutoff}::date
+        AND t.status = 'ACTIVE'
+        AND o.amount - COALESCE(pay_agg.total_paid, 0) > 0
+    `;
+
+    return rows.map((r) => ({
+      obligation_id: r.obligation_id,
+      tenant_id: r.tenant_id,
+      owner_id: r.owner_id,
+      allocation_id: r.allocation_id,
+      rent_month: r.rent_month,
+      due_date: r.due_date,
+      amount: Number(r.amount || 0),
+      remaining_amount: Number(r.remaining_amount || 0),
+      tenant_name: r.tenant_name,
+      personal_email: r.personal_email,
+    }));
+  }
+
+  /**
    * Historical outstanding — all tenants, no lifecycle filter.
    * Used for accounting reports and overdue defaulter lists.
    */

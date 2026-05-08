@@ -1,4 +1,5 @@
 import { prisma } from "../db";
+import { financialService } from "./financial-service";
 
 // ─── Decision Engine ──────────────────────────────────────────────────────────
 
@@ -48,7 +49,7 @@ export class AnalyticsService {
     // ── Single-pass CTE: replaces 3 separate overdue scans + a tenant findMany ─
     // Before: overdueAgg (aggregate), overdueGroups (groupBy), dueDates (raw) + tenants (findMany)
     // After:  one query returning sum + count + top-5 with names + earliest_due
-    const [expectedAgg, collectedAgg, daily, overdueRows] = await Promise.all([
+    const [expectedAgg, collectedAgg, daily, dues, topDefaulters, overdueTenantCount] = await Promise.all([
       prisma.rentObligation.aggregate({
         where: { owner_id: ownerId, rent_month: { gte: start, lte: end } },
         _sum: { amount: true },
@@ -65,69 +66,35 @@ export class AnalyticsService {
           AND payment_date <= ${end}::date
         GROUP BY payment_date ORDER BY payment_date
       `,
-      // ── Consolidated overdue CTE ──────────────────────────────────────────────
-      // Replaces: overdueAgg + overdueGroups + topGroups + tenants findMany + dueDates raw
-      prisma.$queryRaw<{
-        overdue_total: number;
-        overdue_tenant_count: number;
-        top_tenant_id: string;
-        top_name: string;
-        top_pending: number;
-        top_days_overdue: number;
-      }[]>`
-        WITH overdue AS (
-          SELECT
-            o.tenant_id,
-            p.name,
-            SUM(o.amount)::float                 AS pending_amount,
-            MIN(o.due_date)                       AS earliest_due
-          FROM rent_obligations o
-          JOIN tenants t   ON t.id = o.tenant_id
-          JOIN profiles p  ON p.id = t.profile_id
-          WHERE o.owner_id = ${ownerId}::uuid
-            AND o.status IN ('PENDING', 'PARTIAL')
-            AND o.due_date < NOW()
-            AND t.status = 'ACTIVE'
-          GROUP BY o.tenant_id, p.name
-        ),
-        summary AS (
-          SELECT
-            COALESCE(SUM(pending_amount), 0)::float AS overdue_total,
-            COUNT(*)::int                            AS overdue_tenant_count
-          FROM overdue
-        ),
-        top5 AS (
-          SELECT tenant_id, name, pending_amount, earliest_due
-          FROM overdue
-          ORDER BY pending_amount DESC
-          LIMIT 5
-        )
-        SELECT
-          s.overdue_total,
-          s.overdue_tenant_count,
-          t5.tenant_id   AS top_tenant_id,
-          t5.name        AS top_name,
-          t5.pending_amount AS top_pending,
-          GREATEST(0, EXTRACT(DAY FROM NOW() - t5.earliest_due))::int AS top_days_overdue
-        FROM summary s
-        CROSS JOIN top5 t5
-      `,
+      financialService.getOperationalDues(ownerId),
+      financialService.getOperationalDefaulters(ownerId, 5),
+      prisma.tenant.count({
+        where: {
+          owner_id: ownerId,
+          status: "ACTIVE",
+          obligations: {
+            some: {
+              status: { in: ["PENDING", "PARTIAL"] },
+              due_date: { lt: now },
+            },
+          },
+        },
+      }),
     ]);
 
     const expected  = Number(expectedAgg._sum.amount  ?? 0);
     const collected = Number(collectedAgg._sum.amount_paid  ?? 0);
 
-    // Extract summary from first CTE row (duplicated across top-5 cross join)
-    const overdue              = Number(overdueRows[0]?.overdue_total          ?? 0);
-    const overdueTenantsCount  = Number(overdueRows[0]?.overdue_tenant_count   ?? 0);
-    const top_defaulters = overdueRows.map((r) => ({
-      tenant_id:      r.top_tenant_id,
-      name:           r.top_name,
-      pending_amount: r.top_pending,
-      days_overdue:   r.top_days_overdue,
+    const overdue = Number(dues.overdue_total || 0);
+    const overdueTenantsCount = overdueTenantCount;
+    const top_defaulters = topDefaulters.map((d) => ({
+      tenant_id: d.tenant_id,
+      name: d.name,
+      pending_amount: d.pending_amount,
+      days_overdue: d.days_overdue,
     }));
 
-    const pending         = Math.max(0, expected - collected);
+    const pending         = Number(dues.pending_total || 0);
     const collection_rate = expected > 0 ? Math.round((collected / expected) * 10000) / 100 : 0;
 
     // ── Decision layer ────────────────────────────────────────────────────────

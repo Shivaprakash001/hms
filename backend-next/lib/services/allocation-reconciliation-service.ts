@@ -1,6 +1,7 @@
 import { prisma } from "../db";
 import { eventLog } from "./event-log-service";
 import { getLogger } from "../logger";
+import { invalidateDashboardCache } from "../cache/dashboard-cache";
 
 const logger = getLogger("allocation-reconcile");
 
@@ -240,6 +241,7 @@ export class AllocationReconciliationService {
         new_status: "EXPIRED",
         released_allocations: t.allocations.length,
       }, t.id);
+      if (t.owner_id) invalidateDashboardCache(t.owner_id);
     }
 
     return { expired_count: expired };

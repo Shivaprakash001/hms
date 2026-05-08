@@ -164,21 +164,11 @@ export class DashboardService {
 
     if (!tenant) throw new Error("NOT_FOUND: Tenant record not found");
 
-    let pendingTotal = 0;
-    let nextPayment: Date | null = null;
-    let oldestObligationId: string | null = null;
-
-    tenant.obligations.forEach((ob: any) => {
-      const paid = ob.payments.reduce((sum: number, p: any) => sum + Number(p.amount_paid), 0);
-      const remaining = Number(ob.amount) - paid;
-      if (remaining > 0) {
-        pendingTotal += remaining;
-        if (!nextPayment) {
-          nextPayment = ob.due_date;
-          oldestObligationId = ob.id;
-        }
-      }
-    });
+    const dues = await financialService.getTenantDues(tenant.id);
+    const pendingTotal = dues.total_due;
+    const nextItem = dues.items[0];
+    const nextPayment: Date | null = nextItem?.due_date ?? null;
+    const oldestObligationId: string | null = nextItem?.obligation_id ?? null;
 
     return {
       tenant_id: tenant.id,

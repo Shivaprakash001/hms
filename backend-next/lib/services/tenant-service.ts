@@ -467,21 +467,26 @@ export class TenantService {
 
     const currentRoom = tenant.allocations[0]?.room;
 
-    // Only PENDING/PARTIAL obligations represent outstanding dues.
-    // PAID obligations are settled; including them in totalDue inflates the number.
-    let totalDue = 0;
-    let totalPaid = 0;
-    const allPayments: any[] = [];
-
-    tenant.obligations.forEach((o: any) => {
-      const paid = o.payments.reduce((sum: number, p: any) => sum + Number(p.amount_paid), 0);
-      const remaining = Math.max(Number(o.amount) - paid, 0);
-      totalDue += remaining;
-      totalPaid += paid;
-      o.payments.forEach((p: any) => allPayments.push(p));
+    const dues = await financialService.getTenantDues(tenantId);
+    const paymentAgg = await prisma.payment.aggregate({
+      where: { tenant_id: tenantId },
+      _sum: { amount_paid: true },
     });
-
-    const outstanding = totalDue;
+    const totalPaid = Number(paymentAgg._sum.amount_paid || 0);
+    const totalDue = dues.total_due;
+    const outstanding = dues.total_due;
+    const allPayments = await prisma.payment.findMany({
+      where: { tenant_id: tenantId },
+      orderBy: { payment_date: "desc" },
+      take: 25,
+      select: {
+        id: true,
+        amount_paid: true,
+        payment_date: true,
+        payment_method: true,
+        reference_number: true,
+      },
+    });
     const recentPayments = allPayments
       .sort((a, b) => new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime())
       .slice(0, 5)
@@ -578,6 +583,11 @@ export class TenantService {
       tenant_id: tenantId,
       released_allocations: tenant.allocations.length,
     }, tenantId);
+    await eventSystem.trigger("tenant_status_changed", {
+      owner_id: ownerId,
+      tenant_id: tenantId,
+      status: "CANCELLED",
+    });
 
     return { success: true, tenant_id: tenantId, new_status: "CANCELLED" };
   }
@@ -619,6 +629,11 @@ export class TenantService {
           error: String(err?.message || err),
         });
       });
+      await eventSystem.trigger("tenant_status_changed", {
+        owner_id: ownerId,
+        tenant_id: id,
+        status: data.status,
+      });
     }
     return updated;
   }
@@ -654,6 +669,11 @@ export class TenantService {
         error: String(err?.message || err),
       });
     });
+    await eventSystem.trigger("tenant_status_changed", {
+      owner_id: ownerId,
+      tenant_id: id,
+      status: "LEFT",
+    });
     return updated;
   }
 
@@ -680,6 +700,11 @@ export class TenantService {
         tenant_id: id,
         error: String(err?.message || err),
       });
+    });
+    await eventSystem.trigger("tenant_status_changed", {
+      owner_id: ownerId,
+      tenant_id: id,
+      status: "ACTIVE",
     });
     return updated;
   }
