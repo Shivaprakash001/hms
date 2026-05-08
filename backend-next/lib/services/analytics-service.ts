@@ -49,15 +49,8 @@ export class AnalyticsService {
     // ── Single-pass CTE: replaces 3 separate overdue scans + a tenant findMany ─
     // Before: overdueAgg (aggregate), overdueGroups (groupBy), dueDates (raw) + tenants (findMany)
     // After:  one query returning sum + count + top-5 with names + earliest_due
-    const [expectedAgg, collectedAgg, daily, dues, topDefaulters] = await Promise.all([
-      prisma.rentObligation.aggregate({
-        where: { owner_id: ownerId, rent_month: { gte: start, lte: end } },
-        _sum: { amount: true },
-      }),
-      prisma.payment.aggregate({
-        where: { owner_id: ownerId, payment_date: { gte: start, lte: end } },
-        _sum: { amount_paid: true },
-      }),
+    const [cashflow, daily, topDefaulters] = await Promise.all([
+      financialService.getOperationalCashflowMetrics(ownerId, start, end),
       prisma.$queryRaw<{ date: string; amount: number }[]>`
         SELECT payment_date::text AS date, SUM(amount_paid)::float AS amount
         FROM payments
@@ -66,20 +59,19 @@ export class AnalyticsService {
           AND payment_date <= ${end}::date
         GROUP BY payment_date ORDER BY payment_date
       `,
-      financialService.getOperationalDues(ownerId),
       financialService.getOperationalDefaulters(ownerId, 5),
     ]);
 
-    const expected  = Number(expectedAgg._sum.amount  ?? 0);
-    const collected = Number(collectedAgg._sum.amount_paid  ?? 0);
-
-    const overdue = Number(dues.overdue_total || 0);
+    const expected = Number(cashflow.expected_total || 0);
+    const collected = Number(cashflow.collected_total || 0);
+    const pending = Number(cashflow.pending_total || 0);
+    const overdue = Number(cashflow.overdue_total || 0);
     const canonicalUnpaidTenantCount = operationalPendingInvariantHolds(
-      Number(dues.pending_total || 0),
-      Number(dues.unpaid_tenant_count || 0),
-    ) ? Number(dues.unpaid_tenant_count || 0) : 0;
+      pending,
+      Number(cashflow.unpaid_tenant_count || 0),
+    ) ? Number(cashflow.unpaid_tenant_count || 0) : 0;
     const overdueTenantsCount = Math.min(
-      Number(dues.overdue_tenant_count || 0),
+      Number(cashflow.overdue_tenant_count || 0),
       canonicalUnpaidTenantCount,
     );
     const top_defaulters = topDefaulters.map((d) => ({
@@ -89,8 +81,7 @@ export class AnalyticsService {
       days_overdue: d.days_overdue,
     }));
 
-    const pending         = Number(dues.pending_total || 0);
-    const collection_rate = expected > 0 ? Math.round((collected / expected) * 10000) / 100 : 0;
+    const collection_rate = Number(cashflow.collection_rate || 0);
 
     // ── Decision layer ────────────────────────────────────────────────────────
     const uncollectedPct  = expected > 0 ? Math.round((1 - collected / expected) * 100) : 0;
@@ -127,6 +118,7 @@ export class AnalyticsService {
         collection_rate,
         overdue_amount:         overdue,
         overdue_tenants_count:  overdueTenantsCount,
+        unpaid_tenants_count:   canonicalUnpaidTenantCount,
         predicted_collection,
         expected_loss,
         top_defaulters,
@@ -152,9 +144,8 @@ export class AnalyticsService {
           JOIN tenants t ON t.id = tbs.tenant_id
           WHERE t.owner_id = ${ownerId}::uuid AND t.status = 'ACTIVE'
         `,
-        prisma.$queryRaw<{ tenant_id: string; name: string; score: number; pending_amount: number; avg_delay_days: number }[]>`
+        prisma.$queryRaw<{ tenant_id: string; name: string; score: number; avg_delay_days: number }[]>`
           SELECT t.id AS tenant_id, p.name, COALESCE(tbs.score, 100) AS score,
-            COALESCE(SUM(CASE WHEN o.status IN ('PENDING','PARTIAL') THEN o.amount ELSE 0 END)::float, 0) AS pending_amount,
             COALESCE(AVG(CASE WHEN pay.payment_date > o.due_date THEN pay.payment_date - o.due_date END), 0)::float AS avg_delay_days
           FROM tenants t
           JOIN profiles p ON p.id = t.profile_id
@@ -213,9 +204,14 @@ export class AnalyticsService {
     const base = activeCount + totalExited;
 
     const distribution    = { good: Number(dist?.good ?? 0), medium: Number(dist?.medium ?? 0), risky: Number(dist?.risky ?? 0) };
+    const riskyOutstanding = await financialService.getOperationalOutstandingByTenants(
+      ownerId,
+      riskyRows.map((r) => r.tenant_id),
+    );
+
     const risky_tenants   = riskyRows.map((r) => ({
       tenant_id: r.tenant_id, name: r.name, score: r.score,
-      pending_amount: r.pending_amount,
+      pending_amount: Number(riskyOutstanding.get(r.tenant_id) || 0),
       avg_delay_days: Math.round(r.avg_delay_days * 10) / 10,
     }));
     const on_time_percentage       = tot > 0 ? Math.round((onT / tot) * 10000) / 100 : 0;

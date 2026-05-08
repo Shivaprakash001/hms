@@ -52,6 +52,140 @@ export class FinancialService {
   }
 
   /**
+   * Operational cashflow metrics for a date range.
+   *
+   * Scope:
+   * - ACTIVE tenants only
+   * - obligations whose rent_month is within [start, end]
+   * - excludes WAIVED obligations
+   * - remaining balance is canonical: amount - paid
+   */
+  async getOperationalCashflowMetrics(
+    ownerId: string,
+    start: Date,
+    end: Date,
+  ): Promise<{
+    expected_total: number;
+    collected_total: number;
+    pending_total: number;
+    overdue_total: number;
+    unpaid_tenant_count: number;
+    overdue_tenant_count: number;
+    collection_rate: number;
+  }> {
+    await this.reconcileSettledOperationalObligations(ownerId);
+
+    const now = new Date();
+    const todayUTC = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+    ));
+
+    const [row] = await prisma.$queryRaw<{
+      expected_total: number;
+      collected_total: number;
+      pending_total: number;
+      overdue_total: number;
+      unpaid_tenant_count: number;
+      overdue_tenant_count: number;
+    }[]>`
+      WITH base AS (
+        SELECT
+          o.id,
+          o.tenant_id,
+          o.amount::float                              AS amount,
+          o.due_date,
+          GREATEST(
+            o.amount - COALESCE(pay_agg.total_paid, 0),
+            0
+          )::float                                     AS remaining
+        FROM rent_obligations o
+        JOIN tenants t ON t.id = o.tenant_id
+        LEFT JOIN (
+          SELECT obligation_id, SUM(amount_paid)::float AS total_paid
+          FROM payments
+          GROUP BY obligation_id
+        ) pay_agg ON pay_agg.obligation_id = o.id
+        WHERE o.owner_id = ${ownerId}::uuid
+          AND t.status = 'ACTIVE'
+          AND o.status <> 'WAIVED'
+          AND o.rent_month >= ${start}::date
+          AND o.rent_month <= ${end}::date
+      )
+      SELECT
+        COALESCE(SUM(b.amount), 0)::float                                       AS expected_total,
+        COALESCE(SUM(b.amount - b.remaining), 0)::float                         AS collected_total,
+        COALESCE(SUM(b.remaining), 0)::float                                    AS pending_total,
+        COALESCE(SUM(
+          CASE WHEN b.due_date < ${todayUTC}::date
+            THEN b.remaining
+            ELSE 0
+          END
+        ), 0)::float                                                            AS overdue_total,
+        COUNT(DISTINCT CASE WHEN b.remaining > 0 THEN b.tenant_id END)::int     AS unpaid_tenant_count,
+        COUNT(DISTINCT CASE
+          WHEN b.remaining > 0 AND b.due_date < ${todayUTC}::date
+          THEN b.tenant_id
+        END)::int                                                               AS overdue_tenant_count
+      FROM base b
+    `;
+
+    const expected = Number(row?.expected_total || 0);
+    const collected = Number(row?.collected_total || 0);
+    const pending = Number(row?.pending_total || 0);
+    const rate = expected > 0
+      ? Math.round(((collected / expected) * 100) * 100) / 100
+      : 0;
+
+    return {
+      expected_total: expected,
+      collected_total: collected,
+      pending_total: pending,
+      overdue_total: Number(row?.overdue_total || 0),
+      unpaid_tenant_count: Number(row?.unpaid_tenant_count || 0),
+      overdue_tenant_count: Number(row?.overdue_tenant_count || 0),
+      collection_rate: rate,
+    };
+  }
+
+  /**
+   * Operational outstanding per tenant for a specific owner.
+   * ACTIVE tenants only, remaining-balance basis.
+   */
+  async getOperationalOutstandingByTenants(
+    ownerId: string,
+    tenantIds: string[],
+  ): Promise<Map<string, number>> {
+    const ids = Array.from(new Set(tenantIds.filter(Boolean)));
+    if (ids.length === 0) return new Map();
+
+    await this.reconcileSettledOperationalObligations(ownerId);
+
+    const rows = await prisma.$queryRaw<Array<{ tenant_id: string; outstanding: number }>>`
+      SELECT
+        o.tenant_id,
+        COALESCE(SUM(
+          GREATEST(o.amount - COALESCE(pay_agg.total_paid, 0), 0)
+        ), 0)::float AS outstanding
+      FROM rent_obligations o
+      JOIN tenants t ON t.id = o.tenant_id
+      LEFT JOIN (
+        SELECT obligation_id, SUM(amount_paid)::float AS total_paid
+        FROM payments
+        GROUP BY obligation_id
+      ) pay_agg ON pay_agg.obligation_id = o.id
+      WHERE o.owner_id = ${ownerId}::uuid
+        AND o.tenant_id = ANY(${ids}::uuid[])
+        AND t.status = 'ACTIVE'
+        AND o.status IN ('PENDING', 'PARTIAL')
+      GROUP BY o.tenant_id
+    `;
+
+    return new Map(rows.map((r) => [r.tenant_id, Number(r.outstanding || 0)]));
+  }
+
+  /**
    * Operational dues for the dashboard:
    * - PENDING/PARTIAL obligations
    * - belonging to ACTIVE tenants only

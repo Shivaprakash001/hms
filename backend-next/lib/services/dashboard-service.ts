@@ -118,37 +118,25 @@ export class DashboardService {
       const targetYear      = now.getUTCFullYear() + Math.floor(targetMonth / 12);
       const normalizedMonth = ((targetMonth % 12) + 12) % 12;
       const start = new Date(Date.UTC(targetYear, normalizedMonth, 1, 0, 0, 0, 0));
-      const end   = new Date(Date.UTC(targetYear, normalizedMonth + 1, 1, 0, 0, 0, 0));
+      const end   = new Date(Date.UTC(targetYear, normalizedMonth + 1, 0, 0, 0, 0, 0));
       return { start, end };
     });
 
-    // All 12 queries fire simultaneously — one DB round-trip instead of 6.
     const results = await Promise.all(
-      ranges.map(({ start, end }) =>
-        Promise.all([
-          prisma.payment.aggregate({
-            where: { owner_id: userId, payment_date: { gte: start, lt: end } },
-            _sum: { amount_paid: true },
-          }),
-          prisma.rentObligation.aggregate({
-            where: { owner_id: userId, rent_month: { gte: start, lt: end }, status: { not: "WAIVED" } },
-            _sum: { amount: true },
-          }),
-        ])
-      )
+      ranges.map(({ start, end }) => financialService.getOperationalCashflowMetrics(userId, start, end))
     );
 
     return results
-      .map(([collected, due], i) => {
+      .map((cf, i) => {
         const { start }        = ranges[i];
-        const collectedAmount  = Number(collected._sum.amount_paid || 0);
-        const dueAmount        = Number(due._sum.amount || 0);
+        const collectedAmount  = Number(cf.collected_total || 0);
+        const dueAmount        = Number(cf.expected_total || 0);
         return {
           month: formatShortMonth(start),
           year:  start.getFullYear(),
           collected: collectedAmount,
           due:       dueAmount,
-          collection_rate: dueAmount > 0 ? Math.round((collectedAmount / dueAmount) * 100) : 0,
+          collection_rate: Number(cf.collection_rate || 0),
         };
       })
       .reverse();

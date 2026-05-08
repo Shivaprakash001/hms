@@ -2091,20 +2091,16 @@ export class PaymentService {
 
     if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
 
-    let totalDue = 0;
+    const dues = await financialService.getTenantDues(tenantId);
+    let totalDue = dues.total_due;
     let totalPaid = 0;
     const allPayments: any[] = [];
-
-    // Sort obligations to find earliest unpaid reliably
-    const latestUnpaidDueDate = tenant.obligations
-      .filter((o: any) => o.status === "PENDING" || o.status === "PARTIAL")
-      .sort((a: any, b: any) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())[0]?.due_date || null;
+    const latestUnpaidDueDate = dues.items[0]?.due_date || null;
 
     const formattedObligations = tenant.obligations.map((o: any) => {
       const obligationPaid = o.payments.reduce((sum: number, p: any) => sum + Number(p.amount_paid), 0);
       const remainingDue = Math.max(0, Number(o.amount) - obligationPaid);
 
-      if (o.status !== "WAIVED") totalDue += Number(o.amount);
       totalPaid += obligationPaid;
       o.payments.forEach((p: any) => {
         const transactionId = p.reference_number || p.payment_attempt_id || p.id;
@@ -2138,8 +2134,12 @@ export class PaymentService {
       };
     });
 
-    const outstandingBalance = Math.max(totalDue - totalPaid, 0);
-    const paymentStatus = outstandingBalance <= 0 ? "PAID" : totalPaid > 0 ? "PARTIAL" : "PENDING";
+    const outstandingBalance = dues.total_due;
+    const paymentStatus = outstandingBalance <= 0
+      ? "PAID"
+      : totalPaid > 0
+        ? "PARTIAL"
+        : "PENDING";
     const allocationRent = Number(tenant.allocations?.[0]?.room?.base_rent || 0);
     const fallbackObligationRent = Number(tenant.obligations?.[0]?.amount || 0);
     const tenantRent = Number(tenant.monthly_rent || 0);

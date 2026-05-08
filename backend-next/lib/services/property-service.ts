@@ -1,6 +1,7 @@
 import { prisma } from "../db";
 import { planEnforcementService } from "./plan-enforcement-service";
 import { planGate } from "./plan-gate-service";
+import { financialService } from "./financial-service";
 
 
 export class PropertyService {
@@ -241,8 +242,8 @@ export class PropertyService {
               include: {
                 profile: true,
                 obligations: {
-                  where: { status: { not: "WAIVED" } },
-                  include: { payments: true }
+                  where: { status: { in: ["PENDING", "PARTIAL"] } },
+                  include: { payments: { select: { amount_paid: true, payment_date: true } } }
                 }
               }
             }
@@ -263,10 +264,8 @@ export class PropertyService {
       const tenants = room.allocations.map((a: any) => {
         const tenant = a.tenant;
         const profile = tenant.profile;
-        const totalAmount = tenant.obligations.reduce((sum: number, o: any) => sum + Number(o.amount), 0);
-        const totalPaid = tenant.obligations.reduce((sum: number, o: any) => 
-          sum + o.payments.reduce((pSum: number, p: any) => pSum + Number(p.amount_paid), 0), 0);
-        const pendingDues = totalAmount - totalPaid;
+        const summary = financialService.getTenantPaymentSummary(tenant.id, tenant.obligations || []);
+        const pendingDues = Number(summary.pending_amount || 0);
 
         return {
           tenant_id: tenant.id,
@@ -305,8 +304,8 @@ export class PropertyService {
               include: {
                 profile: true,
                 obligations: {
-                  where: { status: { not: "WAIVED" } },
-                  include: { payments: true }
+                  where: { status: { in: ["PENDING", "PARTIAL"] } },
+                  include: { payments: { select: { amount_paid: true, payment_date: true } } }
                 }
               }
             }
@@ -320,10 +319,8 @@ export class PropertyService {
     const tenants = room.allocations.map((a: any) => {
       const tenant = a.tenant;
       const profile = tenant.profile;
-      const totalAmount = tenant.obligations.reduce((sum: number, o: any) => sum + Number(o.amount), 0);
-      const totalPaid = tenant.obligations.reduce((sum: number, o: any) => 
-        sum + o.payments.reduce((pSum: number, p: any) => pSum + Number(p.amount_paid), 0), 0);
-      const pendingDues = totalAmount - totalPaid;
+      const summary = financialService.getTenantPaymentSummary(tenant.id, tenant.obligations || []);
+      const pendingDues = Number(summary.pending_amount || 0);
 
       // Extract last payment info
       const allPayments = tenant.obligations.flatMap((o: any) => o.payments);
@@ -331,9 +328,9 @@ export class PropertyService {
         ? allPayments.sort((p1: any, p2: any) => new Date(p2.payment_date).getTime() - new Date(p1.payment_date).getTime())[0]
         : null;
 
-      let paymentStatus = "PENDING";
-      if (pendingDues <= 0) paymentStatus = lastPayment ? "PAID" : "NO_HISTORY";
-      else if (lastPayment) paymentStatus = "PARTIAL";
+      const paymentStatus = pendingDues <= 0
+        ? (lastPayment ? "PAID" : "NO_HISTORY")
+        : (summary.total_paid > 0 ? "PARTIAL" : "PENDING");
 
       return {
         tenant_id: tenant.id,
