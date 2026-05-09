@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { propertyService } from "@/lib/services/property-service";
+import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
 
 
 /**
@@ -20,7 +21,8 @@ export async function GET(
   }
 
   try {
-    const overview = await propertyService.getRoomOverview(params.id, session.sub);
+    const scope = resolveOwnerScope(session);
+    const overview = await propertyService.getRoomOverview(params.id, scope.owner_id);
     return apiResponse(overview);
   } catch (error: any) {
     const msg = typeof error === 'string' ? error : error?.message ?? String(error);

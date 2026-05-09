@@ -12,83 +12,103 @@
  *    still works (e.g., invalidate all ['payments', 'dues'] regardless of filter).
  */
 
+const readStoredSession = () => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const owner = window.localStorage.getItem('ownerUser');
+    const tenant = window.localStorage.getItem('tenantUser');
+    return owner ? JSON.parse(owner) : (tenant ? JSON.parse(tenant) : null);
+  } catch {
+    return null;
+  }
+};
+
+const scope = () => {
+  const user = readStoredSession();
+  const ownerId = user?.owner_id || (user?.role === 'owner' ? user?.id : null) || 'anonymous';
+  const hostelId = user?.hostel_id || 'all-hostels';
+  return ['scope', ownerId, hostelId];
+};
+
+const key = (...parts) => [...scope(), ...parts];
+
 export const queryKeys = {
   // ── Auth / session ──────────────────────────────────────────────────────────
-  me: () => ['me'],
+  me: () => key('me'),
 
   // ── Notifications ───────────────────────────────────────────────────────────
-  notifications: () => ['notifications'],
+  notifications: () => key('notifications'),
 
   // ── Analytics (owner dashboard) ─────────────────────────────────────────────
   analytics: {
-    all:        ()       => ['analytics'],
-    cashflow:   (range)  => range ? ['analytics', 'cashflow', range]   : ['analytics', 'cashflow'],
-    tenants:    (range)  => range ? ['analytics', 'tenants',  range]   : ['analytics', 'tenants'],
-    funnel:     (range)  => range ? ['analytics', 'funnel',   range]   : ['analytics', 'funnel'],
-    operations: (range)  => range ? ['analytics', 'operations', range] : ['analytics', 'operations'],
+    all:        ()       => key('analytics'),
+    cashflow:   (range)  => range ? key('analytics', 'cashflow', range)   : key('analytics', 'cashflow'),
+    tenants:    (range)  => range ? key('analytics', 'tenants',  range)   : key('analytics', 'tenants'),
+    funnel:     (range)  => range ? key('analytics', 'funnel',   range)   : key('analytics', 'funnel'),
+    operations: (range)  => range ? key('analytics', 'operations', range) : key('analytics', 'operations'),
   },
 
   // ── Dashboard (legacy stats endpoints) ──────────────────────────────────────
   dashboard: {
-    all:     ()       => ['dashboard'],
-    stats:   ()       => ['dashboard', 'stats'],
-    summary: ()       => ['dashboard', 'summary'],
-    monthly: (months) => ['dashboard', 'monthly', months ?? 6],
+    all:     ()       => key('dashboard'),
+    stats:   ()       => key('dashboard', 'stats'),
+    summary: ()       => key('dashboard', 'summary'),
+    monthly: (months) => key('dashboard', 'monthly', months ?? 6),
   },
 
   // ── Tenants ─────────────────────────────────────────────────────────────────
   tenants: {
-    all:            ()         => ['tenants'],
-    list:           (filters)  => ['tenants', 'list', filters ?? {}],
-    detail:         (id)       => ['tenants', 'detail', id],
-    documents:      (id)       => ['tenants', id, 'documents'],
-    paymentHistory: (id)       => ['tenants', id, 'payments'],
+    all:            ()         => key('tenants'),
+    list:           (filters)  => key('tenants', 'list', filters ?? {}),
+    detail:         (id)       => key('tenants', 'detail', id),
+    documents:      (id)       => key('tenants', id, 'documents'),
+    paymentHistory: (id)       => key('tenants', id, 'payments'),
   },
 
   // ── Rooms ───────────────────────────────────────────────────────────────────
   rooms: {
-    all:    ()       => ['rooms'],
-    list:   (params) => ['rooms', 'list', params ?? {}],
-    detail: (id)     => ['rooms', 'detail', id],
+    all:    ()       => key('rooms'),
+    list:   (params) => key('rooms', 'list', params ?? {}),
+    detail: (id)     => key('rooms', 'detail', id),
   },
 
   // ── Allocations ─────────────────────────────────────────────────────────────
   allocations: {
-    all:    () => ['allocations'],
-    active: () => ['allocations', 'active'],
+    all:    () => key('allocations'),
+    active: () => key('allocations', 'active'),
   },
 
   // ── Payments ────────────────────────────────────────────────────────────────
   payments: {
-    all:                () => ['payments'],
-    ledger:     (params) => ['payments', 'ledger', params ?? {}],
-    dues:       (params) => ['payments', 'dues',   params ?? {}],
-    pendingVerification: () => ['payments', 'pending-verification'],
-    attempt:       (id)  => ['payments', 'attempt', id],
+    all:                () => key('payments'),
+    ledger:     (params) => key('payments', 'ledger', params ?? {}),
+    dues:       (params) => key('payments', 'dues',   params ?? {}),
+    pendingVerification: () => key('payments', 'pending-verification'),
+    attempt:       (id)  => key('payments', 'attempt', id),
   },
 
   // ── Expenses ─────────────────────────────────────────────────────────────────
   expenses: {
-    all:  () => ['expenses'],
-    list: () => ['expenses', 'list'],
+    all:  () => key('expenses'),
+    list: () => key('expenses', 'list'),
   },
 
   // ── Addon / usage ────────────────────────────────────────────────────────────
   addon: {
-    all:   () => ['addon'],
-    usage: () => ['addon', 'usage'],
+    all:   () => key('addon'),
+    usage: () => key('addon', 'usage'),
   },
 
   // ── Subscription ─────────────────────────────────────────────────────────────
   subscription: {
-    all:     () => ['subscription'],
-    current: () => ['subscription', 'current'],
-    plans:   () => ['subscription', 'plans'],
+    all:     () => key('subscription'),
+    current: () => key('subscription', 'current'),
+    plans:   () => key('subscription', 'plans'),
   },
 
   // ── Activity ─────────────────────────────────────────────────────────────────
   activity: {
-    all:  ()       => ['activity'],
-    list: (params) => ['activity', 'list', params ?? {}],
+    all:  ()       => key('activity'),
+    list: (params) => key('activity', 'list', params ?? {}),
   },
 };

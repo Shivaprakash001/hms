@@ -3,7 +3,9 @@ export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
-import { dashboardSnapshotService } from "@/lib/services/dashboard-snapshot-service";
+import { dashboardService } from "@/lib/services/dashboard-service";
+import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
+import { assertHostelBelongsToOwner } from "@/lib/security/scoped-query";
 
 
 /**
@@ -18,9 +20,12 @@ export async function GET(req: NextRequest) {
 
   try {
     const { searchParams } = new URL(req.url);
+    const scope = resolveOwnerScope(session);
+    const hostelId = searchParams.get("hostelId") || undefined;
+    await assertHostelBelongsToOwner(scope.owner_id, hostelId);
     const parseResult = parseInt(searchParams.get("months") || "6", 10);
     const months = Number.isNaN(parseResult) ? 6 : Math.max(1, Math.min(36, parseResult));
-    const stats = await dashboardSnapshotService.getMonthlyStats(session.sub, months);
+    const stats = await dashboardService.getMonthlyStats(scope.owner_id, months, hostelId);
     return apiResponse(stats);
   } catch (error: any) {
     return apiError(error.message || "Failed to fetch monthly stats");

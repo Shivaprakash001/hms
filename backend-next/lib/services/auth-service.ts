@@ -81,6 +81,7 @@ export class AuthService {
       role: profile.role,
       email: profile.email,
       owner_id: effectiveOwnerId || null,
+      tenant_id: tenantId,
     });
 
     const refreshToken = generateRefreshToken();
@@ -103,6 +104,7 @@ export class AuthService {
       role: profile.role,
       name: profile.name,
       user_id: profile.id,
+      owner_id: effectiveOwnerId || null,
       tenant_id: tenantId,
       is_profile_completed: tenantId ? tenantProfileCompleted : profile.is_profile_completed,
     };
@@ -352,4 +354,3 @@ export class AuthService {
 }
 
 export const authService = new AuthService();
-

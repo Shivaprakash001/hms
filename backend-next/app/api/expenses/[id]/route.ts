@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { expenseService } from "@/lib/services/expense-service";
+import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,8 +21,9 @@ export async function PUT(
   }
 
   try {
+    const scope = resolveOwnerScope(session);
     const body = await req.json();
-    const expense = await expenseService.updateExpense(params.id, session.sub, body);
+    const expense = await expenseService.updateExpense(params.id, scope.owner_id, body);
     return apiResponse(expense);
   } catch (error: any) {
     return apiError(error.message || "Failed to update expense");
@@ -38,7 +40,8 @@ export async function DELETE(
   }
 
   try {
-    const expense = await expenseService.deleteExpense(params.id, session.sub);
+    const scope = resolveOwnerScope(session);
+    const expense = await expenseService.deleteExpense(params.id, scope.owner_id);
     return apiResponse(expense);
   } catch (error: any) {
     return apiError(error.message || "Failed to delete expense");

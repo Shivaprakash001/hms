@@ -64,6 +64,7 @@ export async function getSession(req: NextRequest): Promise<AuthPayload | null> 
   const userRole = req.headers.get("x-user-role");
   const userEmail = req.headers.get("x-user-email");
   const ownerId = req.headers.get("x-owner-id");
+  const tenantId = req.headers.get("x-tenant-id");
 
   if (!userId || !userRole) return null;
 
@@ -71,7 +72,8 @@ export async function getSession(req: NextRequest): Promise<AuthPayload | null> 
     sub: userId,
     role: userRole,
     email: userEmail || "",
-    owner_id: ownerId
+    owner_id: ownerId,
+    tenant_id: tenantId,
   };
 }
 

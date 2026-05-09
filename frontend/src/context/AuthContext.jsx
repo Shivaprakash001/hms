@@ -2,6 +2,7 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../api/axios';
+import { queryClient } from '../config/queryClient';
 
 const AuthContext = createContext(null);
 
@@ -21,8 +22,11 @@ export const AuthProvider = ({ children }) => {
 
     const logout = () => {
         setUser(null);
+        queryClient.clear();
         localStorage.removeItem('tenantUser');
         localStorage.removeItem('ownerUser');
+        localStorage.removeItem('hms_onboarding_step');
+        sessionStorage.clear();
     };
 
     useEffect(() => {
@@ -58,6 +62,8 @@ export const AuthProvider = ({ children }) => {
                         ...response.data,
                         role: normalizeRole(response.data.role ?? storedData.role),
                         id: response.data.user_id,
+                        owner_id: response.data.owner_id,
+                        hostel_id: response.data.hostel_id,
                         tenant_id: response.data.tenant_id,
                         due_day: response.data.due_day,
                         room_no: response.data.room_no,
@@ -92,9 +98,10 @@ export const AuthProvider = ({ children }) => {
         try {
             const normalizedEmail = (email || '').trim().toLowerCase();
             const response = await api.post('/auth/login', { email: normalizedEmail, password });
-            const { access_token, role, name, user_id, tenant_id, is_profile_completed } = response.data;
+            queryClient.clear();
+            const { access_token, role, name, user_id, owner_id, tenant_id, hostel_id, is_profile_completed } = response.data;
             const normalizedRole = normalizeRole(role);
-            const userData = { email: normalizedEmail, role: normalizedRole, name, id: user_id, tenant_id, is_profile_completed, token: access_token };
+            const userData = { email: normalizedEmail, role: normalizedRole, name, id: user_id, owner_id, tenant_id, hostel_id, is_profile_completed, token: access_token };
             setUser(userData);
 
             if (normalizedRole === 'owner' || normalizedRole === 'admin') {
@@ -122,9 +129,10 @@ export const AuthProvider = ({ children }) => {
         try {
             // Pass the redirect_uri so the backend can use the same value when exchanging the code with Google
             const response = await api.post('/auth/google-callback', { code, redirect_uri: redirectUri });
-            const { access_token, role, name, user_id, tenant_id, is_profile_completed } = response.data;
+            queryClient.clear();
+            const { access_token, role, name, user_id, owner_id, tenant_id, hostel_id, is_profile_completed } = response.data;
             const normalizedRole = normalizeRole(role);
-            const userData = { role: normalizedRole, name, id: user_id, tenant_id, is_profile_completed, token: access_token };
+            const userData = { role: normalizedRole, name, id: user_id, owner_id, tenant_id, hostel_id, is_profile_completed, token: access_token };
             setUser(userData);
 
             if (normalizedRole === 'owner' || normalizedRole === 'admin') {

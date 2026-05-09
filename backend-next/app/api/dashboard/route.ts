@@ -6,6 +6,8 @@ import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { dashboardService } from "@/lib/services/dashboard-service";
 import { activityService } from "@/lib/services/activity-service";
 import { getCachedDashboard, setDashboardCache } from "@/lib/cache/dashboard-cache";
+import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
+import { assertHostelBelongsToOwner } from "@/lib/security/scoped-query";
 
 export async function GET(req: NextRequest) {
   const session = await getSession(req);
@@ -17,7 +19,16 @@ export async function GET(req: NextRequest) {
   const monthsStr = searchParams.get("months");
   const months = monthsStr ? parseInt(monthsStr, 10) : 6;
   const hostelId = searchParams.get("hostelId") || undefined; // Phase 4: hostel isolation
-  const cacheKey = `${session.sub}_${months}_${hostelId || "ALL"}`;
+
+  let scope;
+  try {
+    scope = resolveOwnerScope(session);
+    await assertHostelBelongsToOwner(scope.owner_id, hostelId);
+  } catch (error: any) {
+    return apiError(error.message || "Forbidden", error.code || "FORBIDDEN", error.code === "UNAUTHORIZED" ? 401 : 403);
+  }
+
+  const cacheKey = `${scope.owner_id}_${months}_${hostelId || "ALL"}`;
 
   const cachedResult = getCachedDashboard(cacheKey);
   if (cachedResult) {
@@ -27,9 +38,9 @@ export async function GET(req: NextRequest) {
   try {
     // Run everything in parallel! The real secret to production performance
     const [summary, monthlyStats, activityRes] = await Promise.all([
-      dashboardService.getOwnerStats(session.sub, hostelId),
-      dashboardService.getMonthlyStats(session.sub, months, hostelId),
-      activityService.getOwnerActivity({ userId: session.sub, limit: 5, offset: 0 }).catch(() => ({ items: [], total: 0 }))
+      dashboardService.getOwnerStats(scope.owner_id, hostelId),
+      dashboardService.getMonthlyStats(scope.owner_id, months, hostelId),
+      activityService.getOwnerActivity({ userId: scope.owner_id, limit: 5, offset: 0 }).catch(() => ({ items: [], total: 0 }))
     ]);
 
     const finalResponse = {

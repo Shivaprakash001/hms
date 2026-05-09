@@ -60,6 +60,14 @@ export class TenantService {
     if (requestingUser.role === "TENANT" && tenant.profile_id !== requestingUser.sub) {
       throw new Error("FORBIDDEN: You can only view your own record");
     }
+    if (requestingUser.role === "OWNER" && tenant.owner_id !== requestingUser.sub) {
+      await eventLog.log("OWNER_SCOPE_VIOLATION", requestingUser.sub, {
+        entity_type: "Tenant",
+        entity_id: id,
+        attempted_owner_id: tenant.owner_id,
+      });
+      throw new Error("FORBIDDEN: You can only view your own tenants");
+    }
 
     const verification_badge = await documentService.getVerificationBadge(id);
     return { ...tenant, verification_badge };
@@ -112,6 +120,14 @@ export class TenantService {
 
     if (requestingUser.role === "TENANT" && profileId !== requestingUser.sub) {
       throw new Error("FORBIDDEN: You can only view your own record");
+    }
+    if (requestingUser.role === "OWNER" && tenant.owner_id !== requestingUser.sub) {
+      await eventLog.log("OWNER_SCOPE_VIOLATION", requestingUser.sub, {
+        entity_type: "Tenant",
+        entity_id: tenant.id,
+        attempted_owner_id: tenant.owner_id,
+      });
+      throw new Error("FORBIDDEN: You can only view your own tenants");
     }
 
     const verification_badge = await documentService.getVerificationBadge(tenant.id);
@@ -454,8 +470,8 @@ export class TenantService {
     });
   }
   async getOwnerTenantOverview(tenantId: string, ownerId: string) {
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId },
+    const tenant = await prisma.tenant.findFirst({
+      where: { id: tenantId, owner_id: ownerId },
       include: {
         profile: true,
         allocations: {
@@ -470,22 +486,19 @@ export class TenantService {
     });
 
     if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
-    if (tenant.owner_id !== ownerId) {
-      throw new Error("FORBIDDEN: You can only view your own tenants");
-    }
 
     const currentRoom = tenant.allocations[0]?.room;
 
-    const dues = await financialService.getTenantDues(tenantId);
+    const dues = await financialService.getTenantDues(tenantId, ownerId);
     const paymentAgg = await prisma.payment.aggregate({
-      where: { tenant_id: tenantId },
+      where: { tenant_id: tenantId, owner_id: ownerId },
       _sum: { amount_paid: true },
     });
     const totalPaid = Number(paymentAgg._sum.amount_paid || 0);
     const totalDue = dues.total_due;
     const outstanding = dues.total_due;
     const allPayments = await prisma.payment.findMany({
-      where: { tenant_id: tenantId },
+      where: { tenant_id: tenantId, owner_id: ownerId },
       orderBy: { payment_date: "desc" },
       take: 25,
       select: {

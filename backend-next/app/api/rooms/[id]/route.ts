@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
 
 
 /**
@@ -22,8 +23,9 @@ export async function GET(
   }
 
   try {
+    const scope = resolveOwnerScope(session);
     const room = await prisma.room.findFirst({
-      where: { id: params.id, hostel: { owner_id: session.sub } },
+      where: { id: params.id, hostel: { owner_id: scope.owner_id } },
     });
 
     if (!room) return apiError("Room not found", "NOT_FOUND", 404);
@@ -46,18 +48,19 @@ export async function PATCH(
   }
 
   try {
+    const scope = resolveOwnerScope(session);
     const body = await req.json();
 
     const updatedRoom = await propertyService.updateRoom(
       params.id,
       body,
-      session.sub
+      scope.owner_id
     );
 
     // Broadcast Server-Sent Event so owner dashboards refresh automatically
     await eventSystem.trigger("room_updated", {
       roomId: params.id,
-      ownerId: session.sub
+      ownerId: scope.owner_id
     });
 
     return apiResponse(updatedRoom);
@@ -88,9 +91,10 @@ export async function DELETE(
   }
 
   try {
+    const scope = resolveOwnerScope(session);
     // Verify ownership
     const existing = await prisma.room.findFirst({
-      where: { id: params.id, hostel: { owner_id: session.sub } },
+      where: { id: params.id, hostel: { owner_id: scope.owner_id } },
     });
     if (!existing) return apiError("Room not found", "NOT_FOUND", 404);
 

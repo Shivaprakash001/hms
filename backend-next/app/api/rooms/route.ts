@@ -6,6 +6,8 @@ import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { RoomCreateSchema } from "@/lib/validators";
 import { propertyService } from "@/lib/services/property-service";
+import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
+import { assertHostelBelongsToOwner, scopedRoomWhere } from "@/lib/security/scoped-query";
 
 
 /**
@@ -20,22 +22,20 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const scope = resolveOwnerScope(session);
     const { searchParams } = new URL(req.url);
     const grouped = searchParams.get("grouped") !== "false";
     const hostelId = searchParams.get("hostelId") || undefined; // Phase 4: hostel isolation
+    await assertHostelBelongsToOwner(scope.owner_id, hostelId);
 
     if (grouped) {
-      const floors = await propertyService.getFloorsWithRooms(session.sub, hostelId);
+      const floors = await propertyService.getFloorsWithRooms(scope.owner_id, hostelId);
       return apiResponse(floors);
     }
 
     // Flat list
     const rooms = await prisma.room.findMany({
-      where: {
-        hostel: { owner_id: session.sub },
-        is_active: true,
-        ...(hostelId ? { hostel_id: hostelId } : {}),
-      },
+      where: scopedRoomWhere({ owner_id: scope.owner_id, hostel_id: hostelId }, { is_active: true }),
       orderBy: { room_no: "asc" },
     });
     return apiResponse(rooms);
@@ -51,23 +51,22 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const scope = resolveOwnerScope(session);
     const body = await req.json();
     const validated = RoomCreateSchema.safeParse(body);
     if (!validated.success) {
       return apiError("Validation error", "VALIDATION_ERROR", 400);
     }
 
-    // Phase 2: accept explicit hostelId from frontend; fallback to findFirst for backward compat
+    // Phase 2: accept explicit hostelId from frontend; fallback remains owner-scoped.
     let hostelId = body.hostelId;
     let hostel;
     if (hostelId) {
-      hostel = await prisma.hostel.findUnique({ where: { id: hostelId } });
-      if (!hostel || hostel.owner_id !== session.sub) {
-        return apiError("Hostel not found or not owned by you", "FORBIDDEN", 403);
-      }
+      hostel = await assertHostelBelongsToOwner(scope.owner_id, hostelId);
     } else {
       hostel = await prisma.hostel.findFirst({
-        where: { owner_id: session.sub, is_active: true },
+        where: { owner_id: scope.owner_id, is_active: true },
+        orderBy: { created_at: "asc" },
       });
     }
     if (!hostel) {

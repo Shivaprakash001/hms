@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { tenantService } from "@/lib/services/tenant-service";
+import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
 
 
 /**
@@ -40,8 +41,9 @@ export async function PUT(
   }
 
   try {
+    const scope = resolveOwnerScope(session);
     const body = await req.json();
-    const updated = await tenantService.updateTenant(params.id, body, session.sub);
+    const updated = await tenantService.updateTenant(params.id, body, scope.owner_id);
     return apiResponse(updated);
   } catch (error: any) {
     const msg = typeof error?.message === "string" ? error.message : String(error);
@@ -61,7 +63,8 @@ export async function DELETE(
   }
 
   try {
-    const result = await tenantService.deleteTenant(params.id, session.sub);
+    const scope = resolveOwnerScope(session);
+    const result = await tenantService.deleteTenant(params.id, scope.owner_id);
     return apiResponse(result);
   } catch (error: any) {
     const msg = typeof error?.message === "string" ? error.message : String(error);

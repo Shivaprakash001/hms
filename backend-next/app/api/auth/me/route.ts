@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
         id: true,
         email: true,
         role: true,
+        owner_id: true,
         is_profile_completed: true
       }
     });
@@ -58,6 +59,7 @@ export async function GET(req: NextRequest) {
 
     return apiResponse({
       user_id: profile.id,
+      owner_id: profile.role === "OWNER" ? profile.id : profile.owner_id,
       email: profile.email,
       role: profile.role,
       tenant_id: tenantId,

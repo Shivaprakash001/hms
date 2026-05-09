@@ -5,6 +5,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { tenantService } from "@/lib/services/tenant-service";
 import { planGate, TenantHardCapError } from "@/lib/services/plan-gate-service";
+import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
+import { assertHostelBelongsToOwner } from "@/lib/security/scoped-query";
 
 
 /**
@@ -19,6 +21,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const scope = resolveOwnerScope(session);
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status") || undefined;
     const search = searchParams.get("search") || undefined;
@@ -27,9 +30,12 @@ export async function GET(req: NextRequest) {
     const parsedOffset = parseInt(searchParams.get("offset") || "0", 10);
     const offset = Number.isNaN(parsedOffset) ? 0 : parsedOffset;
 
+    const hostelId = searchParams.get("hostelId") || undefined;
+    await assertHostelBelongsToOwner(scope.owner_id, hostelId);
+
     const result = await tenantService.getAllTenants({
-      status, search, ownerId: session.sub, limit, offset,
-      hostelId: searchParams.get("hostelId") || undefined, // Phase 4: hostel isolation
+      status, search, ownerId: scope.owner_id, limit, offset,
+      hostelId, // Phase 4: hostel isolation
     });
 
     return apiResponse(result);
@@ -45,6 +51,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const scope = resolveOwnerScope(session);
     const body = await req.json();
     
     if (!body.profile_id) {
@@ -54,9 +61,9 @@ export async function POST(req: NextRequest) {
       return apiError("monthly_rent must be > 0", "VALIDATION_ERROR", 400);
     }
 
-    await planGate.assertTenantLimit(session.sub);
+    await planGate.assertTenantLimit(scope.owner_id);
 
-    const tenant = await tenantService.createTenant(body, session.sub);
+    const tenant = await tenantService.createTenant(body, scope.owner_id);
     return apiResponse(tenant, 201);
   } catch (error: any) {
     if (error instanceof TenantHardCapError) {

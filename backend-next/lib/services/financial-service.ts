@@ -482,7 +482,7 @@ export class FinancialService {
    * Returns itemised list of PENDING/PARTIAL obligations with remaining amounts.
    * Does NOT include PAID obligations — they are settled.
    */
-  async getTenantDues(tenantId: string): Promise<{
+  async getTenantDues(tenantId: string, ownerId?: string): Promise<{
     tenant_id: string;
     items: TenantDueItem[];
     total_due: number;
@@ -493,6 +493,7 @@ export class FinancialService {
     const obligations = await prisma.rentObligation.findMany({
       where: {
         tenant_id: tenantId,
+        ...(ownerId ? { owner_id: ownerId } : {}),
         status: { in: ["PENDING", "PARTIAL"] },
       },
       include: {
