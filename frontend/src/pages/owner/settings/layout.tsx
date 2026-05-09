@@ -20,6 +20,7 @@ export function SettingsNav({ activeSection, setActiveSection, hostels, activeHo
             {!compact && (
                 <select value={activeHostelId || ''} onChange={(e) => onHostelChange(e.target.value)} className={inputClass}>
                     {hostels.map((hostel: any) => <option key={hostel.id} value={hostel.id}>{hostel.name}</option>)}
+                    <option value="ADD_NEW">+ Add new hostel</option>
                 </select>
             )}
             

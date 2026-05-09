@@ -134,6 +134,10 @@ export const ownerService = {
         const response = await api.get('/owner/hostels');
         return response.data;
     },
+    createHostel: async (data) => {
+        const response = await api.post('/owner/hostels', data);
+        return response.data;
+    },
     getHostelBillingDefaults: async (hostelId) => {
         const response = await api.get(`/hostels/${hostelId}/billing-defaults`);
         return response.data;

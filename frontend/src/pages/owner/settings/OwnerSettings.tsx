@@ -12,6 +12,8 @@ import {
 } from './sections';
 import { SettingsNav, MobileOverview, MobileDrawer } from './layout';
 
+import { AddHostelModal } from './components/AddHostelModal';
+
 export function errorMessage(error: any, fallback: string) {
     const detail = error?.response?.data?.detail || error?.response?.data?.message || error?.response?.data?.error?.message || error?.message;
     return `${fallback}${detail ? `. ${typeof detail === 'string' ? detail : detail.message || ''}` : ''}`;
@@ -40,6 +42,7 @@ export default function OwnerSettings() {
     const [activeHostelId, setActiveHostelIdState] = useState('');
     const [hostel, setHostel] = useState<any>(null);
     const [prefs, setPrefs] = useState<any>(DEFAULT_PREFS);
+    const [plan, setPlan] = useState<any>(null);
     const [planId, setPlanId] = useState('free');
     const [addonUsage, setAddonUsage] = useState<any>(null);
     
@@ -48,6 +51,7 @@ export default function OwnerSettings() {
     ));
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [buyCreditsModal, setBuyCreditsModal] = useState<string | null>(null);
+    const [addHostelModalOpen, setAddHostelModalOpen] = useState(false);
 
     async function load(selectedId?: string) {
         setLoading(true);
@@ -74,6 +78,7 @@ export default function OwnerSettings() {
             setActiveHostelIdState(chosenId);
             setHostel(nextHostel);
             setPrefs(nextPrefs);
+            setPlan(subscriptionData?.current_plan || null);
             setPlanId(subscriptionData?.current_plan?.id || subscriptionData?.plan_id || 'free');
             setAddonUsage(usageData || null);
             updatePreferencesLocal(nextPrefs);
@@ -87,8 +92,21 @@ export default function OwnerSettings() {
     useEffect(() => { load(); }, []);
 
     async function switchHostel(id: string) {
+        if (id === 'ADD_NEW') {
+            setAddHostelModalOpen(true);
+            return;
+        }
         if (!id || id === activeHostelId) return;
         await load(id);
+    }
+
+    async function createNewHostel(values: any) {
+        const response = await ownerService.createHostel(values);
+        const newHostels = response?.hostels || [];
+        // The newly created hostel should be the last one if ordered by created_at, or we can just pick it if it's the only one missing
+        // It's safer to just reload and pick the newly created one. We'll pick the last one in the array.
+        const newId = newHostels[newHostels.length - 1]?.id;
+        await load(newId);
     }
 
     async function saveProfile(values: any) {
@@ -186,6 +204,8 @@ export default function OwnerSettings() {
             </MobileDrawer>
             
             {buyCreditsModal && <BuyRemindersModal isOpen={!!buyCreditsModal} onClose={() => setBuyCreditsModal(null)} trigger={buyCreditsModal} onSuccess={() => load(activeHostelId)} />}
+            
+            <AddHostelModal isOpen={addHostelModalOpen} onClose={() => setAddHostelModalOpen(false)} onSubmit={createNewHostel} plan={plan} hostelsCount={hostels.length} />
         </div>
     );
 }

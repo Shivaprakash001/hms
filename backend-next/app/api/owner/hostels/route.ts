@@ -86,3 +86,48 @@ export async function GET(req: NextRequest) {
     return apiError(error.message || "Failed to fetch hostels");
   }
 }
+
+export async function POST(req: NextRequest) {
+  const session = await getSession(req);
+  if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
+    return apiError("Forbidden", "FORBIDDEN", 403);
+  }
+
+  try {
+    const body = await req.json();
+    const { propertyService } = await import("@/lib/services/property-service");
+    
+    // We will bypass the existingCount check by adding a dedicated create method
+    // or by temporarily mocking hostelId and doing it manually. 
+    // It's cleaner to just do it directly here using the enforcement service.
+    const { planEnforcementService } = await import("@/lib/services/plan-enforcement-service");
+    
+    await planEnforcementService.assertSubscriptionActive(session.sub);
+    await planEnforcementService.assertHostelLimit(session.sub);
+
+    const name = body.name || body.hostel_name || "New Hostel";
+    const phone = body.phone || body.hostel_phone || "";
+    
+    await prisma.hostel.create({
+      data: {
+        owner_id: session.sub,
+        name,
+        phone,
+        address: body.address || "",
+        city: body.city || null,
+        state: body.state || null,
+        pincode: body.pincode || null,
+      },
+    });
+
+    const result = await propertyService.getOwnerProfile(session.sub);
+    return apiResponse(result);
+  } catch (error: any) {
+    const msg = typeof error === "string" ? error : (error && typeof error.message === "string" ? error.message : String(error));
+    if (msg.startsWith("PLAN_LIMIT:")) {
+      const code = msg.replace("PLAN_LIMIT:", "").trim();
+      return apiError(code, code, 402);
+    }
+    return apiError(msg || "Failed to create hostel");
+  }
+}
