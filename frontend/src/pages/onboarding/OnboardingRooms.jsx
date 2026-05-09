@@ -6,7 +6,14 @@ import { roomService } from '../../api/services';
 import { setStoredStep } from '../../hooks/useOnboardingState';
 
 const CAPACITY_OPTIONS = [1, 2, 3, 4, 6, 8, 10];
-const FLOOR_OPTIONS = ['Ground', '1st', '2nd', '3rd', '4th', '5th'];
+const FLOOR_OPTIONS = [
+  { label: 'Ground floor', value: 0 },
+  { label: '1st floor',   value: 1 },
+  { label: '2nd floor',   value: 2 },
+  { label: '3rd floor',   value: 3 },
+  { label: '4th floor',   value: 4 },
+  { label: '5th floor',   value: 5 },
+];
 
 const emptyForm = () => ({ number: '', rent: '', capacity: 2, floor: '' });
 
@@ -38,12 +45,13 @@ export default function OnboardingRooms() {
     setSaving(true);
     setApiError('');
     try {
-      const room = await roomService.create({
-        room_number: form.number.trim(),
-        base_rent:   Number(form.rent),
-        capacity:    form.capacity,
-        floor:       form.floor || undefined,
-      });
+      const payload = {
+        room_no:  form.number.trim(),
+        capacity: form.capacity,
+        // floor must be an integer or omitted — convert string label to index
+        ...(form.floor !== '' ? { floor: Number(form.floor) } : {}),
+      };
+      const room = await roomService.create(payload);
       setAddedRooms(r => [...r, { id: room.id || Date.now(), number: form.number, rent: Number(form.rent) }]);
       setForm(emptyForm());
       setShowForm(false);
@@ -178,7 +186,9 @@ export default function OnboardingRooms() {
                   className="w-full py-3.5 px-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="">Select</option>
-                  {FLOOR_OPTIONS.map(f => <option key={f} value={f}>{f} floor</option>)}
+                  {FLOOR_OPTIONS.map(f => (
+                    <option key={f.value} value={f.value}>{f.label}</option>
+                  ))}
                 </select>
               </div>
             </div>
