@@ -345,6 +345,7 @@ export class RentGenerationService {
               owner_id: alloc.tenant.owner_id, rent_month: rentMonth,
               amount: rentAmount, total_amount: rentAmount,
               due_date: tenantDueDate, status: "PENDING", obligation_type: "RENT",
+              hostel_id: hostelId, // Phase 2: immutable hostel context at generation time
             });
             stat.created++;
           } else {
@@ -381,6 +382,7 @@ export class RentGenerationService {
                 owner_id: alloc.tenant.owner_id, rent_month: rentMonth,
                 amount: maintAmount, total_amount: maintAmount,
                 due_date: tenantDueDate, status: "PENDING", obligation_type: "MAINTENANCE",
+                hostel_id: hostelId, // Phase 2: immutable hostel context at generation time
               });
               stat.created++;
             } else {

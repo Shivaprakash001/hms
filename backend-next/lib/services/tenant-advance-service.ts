@@ -1,6 +1,6 @@
 import { prisma } from "../db";
 import { getLogger } from "../logger";
-import { getPreferences } from "../preferences";
+import { getPreferences, resolvePreferences } from "../preferences";
 
 const logger = getLogger("tenant.advance");
 
@@ -67,7 +67,7 @@ export class TenantAdvanceService {
 
     if (amount <= 0) throw new Error("BAD_REQUEST: Amount must be positive");
     await this._assertOwnership(tenantId, ownerId);
-    await this._assertAdvanceEnabled(ownerId);
+    await this._assertAdvanceEnabled(ownerId, tenantId);
 
     return prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${tenantId}::uuid FOR UPDATE`;
@@ -174,7 +174,7 @@ export class TenantAdvanceService {
 
     if (amount <= 0) throw new Error("BAD_REQUEST: Amount must be positive");
     await this._assertOwnership(tenantId, ownerId);
-    await this._assertAdvanceEnabled(ownerId);
+    await this._assertAdvanceEnabled(ownerId, tenantId);
 
     // For REFUND: the entry is created with refund_status = PENDING.
     // Balance decreases immediately (intent recorded), but the physical money may not have
@@ -258,7 +258,7 @@ export class TenantAdvanceService {
 
     if (amount <= 0) throw new Error("BAD_REQUEST: Amount must be positive");
     await this._assertOwnership(tenantId, ownerId);
-    await this._assertAdvanceEnabled(ownerId);
+    await this._assertAdvanceEnabled(ownerId, tenantId);
 
     return prisma.$transaction(async (tx) => {
       // Lock tenant row first (always first to avoid deadlock ordering)
@@ -360,8 +360,20 @@ export class TenantAdvanceService {
     if (tenant.owner_id !== ownerId) throw new Error("FORBIDDEN: Tenant does not belong to this owner");
   }
 
-  private async _assertAdvanceEnabled(ownerId: string) {
-    const prefs = await getPreferences(ownerId);
+  private async _assertAdvanceEnabled(ownerId: string, tenantId?: string) {
+    // Phase 2: resolve from tenant's hostel if available
+    let prefs: any;
+    if (tenantId) {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { hostel_id: true },
+      });
+      if (tenant?.hostel_id) {
+        const hostel = await prisma.hostel.findUnique({ where: { id: tenant.hostel_id } });
+        prefs = resolvePreferences(hostel);
+      }
+    }
+    if (!prefs) prefs = await getPreferences(ownerId);
     if (!prefs.advance_enabled) {
       throw new Error("BAD_REQUEST: Advance/deposit feature is not enabled for this hostel. Enable it in Settings → Preferences.");
     }

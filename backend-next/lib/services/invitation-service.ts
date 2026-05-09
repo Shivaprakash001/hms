@@ -21,13 +21,8 @@ export class InvitationService {
   async inviteTenant(data: any, ownerId: string) {
     const { email, name, phone, room_id, monthly_rent } = data;
 
-    // ── Resolve financial defaults from owner preferences ────────
-    const { getPreferences } = await import("../preferences");
-    const prefs = await getPreferences(ownerId);
-
-    const advance_amount     = Number(data.advance_amount     ?? prefs.advance_amount_default     ?? 0);
-    const maintenance_amount = Number(data.maintenance_amount ?? prefs.maintenance_amount_default ?? 0);
-    const maintenance_type   = data.maintenance_type || prefs.maintenance_type || "MONTHLY";
+    // ── Resolve financial defaults from hostel preferences ────────
+    // Phase 2: prefs resolved from room.hostel after room fetch (below)
 
     // ── Resolve joining date + billing start ─────────────────────
     const today = new Date();
@@ -78,6 +73,14 @@ export class InvitationService {
       throw new Error("CAPACITY_EXCEEDED: Room is already at full capacity");
     }
 
+    // Phase 2: resolve prefs from the target room's hostel (not findFirst owner)
+    const { resolvePreferences } = await import("../preferences");
+    const prefs = resolvePreferences(room.hostel);
+
+    const advance_amount     = Number(data.advance_amount     ?? prefs.advance_amount_default     ?? 0);
+    const maintenance_amount = Number(data.maintenance_amount ?? prefs.maintenance_amount_default ?? 0);
+    const maintenance_type   = data.maintenance_type || prefs.maintenance_type || "MONTHLY";
+
     const owner = await prisma.profile.findUnique({ where: { id: ownerId } });
     if (!owner) throw new Error("NOT_FOUND: Owner profile not found");
 
@@ -121,6 +124,7 @@ export class InvitationService {
           advance_deposit:    advance_amount,
           maintenance_charge: maintenance_amount,
           maintenance_type,
+          hostel_id: room.hostel.id, // Phase 2: write-through hostel_id
         } as any,
       });
 
@@ -130,6 +134,7 @@ export class InvitationService {
           room_id,
           start_date: joiningDate,
           is_active: true,
+          hostel_id: room.hostel.id, // Phase 2: write-through hostel_id
         },
       });
 

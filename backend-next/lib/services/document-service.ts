@@ -1,7 +1,7 @@
 import { prisma } from "../db";
 import { imagekit, IMAGEKIT_URL_ENDPOINT } from "../imagekit";
 import { eventSystem } from "../events";
-import { getPreferences } from "../preferences";
+import { getPreferences, resolvePreferences } from "../preferences";
 import { planEnforcementService } from "./plan-enforcement-service";
 
 // ── Document type constants ─────────────────────────────────
@@ -321,7 +321,18 @@ export class DocumentService {
 
     let requireApproval = false;
     if (requestingUser.role === "TENANT" && tenant.owner_id) {
-      const prefs = await getPreferences(tenant.owner_id);
+      // Phase 2: resolve from tenant's hostel if available
+      const tenantWithHostel = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { hostel_id: true },
+      });
+      let prefs: any;
+      if (tenantWithHostel?.hostel_id) {
+        const hostel = await prisma.hostel.findUnique({ where: { id: tenantWithHostel.hostel_id } });
+        prefs = resolvePreferences(hostel);
+      } else {
+        prefs = await getPreferences(tenant.owner_id);
+      }
       requireApproval = prefs.require_doc_approval === true;
     }
 

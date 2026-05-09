@@ -64,6 +64,7 @@ export class FinancialService {
     ownerId: string,
     start: Date,
     end: Date,
+    hostelId?: string,
   ): Promise<{
     expected_total: number;
     collected_total: number;
@@ -82,15 +83,18 @@ export class FinancialService {
       now.getUTCDate(),
     ));
 
-    const [row] = await prisma.$queryRaw<{
+    // Phase 4: optional hostel isolation for analytics
+    const hostelFilter = hostelId ? `AND o.hostel_id = '${hostelId}'::uuid` : "";
+
+    const [row] = await prisma.$queryRawUnsafe<{
       expected_total: number;
       collected_total: number;
       pending_total: number;
       overdue_total: number;
       unpaid_tenant_count: number;
       overdue_tenant_count: number;
-    }[]>`
-      WITH base AS (
+    }[]>(
+      `WITH base AS (
         SELECT
           o.id,
           o.tenant_id,
@@ -107,29 +111,31 @@ export class FinancialService {
           FROM payments
           GROUP BY obligation_id
         ) pay_agg ON pay_agg.obligation_id = o.id
-        WHERE o.owner_id = ${ownerId}::uuid
+        WHERE o.owner_id = $1::uuid
           AND t.status = 'ACTIVE'
           AND o.status <> 'WAIVED'
-          AND o.rent_month >= ${start}::date
-          AND o.rent_month <= ${end}::date
+          AND o.rent_month >= $2::date
+          AND o.rent_month <= $3::date
+          ${hostelFilter}
       )
       SELECT
         COALESCE(SUM(b.amount), 0)::float                                       AS expected_total,
         COALESCE(SUM(b.amount - b.remaining), 0)::float                         AS collected_total,
         COALESCE(SUM(b.remaining), 0)::float                                    AS pending_total,
         COALESCE(SUM(
-          CASE WHEN b.due_date < ${todayUTC}::date
+          CASE WHEN b.due_date < $4::date
             THEN b.remaining
             ELSE 0
           END
         ), 0)::float                                                            AS overdue_total,
         COUNT(DISTINCT CASE WHEN b.remaining > 0 THEN b.tenant_id END)::int     AS unpaid_tenant_count,
         COUNT(DISTINCT CASE
-          WHEN b.remaining > 0 AND b.due_date < ${todayUTC}::date
+          WHEN b.remaining > 0 AND b.due_date < $4::date
           THEN b.tenant_id
         END)::int                                                               AS overdue_tenant_count
-      FROM base b
-    `;
+      FROM base b`,
+      ownerId, start, end, todayUTC,
+    );
 
     const expected = Number(row?.expected_total || 0);
     const collected = Number(row?.collected_total || 0);
@@ -191,7 +197,7 @@ export class FinancialService {
    * - belonging to ACTIVE tenants only
    * - split into: pending (due_date >= today), overdue (due_date < today)
    */
-  async getOperationalDues(ownerId: string): Promise<{
+  async getOperationalDues(ownerId: string, hostelId?: string): Promise<{
     pending_total: number;
     overdue_total: number;
     overdue_count: number;
@@ -207,7 +213,10 @@ export class FinancialService {
       now.getUTCDate(),
     ));
 
-    const [row] = await prisma.$queryRaw<
+    // Phase 4: optional hostel isolation
+    const hostelFilter = hostelId ? `AND o.hostel_id = '${hostelId}'::uuid` : "";
+
+    const [row] = await prisma.$queryRawUnsafe<
       {
         pending_total: number;
         overdue_total: number;
@@ -215,25 +224,25 @@ export class FinancialService {
         unpaid_tenant_count: number;
         overdue_tenant_count: number;
       }[]
-    >`
-      SELECT
+    >(
+      `SELECT
         COALESCE(SUM(
           o.amount - COALESCE(pay_agg.total_paid, 0)
         ), 0)::float                                                                  AS pending_total,
         COALESCE(SUM(
-          CASE WHEN o.due_date < ${todayUTC}::date
+          CASE WHEN o.due_date < $2::date
             THEN o.amount - COALESCE(pay_agg.total_paid, 0)
             ELSE 0
           END
         ), 0)::float                                                                  AS overdue_total,
         COUNT(
-          CASE WHEN o.due_date < ${todayUTC}::date
+          CASE WHEN o.due_date < $2::date
             AND o.amount - COALESCE(pay_agg.total_paid, 0) > 0
           THEN 1 END
         )::int                                                                        AS overdue_count,
         COUNT(DISTINCT t.id)::int                                                     AS unpaid_tenant_count,
         COUNT(DISTINCT CASE
-          WHEN o.due_date < ${todayUTC}::date THEN t.id
+          WHEN o.due_date < $2::date THEN t.id
         END)::int                                                                     AS overdue_tenant_count
       FROM rent_obligations o
       JOIN tenants t ON t.id = o.tenant_id
@@ -242,11 +251,13 @@ export class FinancialService {
         FROM payments
         GROUP BY obligation_id
       ) pay_agg ON pay_agg.obligation_id = o.id
-      WHERE o.owner_id    = ${ownerId}::uuid
+      WHERE o.owner_id    = $1::uuid
         AND o.status      IN ('PENDING', 'PARTIAL')
         AND t.status      = 'ACTIVE'
         AND o.amount - COALESCE(pay_agg.total_paid, 0) > 0
-    `;
+        ${hostelFilter}`,
+      ownerId, todayUTC,
+    );
 
     return {
       pending_total: row?.pending_total ?? 0,
@@ -264,6 +275,7 @@ export class FinancialService {
   async getOperationalDefaulters(
     ownerId: string,
     limit: number = 5,
+    hostelId?: string,
   ): Promise<Array<{
     tenant_id: string;
     name: string;
@@ -271,13 +283,15 @@ export class FinancialService {
     days_overdue: number;
   }>> {
     const safeLimit = Math.max(1, Math.min(50, Math.floor(limit || 5)));
-    const rows = await prisma.$queryRaw<Array<{
+    // Phase 4: optional hostel isolation
+    const hostelFilter = hostelId ? `AND o.hostel_id = '${hostelId}'::uuid` : "";
+    const rows = await prisma.$queryRawUnsafe<Array<{
       tenant_id: string;
       name: string;
       pending_amount: number;
       days_overdue: number;
-    }>>`
-      WITH overdue AS (
+    }>>(
+      `WITH overdue AS (
         SELECT
           o.tenant_id,
           p.name,
@@ -291,11 +305,12 @@ export class FinancialService {
           FROM payments
           GROUP BY obligation_id
         ) pay_agg ON pay_agg.obligation_id = o.id
-        WHERE o.owner_id = ${ownerId}::uuid
+        WHERE o.owner_id = $1::uuid
           AND o.status IN ('PENDING', 'PARTIAL')
           AND t.status = 'ACTIVE'
           AND o.due_date < CURRENT_DATE
           AND o.amount - COALESCE(pay_agg.total_paid, 0) > 0
+          ${hostelFilter}
         GROUP BY o.tenant_id, p.name
       )
       SELECT
@@ -305,8 +320,9 @@ export class FinancialService {
         GREATEST(0, (CURRENT_DATE - earliest_due::date))::int AS days_overdue
       FROM overdue
       ORDER BY pending_amount DESC
-      LIMIT ${safeLimit}
-    `;
+      LIMIT $2`,
+      ownerId, safeLimit,
+    );
 
     return rows.map((r) => ({
       tenant_id: r.tenant_id,
@@ -319,11 +335,18 @@ export class FinancialService {
   /**
    * Overdue operational obligations for reminder engine.
    * ACTIVE tenants only; excludes cancelled/expired/invited/left lifecycle states.
+   *
+   * @param asOfDate  - Reference date for overdue calculation (default: now)
+   * @param ownerId   - Optional: scope to a single owner. Omit for cron (all owners).
    */
-  async getOperationalOverdueObligations(asOfDate: Date = new Date()): Promise<Array<{
+  async getOperationalOverdueObligations(
+    asOfDate: Date = new Date(),
+    ownerId?: string,
+  ): Promise<Array<{
     obligation_id: string;
     tenant_id: string;
     owner_id: string;
+    hostel_id: string | null;
     allocation_id: string | null;
     rent_month: Date;
     due_date: Date;
@@ -338,10 +361,14 @@ export class FinancialService {
       asOfDate.getUTCDate(),
     ));
 
-    const rows = await prisma.$queryRaw<Array<{
+    // Build the owner filter clause string (Prisma raw template tags can't use conditionals cleanly)
+    const ownerFilter = ownerId ? `AND o.owner_id = '${ownerId}'::uuid` : "";
+
+    const rows = await prisma.$queryRawUnsafe<Array<{
       obligation_id: string;
       tenant_id: string;
       owner_id: string;
+      hostel_id: string | null;
       allocation_id: string | null;
       rent_month: Date;
       due_date: Date;
@@ -349,11 +376,12 @@ export class FinancialService {
       remaining_amount: number;
       tenant_name: string | null;
       personal_email: string | null;
-    }>>`
-      SELECT
+    }>>(
+      `SELECT
         o.id                                                AS obligation_id,
         o.tenant_id,
         o.owner_id,
+        r.hostel_id                                         AS hostel_id,
         o.allocation_id,
         o.rent_month,
         o.due_date,
@@ -364,6 +392,8 @@ export class FinancialService {
       FROM rent_obligations o
       JOIN tenants t ON t.id = o.tenant_id
       JOIN profiles p ON p.id = t.profile_id
+      LEFT JOIN room_allocations ra ON ra.id = o.allocation_id
+      LEFT JOIN rooms r ON r.id = ra.room_id
       LEFT JOIN (
         SELECT obligation_id, SUM(amount_paid)::float AS total_paid
         FROM payments
@@ -371,24 +401,28 @@ export class FinancialService {
       ) pay_agg ON pay_agg.obligation_id = o.id
       WHERE o.status IN ('PENDING', 'PARTIAL')
         AND o.obligation_type = 'RENT'
-        AND o.due_date < ${cutoff}::date
+        AND o.due_date < $1::date
         AND t.status = 'ACTIVE'
         AND o.amount - COALESCE(pay_agg.total_paid, 0) > 0
-    `;
+        ${ownerFilter}`,
+      cutoff,
+    );
 
     return rows.map((r) => ({
-      obligation_id: r.obligation_id,
-      tenant_id: r.tenant_id,
-      owner_id: r.owner_id,
-      allocation_id: r.allocation_id,
-      rent_month: r.rent_month,
-      due_date: r.due_date,
-      amount: Number(r.amount || 0),
+      obligation_id:    r.obligation_id,
+      tenant_id:        r.tenant_id,
+      owner_id:         r.owner_id,
+      hostel_id:        r.hostel_id ?? null,
+      allocation_id:    r.allocation_id,
+      rent_month:       r.rent_month,
+      due_date:         r.due_date,
+      amount:           Number(r.amount || 0),
       remaining_amount: Number(r.remaining_amount || 0),
-      tenant_name: r.tenant_name,
-      personal_email: r.personal_email,
+      tenant_name:      r.tenant_name,
+      personal_email:   r.personal_email,
     }));
   }
+
 
   /**
    * Historical outstanding — all tenants, no lifecycle filter.

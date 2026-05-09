@@ -12,6 +12,9 @@
 
 import { prisma } from "./db";
 
+// Re-export context utilities so callers can import from one place
+export { getHostelOperationalContext, resolveHostelIdFromTenant, batchGetHostelContexts } from "./hostel-context";
+
 // ─── Strict Typed Preferences ─────────────────────────────────
 
 export interface HostelPreferences {
@@ -139,11 +142,26 @@ const DEFAULTS: HostelPreferences = {
  * Fetch and return TYPED preferences for an owner.
  * Merges hostel-level columns + JSON blob + defaults.
  *
- * This is the ONLY function services should call.
+ * ⚠️  DEPRECATION WARNING: This function uses findFirst and will return
+ * the preferences of an arbitrary hostel when an owner has 2+ hostels.
+ * Use getHostelOperationalContext(ownerId, hostelId) from hostel-context.ts
+ * for all new operational service code.
+ *
+ * This function is retained for backward compatibility with single-hostel owners
+ * and for contexts where an explicit hostelId is genuinely not available.
  */
 export async function getPreferences(ownerId: string): Promise<HostelPreferences> {
+  if (process.env.NODE_ENV !== "production") {
+    // Dev-only warning — helps track remaining callers during migration
+    console.warn(
+      `[PREFERENCES] getPreferences(ownerId) called without hostelId. ` +
+      `For multi-hostel safety, migrate to getHostelOperationalContext(ownerId, hostelId). ` +
+      `Caller ownerId: ${ownerId}`
+    );
+  }
   const hostel = await prisma.hostel.findFirst({
     where: { owner_id: ownerId, is_active: true },
+    orderBy: { created_at: "asc" }, // deterministic: always return the FIRST-created hostel
   });
 
   return resolvePreferences(hostel);
@@ -173,11 +191,15 @@ export function resolvePreferences(hostel: any): HostelPreferences {
 
 /**
  * Get the hostel record + resolved preferences in one call.
- * Useful when you need both the hostel metadata AND the prefs.
+ *
+ * ⚠️  DEPRECATION WARNING: Uses findFirst — non-deterministic for multi-hostel owners.
+ * Migrate to getHostelOperationalContext(ownerId, hostelId) for operational services.
+ * Retained for backward compatibility.
  */
 export async function getHostelWithPreferences(ownerId: string) {
   const hostel = await prisma.hostel.findFirst({
     where: { owner_id: ownerId, is_active: true },
+    orderBy: { created_at: "asc" }, // deterministic: always return the FIRST-created hostel
   });
 
   return {

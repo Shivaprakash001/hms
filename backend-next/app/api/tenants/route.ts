@@ -28,7 +28,8 @@ export async function GET(req: NextRequest) {
     const offset = Number.isNaN(parsedOffset) ? 0 : parsedOffset;
 
     const result = await tenantService.getAllTenants({
-      status, search, ownerId: session.sub, limit, offset
+      status, search, ownerId: session.sub, limit, offset,
+      hostelId: searchParams.get("hostelId") || undefined, // Phase 4: hostel isolation
     });
 
     return apiResponse(result);

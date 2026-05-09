@@ -17,12 +17,15 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const stats = await dashboardService.getOwnerStats(session.sub);
-    const monthlyTrend = await dashboardService.getMonthlyStats(session.sub);
+    // Phase 4: optional hostel isolation via query parameter
+    const hostelId = req.nextUrl.searchParams.get("hostelId") || undefined;
+    const stats = await dashboardService.getOwnerStats(session.sub, hostelId);
+    const monthlyTrend = await dashboardService.getMonthlyStats(session.sub, 6, hostelId);
 
     return apiResponse({
       metrics: stats,
       trends: monthlyTrend,
+      hostel_scope: hostelId || "ALL_HOSTELS",
       generated_at: new Date().toISOString()
     });
   } catch (error: any) {

@@ -68,14 +68,23 @@ export class RoomAllocationService {
           throw new Error("VALIDATION_ERROR: Room is at maximum capacity");
         }
 
-        // 3. Create allocation
-        return await tx.roomAllocation.create({
+        // 3. Create allocation with denormalized hostel_id (immutable snapshot)
+        const allocation = await tx.roomAllocation.create({
           data: {
             tenant_id: tenantId,
             room_id: roomId,
-            start_date: new Date(startDate)
+            start_date: new Date(startDate),
+            hostel_id: room.hostel_id, // Phase 2: immutable hostel context at creation
           }
         });
+
+        // 4. Update Tenant.hostel_id to reflect current operational hostel
+        await tx.tenant.update({
+          where: { id: tenantId },
+          data: { hostel_id: room.hostel_id },
+        });
+
+        return allocation;
       });
     } catch (err: any) {
       throw mapAllocationConstraintError(err);
@@ -158,14 +167,23 @@ export class RoomAllocationService {
           throw new Error("VALIDATION_ERROR: Target room is at maximum capacity");
         }
 
-        // 4. Create new allocation
-        return await tx.roomAllocation.create({
+        // 4. Create new allocation with denormalized hostel_id (immutable snapshot)
+        const newAllocation = await tx.roomAllocation.create({
           data: {
             tenant_id: tenantId,
             room_id: newRoomId,
-            start_date: new Date(shiftDate)
+            start_date: new Date(shiftDate),
+            hostel_id: room.hostel_id, // Phase 2: immutable hostel context
           }
         });
+
+        // 5. Update Tenant.hostel_id to new operational hostel
+        await tx.tenant.update({
+          where: { id: tenantId },
+          data: { hostel_id: room.hostel_id },
+        });
+
+        return newAllocation;
       });
     } catch (err: any) {
       throw mapAllocationConstraintError(err);

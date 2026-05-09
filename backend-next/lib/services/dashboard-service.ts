@@ -25,7 +25,7 @@ import { operationalPendingInvariantHolds } from "./financial-invariants";
  */
 
 export class DashboardService {
-  async getOwnerStats(userId: string) {
+  async getOwnerStats(userId: string, hostelId?: string) {
     // Use UTC month boundaries for DATE column filtering.
     //
     // payments.payment_date is @db.Date (PostgreSQL DATE, no time component).
@@ -47,21 +47,28 @@ export class DashboardService {
     const monthStart = new Date(Date.UTC(utcYear, utcMonth, 1, 0, 0, 0, 0));
     const nextMonthStart = new Date(Date.UTC(utcYear, utcMonth + 1, 1, 0, 0, 0, 0));
 
+    // Phase 4: optional hostel isolation
+    const hostelRoomFilter = hostelId ? `AND h.id = '${hostelId}'::uuid` : "";
+    const hostelPaymentFilter = hostelId ? { hostel_id: hostelId } : {};
+
     // ✅ Use count()+aggregate instead of findMany — avoids fetching full rows for JS-side counting
     const [totalTenants, activeTenants, roomStats, payments, costs] = await Promise.all([
-      prisma.tenant.count({ where: { owner_id: userId } }),
-      prisma.tenant.count({ where: { owner_id: userId, status: "ACTIVE" } }),
-      prisma.$queryRaw<{ total_rooms: number; total_capacity: number }[]>`
-        SELECT COUNT(r.id)::int AS total_rooms, COALESCE(SUM(r.capacity), 0)::int AS total_capacity
+      prisma.tenant.count({ where: { owner_id: userId, ...(hostelId ? { hostel_id: hostelId } : {}) } }),
+      prisma.tenant.count({ where: { owner_id: userId, status: "ACTIVE", ...(hostelId ? { hostel_id: hostelId } : {}) } }),
+      prisma.$queryRawUnsafe<{ total_rooms: number; total_capacity: number }[]>(
+        `SELECT COUNT(r.id)::int AS total_rooms, COALESCE(SUM(r.capacity), 0)::int AS total_capacity
         FROM rooms r JOIN hostels h ON h.id = r.hostel_id
-        WHERE h.owner_id = ${userId}::uuid AND r.is_active = true
-      `,
+        WHERE h.owner_id = $1::uuid AND r.is_active = true
+        ${hostelRoomFilter}`,
+        userId,
+      ),
       // ✅ FIXED: Use payment_date (actual payment date, source of truth)
       // ✅ FIXED: Use nextMonthStart (day 1 of next month, exclusive upper bound)
       prisma.payment.aggregate({
         where: {
           owner_id: userId,
           payment_date: { gte: monthStart, lt: nextMonthStart },
+          ...hostelPaymentFilter,
         },
         _sum: { amount_paid: true },
       }),
@@ -69,6 +76,7 @@ export class DashboardService {
         where: {
           owner_id: userId,
           date: { gte: monthStart, lt: nextMonthStart },
+          ...hostelPaymentFilter,
         },
         _sum: { amount: true },
       }),
@@ -83,7 +91,7 @@ export class DashboardService {
     // Logic is identical: remaining = amount - SUM(payments); overdue = due_date < today.
     // due_date is @db.Date — compare against UTC midnight of today for DATE-to-DATE clean match.
     // Operational dues — ACTIVE tenants only (canonical via financialService)
-    const dues = await financialService.getOperationalDues(userId);
+    const dues = await financialService.getOperationalDues(userId, hostelId);
     const pendingTotal = dues.pending_total;
     const overdueTotal = dues.overdue_total;
     const overdueCount = dues.overdue_tenant_count;
@@ -108,7 +116,7 @@ export class DashboardService {
     };
   }
 
-  async getMonthlyStats(userId: string, months: number = 6) {
+  async getMonthlyStats(userId: string, months: number = 6, hostelId?: string) {
     const now = new Date();
 
     // Build all date ranges first so we can fire every query in one parallel batch
@@ -123,7 +131,7 @@ export class DashboardService {
     });
 
     const results = await Promise.all(
-      ranges.map(({ start, end }) => financialService.getOperationalCashflowMetrics(userId, start, end))
+      ranges.map(({ start, end }) => financialService.getOperationalCashflowMetrics(userId, start, end, hostelId))
     );
 
     return results

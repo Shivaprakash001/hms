@@ -77,6 +77,17 @@ const metrics = {
     recomputes:        0,  // Total recompute executions (stats + monthly)
     lock_contentions:  0,  // Recompute skipped because lock was held
   },
+  // ── Operational integrity observability ───────────────────────────────────
+  integrity: {
+    invariant_failures: 0,
+    critical_failures: 0,
+    high_failures: 0,
+    medium_failures: 0,
+    low_failures: 0,
+    dual_read_mismatches: 0,
+    orphan_records: 0,
+    rollup_mismatches: 0,
+  },
   // ── PDF Render volume ──────────────────────────────────────────────────────
   pdf_renders: {
     puppeteer: 0,  // Actual Puppeteer renders (costly CPU path)
@@ -130,6 +141,25 @@ export function incrementSnapshot(
   if (type === "monthly_miss")     { metrics.snapshot.monthly_misses++;    metrics.snapshot.recomputes++; return; }
   if (type === "recompute")        { metrics.snapshot.recomputes++;        return; }
   if (type === "lock_contention")  { metrics.snapshot.lock_contentions++;  return; }
+}
+
+// ── Operational Integrity ───────────────────────────────────────────────────
+
+export function incrementIntegrityMetric(
+  type: "invariant_failure" | "dual_read_mismatch" | "orphan_record" | "rollup_mismatch",
+  severity?: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
+) {
+  if (type === "invariant_failure") {
+    metrics.integrity.invariant_failures++;
+    if (severity === "CRITICAL") metrics.integrity.critical_failures++;
+    if (severity === "HIGH") metrics.integrity.high_failures++;
+    if (severity === "MEDIUM") metrics.integrity.medium_failures++;
+    if (severity === "LOW") metrics.integrity.low_failures++;
+    return;
+  }
+  if (type === "dual_read_mismatch") { metrics.integrity.dual_read_mismatches++; return; }
+  if (type === "orphan_record")      { metrics.integrity.orphan_records++;       return; }
+  if (type === "rollup_mismatch")    { metrics.integrity.rollup_mismatches++;    return; }
 }
 
 // ── Read ─────────────────────────────────────────────────────────────────────
@@ -188,9 +218,16 @@ export function resetMetrics() {
   metrics.snapshot.monthly_misses = 0;
   metrics.snapshot.recomputes = 0;
   metrics.snapshot.lock_contentions = 0;
+  metrics.integrity.invariant_failures = 0;
+  metrics.integrity.critical_failures = 0;
+  metrics.integrity.high_failures = 0;
+  metrics.integrity.medium_failures = 0;
+  metrics.integrity.low_failures = 0;
+  metrics.integrity.dual_read_mismatches = 0;
+  metrics.integrity.orphan_records = 0;
+  metrics.integrity.rollup_mismatches = 0;
   metrics.pdf_renders.puppeteer = 0;
   metrics.pdf_renders.invoice = 0;
   metrics.lastReset = new Date().toISOString();
   resetTimingStats();
 }
-

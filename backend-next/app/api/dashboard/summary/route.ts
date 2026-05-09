@@ -18,7 +18,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const stats = await dashboardService.getOwnerStats(session.sub);
+    const hostelId = req.nextUrl.searchParams.get("hostelId") || undefined;
+    const stats = await dashboardService.getOwnerStats(session.sub, hostelId);
     return apiResponse(stats);
   } catch (error: any) {
     return apiError(error.message || "Failed to fetch dashboard stats");

@@ -16,7 +16,8 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const monthsStr = searchParams.get("months");
   const months = monthsStr ? parseInt(monthsStr, 10) : 6;
-  const cacheKey = `${session.sub}_${months}`;
+  const hostelId = searchParams.get("hostelId") || undefined; // Phase 4: hostel isolation
+  const cacheKey = `${session.sub}_${months}_${hostelId || "ALL"}`;
 
   const cachedResult = getCachedDashboard(cacheKey);
   if (cachedResult) {
@@ -26,8 +27,8 @@ export async function GET(req: NextRequest) {
   try {
     // Run everything in parallel! The real secret to production performance
     const [summary, monthlyStats, activityRes] = await Promise.all([
-      dashboardService.getOwnerStats(session.sub),
-      dashboardService.getMonthlyStats(session.sub, months),
+      dashboardService.getOwnerStats(session.sub, hostelId),
+      dashboardService.getMonthlyStats(session.sub, months, hostelId),
       activityService.getOwnerActivity({ userId: session.sub, limit: 5, offset: 0 }).catch(() => ({ items: [], total: 0 }))
     ]);
 

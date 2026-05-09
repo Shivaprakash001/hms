@@ -1,7 +1,7 @@
 import { prisma } from "../db";
 import { eventSystem } from "../events";
 import { z } from "zod";
-import { getPreferences } from "../preferences";
+import { getPreferences, resolvePreferences } from "../preferences";
 import { documentService } from "./document-service";
 import { allocationReconciliationService } from "./allocation-reconciliation-service";
 import { financialService } from "./financial-service";
@@ -122,13 +122,15 @@ export class TenantService {
     status?: string;
     search?: string;
     ownerId?: string;
+    hostelId?: string; // Phase 4: hostel isolation
     limit?: number;
     offset?: number;
   }) {
-    const { status, search, ownerId, limit = 50, offset = 0 } = params;
+    const { status, search, ownerId, hostelId, limit = 50, offset = 0 } = params;
 
     const where: any = {
       ...(ownerId && { owner_id: ownerId }),
+      ...(hostelId && { hostel_id: hostelId }),
       ...(status && { status: status as any }),
     };
 
@@ -175,14 +177,21 @@ export class TenantService {
   async updateTenantSelfProfile(profileId: string, data: any, updatedBy: string) {
     const tenantCheck = await prisma.tenant.findUnique({
       where: { profile_id: profileId },
-      select: { id: true, owner_id: true },
+      select: { id: true, owner_id: true, hostel_id: true },
     });
 
     if (!tenantCheck) throw new Error("NOT_FOUND: Tenant record not found");
 
     // ── Enforce allow_tenant_edits preference ──
     if (tenantCheck.owner_id) {
-      const prefs = await getPreferences(tenantCheck.owner_id);
+      // Phase 2: resolve from tenant's hostel, not findFirst(owner_id)
+      let prefs: any;
+      if (tenantCheck.hostel_id) {
+        const hostel = await prisma.hostel.findUnique({ where: { id: tenantCheck.hostel_id } });
+        prefs = resolvePreferences(hostel);
+      } else {
+        prefs = await getPreferences(tenantCheck.owner_id);
+      }
       if (prefs.allow_tenant_edits === false) {
         throw new Error("FORBIDDEN: Profile editing is currently disabled by the hostel owner");
       }

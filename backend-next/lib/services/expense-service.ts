@@ -2,9 +2,12 @@ import { prisma } from "../db";
 import { eventSystem } from "../events";
 
 export class ExpenseService {
-  async getAllExpenses(ownerId: string) {
+  async getAllExpenses(ownerId: string, hostelId?: string) {
     return prisma.expense.findMany({
-      where: { owner_id: ownerId },
+      where: {
+        owner_id: ownerId,
+        ...(hostelId ? { hostel_id: hostelId } : {}),
+      },
       orderBy: { date: "desc" }
     });
   }
@@ -16,6 +19,7 @@ export class ExpenseService {
     date: Date | string;
     category: string;
     status?: string;
+    hostel_id?: string;
   }) {
     // Parse date safely — handle both Date objects and ISO strings
     let parsedDate: Date;
@@ -38,6 +42,7 @@ export class ExpenseService {
         date: parsedDate,
         category: data.category,
         status: data.status || "paid",
+        hostel_id: data.hostel_id || null, // Phase 2: hostel-scoped expenses
       }
     });
 

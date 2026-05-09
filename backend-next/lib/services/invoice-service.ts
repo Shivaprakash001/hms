@@ -1,7 +1,7 @@
 import { PDFDocument, StandardFonts, rgb, PDFPage, PDFFont } from "pdf-lib";
 import { prisma } from "../db";
 import { imagekit } from "../imagekit";
-import { getHostelWithPreferences } from "../preferences";
+import { resolvePreferences } from "../preferences";
 import { formatCurrency, formatShortDate, formatMonthYear, getCurrencySymbol } from "../format";
 import { timed } from "../perf";
 import { incrementPdfCache } from "../metrics";
@@ -103,7 +103,20 @@ export class InvoiceService {
     }
 
     try {
-      const { hostel, prefs } = await getHostelWithPreferences(receipt.tenant.owner_id as string);
+      // Phase 2: resolve hostel from payment/receipt chain, not findFirst(owner_id)
+      let hostel: any = null;
+      const hostelIdFromReceipt = (receipt as any).hostel_id || (receipt as any).payment?.hostel_id;
+      if (hostelIdFromReceipt) {
+        hostel = await prisma.hostel.findUnique({ where: { id: hostelIdFromReceipt } });
+      }
+      if (!hostel) {
+        // Fallback for pre-backfill data
+        hostel = await prisma.hostel.findFirst({
+          where: { owner_id: receipt.tenant.owner_id as string, is_active: true },
+          orderBy: { created_at: "asc" },
+        });
+      }
+      const prefs = resolvePreferences(hostel);
       if (!hostel) throw new Error("Hostel details not found");
 
     const allocation = await prisma.roomAllocation.findFirst({

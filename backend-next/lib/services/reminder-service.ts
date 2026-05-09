@@ -5,6 +5,7 @@ import { messageService } from "./message-service";
 import { eventLog } from "./event-log-service";
 import { resolveRules, calculateSingleRuleFee } from "../billing/engine";
 import { resolvePreferences } from "../preferences";
+import { batchGetHostelContexts, resolveHostelIdFromObligation, resolveHostelIdFromTenant } from "../hostel-context";
 import { formatMonthYear, formatDate } from "../format";
 import { requireAutomation, consumeReminder } from "./plan-gate-service";
 import { financialService } from "./financial-service";
@@ -32,12 +33,29 @@ export class ReminderService {
       : [];
     const remindersByObligation = new Map(lastReminders.map((r) => [r.obligation_id, r]));
 
-    // Optimization: Batch fetch owner preferences
-    const ownerIds = Array.from(new Set(overdueOperational.map((ob) => ob.owner_id).filter(Boolean))) as string[];
-    const hostelPrefs: any[] = await prisma.hostel.findMany({
-      where: { owner_id: { in: ownerIds }, is_active: true },
-    });
-    const prefsMap = new Map(hostelPrefs.map((p: any) => [p.owner_id, p]));
+    // Phase 1 Safety Fix: Build hostelId→context map from obligation allocation chains.
+    // Previously used owner_id→hostel (findFirst), which was wrong for multi-hostel owners.
+    // Now: each obligation's hostel is resolved from its allocation_id → room → hostel.
+    const hostelIds = Array.from(
+      new Set(overdueOperational.map((ob) => (ob as any).hostel_id).filter(Boolean))
+    ) as string[];
+
+    // For obligations missing hostel_id (pre-Phase-2 data), resolve via allocation chain
+    const missingHostelObligations = overdueOperational.filter((ob) => !(ob as any).hostel_id);
+    if (missingHostelObligations.length > 0) {
+      const resolvedIds = await Promise.all(
+        missingHostelObligations.map((ob) =>
+          resolveHostelIdFromObligation(ob.obligation_id, ob.allocation_id, ob.tenant_id)
+        )
+      );
+      resolvedIds.forEach((id) => { if (id) hostelIds.push(id); });
+    }
+
+    // Batch-load all needed hostel contexts in ONE query (replaces N×findFirst calls)
+    const hostelContextMap = await batchGetHostelContexts(hostelIds);
+
+    // Build obligation_id→hostelId lookup (for obligations with no hostel_id column yet)
+    const allocationHostelCache = new Map<string, string>();
 
     let remindersSent = 0;
     let lateFeesAdded = 0;
@@ -46,8 +64,21 @@ export class ReminderService {
       const ownerId = ob.owner_id;
       if (!ownerId) continue;
 
-      const prefs: any = prefsMap.get(ownerId);
-      const config = resolvePreferences(prefs);
+      // Resolve this obligation's hostel (explicit, not findFirst)
+      let hostelId: string | null = (ob as any).hostel_id ?? null;
+      if (!hostelId) {
+        // Pre-Phase-2 data: resolve from allocation chain (cached per allocation)
+        const cacheKey = ob.allocation_id ?? ob.tenant_id;
+        if (!allocationHostelCache.has(cacheKey)) {
+          const resolved = await resolveHostelIdFromObligation(ob.obligation_id, ob.allocation_id, ob.tenant_id);
+          allocationHostelCache.set(cacheKey, resolved ?? "");
+        }
+        hostelId = allocationHostelCache.get(cacheKey) || null;
+      }
+
+      const hostelCtx = hostelId ? hostelContextMap.get(hostelId) : undefined;
+      // Fallback: if hostel context is missing (inactive/deleted hostel), use empty defaults
+      const config = hostelCtx ? hostelCtx.prefs : resolvePreferences(null);
 
       // 🔒 Plan Gate: Automation features require Starter+ plan
       // If owner is on FREE plan, skip ALL automation (reminders & late fees)
@@ -160,6 +191,7 @@ export class ReminderService {
                           due_date: todayMid,
                           status: "PENDING",
                           obligation_type: "LATE_FEE",
+                          hostel_id: hostelId || null, // Phase 2: immutable hostel context
                         },
                       });
                       accumulatedFees += feeAmount;
@@ -208,6 +240,7 @@ export class ReminderService {
                           due_date: todayMid,
                           status: "PENDING",
                           obligation_type: "LATE_FEE",
+                          hostel_id: hostelId || null, // Phase 2: immutable hostel context
                         },
                       });
                       accumulatedFees += feeAmount;
@@ -300,8 +333,25 @@ export class ReminderService {
 
     if (!obligation) return { sent: 0, tenant_name: tenant.profile?.name ?? "Tenant" };
 
-    const hostel = await prisma.hostel.findFirst({ where: { owner_id: ownerId, is_active: true } });
-    const config = resolvePreferences(hostel);
+    // Fix: resolve hostel from tenant's allocation chain instead of findFirst(owner_id).
+    // This ensures correct UPI routing and branding when owner has multiple hostels.
+    const hostelId = await resolveHostelIdFromTenant(tenantId);
+    let config: any;
+    if (hostelId) {
+      const allocation = await prisma.roomAllocation.findFirst({
+        where: { tenant_id: tenantId, is_active: true },
+        select: { room: { select: { hostel: true } } },
+        orderBy: { start_date: "desc" },
+      });
+      config = resolvePreferences(allocation?.room?.hostel ?? null);
+    } else {
+      // No active allocation — fall back to first hostel (single-hostel owners only)
+      const hostel = await prisma.hostel.findFirst({
+        where: { owner_id: ownerId, is_active: true },
+        orderBy: { created_at: "asc" },
+      });
+      config = resolvePreferences(hostel);
+    }
 
     await this.triggerNotification({ ...obligation, tenant }, "WARNING", config);
 
@@ -337,7 +387,8 @@ export class ReminderService {
           obligation_id: obligation.id,
           tenant_id: obligation.tenant.id,
           reminder_type: type,
-          channel: "IN_APP"
+          channel: "IN_APP",
+          hostel_id: obligation.hostel_id || null, // Phase 2: immutable hostel context
         }
       });
     }

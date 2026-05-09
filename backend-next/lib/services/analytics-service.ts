@@ -44,22 +44,26 @@ export class AnalyticsService {
 
   // ── Dashboard 1: Cashflow ──────────────────────────────────────────────────
 
-  async getCashflowDashboard(ownerId: string, start: Date, end: Date) {
+  async getCashflowDashboard(ownerId: string, start: Date, end: Date, hostelId?: string) {
 
     // ── Single-pass CTE: replaces 3 separate overdue scans + a tenant findMany ─
     // Before: overdueAgg (aggregate), overdueGroups (groupBy), dueDates (raw) + tenants (findMany)
     // After:  one query returning sum + count + top-5 with names + earliest_due
+    // Phase 4: hostelId filter propagated to financial service
+    const hostelFilter = hostelId ? `AND p.hostel_id = '${hostelId}'::uuid` : "";
     const [cashflow, daily, topDefaulters] = await Promise.all([
-      financialService.getOperationalCashflowMetrics(ownerId, start, end),
-      prisma.$queryRaw<{ date: string; amount: number }[]>`
-        SELECT payment_date::text AS date, SUM(amount_paid)::float AS amount
-        FROM payments
-        WHERE owner_id = ${ownerId}::uuid
-          AND payment_date >= ${start}::date
-          AND payment_date <= ${end}::date
-        GROUP BY payment_date ORDER BY payment_date
-      `,
-      financialService.getOperationalDefaulters(ownerId, 5),
+      financialService.getOperationalCashflowMetrics(ownerId, start, end, hostelId),
+      prisma.$queryRawUnsafe<{ date: string; amount: number }[]>(
+        `SELECT payment_date::text AS date, SUM(amount_paid)::float AS amount
+        FROM payments p
+        WHERE p.owner_id = $1::uuid
+          AND p.payment_date >= $2::date
+          AND p.payment_date <= $3::date
+          ${hostelFilter}
+        GROUP BY payment_date ORDER BY payment_date`,
+        ownerId, start, end,
+      ),
+      financialService.getOperationalDefaulters(ownerId, 5, hostelId),
     ]);
 
     const expected = Number(cashflow.expected_total || 0);
@@ -132,7 +136,10 @@ export class AnalyticsService {
 
   // ── Dashboard 2: Tenant Intelligence ──────────────────────────────────────
 
-  async getTenantIntelligenceDashboard(ownerId: string, start: Date, end: Date) {
+  async getTenantIntelligenceDashboard(ownerId: string, start: Date, end: Date, hostelId?: string) {
+    // Phase 4: optional hostel isolation for tenant intelligence
+    const hostelFilter = hostelId ? `AND t.hostel_id = '${hostelId}'::uuid` : "";
+    const hostelPayFilter = hostelId ? `AND pay.hostel_id = '${hostelId}'::uuid` : "";
     const [distRows, riskyRows, behaviorRows, depRows, exitRows, totalExited, activeCount] =
       await Promise.all([
         prisma.$queryRaw<{ good: bigint; medium: bigint; risky: bigint }[]>`
@@ -263,7 +270,9 @@ export class AnalyticsService {
 
   // ── Dashboard 3: Reminder Funnel ──────────────────────────────────────────
 
-  async getReminderFunnelDashboard(ownerId: string, start: Date, end: Date) {
+  async getReminderFunnelDashboard(ownerId: string, start: Date, end: Date, hostelId?: string) {
+    // Phase 4: optional hostel isolation for reminder funnel
+    const hostelFilter = hostelId ? `AND rl.hostel_id = '${hostelId}'::uuid` : "";
     const [funnelRows, channelRows] = await Promise.all([
       prisma.$queryRaw<{ sent: bigint; converted: bigint; revenue: number; avg_hours: number }[]>`
         SELECT
@@ -353,7 +362,10 @@ export class AnalyticsService {
 
   // ── Dashboard 4: Operations ───────────────────────────────────────────────
 
-  async getOperationsDashboard(ownerId: string, start: Date, end: Date) {
+  async getOperationsDashboard(ownerId: string, start: Date, end: Date, hostelId?: string) {
+    // Phase 4: optional hostel isolation for operations
+    const hostelIdFilter = hostelId ? { hostel_id: hostelId } : {};
+    const hostelSqlFilter = hostelId ? `AND h.id = '${hostelId}'::uuid` : "";
     const [roomRows, moveRows, revenueAgg, expenseAgg, complaintRows] = await Promise.all([
       prisma.$queryRaw<{ total_rooms: bigint; total_capacity: bigint; occupied_beds: bigint; avg_vacancy_days: number }[]>`
         SELECT

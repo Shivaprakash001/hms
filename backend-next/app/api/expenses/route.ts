@@ -17,7 +17,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const expenses = await expenseService.getAllExpenses(session.sub);
+    const hostelId = req.nextUrl.searchParams.get("hostelId") || undefined;
+    const expenses = await expenseService.getAllExpenses(session.sub, hostelId);
     return apiResponse(expenses);
   } catch (error: any) {
     return apiError(error.message || "Failed to fetch expenses");
@@ -44,6 +45,7 @@ export async function POST(req: NextRequest) {
       date: body.date,
       category: body.category,
       status: body.status || "paid",
+      hostel_id: body.hostelId || undefined, // Phase 4: hostel-scoped expenses
     });
     return apiResponse(expense, 201);
   } catch (error: any) {

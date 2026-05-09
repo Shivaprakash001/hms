@@ -14,11 +14,12 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const { start, end } = getDateRange(searchParams.get("from"), searchParams.get("to"));
+  const hostelId = searchParams.get("hostelId") || undefined; // Phase 4: hostel isolation
 
   try {
     const data = await timed(
       "analytics.operations",
-      () => analyticsService.getOperationsDashboard(session.sub, start, end),
+      () => analyticsService.getOperationsDashboard(session.sub, start, end, hostelId),
       { owner_id: session.sub, slow_ms: 1_500 }
     );
     return apiResponse(data);

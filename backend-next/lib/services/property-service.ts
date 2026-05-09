@@ -231,9 +231,13 @@ export class PropertyService {
     return this.getOwnerProfile(userId);
   }
 
-  async getFloorsWithRooms(ownerId: string) {
+  async getFloorsWithRooms(ownerId: string, hostelId?: string) {
     const rooms = await prisma.room.findMany({
-      where: { hostel: { owner_id: ownerId }, is_active: true },
+      where: {
+        hostel: { owner_id: ownerId },
+        is_active: true,
+        ...(hostelId ? { hostel_id: hostelId } : {}),
+      },
       include: {
         allocations: {
           where: { is_active: true, end_date: null },

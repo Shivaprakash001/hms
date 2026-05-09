@@ -15,13 +15,49 @@
 
 import { prisma } from "../db";
 import crypto from "crypto";
-import { getHostelWithPreferences } from "../preferences";
+import { resolvePreferences } from "../preferences";
+import { getHostelOperationalContext } from "../hostel-context";
 import { htmlToPdf } from "../pdf/browser";
 import { renderReceiptHTML, type ReceiptRenderData } from "../pdf/receipt-template";
 import { timed } from "../perf";
 import { imagekit } from "../imagekit";
 import { incrementPdfCache } from "../metrics";
 import { acquireSystemLock, releaseSystemLock, sleep } from "../lock";
+
+/**
+ * Resolve the hostel record for a payment, using the canonical hostel_id
+ * chain: payment.hostel_id → hostel (preferred)
+ * Fallback: payment → obligation → allocation → room → hostel (for pre-backfill data)
+ */
+async function resolveHostelForPayment(payment: any): Promise<{ hostel: any; prefs: any }> {
+  const ownerId = payment.tenant?.owner_id || payment.owner_id || "";
+
+  // Canonical path: payment already has hostel_id (Phase 2 write-through)
+  if (payment.hostel_id) {
+    const hostel = await prisma.hostel.findUnique({
+      where: { id: payment.hostel_id },
+    });
+    if (hostel) return { hostel, prefs: resolvePreferences(hostel) };
+  }
+
+  // Fallback: derive from obligation → allocation → room → hostel
+  if (payment.obligation?.allocation_id) {
+    const allocation = await prisma.roomAllocation.findUnique({
+      where: { id: payment.obligation.allocation_id },
+      include: { room: { include: { hostel: true } } },
+    });
+    if (allocation?.room?.hostel) {
+      return { hostel: allocation.room.hostel, prefs: resolvePreferences(allocation.room.hostel) };
+    }
+  }
+
+  // Last resort: owner's first hostel (single-hostel owners only)
+  const hostel = await prisma.hostel.findFirst({
+    where: { owner_id: ownerId, is_active: true },
+    orderBy: { created_at: "asc" },
+  });
+  return { hostel, prefs: resolvePreferences(hostel) };
+}
 
 // ── Template version: bump when receipt HTML/CSS layout changes ──
 // This triggers a one-time Puppeteer re-render for all existing receipts.
@@ -46,10 +82,10 @@ export class ReceiptService {
    *
    * Avoids direct sequence SQL so environments without receipt_seq don't crash.
    */
-  async generateReceiptNumber(ownerId: string, offset = 0): Promise<string> {
-    const { prefs } = await getHostelWithPreferences(ownerId);
+  async generateReceiptNumber(ownerId: string, offset = 0, prefs?: any): Promise<string> {
+    const resolvedPrefs = prefs || resolvePreferences(null);
     const year = new Date().getFullYear();
-    const prefix = `${prefs.receipt_prefix}-${year}-`;
+    const prefix = `${resolvedPrefs.receipt_prefix}-${year}-`;
     const yearStart = new Date(`${year}-01-01T00:00:00.000Z`);
     const yearEnd = new Date(`${year + 1}-01-01T00:00:00.000Z`);
     const existingCount = await prisma.receipt.count({
@@ -88,11 +124,12 @@ export class ReceiptService {
     if (!canGenerateReceipts) {
       throw new Error(`${PLAN_UPGRADE_REQUIRED_ERROR}: Upgrade to Growth plan to generate receipts`);
     }
-    const { hostel, prefs } = await getHostelWithPreferences(ownerId);
+    // Phase 2: resolve hostel from payment chain, not findFirst(owner_id)
+    const { hostel, prefs } = await resolveHostelForPayment(payment);
     let receipt = null;
 
     for (let attempt = 0; attempt < RECEIPT_NUMBER_RETRY_LIMIT; attempt += 1) {
-      const receiptNumber = await this.generateReceiptNumber(ownerId, attempt);
+      const receiptNumber = await this.generateReceiptNumber(ownerId, attempt, prefs);
       try {
         receipt = await prisma.receipt.create({
           data: {
@@ -106,6 +143,7 @@ export class ReceiptService {
             hostel_name: hostel?.name || "HMS Hostel",
             tenant_name: payment.tenant.profile.name,
             rent_month: payment.obligation.rent_month,
+            hostel_id: payment.hostel_id || hostel?.id || null, // Phase 2: immutable hostel context
           },
         });
         break;
@@ -221,8 +259,25 @@ export class ReceiptService {
 
     try {
       // 2. Fetch hostel + preferences + room allocation
+      // Phase 2: resolve hostel from receipt's payment chain, not findFirst(owner_id)
       const ownerId = receipt.owner_id || receipt.tenant?.owner_id || "";
-    const { hostel, prefs } = await getHostelWithPreferences(ownerId);
+    let hostel: any = null;
+    let prefs: any;
+
+    // Canonical: receipt has hostel_id (Phase 2 write-through)
+    if (receipt.hostel_id) {
+      hostel = await prisma.hostel.findUnique({ where: { id: receipt.hostel_id } });
+      prefs = resolvePreferences(hostel);
+    }
+    // Fallback: derive from payment chain
+    if (!hostel && receipt.payment) {
+      const resolved = await resolveHostelForPayment(receipt.payment);
+      hostel = resolved.hostel;
+      prefs = resolved.prefs;
+    }
+    if (!prefs) {
+      prefs = resolvePreferences(hostel);
+    }
 
     const allocation = await prisma.roomAllocation.findFirst({
       where: { tenant_id: receipt.tenant_id, is_active: true },

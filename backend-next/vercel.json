@@ -19,6 +19,14 @@
     {
       "path": "/api/cron/onboarding-nudges",
       "schedule": "30 4 * * *"
+    },
+    {
+      "path": "/api/cron/hostel-invariants",
+      "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/migration-audit",
+      "schedule": "15 1 * * *"
     }
   ]
 }

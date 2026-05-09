@@ -4,7 +4,8 @@ import { PaymentProviderFactory } from "./payments/provider-factory";
 import crypto from "crypto";
 import { EmailService } from "./email-service";
 import { receiptService } from "./receipt-service";
-import { getPreferences } from "../preferences";
+import { getPreferences, resolvePreferences } from "../preferences";
+import { resolveHostelIdFromObligation } from "../hostel-context";
 import { tenantAdvanceService } from "./tenant-advance-service";
 import { formatCurrency, formatMonthYear } from "../format";
 import { eventLog } from "./event-log-service";
@@ -83,6 +84,7 @@ export class PaymentService {
         offline_recorded_at: data.offlineRecordedAt || null,
         offline_recorded_ip: data.offlineRecordedIp || null,
         offline_note: data.offlineNote || null,
+        hostel_id: obligation.hostel_id || null, // Phase 2: immutable hostel context from obligation
       }
     });
 
@@ -159,7 +161,14 @@ export class PaymentService {
 
       receiptService.createReceipt(res.payment.id).then(async (receipt: any) => {
         try {
-          const prefs = await getPreferences(res.payment.owner_id || "");
+          // Phase 2: resolve prefs from payment's hostel chain, not findFirst(owner_id)
+          let prefs: any;
+          if (res.payment.hostel_id) {
+            const hostel = await prisma.hostel.findUnique({ where: { id: res.payment.hostel_id } });
+            prefs = resolvePreferences(hostel);
+          } else {
+            prefs = await getPreferences(res.payment.owner_id || "");
+          }
           if (!prefs.auto_email_receipt) return;
           const renderContext = receipt._renderContext || {
             footer: prefs.receipt_footer || null,
@@ -243,7 +252,14 @@ export class PaymentService {
       // Cash/manual payments (majority of hostel payments) were invisible to the receipt system.
       receiptService.createReceipt(res.payment.id).then(async (receipt) => {
         try {
-          const prefs = await getPreferences(res.payment.owner_id || "");
+          // Phase 2: resolve prefs from payment's hostel chain, not findFirst(owner_id)
+          let prefs: any;
+          if (res.payment.hostel_id) {
+            const hostel = await prisma.hostel.findUnique({ where: { id: res.payment.hostel_id } });
+            prefs = resolvePreferences(hostel);
+          } else {
+            prefs = await getPreferences(res.payment.owner_id || "");
+          }
           if (!prefs.auto_email_receipt) return;
 
           const renderContext = receipt._renderContext || {
@@ -438,6 +454,7 @@ export class PaymentService {
             payment_group_id: groupId,
             // Only first payment in group gets the idempotency key (unique constraint)
             idempotency_key: allocations.length === 0 ? (data.idempotencyKey || null) : null,
+            hostel_id: ob.hostel_id || null, // Phase 2: immutable hostel context from obligation
           },
         });
 
@@ -554,7 +571,14 @@ export class PaymentService {
     const validationAmountPaisa = Math.round(validationAmount * 100);
 
     // 1️⃣ Fetch Owner Preferences for Payment Rules
-    const prefs = await getPreferences(obligation.owner_id || "");
+    // Phase 2: resolve from obligation's hostel chain, not findFirst(owner_id)
+    let prefs: any;
+    if (obligation.hostel_id) {
+      const hostel = await prisma.hostel.findUnique({ where: { id: obligation.hostel_id } });
+      prefs = resolvePreferences(hostel);
+    } else {
+      prefs = await getPreferences(obligation.owner_id || "");
+    }
 
     const allowPartial = prefs.allow_partial_payments;
     const minAmount = prefs.min_payment_amount;
@@ -702,7 +726,15 @@ export class PaymentService {
     }
 
     const ownerId = obligations[0].owner_id || "";
-    const prefs = await getPreferences(ownerId);
+    // Phase 2: resolve from first obligation's hostel chain, not findFirst(owner_id)
+    let prefs: any;
+    const firstHostelId = obligations[0].hostel_id;
+    if (firstHostelId) {
+      const hostel = await prisma.hostel.findUnique({ where: { id: firstHostelId } });
+      prefs = resolvePreferences(hostel);
+    } else {
+      prefs = await getPreferences(ownerId);
+    }
     const { provider, config } = await this.getProviderForOwner(ownerId);
     const instance = PaymentProviderFactory.getProvider(provider, config);
 
@@ -920,7 +952,22 @@ export class PaymentService {
 
     if (amount <= 0) throw new Error("BAD_REQUEST: Amount must be positive");
 
-    const prefs = await getPreferences(ownerId);
+    // Phase 2: resolve prefs from tenant's hostel, not findFirst(owner_id)
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      include: { profile: true },
+    });
+    if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
+    if (tenant.owner_id !== ownerId) throw new Error("FORBIDDEN: Tenant does not belong to this owner");
+
+    let prefs: any;
+    if (tenant.hostel_id) {
+      const hostel = await prisma.hostel.findUnique({ where: { id: tenant.hostel_id } });
+      prefs = resolvePreferences(hostel);
+    } else {
+      prefs = await getPreferences(ownerId);
+    }
+
     if (!prefs.advance_enabled) {
       throw new Error("BAD_REQUEST: Advance/deposit payments are not enabled for this hostel");
     }
@@ -929,13 +976,6 @@ export class PaymentService {
     if (amountPaisa < minPaisa) {
       throw new Error(`BAD_REQUEST: Minimum payment amount is ${formatCurrency(prefs.min_payment_amount)}`);
     }
-
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId },
-      include: { profile: true },
-    });
-    if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
-    if (tenant.owner_id !== ownerId) throw new Error("FORBIDDEN: Tenant does not belong to this owner");
 
     const { provider, config } = await this.getProviderForOwner(ownerId);
     const instance = PaymentProviderFactory.getProvider(provider, config);

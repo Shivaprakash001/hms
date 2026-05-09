@@ -22,15 +22,20 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const grouped = searchParams.get("grouped") !== "false";
+    const hostelId = searchParams.get("hostelId") || undefined; // Phase 4: hostel isolation
 
     if (grouped) {
-      const floors = await propertyService.getFloorsWithRooms(session.sub);
+      const floors = await propertyService.getFloorsWithRooms(session.sub, hostelId);
       return apiResponse(floors);
     }
 
     // Flat list
     const rooms = await prisma.room.findMany({
-      where: { hostel: { owner_id: session.sub }, is_active: true },
+      where: {
+        hostel: { owner_id: session.sub },
+        is_active: true,
+        ...(hostelId ? { hostel_id: hostelId } : {}),
+      },
       orderBy: { room_no: "asc" },
     });
     return apiResponse(rooms);
@@ -52,10 +57,19 @@ export async function POST(req: NextRequest) {
       return apiError("Validation error", "VALIDATION_ERROR", 400);
     }
 
-    // Find the owner's hostel
-    const hostel = await prisma.hostel.findFirst({
-      where: { owner_id: session.sub, is_active: true },
-    });
+    // Phase 2: accept explicit hostelId from frontend; fallback to findFirst for backward compat
+    let hostelId = body.hostelId;
+    let hostel;
+    if (hostelId) {
+      hostel = await prisma.hostel.findUnique({ where: { id: hostelId } });
+      if (!hostel || hostel.owner_id !== session.sub) {
+        return apiError("Hostel not found or not owned by you", "FORBIDDEN", 403);
+      }
+    } else {
+      hostel = await prisma.hostel.findFirst({
+        where: { owner_id: session.sub, is_active: true },
+      });
+    }
     if (!hostel) {
       return apiError("No hostel found. Please complete hostel setup first.", "NOT_FOUND", 404);
     }
