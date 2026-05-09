@@ -13,6 +13,7 @@ import { incrementPayment, incrementWebhook } from "../metrics";
 import { tenantAnalyticsService } from "./tenant-analytics-service";
 import { planEnforcementService } from "./plan-enforcement-service";
 import { financialService } from "./financial-service";
+import { abandonmentService } from "./abandonment-service";
 
 const logger = getLogger("payment.service");
 
@@ -279,6 +280,13 @@ export class PaymentService {
         method: data.paymentMethod,
       });
 
+      // 🎉 First-payment milestone: fires once for the owner's very first collection.
+      if (res.payment?.owner_id) {
+        abandonmentService
+          .sendFirstSuccessNotification(res.payment.owner_id, "FIRST_PAYMENT")
+          .catch((e: any) => console.warn("[PAYMENT] First-payment milestone failed:", e?.message));
+      }
+
       return res;
     });
   }
@@ -499,6 +507,18 @@ export class PaymentService {
       method: data.paymentMethod,
       idempotency_key: data.idempotencyKey || null,
     });
+
+    // 🎉 First-payment milestone: fires once for the owner's very first tenant payment.
+    const ownerIdForMilestone = txResult.allocations[0] ? await prisma.rentObligation.findUnique({
+      where: { id: txResult.allocations[0].obligation_id },
+      select: { owner_id: true },
+    }).then(ob => ob?.owner_id ?? null).catch(() => null) : null;
+
+    if (ownerIdForMilestone) {
+      abandonmentService
+        .sendFirstSuccessNotification(ownerIdForMilestone, "FIRST_PAYMENT")
+        .catch((e: any) => console.warn("[PAYMENT] First-payment milestone (tenant path) failed:", e?.message));
+    }
 
     return txResult;
   }

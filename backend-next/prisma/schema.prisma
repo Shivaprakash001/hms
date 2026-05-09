@@ -290,6 +290,31 @@ model RentGenerationLog {
   @@schema("public")
 }
 
+model RentGenerationLedger {
+  id              String    @id @default(uuid()) @db.Uuid
+  owner_id        String    @db.Uuid
+  hostel_id       String    @db.Uuid
+  rent_month      DateTime  @db.Date
+  obligation_type String
+  status          String
+  trigger_type    String?
+  generated_by    String?   @db.Uuid
+  created_count   Int       @default(0)
+  skipped_count   Int       @default(0)
+  failure_reason  String?
+  started_at      DateTime? @db.Timestamptz(6)
+  completed_at    DateTime? @db.Timestamptz(6)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime? @updatedAt @db.Timestamptz(6)
+
+  @@unique([owner_id, hostel_id, rent_month, obligation_type])
+  @@index([rent_month, status])
+  @@index([owner_id, rent_month])
+  @@index([hostel_id, rent_month])
+  @@map("rent_generation_ledgers")
+  @@schema("public")
+}
+
 model SystemLock {
   key        String   @id
   locked_at  DateTime @default(now()) @db.Timestamptz(6)
@@ -836,6 +861,30 @@ model OverflowLedger {
   @@index([billing_month])
   @@index([status])
   @@map("overflow_ledger")
+  @@schema("public")
+}
+
+// ── Owner Onboarding Intelligence State ──────────────────────────────────────
+// Persistent across devices, sessions, and browsers. Single source of truth
+// for onboarding progress. Derived activation is computed from real DB state
+// in ActivationService — this row stores the cache + metadata.
+model OwnerOnboardingState {
+  owner_id                String    @id @db.Uuid
+  onboarding_step         String    @default("ACCOUNT_CREATED")
+  onboarding_completed_at DateTime? @db.Timestamptz(6)
+  onboarding_last_seen_at DateTime  @default(now()) @db.Timestamptz(6)
+  skipped_steps           Json      @default("[]")
+  onboarding_source       String?
+  onboarding_version      String    @default("v2")
+  activation_score        Int       @default(0)
+  created_at              DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@index([onboarding_step])
+  @@index([onboarding_completed_at])
+  @@index([onboarding_last_seen_at])
+  @@index([activation_score])
+  @@map("owner_onboarding_states")
   @@schema("public")
 }
 

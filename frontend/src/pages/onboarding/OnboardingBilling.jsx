@@ -1,0 +1,222 @@
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ArrowRight, Loader2, ChevronUp, ChevronDown, Zap } from 'lucide-react';
+import { ownerService } from '../../api/services';
+import { setStoredStep } from '../../hooks/useOnboardingState';
+
+// Day stepper input component (mobile-friendly, no tiny number input)
+function DayStepper({ id, value, onChange, label, hint }) {
+  const dec = () => onChange(Math.max(1, value - 1));
+  const inc = () => onChange(Math.min(28, value + 1));
+  return (
+    <div>
+      <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-1.5">
+        {label}
+      </label>
+      {hint && <p className="text-xs text-slate-400 mb-2 font-medium">{hint}</p>}
+      <div className="flex items-center gap-0 bg-white border border-slate-200 rounded-2xl overflow-hidden">
+        <button
+          type="button"
+          onClick={dec}
+          className="flex-1 py-4 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors active:scale-95"
+        >
+          <ChevronDown size={20} />
+        </button>
+        <div className="flex-shrink-0 px-6 py-4 text-center border-x border-slate-100">
+          <span className="text-2xl font-black text-slate-900 tabular-nums">{value}</span>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">of month</p>
+        </div>
+        <button
+          type="button"
+          onClick={inc}
+          className="flex-1 py-4 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors active:scale-95"
+        >
+          <ChevronUp size={20} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Visual timeline preview
+function TimelinePreview({ rentDay, dueDay }) {
+  const shifted = dueDay < rentDay;
+  const effectiveDue = shifted ? `${dueDay} (next month)` : `${dueDay}`;
+  const thisMonth = new Date().toLocaleString('default', { month: 'long' });
+  const nextMonth = new Date(new Date().setMonth(new Date().getMonth() + 1)).toLocaleString('default', { month: 'long' });
+
+  const events = [
+    { day: `${thisMonth} ${rentDay}`, label: '📋 Rent generated', sub: 'Tenants see the due bill instantly', color: 'bg-indigo-100 text-indigo-700' },
+    { day: `${shifted ? nextMonth : thisMonth} ${dueDay}`, label: '📅 Due date', sub: 'Tenants must pay by this day', color: 'bg-violet-100 text-violet-700' },
+    { day: 'From due date +1', label: '🔔 Reminders start', sub: 'Automatic WhatsApp + in-app alerts', color: 'bg-amber-100 text-amber-700' },
+  ];
+
+  return (
+    <div className="bg-gradient-to-br from-slate-900 to-indigo-950 rounded-2xl p-5 space-y-3">
+      <p className="text-[10px] font-black uppercase tracking-widest text-indigo-300 mb-4">
+        Automation Timeline Preview
+      </p>
+      {events.map((e, i) => (
+        <motion.div
+          key={i}
+          initial={{ opacity: 0, x: -8 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: i * 0.1 }}
+          className="flex items-start gap-3"
+        >
+          <div className="flex flex-col items-center">
+            <div className={`w-2 h-2 rounded-full mt-1.5 ${i === 0 ? 'bg-indigo-400' : i === 1 ? 'bg-violet-400' : 'bg-amber-400'}`} />
+            {i < 2 && <div className="w-px flex-1 bg-white/10 mt-1 h-6" />}
+          </div>
+          <div className="flex-1 pb-1">
+            <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">{e.day}</p>
+            <p className="text-sm font-black text-white">{e.label}</p>
+            <p className="text-xs text-white/50 font-medium mt-0.5">{e.sub}</p>
+          </div>
+        </motion.div>
+      ))}
+      {shifted && (
+        <div className="bg-amber-500/20 border border-amber-500/30 rounded-xl p-3 mt-2">
+          <p className="text-xs font-bold text-amber-300">
+            ℹ️ Since the due date ({dueDay}) falls before rent generates ({rentDay}), the due date is set to the following month. Tenants get a full grace window.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function OnboardingBilling() {
+  const navigate = useNavigate();
+  const [rentDay, setRentDay] = useState(1);
+  const [dueDay, setDueDay]   = useState(5);
+  const [autoReminders, setAutoReminders] = useState(true);
+  const [timezone, setTimezone] = useState('Asia/Kolkata');
+  const [saving, setSaving] = useState(false);
+  const [apiError, setApiError] = useState('');
+
+  // Auto-detect timezone
+  useEffect(() => {
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (tz) setTimezone(tz);
+    } catch {}
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setApiError('');
+    try {
+      await ownerService.updatePreferences({
+        auto_rent_day:    rentDay,
+        due_day:          dueDay,
+        timezone:         timezone,
+        auto_generate_rent: true,
+        reminders_enabled: autoReminders,
+      });
+      setStoredStep('BILLING_CONFIGURED');
+      navigate('/onboarding/rooms');
+    } catch (err) {
+      setApiError(err?.response?.data?.error?.message || err?.response?.data?.detail || 'Could not save. Try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <div className="w-8 h-8 bg-amber-100 rounded-xl flex items-center justify-center">
+            <Zap size={16} className="text-amber-600" />
+          </div>
+          <span className="text-xs font-black uppercase tracking-widest text-amber-600">Critical Step</span>
+        </div>
+        <h1 className="text-2xl font-black text-slate-900 tracking-tight">
+          Set up rent automation
+        </h1>
+        <p className="text-slate-500 mt-1 text-sm">
+          This is what saves you hours every month. You won't need to chase tenants manually.
+        </p>
+      </div>
+
+      {apiError && (
+        <div className="bg-red-50 text-red-600 px-4 py-3 rounded-xl text-sm font-medium border border-red-100">
+          {apiError}
+        </div>
+      )}
+
+      {/* Rent Generation Day */}
+      <DayStepper
+        id="onboarding-rent-day"
+        value={rentDay}
+        onChange={setRentDay}
+        label="Generate rent on the ___th of every month"
+        hint="Tenants will see a new bill on this day"
+      />
+
+      {/* Due Day */}
+      <DayStepper
+        id="onboarding-due-day"
+        value={dueDay}
+        onChange={setDueDay}
+        label="Tenants must pay by the ___th"
+        hint="Reminders start automatically after this date"
+      />
+
+      {/* Timeline preview — updates live */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={`${rentDay}-${dueDay}`}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2 }}
+        >
+          <TimelinePreview rentDay={rentDay} dueDay={dueDay} />
+        </motion.div>
+      </AnimatePresence>
+
+      {/* Auto-reminders toggle */}
+      <div className="flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-200">
+        <div>
+          <p className="text-sm font-black text-slate-900">🔔 Auto-reminders</p>
+          <p className="text-xs text-slate-500 font-medium mt-0.5">
+            Tenants get WhatsApp + in-app reminders after due date
+          </p>
+        </div>
+        <button
+          type="button"
+          id="onboarding-reminders-toggle"
+          onClick={() => setAutoReminders(r => !r)}
+          className={`relative w-12 h-6 rounded-full transition-colors ${autoReminders ? 'bg-indigo-600' : 'bg-slate-200'}`}
+        >
+          <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${autoReminders ? 'translate-x-6' : 'translate-x-0.5'}`} />
+        </button>
+      </div>
+
+      {/* Timezone (collapsed, auto-detected) */}
+      <div className="flex items-center justify-between px-4 py-3 bg-slate-50 rounded-xl border border-slate-100">
+        <p className="text-xs font-semibold text-slate-500">
+          Timezone: <span className="text-slate-900 font-black">{timezone}</span>
+        </p>
+        <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+          Auto-detected ✓
+        </span>
+      </div>
+
+      {/* Sticky CTA */}
+      <div className="fixed bottom-8 left-4 right-4" style={{ left: '50%', transform: 'translateX(-50%)', width: 'calc(100% - 32px)', maxWidth: '512px' }}>
+        <motion.button
+          whileTap={{ scale: 0.98 }}
+          onClick={handleSave}
+          disabled={saving}
+          id="onboarding-billing-continue"
+          className="w-full flex items-center justify-center gap-2 py-4 px-6 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-black rounded-2xl shadow-2xl shadow-indigo-600/25 transition-all text-base"
+        >
+          {saving ? <Loader2 size={18} className="animate-spin" /> : <>Save & Continue <ArrowRight size={18} /></>}
+        </motion.button>
+      </div>
+    </div>
+  );
+}

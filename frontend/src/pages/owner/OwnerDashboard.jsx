@@ -1,4 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import SmartDashboardGuidance from '../../components/SmartDashboardGuidance';
+import FirstSuccessMoment from '../../components/FirstSuccessMoment';
 import { useNavigate } from 'react-router-dom';
 import { AreaChart, Area, ResponsiveContainer } from 'recharts';
 import {
@@ -39,6 +41,25 @@ const OwnerDashboard = () => {
     const [tab, setTab]           = useState('cashflow');
     const [dismissed, setDismissed] = useState(false);
 
+    // ── Milestone notifications (for FirstSuccessMoment) ─────────────────────
+    const [milestoneNotifs, setMilestoneNotifs] = useState([]);
+    useEffect(() => {
+        // Fetch unread notifications; filter milestone types in FirstSuccessMoment
+        import('../../api/services').then(({ notificationService }) => {
+            notificationService.getAll().then(data => {
+                const notifs = Array.isArray(data) ? data : (data?.notifications ?? []);
+                setMilestoneNotifs(notifs.filter(n => !n.is_read));
+            }).catch(() => {});
+        });
+    }, []);
+
+    const handleMilestoneDismiss = (notifId) => {
+        setMilestoneNotifs(prev => prev.map(n => n.id === notifId ? { ...n, is_read: true } : n));
+        import('../../api/services').then(({ notificationService }) => {
+            notificationService.markAsRead(notifId).catch(() => {});
+        });
+    };
+
     // Always-on: cashflow + addon (parallel, shared cache)
     const { data: cf, isLoading } = useCashflow();
     const { data: addonData }     = useAddonUsage();
@@ -73,6 +94,12 @@ const OwnerDashboard = () => {
 
     return (
         <div className="relative pb-28 bg-slate-50 min-h-screen -mx-3 sm:-mx-8 -mt-3 sm:-mt-8">
+            {/* First-success milestone celebrations */}
+            <FirstSuccessMoment
+                notifications={milestoneNotifs}
+                onDismiss={handleMilestoneDismiss}
+            />
+
             {showBanner && (
                 <AlertBanner
                     cronStopped={cronStopped} creditsLow={creditsLow}
@@ -208,6 +235,11 @@ const InsightStrip = ({ insights, severity }) => {
 //              top_defaulters[]{tenant_id, name, pending_amount, days_overdue},
 //              daily_collection[]{date, amount}
 const S1_Cashflow = ({ cfStats, cfSeverity, cfInsights, preferences, navigate }) => {
+    // If the owner has no tenants and no expected rent, they are likely new.
+    // SmartDashboardGuidance derives real state from the server — not just local flags.
+    const isNewOwner = cfStats.expected === 0 && cfStats.topDefaulters.length === 0;
+    if (isNewOwner) return <SmartDashboardGuidance />;
+
     const highRisk = cfStats.topDefaulters.filter(d => riskBadge(d) === 'HIGH').length;
     const actionItems = [
         cfStats.overdueCount > 0 && { id: 'remind',  icon: Bell,       color: 'text-indigo-600 bg-indigo-50',  label: `${cfStats.overdueCount} tenant${cfStats.overdueCount !== 1 ? 's' : ''} unpaid — send reminders`,                    cta: 'Payments',    path: '/owner/payments' },

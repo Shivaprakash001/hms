@@ -5,21 +5,28 @@ import { eventLog } from "./event-log-service";
 import { resolvePreferences } from "../preferences";
 import { getDayInTimezone } from "../timezone";
 import { planEnforcementService } from "./plan-enforcement-service";
+import { rentGenerationLedgerService } from "./rent-generation-ledger-service";
+import {
+  validateBillingPreferences,
+  computeDueDate,
+  type BillingValidationError,
+} from "./billing-validation";
+import { abandonmentService } from "./abandonment-service";
 
 /**
- * 🏦 Rent Generation Service
- * 
+ * 🏦 Rent Generation Service — Phases 1-7
+ *
  * Idempotent monthly rent obligation generator.
  * Safe to run multiple times — the DB unique constraint
  * on (allocation_id, rent_month, obligation_type) prevents duplicate rows.
- * 
+ *
  * Safety features:
- * - Deterministic UTC month keys (YYYY-MM-01T00:00:00Z)
- * - end_date filter prevents billing ex-tenants
- * - Zero-rent skip before insert
- * - P2002 catch with debug logging
- * - Rate-limit lock prevents concurrent runs
- * - Full audit trail via RentGenerationLog
+ * Phase 1: Catch-up generation, ledger idempotency
+ * Phase 2: Hostel-scoped preferences, multi-hostel independence
+ * Phase 3: Atomic transaction (rent + maintenance in one TX)
+ * Phase 4: Billing preference validation before any rows are queued
+ * Phase 5: Unified owner-scoped DB lock prevents cron/manual overlap
+ * Phase 7: Anomaly events for zero generation, timeouts, lock contention
  */
 
 export class RentGenerationService {
@@ -33,15 +40,17 @@ export class RentGenerationService {
     const now = targetDate || new Date();
     // Deterministic month key — always UTC midnight on 1st
     const rentMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
-    // Due date = 5th of the month
-    const dueDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 5));
 
-    // Persistent Database Lock
-    const lockKey = `rent_gen_${rentMonth.toISOString()}_${ownerId || "global"}`;
-    const LOCK_TTL_MS = 60_000; // 60 seconds
+    // Phase 5: Unified owner-scoped lock key.
+    // Format: rent_gen_<ownerId|global>_<YYYY-MM>
+    // Scoped to owner+month so cron and manual triggers for the SAME owner+month
+    // cannot overlap, while different owners run concurrently without blocking each other.
+    const monthKey = `${rentMonth.getUTCFullYear()}-${String(rentMonth.getUTCMonth() + 1).padStart(2, "0")}`;
+    const lockKey = `rent_gen_${ownerId || "global"}_${monthKey}`;
 
     try {
-      // Atomic Lock Acquisition (Handles fresh insertion + overwriting expired locks inside ONE query window)
+      // Atomic Lock Acquisition: INSERT with ON CONFLICT DO UPDATE WHERE expires_at < NOW()
+      // Zero rows affected means the lock is held by another process and not yet expired.
       const lockAcquired = await prisma.$executeRaw`
         INSERT INTO system_locks (key, locked_at, expires_at)
         VALUES (${lockKey}, NOW(), NOW() + interval '60 seconds')
@@ -51,19 +60,36 @@ export class RentGenerationService {
       `;
 
       if (lockAcquired === 0) {
-        // Zero rows affected = constraint fired AND the existing lock has NOT expired
+        // Phase 7: Structured lock contention event
+        console.warn("[RENT] Lock contention — generation already in progress", {
+          lock_key: lockKey, trigger_type: triggerType, owner_id: ownerId,
+        });
+        await eventLog.log("LOCK_CONTENTION", ownerId || null, {
+          lock_key: lockKey,
+          rent_month: rentMonth.toISOString(),
+          trigger_type: triggerType,
+        }).catch(() => {});
         return {
           rent_month: rentMonth.toISOString(),
           error: "Rent generation already in progress. Please wait.",
-          locked: true
+          locked: true,
         };
       }
+
+      console.log("[RENT] Lock acquired", { lock_key: lockKey, trigger_type: triggerType });
     } catch (e: any) {
       console.error("[RENT] Critical DB lock failure:", e);
+      await eventLog.log("LOCK_CONTENTION", ownerId || null, {
+        lock_key: lockKey,
+        rent_month: rentMonth.toISOString(),
+        trigger_type: triggerType,
+        error: e?.message,
+        cause: "LOCK_ACQUIRE_FAILED",
+      }).catch(() => {});
       return {
         rent_month: rentMonth.toISOString(),
         error: "Failed to acquire generation lock.",
-        locked: true
+        locked: true,
       };
     }
 
@@ -92,17 +118,18 @@ export class RentGenerationService {
             select: { id: true, monthly_rent: true, owner_id: true, maintenance_charge: true, maintenance_type: true }
           },
           room: {
-            select: { base_rent: true }
+            select: { base_rent: true, hostel_id: true }
           }
         }
       });
 
-      // Optimization: Batch fetch owner preferences to avoid N+1 queries in large systems
-      const ownerIds = Array.from(new Set(allocations.map(a => a.tenant.owner_id).filter(Boolean))) as string[];
+      // Phase 2: preferences are scoped to the allocation's actual hostel.
+      // This keeps multi-hostel owners from leaking one hostel's billing config into another.
+      const hostelIds = Array.from(new Set(allocations.map(a => (a.room as any).hostel_id).filter(Boolean))) as string[];
       const hostelPrefs: any[] = await prisma.hostel.findMany({
-        where: { owner_id: { in: ownerIds }, is_active: true },
+        where: { id: { in: hostelIds }, is_active: true },
       });
-      const prefsMap = new Map(hostelPrefs.map((p: any) => [p.owner_id, p]));
+      const prefsMap = new Map(hostelPrefs.map((p: any) => [p.id, p]));
 
       let created = 0;
       let skipped = 0;
@@ -123,6 +150,29 @@ export class RentGenerationService {
 
       const rentRows:  any[] = [];
       const maintRows: any[] = [];
+      const ledgerStats = new Map<string, {
+        ownerId: string;
+        hostelId: string;
+        obligationType: string;
+        created: number;
+        skipped: number;
+      }>();
+
+      const ledgerKey = (ownerId: string, hostelId: string, obligationType: string) =>
+        `${ownerId}:${hostelId}:${obligationType}`;
+
+      const ensureLedgerStat = (ownerId: string, hostelId: string, obligationType: string) => {
+        const key = ledgerKey(ownerId, hostelId, obligationType);
+        const current = ledgerStats.get(key);
+        if (current) return current;
+        const next = { ownerId, hostelId, obligationType, created: 0, skipped: 0 };
+        ledgerStats.set(key, next);
+        return next;
+      };
+
+      const logGenerationDecision = (payload: Record<string, any>) => {
+        console.log("[RENT] generation-decision", payload);
+      };
 
       for (const alloc of allocations) {
         // Runaway generation timeout guard
@@ -139,23 +189,95 @@ export class RentGenerationService {
           continue;
         }
 
+        const hostelId = (alloc.room as any).hostel_id;
+        if (!hostelId) {
+          console.warn(`[RENT] Skipping allocation ${alloc.id} — missing hostel_id`);
+          skipped++;
+          continue;
+        }
+
+        const prefs: any = prefsMap.get(hostelId);
+        if (!prefs) {
+          console.warn(`[RENT] Skipping allocation ${alloc.id} — missing active hostel preferences for ${hostelId}`);
+          skipped++;
+          await rentGenerationLedgerService.skip({
+            ownerId, hostelId, rentMonth, obligationType: "RENT",
+            skippedCount: 1, reason: "ACTIVE_HOSTEL_NOT_FOUND"
+          }).catch((ledgerErr: any) => console.error("[RENT] Failed to write ledger skip:", ledgerErr));
+          logGenerationDecision({
+            owner_id: ownerId, hostel_id: hostelId, rent_month: rentMonth.toISOString(),
+            obligation_type: "RENT", created: 0, skipped: 1,
+            reason: "ACTIVE_HOSTEL_NOT_FOUND", trigger_type: triggerType
+          });
+          continue;
+        }
+
         // Enforcement: Check plan allows automation feature
         try {
           await planEnforcementService.assertFeature(ownerId, "automation");
         } catch (err: any) {
           console.warn(`[RENT] Skipping owner ${ownerId} — automation not available: ${err?.message}`);
+          await rentGenerationLedgerService.skip({
+            ownerId, hostelId, rentMonth, obligationType: "RENT",
+            skippedCount: 1, reason: "PLAN_AUTOMATION_UNAVAILABLE"
+          }).catch((ledgerErr: any) => console.error("[RENT] Failed to write ledger skip:", ledgerErr));
+          logGenerationDecision({
+            owner_id: ownerId, hostel_id: hostelId, rent_month: rentMonth.toISOString(),
+            obligation_type: "RENT", created: 0, skipped: 1,
+            reason: "PLAN_AUTOMATION_UNAVAILABLE", trigger_type: triggerType
+          });
           skipped++;
           continue;
         }
 
-        const prefs: any = prefsMap.get(ownerId);
         const config = resolvePreferences(prefs);
+
+        // Phase 4: Validate billing preferences before queuing any rows.
+        // Invalid configs produce a structured error and skip this hostel's generation.
+        const prefValidation = validateBillingPreferences({
+          hostel_id: hostelId,
+          owner_id: ownerId,
+          auto_rent_day: Number(config.auto_rent_day ?? 1),
+          due_day: Number(config.due_day ?? 5),
+          timezone: config.timezone || "Asia/Kolkata",
+          rent_cycle: config.rent_cycle || "MONTHLY",
+        });
+        if (!prefValidation.valid) {
+          const errorCodes = prefValidation.errors.map((e) => e.code).join(",");
+          console.warn(`[RENT] Skipping hostel ${hostelId} — invalid billing config: ${errorCodes}`, prefValidation.errors);
+          skipped++;
+          await rentGenerationLedgerService.skip({
+            ownerId, hostelId, rentMonth, obligationType: "RENT",
+            skippedCount: 1, reason: `INVALID_BILLING_CONFIG:${errorCodes}`,
+          }).catch((ledgerErr: any) => console.error("[RENT] Failed to write ledger skip:", ledgerErr));
+          logGenerationDecision({
+            owner_id: ownerId, hostel_id: hostelId, rent_month: rentMonth.toISOString(),
+            obligation_type: "RENT", created: 0, skipped: 1,
+            reason: "INVALID_BILLING_CONFIG", validation_errors: prefValidation.errors,
+            trigger_type: triggerType,
+          });
+          continue;
+        }
+        // Log any warnings (e.g. DUE_DAY_BEFORE_RENT_DAY_SHIFTED) without aborting
+        const prefWarnings = prefValidation.errors.filter((e: BillingValidationError) => e.severity === "WARNING");
+        if (prefWarnings.length > 0) {
+          console.warn(`[RENT] Billing config warnings for hostel ${hostelId}`, prefWarnings);
+        }
 
         // Automation Guard: Skip if owner disabled auto-generation (unless manual trigger)
         if (triggerType === "cron") {
           const autoGen = config.auto_generate_rent ?? true;
           if (!autoGen) {
             console.info(`[RENT] Skipping owner ${ownerId} — auto_generate_rent disabled`);
+            await rentGenerationLedgerService.skip({
+              ownerId, hostelId, rentMonth, obligationType: "RENT",
+              skippedCount: 1, reason: "AUTO_GENERATE_DISABLED"
+            }).catch((ledgerErr: any) => console.error("[RENT] Failed to write ledger skip:", ledgerErr));
+            logGenerationDecision({
+              owner_id: ownerId, hostel_id: hostelId, rent_month: rentMonth.toISOString(),
+              obligation_type: "RENT", created: 0, skipped: 1,
+              reason: "AUTO_GENERATE_DISABLED", trigger_type: triggerType
+            });
             skipped++;
             continue;
           }
@@ -166,18 +288,30 @@ export class RentGenerationService {
           const localDay = getDayInTimezone(now, tz);
 
           console.log("[RENT] day-check", {
-            ownerId, utcNow: now.toISOString(), timezone: tz,
-            localDay, expectedDay, willProcess: localDay === expectedDay,
+            ownerId, hostelId, utcNow: now.toISOString(), timezone: tz,
+            localDay, expectedDay, willProcess: localDay >= expectedDay,
           });
 
-          if (localDay !== expectedDay) {
+          if (localDay < expectedDay) {
+            await rentGenerationLedgerService.skip({
+              ownerId, hostelId, rentMonth, obligationType: "RENT",
+              skippedCount: 1, reason: "BEFORE_GENERATION_DAY"
+            }).catch((ledgerErr: any) => console.error("[RENT] Failed to write ledger skip:", ledgerErr));
+            logGenerationDecision({
+              owner_id: ownerId, hostel_id: hostelId, rent_month: rentMonth.toISOString(),
+              obligation_type: "RENT", created: 0, skipped: 1,
+              reason: "BEFORE_GENERATION_DAY", trigger_type: triggerType,
+              local_day: localDay, expected_day: expectedDay
+            });
             skipped++;
             continue;
           }
         }
 
-        const dueDay = config.due_day ?? prefs?.due_day ?? 5;
-        const tenantDueDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), dueDay));
+        // Phase 4: Use computeDueDate which applies the shift policy when due_day < auto_rent_day
+        const autoRentDayVal = Number(config.auto_rent_day ?? 1);
+        const dueDayVal = Number(config.due_day ?? 5);
+        const tenantDueDate = computeDueDate(rentMonth, autoRentDayVal, dueDayVal);
 
         const rentAmount = Number(alloc.tenant.monthly_rent) || Number(alloc.room.base_rent) || 0;
         if (rentAmount <= 0) {
@@ -187,42 +321,157 @@ export class RentGenerationService {
         }
 
         // Collect RENT row if not already present
-        if (!existingSet.has(`${alloc.id}:RENT`)) {
-          rentRows.push({
-            tenant_id: alloc.tenant.id, allocation_id: alloc.id,
-            owner_id: alloc.tenant.owner_id, rent_month: rentMonth,
-            amount: rentAmount, total_amount: rentAmount,
-            due_date: tenantDueDate, status: "PENDING", obligation_type: "RENT",
+        const rentCompleted = await rentGenerationLedgerService.hasCompleted(ownerId, hostelId, rentMonth, "RENT");
+        if (rentCompleted) {
+          skipped++;
+          await rentGenerationLedgerService.skip({
+            ownerId, hostelId, rentMonth, obligationType: "RENT",
+            skippedCount: 1, reason: "ALREADY_COMPLETED"
+          }).catch((ledgerErr: any) => console.error("[RENT] Failed to write ledger skip:", ledgerErr));
+          logGenerationDecision({
+            owner_id: ownerId, hostel_id: hostelId, rent_month: rentMonth.toISOString(),
+            obligation_type: "RENT", created: 0, skipped: 1,
+            reason: "ALREADY_COMPLETED", trigger_type: triggerType
           });
         } else {
-          skipped++;
+          await rentGenerationLedgerService.startOrReuse({
+            ownerId, hostelId, rentMonth, obligationType: "RENT",
+            triggerType, generatedBy: triggerType === "manual" ? ownerId : null
+          });
+          const stat = ensureLedgerStat(ownerId, hostelId, "RENT");
+          if (!existingSet.has(`${alloc.id}:RENT`)) {
+            rentRows.push({
+              tenant_id: alloc.tenant.id, allocation_id: alloc.id,
+              owner_id: alloc.tenant.owner_id, rent_month: rentMonth,
+              amount: rentAmount, total_amount: rentAmount,
+              due_date: tenantDueDate, status: "PENDING", obligation_type: "RENT",
+            });
+            stat.created++;
+          } else {
+            stat.skipped++;
+            skipped++;
+          }
         }
 
         // Collect MAINTENANCE row if applicable and not already present
         const maintAmount = Number((alloc.tenant as any).maintenance_charge) || 0;
         const maintType   = (alloc.tenant as any).maintenance_type || "MONTHLY";
         if (maintAmount > 0 && maintType === "MONTHLY") {
-          if (!existingSet.has(`${alloc.id}:MAINTENANCE`)) {
-            maintRows.push({
-              tenant_id: alloc.tenant.id, allocation_id: alloc.id,
-              owner_id: alloc.tenant.owner_id, rent_month: rentMonth,
-              amount: maintAmount, total_amount: maintAmount,
-              due_date: tenantDueDate, status: "PENDING", obligation_type: "MAINTENANCE",
+          const maintCompleted = await rentGenerationLedgerService.hasCompleted(ownerId, hostelId, rentMonth, "MAINTENANCE");
+          if (maintCompleted) {
+            skipped++;
+            await rentGenerationLedgerService.skip({
+              ownerId, hostelId, rentMonth, obligationType: "MAINTENANCE",
+              skippedCount: 1, reason: "ALREADY_COMPLETED"
+            }).catch((ledgerErr: any) => console.error("[RENT] Failed to write ledger skip:", ledgerErr));
+            logGenerationDecision({
+              owner_id: ownerId, hostel_id: hostelId, rent_month: rentMonth.toISOString(),
+              obligation_type: "MAINTENANCE", created: 0, skipped: 1,
+              reason: "ALREADY_COMPLETED", trigger_type: triggerType
             });
           } else {
-            skipped++;
+            await rentGenerationLedgerService.startOrReuse({
+              ownerId, hostelId, rentMonth, obligationType: "MAINTENANCE",
+              triggerType, generatedBy: triggerType === "manual" ? ownerId : null
+            });
+            const stat = ensureLedgerStat(ownerId, hostelId, "MAINTENANCE");
+            if (!existingSet.has(`${alloc.id}:MAINTENANCE`)) {
+              maintRows.push({
+                tenant_id: alloc.tenant.id, allocation_id: alloc.id,
+                owner_id: alloc.tenant.owner_id, rent_month: rentMonth,
+                amount: maintAmount, total_amount: maintAmount,
+                due_date: tenantDueDate, status: "PENDING", obligation_type: "MAINTENANCE",
+              });
+              stat.created++;
+            } else {
+              stat.skipped++;
+              skipped++;
+            }
           }
+
         }
       }
 
-      // 2. Two bulk inserts — skipDuplicates handles concurrent races
-      if (rentRows.length > 0) {
-        const result = await prisma.rentObligation.createMany({ data: rentRows, skipDuplicates: true });
-        created += result.count;
+      // 2. Atomic bulk insert — both rent and maintenance rows go in a single transaction.
+      //    If either insert fails the entire transaction rolls back, preventing partial generation.
+      //    skipDuplicates is still set so concurrent cron/manual triggers that race past the
+      //    ledger check are handled gracefully inside the transaction window.
+      let txRolledBack = false;
+      try {
+        const txResults = await prisma.$transaction(async (tx) => {
+          let rentCount = 0;
+          let maintCount = 0;
+          if (rentRows.length > 0) {
+            const result = await tx.rentObligation.createMany({ data: rentRows, skipDuplicates: true });
+            rentCount = result.count;
+          }
+          if (maintRows.length > 0) {
+            const result = await tx.rentObligation.createMany({ data: maintRows, skipDuplicates: true });
+            maintCount = result.count;
+          }
+          return { rentCount, maintCount };
+        });
+        created += txResults.rentCount + txResults.maintCount;
+      } catch (insertErr: any) {
+        txRolledBack = true;
+        failed += ledgerStats.size || 1;
+
+        // Classify the failure reason for structured audit trails
+        const failureReason = insertErr?.code === "P2002"
+          ? "DUPLICATE_KEY_CONFLICT"
+          : insertErr?.message?.includes("timeout")
+            ? "TRANSACTION_TIMEOUT"
+            : "TRANSACTION_ROLLED_BACK";
+
+        console.error("[RENT] Transaction rolled back — no obligations written", {
+          rent_month: rentMonth.toISOString(),
+          reason: failureReason,
+          error: insertErr?.message,
+          rent_rows_pending: rentRows.length,
+          maint_rows_pending: maintRows.length,
+        });
+
+        errors.push(`${failureReason}: ${insertErr?.message || "unknown"}`);
+
+        // Mark every affected ledger entry as FAILED.
+        // These writes happen OUTSIDE the rolled-back transaction so the control-plane
+        // accurately records the failure and unblocks safe retries.
+        for (const stat of Array.from(ledgerStats.values())) {
+          await rentGenerationLedgerService.fail({
+            ownerId: stat.ownerId,
+            hostelId: stat.hostelId,
+            rentMonth,
+            obligationType: stat.obligationType,
+            createdCount: 0,
+            skippedCount: stat.skipped,
+            reason: failureReason,
+          }).catch((ledgerErr: any) => console.error("[RENT] Failed to mark ledger failed:", ledgerErr));
+        }
+        throw insertErr;
       }
-      if (maintRows.length > 0) {
-        const result = await prisma.rentObligation.createMany({ data: maintRows, skipDuplicates: true });
-        created += result.count;
+
+      for (const stat of Array.from(ledgerStats.values())) {
+        await rentGenerationLedgerService.complete({
+          ownerId: stat.ownerId,
+          hostelId: stat.hostelId,
+          rentMonth,
+          obligationType: stat.obligationType,
+          createdCount: stat.created,
+          skippedCount: stat.skipped,
+        }).catch((ledgerErr: any) => {
+          console.error("[RENT] Failed to complete ledger:", ledgerErr);
+          errors.push(`LEDGER_COMPLETE_FAILED: ${ledgerErr?.message || ledgerErr}`);
+        });
+        logGenerationDecision({
+          owner_id: stat.ownerId,
+          hostel_id: stat.hostelId,
+          rent_month: rentMonth.toISOString(),
+          obligation_type: stat.obligationType,
+          created: stat.created,
+          skipped: stat.skipped,
+          reason: "COMPLETED",
+          trigger_type: triggerType,
+        });
       }
 
       const durationMs = Date.now() - startTime;
@@ -236,6 +485,31 @@ export class RentGenerationService {
         duration_ms: durationMs,
         errors: errors.length > 0 ? errors : undefined
       };
+
+      // Phase 7: Anomaly detection — emit ZERO_RENT_GENERATED when we had eligible
+      // allocations but created nothing. This is a financial signal, not an error per se,
+      // but it must be surfaced for operational visibility.
+      if (created === 0 && allocations.length > 0 && failed === 0) {
+        await eventLog.log("ZERO_RENT_GENERATED", ownerId || null, {
+          rent_month: rentMonth.toISOString(),
+          trigger_type: triggerType,
+          total_allocations: allocations.length,
+          skipped,
+          hint: "All eligible allocations were skipped. Verify ledger state and hostel config.",
+        }).catch(() => {});
+      }
+
+      // Phase 7: Emit GENERATION_TIMEOUT anomaly if we hit the safety abort
+      if (errors.some((e) => e.startsWith("TIMEOUT:"))) {
+        await eventLog.log("GENERATION_TIMEOUT", ownerId || null, {
+          rent_month: rentMonth.toISOString(),
+          trigger_type: triggerType,
+          duration_ms: durationMs,
+          created,
+          skipped,
+          failed,
+        }).catch(() => {});
+      }
 
       // Write audit log
       await prisma.rentGenerationLog.create({
@@ -253,6 +527,7 @@ export class RentGenerationService {
       }).catch(logErr => {
         console.error("[RENT] Failed to write generation log:", logErr);
       });
+
 
       // Broadcast structured SSE events
       if (created > 0) {
@@ -284,6 +559,14 @@ export class RentGenerationService {
         trigger_type: triggerType,
         created, skipped, failed, duration_ms: durationMs
       });
+
+      // 🎉 First-rent milestone: fire once when the owner's very first rent cycle succeeds.
+      // Non-blocking — never lets a notification failure affect the generation result.
+      if (created > 0 && ownerId) {
+        abandonmentService
+          .sendFirstSuccessNotification(ownerId, "FIRST_RENT")
+          .catch((e: any) => console.warn("[RENT] First-rent milestone notification failed:", e?.message));
+      }
 
       console.log(`[RENT] Generation complete: ${created} created, ${skipped} skipped, ${failed} failed (${durationMs}ms)`);
       return summary;

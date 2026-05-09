@@ -758,3 +758,26 @@ export const reminderService = {
         return { sent, failed, total: results.length };
     },
 };
+
+// --- Activation / Onboarding Intelligence Service ---
+export const activationService = {
+    /**
+     * Derive operational activation state from real server DB data.
+     * Returns: { operational_state, activation_score, completed_steps,
+     *            missing_steps, blockers, recommendations, next_action,
+     *            readiness, raw }
+     */
+    get: async () => {
+        const response = await api.get('/owner/me/activation');
+        return response.data;
+    },
+    /**
+     * Persist an onboarding step server-side for cross-device sync.
+     * @param {string} step
+     * @param {{ skipped?: boolean, source?: string }} [options]
+     */
+    persistStep: async (step, options = {}) => {
+        const response = await api.patch('/owner/me/activation', { step, ...options });
+        return response.data;
+    },
+};

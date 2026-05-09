@@ -17,6 +17,16 @@ const ActivateAccount = lazy(() => import('./pages/auth/ActivateAccount.jsx'));
 const CompleteProfile = lazy(() => import('./pages/auth/CompleteProfile.jsx'));
 const GoogleCallback  = lazy(() => import('./pages/auth/GoogleCallback.jsx').then(m => ({ default: m.GoogleCallback })));
 
+// ── Onboarding — new owner activation flow ────────────────────────────────────
+const OnboardingShell    = lazy(() => import('./pages/onboarding/OnboardingShell.jsx'));
+const OnboardingWelcome  = lazy(() => import('./pages/onboarding/OnboardingWelcome.jsx'));
+const OnboardingHostel   = lazy(() => import('./pages/onboarding/OnboardingHostel.jsx'));
+const OnboardingBilling  = lazy(() => import('./pages/onboarding/OnboardingBilling.jsx'));
+const OnboardingRooms    = lazy(() => import('./pages/onboarding/OnboardingRooms.jsx'));
+const OnboardingTenant   = lazy(() => import('./pages/onboarding/OnboardingTenant.jsx'));
+const OnboardingPayments = lazy(() => import('./pages/onboarding/OnboardingPayments.jsx'));
+const OnboardingDone     = lazy(() => import('./pages/onboarding/OnboardingDone.jsx'));
+
 // ── Owner pages — code-split per route ───────────────────────────────────────
 const OwnerDashboard    = lazy(() => import('./pages/owner/OwnerDashboard.jsx'));
 const ManageTenants     = lazy(() => import('./pages/owner/ManageTenants.jsx'));
@@ -57,6 +67,18 @@ function App() {
             <Route path="/tenant/complete-profile" element={<Navigate to="/complete-profile" replace />} />
             <Route path="/callback" element={<GoogleCallback />} />
             <Route path="/payment-return" element={<TenantPaymentReturn />} />
+
+            {/* Onboarding Routes — new owner setup flow */}
+            <Route path="/onboarding" element={<OnboardingShell />}>
+              <Route index element={<Navigate to="welcome" replace />} />
+              <Route path="welcome"  element={<OnboardingWelcome />} />
+              <Route path="hostel"   element={<OnboardingHostel />} />
+              <Route path="billing"  element={<OnboardingBilling />} />
+              <Route path="rooms"    element={<OnboardingRooms />} />
+              <Route path="tenant"   element={<OnboardingTenant />} />
+              <Route path="payments" element={<OnboardingPayments />} />
+              <Route path="done"     element={<OnboardingDone />} />
+            </Route>
 
             {/* Tenant Routes */}
             <Route element={<ProtectedTenantRoute />}>

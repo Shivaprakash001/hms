@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/process-overflow",
       "schedule": "0 4 2 * *"
+    },
+    {
+      "path": "/api/cron/onboarding-nudges",
+      "schedule": "30 4 * * *"
     }
   ]
 }
