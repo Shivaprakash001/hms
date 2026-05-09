@@ -85,6 +85,19 @@ async function main() {
   assertEq(policyA.tenant_rules.profile_photo_required, true, "Legacy tenant rule maps into tenant_rules domain");
   assertEq(policyB.payments.upi_id, "b@upi", "Typed hostel payment column merges into payments domain");
 
+  const policyC = normalizeHostelPolicy({
+    preferences_config: {
+      reminder_before_due_days: [3, 1],
+      reminder_after_due_days: [2, 4, 8],
+      reminder_auto_stop_after_payment: false,
+      reminder_escalation_tone: "FIRM",
+    },
+  });
+  assertEq(policyC.reminders.schedule.before_due_days.join(","), "3,1", "Flat before-due schedule normalizes during transition");
+  assertEq(policyC.reminders.schedule.after_due_days.join(","), "2,4,8", "Flat after-due schedule normalizes during transition");
+  assertEq(policyC.reminders.auto_stop_after_payment, false, "Flat auto-stop setting maps into reminders domain");
+  assertEq(policyC.reminders.escalation.tone, "FIRM", "Flat escalation tone maps into reminders domain");
+
   const compat = toCompatibilityPreferences(policyB);
   assertEq(compat.billing_defaults.advance_deposit, 15000, "Compatibility response preserves billing_defaults shape");
   assertEq(compat.upi_id, "b@upi", "Compatibility response preserves payment keys");
@@ -93,10 +106,18 @@ async function main() {
     due_day: 12,
     billing_defaults: { advance_deposit: 7000, maintenance_charge: 0, maintenance_type: "NONE", auto_fill_room_rent: true, allow_override: true },
     require_profile_photo_onboarding: true,
+    reminder_after_due_days: [1, 3, 7],
+    reminder_before_due_days: [2],
+    reminder_auto_stop_after_payment: false,
+    reminder_escalation_tone: "POLITE",
   });
   assertEq(patch.billing.due_day, 12, "Flat due_day patch maps to billing domain");
   assertEq(patch.billing.maintenance.type, "NONE", "Flat billing default patch maps maintenance domain");
   assertEq(patch.tenant_rules.profile_photo_required, true, "Flat profile-photo patch maps tenant_rules domain");
+  assertEq(patch.reminders.schedule.after_due_days.join(","), "1,3,7", "Flat custom reminder schedule patch maps to reminders domain");
+  assertEq(patch.reminders.schedule.before_due_days.join(","), "2", "Flat before-due schedule patch maps to reminders domain");
+  assertEq(patch.reminders.auto_stop_after_payment, false, "Flat auto-stop patch maps to reminders domain");
+  assertEq(patch.reminders.escalation.tone, "POLITE", "Flat escalation tone patch maps to reminders domain");
 
   try {
     validateHostelPolicyForWrite(normalizeHostelPolicy({ preferences_config: { billing: { due_day: 40 } } }));

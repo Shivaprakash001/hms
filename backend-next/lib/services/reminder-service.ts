@@ -5,10 +5,11 @@ import { messageService } from "./message-service";
 import { eventLog } from "./event-log-service";
 import { resolveRules, calculateSingleRuleFee } from "../billing/engine";
 import { resolvePreferences } from "../preferences";
-import { batchGetHostelContexts, resolveHostelIdFromObligation, resolveHostelIdFromTenant } from "../hostel-context";
+import { batchGetHostelContexts, getTenantOperationalContext, resolveHostelIdFromObligation } from "../hostel-context";
 import { formatMonthYear, formatDate } from "../format";
 import { requireAutomation, consumeReminder } from "./plan-gate-service";
 import { financialService } from "./financial-service";
+import { selectReminderForOverdueDay } from "./collection-strategy-service";
 
 export class ReminderService {
 
@@ -102,6 +103,7 @@ export class ReminderService {
       const lastReminderType = remindersByObligation.get(ob.obligation_id)?.reminder_type ?? null;
       const reminderTarget = {
         id: ob.obligation_id,
+        hostel_id: hostelId || null,
         amount: ob.remaining_amount,
         rent_month: ob.rent_month,
         due_date: ob.due_date,
@@ -116,18 +118,9 @@ export class ReminderService {
       try {
         // 1️⃣ Automated Tiered Reminders
         if (autoReminders) {
-          const sendGentle = config.reminder_day_1 ?? true;
-          const sendWarning = config.reminder_day_5 ?? true;
-          const sendFinal = config.reminder_day_10 ?? true;
-
-          if (daysOverdue === 1 && sendGentle && lastReminderType !== "DUE_SOON") {
-            await this.triggerNotification(reminderTarget, "DUE_SOON", config);
-            remindersSent++;
-          } else if (daysOverdue === 5 && sendWarning && lastReminderType !== "WARNING") {
-            await this.triggerNotification(reminderTarget, "WARNING", config);
-            remindersSent++;
-          } else if (daysOverdue === 10 && sendFinal && lastReminderType !== "FINAL_NOTICE") {
-            await this.triggerNotification(reminderTarget, "FINAL_NOTICE", config);
+          const reminderType = selectReminderForOverdueDay(daysOverdue, lastReminderType, config);
+          if (reminderType) {
+            await this.triggerNotification(reminderTarget, reminderType, config);
             remindersSent++;
           }
         }
@@ -313,7 +306,7 @@ export class ReminderService {
   async sendManualReminder(tenantId: string, ownerId: string): Promise<{ sent: number; tenant_name: string }> {
     const tenant = await prisma.tenant.findFirst({
       where: { id: tenantId, owner_id: ownerId, status: "ACTIVE" },
-      select: { id: true, personal_email: true, owner_id: true, profile: { select: { name: true, phone: true } } },
+      select: { id: true, personal_email: true, owner_id: true, hostel_id: true, profile: { select: { name: true, phone: true } } },
     });
     if (!tenant) {
       const err: any = new Error("Tenant not found or access denied");
@@ -333,27 +326,10 @@ export class ReminderService {
 
     if (!obligation) return { sent: 0, tenant_name: tenant.profile?.name ?? "Tenant" };
 
-    // Fix: resolve hostel from tenant's allocation chain instead of findFirst(owner_id).
-    // This ensures correct UPI routing and branding when owner has multiple hostels.
-    const hostelId = await resolveHostelIdFromTenant(tenantId);
-    let config: any;
-    if (hostelId) {
-      const allocation = await prisma.roomAllocation.findFirst({
-        where: { tenant_id: tenantId, is_active: true },
-        select: { room: { select: { hostel: true } } },
-        orderBy: { start_date: "desc" },
-      });
-      config = resolvePreferences(allocation?.room?.hostel ?? null);
-    } else {
-      // No active allocation — fall back to first hostel (single-hostel owners only)
-      const hostel = await prisma.hostel.findFirst({
-        where: { owner_id: ownerId, is_active: true },
-        orderBy: { created_at: "asc" },
-      });
-      config = resolvePreferences(hostel);
-    }
+    const context = await getTenantOperationalContext(tenantId, ownerId, tenant.hostel_id);
+    const config = context.prefs;
 
-    await this.triggerNotification({ ...obligation, tenant }, "WARNING", config);
+    await this.triggerNotification({ ...obligation, hostel_id: context.hostel.id, tenant }, "WARNING", config);
 
     eventSystem.trigger("dashboard_updated", { reason: "manual_reminder_sent", ownerId });
 

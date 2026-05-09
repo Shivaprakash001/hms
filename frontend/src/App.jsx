@@ -35,7 +35,7 @@ const Payments          = lazy(() => import('./pages/owner/Payments.jsx'));
 const Expenses          = lazy(() => import('./pages/owner/Expenses.jsx'));
 const ActivityHistory   = lazy(() => import('./pages/owner/ActivityHistory.jsx'));
 const BillingPlans      = lazy(() => import('./pages/owner/BillingPlans.jsx'));
-const OwnerProfile      = lazy(() => import('./pages/owner/OwnerProfile.jsx'));
+const OwnerProfile      = lazy(() => import('./pages/owner/settings/OwnerSettings'));
 const TenantProfilePage = lazy(() => import('./pages/owner/TenantProfilePage.jsx'));
 
 // ── Tenant pages — code-split per route ──────────────────────────────────────

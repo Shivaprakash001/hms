@@ -327,15 +327,15 @@ export function normalizeHostelPolicy(hostel: any): HostelPolicy {
         sms: bool(reminderChannels.sms, false),
       },
       schedule: {
-        before_due_days: intArray(reminderSchedule.before_due_days, "Before-due reminder days"),
-        after_due_days: intArray(reminderSchedule.after_due_days ?? legacyReminderDays(config), "After-due reminder days"),
+        before_due_days: intArray(reminderSchedule.before_due_days ?? config.reminder_before_due_days, "Before-due reminder days"),
+        after_due_days: intArray(reminderSchedule.after_due_days ?? config.reminder_after_due_days ?? legacyReminderDays(config), "After-due reminder days"),
       },
       escalation: {
         enabled: bool(reminderEscalation.enabled, false),
-        after_days: intArray(reminderEscalation.after_days, "Escalation days"),
-        tone: String(reminderEscalation.tone || "STANDARD"),
+        after_days: intArray(reminderEscalation.after_days ?? config.reminder_escalation_after_days, "Escalation days"),
+        tone: String(reminderEscalation.tone || config.reminder_escalation_tone || "STANDARD"),
       },
-      auto_stop_after_payment: bool(reminders.auto_stop_after_payment, true),
+      auto_stop_after_payment: bool(reminders.auto_stop_after_payment ?? config.reminder_auto_stop_after_payment, true),
       late_fee_notifications: bool(reminders.late_fee_notifications ?? config.late_fee_notification, true),
       owner_daily_summary: bool(reminders.owner_daily_summary ?? config.owner_daily_summary, false),
     },
@@ -454,6 +454,10 @@ export function toCompatibilityPreferences(policy: HostelPolicy): Record<string,
     reminder_day_1: policy.reminders.schedule.after_due_days.includes(1),
     reminder_day_5: policy.reminders.schedule.after_due_days.includes(5),
     reminder_day_10: policy.reminders.schedule.after_due_days.includes(10),
+    reminder_before_due_days: policy.reminders.schedule.before_due_days,
+    reminder_after_due_days: policy.reminders.schedule.after_due_days,
+    reminder_auto_stop_after_payment: policy.reminders.auto_stop_after_payment,
+    reminder_escalation_tone: policy.reminders.escalation.tone,
     late_fee_notification: policy.reminders.late_fee_notifications,
     owner_daily_summary: policy.reminders.owner_daily_summary,
     auto_generate_rent: policy.automation.auto_generate_rent,
@@ -510,15 +514,25 @@ export function compatibilityPreferencesToPolicyPatch(data: Record<string, any>)
         ...(data.reminder_in_app !== undefined && { in_app: data.reminder_in_app }),
         ...(data.reminder_whatsapp !== undefined && { whatsapp: data.reminder_whatsapp }),
       },
-      ...((data.reminder_day_1 !== undefined || data.reminder_day_5 !== undefined || data.reminder_day_10 !== undefined) && {
+      ...((data.reminder_after_due_days !== undefined || data.reminder_before_due_days !== undefined || data.reminder_day_1 !== undefined || data.reminder_day_5 !== undefined || data.reminder_day_10 !== undefined) && {
         schedule: {
-          after_due_days: [
-            ...(data.reminder_day_1 !== false ? [1] : []),
-            ...(data.reminder_day_5 !== false ? [5] : []),
-            ...(data.reminder_day_10 !== false ? [10] : []),
-          ],
+          ...(data.reminder_before_due_days !== undefined && { before_due_days: data.reminder_before_due_days }),
+          after_due_days: data.reminder_after_due_days !== undefined
+            ? data.reminder_after_due_days
+            : [
+                ...(data.reminder_day_1 !== false ? [1] : []),
+                ...(data.reminder_day_5 !== false ? [5] : []),
+                ...(data.reminder_day_10 !== false ? [10] : []),
+              ],
         },
       }),
+      ...((data.reminder_escalation_tone !== undefined || data.reminder_escalation_after_days !== undefined) && {
+        escalation: {
+          ...(data.reminder_escalation_tone !== undefined && { tone: data.reminder_escalation_tone }),
+          ...(data.reminder_escalation_after_days !== undefined && { after_days: data.reminder_escalation_after_days }),
+        },
+      }),
+      ...(data.reminder_auto_stop_after_payment !== undefined && { auto_stop_after_payment: data.reminder_auto_stop_after_payment }),
       ...(data.late_fee_notification !== undefined && { late_fee_notifications: data.late_fee_notification }),
       ...(data.owner_daily_summary !== undefined && { owner_daily_summary: data.owner_daily_summary }),
     },

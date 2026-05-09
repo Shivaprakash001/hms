@@ -106,6 +106,10 @@ export const ownerService = {
             throw error;
         }
     },
+    updateProfileSection: async (data) => {
+        const response = await api.patch('/profile', data);
+        return response.data;
+    },
     updateHostel: async (data, hostelId) => {
         if (hostelId) {
             const response = await api.patch(`/hostels/${hostelId}`, data);
@@ -161,6 +165,10 @@ export const ownerService = {
     },
     sendTestReminder: async (type = 'DUE_SOON', hostelId) => {
         const response = await api.post('/notifications/test-reminder', { type, hostel_id: hostelId });
+        return response.data;
+    },
+    updateSectionConfig: async (hostelId, section, data) => {
+        const response = await api.patch(`/hostels/${hostelId}/${section}`, data);
         return response.data;
     }
 };

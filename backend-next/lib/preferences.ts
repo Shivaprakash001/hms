@@ -58,6 +58,10 @@ export interface HostelPreferences {
   reminder_day_1: boolean;
   reminder_day_5: boolean;
   reminder_day_10: boolean;
+  reminder_before_due_days?: number[];
+  reminder_after_due_days?: number[];
+  reminder_auto_stop_after_payment?: boolean;
+  reminder_escalation_tone?: string;
   late_fee_notification: boolean;
   owner_daily_summary: boolean;
 

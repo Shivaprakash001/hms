@@ -8,6 +8,48 @@
 
 @theme {
     --font-sans: "Inter", sans-serif;
+    --color-brand-50: var(--color-amber-50);
+    --color-brand-100: var(--color-amber-100);
+    --color-brand-300: var(--color-amber-300);
+    --color-brand-500: var(--color-amber-500);
+    --color-brand-600: var(--color-amber-600);
+    --color-brand-700: var(--color-amber-700);
+    --color-ink-50: var(--color-slate-50);
+    --color-ink-100: var(--color-slate-100);
+    --color-ink-200: var(--color-slate-200);
+    --color-ink-300: var(--color-slate-300);
+    --color-ink-400: var(--color-slate-400);
+    --color-ink-500: var(--color-slate-500);
+    --color-ink-600: var(--color-slate-600);
+    --color-ink-700: var(--color-slate-700);
+    --color-ink-800: var(--color-slate-800);
+    --color-ink-900: var(--color-slate-900);
+    --color-surface-0: var(--color-white);
+    --color-surface-50: var(--color-slate-50);
+    --color-surface-100: var(--color-slate-100);
+    --color-danger-50: var(--color-rose-50);
+    --color-danger-500: var(--color-rose-500);
+    --color-warning-50: var(--color-amber-50);
+    --color-warning-500: var(--color-amber-500);
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --radius-full: 9999px;
+    --text-2xs: 10px;
+    --text-2xs--line-height: 14px;
+    --text-xs: 11px;
+    --text-xs--line-height: 16px;
+    --text-sm: 12px;
+    --text-sm--line-height: 18px;
+    --text-base: 13px;
+    --text-base--line-height: 20px;
+    --text-md: 14px;
+    --text-md--line-height: 22px;
+    --text-lg: 16px;
+    --text-lg--line-height: 24px;
+    --text-xl: 18px;
+    --text-xl--line-height: 28px;
 }
 
 body {
