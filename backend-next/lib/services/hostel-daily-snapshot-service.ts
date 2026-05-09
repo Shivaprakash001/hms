@@ -13,31 +13,31 @@ function hashSnapshot(payload: Record<string, any>) {
 export class HostelDailySnapshotService {
   async createSnapshot(hostelId: string, snapshotDate = new Date()) {
     const day = dateOnly(snapshotDate);
-    const [row] = await prisma.$queryRawUnsafe<any[]>(`
+    const [row] = await prisma.$queryRaw<any[]>`
       WITH room_stats AS (
         SELECT
           COALESCE(SUM(capacity), 0)::int AS capacity
         FROM rooms
-        WHERE hostel_id = $1::uuid AND is_active = true
+        WHERE hostel_id = ${hostelId}::uuid AND is_active = true
       ), active_allocations AS (
         SELECT COUNT(*)::int AS active_tenants
         FROM room_allocations
-        WHERE hostel_id = $1::uuid AND is_active = true AND end_date IS NULL
+        WHERE hostel_id = ${hostelId}::uuid AND is_active = true AND end_date IS NULL
       ), obligations AS (
         SELECT
           COALESCE(SUM(amount), 0)::float AS expected_revenue,
           COALESCE(SUM(CASE WHEN status IN ('PENDING','PARTIAL') THEN amount ELSE 0 END), 0)::float AS pending_dues,
           COUNT(CASE WHEN status IN ('PENDING','PARTIAL') AND due_date < $2::date THEN 1 END)::int AS overdue_count
         FROM rent_obligations
-        WHERE hostel_id = $1::uuid AND rent_month <= $2::date
+        WHERE hostel_id = ${hostelId}::uuid AND rent_month <= ${day}::date
       ), collections AS (
         SELECT COALESCE(SUM(amount_paid), 0)::float AS collected_revenue
         FROM payments
-        WHERE hostel_id = $1::uuid AND payment_date <= $2::date
+        WHERE hostel_id = ${hostelId}::uuid AND payment_date <= ${day}::date
       ), expense_stats AS (
         SELECT COALESCE(SUM(amount), 0)::float AS expenses
         FROM expenses
-        WHERE hostel_id = $1::uuid AND date <= $2::date
+        WHERE hostel_id = ${hostelId}::uuid AND date <= ${day}::date
       )
       SELECT
         rs.capacity,
@@ -48,7 +48,7 @@ export class HostelDailySnapshotService {
         o.overdue_count,
         e.expenses
       FROM room_stats rs, active_allocations aa, obligations o, collections c, expense_stats e
-    `, hostelId, day);
+    `;
 
     const capacity = Number(row?.capacity || 0);
     const activeTenants = Number(row?.active_tenants || 0);
@@ -100,14 +100,14 @@ export class HostelDailySnapshotService {
   }
 
   private async previewLive(hostelId: string, day: Date) {
-    const [row] = await prisma.$queryRawUnsafe<any[]>(`
+    const [row] = await prisma.$queryRaw<any[]>`
       SELECT
         COUNT(DISTINCT ra.tenant_id)::int AS active_tenants,
         COALESCE(SUM(DISTINCT r.capacity), 0)::int AS capacity
       FROM rooms r
       LEFT JOIN room_allocations ra ON ra.room_id = r.id AND ra.is_active = true AND ra.end_date IS NULL
-      WHERE r.hostel_id = $1::uuid
-    `, hostelId, day);
+      WHERE r.hostel_id = ${hostelId}::uuid
+    `;
 
     const capacity = Number(row?.capacity || 0);
     const activeTenants = Number(row?.active_tenants || 0);

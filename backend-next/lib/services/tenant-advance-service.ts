@@ -1,6 +1,6 @@
 import { prisma } from "../db";
 import { getLogger } from "../logger";
-import { getPreferences, resolvePreferences } from "../preferences";
+import { getTenantOperationalContext } from "../hostel-context";
 
 const logger = getLogger("tenant.advance");
 
@@ -362,18 +362,14 @@ export class TenantAdvanceService {
 
   private async _assertAdvanceEnabled(ownerId: string, tenantId?: string) {
     // Phase 2: resolve from tenant's hostel if available
-    let prefs: any;
-    if (tenantId) {
-      const tenant = await prisma.tenant.findUnique({
-        where: { id: tenantId },
-        select: { hostel_id: true },
-      });
-      if (tenant?.hostel_id) {
-        const hostel = await prisma.hostel.findUnique({ where: { id: tenant.hostel_id } });
-        prefs = resolvePreferences(hostel);
-      }
+    if (!tenantId) {
+      throw new Error("HOSTEL_CONTEXT_REQUIRED: tenantId is required to resolve advance preferences");
     }
-    if (!prefs) prefs = await getPreferences(ownerId);
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { hostel_id: true },
+    });
+    const { prefs } = await getTenantOperationalContext(tenantId, ownerId, tenant?.hostel_id);
     if (!prefs.advance_enabled) {
       throw new Error("BAD_REQUEST: Advance/deposit feature is not enabled for this hostel. Enable it in Settings → Preferences.");
     }

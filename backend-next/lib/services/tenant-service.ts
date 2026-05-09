@@ -1,7 +1,7 @@
 import { prisma } from "../db";
 import { eventSystem } from "../events";
 import { z } from "zod";
-import { getPreferences, resolvePreferences } from "../preferences";
+import { getTenantOperationalContext } from "../hostel-context";
 import { documentService } from "./document-service";
 import { allocationReconciliationService } from "./allocation-reconciliation-service";
 import { financialService } from "./financial-service";
@@ -201,13 +201,7 @@ export class TenantService {
     // ── Enforce allow_tenant_edits preference ──
     if (tenantCheck.owner_id) {
       // Phase 2: resolve from tenant's hostel, not findFirst(owner_id)
-      let prefs: any;
-      if (tenantCheck.hostel_id) {
-        const hostel = await prisma.hostel.findUnique({ where: { id: tenantCheck.hostel_id } });
-        prefs = resolvePreferences(hostel);
-      } else {
-        prefs = await getPreferences(tenantCheck.owner_id);
-      }
+      const { prefs } = await getTenantOperationalContext(tenantCheck.id, tenantCheck.owner_id, tenantCheck.hostel_id);
       if (prefs.allow_tenant_edits === false) {
         throw new Error("FORBIDDEN: Profile editing is currently disabled by the hostel owner");
       }

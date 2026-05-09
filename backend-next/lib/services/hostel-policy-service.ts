@@ -1,0 +1,761 @@
+import { prisma } from "../db";
+import { eventLog } from "./event-log-service";
+
+export type MaintenanceType = "MONTHLY" | "ONE_TIME" | "NONE";
+export type RentCycle = "MONTHLY";
+
+export type HostelPolicy = {
+  policy_version: number;
+  schema_version: string;
+  billing: {
+    rent_cycle: RentCycle;
+    auto_rent_day: number;
+    due_day: number;
+    grace_days: number;
+    late_fee: {
+      enabled: boolean;
+      rules: any[];
+      max_amount: number;
+    };
+    deposit: {
+      enabled: boolean;
+      default_amount: number;
+      refundable: boolean;
+    };
+    maintenance: {
+      type: MaintenanceType;
+      amount: number;
+    };
+    invite_defaults: {
+      auto_fill_room_rent: boolean;
+      allow_override: boolean;
+    };
+    partial_payments: {
+      enabled: boolean;
+      minimum_amount: number;
+    };
+    advance_adjustments: {
+      enabled: boolean;
+    };
+    overflow: {
+      enabled: boolean;
+      strategy: string;
+    };
+  };
+  payments: {
+    upi_id: string | null;
+    phonepe_merchant_id: string | null;
+    payment_instructions: string | null;
+  };
+  reminders: {
+    enabled: boolean;
+    channels: {
+      email: boolean;
+      in_app: boolean;
+      whatsapp: boolean;
+      sms: boolean;
+    };
+    schedule: {
+      before_due_days: number[];
+      after_due_days: number[];
+    };
+    escalation: {
+      enabled: boolean;
+      after_days: number[];
+      tone: string;
+    };
+    auto_stop_after_payment: boolean;
+    late_fee_notifications: boolean;
+    owner_daily_summary: boolean;
+  };
+  receipts: {
+    prefix: string;
+    format: string;
+    auto_email: boolean;
+    footer: string;
+    invoice_notes: string | null;
+    legal_disclaimer: string | null;
+  };
+  branding: {
+    logo_url: string | null;
+    primary_color: string | null;
+    accent_color: string | null;
+    support_contact: string | null;
+    legal_name: string | null;
+    gst_number: string | null;
+  };
+  tenant_rules: {
+    allow_profile_edits: boolean;
+    profile_photo_required: boolean;
+    emergency_contact_required: boolean;
+    required_profile_fields: string[];
+    invite_expiry_hours: number;
+    verification_workflow: string;
+    tenant_segment: string;
+  };
+  documents: {
+    approval_required: boolean;
+    aadhaar_required: boolean;
+    required_types: string[];
+  };
+  room_rules: {
+    capacity_enforcement: string;
+    allow_overbooking: boolean;
+    transfer_policy: string;
+    allocation_requires_room_rent: boolean;
+  };
+  automation: {
+    auto_generate_rent: boolean;
+    auto_apply_late_fees: boolean;
+    auto_send_reminders: boolean;
+    auto_email_receipts: boolean;
+    auto_deactivate_days: number;
+    nightly_reconciliation: boolean;
+    snapshot_generation: boolean;
+  };
+  dashboard: {
+    default_view: string;
+    enabled_widgets: string[];
+    show_risk_alerts: boolean;
+    show_collection_forecast: boolean;
+    highlight_overdue: boolean;
+    occupancy_warning_threshold: number;
+    collection_target_percentage: number;
+  };
+  notifications: {
+    owner_daily_summary: boolean;
+    channels: {
+      email: boolean;
+      in_app: boolean;
+      whatsapp: boolean;
+      sms: boolean;
+    };
+  };
+  operations: {
+    currency: string;
+    timezone: string;
+    date_format: string;
+    time_format: string;
+    language: string;
+    data_retention_months: number;
+  };
+};
+
+export type HostelPolicyResponse = {
+  hostel: {
+    id: string;
+    owner_id: string;
+    name: string;
+    phone: string | null;
+    address: string | null;
+    city: string | null;
+    state: string | null;
+    pincode: string | null;
+    upi_id: string | null;
+    gst_number: string | null;
+    logo_url: string | null;
+  };
+  policy: HostelPolicy;
+  compatibility_preferences: Record<string, any>;
+};
+
+const SCHEMA_VERSION = "2026-05-09";
+const VALID_DOMAINS = new Set([
+  "billing",
+  "payments",
+  "reminders",
+  "receipts",
+  "branding",
+  "tenant_rules",
+  "documents",
+  "room_rules",
+  "automation",
+  "dashboard",
+  "notifications",
+  "operations",
+]);
+
+function asObject(value: unknown): Record<string, any> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : {};
+}
+
+function asArray(value: unknown): any[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function bool(value: unknown, fallback: boolean) {
+  return value === undefined || value === null ? fallback : Boolean(value);
+}
+
+function num(value: unknown, fallback: number) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function boundedNumber(value: unknown, fallback: number, min: number, max: number, label: string) {
+  const parsed = num(value, fallback);
+  if (parsed < min || parsed > max) throw new Error(`VALIDATION: ${label} must be ${min}-${max}`);
+  return parsed;
+}
+
+function compatibleNumber(value: unknown, fallback: number) {
+  if (value === undefined || value === null || value === "") return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function nonNegative(value: unknown, fallback: number, label: string, max = Number.MAX_SAFE_INTEGER) {
+  const parsed = num(value, fallback);
+  if (parsed < 0 || parsed > max) throw new Error(`VALIDATION: ${label} must be a non-negative number`);
+  return parsed;
+}
+
+function maintenanceType(value: unknown): MaintenanceType {
+  const normalized = String(value || "MONTHLY").toUpperCase();
+  if (!["MONTHLY", "ONE_TIME", "NONE"].includes(normalized)) {
+    throw new Error("VALIDATION: Invalid maintenance type");
+  }
+  return normalized as MaintenanceType;
+}
+
+function rentCycle(value: unknown): RentCycle {
+  const normalized = String(value || "MONTHLY").toUpperCase();
+  return normalized as RentCycle;
+}
+
+function intArray(value: unknown, label: string) {
+  const values = asArray(value).map((item) => Number(item));
+  if (values.some((item) => !Number.isInteger(item) || item < -30 || item > 90)) {
+    throw new Error(`VALIDATION: ${label} must contain safe integer day offsets`);
+  }
+  return values;
+}
+
+function stringArray(value: unknown) {
+  return asArray(value).filter((item) => typeof item === "string");
+}
+
+function legacyReminderDays(config: Record<string, any>) {
+  const days: number[] = [];
+  if (config.reminder_day_1 !== false) days.push(1);
+  if (config.reminder_day_5 !== false) days.push(5);
+  if (config.reminder_day_10 !== false) days.push(10);
+  return days;
+}
+
+export function normalizeHostelPolicy(hostel: any): HostelPolicy {
+  const config = asObject(hostel?.preferences_config);
+  const billing = asObject(config.billing);
+  const lateFee = asObject(billing.late_fee);
+  const deposit = asObject(billing.deposit);
+  const maintenance = asObject(billing.maintenance);
+  const inviteDefaults = asObject(billing.invite_defaults);
+  const partialPayments = asObject(billing.partial_payments);
+  const billingDefaults = asObject(config.billing_defaults);
+  const reminders = asObject(config.reminders);
+  const reminderChannels = asObject(reminders.channels);
+  const reminderSchedule = asObject(reminders.schedule);
+  const reminderEscalation = asObject(reminders.escalation);
+  const receipts = asObject(config.receipts);
+  const branding = asObject(config.branding);
+  const tenantRules = asObject(config.tenant_rules);
+  const documents = asObject(config.documents);
+  const roomRules = asObject(config.room_rules);
+  const automation = asObject(config.automation);
+  const dashboard = asObject(config.dashboard);
+  const notifications = asObject(config.notifications);
+  const notificationChannels = asObject(notifications.channels);
+  const operations = asObject(config.operations);
+
+  const maintenanceResolved = maintenanceType(maintenance.type ?? billingDefaults.maintenance_type ?? config.maintenance_type);
+  const maintenanceAmount = maintenanceResolved === "NONE"
+    ? 0
+    : nonNegative(maintenance.amount ?? billingDefaults.maintenance_charge ?? config.maintenance_amount_default, 0, "Maintenance amount", 50000);
+
+  const lateFeeRules = asArray(lateFee.rules ?? config.late_fee_rules);
+  const lateFeeEnabled = lateFee.enabled ?? (lateFeeRules.length > 0 || (config.late_fee_type && config.late_fee_type !== "none"));
+
+  return {
+    policy_version: Math.max(1, Math.floor(num(config.policy_version, 1))),
+    schema_version: String(config.schema_version || SCHEMA_VERSION),
+    billing: {
+      rent_cycle: rentCycle(billing.rent_cycle || config.rent_cycle || hostel?.rent_cycle),
+      auto_rent_day: compatibleNumber(billing.auto_rent_day ?? config.auto_rent_day ?? hostel?.auto_rent_day, 1),
+      due_day: compatibleNumber(billing.due_day ?? config.due_day, 5),
+      grace_days: compatibleNumber(billing.grace_days ?? config.grace_days, 0),
+      late_fee: {
+        enabled: bool(lateFeeEnabled, false),
+        rules: lateFeeRules,
+        max_amount: nonNegative(lateFee.max_amount ?? config.max_late_fee, 500, "Maximum late fee", 50000),
+      },
+      deposit: {
+        enabled: bool(deposit.enabled ?? config.advance_enabled, false),
+        default_amount: nonNegative(deposit.default_amount ?? billingDefaults.advance_deposit ?? config.advance_amount_default, 0, "Default advance deposit", 1000000),
+        refundable: bool(deposit.refundable ?? config.advance_refundable, true),
+      },
+      maintenance: {
+        type: maintenanceResolved,
+        amount: maintenanceAmount,
+      },
+      invite_defaults: {
+        auto_fill_room_rent: bool(inviteDefaults.auto_fill_room_rent ?? billingDefaults.auto_fill_room_rent, true),
+        allow_override: bool(inviteDefaults.allow_override ?? billingDefaults.allow_override, true),
+      },
+      partial_payments: {
+        enabled: bool(partialPayments.enabled ?? config.allow_partial_payments, false),
+        minimum_amount: nonNegative(partialPayments.minimum_amount ?? config.min_payment_amount, 500, "Minimum payment amount", 1000000),
+      },
+      advance_adjustments: {
+        enabled: bool(asObject(billing.advance_adjustments).enabled, false),
+      },
+      overflow: {
+        enabled: bool(asObject(billing.overflow).enabled, true),
+        strategy: String(asObject(billing.overflow).strategy || "CARRY_FORWARD"),
+      },
+    },
+    payments: {
+      upi_id: (asObject(config.payments).upi_id ?? hostel?.upi_id ?? null) || null,
+      phonepe_merchant_id: (asObject(config.payments).phonepe_merchant_id ?? hostel?.phonepe_merchant_id ?? null) || null,
+      payment_instructions: asObject(config.payments).payment_instructions ?? null,
+    },
+    reminders: {
+      enabled: bool(reminders.enabled ?? config.auto_send_reminders, true),
+      channels: {
+        email: bool(reminderChannels.email ?? config.reminder_email, true),
+        in_app: bool(reminderChannels.in_app ?? config.reminder_in_app, true),
+        whatsapp: bool(reminderChannels.whatsapp ?? config.reminder_whatsapp, false),
+        sms: bool(reminderChannels.sms, false),
+      },
+      schedule: {
+        before_due_days: intArray(reminderSchedule.before_due_days, "Before-due reminder days"),
+        after_due_days: intArray(reminderSchedule.after_due_days ?? legacyReminderDays(config), "After-due reminder days"),
+      },
+      escalation: {
+        enabled: bool(reminderEscalation.enabled, false),
+        after_days: intArray(reminderEscalation.after_days, "Escalation days"),
+        tone: String(reminderEscalation.tone || "STANDARD"),
+      },
+      auto_stop_after_payment: bool(reminders.auto_stop_after_payment, true),
+      late_fee_notifications: bool(reminders.late_fee_notifications ?? config.late_fee_notification, true),
+      owner_daily_summary: bool(reminders.owner_daily_summary ?? config.owner_daily_summary, false),
+    },
+    receipts: {
+      prefix: String(receipts.prefix ?? config.receipt_prefix ?? hostel?.receipt_prefix ?? "HMS"),
+      format: String(receipts.format ?? config.receipt_format ?? "PREFIX-YEAR-SEQ"),
+      auto_email: bool(receipts.auto_email ?? config.auto_email_receipt, false),
+      footer: String(receipts.footer ?? config.receipt_footer ?? ""),
+      invoice_notes: receipts.invoice_notes ?? null,
+      legal_disclaimer: receipts.legal_disclaimer ?? null,
+    },
+    branding: {
+      logo_url: (branding.logo_url ?? hostel?.logo_url ?? null) || null,
+      primary_color: branding.primary_color ?? null,
+      accent_color: branding.accent_color ?? null,
+      support_contact: branding.support_contact ?? null,
+      legal_name: branding.legal_name ?? hostel?.name ?? null,
+      gst_number: (branding.gst_number ?? hostel?.gst_number ?? null) || null,
+    },
+    tenant_rules: {
+      allow_profile_edits: bool(tenantRules.allow_profile_edits ?? config.allow_tenant_edits, true),
+      profile_photo_required: bool(tenantRules.profile_photo_required ?? config.require_profile_photo_onboarding, false),
+      emergency_contact_required: bool(tenantRules.emergency_contact_required, false),
+      required_profile_fields: stringArray(tenantRules.required_profile_fields),
+      invite_expiry_hours: boundedNumber(tenantRules.invite_expiry_hours, 48, 1, 720, "Invite expiry hours"),
+      verification_workflow: String(tenantRules.verification_workflow || "OWNER_REVIEW"),
+      tenant_segment: String(tenantRules.tenant_segment || "MIXED"),
+    },
+    documents: {
+      approval_required: bool(documents.approval_required ?? config.require_doc_approval, false),
+      aadhaar_required: bool(documents.aadhaar_required ?? config.require_aadhaar, false),
+      required_types: stringArray(documents.required_types),
+    },
+    room_rules: {
+      capacity_enforcement: String(roomRules.capacity_enforcement || "STRICT"),
+      allow_overbooking: bool(roomRules.allow_overbooking, false),
+      transfer_policy: String(roomRules.transfer_policy || "OWNER_APPROVAL"),
+      allocation_requires_room_rent: bool(roomRules.allocation_requires_room_rent, true),
+    },
+    automation: {
+      auto_generate_rent: bool(automation.auto_generate_rent ?? config.auto_generate_rent, true),
+      auto_apply_late_fees: bool(automation.auto_apply_late_fees ?? config.auto_apply_late_fees, true),
+      auto_send_reminders: bool(automation.auto_send_reminders ?? config.auto_send_reminders, true),
+      auto_email_receipts: bool(automation.auto_email_receipts ?? config.auto_email_receipt, false),
+      auto_deactivate_days: boundedNumber(automation.auto_deactivate_days ?? config.auto_deactivate_days, 0, 0, 365, "Auto deactivate days"),
+      nightly_reconciliation: bool(automation.nightly_reconciliation, true),
+      snapshot_generation: bool(automation.snapshot_generation, true),
+    },
+    dashboard: {
+      default_view: String(dashboard.default_view || "OPERATIONS"),
+      enabled_widgets: stringArray(dashboard.enabled_widgets),
+      show_risk_alerts: bool(dashboard.show_risk_alerts, true),
+      show_collection_forecast: bool(dashboard.show_collection_forecast, true),
+      highlight_overdue: bool(dashboard.highlight_overdue, true),
+      occupancy_warning_threshold: boundedNumber(dashboard.occupancy_warning_threshold, 80, 0, 100, "Occupancy warning threshold"),
+      collection_target_percentage: boundedNumber(dashboard.collection_target_percentage, 95, 0, 100, "Collection target percentage"),
+    },
+    notifications: {
+      owner_daily_summary: bool(notifications.owner_daily_summary ?? config.owner_daily_summary, false),
+      channels: {
+        email: bool(notificationChannels.email ?? config.reminder_email, true),
+        in_app: bool(notificationChannels.in_app ?? config.reminder_in_app, true),
+        whatsapp: bool(notificationChannels.whatsapp ?? config.reminder_whatsapp, false),
+        sms: bool(notificationChannels.sms, false),
+      },
+    },
+    operations: {
+      currency: String(operations.currency ?? config.currency ?? hostel?.currency ?? "INR"),
+      timezone: String(operations.timezone ?? config.timezone ?? hostel?.timezone ?? "Asia/Kolkata"),
+      date_format: String(operations.date_format ?? config.date_format ?? "DD/MM/YYYY"),
+      time_format: String(operations.time_format ?? config.time_format ?? "12h"),
+      language: String(operations.language ?? config.language ?? "en"),
+      data_retention_months: boundedNumber(operations.data_retention_months ?? config.data_retention_months, 0, 0, 120, "Data retention months"),
+    },
+  };
+}
+
+export function toCompatibilityPreferences(policy: HostelPolicy): Record<string, any> {
+  return {
+    currency: policy.operations.currency,
+    timezone: policy.operations.timezone,
+    date_format: policy.operations.date_format,
+    time_format: policy.operations.time_format,
+    language: policy.operations.language,
+    data_retention_months: policy.operations.data_retention_months,
+    rent_cycle: policy.billing.rent_cycle,
+    auto_rent_day: policy.billing.auto_rent_day,
+    due_day: policy.billing.due_day,
+    grace_days: policy.billing.grace_days,
+    late_fee_type: policy.billing.late_fee.rules?.[0]?.type || "none",
+    late_fee_amount: policy.billing.late_fee.rules?.[0]?.amount ?? 200,
+    late_fee_percentage: policy.billing.late_fee.rules?.[0]?.value ?? 5,
+    late_fee_after_days: policy.billing.late_fee.rules?.[0]?.after_days ?? 7,
+    late_fee_rules: policy.billing.late_fee.rules,
+    max_late_fee: policy.billing.late_fee.max_amount,
+    advance_enabled: policy.billing.deposit.enabled,
+    advance_amount_default: policy.billing.deposit.default_amount,
+    advance_refundable: policy.billing.deposit.refundable,
+    maintenance_enabled: policy.billing.maintenance.type !== "NONE",
+    maintenance_amount_default: policy.billing.maintenance.amount,
+    maintenance_type: policy.billing.maintenance.type,
+    billing_defaults: {
+      advance_deposit: policy.billing.deposit.default_amount,
+      maintenance_charge: policy.billing.maintenance.amount,
+      maintenance_type: policy.billing.maintenance.type,
+      auto_fill_room_rent: policy.billing.invite_defaults.auto_fill_room_rent,
+      allow_override: policy.billing.invite_defaults.allow_override,
+    },
+    allow_partial_payments: policy.billing.partial_payments.enabled,
+    min_payment_amount: policy.billing.partial_payments.minimum_amount,
+    upi_id: policy.payments.upi_id || "",
+    phonepe_merchant_id: policy.payments.phonepe_merchant_id || "",
+    reminder_email: policy.reminders.channels.email,
+    reminder_in_app: policy.reminders.channels.in_app,
+    reminder_whatsapp: policy.reminders.channels.whatsapp,
+    reminder_day_1: policy.reminders.schedule.after_due_days.includes(1),
+    reminder_day_5: policy.reminders.schedule.after_due_days.includes(5),
+    reminder_day_10: policy.reminders.schedule.after_due_days.includes(10),
+    late_fee_notification: policy.reminders.late_fee_notifications,
+    owner_daily_summary: policy.reminders.owner_daily_summary,
+    auto_generate_rent: policy.automation.auto_generate_rent,
+    auto_apply_late_fees: policy.automation.auto_apply_late_fees,
+    auto_send_reminders: policy.automation.auto_send_reminders,
+    auto_deactivate_days: policy.automation.auto_deactivate_days,
+    receipt_prefix: policy.receipts.prefix,
+    receipt_format: policy.receipts.format,
+    auto_email_receipt: policy.receipts.auto_email,
+    receipt_footer: policy.receipts.footer,
+    require_doc_approval: policy.documents.approval_required,
+    require_aadhaar: policy.documents.aadhaar_required,
+    allow_tenant_edits: policy.tenant_rules.allow_profile_edits,
+    require_profile_photo_onboarding: policy.tenant_rules.profile_photo_required,
+  };
+}
+
+export function compatibilityPreferencesToPolicyPatch(data: Record<string, any>): Record<string, any> {
+  return {
+    billing: {
+      ...(data.rent_cycle !== undefined && { rent_cycle: data.rent_cycle }),
+      ...(data.auto_rent_day !== undefined && { auto_rent_day: data.auto_rent_day }),
+      ...(data.due_day !== undefined && { due_day: data.due_day }),
+      ...(data.grace_days !== undefined && { grace_days: data.grace_days }),
+      ...((data.late_fee_rules !== undefined || data.max_late_fee !== undefined) && {
+        late_fee: {
+          ...(data.late_fee_rules !== undefined && { rules: data.late_fee_rules }),
+          ...(data.max_late_fee !== undefined && { max_amount: data.max_late_fee }),
+        },
+      }),
+      ...(data.billing_defaults !== undefined && {
+        deposit: { default_amount: data.billing_defaults.advance_deposit },
+        maintenance: { type: data.billing_defaults.maintenance_type, amount: data.billing_defaults.maintenance_charge },
+        invite_defaults: {
+          auto_fill_room_rent: data.billing_defaults.auto_fill_room_rent,
+          allow_override: data.billing_defaults.allow_override,
+        },
+      }),
+      ...((data.allow_partial_payments !== undefined || data.min_payment_amount !== undefined) && {
+        partial_payments: {
+          ...(data.allow_partial_payments !== undefined && { enabled: data.allow_partial_payments }),
+          ...(data.min_payment_amount !== undefined && { minimum_amount: data.min_payment_amount }),
+        },
+      }),
+    },
+    payments: {
+      ...(data.upi_id !== undefined && { upi_id: data.upi_id }),
+      ...(data.phonepe_merchant_id !== undefined && { phonepe_merchant_id: data.phonepe_merchant_id }),
+    },
+    reminders: {
+      ...(data.auto_send_reminders !== undefined && { enabled: data.auto_send_reminders }),
+      channels: {
+        ...(data.reminder_email !== undefined && { email: data.reminder_email }),
+        ...(data.reminder_in_app !== undefined && { in_app: data.reminder_in_app }),
+        ...(data.reminder_whatsapp !== undefined && { whatsapp: data.reminder_whatsapp }),
+      },
+      ...((data.reminder_day_1 !== undefined || data.reminder_day_5 !== undefined || data.reminder_day_10 !== undefined) && {
+        schedule: {
+          after_due_days: [
+            ...(data.reminder_day_1 !== false ? [1] : []),
+            ...(data.reminder_day_5 !== false ? [5] : []),
+            ...(data.reminder_day_10 !== false ? [10] : []),
+          ],
+        },
+      }),
+      ...(data.late_fee_notification !== undefined && { late_fee_notifications: data.late_fee_notification }),
+      ...(data.owner_daily_summary !== undefined && { owner_daily_summary: data.owner_daily_summary }),
+    },
+    automation: {
+      ...(data.auto_generate_rent !== undefined && { auto_generate_rent: data.auto_generate_rent }),
+      ...(data.auto_apply_late_fees !== undefined && { auto_apply_late_fees: data.auto_apply_late_fees }),
+      ...(data.auto_send_reminders !== undefined && { auto_send_reminders: data.auto_send_reminders }),
+      ...(data.auto_deactivate_days !== undefined && { auto_deactivate_days: data.auto_deactivate_days }),
+      ...(data.auto_email_receipt !== undefined && { auto_email_receipts: data.auto_email_receipt }),
+    },
+    receipts: {
+      ...(data.receipt_prefix !== undefined && { prefix: data.receipt_prefix }),
+      ...(data.receipt_format !== undefined && { format: data.receipt_format }),
+      ...(data.auto_email_receipt !== undefined && { auto_email: data.auto_email_receipt }),
+      ...(data.receipt_footer !== undefined && { footer: data.receipt_footer }),
+    },
+    documents: {
+      ...(data.require_doc_approval !== undefined && { approval_required: data.require_doc_approval }),
+      ...(data.require_aadhaar !== undefined && { aadhaar_required: data.require_aadhaar }),
+    },
+    tenant_rules: {
+      ...(data.allow_tenant_edits !== undefined && { allow_profile_edits: data.allow_tenant_edits }),
+      ...(data.require_profile_photo_onboarding !== undefined && { profile_photo_required: data.require_profile_photo_onboarding }),
+    },
+    operations: {
+      ...(data.currency !== undefined && { currency: data.currency }),
+      ...(data.timezone !== undefined && { timezone: data.timezone }),
+      ...(data.date_format !== undefined && { date_format: data.date_format }),
+      ...(data.time_format !== undefined && { time_format: data.time_format }),
+      ...(data.language !== undefined && { language: data.language }),
+      ...(data.data_retention_months !== undefined && { data_retention_months: data.data_retention_months }),
+    },
+  };
+}
+
+function validateAllowedDomains(patch: Record<string, any>) {
+  for (const key of Object.keys(patch)) {
+    if (!VALID_DOMAINS.has(key)) {
+      throw new Error(`VALIDATION: Unsupported policy domain '${key}'`);
+    }
+  }
+}
+
+function deepMerge<T extends Record<string, any>>(base: T, patch: Record<string, any>): T {
+  const output: Record<string, any> = { ...base };
+  for (const [key, value] of Object.entries(patch)) {
+    const current = output[key];
+    output[key] = asObject(current) === current && asObject(value) === value
+      ? deepMerge(current, value as Record<string, any>)
+      : value;
+  }
+  return output as T;
+}
+
+function mergePolicy(current: HostelPolicy, patch: Record<string, any>): HostelPolicy {
+  validateAllowedDomains(patch);
+  const nextConfig = {
+    policy_version: current.policy_version + 1,
+    schema_version: SCHEMA_VERSION,
+    billing: deepMerge(current.billing, asObject(patch.billing)),
+    payments: deepMerge(current.payments, asObject(patch.payments)),
+    reminders: deepMerge(current.reminders, asObject(patch.reminders)),
+    receipts: deepMerge(current.receipts, asObject(patch.receipts)),
+    branding: deepMerge(current.branding, asObject(patch.branding)),
+    tenant_rules: deepMerge(current.tenant_rules, asObject(patch.tenant_rules)),
+    documents: deepMerge(current.documents, asObject(patch.documents)),
+    room_rules: deepMerge(current.room_rules, asObject(patch.room_rules)),
+    automation: deepMerge(current.automation, asObject(patch.automation)),
+    dashboard: deepMerge(current.dashboard, asObject(patch.dashboard)),
+    notifications: deepMerge(current.notifications, asObject(patch.notifications)),
+    operations: deepMerge(current.operations, asObject(patch.operations)),
+  };
+  return normalizeHostelPolicy({ preferences_config: nextConfig });
+}
+
+function changedDomains(before: HostelPolicy, after: HostelPolicy) {
+  return Array.from(VALID_DOMAINS).filter((domain) => JSON.stringify((before as any)[domain]) !== JSON.stringify((after as any)[domain]));
+}
+
+export function validateHostelPolicyForWrite(policy: HostelPolicy) {
+  if (policy.billing.rent_cycle !== "MONTHLY") throw new Error("VALIDATION: Unsupported rent cycle");
+  boundedNumber(policy.billing.auto_rent_day, 1, 1, 28, "Rent generation day");
+  boundedNumber(policy.billing.due_day, 5, 1, 28, "Due day");
+  boundedNumber(policy.billing.grace_days, 0, 0, 30, "Grace period");
+  nonNegative(policy.billing.late_fee.max_amount, 500, "Maximum late fee", 50000);
+  nonNegative(policy.billing.deposit.default_amount, 0, "Default advance deposit", 1000000);
+  nonNegative(policy.billing.maintenance.amount, 0, "Maintenance amount", 50000);
+  nonNegative(policy.billing.partial_payments.minimum_amount, 500, "Minimum payment amount", 1000000);
+  boundedNumber(policy.tenant_rules.invite_expiry_hours, 48, 1, 720, "Invite expiry hours");
+  boundedNumber(policy.automation.auto_deactivate_days, 0, 0, 365, "Auto deactivate days");
+  boundedNumber(policy.dashboard.occupancy_warning_threshold, 80, 0, 100, "Occupancy warning threshold");
+  boundedNumber(policy.dashboard.collection_target_percentage, 95, 0, 100, "Collection target percentage");
+  boundedNumber(policy.operations.data_retention_months, 0, 0, 120, "Data retention months");
+  intArray(policy.reminders.schedule.before_due_days, "Before-due reminder days");
+  intArray(policy.reminders.schedule.after_due_days, "After-due reminder days");
+  intArray(policy.reminders.escalation.after_days, "Escalation days");
+}
+
+function policyToStorage(policy: HostelPolicy, existingConfig: Record<string, any>) {
+  const compatibility = toCompatibilityPreferences(policy);
+  return {
+    ...existingConfig,
+    ...compatibility,
+    policy_version: policy.policy_version,
+    schema_version: policy.schema_version,
+    billing: policy.billing,
+    payments: policy.payments,
+    reminders: policy.reminders,
+    receipts: policy.receipts,
+    branding: policy.branding,
+    tenant_rules: policy.tenant_rules,
+    documents: policy.documents,
+    room_rules: policy.room_rules,
+    automation: policy.automation,
+    dashboard: policy.dashboard,
+    notifications: policy.notifications,
+    operations: policy.operations,
+  };
+}
+
+export class HostelPolicyService {
+  async getHostelPolicy(hostelId: string, ownerId?: string): Promise<HostelPolicyResponse> {
+    const hostel = await prisma.hostel.findFirst({
+      where: {
+        id: hostelId,
+        is_active: true,
+        ...(ownerId ? { owner_id: ownerId } : {}),
+      },
+      select: {
+        id: true,
+        owner_id: true,
+        name: true,
+        phone: true,
+        address: true,
+        city: true,
+        state: true,
+        pincode: true,
+        upi_id: true,
+        gst_number: true,
+        logo_url: true,
+        currency: true,
+        rent_cycle: true,
+        receipt_prefix: true,
+        timezone: true,
+        auto_rent_day: true,
+        phonepe_merchant_id: true,
+        preferences_config: true,
+      },
+    });
+
+    if (!hostel) throw new Error(ownerId ? "FORBIDDEN: Hostel is not owned by the authenticated owner" : "NOT_FOUND: Hostel not found");
+    const policy = normalizeHostelPolicy(hostel);
+    return {
+      hostel: {
+        id: hostel.id,
+        owner_id: hostel.owner_id,
+        name: hostel.name,
+        phone: hostel.phone,
+        address: hostel.address,
+        city: hostel.city,
+        state: hostel.state,
+        pincode: hostel.pincode,
+        upi_id: hostel.upi_id,
+        gst_number: hostel.gst_number,
+        logo_url: hostel.logo_url,
+      },
+      policy,
+      compatibility_preferences: toCompatibilityPreferences(policy),
+    };
+  }
+
+  async updateHostelPolicy(hostelId: string, ownerId: string, patch: Record<string, any>, changedBy: string): Promise<HostelPolicyResponse> {
+    const hostel = await prisma.hostel.findFirst({
+      where: { id: hostelId, owner_id: ownerId, is_active: true },
+      select: {
+        id: true,
+        owner_id: true,
+        name: true,
+        phone: true,
+        address: true,
+        city: true,
+        state: true,
+        pincode: true,
+        upi_id: true,
+        gst_number: true,
+        logo_url: true,
+        currency: true,
+        rent_cycle: true,
+        receipt_prefix: true,
+        timezone: true,
+        auto_rent_day: true,
+        phonepe_merchant_id: true,
+        preferences_config: true,
+      },
+    });
+    if (!hostel) throw new Error("FORBIDDEN: Hostel is not owned by the authenticated owner");
+
+    const current = normalizeHostelPolicy(hostel);
+    const next = mergePolicy(current, patch);
+    validateHostelPolicyForWrite(next);
+    const existingConfig = asObject(hostel.preferences_config);
+    const preferencesConfig = policyToStorage(next, existingConfig);
+    const compatibility = toCompatibilityPreferences(next);
+
+    await prisma.hostel.update({
+      where: { id: hostel.id },
+      data: {
+        currency: next.operations.currency,
+        timezone: next.operations.timezone,
+        rent_cycle: next.billing.rent_cycle,
+        auto_rent_day: next.billing.auto_rent_day,
+        receipt_prefix: next.receipts.prefix,
+        upi_id: next.payments.upi_id,
+        phonepe_merchant_id: next.payments.phonepe_merchant_id,
+        gst_number: next.branding.gst_number,
+        logo_url: next.branding.logo_url,
+        preferences_config: preferencesConfig,
+      },
+    });
+
+    await eventLog.log("HOSTEL_POLICY_UPDATED", ownerId, {
+      hostel_id: hostel.id,
+      changed_by: changedBy,
+      policy_version: next.policy_version,
+      changed_domains: changedDomains(current, next),
+    });
+
+    if (JSON.stringify(compatibility.billing_defaults) !== JSON.stringify(toCompatibilityPreferences(current).billing_defaults)) {
+      await eventLog.log("BILLING_DEFAULTS_UPDATED", ownerId, {
+        hostel_id: hostel.id,
+        billing_defaults: compatibility.billing_defaults,
+        source: "hostel_policy",
+      });
+    }
+
+    return this.getHostelPolicy(hostel.id, ownerId);
+  }
+}
+
+export const hostelPolicyService = new HostelPolicyService();

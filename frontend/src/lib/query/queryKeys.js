@@ -12,6 +12,8 @@
  *    still works (e.g., invalidate all ['payments', 'dues'] regardless of filter).
  */
 
+import { getActiveHostelId } from '../hostel/activeHostel';
+
 const readStoredSession = () => {
   if (typeof window === 'undefined') return null;
   try {
@@ -26,7 +28,7 @@ const readStoredSession = () => {
 const scope = () => {
   const user = readStoredSession();
   const ownerId = user?.owner_id || (user?.role === 'owner' ? user?.id : null) || 'anonymous';
-  const hostelId = user?.hostel_id || 'all-hostels';
+  const hostelId = getActiveHostelId(user) || 'all-hostels';
   return ['scope', ownerId, hostelId];
 };
 

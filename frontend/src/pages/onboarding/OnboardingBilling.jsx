@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowRight, Loader2, ChevronUp, ChevronDown, Zap } from 'lucide-react';
+import { ArrowRight, Loader2, ChevronUp, ChevronDown, Zap, Wallet, Wrench } from 'lucide-react';
 import { ownerService } from '../../api/services';
 import { setStoredStep } from '../../hooks/useOnboardingState';
+import { setActiveHostelId } from '../../lib/hostel/activeHostel';
 
 // Day stepper input component (mobile-friendly, no tiny number input)
 function DayStepper({ id, value, onChange, label, hint }) {
@@ -87,14 +88,46 @@ function TimelinePreview({ rentDay, dueDay }) {
   );
 }
 
+function MoneyInput({ label, value, onChange, icon: Icon, disabled = false, hint }) {
+  return (
+    <div>
+      <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-1.5">
+        {label}
+      </label>
+      {hint && <p className="text-xs text-slate-400 mb-2 font-medium">{hint}</p>}
+      <div className="relative">
+        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+          <Icon size={18} className="text-slate-400" />
+        </div>
+        <input
+          type="number"
+          min="0"
+          value={value}
+          disabled={disabled}
+          onChange={(e) => onChange(Math.max(0, Number(e.target.value) || 0))}
+          className={`w-full pl-11 pr-4 py-4 rounded-2xl border font-black outline-none transition-all ${
+            disabled
+              ? 'bg-slate-100 border-slate-200 text-slate-400'
+              : 'bg-white border-slate-200 text-slate-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100'
+          }`}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function OnboardingBilling() {
   const navigate = useNavigate();
   const [rentDay, setRentDay] = useState(1);
   const [dueDay, setDueDay]   = useState(5);
   const [autoReminders, setAutoReminders] = useState(true);
   const [timezone, setTimezone] = useState('Asia/Kolkata');
+  const [advanceDeposit, setAdvanceDeposit] = useState(5000);
+  const [maintenanceCharge, setMaintenanceCharge] = useState(1000);
+  const [maintenanceType, setMaintenanceType] = useState('MONTHLY');
   const [saving, setSaving] = useState(false);
   const [apiError, setApiError] = useState('');
+  const [hostelId, setHostelId] = useState('');
 
   // Auto-detect timezone
   useEffect(() => {
@@ -102,19 +135,41 @@ export default function OnboardingBilling() {
       const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
       if (tz) setTimezone(tz);
     } catch {}
+    ownerService.getProfile()
+      .then((profile) => {
+        const owner = profile?.owner || {};
+        const hostels = profile?.hostels || (profile?.hostel?.id ? [profile.hostel] : []);
+        const [onlyHostel] = hostels;
+        const selected = hostels.length === 1 ? onlyHostel : null;
+        if (selected?.id) {
+          setHostelId(selected.id);
+          setActiveHostelId({ ...owner, role: 'owner', owner_id: owner.id }, selected.id);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   const handleSave = async () => {
     setSaving(true);
     setApiError('');
     try {
+      if (!hostelId) {
+        throw new Error('Please complete hostel setup first.');
+      }
       await ownerService.updatePreferences({
         auto_rent_day:    rentDay,
         due_day:          dueDay,
         timezone:         timezone,
         auto_generate_rent: true,
-        reminders_enabled: autoReminders,
-      });
+        auto_send_reminders: autoReminders,
+        billing_defaults: {
+          advance_deposit: advanceDeposit,
+          maintenance_charge: maintenanceType === 'NONE' ? 0 : maintenanceCharge,
+          maintenance_type: maintenanceType,
+          auto_fill_room_rent: true,
+          allow_override: true,
+        },
+      }, hostelId);
       setStoredStep('BILLING_CONFIGURED');
       navigate('/onboarding/rooms');
     } catch (err) {
@@ -176,6 +231,55 @@ export default function OnboardingBilling() {
           <TimelinePreview rentDay={rentDay} dueDay={dueDay} />
         </motion.div>
       </AnimatePresence>
+
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-4">
+        <div>
+          <p className="text-sm font-black text-slate-900">Tenant invite defaults</p>
+          <p className="text-xs text-slate-500 font-medium mt-0.5">
+            These defaults are automatically applied while inviting new tenants.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <MoneyInput
+            label="Default advance deposit"
+            value={advanceDeposit}
+            onChange={setAdvanceDeposit}
+            icon={Wallet}
+            hint="Refundable security deposit"
+          />
+          <MoneyInput
+            label="Maintenance charge"
+            value={maintenanceType === 'NONE' ? 0 : maintenanceCharge}
+            onChange={setMaintenanceCharge}
+            icon={Wrench}
+            disabled={maintenanceType === 'NONE'}
+            hint="Monthly, one-time, or disabled"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-1.5">
+            Maintenance type
+          </label>
+          <select
+            value={maintenanceType}
+            onChange={(e) => setMaintenanceType(e.target.value)}
+            className="w-full px-4 py-4 rounded-2xl border border-slate-200 bg-white text-slate-900 font-black outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+          >
+            <option value="MONTHLY">Monthly maintenance</option>
+            <option value="ONE_TIME">One-time maintenance</option>
+            <option value="NONE">No maintenance charge</option>
+          </select>
+        </div>
+        <div className="rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100 px-4 py-3">
+          <p className="text-xs font-black uppercase tracking-widest text-emerald-600">Live Preview</p>
+          <p className="text-sm font-black text-emerald-900 mt-1">
+            New tenants joining this hostel will start with: ₹{advanceDeposit.toLocaleString('en-IN')} deposit
+            {maintenanceType === 'NONE'
+              ? ' + no maintenance charge'
+              : ` + ₹${maintenanceCharge.toLocaleString('en-IN')} ${maintenanceType === 'MONTHLY' ? 'monthly' : 'one-time'} maintenance`}
+          </p>
+        </div>
+      </div>
 
       {/* Auto-reminders toggle */}
       <div className="flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-200">

@@ -6,6 +6,7 @@ import { EmailService } from "./email-service";
 import { getLogger } from "../logger";
 import { planEnforcementService } from "./plan-enforcement-service";
 import { allocationReconciliationService } from "./allocation-reconciliation-service";
+import { hostelBillingPreferencesService, type MaintenanceType } from "./hostel-billing-preferences-service";
 
 const logger = getLogger("invitation-service");
 
@@ -19,7 +20,7 @@ function mapAllocationConstraintError(err: any): Error {
 
 export class InvitationService {
   async inviteTenant(data: any, ownerId: string) {
-    const { email, name, phone, room_id, monthly_rent } = data;
+    const { email, name, phone, room_id } = data;
 
     // ── Resolve financial defaults from hostel preferences ────────
     // Phase 2: prefs resolved from room.hostel after room fetch (below)
@@ -49,7 +50,7 @@ export class InvitationService {
       ) {
         logger.info(`Existing INVITED tenant found for ${normalizedEmail}; converting invite to resend.`);
         return this.resendInvitation(normalizedEmail, { id: ownerId, role: "OWNER" }, {
-          name, phone, room_id, monthly_rent,
+          name, phone, room_id, monthly_rent: data.monthly_rent,
         });
       }
       logger.warn(`Attempted to invite existing email: ${normalizedEmail}`);
@@ -57,8 +58,8 @@ export class InvitationService {
     }
 
     // 2. Room and Owner check
-    const room = await prisma.room.findUnique({
-      where: { id: room_id },
+    const room = await prisma.room.findFirst({
+      where: { id: room_id, hostel: { owner_id: ownerId, is_active: true } },
       include: {
         hostel: true,
         allocations: {
@@ -73,13 +74,29 @@ export class InvitationService {
       throw new Error("CAPACITY_EXCEEDED: Room is already at full capacity");
     }
 
-    // Phase 2: resolve prefs from the target room's hostel (not findFirst owner)
-    const { resolvePreferences } = await import("../preferences");
-    const prefs = resolvePreferences(room.hostel);
+    // Resolve invitation defaults from the selected room's hostel. These values
+    // are copied into Tenant as immutable billing snapshots for future history.
+    const inviteDefaults = await hostelBillingPreferencesService.resolveTenantInviteDefaults(room_id, ownerId);
+    const resolved = inviteDefaults.resolved_values;
+    const monthlyRent = Number(data.monthly_rent ?? resolved.monthly_rent);
+    const advance_amount = Number(data.advance_amount ?? resolved.advance_deposit);
+    const maintenance_type = (data.maintenance_type || resolved.maintenance_type) as MaintenanceType;
+    const maintenance_amount = maintenance_type === "NONE"
+      ? 0
+      : Number(data.maintenance_amount ?? resolved.maintenance_charge);
 
-    const advance_amount     = Number(data.advance_amount     ?? prefs.advance_amount_default     ?? 0);
-    const maintenance_amount = Number(data.maintenance_amount ?? prefs.maintenance_amount_default ?? 0);
-    const maintenance_type   = data.maintenance_type || prefs.maintenance_type || "MONTHLY";
+    if (!Number.isFinite(monthlyRent) || monthlyRent <= 0) {
+      throw new Error("VALIDATION: Monthly rent must be greater than zero");
+    }
+    if (!Number.isFinite(advance_amount) || advance_amount < 0) {
+      throw new Error("VALIDATION: Advance deposit must be zero or greater");
+    }
+    if (!Number.isFinite(maintenance_amount) || maintenance_amount < 0) {
+      throw new Error("VALIDATION: Maintenance charge must be zero or greater");
+    }
+    if (!["MONTHLY", "ONE_TIME", "NONE"].includes(maintenance_type)) {
+      throw new Error("VALIDATION: Invalid maintenance type");
+    }
 
     const owner = await prisma.profile.findUnique({ where: { id: ownerId } });
     if (!owner) throw new Error("NOT_FOUND: Owner profile not found");
@@ -117,7 +134,7 @@ export class InvitationService {
           id: crypto.randomUUID(),
           profile_id: profile.id,
           owner_id: ownerId,
-          monthly_rent: Number(monthly_rent),
+          monthly_rent: monthlyRent,
           joined_on: joiningDate,
           billing_start_date: billingStartDate,
           status: "INVITED",
@@ -188,14 +205,14 @@ export class InvitationService {
       ownerName: owner.name || "The Owner",
       hostelName: room.hostel.name,
       roomNumber: room.room_no,
-      roomRent: Number(monthly_rent),
+      roomRent: monthlyRent,
       activationLink,
       advanceDeposit: advance_amount,
       maintenanceCharge: maintenance_amount,
       maintenanceType: maintenance_type,
       joiningDate,
       roommates,
-      prefs,
+      prefs: { ...inviteDefaults.billing_defaults, maintenance_type },
     });
     if (!emailResult.sent) {
       logger.error(`Failed to send invitation email to ${normalizedEmail}: ${String(emailResult.error || "unknown")}`);

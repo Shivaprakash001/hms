@@ -7,6 +7,7 @@ import ProfileLogoUploader from '../../components/owner/ProfileLogoUploader';
 import BuyRemindersModal from '../../components/owner/BuyRemindersModal';
 import { useAppPreferences } from '../../context/AppPreferencesContext';
 import { formatCurrency, formatDateTime } from '../../utils/format';
+import { getActiveHostelId, setActiveHostelId } from '../../lib/hostel/activeHostel';
 
 // ─── Plan access map ──────────────────────────────────────────────────────────
 const PLAN_ACCESS = {
@@ -16,6 +17,26 @@ const PLAN_ACCESS = {
     business: { automation: true },
     scale:    { automation: true },
 };
+
+const DEFAULT_BILLING_DEFAULTS = {
+    advance_deposit: 0,
+    maintenance_charge: 0,
+    maintenance_type: 'MONTHLY',
+    auto_fill_room_rent: true,
+    allow_override: true,
+};
+
+function resolveBillingDefaultsFromPrefs(prefs = {}) {
+    const nested = prefs.billing_defaults || {};
+    return {
+        ...DEFAULT_BILLING_DEFAULTS,
+        advance_deposit: Number(nested.advance_deposit ?? prefs.advance_amount_default ?? DEFAULT_BILLING_DEFAULTS.advance_deposit),
+        maintenance_charge: Number(nested.maintenance_charge ?? prefs.maintenance_amount_default ?? DEFAULT_BILLING_DEFAULTS.maintenance_charge),
+        maintenance_type: nested.maintenance_type || prefs.maintenance_type || DEFAULT_BILLING_DEFAULTS.maintenance_type,
+        auto_fill_room_rent: nested.auto_fill_room_rent ?? DEFAULT_BILLING_DEFAULTS.auto_fill_room_rent,
+        allow_override: nested.allow_override ?? DEFAULT_BILLING_DEFAULTS.allow_override,
+    };
+}
 
 function getPlanAccess(planId) {
     const key = (planId || 'free').toLowerCase();
@@ -59,10 +80,12 @@ export default function OwnerProfile() {
     const [autoTopup, setAutoTopup] = useState(false);            // owner's auto-topup preference
     const [retryToast, setRetryToast] = useState(null); // { action, label } | null
 
-    const [ownerForm, setOwnerForm] = useState({ name: '', email: '', phone: '' });
+    const [ownerForm, setOwnerForm] = useState({ id: '', name: '', email: '', phone: '' });
     const [hostelForm, setHostelForm] = useState({
         name: '', phone: '', address: '', city: '', state: '', pincode: '', upi_id: '', gst_number: '', logo_url: ''
     });
+    const [hostels, setHostels] = useState([]);
+    const [selectedHostelId, setSelectedHostelId] = useState('');
 
     const [isEditingOwner, setIsEditingOwner] = useState(false);
     const [isEditingHostel, setIsEditingHostel] = useState(false);
@@ -79,6 +102,7 @@ export default function OwnerProfile() {
         receipt_prefix: 'HMS', receipt_format: 'PREFIX-YEAR-SEQ', auto_email_receipt: false, receipt_footer: '',
         require_doc_approval: false, require_aadhaar: false, allow_tenant_edits: true, require_profile_photo_onboarding: false, data_retention_months: 0,
         timezone: 'Asia/Kolkata', date_format: 'DD/MM/YYYY', time_format: '12h', language: 'en',
+        billing_defaults: DEFAULT_BILLING_DEFAULTS,
     });
 
     // FIX #1: Multiple modules open simultaneously (Set instead of single key)
@@ -91,8 +115,9 @@ export default function OwnerProfile() {
         const load = async () => {
             setLoading(true); setError('');
             try {
-                const [data, subData, addonData] = await Promise.all([
+                const [data, hostelsData, subData, addonData] = await Promise.all([
                     ownerService.getProfile(),
+                    ownerService.getHostels(),
                     billingService.getSubscription().catch(() => null),
                     addonService.getUsage().catch(() => null),
                 ]);
@@ -139,9 +164,21 @@ export default function OwnerProfile() {
                 }
 
                 const owner = data?.owner || {};
-                const hostel = data?.hostel || {};
-                const prefs = data?.preferences || {};
-                setOwnerForm({ name: owner.name || '', email: owner.email || '', phone: owner.phone || '' });
+                const availableHostels = hostelsData?.hostels || data?.hostels || [];
+                setHostels(availableHostels);
+                const ownerScope = { ...owner, role: 'owner', owner_id: owner.id };
+                const storedHostelId = getActiveHostelId(ownerScope);
+                const activeHostel = availableHostels.find(h => h.id === storedHostelId) || availableHostels[0] || null;
+                if (activeHostel?.id) {
+                    setSelectedHostelId(activeHostel.id);
+                    setActiveHostelId(ownerScope, activeHostel.id);
+                }
+                const policyResponse = activeHostel?.id
+                    ? await ownerService.getHostelPreferences(activeHostel.id)
+                    : null;
+                const hostel = policyResponse?.hostel || activeHostel || {};
+                const prefs = policyResponse?.compatibility_preferences || {};
+                setOwnerForm({ id: owner.id || '', name: owner.name || '', email: owner.email || '', phone: owner.phone || '' });
                 setHostelForm({
                     name: hostel.name || '', phone: hostel.phone || '', address: hostel.address || '',
                     city: hostel.city || '', state: hostel.state || '', pincode: hostel.pincode || '',
@@ -187,6 +224,7 @@ export default function OwnerProfile() {
                     ...(prefs.date_format !== undefined && { date_format: prefs.date_format }),
                     ...(prefs.time_format !== undefined && { time_format: prefs.time_format }),
                     ...(prefs.language !== undefined && { language: prefs.language }),
+                    billing_defaults: resolveBillingDefaultsFromPrefs(prefs),
                 };
                 setPreferences(merged);
                 setSavedPreferences(merged);
@@ -204,6 +242,76 @@ export default function OwnerProfile() {
 
     const showTempSuccess = (msg) => { setSuccess(msg); setTimeout(() => setSuccess(''), 2500); };
 
+    const applyHostelSettings = useCallback((hostel, prefs = {}) => {
+        setHostelForm({
+            name: hostel.name || '', phone: hostel.phone || '', address: hostel.address || '',
+            city: hostel.city || '', state: hostel.state || '', pincode: hostel.pincode || '',
+            upi_id: hostel.upi_id || '', gst_number: hostel.gst_number || '', logo_url: hostel.logo_url || ''
+        });
+        const merged = {
+            ...preferences,
+            currency: prefs.currency || preferences.currency,
+            rent_cycle: prefs.rent_cycle || preferences.rent_cycle,
+            receipt_prefix: prefs.receipt_prefix || preferences.receipt_prefix,
+            timezone: prefs.timezone || preferences.timezone,
+            auto_rent_day: prefs.auto_rent_day || preferences.auto_rent_day,
+            phonepe_merchant_id: prefs.phonepe_merchant_id || '',
+            upi_id: prefs.upi_id || hostel.upi_id || '',
+            ...(prefs.due_day !== undefined && { due_day: prefs.due_day }),
+            ...(prefs.late_fee_type !== undefined && { late_fee_type: prefs.late_fee_type }),
+            ...(prefs.late_fee_amount !== undefined && { late_fee_amount: prefs.late_fee_amount }),
+            ...(prefs.late_fee_percentage !== undefined && { late_fee_percentage: prefs.late_fee_percentage }),
+            ...(prefs.late_fee_after_days !== undefined && { late_fee_after_days: prefs.late_fee_after_days }),
+            ...(prefs.max_late_fee !== undefined && { max_late_fee: prefs.max_late_fee }),
+            ...(prefs.grace_days !== undefined && { grace_days: prefs.grace_days }),
+            ...(prefs.late_fee_rules !== undefined && { late_fee_rules: prefs.late_fee_rules }),
+            ...(prefs.auto_generate_rent !== undefined && { auto_generate_rent: prefs.auto_generate_rent }),
+            ...(prefs.auto_apply_late_fees !== undefined && { auto_apply_late_fees: prefs.auto_apply_late_fees }),
+            ...(prefs.auto_send_reminders !== undefined && { auto_send_reminders: prefs.auto_send_reminders }),
+            ...(prefs.auto_deactivate_days !== undefined && { auto_deactivate_days: prefs.auto_deactivate_days }),
+            ...(prefs.allow_partial_payments !== undefined && { allow_partial_payments: prefs.allow_partial_payments }),
+            ...(prefs.min_payment_amount !== undefined && { min_payment_amount: prefs.min_payment_amount }),
+            ...(prefs.reminder_email !== undefined && { reminder_email: prefs.reminder_email }),
+            ...(prefs.reminder_in_app !== undefined && { reminder_in_app: prefs.reminder_in_app }),
+            ...(prefs.reminder_whatsapp !== undefined && { reminder_whatsapp: prefs.reminder_whatsapp }),
+            ...(prefs.reminder_day_1 !== undefined && { reminder_day_1: prefs.reminder_day_1 }),
+            ...(prefs.reminder_day_5 !== undefined && { reminder_day_5: prefs.reminder_day_5 }),
+            ...(prefs.reminder_day_10 !== undefined && { reminder_day_10: prefs.reminder_day_10 }),
+            ...(prefs.late_fee_notification !== undefined && { late_fee_notification: prefs.late_fee_notification }),
+            ...(prefs.owner_daily_summary !== undefined && { owner_daily_summary: prefs.owner_daily_summary }),
+            ...(prefs.auto_email_receipt !== undefined && { auto_email_receipt: prefs.auto_email_receipt }),
+            ...(prefs.receipt_format !== undefined && { receipt_format: prefs.receipt_format }),
+            ...(prefs.receipt_footer !== undefined && { receipt_footer: prefs.receipt_footer }),
+            ...(prefs.require_doc_approval !== undefined && { require_doc_approval: prefs.require_doc_approval }),
+            ...(prefs.allow_tenant_edits !== undefined && { allow_tenant_edits: prefs.allow_tenant_edits }),
+            ...(prefs.require_profile_photo_onboarding !== undefined && { require_profile_photo_onboarding: prefs.require_profile_photo_onboarding }),
+            ...(prefs.data_retention_months !== undefined && { data_retention_months: prefs.data_retention_months }),
+            ...(prefs.date_format !== undefined && { date_format: prefs.date_format }),
+            ...(prefs.time_format !== undefined && { time_format: prefs.time_format }),
+            ...(prefs.language !== undefined && { language: prefs.language }),
+            billing_defaults: resolveBillingDefaultsFromPrefs(prefs),
+        };
+        setPreferences(merged);
+        setSavedPreferences(merged);
+        setDirtyModules(new Set());
+    }, [preferences]);
+
+    const handleHostelSwitch = async (hostelId) => {
+        if (!hostelId || hostelId === selectedHostelId) return;
+        setSaving(true); setError('');
+        try {
+            const ownerScope = { id: ownerForm.id, owner_id: ownerForm.id, role: 'owner' };
+            setSelectedHostelId(hostelId);
+            setActiveHostelId(ownerScope, hostelId);
+            const response = await ownerService.getHostelPreferences(hostelId);
+            applyHostelSettings(response?.hostel || {}, response?.compatibility_preferences || {});
+            showTempSuccess('Switched hostel settings workspace');
+        } catch (e) {
+            const detail = e?.response?.data?.detail;
+            setError(typeof detail === 'string' ? detail : (detail?.message || 'Failed to switch hostel'));
+        } finally { setSaving(false); }
+    };
+
     const updatePref = (key, value) => {
         setPreferences(prev => ({ ...prev, [key]: value }));
     };
@@ -219,7 +327,7 @@ export default function OwnerProfile() {
         try {
             const data = await ownerService.updateOwner({ name: ownerForm.name, phone: ownerForm.phone });
             const owner = data?.owner || {};
-            setOwnerForm(prev => ({ ...prev, name: owner.name || prev.name, phone: owner.phone || prev.phone, email: owner.email || prev.email }));
+            setOwnerForm(prev => ({ ...prev, id: owner.id || prev.id, name: owner.name || prev.name, phone: owner.phone || prev.phone, email: owner.email || prev.email }));
             setIsEditingOwner(false);
             showTempSuccess('Owner profile updated');
         } catch (e) {
@@ -231,7 +339,8 @@ export default function OwnerProfile() {
     const saveHostel = async (e) => {
         e.preventDefault(); setSaving(true); setError('');
         try {
-            const data = await ownerService.updateHostel(hostelForm);
+            if (!selectedHostelId) throw new Error('Select a hostel before saving settings');
+            const data = await ownerService.updateHostel(hostelForm, selectedHostelId);
             const hostel = data?.hostel || {};
             setHostelForm({
                 name: hostel.name || '', phone: hostel.phone || '', address: hostel.address || '',
@@ -271,9 +380,11 @@ export default function OwnerProfile() {
                 }
             }
 
-            // Sync UPI to hostel too
+            if (!selectedHostelId) throw new Error('Select a hostel before saving preferences');
+
+            // Sync UPI to the selected hostel too
             if (preferences.upi_id !== (savedPreferences?.upi_id || '')) {
-                await ownerService.updateHostel({ upi_id: preferences.upi_id });
+                await ownerService.updateHostel({ upi_id: preferences.upi_id }, selectedHostelId);
             }
             const preferencePayload = {
                 currency: preferences.currency, rent_cycle: preferences.rent_cycle,
@@ -294,8 +405,9 @@ export default function OwnerProfile() {
                 reminder_day_5: preferences.reminder_day_5, reminder_day_10: preferences.reminder_day_10,
                 late_fee_notification: preferences.late_fee_notification, owner_daily_summary: preferences.owner_daily_summary,
                 allow_partial_payments: preferences.allow_partial_payments, min_payment_amount: preferences.min_payment_amount,
+                billing_defaults: preferences.billing_defaults,
             };
-            await ownerService.updatePreferences(preferencePayload);
+            await ownerService.updatePreferences(preferencePayload, selectedHostelId);
             setSavedPreferences({ ...preferences });
             updatePreferencesLocal({ ...preferences });
             setDirtyModules(new Set());
@@ -309,7 +421,8 @@ export default function OwnerProfile() {
     const uploadLogo = async (file) => {
         setSaving(true); setError('');
         try {
-            const response = await ownerService.uploadLogo(file);
+            if (!selectedHostelId) throw new Error('Select a hostel before uploading a logo');
+            const response = await ownerService.uploadLogo(file, selectedHostelId);
             const logoUrl = response?.logo_url || '';
             setHostelForm(prev => ({ ...prev, logo_url: logoUrl }));
             window.dispatchEvent(new CustomEvent('owner-branding-updated', { detail: { logoUrl } }));
@@ -323,7 +436,8 @@ export default function OwnerProfile() {
     const removeLogo = async () => {
         setSaving(true); setError('');
         try {
-            await ownerService.removeLogo();
+            if (!selectedHostelId) throw new Error('Select a hostel before removing a logo');
+            await ownerService.removeLogo(selectedHostelId);
             setHostelForm(prev => ({ ...prev, logo_url: '' }));
             window.dispatchEvent(new CustomEvent('owner-branding-updated', { detail: { logoUrl: '' } }));
             showTempSuccess('Hostel logo removed');
@@ -388,6 +502,24 @@ export default function OwnerProfile() {
             {success && (
                 <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded-xl px-4 py-3 animate-in fade-in slide-in-from-top-2">
                     <CheckCircle2 size={16} className="mt-0.5 flex-shrink-0" /> {success}
+                </div>
+            )}
+
+            {hostels.length > 0 && (
+                <div className="bg-slate-950 text-white rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-emerald-300">Selected Hostel Settings</p>
+                        <p className="text-sm text-slate-300 mt-1">All settings below apply only to the selected hostel.</p>
+                    </div>
+                    <select
+                        value={selectedHostelId}
+                        onChange={(e) => handleHostelSwitch(e.target.value)}
+                        className="bg-white text-slate-900 border-0 rounded-xl px-4 py-3 text-sm font-black outline-none min-w-[220px]"
+                    >
+                        {hostels.map((hostel) => (
+                            <option key={hostel.id} value={hostel.id}>{hostel.name}</option>
+                        ))}
+                    </select>
                 </div>
             )}
 
@@ -460,6 +592,12 @@ export default function OwnerProfile() {
             {/* ─── Preferences Tab ─── */}
             {activeTab === 'preferences' && (
                 <div className="space-y-2">
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3">
+                        <p className="text-sm font-black text-emerald-900">Hostel Operating System Settings</p>
+                        <p className="text-xs text-emerald-700 mt-1 font-medium">
+                            Editing policy for {hostels.find(h => h.id === selectedHostelId)?.name || 'selected hostel'} only. Other hostels keep their own billing, automation, receipt, and tenant rules.
+                        </p>
+                    </div>
                     {prefModules.map((mod) => {
                         const Icon = mod.icon;
                         const isOpen = openModules.has(mod.key);
@@ -565,6 +703,12 @@ function BillingModule({ prefs, updatePref }) {
 
     const [whatIfRent, setWhatIfRent] = useState(8000);
     const [whatIfDelay, setWhatIfDelay] = useState(10);
+    const billingDefaults = prefs.billing_defaults || DEFAULT_BILLING_DEFAULTS;
+    const updateBillingDefault = (key, value) => {
+        const next = { ...DEFAULT_BILLING_DEFAULTS, ...billingDefaults, [key]: value };
+        if (key === 'maintenance_type' && value === 'NONE') next.maintenance_charge = 0;
+        updatePref('billing_defaults', next);
+    };
 
     // ── Rules CRUD ──
     const rules = billingConfig.late_fee_rules || [];
@@ -624,6 +768,59 @@ function BillingModule({ prefs, updatePref }) {
                         <span className="text-sm font-bold text-indigo-600 min-w-[40px] text-right">{prefs.grace_days ?? 0}d</span>
                     </div>
                 </div>
+            </div>
+
+            <Divider label="Tenant Invite Defaults" />
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 px-4 py-3">
+                <p className="text-sm font-bold text-emerald-800">Hostel billing policy</p>
+                <p className="text-xs text-emerald-700/80 mt-1">
+                    These defaults are automatically applied while inviting new tenants. Existing tenants keep their original billing snapshots.
+                </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field
+                    label="Default Advance Deposit"
+                    type="number"
+                    value={billingDefaults.advance_deposit ?? 0}
+                    onChange={(v) => updateBillingDefault('advance_deposit', Math.max(0, Number(v) || 0))}
+                />
+                <Field
+                    label="Default Maintenance Charge"
+                    type="number"
+                    disabled={billingDefaults.maintenance_type === 'NONE'}
+                    value={billingDefaults.maintenance_type === 'NONE' ? 0 : (billingDefaults.maintenance_charge ?? 0)}
+                    onChange={(v) => updateBillingDefault('maintenance_charge', Math.max(0, Number(v) || 0))}
+                />
+            </div>
+            <SelectField
+                label="Maintenance Type"
+                value={billingDefaults.maintenance_type || 'MONTHLY'}
+                options={[
+                    { value: 'MONTHLY', label: 'Monthly maintenance' },
+                    { value: 'ONE_TIME', label: 'One-time maintenance' },
+                    { value: 'NONE', label: 'No maintenance charge' },
+                ]}
+                onChange={(v) => updateBillingDefault('maintenance_type', v)}
+            />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <ToggleField
+                    label="Auto-fill room rent"
+                    desc="Use selected room base rent during tenant invitation"
+                    value={billingDefaults.auto_fill_room_rent !== false}
+                    onChange={(v) => updateBillingDefault('auto_fill_room_rent', v)}
+                />
+                <ToggleField
+                    label="Allow manual override"
+                    desc="Owners can customize invite values before sending"
+                    value={billingDefaults.allow_override !== false}
+                    onChange={(v) => updateBillingDefault('allow_override', v)}
+                />
+            </div>
+            <div className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 text-xs text-slate-500">
+                New invites default to {formatCurrency(billingDefaults.advance_deposit || 0, prefs)} deposit
+                {billingDefaults.maintenance_type === 'NONE'
+                    ? ' with no maintenance charge.'
+                    : ` + ${formatCurrency(billingDefaults.maintenance_charge || 0, prefs)} ${billingDefaults.maintenance_type === 'MONTHLY' ? 'monthly' : 'one-time'} maintenance.`}
             </div>
 
             {/* ── Section 2: Late Fee Rules Builder ── */}
@@ -858,7 +1055,8 @@ function NotificationsModule({ prefs, updatePref, reminderCredits, remindersUsed
         setTestSending(true);
         setTestResult('');
         try {
-            const res = await ownerService.sendTestReminder('DUE_SOON');
+            if (!selectedHostelId) throw new Error('Select a hostel before sending a test reminder');
+            const res = await ownerService.sendTestReminder('DUE_SOON', selectedHostelId);
             setTestSent(true);
             setTestResult(res?.message || 'Test reminder sent!');
         } catch (e) {

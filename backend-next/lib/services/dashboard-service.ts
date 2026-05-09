@@ -1,4 +1,5 @@
 import { prisma } from "../db";
+import { Prisma } from "@prisma/client";
 import { formatShortMonth } from "../format";
 import { financialService } from "./financial-service";
 import { operationalPendingInvariantHolds } from "./financial-invariants";
@@ -47,21 +48,19 @@ export class DashboardService {
     const monthStart = new Date(Date.UTC(utcYear, utcMonth, 1, 0, 0, 0, 0));
     const nextMonthStart = new Date(Date.UTC(utcYear, utcMonth + 1, 1, 0, 0, 0, 0));
 
-    // Phase 4: optional hostel isolation
-    const hostelRoomFilter = hostelId ? `AND h.id = '${hostelId}'::uuid` : "";
+    const hostelRoomFilter = hostelId ? Prisma.sql`AND h.id = ${hostelId}::uuid` : Prisma.empty;
     const hostelPaymentFilter = hostelId ? { hostel_id: hostelId } : {};
 
     // ✅ Use count()+aggregate instead of findMany — avoids fetching full rows for JS-side counting
     const [totalTenants, activeTenants, roomStats, payments, costs] = await Promise.all([
       prisma.tenant.count({ where: { owner_id: userId, ...(hostelId ? { hostel_id: hostelId } : {}) } }),
       prisma.tenant.count({ where: { owner_id: userId, status: "ACTIVE", ...(hostelId ? { hostel_id: hostelId } : {}) } }),
-      prisma.$queryRawUnsafe<{ total_rooms: number; total_capacity: number }[]>(
-        `SELECT COUNT(r.id)::int AS total_rooms, COALESCE(SUM(r.capacity), 0)::int AS total_capacity
+      prisma.$queryRaw<{ total_rooms: number; total_capacity: number }[]>`
+        SELECT COUNT(r.id)::int AS total_rooms, COALESCE(SUM(r.capacity), 0)::int AS total_capacity
         FROM rooms r JOIN hostels h ON h.id = r.hostel_id
-        WHERE h.owner_id = $1::uuid AND r.is_active = true
-        ${hostelRoomFilter}`,
-        userId,
-      ),
+        WHERE h.owner_id = ${userId}::uuid AND r.is_active = true
+        ${hostelRoomFilter}
+      `,
       // ✅ FIXED: Use payment_date (actual payment date, source of truth)
       // ✅ FIXED: Use nextMonthStart (day 1 of next month, exclusive upper bound)
       prisma.payment.aggregate({

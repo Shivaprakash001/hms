@@ -4,7 +4,7 @@ export const runtime = "nodejs";
 import { NextRequest } from "next/server";
 import { getSession, apiError, apiResponse } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { getPreferences } from "@/lib/preferences";
+import { getTenantOperationalContext } from "@/lib/hostel-context";
 
 export async function GET(req: NextRequest) {
   const session = await getSession(req);
@@ -15,14 +15,16 @@ export async function GET(req: NextRequest) {
   try {
     const tenant = await prisma.tenant.findUnique({
       where: { profile_id: session.sub },
-      select: { owner_id: true },
+      select: { id: true, owner_id: true, hostel_id: true },
     });
 
     if (!tenant) {
       return apiError("Tenant record not found", "NOT_FOUND", 404);
     }
 
-    const prefs = tenant.owner_id ? await getPreferences(tenant.owner_id) : null;
+    const { prefs } = tenant.owner_id
+      ? await getTenantOperationalContext(tenant.id, tenant.owner_id, tenant.hostel_id)
+      : { prefs: null as any };
 
     return apiResponse({
       require_profile_photo_onboarding: Boolean(prefs?.require_profile_photo_onboarding),
@@ -31,4 +33,3 @@ export async function GET(req: NextRequest) {
     return apiError(error?.message || "Failed to fetch onboarding settings");
   }
 }
-

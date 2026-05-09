@@ -106,24 +106,50 @@ export const ownerService = {
             throw error;
         }
     },
-    updateHostel: async (data) => {
+    updateHostel: async (data, hostelId) => {
+        if (hostelId) {
+            const response = await api.patch(`/hostels/${hostelId}`, data);
+            return response.data;
+        }
         const response = await api.patch('/owner/me/hostel', data);
         return response.data;
     },
-    updatePreferences: async (data) => {
+    updatePreferences: async (data, hostelId) => {
+        if (hostelId) {
+            const response = await api.patch(`/hostels/${hostelId}/preferences`, data);
+            return response.data;
+        }
         const response = await api.patch('/owner/me/preferences', data);
         return response.data;
     },
-    uploadLogo: async (file) => {
+    getHostelPreferences: async (hostelId) => {
+        const response = await api.get(`/hostels/${hostelId}/preferences`);
+        return response.data;
+    },
+    getHostels: async () => {
+        const response = await api.get('/owner/hostels');
+        return response.data;
+    },
+    getHostelBillingDefaults: async (hostelId) => {
+        const response = await api.get(`/hostels/${hostelId}/billing-defaults`);
+        return response.data;
+    },
+    updateHostelBillingDefaults: async (hostelId, billingDefaults) => {
+        const response = await api.patch(`/hostels/${hostelId}/billing-defaults`, { billing_defaults: billingDefaults });
+        return response.data;
+    },
+    uploadLogo: async (file, hostelId) => {
         const formData = new FormData();
         formData.append('file', file);
-        const response = await api.post('/owner/logo', formData, {
+        const endpoint = hostelId ? `/hostels/${hostelId}/logo` : '/owner/logo';
+        const response = await api.post(endpoint, formData, {
             headers: { 'Content-Type': 'multipart/form-data' }
         });
         return response.data;
     },
-    removeLogo: async () => {
-        const response = await api.delete('/owner/logo');
+    removeLogo: async (hostelId) => {
+        const endpoint = hostelId ? `/hostels/${hostelId}/logo` : '/owner/logo';
+        const response = await api.delete(endpoint);
         return response.data;
     },
     searchTenants: async (query, limit = 10, signal) => {
@@ -133,8 +159,8 @@ export const ownerService = {
         });
         return response.data;
     },
-    sendTestReminder: async (type = 'DUE_SOON') => {
-        const response = await api.post('/notifications/test-reminder', { type });
+    sendTestReminder: async (type = 'DUE_SOON', hostelId) => {
+        const response = await api.post('/notifications/test-reminder', { type, hostel_id: hostelId });
         return response.data;
     }
 };
@@ -305,6 +331,10 @@ export const roomService = {
     },
     getOverview: async (id) => {
         const response = await api.get(`/rooms/${id}/overview`);
+        return response.data;
+    },
+    getInviteDefaults: async (id) => {
+        const response = await api.get(`/rooms/${id}/invite-defaults`);
         return response.data;
     },
     create: async (data) => {

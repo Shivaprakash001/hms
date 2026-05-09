@@ -15,7 +15,9 @@ export function removeClient(client: SSEClient) {
 
 export function broadcast(ownerId: string, event: object) {
   for (const client of Array.from(clients)) {
-    if (client.ownerId === ownerId || !client.ownerId) {
+    // Never broadcast owner events to unscoped clients. A missing ownerId is a
+    // delivery bug, not permission to receive every owner's operational stream.
+    if (client.ownerId === ownerId) {
       client.send(event);
     }
   }

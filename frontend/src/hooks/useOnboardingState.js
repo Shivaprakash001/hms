@@ -12,12 +12,34 @@ export const ONBOARDING_STEPS = [
   'COMPLETED',
 ];
 
-const STORAGE_KEY = 'hms_onboarding_step';
+const LEGACY_STORAGE_KEY = 'hms_onboarding_step';
 
-export const getStoredStep = () => localStorage.getItem(STORAGE_KEY) || 'ACCOUNT_CREATED';
-export const setStoredStep = (step) => localStorage.setItem(STORAGE_KEY, step);
-export const clearOnboardingState = () => localStorage.removeItem(STORAGE_KEY);
-export const isOnboardingComplete = () => localStorage.getItem(STORAGE_KEY) === 'COMPLETED';
+const readStoredSession = () => {
+  try {
+    const owner = localStorage.getItem('ownerUser');
+    const tenant = localStorage.getItem('tenantUser');
+    return owner ? JSON.parse(owner) : (tenant ? JSON.parse(tenant) : null);
+  } catch {
+    return null;
+  }
+};
+
+const storageKey = () => {
+  const user = readStoredSession();
+  const ownerId = user?.owner_id || (String(user?.role || '').toLowerCase() === 'owner' ? user?.id : null) || 'anonymous';
+  return `hms_onboarding_step:${ownerId}`;
+};
+
+export const getStoredStep = () => localStorage.getItem(storageKey()) || localStorage.getItem(LEGACY_STORAGE_KEY) || 'ACCOUNT_CREATED';
+export const setStoredStep = (step) => {
+  localStorage.setItem(storageKey(), step);
+  localStorage.removeItem(LEGACY_STORAGE_KEY);
+};
+export const clearOnboardingState = () => {
+  localStorage.removeItem(storageKey());
+  localStorage.removeItem(LEGACY_STORAGE_KEY);
+};
+export const isOnboardingComplete = () => getStoredStep() === 'COMPLETED';
 
 // Derive the furthest completed step from server data
 export async function deriveOnboardingStep() {

@@ -6,7 +6,7 @@ import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { tenantService } from "@/lib/services/tenant-service";
 import { prisma } from "@/lib/db";
 import { TenantProfileUpdateSchema } from "@/lib/validators";
-import { getPreferences } from "@/lib/preferences";
+import { getTenantOperationalContext } from "@/lib/hostel-context";
 import { imagekit, IMAGEKIT_URL_ENDPOINT } from "@/lib/imagekit";
 
 
@@ -57,9 +57,11 @@ export async function POST(req: NextRequest) {
 
     const tenantOwner = await prisma.tenant.findUnique({
       where: { profile_id: session.sub },
-      select: { id: true, owner_id: true },
+      select: { id: true, owner_id: true, hostel_id: true },
     });
-    const ownerPrefs = tenantOwner?.owner_id ? await getPreferences(tenantOwner.owner_id) : null;
+    const ownerPrefs = tenantOwner?.owner_id
+      ? (await getTenantOperationalContext(tenantOwner.id, tenantOwner.owner_id, tenantOwner.hostel_id)).prefs
+      : null;
     const profilePhotoRequired = Boolean(ownerPrefs?.require_profile_photo_onboarding);
     if (profilePhotoRequired && !profilePhotoFile) {
       return apiError("Profile photo is required by your hostel owner.", "VALIDATION_ERROR", 400);

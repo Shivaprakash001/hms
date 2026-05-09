@@ -1,7 +1,7 @@
 /**
  * 🏗️ Hostel Operational Context — SINGLE SOURCE OF TRUTH (v2)
  *
- * Replaces implicit `getPreferences(ownerId)` with an explicitly hostel-scoped
+ * Replaces implicit owner-level preference lookup with an explicitly hostel-scoped
  * context object. All operational services (reminders, receipts, rent generation,
  * payments) MUST use this module when they need hostel-level config.
  *
@@ -10,13 +10,13 @@
  *   All calls must resolve an explicit hostelId from the entity chain first.
  *
  * BACKWARD COMPATIBILITY:
- *   `getPreferences(ownerId)` still works for single-hostel owners (returns the
- *   one active hostel). It now logs a deprecation warning so we can track all
- *   remaining callers and migrate them.
+ *   Legacy consumers may still call resolvePreferences(hostel), but the hostel
+ *   record must already be selected by explicit context or entity lineage.
  */
 
 import { prisma } from "./db";
 import { resolvePreferences, type HostelPreferences } from "./preferences";
+import { eventLog } from "./services/event-log-service";
 
 // ─── Hostel Operational Context ────────────────────────────────────────────────
 
@@ -148,6 +148,72 @@ export async function resolveHostelIdFromTenant(tenantId: string): Promise<strin
   }
 
   return derived;
+}
+
+function contextMissing(entityType: string, entityId: string) {
+  const err: any = new Error(
+    `HOSTEL_CONTEXT_REQUIRED: Unable to resolve hostel context for ${entityType} ${entityId}. ` +
+    "Operational preferences must be resolved from entity lineage, not owner fallback."
+  );
+  err.code = "HOSTEL_CONTEXT_REQUIRED";
+  return err;
+}
+
+export async function getTenantOperationalContext(
+  tenantId: string,
+  ownerId: string,
+  storedHostelId?: string | null,
+): Promise<HostelOperationalContext> {
+  const hostelId = storedHostelId || await resolveHostelIdFromTenant(tenantId);
+  if (!hostelId) {
+    await eventLog.log("HOSTEL_SCOPE_VIOLATION", ownerId, {
+      entity_type: "Tenant",
+      entity_id: tenantId,
+      reason: "MISSING_HOSTEL_CONTEXT",
+    });
+    throw contextMissing("tenant", tenantId);
+  }
+  return getHostelOperationalContext(ownerId, hostelId);
+}
+
+export async function getPaymentOperationalContext(
+  paymentId: string,
+  ownerId: string,
+  storedHostelId?: string | null,
+  tenantId?: string | null,
+): Promise<HostelOperationalContext> {
+  let hostelId = storedHostelId || null;
+  if (!hostelId && tenantId) {
+    hostelId = await resolveHostelIdFromTenant(tenantId);
+  }
+  if (!hostelId) {
+    await eventLog.log("HOSTEL_SCOPE_VIOLATION", ownerId, {
+      entity_type: "Payment",
+      entity_id: paymentId,
+      reason: "MISSING_HOSTEL_CONTEXT",
+    });
+    throw contextMissing("payment", paymentId);
+  }
+  return getHostelOperationalContext(ownerId, hostelId);
+}
+
+export async function getObligationOperationalContext(
+  obligation: { id: string; owner_id?: string | null; hostel_id?: string | null; allocation_id?: string | null; tenant_id: string },
+): Promise<HostelOperationalContext> {
+  const ownerId = obligation.owner_id || "";
+  let hostelId = obligation.hostel_id || null;
+  if (!hostelId) {
+    hostelId = await resolveHostelIdFromObligation(obligation.id, obligation.allocation_id || null, obligation.tenant_id);
+  }
+  if (!hostelId) {
+    await eventLog.log("HOSTEL_SCOPE_VIOLATION", ownerId || null, {
+      entity_type: "RentObligation",
+      entity_id: obligation.id,
+      reason: "MISSING_HOSTEL_CONTEXT",
+    });
+    throw contextMissing("obligation", obligation.id);
+  }
+  return getHostelOperationalContext(ownerId, hostelId);
 }
 
 /**

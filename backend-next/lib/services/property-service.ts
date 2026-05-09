@@ -1,6 +1,5 @@
 import { prisma } from "../db";
 import { planEnforcementService } from "./plan-enforcement-service";
-import { planGate } from "./plan-gate-service";
 import { financialService } from "./financial-service";
 
 
@@ -11,15 +10,16 @@ export class PropertyService {
       include: {
         hostels: {
           where: { is_active: true },
-          take: 1
+          orderBy: { created_at: "asc" },
         }
       }
     });
 
     if (!profile) throw new Error("NOT_FOUND: Owner profile not found");
-
-    const hostel = profile.hostels[0] || {};
     
+    const [onlyHostel] = profile.hostels;
+    const singleHostel = profile.hostels.length === 1 ? onlyHostel : null;
+
     return {
       owner: {
         id: profile.id,
@@ -28,27 +28,33 @@ export class PropertyService {
         phone: profile.phone,
         role: profile.role
       },
-      hostel: {
-        name: hostel.name || null,
-        phone: hostel.phone || null,
-        address: hostel.address || null,
-        city: hostel.city || null,
-        state: hostel.state || null,
-        pincode: hostel.pincode || null,
-        upi_id: hostel.upi_id || null,
-        gst_number: hostel.gst_number || null,
-        logo_url: (hostel as any).logo_url || null, // Assuming added to schema
-      },
-      preferences: {
-        currency: (hostel as any).currency || "INR",
-        rent_cycle: (hostel as any).rent_cycle || "MONTHLY",
-        receipt_prefix: (hostel as any).receipt_prefix || "HMS",
-        timezone: (hostel as any).timezone || "Asia/Kolkata",
-        auto_rent_day: (hostel as any).auto_rent_day || 1,
-        phonepe_merchant_id: (hostel as any).phonepe_merchant_id || "",
-        // Spread extended config from JSON blob
-        ...((hostel as any).preferences_config || {}),
-      }
+      hostels: profile.hostels.map((hostel: any) => ({
+        id: hostel.id,
+        name: hostel.name,
+        phone: hostel.phone,
+        address: hostel.address,
+        city: hostel.city,
+        state: hostel.state,
+        pincode: hostel.pincode,
+        upi_id: hostel.upi_id,
+        gst_number: hostel.gst_number,
+        logo_url: hostel.logo_url,
+      })),
+      // Compatibility shape only for single-hostel bootstrap screens. Multi-hostel
+      // settings must fetch /api/hostels/:id/preferences explicitly.
+      hostel: singleHostel ? {
+        id: singleHostel.id,
+        name: singleHostel.name || null,
+        phone: singleHostel.phone || null,
+        address: singleHostel.address || null,
+        city: singleHostel.city || null,
+        state: singleHostel.state || null,
+        pincode: singleHostel.pincode || null,
+        upi_id: singleHostel.upi_id || null,
+        gst_number: singleHostel.gst_number || null,
+        logo_url: (singleHostel as any).logo_url || null,
+      } : null,
+      preferences: {},
     };
   }
 
@@ -70,14 +76,9 @@ export class PropertyService {
   }
 
   async updateHostel(userId: string, data: any) {
-    const profile = await prisma.profile.findUnique({
-      where: { id: userId },
-      include: { hostels: { where: { is_active: true }, take: 1 } }
-    });
+    const profile = await prisma.profile.findUnique({ where: { id: userId } });
 
     if (!profile) throw new Error("NOT_FOUND: Profile not found");
-
-    const hostel = profile.hostels[0];
 
     const mapped: any = {};
     if (data.name ?? data.hostel_name) mapped.name = data.name ?? data.hostel_name;
@@ -89,12 +90,18 @@ export class PropertyService {
     if (data.upi_id !== undefined) mapped.upi_id = data.upi_id;
     if (data.gst_number !== undefined) mapped.gst_number = data.gst_number;
 
-    if (hostel) {
-      await prisma.hostel.update({
-        where: { id: hostel.id },
+    const hostelId = data.hostel_id || data.hostelId;
+    if (hostelId) {
+      const updated = await prisma.hostel.updateMany({
+        where: { id: hostelId, owner_id: userId, is_active: true },
         data: mapped,
       });
+      if (updated.count !== 1) throw new Error("FORBIDDEN: Hostel is not owned by the authenticated owner");
     } else {
+      const existingCount = await prisma.hostel.count({ where: { owner_id: userId, is_active: true } });
+      if (existingCount > 0) {
+        throw new Error("VALIDATION: hostel_id is required for existing hostel updates");
+      }
       // Enforcement: creating a new hostel requires active subscription and available hostel slots
       await planEnforcementService.assertSubscriptionActive(userId);
       await planEnforcementService.assertHostelLimit(userId);
@@ -113,122 +120,98 @@ export class PropertyService {
   }
 
   async updatePreferences(userId: string, data: any) {
-    const profile = await prisma.profile.findUnique({
-      where: { id: userId },
-      include: { hostels: { where: { is_active: true }, take: 1 } },
-    });
-
-    if (!profile) throw new Error("NOT_FOUND: Profile not found");
-    const hostel = profile.hostels[0];
-    if (!hostel) throw new Error("VALIDATION: Please complete Hostel Details before setting preferences");
-
-    // ── Typed columns (backward compat) ──
-    const typedColumns = ["currency", "rent_cycle", "receipt_prefix", "timezone", "auto_rent_day", "phonepe_merchant_id"];
-    const updateData: any = {};
-    for (const key of typedColumns) {
-      if (data[key] !== undefined) updateData[key] = data[key];
+    const hostelId = data?.hostel_id || data?.hostelId;
+    if (!hostelId) {
+      throw new Error("VALIDATION: hostel_id is required for preference updates");
     }
 
-    // ── Server-side validation ──
-    if (updateData.auto_rent_day !== undefined) {
-      const day = Number(updateData.auto_rent_day);
-      if (isNaN(day) || day < 1 || day > 28) throw new Error("VALIDATION: Rent generation day must be 1–28");
-      updateData.auto_rent_day = day;
+    const { hostelPolicyService } = await import("./hostel-policy-service");
+    const policyPatch = data?.policy && typeof data.policy === "object" ? data.policy : {};
+    if (!data.policy) {
+      // Compatibility adapter for old callers that still send flat preference keys
+      // after providing explicit hostel_id. This avoids first-hostel fallback while
+      // the UI migrates module-by-module to nested policy domains.
+      policyPatch.billing = {
+        ...(data.rent_cycle !== undefined && { rent_cycle: data.rent_cycle }),
+        ...(data.auto_rent_day !== undefined && { auto_rent_day: data.auto_rent_day }),
+        ...(data.due_day !== undefined && { due_day: data.due_day }),
+        ...(data.grace_days !== undefined && { grace_days: data.grace_days }),
+        ...((data.late_fee_rules !== undefined || data.max_late_fee !== undefined) && {
+          late_fee: {
+            ...(data.late_fee_rules !== undefined && { rules: data.late_fee_rules }),
+            ...(data.max_late_fee !== undefined && { max_amount: data.max_late_fee }),
+          },
+        }),
+        ...((data.billing_defaults !== undefined) && {
+          deposit: { default_amount: data.billing_defaults.advance_deposit },
+          maintenance: { type: data.billing_defaults.maintenance_type, amount: data.billing_defaults.maintenance_charge },
+          invite_defaults: {
+            auto_fill_room_rent: data.billing_defaults.auto_fill_room_rent,
+            allow_override: data.billing_defaults.allow_override,
+          },
+        }),
+        ...((data.allow_partial_payments !== undefined || data.min_payment_amount !== undefined) && {
+          partial_payments: {
+            ...(data.allow_partial_payments !== undefined && { enabled: data.allow_partial_payments }),
+            ...(data.min_payment_amount !== undefined && { minimum_amount: data.min_payment_amount }),
+          },
+        }),
+      };
+      policyPatch.payments = {
+        ...(data.upi_id !== undefined && { upi_id: data.upi_id }),
+        ...(data.phonepe_merchant_id !== undefined && { phonepe_merchant_id: data.phonepe_merchant_id }),
+      };
+      policyPatch.reminders = {
+        ...(data.auto_send_reminders !== undefined && { enabled: data.auto_send_reminders }),
+        channels: {
+          ...(data.reminder_email !== undefined && { email: data.reminder_email }),
+          ...(data.reminder_in_app !== undefined && { in_app: data.reminder_in_app }),
+          ...(data.reminder_whatsapp !== undefined && { whatsapp: data.reminder_whatsapp }),
+        },
+        ...((data.reminder_day_1 !== undefined || data.reminder_day_5 !== undefined || data.reminder_day_10 !== undefined) && {
+          schedule: {
+            after_due_days: [
+              ...(data.reminder_day_1 !== false ? [1] : []),
+              ...(data.reminder_day_5 !== false ? [5] : []),
+              ...(data.reminder_day_10 !== false ? [10] : []),
+            ],
+          },
+        }),
+        ...(data.late_fee_notification !== undefined && { late_fee_notifications: data.late_fee_notification }),
+        ...(data.owner_daily_summary !== undefined && { owner_daily_summary: data.owner_daily_summary }),
+      };
+      policyPatch.automation = {
+        ...(data.auto_generate_rent !== undefined && { auto_generate_rent: data.auto_generate_rent }),
+        ...(data.auto_apply_late_fees !== undefined && { auto_apply_late_fees: data.auto_apply_late_fees }),
+        ...(data.auto_send_reminders !== undefined && { auto_send_reminders: data.auto_send_reminders }),
+        ...(data.auto_deactivate_days !== undefined && { auto_deactivate_days: data.auto_deactivate_days }),
+        ...(data.auto_email_receipt !== undefined && { auto_email_receipts: data.auto_email_receipt }),
+      };
+      policyPatch.receipts = {
+        ...(data.receipt_prefix !== undefined && { prefix: data.receipt_prefix }),
+        ...(data.receipt_format !== undefined && { format: data.receipt_format }),
+        ...(data.auto_email_receipt !== undefined && { auto_email: data.auto_email_receipt }),
+        ...(data.receipt_footer !== undefined && { footer: data.receipt_footer }),
+      };
+      policyPatch.documents = {
+        ...(data.require_doc_approval !== undefined && { approval_required: data.require_doc_approval }),
+        ...(data.require_aadhaar !== undefined && { aadhaar_required: data.require_aadhaar }),
+      };
+      policyPatch.tenant_rules = {
+        ...(data.allow_tenant_edits !== undefined && { allow_profile_edits: data.allow_tenant_edits }),
+        ...(data.require_profile_photo_onboarding !== undefined && { profile_photo_required: data.require_profile_photo_onboarding }),
+      };
+      policyPatch.operations = {
+        ...(data.currency !== undefined && { currency: data.currency }),
+        ...(data.timezone !== undefined && { timezone: data.timezone }),
+        ...(data.date_format !== undefined && { date_format: data.date_format }),
+        ...(data.time_format !== undefined && { time_format: data.time_format }),
+        ...(data.language !== undefined && { language: data.language }),
+        ...(data.data_retention_months !== undefined && { data_retention_months: data.data_retention_months }),
+      };
     }
 
-    // ── Extended config (JSON blob) ──
-    const extendedKeys = [
-      "due_day", "late_fee_type", "late_fee_amount", "late_fee_percentage",
-      "late_fee_after_days", "max_late_fee", "grace_days", "late_fee_rules",
-      "allow_partial_payments", "min_payment_amount",
-      "reminder_email", "reminder_in_app", "reminder_whatsapp",
-      "reminder_day_1", "reminder_day_5", "reminder_day_10",
-      "late_fee_notification", "owner_daily_summary",
-      "auto_generate_rent", "auto_apply_late_fees", "auto_send_reminders", "auto_deactivate_days",
-      "auto_email_receipt", "receipt_format", "receipt_footer",
-      "require_doc_approval", "allow_tenant_edits", "require_profile_photo_onboarding", "data_retention_months",
-      "date_format", "time_format", "language",
-    ];
-
-    const existingConfig = (hostel as any).preferences_config || {};
-    const newConfig = { ...existingConfig };
-    let hasExtended = false;
-
-    for (const key of extendedKeys) {
-      if (data[key] !== undefined) {
-        newConfig[key] = data[key];
-        hasExtended = true;
-      }
-    }
-
-    // Financial safety validations
-    if (newConfig.late_fee_amount !== undefined && Number(newConfig.late_fee_amount) > 10000) {
-      throw new Error("VALIDATION: Late fee amount cannot exceed 10,000");
-    }
-    if (newConfig.late_fee_percentage !== undefined && (Number(newConfig.late_fee_percentage) < 0 || Number(newConfig.late_fee_percentage) > 50)) {
-      throw new Error("VALIDATION: Late fee percentage must be 0–50%");
-    }
-    if (newConfig.max_late_fee !== undefined && Number(newConfig.max_late_fee) > 50000) {
-      throw new Error("VALIDATION: Maximum late fee cannot exceed 50,000");
-    }
-    if (newConfig.min_payment_amount !== undefined && Number(newConfig.min_payment_amount) < 0) {
-      throw new Error("VALIDATION: Minimum payment must be positive");
-    }
-
-    // ── Late Fee Rules Engine validation ──
-    if (newConfig.grace_days !== undefined) {
-      const gd = Number(newConfig.grace_days);
-      if (isNaN(gd) || gd < 0 || gd > 30) throw new Error("VALIDATION: Grace period must be 0–30 days");
-      newConfig.grace_days = gd;
-    }
-
-    if (newConfig.late_fee_rules !== undefined) {
-      if (!Array.isArray(newConfig.late_fee_rules)) {
-        throw new Error("VALIDATION: late_fee_rules must be an array");
-      }
-      if (newConfig.late_fee_rules.length > 5) {
-        throw new Error("VALIDATION: Maximum 5 late fee rules allowed");
-      }
-      const validTypes = ["flat", "per_day", "percentage"];
-      for (const rule of newConfig.late_fee_rules) {
-        if (!rule.id || typeof rule.id !== "string") {
-          throw new Error("VALIDATION: Each rule must have a string 'id'");
-        }
-        if (!validTypes.includes(rule.type)) {
-          throw new Error(`VALIDATION: Invalid rule type '${rule.type}'. Must be: ${validTypes.join(", ")}`);
-        }
-        if (rule.type === "percentage") {
-          const pct = Number(rule.value);
-          if (isNaN(pct) || pct < 0 || pct > 100) {
-            throw new Error("VALIDATION: Rule percentage must be 0–100");
-          }
-        } else {
-          const amt = Number(rule.amount);
-          if (isNaN(amt) || amt < 0 || amt > 50000) {
-            throw new Error("VALIDATION: Rule amount must be 0–50,000");
-          }
-        }
-        const afterDays = Number(rule.after_days);
-        if (isNaN(afterDays) || afterDays < 1 || afterDays > 60) {
-          throw new Error("VALIDATION: Rule after_days must be 1–60");
-        }
-      }
-    }
-
-    if (hasExtended) {
-      updateData.preferences_config = newConfig;
-    }
-
-    if (Object.keys(updateData).length === 0) {
-      throw new Error("VALIDATION: No valid preference fields to update");
-    }
-
-    await prisma.hostel.update({
-      where: { id: hostel.id },
-      data: updateData,
-    });
-
-    return this.getOwnerProfile(userId);
+    return hostelPolicyService.updateHostelPolicy(hostelId, userId, policyPatch, userId);
   }
 
   async getFloorsWithRooms(ownerId: string, hostelId?: string) {

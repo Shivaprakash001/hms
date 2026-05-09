@@ -14,6 +14,17 @@ const LOGIN_ERROR_MAP = {
     500: 'Something went wrong. Please try again.',
 };
 
+const clearSessionScopedStorage = () => {
+    localStorage.removeItem('tenantUser');
+    localStorage.removeItem('ownerUser');
+    localStorage.removeItem('hms_onboarding_step');
+    localStorage.removeItem('ownerPreferences');
+    Object.keys(localStorage)
+        .filter((key) => key.startsWith('hms_onboarding_step:') || key.startsWith('ownerPreferences:') || key.startsWith('activeHostel:'))
+        .forEach((key) => localStorage.removeItem(key));
+    sessionStorage.clear();
+};
+
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -23,10 +34,7 @@ export const AuthProvider = ({ children }) => {
     const logout = () => {
         setUser(null);
         queryClient.clear();
-        localStorage.removeItem('tenantUser');
-        localStorage.removeItem('ownerUser');
-        localStorage.removeItem('hms_onboarding_step');
-        sessionStorage.clear();
+        clearSessionScopedStorage();
     };
 
     useEffect(() => {
@@ -99,6 +107,7 @@ export const AuthProvider = ({ children }) => {
             const normalizedEmail = (email || '').trim().toLowerCase();
             const response = await api.post('/auth/login', { email: normalizedEmail, password });
             queryClient.clear();
+            clearSessionScopedStorage();
             const { access_token, role, name, user_id, owner_id, tenant_id, hostel_id, is_profile_completed } = response.data;
             const normalizedRole = normalizeRole(role);
             const userData = { email: normalizedEmail, role: normalizedRole, name, id: user_id, owner_id, tenant_id, hostel_id, is_profile_completed, token: access_token };
@@ -130,6 +139,7 @@ export const AuthProvider = ({ children }) => {
             // Pass the redirect_uri so the backend can use the same value when exchanging the code with Google
             const response = await api.post('/auth/google-callback', { code, redirect_uri: redirectUri });
             queryClient.clear();
+            clearSessionScopedStorage();
             const { access_token, role, name, user_id, owner_id, tenant_id, hostel_id, is_profile_completed } = response.data;
             const normalizedRole = normalizeRole(role);
             const userData = { role: normalizedRole, name, id: user_id, owner_id, tenant_id, hostel_id, is_profile_completed, token: access_token };

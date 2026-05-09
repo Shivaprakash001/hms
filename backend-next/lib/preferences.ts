@@ -10,7 +10,7 @@
  * 3. Auditability — grep for getPreferences to find every consumer
  */
 
-import { prisma } from "./db";
+import { normalizeHostelPolicy, toCompatibilityPreferences } from "./services/hostel-policy-service";
 
 // Re-export context utilities so callers can import from one place
 export { getHostelOperationalContext, resolveHostelIdFromTenant, batchGetHostelContexts } from "./hostel-context";
@@ -43,6 +43,13 @@ export interface HostelPreferences {
   maintenance_enabled: boolean;
   maintenance_amount_default: number;
   maintenance_type: string;  // "MONTHLY" | "ONE_TIME"
+  billing_defaults?: {
+    advance_deposit: number;
+    maintenance_charge: number;
+    maintenance_type: string;
+    auto_fill_room_rent: boolean;
+    allow_override: boolean;
+  };
 
   // Notifications
   reminder_email: boolean;
@@ -139,71 +146,12 @@ const DEFAULTS: HostelPreferences = {
 // ─── Core API ─────────────────────────────────────────────────
 
 /**
- * Fetch and return TYPED preferences for an owner.
- * Merges hostel-level columns + JSON blob + defaults.
- *
- * ⚠️  DEPRECATION WARNING: This function uses findFirst and will return
- * the preferences of an arbitrary hostel when an owner has 2+ hostels.
- * Use getHostelOperationalContext(ownerId, hostelId) from hostel-context.ts
- * for all new operational service code.
- *
- * This function is retained for backward compatibility with single-hostel owners
- * and for contexts where an explicit hostelId is genuinely not available.
- */
-export async function getPreferences(ownerId: string): Promise<HostelPreferences> {
-  if (process.env.NODE_ENV !== "production") {
-    // Dev-only warning — helps track remaining callers during migration
-    console.warn(
-      `[PREFERENCES] getPreferences(ownerId) called without hostelId. ` +
-      `For multi-hostel safety, migrate to getHostelOperationalContext(ownerId, hostelId). ` +
-      `Caller ownerId: ${ownerId}`
-    );
-  }
-  const hostel = await prisma.hostel.findFirst({
-    where: { owner_id: ownerId, is_active: true },
-    orderBy: { created_at: "asc" }, // deterministic: always return the FIRST-created hostel
-  });
-
-  return resolvePreferences(hostel);
-}
-
-/**
  * Resolve preferences from a hostel record already in memory.
  * Use this in batch operations where you've already fetched hostels.
  */
 export function resolvePreferences(hostel: any): HostelPreferences {
-  if (!hostel) return { ...DEFAULTS };
-
-  const config = (hostel.preferences_config as any) || {};
-
   return {
     ...DEFAULTS,
-    // Override from typed columns
-    ...(hostel.currency && { currency: hostel.currency }),
-    ...(hostel.rent_cycle && { rent_cycle: hostel.rent_cycle }),
-    ...(hostel.receipt_prefix && { receipt_prefix: hostel.receipt_prefix }),
-    ...(hostel.timezone && { timezone: hostel.timezone }),
-    ...(hostel.auto_rent_day && { auto_rent_day: hostel.auto_rent_day }),
-    // Override from JSON blob (takes precedence over typed columns for extended keys)
-    ...config,
-  };
-}
-
-/**
- * Get the hostel record + resolved preferences in one call.
- *
- * ⚠️  DEPRECATION WARNING: Uses findFirst — non-deterministic for multi-hostel owners.
- * Migrate to getHostelOperationalContext(ownerId, hostelId) for operational services.
- * Retained for backward compatibility.
- */
-export async function getHostelWithPreferences(ownerId: string) {
-  const hostel = await prisma.hostel.findFirst({
-    where: { owner_id: ownerId, is_active: true },
-    orderBy: { created_at: "asc" }, // deterministic: always return the FIRST-created hostel
-  });
-
-  return {
-    hostel,
-    prefs: resolvePreferences(hostel),
-  };
+    ...toCompatibilityPreferences(normalizeHostelPolicy(hostel)),
+  } as HostelPreferences;
 }

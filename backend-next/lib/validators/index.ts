@@ -92,7 +92,7 @@ export const InvitationSchema = z.object({
   advance_amount: z.number().min(0).optional(),
   maintenance_amount: z.number().min(0).optional(),
   joining_date: z.string().optional(),            // ISO date string, defaults to today
-  maintenance_type: z.enum(["MONTHLY", "ONE_TIME"]).optional(), // defaults to preference
+  maintenance_type: z.enum(["MONTHLY", "ONE_TIME", "NONE"]).optional(), // defaults to hostel billing policy
 });
 
 export const ActivationSchema = z.object({

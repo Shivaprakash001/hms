@@ -7,8 +7,9 @@ import { EmailService } from "@/lib/services/email-service";
 import { prisma } from "@/lib/db";
 import { eventLog } from "@/lib/services/event-log-service";
 import { consumeReminder } from "@/lib/services/plan-gate-service";
-import { getPreferences } from "@/lib/preferences";
 import { formatMonthYear } from "@/lib/format";
+import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
+import { hostelPolicyService } from "@/lib/services/hostel-policy-service";
 
 /**
  * 🔔 TEST REMINDER
@@ -25,8 +26,13 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const scope = resolveOwnerScope(session);
     const body = await req.json().catch(() => ({}));
     const reminderType = body.type || "DUE_SOON";
+    const hostelId = body.hostel_id || body.hostelId;
+    if (!hostelId) {
+      return apiError("hostelId is required for test reminders", "HOSTEL_CONTEXT_REQUIRED", 400);
+    }
 
     const validTypes = ["DUE_SOON", "WARNING", "FINAL_NOTICE", "LATE_FEE_ADDED"];
     if (!validTypes.includes(reminderType)) {
@@ -39,7 +45,7 @@ export async function POST(req: NextRequest) {
 
     // 🔒 Enforce addon credits — NOT plan-gated
     try {
-      await consumeReminder(session.sub);
+      await consumeReminder(scope.owner_id);
     } catch (creditErr: any) {
       if (creditErr?.code === "NO_REMINDERS_LEFT") {
         return apiError(
@@ -53,7 +59,7 @@ export async function POST(req: NextRequest) {
 
     // Fetch owner profile
     const profile = await prisma.profile.findUnique({
-      where: { id: session.sub },
+      where: { id: scope.owner_id },
       select: { name: true, email: true },
     });
 
@@ -61,7 +67,8 @@ export async function POST(req: NextRequest) {
       return apiError("No email found for your account", "NOT_FOUND", 404);
     }
 
-    const prefs = await getPreferences(session.sub);
+    const policyResult = await hostelPolicyService.getHostelPolicy(hostelId, scope.owner_id);
+    const prefs = policyResult.compatibility_preferences;
     const dueDay = prefs.due_day;
     const now = new Date();
     const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
@@ -77,7 +84,8 @@ export async function POST(req: NextRequest) {
       prefs,
     });
 
-    await eventLog.log("TEST_REMINDER_SENT", session.sub, {
+    await eventLog.log("TEST_REMINDER_SENT", scope.owner_id, {
+      hostel_id: hostelId,
       type: reminderType,
       email: profile.email,
       sent: result.sent,

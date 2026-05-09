@@ -18,7 +18,7 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
     const [roomId, setRoomId] = useState('');
     const [rooms, setRooms] = useState([]);
     const [loadingRooms, setLoadingRooms] = useState(true);
-    const [loadingPrefs, setLoadingPrefs] = useState(true);
+    const [loadingDefaults, setLoadingDefaults] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
     const [successData, setSuccessData] = useState(null);
@@ -26,9 +26,10 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
     const [maintenanceAmount, setMaintenanceAmount] = useState('');
     const [maintenanceType, setMaintenanceType] = useState('MONTHLY');
     const [joiningDate, setJoiningDate] = useState(() => new Date().toISOString().split('T')[0]);
-    const [prefs, setPrefs] = useState(null);
+    const [defaultsSource, setDefaultsSource] = useState(null);
+    const [customizedFields, setCustomizedFields] = useState({});
 
-    const isInitializing = loadingRooms || loadingPrefs;
+    const isInitializing = loadingRooms;
 
     useEffect(() => {
         if (isOpen) {
@@ -43,34 +44,33 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
             setMaintenanceAmount('');
             setMaintenanceType('MONTHLY');
             setJoiningDate(new Date().toISOString().split('T')[0]);
-            setPrefs(null);
+            setDefaultsSource(null);
+            setCustomizedFields({});
             setLoadingRooms(true);
-            setLoadingPrefs(true);
             fetchRooms();
-            fetchPreferences();
         }
     }, [isOpen]);
-
-    const fetchPreferences = async () => {
-        try {
-            const res = await api.get('/owner/me/preferences');
-            const p = res.data;
-            setPrefs(p);
-            setAdvanceAmount(String(p.advance_amount_default ?? 0));
-            setMaintenanceAmount(String(p.maintenance_amount_default ?? 0));
-            if (p.maintenance_type) setMaintenanceType(p.maintenance_type);
-        } catch {
-            setPrefs({ advance_enabled: false, maintenance_enabled: false });
-        } finally {
-            setLoadingPrefs(false);
-        }
-    };
 
     const fetchRooms = async () => {
         try {
             const response = await api.get('/rooms?grouped=false');
             const allRooms = response.data || [];
-            setRooms(allRooms.filter(r => !r.is_full));
+            const availableRooms = allRooms.filter(r => !r.is_full);
+            setRooms(availableRooms);
+
+            const hostelIds = [...new Set(availableRooms.map(r => r.hostel_id).filter(Boolean))];
+            if (hostelIds.length === 1) {
+                try {
+                    const defaults = await api.get(`/hostels/${hostelIds[0]}/billing-defaults`);
+                    const billingDefaults = defaults.data?.billing_defaults || {};
+                    setAdvanceAmount(String(billingDefaults.advance_deposit ?? 0));
+                    setMaintenanceAmount(String(billingDefaults.maintenance_type === 'NONE' ? 0 : (billingDefaults.maintenance_charge ?? 0)));
+                    setMaintenanceType(billingDefaults.maintenance_type || 'MONTHLY');
+                    setDefaultsSource({ billing_defaults: billingDefaults });
+                } catch {
+                    // Room selection still performs authoritative room->hostel resolution.
+                }
+            }
         } catch {
             setRooms([]);
         } finally {
@@ -78,11 +78,48 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
         }
     };
 
-    const handleRoomChange = (e) => {
+    const handleRoomChange = async (e) => {
         const selectedId = e.target.value;
         setRoomId(selectedId);
-        const selectedRoom = rooms.find(r => r.id === selectedId);
-        if (selectedRoom?.monthly_rent) setMonthlyRent(selectedRoom.monthly_rent);
+        setCustomizedFields({});
+        setDefaultsSource(null);
+
+        if (!selectedId) {
+            setMonthlyRent('');
+            setAdvanceAmount('');
+            setMaintenanceAmount('');
+            setMaintenanceType('MONTHLY');
+            return;
+        }
+
+        setLoadingDefaults(true);
+        setError('');
+        try {
+            const res = await api.get(`/rooms/${selectedId}/invite-defaults`);
+            const resolved = res.data?.resolved_values || {};
+            setMonthlyRent(String(resolved.monthly_rent ?? ''));
+            setAdvanceAmount(String(resolved.advance_deposit ?? 0));
+            setMaintenanceAmount(String(resolved.maintenance_charge ?? 0));
+            setMaintenanceType(resolved.maintenance_type || 'MONTHLY');
+            setDefaultsSource(res.data);
+        } catch (err) {
+            const detail = err.response?.data?.error?.message ?? err.response?.data?.detail;
+            setError(typeof detail === 'string' ? detail : 'Could not load room billing defaults.');
+        } finally {
+            setLoadingDefaults(false);
+        }
+    };
+
+    const updateCustomized = (field, setter) => (e) => {
+        setCustomizedFields(prev => ({ ...prev, [field]: true }));
+        setter(e.target.value);
+    };
+
+    const handleMaintenanceTypeChange = (e) => {
+        const nextType = e.target.value;
+        setCustomizedFields(prev => ({ ...prev, maintenance_type: true }));
+        setMaintenanceType(nextType);
+        if (nextType === 'NONE') setMaintenanceAmount('0');
     };
 
     const handleSubmit = async (e) => {
@@ -231,8 +268,17 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                                                 <CreditCard className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
                                             </div>
-                                            <input type="number" value={monthlyRent} onChange={e => setMonthlyRent(e.target.value)} className={inputCls} placeholder="8000" required />
+                                            <input
+                                                type="number"
+                                                value={monthlyRent}
+                                                onChange={updateCustomized('monthly_rent', setMonthlyRent)}
+                                                className={inputCls}
+                                                placeholder={roomId ? '8000' : 'Select a room first'}
+                                                required
+                                                disabled={!roomId || loadingDefaults}
+                                            />
                                         </div>
+                                        {!roomId && <p className="text-xs text-slate-400 ml-1">Rent fills from the selected room.</p>}
                                     </div>
                                     <div className="space-y-2">
                                         <label className={labelCls}>Assign Room *</label>
@@ -252,6 +298,17 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                     </div>
                                 </div>
 
+                                {defaultsSource?.room && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: -4 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700"
+                                    >
+                                        <CheckCircle2 size={14} />
+                                        Auto-filled from room & hostel settings
+                                    </motion.div>
+                                )}
+
                                 {/* Joining Date */}
                                 <div className="space-y-2">
                                     <label className={labelCls}>Joining Date *</label>
@@ -268,13 +325,17 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                 <div className="space-y-2">
                                     <label className={labelCls}>
                                         Advance / Security Deposit (₹)
-                                        {prefs && <span className="ml-1 normal-case font-normal text-indigo-400">from settings</span>}
+                                        {defaultsSource && (
+                                            <span className="ml-1 normal-case font-normal text-indigo-400">
+                                                {customizedFields.advance_deposit ? 'customized' : 'from hostel settings'}
+                                            </span>
+                                        )}
                                     </label>
                                     <div className="relative group">
                                         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                                             <Wallet className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
                                         </div>
-                                        <input type="number" min="0" value={advanceAmount} onChange={e => setAdvanceAmount(e.target.value)} className={inputCls} placeholder="0" />
+                                        <input type="number" min="0" value={advanceAmount} onChange={updateCustomized('advance_deposit', setAdvanceAmount)} className={inputCls} placeholder="0" />
                                     </div>
                                     <p className="text-xs text-slate-400 ml-1">One-time refundable deposit. Due on joining date.</p>
                                 </div>
@@ -284,13 +345,17 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                     <div className="col-span-2 space-y-2">
                                         <label className={labelCls}>
                                             Maintenance (₹)
-                                            {prefs && <span className="ml-1 normal-case font-normal text-indigo-400">from settings</span>}
+                                            {defaultsSource && (
+                                                <span className="ml-1 normal-case font-normal text-indigo-400">
+                                                    {customizedFields.maintenance_charge ? 'customized' : 'from hostel settings'}
+                                                </span>
+                                            )}
                                         </label>
                                         <div className="relative group">
                                             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                                                 <Wrench className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
                                             </div>
-                                            <input type="number" min="0" value={maintenanceAmount} onChange={e => setMaintenanceAmount(e.target.value)} className={inputCls} placeholder="0" />
+                                            <input type="number" min="0" value={maintenanceAmount} onChange={updateCustomized('maintenance_charge', setMaintenanceAmount)} className={inputCls} placeholder="0" disabled={maintenanceType === 'NONE'} />
                                         </div>
                                     </div>
                                     <div className="space-y-2">
@@ -299,23 +364,26 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                                                 <Settings2 className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
                                             </div>
-                                            <select value={maintenanceType} onChange={e => setMaintenanceType(e.target.value)} className={`${inputCls} appearance-none`}>
+                                            <select value={maintenanceType} onChange={handleMaintenanceTypeChange} className={`${inputCls} appearance-none`}>
                                                 <option value="MONTHLY">Monthly</option>
                                                 <option value="ONE_TIME">One-time</option>
+                                                <option value="NONE">None</option>
                                             </select>
                                         </div>
                                     </div>
                                 </div>
                                 <p className="text-xs text-slate-400 ml-1 -mt-3">
-                                    {maintenanceType === 'MONTHLY' ? 'Added to every rent cycle alongside rent.' : 'Single charge due on joining date.'}
+                                    {maintenanceType === 'MONTHLY' && 'Added to every rent cycle alongside rent.'}
+                                    {maintenanceType === 'ONE_TIME' && 'Single charge due on joining date.'}
+                                    {maintenanceType === 'NONE' && 'No maintenance obligation will be created for this tenant.'}
                                 </p>
 
                                 <button
                                     type="submit"
-                                    disabled={isSubmitting}
+                                    disabled={isSubmitting || loadingDefaults}
                                     className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl shadow-xl shadow-indigo-600/20 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-70 disabled:hover:scale-100 mt-2"
                                 >
-                                    {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Send size={18} />Send Invitation</>}
+                                    {isSubmitting || loadingDefaults ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Send size={18} />Send Invitation</>}
                                 </button>
                             </motion.form>
                         )}
