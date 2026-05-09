@@ -109,18 +109,11 @@ export class AuthService {
   }
 
   async registerOwner(data: {
-    email: string;
+    email:    string;
     password: string;
-    name: string;
-    phone?: string;
-    hostel_name: string;
-    hostel_phone: string;
-    hostel_address: string;
-    hostel_city: string;
-    hostel_state: string;
-    hostel_pincode: string;
-    upi_id?: string;
-    gst_number?: string;
+    name:     string;
+    phone?:   string;
+    role?:    string;
   }) {
     const normalizedEmail = data.email.trim().toLowerCase();
 
@@ -151,45 +144,32 @@ export class AuthService {
       console.warn("Supabase auth admin createUser threw, using local UUID fallback", supabaseCreateError?.message);
     }
 
-    // 3. Hash password and create profile + hostel in one transaction
+    // 3. Hash password and create profile (no hostel — captured in onboarding step 2)
     const hashedPassword = await hashPassword(data.password);
 
     try {
       const profile = await prisma.profile.create({
         data: {
-          id: userId,
-          email: normalizedEmail,
+          id:       userId,
+          email:    normalizedEmail,
           password_hash: hashedPassword,
-          name: data.name,
-          phone: data.phone || null,
-          role: "OWNER",
+          name:     data.name,
+          phone:    data.phone || null,
+          role:     "OWNER",
           is_active: true,
-          owner_id: userId,
-          hostels: {
-            create: {
-              name: data.hostel_name,
-              phone: data.hostel_phone,
-              address: data.hostel_address,
-              city: data.hostel_city,
-              state: data.hostel_state,
-              pincode: data.hostel_pincode,
-              upi_id: data.upi_id || null,
-              gst_number: data.gst_number || null,
-            },
-          },
+          owner_id:  userId,
         },
-        include: { hostels: true },
       });
 
       // Every new owner gets a FREE subscription row immediately.
       // Without this, all plan enforcement throws "No subscription found".
       await prisma.ownerSubscription.upsert({
-        where: { owner_id: userId },
+        where:  { owner_id: userId },
         update: {},
         create: {
-          owner_id: userId,
-          plan_id: "FREE",
-          status: "FREE",
+          owner_id:   userId,
+          plan_id:    "FREE",
+          status:     "FREE",
           start_date: new Date(),
           auto_renew: false,
         },
