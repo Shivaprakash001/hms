@@ -10,6 +10,7 @@ import Login from './pages/auth/Login.jsx';
 import Legal from './pages/Legal.jsx';
 import OwnerLayout from './layouts/OwnerLayout.jsx';
 import TenantLayout from './layouts/TenantLayout.jsx';
+import { HostelContextProvider, LegacyOwnerOperationalRedirect } from './context/HostelContext.jsx';
 
 // ── Auth pages — small, low priority ─────────────────────────────────────────
 const Register        = lazy(() => import('./pages/auth/Register.jsx'));
@@ -36,6 +37,7 @@ const Expenses          = lazy(() => import('./pages/owner/Expenses.jsx'));
 const ActivityHistory   = lazy(() => import('./pages/owner/ActivityHistory.jsx'));
 const BillingPlans      = lazy(() => import('./pages/owner/BillingPlans.jsx'));
 const OwnerProfile      = lazy(() => import('./pages/owner/settings/OwnerSettings'));
+const Portfolio         = lazy(() => import('./pages/owner/Portfolio.jsx'));
 const TenantProfilePage = lazy(() => import('./pages/owner/TenantProfilePage.jsx'));
 
 // ── Tenant pages — code-split per route ──────────────────────────────────────
@@ -95,6 +97,21 @@ function App() {
             {/* Owner Routes */}
             <Route element={<ProtectedOwnerRoute />}>
               <Route path="/owner" element={<OwnerLayout />}>
+                <Route index element={<Navigate to="portfolio" replace />} />
+                <Route path="dashboard"  element={<LegacyOwnerOperationalRedirect />} />
+                <Route path="tenants"    element={<LegacyOwnerOperationalRedirect />} />
+                <Route path="tenants/:id" element={<LegacyOwnerOperationalRedirect />} />
+                <Route path="rooms"      element={<LegacyOwnerOperationalRedirect />} />
+                <Route path="payments"   element={<LegacyOwnerOperationalRedirect />} />
+                <Route path="expenses"   element={<LegacyOwnerOperationalRedirect />} />
+                <Route path="activities" element={<LegacyOwnerOperationalRedirect />} />
+                <Route path="activity"   element={<LegacyOwnerOperationalRedirect />} />
+                <Route path="billing"    element={<BillingPlans />} />
+                <Route path="profile"    element={<OwnerProfile />} />
+                <Route path="portfolio"  element={<Portfolio />} />
+              </Route>
+
+              <Route path="/hostels/:hostelId" element={<HostelContextProvider><OwnerLayout /></HostelContextProvider>}>
                 <Route index element={<Navigate to="dashboard" replace />} />
                 <Route path="dashboard"  element={<OwnerDashboard />} />
                 <Route path="tenants"    element={<ManageTenants />} />
@@ -103,9 +120,7 @@ function App() {
                 <Route path="payments"   element={<Payments />} />
                 <Route path="expenses"   element={<Expenses />} />
                 <Route path="activities" element={<ActivityHistory />} />
-                <Route path="activity"   element={<Navigate to="/owner/activities" replace />} />
-                <Route path="billing"    element={<BillingPlans />} />
-                <Route path="profile"    element={<OwnerProfile />} />
+                <Route path="activity"   element={<Navigate to="activities" replace />} />
               </Route>
             </Route>
 

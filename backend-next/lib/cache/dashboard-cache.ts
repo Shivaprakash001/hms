@@ -10,6 +10,18 @@ export function invalidateDashboardCache(ownerId: string) {
   dashboardSnapshotService.markOwnerStale(ownerId).catch(() => {});
 }
 
+export function invalidateHostelDashboardCache(hostelId: string) {
+  for (const key of Array.from(dashboardCache.keys())) {
+    if (key.includes(`_${hostelId}`) || key === hostelId) dashboardCache.delete(key);
+  }
+}
+
+export function invalidatePortfolioCache(ownerId: string) {
+  for (const key of Array.from(dashboardCache.keys())) {
+    if (key.startsWith(`portfolio_${ownerId}`)) dashboardCache.delete(key);
+  }
+}
+
 export function getCachedDashboard(ownerId: string) {
   const entry = dashboardCache.get(ownerId);
 

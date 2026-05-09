@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { rentGenerationService } from "@/lib/services/rent-generation-service";
 import { authService } from "@/lib/services/auth-service";
 import { apiError } from "@/lib/utils/api-utils";
+import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
 
 /**
  * 🔧 FIX C1: Redirected from old paymentService.previewMonthlyRent to canonical rentGenerationService.
@@ -18,6 +19,12 @@ export async function GET(req: NextRequest) {
     }
 
     const rentMonth = req.nextUrl.searchParams.get("rent_month");
+    const hostelId = req.nextUrl.searchParams.get("hostelId") || undefined;
+    if (!hostelId) {
+      return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
+    }
+    await requireHostelBelongsToOwner(user.id, hostelId);
+
     let targetDate: Date | undefined;
     if (rentMonth) {
       targetDate = new Date(rentMonth);
@@ -25,7 +32,8 @@ export async function GET(req: NextRequest) {
 
     const result = await rentGenerationService.previewMonthlyRent(
       targetDate,
-      user.role === "OWNER" ? user.id : undefined
+      user.id,
+      hostelId
     );
 
     return NextResponse.json(result);

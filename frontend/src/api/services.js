@@ -224,8 +224,8 @@ export const addonService = {
 
 // --- Tenant Services ---
 export const tenantService = {
-    getAll: async (params) => {
-        const response = await api.get('/tenants', { params });
+    getAll: async (hostelId, params = {}) => {
+        const response = await api.get('/tenants', { params: { ...params, hostelId } });
         return response.data;
     },
     getById: async (id) => {
@@ -333,8 +333,8 @@ export const tenantService = {
 
 // --- Room Services ---
 export const roomService = {
-    getAll: async (params) => {
-        const response = await api.get('/rooms', { params });
+    getAll: async (hostelId, params = {}) => {
+        const response = await api.get('/rooms', { params: { ...params, hostelId } });
         return response.data;
     },
     getById: async (id) => {
@@ -349,8 +349,8 @@ export const roomService = {
         const response = await api.get(`/rooms/${id}/invite-defaults`);
         return response.data;
     },
-    create: async (data) => {
-        const response = await api.post('/rooms', data);
+    create: async (hostelId, data) => {
+        const response = await api.post('/rooms', { ...data, hostelId });
         return response.data;
     },
     update: async (id, data) => {
@@ -365,24 +365,24 @@ export const roomService = {
 
 // --- Allocation Services ---
 export const allocationService = {
-    allocate: async (data) => {
-        const response = await api.post('/allocations', data);
+    allocate: async (hostelId, data) => {
+        const response = await api.post('/allocations', { ...data, hostelId });
         return response.data;
     },
     end: async (allocationId, data) => {
         const response = await api.patch(`/allocations/${allocationId}/end`, data);
         return response.data;
     },
-    shift: async (data) => {
-        const response = await api.post('/allocations/shift', data);
+    shift: async (hostelId, data) => {
+        const response = await api.post('/allocations/shift', { ...data, hostelId });
         return response.data;
     },
-    getTenantHistory: async (tenantId) => {
+    getTenantHistory: async (tenantId, hostelId) => {
         const response = await api.get(`/allocations/tenant/${tenantId}`);
         return response.data;
     },
-    getAllActive: async () => {
-        const response = await api.get('/allocations');
+    getAllActive: async (hostelId) => {
+        const response = await api.get('/allocations', { params: { hostelId } });
         return response.data;
     },
     getHistory: async () => {
@@ -402,12 +402,12 @@ export const identityService = {
 
 // --- Payment Services ---
 export const paymentService = {
-    getAll: async (params) => {
-        const response = await api.get('/payments', { params });
+    getAll: async (hostelId, params = {}) => {
+        const response = await api.get('/payments', { params: { ...params, hostelId } });
         return response.data;
     },
-    getAllDues: async (params) => {
-        const response = await api.get('/payments/dues', { params });
+    getAllDues: async (hostelId, params = {}) => {
+        const response = await api.get('/payments/dues', { params: { ...params, hostelId } });
         return response.data;
     },
     getTenantHistory: async (tenantId) => {
@@ -424,8 +424,8 @@ export const paymentService = {
             if (tenantId) {
                 // Owner fetches a tenant-scoped ledger from payments service
                 const [dues, paymentsResult] = await Promise.all([
-                    api.get('/payments/dues', { params: { tenant_id: tenantId } }),
-                    api.get('/payments', { params: { tenant_id: tenantId, limit: 500 } })
+                    api.get('/payments/dues', { params: { tenant_id: tenantId, hostelId } }),
+                    api.get('/payments', { params: { tenant_id: tenantId, limit: 500, hostelId } })
                 ]);
 
                 const obligations = (dues.data || []).filter((o) => o.tenant_id === tenantId);
@@ -553,12 +553,12 @@ export const paymentService = {
         const response = await api.post('/payments/manual-confirm', { attempt_id: attemptId });
         return response.data;
     },
-    generateRent: async (month) => {
-        const response = await api.post('/rent/generate', { month });
+    generateRent: async (hostelId, month) => {
+        const response = await api.post('/rent/generate', { month, hostelId });
         return response.data;
     },
-    previewGenerateRent: async (month) => {
-        const response = await api.get('/rent/generate', { params: { month } });
+    previewGenerateRent: async (hostelId, month) => {
+        const response = await api.get('/rent/generate', { params: { month, hostelId } });
         return response.data;
     },
     waive: async (obligationId, reason) => {
@@ -620,12 +620,12 @@ export const paymentService = {
 
 // --- Expense Service ---
 export const expenseService = {
-    getAll: async () => {
-        const response = await api.get('/expenses');
+    getAll: async (hostelId) => {
+        const response = await api.get('/expenses', { params: { hostelId } });
         return response.data;
     },
-    create: async (data) => {
-        const response = await api.post('/expenses', data);
+    create: async (hostelId, data) => {
+        const response = await api.post('/expenses', { ...data, hostelId });
         return response.data;
     },
     update: async (id, data) => {
@@ -660,41 +660,41 @@ const requestWithRetry = async (fn, { retries = 2, delayMs = 1500 } = {}) => {
 
 // --- Dashboard Service ---
 export const dashboardService = {
-    getUnified: async (months = 6) => {
-        const response = await api.get('/dashboard', { params: { months } });
+    getUnified: async (hostelId, months = 6) => {
+        const response = await api.get('/dashboard', { params: { months, hostelId } });
         return response.data;
     },
-    getSummary: async () => {
-        const response = await requestWithRetry(() => api.get('/dashboard/summary'));
+    getSummary: async (hostelId) => {
+        const response = await requestWithRetry(() => api.get('/dashboard/summary', { params: { hostelId } }));
         return response.data;
     },
-    getStats: async () => {
-        const response = await requestWithRetry(() => api.get('/dashboard/stats'));
+    getStats: async (hostelId) => {
+        const response = await requestWithRetry(() => api.get('/dashboard/stats', { params: { hostelId } }));
         return response.data;
     },
-    getMonthlyStats: async (months = 6) => {
-        const response = await requestWithRetry(() => api.get(`/dashboard/monthly-stats?months=${months}`));
+    getMonthlyStats: async (hostelId, months = 6) => {
+        const response = await requestWithRetry(() => api.get('/dashboard/monthly-stats', { params: { months, hostelId } }));
         return response.data;
     }
 };
 
 // --- Rent Generation Service ---
 export const rentService = {
-    preview: async (month) => {
-        const params = month ? { month } : {};
+    preview: async (hostelId, month) => {
+        const params = { ...(month ? { month } : {}), hostelId };
         const response = await api.get('/rent/generate', { params });
         return response.data;
     },
-    generate: async (month) => {
-        const response = await api.post('/rent/generate', month ? { month } : {});
+    generate: async (hostelId, month) => {
+        const response = await api.post('/rent/generate', { ...(month ? { month } : {}), hostelId });
         return response.data;
     }
 };
 
 // --- Activity Service ---
 export const activityService = {
-    getAll: async (params = {}) => {
-        const response = await requestWithRetry(() => api.get('/activity', { params }));
+    getAll: async (hostelId, params = {}) => {
+        const response = await requestWithRetry(() => api.get('/activity', { params: { ...params, hostelId } }));
         return response.data;
     }
 };
@@ -755,29 +755,29 @@ export const sseService = {
 
 // --- Analytics Dashboard Service (dedicated endpoints, backend-next) ---
 export const analyticsService = {
-    getCashflow: async (from, to) => {
-        const params = {};
+    getCashflow: async (hostelId, from, to) => {
+        const params = { hostelId };
         if (from) params.from = from;
         if (to)   params.to   = to;
         const response = await api.get('/dashboard/cashflow', { params });
         return response.data;
     },
-    getTenants: async (from, to) => {
-        const params = {};
+    getTenants: async (hostelId, from, to) => {
+        const params = { hostelId };
         if (from) params.from = from;
         if (to)   params.to   = to;
         const response = await api.get('/dashboard/tenants', { params });
         return response.data;
     },
-    getFunnel: async (from, to) => {
-        const params = {};
+    getFunnel: async (hostelId, from, to) => {
+        const params = { hostelId };
         if (from) params.from = from;
         if (to)   params.to   = to;
         const response = await api.get('/dashboard/funnel', { params });
         return response.data;
     },
-    getOperations: async (from, to) => {
-        const params = {};
+    getOperations: async (hostelId, from, to) => {
+        const params = { hostelId };
         if (from) params.from = from;
         if (to)   params.to   = to;
         const response = await api.get('/dashboard/operations', { params });

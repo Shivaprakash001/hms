@@ -8,10 +8,12 @@ import EditRoomModal from '../../components/owner/rooms/EditRoomModal';
 import { roomService, allocationService, tenantService } from '../../api/services';
 import { useRooms } from '../../hooks/useRooms';
 import { useAppPreferences } from '../../context/AppPreferencesContext';
+import { useHostelContext } from '../../context/HostelContext';
 import { formatCurrency, formatDate } from '../../utils/format';
 
 const ManageRooms = () => {
     const { preferences } = useAppPreferences();
+    const { hostelId } = useHostelContext();
     // State
     const [selectedRoom, setSelectedRoom] = useState(null);
     const [showAddRoomModal, setShowAddRoomModal] = useState(false);
@@ -64,7 +66,7 @@ const ManageRooms = () => {
         floorsList.flatMap((floor) => floor.rooms).find((room) => room.id === roomId) || null
     );
 
-    const { data: floorsData, isLoading: loading, error: fetchError, refetch: refetchRooms } = useRooms({ grouped: true });
+    const { data: floorsData, isLoading: loading, error: fetchError, refetch: refetchRooms } = useRooms(hostelId, { grouped: true });
     
     const floors = useMemo(() => normalizeFloors(floorsData), [floorsData]);
     const error = fetchError ? "Failed to load room data. Please try again." : null;
@@ -111,7 +113,7 @@ const ManageRooms = () => {
     // Handlers
     const handleAddRoom = async (roomData) => {
         try {
-            await roomService.create({
+            await roomService.create(hostelId, {
                 room_no: roomData.number,
                 capacity: parseInt(roomData.capacity),
                 type: roomData.type,
@@ -169,7 +171,7 @@ const ManageRooms = () => {
             try {
                 const today = new Date();
                 const localDate = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
-                await allocationService.allocate({
+                await allocationService.allocate(hostelId, {
                     tenant_id: tenantId,
                     room_id: room.id,
                     start_date: localDate
@@ -182,7 +184,7 @@ const ManageRooms = () => {
                     if (confirmShift) {
                         const today = new Date();
                         const localDate = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
-                        await allocationService.shift({
+                        await allocationService.shift(hostelId, {
                             tenant_id: tenantId,
                             new_room_id: room.id,
                             shift_date: tenantData.joinDate || localDate
@@ -222,7 +224,7 @@ const ManageRooms = () => {
         try {
             const today = new Date();
             const localDate = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
-            await allocationService.shift({
+            await allocationService.shift(hostelId, {
                 tenant_id: tenantId,
                 new_room_id: newRoomId,
                 shift_date: localDate

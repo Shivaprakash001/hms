@@ -26,7 +26,7 @@ import { operationalPendingInvariantHolds } from "./financial-invariants";
  */
 
 export class DashboardService {
-  async getOwnerStats(userId: string, hostelId?: string) {
+  async getOwnerStats(userId: string, hostelId: string) {
     // Use UTC month boundaries for DATE column filtering.
     //
     // payments.payment_date is @db.Date (PostgreSQL DATE, no time component).
@@ -48,13 +48,13 @@ export class DashboardService {
     const monthStart = new Date(Date.UTC(utcYear, utcMonth, 1, 0, 0, 0, 0));
     const nextMonthStart = new Date(Date.UTC(utcYear, utcMonth + 1, 1, 0, 0, 0, 0));
 
-    const hostelRoomFilter = hostelId ? Prisma.sql`AND h.id = ${hostelId}::uuid` : Prisma.empty;
-    const hostelPaymentFilter = hostelId ? { hostel_id: hostelId } : {};
+    const hostelRoomFilter = Prisma.sql`AND h.id = ${hostelId}::uuid`;
+    const hostelPaymentFilter = { hostel_id: hostelId };
 
     // ✅ Use count()+aggregate instead of findMany — avoids fetching full rows for JS-side counting
     const [totalTenants, activeTenants, roomStats, payments, costs] = await Promise.all([
-      prisma.tenant.count({ where: { owner_id: userId, ...(hostelId ? { hostel_id: hostelId } : {}) } }),
-      prisma.tenant.count({ where: { owner_id: userId, status: "ACTIVE", ...(hostelId ? { hostel_id: hostelId } : {}) } }),
+      prisma.tenant.count({ where: { owner_id: userId, hostel_id: hostelId } }),
+      prisma.tenant.count({ where: { owner_id: userId, status: "ACTIVE", hostel_id: hostelId } }),
       prisma.$queryRaw<{ total_rooms: number; total_capacity: number }[]>`
         SELECT COUNT(r.id)::int AS total_rooms, COALESCE(SUM(r.capacity), 0)::int AS total_capacity
         FROM rooms r JOIN hostels h ON h.id = r.hostel_id
@@ -115,7 +115,7 @@ export class DashboardService {
     };
   }
 
-  async getMonthlyStats(userId: string, months: number = 6, hostelId?: string) {
+  async getMonthlyStats(userId: string, hostelId: string, months: number = 6) {
     const now = new Date();
 
     // Build all date ranges first so we can fire every query in one parallel batch
@@ -164,7 +164,8 @@ export class DashboardService {
 
     if (!tenant) throw new Error("NOT_FOUND: Tenant record not found");
 
-    const dues = await financialService.getTenantDues(tenant.id);
+    if (!tenant.hostel_id) throw new Error("HOSTEL_CONTEXT_REQUIRED: tenant hostel scope unavailable");
+    const dues = await financialService.getTenantDues(tenant.id, tenant.owner_id || undefined, tenant.hostel_id);
     const pendingTotal = dues.total_due;
     const nextItem = dues.items[0];
     const nextPayment: Date | null = nextItem?.due_date ?? null;

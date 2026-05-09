@@ -10,6 +10,7 @@ import api from '../../api/axios';
 import { useAppPreferences } from '../../context/AppPreferencesContext';
 import { formatCurrency, formatDate } from '../../utils/format';
 import { queryKeys } from '../../lib/query/queryKeys';
+import { useHostelContext } from '../../context/HostelContext';
 
 // --- Local Service Helper ---
 const fetchTenantFull = async (id) => {
@@ -29,6 +30,7 @@ const rejectDocument = async ({ tenantId, docId, reason }) => {
 
 export default function TenantProfilePage() {
   const { preferences } = useAppPreferences();
+  const { hostelId } = useHostelContext();
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -36,7 +38,7 @@ export default function TenantProfilePage() {
   const [previewDoc, setPreviewDoc] = useState(null);
 
   const { data: tenant, isLoading, isError } = useQuery({
-    queryKey: queryKeys.tenants.detail(id),
+    queryKey: queryKeys.tenants.detail(hostelId, id),
     queryFn: () => fetchTenantFull(id),
     staleTime: 5 * 60 * 1000,
   });
@@ -44,16 +46,16 @@ export default function TenantProfilePage() {
   const verifyMutation = useMutation({
     mutationFn: verifyDocument,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.tenants.detail(id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.tenants.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tenants.detail(hostelId, id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tenants.all(hostelId) });
     }
   });
 
   const rejectMutation = useMutation({
     mutationFn: rejectDocument,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.tenants.detail(id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.tenants.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tenants.detail(hostelId, id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tenants.all(hostelId) });
     }
   });
 
@@ -71,7 +73,7 @@ export default function TenantProfilePage() {
         <AlertCircle size={48} className="mx-auto text-rose-500 mb-4" />
         <h2 className="text-xl font-bold text-slate-800">Failed to load tenant</h2>
         <p className="text-slate-500 mt-2 mb-6">The tenant might not exist or you don't have access.</p>
-        <button onClick={() => navigate('/owner/tenants')} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-2 rounded-xl font-bold transition">
+        <button onClick={() => navigate(`/hostels/${hostelId}/tenants`)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-2 rounded-xl font-bold transition">
           Go Back
         </button>
       </div>

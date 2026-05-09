@@ -4,7 +4,6 @@ import { motion } from 'framer-motion';
 import { Wallet, Lock, ArrowRight, Loader2 } from 'lucide-react';
 import { ownerService } from '../../api/services';
 import { setStoredStep } from '../../hooks/useOnboardingState';
-import { getActiveHostelId, setActiveHostelId } from '../../lib/hostel/activeHostel';
 
 export default function OnboardingPayments() {
   const navigate = useNavigate();
@@ -17,15 +16,11 @@ export default function OnboardingPayments() {
   useEffect(() => {
     ownerService.getProfile()
       .then((profile) => {
-        const owner = profile?.owner || {};
-        const ownerScope = { ...owner, role: 'owner', owner_id: owner.id };
-        const existing = getActiveHostelId(ownerScope);
         const hostels = profile?.hostels || (profile?.hostel?.id ? [profile.hostel] : []);
         const [onlyHostel] = hostels;
-        const selected = hostels.find((hostel) => hostel.id === existing) || (hostels.length === 1 ? onlyHostel : null);
+        const selected = hostels.length === 1 ? onlyHostel : null;
         if (selected?.id) {
           setHostelId(selected.id);
-          setActiveHostelId(ownerScope, selected.id);
         }
       })
       .catch(() => {});

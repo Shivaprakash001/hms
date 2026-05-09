@@ -14,9 +14,11 @@ import {
 import { useActivities } from '../../hooks/useActivities';
 import { useAppPreferences } from '../../context/AppPreferencesContext';
 import { formatDate } from '../../utils/format';
+import { useHostelContext } from '../../context/HostelContext';
 
 const ActivityHistory = () => {
     const { preferences } = useAppPreferences();
+    const { hostelId } = useHostelContext();
     const navigate = useNavigate();
     const [searchTerm, setSearchTerm] = useState('');
     const [typeFilter, setTypeFilter] = useState('all');
@@ -34,7 +36,7 @@ const ActivityHistory = () => {
     if (dateFilter.start) params.start_date = dateFilter.start;
     if (dateFilter.end) params.end_date = dateFilter.end;
 
-    const { data: activitiesData, isLoading: loading } = useActivities(params);
+    const { data: activitiesData, isLoading: loading } = useActivities(hostelId, params);
 
     const activities = Array.isArray(activitiesData?.items) ? activitiesData.items : [];
     const total = Number(activitiesData?.total || 0);

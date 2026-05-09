@@ -5,10 +5,11 @@ import { queryKeys } from '../lib/query/queryKeys';
 /**
  * Fetch all rooms with optional filtering
  */
-export const useRooms = (params = {}) => {
+export const useRooms = (hostelId, params = {}) => {
   return useQuery({
-    queryKey: queryKeys.rooms.list(params),
-    queryFn:  () => roomService.getAll(params),
+    queryKey: queryKeys.rooms.list(hostelId, params),
+    queryFn:  () => roomService.getAll(hostelId, params),
+    enabled:  !!hostelId,
     staleTime: 5 * 60 * 1000,
     gcTime:    30 * 60 * 1000,
     placeholderData: keepPreviousData,
@@ -18,11 +19,11 @@ export const useRooms = (params = {}) => {
 /**
  * Fetch a single room by ID
  */
-export const useRoom = (roomId) => {
+export const useRoom = (hostelId, roomId) => {
   return useQuery({
-    queryKey: queryKeys.rooms.detail(roomId),
+    queryKey: queryKeys.rooms.detail(hostelId, roomId),
     queryFn:  () => roomService.getById(roomId),
-    enabled:  !!roomId,
+    enabled:  !!hostelId && !!roomId,
     staleTime: 5 * 60 * 1000,
     gcTime:    30 * 60 * 1000,
     placeholderData: keepPreviousData,
@@ -32,24 +33,24 @@ export const useRoom = (roomId) => {
 /**
  * Mutate: Create a new room
  */
-export const useCreateRoom = () => {
+export const useCreateRoom = (hostelId) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data) => roomService.create(data),
-    onSuccess:  () => qc.invalidateQueries({ queryKey: queryKeys.rooms.all() }),
+    mutationFn: (data) => roomService.create(hostelId, data),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: queryKeys.rooms.all(hostelId) }),
   });
 };
 
 /**
  * Mutate: Update a room
  */
-export const useUpdateRoom = (roomId) => {
+export const useUpdateRoom = (hostelId, roomId) => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data) => roomService.update(roomId, data),
     onSuccess:  (updated) => {
-      qc.setQueryData(queryKeys.rooms.detail(roomId), updated);
-      qc.invalidateQueries({ queryKey: queryKeys.rooms.all() });
+      qc.setQueryData(queryKeys.rooms.detail(hostelId, roomId), updated);
+      qc.invalidateQueries({ queryKey: queryKeys.rooms.all(hostelId) });
     },
   });
 };
@@ -57,13 +58,13 @@ export const useUpdateRoom = (roomId) => {
 /**
  * Mutate: Delete a room
  */
-export const useDeleteRoom = () => {
+export const useDeleteRoom = (hostelId) => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id) => roomService.delete(id),
     onSuccess:  (_data, id) => {
-      qc.removeQueries({ queryKey: queryKeys.rooms.detail(id) });
-      qc.invalidateQueries({ queryKey: queryKeys.rooms.all() });
+      qc.removeQueries({ queryKey: queryKeys.rooms.detail(hostelId, id) });
+      qc.invalidateQueries({ queryKey: queryKeys.rooms.all(hostelId) });
     },
   });
 };
@@ -71,10 +72,11 @@ export const useDeleteRoom = () => {
 /**
  * Fetch all active room allocations
  */
-export const useActiveAllocations = () => {
+export const useActiveAllocations = (hostelId) => {
   return useQuery({
-    queryKey: queryKeys.allocations.active(),
-    queryFn:  () => allocationService.getAllActive(),
+    queryKey: queryKeys.allocations.active(hostelId),
+    queryFn:  () => allocationService.getAllActive(hostelId),
+    enabled:  !!hostelId,
     staleTime: 2 * 60 * 1000,
     gcTime:    30 * 60 * 1000,
     placeholderData: keepPreviousData,
@@ -84,15 +86,15 @@ export const useActiveAllocations = () => {
 /**
  * Mutate: Allocate a room to a tenant
  */
-export const useAllocateRoom = () => {
+export const useAllocateRoom = (hostelId) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data) => allocationService.allocate(data),
+    mutationFn: (data) => allocationService.allocate(hostelId, data),
     onSuccess:  () => {
-      qc.invalidateQueries({ queryKey: queryKeys.allocations.all() });
-      qc.invalidateQueries({ queryKey: queryKeys.rooms.all() });
-      qc.invalidateQueries({ queryKey: queryKeys.tenants.all() });
-      qc.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
+      qc.invalidateQueries({ queryKey: queryKeys.allocations.all(hostelId) });
+      qc.invalidateQueries({ queryKey: queryKeys.rooms.all(hostelId) });
+      qc.invalidateQueries({ queryKey: queryKeys.tenants.all(hostelId) });
+      qc.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
     },
   });
 };
@@ -100,15 +102,15 @@ export const useAllocateRoom = () => {
 /**
  * Mutate: End a room allocation
  */
-export const useEndAllocation = () => {
+export const useEndAllocation = (hostelId) => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ allocationId, data }) => allocationService.end(allocationId, data),
     onSuccess:  () => {
-      qc.invalidateQueries({ queryKey: queryKeys.allocations.all() });
-      qc.invalidateQueries({ queryKey: queryKeys.rooms.all() });
-      qc.invalidateQueries({ queryKey: queryKeys.tenants.all() });
-      qc.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
+      qc.invalidateQueries({ queryKey: queryKeys.allocations.all(hostelId) });
+      qc.invalidateQueries({ queryKey: queryKeys.rooms.all(hostelId) });
+      qc.invalidateQueries({ queryKey: queryKeys.tenants.all(hostelId) });
+      qc.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
     },
   });
 };
@@ -116,15 +118,15 @@ export const useEndAllocation = () => {
 /**
  * Mutate: Shift a tenant to a new room
  */
-export const useShiftTenant = () => {
+export const useShiftTenant = (hostelId) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data) => allocationService.shift(data),
+    mutationFn: (data) => allocationService.shift(hostelId, data),
     onSuccess:  () => {
-      qc.invalidateQueries({ queryKey: queryKeys.allocations.all() });
-      qc.invalidateQueries({ queryKey: queryKeys.rooms.all() });
-      qc.invalidateQueries({ queryKey: queryKeys.tenants.all() });
-      qc.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
+      qc.invalidateQueries({ queryKey: queryKeys.allocations.all(hostelId) });
+      qc.invalidateQueries({ queryKey: queryKeys.rooms.all(hostelId) });
+      qc.invalidateQueries({ queryKey: queryKeys.tenants.all(hostelId) });
+      qc.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
     },
   });
 };

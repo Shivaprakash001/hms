@@ -30,6 +30,14 @@ export async function GET(req: NextRequest) {
     return new Response("Unauthorized", { status: 401 });
   }
 
+  const { searchParams } = new URL(req.url);
+  const hostelId = searchParams.get("hostelId") || undefined;
+  const requestedScope = searchParams.get("scope");
+  const scope: "hostel" | "portfolio" | null = hostelId ? "hostel" : requestedScope === "portfolio" ? "portfolio" : null;
+  if (!scope) {
+    return new Response("HOSTEL_CONTEXT_REQUIRED", { status: 400 });
+  }
+
   const stream = new ReadableStream({
     start(controller) {
       const encoder = new TextEncoder();
@@ -44,6 +52,8 @@ export async function GET(req: NextRequest) {
 
       const client = {
         ownerId,
+        hostelId,
+        scope,
         send
       };
 

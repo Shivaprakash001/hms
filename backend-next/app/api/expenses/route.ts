@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
-import { assertHostelBelongsToOwner } from "@/lib/security/scoped-query";
+import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
 import { expenseService } from "@/lib/services/expense-service";
 
 export const runtime = "nodejs";
@@ -21,7 +21,8 @@ export async function GET(req: NextRequest) {
   try {
     const scope = resolveOwnerScope(session);
     const hostelId = req.nextUrl.searchParams.get("hostelId") || undefined;
-    await assertHostelBelongsToOwner(scope.owner_id, hostelId);
+    await requireHostelBelongsToOwner(scope.owner_id, hostelId);
+    if (!hostelId) return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
     const expenses = await expenseService.getAllExpenses(scope.owner_id, hostelId);
     return apiResponse(expenses);
   } catch (error: any) {
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest) {
       return apiError("Missing required fields: title, amount, date, category", "VALIDATION_ERROR", 400);
     }
 
-    await assertHostelBelongsToOwner(scope.owner_id, body.hostelId || undefined);
+    await requireHostelBelongsToOwner(scope.owner_id, body.hostelId || undefined);
 
     const expense = await expenseService.createExpense({
       owner_id: scope.owner_id,

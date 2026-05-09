@@ -45,12 +45,12 @@ export class AnalyticsService {
 
   // ── Dashboard 1: Cashflow ──────────────────────────────────────────────────
 
-  async getCashflowDashboard(ownerId: string, start: Date, end: Date, hostelId?: string) {
+  async getCashflowDashboard(ownerId: string, start: Date, end: Date, hostelId: string) {
 
     // ── Single-pass CTE: replaces 3 separate overdue scans + a tenant findMany ─
     // Before: overdueAgg (aggregate), overdueGroups (groupBy), dueDates (raw) + tenants (findMany)
     // After:  one query returning sum + count + top-5 with names + earliest_due
-    const hostelFilter = hostelId ? Prisma.sql`AND p.hostel_id = ${hostelId}::uuid` : Prisma.empty;
+    const hostelFilter = Prisma.sql`AND p.hostel_id = ${hostelId}::uuid`;
     const [cashflow, daily, topDefaulters] = await Promise.all([
       financialService.getOperationalCashflowMetrics(ownerId, start, end, hostelId),
       prisma.$queryRaw<{ date: string; amount: number }[]>`
@@ -135,9 +135,9 @@ export class AnalyticsService {
 
   // ── Dashboard 2: Tenant Intelligence ──────────────────────────────────────
 
-  async getTenantIntelligenceDashboard(ownerId: string, start: Date, end: Date, hostelId?: string) {
-    const tenantHostelFilter = hostelId ? Prisma.sql`AND t.hostel_id = ${hostelId}::uuid` : Prisma.empty;
-    const paymentHostelFilter = hostelId ? Prisma.sql`AND pay.hostel_id = ${hostelId}::uuid` : Prisma.empty;
+  async getTenantIntelligenceDashboard(ownerId: string, start: Date, end: Date, hostelId: string) {
+    const tenantHostelFilter = Prisma.sql`AND t.hostel_id = ${hostelId}::uuid`;
+    const paymentHostelFilter = Prisma.sql`AND pay.hostel_id = ${hostelId}::uuid`;
     const [distRows, riskyRows, behaviorRows, depRows, exitRows, totalExited, activeCount] =
       await Promise.all([
         prisma.$queryRaw<{ good: bigint; medium: bigint; risky: bigint }[]>`
@@ -196,14 +196,14 @@ export class AnalyticsService {
           FROM tenants
           WHERE owner_id = ${ownerId}::uuid AND status = 'LEFT'
             AND exit_date >= ${start}::date AND exit_date <= ${end}::date
-            ${hostelId ? Prisma.sql`AND hostel_id = ${hostelId}::uuid` : Prisma.empty}
+            AND hostel_id = ${hostelId}::uuid
           GROUP BY exit_reason ORDER BY count DESC LIMIT 5
         `,
         prisma.tenant.count({
-          where: { owner_id: ownerId, status: "LEFT", exit_date: { gte: start, lte: end }, ...(hostelId ? { hostel_id: hostelId } : {}) },
+          where: { owner_id: ownerId, hostel_id: hostelId, status: "LEFT", exit_date: { gte: start, lte: end } },
         }),
         // ─ was sequential after the block; now fully parallel ─
-        prisma.tenant.count({ where: { owner_id: ownerId, status: "ACTIVE", ...(hostelId ? { hostel_id: hostelId } : {}) } }),
+        prisma.tenant.count({ where: { owner_id: ownerId, hostel_id: hostelId, status: "ACTIVE" } }),
       ]);
 
     const dist = distRows[0];
@@ -216,6 +216,7 @@ export class AnalyticsService {
     const distribution    = { good: Number(dist?.good ?? 0), medium: Number(dist?.medium ?? 0), risky: Number(dist?.risky ?? 0) };
     const riskyOutstanding = await financialService.getOperationalOutstandingByTenants(
       ownerId,
+      hostelId,
       riskyRows.map((r) => r.tenant_id),
     );
 
@@ -273,10 +274,10 @@ export class AnalyticsService {
 
   // ── Dashboard 3: Reminder Funnel ──────────────────────────────────────────
 
-  async getReminderFunnelDashboard(ownerId: string, start: Date, end: Date, hostelId?: string) {
-    const reminderHostelFilter = hostelId ? Prisma.sql`AND rl.hostel_id = ${hostelId}::uuid` : Prisma.empty;
-    const reminderSubqueryHostelFilter = hostelId ? Prisma.sql`AND rl2.hostel_id = ${hostelId}::uuid` : Prisma.empty;
-    const paymentHostelFilter = hostelId ? Prisma.sql`AND pay.hostel_id = ${hostelId}::uuid` : Prisma.empty;
+  async getReminderFunnelDashboard(ownerId: string, start: Date, end: Date, hostelId: string) {
+    const reminderHostelFilter = Prisma.sql`AND rl.hostel_id = ${hostelId}::uuid`;
+    const reminderSubqueryHostelFilter = Prisma.sql`AND rl2.hostel_id = ${hostelId}::uuid`;
+    const paymentHostelFilter = Prisma.sql`AND pay.hostel_id = ${hostelId}::uuid`;
     const [funnelRows, channelRows] = await Promise.all([
       prisma.$queryRaw<{ sent: bigint; converted: bigint; revenue: number; avg_hours: number }[]>`
         SELECT
@@ -370,10 +371,7 @@ export class AnalyticsService {
 
   // ── Dashboard 4: Operations ───────────────────────────────────────────────
 
-  async getOperationsDashboard(ownerId: string, start: Date, end: Date, hostelId?: string) {
-    // Phase 4: optional hostel isolation for operations
-    const hostelIdFilter = hostelId ? { hostel_id: hostelId } : {};
-    const hostelSqlFilter = hostelId ? `AND h.id = '${hostelId}'::uuid` : "";
+  async getOperationsDashboard(ownerId: string, start: Date, end: Date, hostelId: string) {
     const [roomRows, moveRows, revenueAgg, expenseAgg, complaintRows] = await Promise.all([
       prisma.$queryRaw<{ total_rooms: bigint; total_capacity: bigint; occupied_beds: bigint; avg_vacancy_days: number }[]>`
         SELECT
@@ -389,7 +387,7 @@ export class AnalyticsService {
         FROM rooms r
         JOIN hostels h ON h.id = r.hostel_id
         LEFT JOIN room_allocations ra ON ra.room_id = r.id
-        WHERE h.owner_id = ${ownerId}::uuid AND r.is_active = true
+        WHERE h.owner_id = ${ownerId}::uuid AND h.id = ${hostelId}::uuid AND r.is_active = true
       `,
       prisma.$queryRaw<{ move_ins: bigint; move_outs: bigint }[]>`
         SELECT
@@ -397,14 +395,14 @@ export class AnalyticsService {
           COUNT(CASE WHEN ra.end_date   >= ${start}::date AND ra.end_date   <= ${end}::date THEN 1 END) AS move_outs
         FROM room_allocations ra
         JOIN tenants t ON t.id = ra.tenant_id
-        WHERE t.owner_id = ${ownerId}::uuid
+        WHERE t.owner_id = ${ownerId}::uuid AND ra.hostel_id = ${hostelId}::uuid
       `,
       prisma.payment.aggregate({
-        where: { owner_id: ownerId, payment_date: { gte: start, lte: end } },
+        where: { owner_id: ownerId, hostel_id: hostelId, payment_date: { gte: start, lte: end } },
         _sum: { amount_paid: true },
       }),
       prisma.expense.aggregate({
-        where: { owner_id: ownerId, date: { gte: start, lte: end } },
+        where: { owner_id: ownerId, hostel_id: hostelId, date: { gte: start, lte: end } },
         _sum: { amount: true },
       }),
       prisma.$queryRaw<{ pending: bigint; resolved: bigint; avg_hours: number }[]>`
@@ -417,6 +415,7 @@ export class AnalyticsService {
           ), 0)::float AS avg_hours
         FROM complaints
         WHERE owner_id = ${ownerId}::uuid
+          AND hostel_id = ${hostelId}::uuid
           AND created_at >= ${start} AND created_at <= ${end}
       `,
     ]);

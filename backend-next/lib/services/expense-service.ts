@@ -2,11 +2,11 @@ import { prisma } from "../db";
 import { eventSystem } from "../events";
 
 export class ExpenseService {
-  async getAllExpenses(ownerId: string, hostelId?: string) {
+  async getAllExpenses(ownerId: string, hostelId: string) {
     return prisma.expense.findMany({
       where: {
         owner_id: ownerId,
-        ...(hostelId ? { hostel_id: hostelId } : {}),
+        hostel_id: hostelId,
       },
       orderBy: { date: "desc" }
     });

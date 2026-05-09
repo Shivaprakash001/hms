@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowRight, Loader2, ChevronUp, ChevronDown, Zap, Wallet, Wrench } from 'lucide-react';
 import { ownerService } from '../../api/services';
 import { setStoredStep } from '../../hooks/useOnboardingState';
-import { setActiveHostelId } from '../../lib/hostel/activeHostel';
 
 // Day stepper input component (mobile-friendly, no tiny number input)
 function DayStepper({ id, value, onChange, label, hint }) {
@@ -143,7 +142,6 @@ export default function OnboardingBilling() {
         const selected = hostels.length === 1 ? onlyHostel : null;
         if (selected?.id) {
           setHostelId(selected.id);
-          setActiveHostelId({ ...owner, role: 'owner', owner_id: owner.id }, selected.id);
         }
       })
       .catch(() => {});

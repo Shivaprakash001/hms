@@ -57,12 +57,13 @@ export default function DashboardEmptyState() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [profile, roomsRes, tenantsRes] = await Promise.allSettled([
-          ownerService.getProfile(),
-          roomService.getAll({ limit: 1 }),
-          tenantService.getAll({ limit: 1, status: 'ACTIVE' }),
-        ]);
-        const p = profile.status === 'fulfilled' ? profile.value : {};
+        const profile = await ownerService.getProfile().catch(() => ({}));
+        const hostelId = profile?.hostel?.id || profile?.hostels?.[0]?.id || null;
+        const [roomsRes, tenantsRes] = hostelId ? await Promise.allSettled([
+          roomService.getAll(hostelId, { limit: 1 }),
+          tenantService.getAll(hostelId, { limit: 1, status: 'ACTIVE' }),
+        ]) : [{ status: 'rejected' }, { status: 'rejected' }];
+        const p = profile || {};
         const roomCount   = roomsRes.status === 'fulfilled'
           ? (Array.isArray(roomsRes.value) ? roomsRes.value.length : roomsRes.value?.total ?? 0) : 0;
         const tenantCount = tenantsRes.status === 'fulfilled'

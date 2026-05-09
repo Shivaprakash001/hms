@@ -1,6 +1,6 @@
 import { prisma } from "../db";
 import { eventSystem } from "../events";
-import { invalidateDashboardCache } from "../cache/dashboard-cache";
+import { invalidateHostelDashboardCache } from "../cache/dashboard-cache";
 import { eventLog } from "./event-log-service";
 import { resolvePreferences } from "../preferences";
 import { getDayInTimezone } from "../timezone";
@@ -32,21 +32,22 @@ import { abandonmentService } from "./abandonment-service";
 export class RentGenerationService {
 
   async generateMonthlyRent(
-    targetDate?: Date,
-    ownerId?: string,
-    triggerType: "cron" | "manual" = "manual"
+    targetDate: Date | undefined,
+    ownerId: string,
+    triggerType: "cron" | "manual" = "manual",
+    hostelId: string
   ) {
+    if (!ownerId || !hostelId) {
+      throw new Error("HOSTEL_CONTEXT_REQUIRED: Rent generation requires ownerId and hostelId");
+    }
+
     const startTime = Date.now();
     const now = targetDate || new Date();
     // Deterministic month key — always UTC midnight on 1st
     const rentMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
 
-    // Phase 5: Unified owner-scoped lock key.
-    // Format: rent_gen_<ownerId|global>_<YYYY-MM>
-    // Scoped to owner+month so cron and manual triggers for the SAME owner+month
-    // cannot overlap, while different owners run concurrently without blocking each other.
     const monthKey = `${rentMonth.getUTCFullYear()}-${String(rentMonth.getUTCMonth() + 1).padStart(2, "0")}`;
-    const lockKey = `rent_gen_${ownerId || "global"}_${monthKey}`;
+    const lockKey = `rent_gen_${hostelId}_${monthKey}`;
 
     try {
       // Atomic Lock Acquisition: INSERT with ON CONFLICT DO UPDATE WHERE expires_at < NOW()
@@ -100,16 +101,14 @@ export class RentGenerationService {
       // Find allocations that are active AND haven't ended before this month
       const whereClause: any = {
         is_active: true,
+        hostel_id: hostelId,
         start_date: { lte: monthEndDate },
-        tenant: { status: "ACTIVE" },
+        tenant: { status: "ACTIVE", owner_id: ownerId },
         OR: [
           { end_date: null },
           { end_date: { gte: rentMonth } }
         ]
       };
-      if (ownerId) {
-        whereClause.tenant.owner_id = ownerId;
-      }
 
       const allocations = await prisma.roomAllocation.findMany({
         where: whereClause,
@@ -536,21 +535,21 @@ export class RentGenerationService {
         await eventSystem.trigger("rent_generated", {
           month: rentMonth.toISOString(),
           count: created,
-          ownerId: ownerId || "all"
+          owner_id: ownerId || "all",
+          hostel_id: hostelId || null,
         });
         await eventSystem.trigger("dashboard_updated", {
           reason: "rent_generated",
-          ownerId: ownerId || "all"
+          owner_id: ownerId || "all",
+          hostel_id: hostelId || null,
         });
 
-        // Invalidate dashboard caches for affected owners
-        if (ownerId) {
-          invalidateDashboardCache(ownerId);
+        if (hostelId) {
+          invalidateHostelDashboardCache(hostelId);
         } else {
-          // For cron runs, get distinct owner IDs
-          const ownerIds = Array.from(new Set(allocations.map(a => a.tenant.owner_id).filter(Boolean)));
-          ownerIds.forEach(id => {
-            if (id) invalidateDashboardCache(id);
+          const hostelIds = Array.from(new Set(allocations.map((a: any) => a.hostel_id).filter(Boolean)));
+          hostelIds.forEach(id => {
+            if (id) invalidateHostelDashboardCache(id);
           });
         }
       }
@@ -585,7 +584,11 @@ export class RentGenerationService {
    * Preview what would be generated without writing anything.
    * Pure read-only operation.
    */
-  async previewMonthlyRent(targetDate?: Date, ownerId?: string) {
+  async previewMonthlyRent(targetDate: Date | undefined, ownerId: string, hostelId: string) {
+    if (!ownerId || !hostelId) {
+      throw new Error("HOSTEL_CONTEXT_REQUIRED: Rent preview requires ownerId and hostelId");
+    }
+
     const now = targetDate || new Date();
     const rentMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
 
@@ -594,16 +597,14 @@ export class RentGenerationService {
 
     const whereClause: any = {
       is_active: true,
+      hostel_id: hostelId,
       start_date: { lte: monthEndDate },
-      tenant: { status: "ACTIVE" },
+      tenant: { status: "ACTIVE", owner_id: ownerId },
       OR: [
         { end_date: null },
         { end_date: { gte: rentMonth } }
       ]
     };
-    if (ownerId) {
-      whereClause.tenant.owner_id = ownerId;
-    }
 
     const allocations = await prisma.roomAllocation.findMany({
       where: whereClause,

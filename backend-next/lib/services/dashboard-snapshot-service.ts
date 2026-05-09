@@ -59,6 +59,7 @@ export class DashboardSnapshotService {
   }
 
   async getOwnerStats(ownerId: string) {
+    throw new Error("HOSTEL_CONTEXT_REQUIRED: owner dashboard snapshots are deprecated for operational stats");
     const now = new Date();
     const row: any = await this.fetchSnapshotRow(ownerId);
 
@@ -77,7 +78,7 @@ export class DashboardSnapshotService {
     if (updated) return this.mapStatsRow(updated);
 
     // Fallback in case lock contention and row not yet present.
-    return dashboardService.getOwnerStats(ownerId);
+    throw new Error("HOSTEL_CONTEXT_REQUIRED: owner dashboard snapshots are deprecated for operational stats");
   }
 
   async getMonthlyStats(ownerId: string, months: number) {
@@ -107,7 +108,7 @@ export class DashboardSnapshotService {
       return updated.monthly_trend as MonthlyPoint[];
     }
 
-    return dashboardService.getMonthlyStats(ownerId, months);
+    throw new Error("HOSTEL_CONTEXT_REQUIRED: owner dashboard snapshots are deprecated for operational monthly stats");
   }
 
   private mapStatsRow(row: any) {
@@ -129,6 +130,7 @@ export class DashboardSnapshotService {
   }
 
   private async refreshStats(ownerId: string, existingRow: any) {
+    throw new Error("HOSTEL_CONTEXT_REQUIRED: owner dashboard snapshots are deprecated for operational stats");
     const key = lockKey(ownerId, "stats");
     const acquired = await this.acquireLock(key);
     if (!acquired) {
@@ -137,8 +139,20 @@ export class DashboardSnapshotService {
     }
 
     try {
-      const stats = await dashboardService.getOwnerStats(ownerId);
-      const monthly = await dashboardService.getMonthlyStats(ownerId, 1);
+      const stats = {
+        total_tenants: 0,
+        active_tenants: 0,
+        total_rooms: 0,
+        total_capacity: 0,
+        vacant_beds: 0,
+        occupancy_rate: 0,
+        rent_collected_this_month: 0,
+        expenses_this_month: 0,
+        pending_dues: 0,
+        overdue_amount: 0,
+        overdue_count: 0,
+      };
+      const monthly: MonthlyPoint[] = [];
       const collectionRate = Number(monthly?.[0]?.collection_rate || 0);
       const snapshotMonth = utcMonthStart(new Date());
       const now = new Date();
@@ -181,6 +195,8 @@ export class DashboardSnapshotService {
   }
 
   private async refreshMonthly(ownerId: string, months: number, existingRow: any) {
+    const trend: MonthlyPoint[] = [];
+    throw new Error("HOSTEL_CONTEXT_REQUIRED: owner dashboard snapshots are deprecated for operational monthly stats");
     const key = lockKey(ownerId, "monthly", months);
     const acquired = await this.acquireLock(key);
     if (!acquired) {
@@ -189,7 +205,7 @@ export class DashboardSnapshotService {
     }
 
     try {
-      const trend = await dashboardService.getMonthlyStats(ownerId, months);
+      throw new Error("HOSTEL_CONTEXT_REQUIRED: owner dashboard snapshots are deprecated for operational monthly stats");
       const now = new Date();
       const snapshotMonth = utcMonthStart(now);
       const staleValue = existingRow ? !!existingRow.is_stale : false;

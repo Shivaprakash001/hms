@@ -3,6 +3,7 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { rentGenerationService } from "@/lib/services/rent-generation-service";
+import { prisma } from "@/lib/db";
 
 
 /**
@@ -29,13 +30,34 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const summary = await rentGenerationService.generateMonthlyRent(undefined, undefined, "cron");
+    const hostels = await prisma.hostel.findMany({
+      where: { is_active: true },
+      select: { id: true, owner_id: true },
+    });
+
+    const results = [];
+    for (const hostel of hostels) {
+      const result = await rentGenerationService.generateMonthlyRent(undefined, hostel.owner_id, "cron", hostel.id);
+      results.push({ hostel_id: hostel.id, ...result });
+    }
+
+    const summary = results.reduce(
+      (acc, result: any) => ({
+        created: acc.created + Number(result.created || 0),
+        skipped: acc.skipped + Number(result.skipped || 0),
+        failed: acc.failed + Number(result.failed || 0),
+        locked: acc.locked + (result.locked ? 1 : 0),
+      }),
+      { created: 0, skipped: 0, failed: 0, locked: 0 }
+    );
 
     console.log("[CRON] Monthly rent generation complete:", summary);
 
     return NextResponse.json({
       success: true,
-      ...summary
+      ...summary,
+      hostels_processed: hostels.length,
+      results,
     });
   } catch (error: any) {
     console.error("[CRON] Rent generation failed:", error);

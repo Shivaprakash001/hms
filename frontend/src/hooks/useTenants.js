@@ -2,56 +2,57 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tansta
 import { tenantService } from '../api/services';
 import { queryKeys } from '../lib/query/queryKeys';
 
-export const useTenants = (filters = {}) => {
+export const useTenants = (hostelId, filters = {}) => {
   return useQuery({
-    queryKey: queryKeys.tenants.list(filters),
-    queryFn:  () => tenantService.getAll(filters),
+    queryKey: queryKeys.tenants.list(hostelId, filters),
+    queryFn:  () => tenantService.getAll(hostelId, filters),
+    enabled:  !!hostelId,
     staleTime: 5 * 60 * 1000,
     gcTime:    30 * 60 * 1000,
     placeholderData: keepPreviousData,
   });
 };
 
-export const useTenant = (tenantId) => {
+export const useTenant = (hostelId, tenantId) => {
   return useQuery({
-    queryKey: queryKeys.tenants.detail(tenantId),
+    queryKey: queryKeys.tenants.detail(hostelId, tenantId),
     queryFn:  () => tenantService.getById(tenantId),
-    enabled:  !!tenantId,
+    enabled:  !!hostelId && !!tenantId,
     staleTime: 5 * 60 * 1000,
     gcTime:    30 * 60 * 1000,
     placeholderData: keepPreviousData,
   });
 };
 
-export const useCreateTenant = () => {
+export const useCreateTenant = (hostelId) => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data) => tenantService.create(data),
     onSuccess: (newTenant) => {
-      qc.setQueryData(queryKeys.tenants.detail(newTenant.id), newTenant);
-      qc.invalidateQueries({ queryKey: queryKeys.tenants.all() });
+      qc.setQueryData(queryKeys.tenants.detail(hostelId, newTenant.id), newTenant);
+      qc.invalidateQueries({ queryKey: queryKeys.tenants.all(hostelId) });
     },
   });
 };
 
-export const useUpdateTenant = (tenantId) => {
+export const useUpdateTenant = (hostelId, tenantId) => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data) => tenantService.update(tenantId, data),
     onSuccess: (updated) => {
-      qc.setQueryData(queryKeys.tenants.detail(tenantId), updated);
-      qc.invalidateQueries({ queryKey: queryKeys.tenants.all() });
+      qc.setQueryData(queryKeys.tenants.detail(hostelId, tenantId), updated);
+      qc.invalidateQueries({ queryKey: queryKeys.tenants.all(hostelId) });
     },
   });
 };
 
-export const useDeleteTenant = () => {
+export const useDeleteTenant = (hostelId) => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id) => tenantService.delete(id),
     onSuccess: (_data, id) => {
-      qc.removeQueries({ queryKey: queryKeys.tenants.detail(id) });
-      qc.invalidateQueries({ queryKey: queryKeys.tenants.all() });
+      qc.removeQueries({ queryKey: queryKeys.tenants.detail(hostelId, id) });
+      qc.invalidateQueries({ queryKey: queryKeys.tenants.all(hostelId) });
     },
   });
 };

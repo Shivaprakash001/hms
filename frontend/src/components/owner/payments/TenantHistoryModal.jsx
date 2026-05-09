@@ -5,7 +5,7 @@ import { paymentService } from '../../../api/services';
 import { useAppPreferences } from '../../../context/AppPreferencesContext';
 import { formatCurrency, formatDate, formatMonthYear } from '../../../utils/format';
 
-const TenantHistoryModal = ({ isOpen, onClose, tenantId, tenantName }) => {
+const TenantHistoryModal = ({ isOpen, onClose, tenantId, tenantName, hostelId }) => {
     const { preferences } = useAppPreferences();
     const [history, setHistory] = React.useState([]);
     const [isLoading, setIsLoading] = React.useState(true);
@@ -15,7 +15,7 @@ const TenantHistoryModal = ({ isOpen, onClose, tenantId, tenantName }) => {
             if (!isOpen || !tenantId) return;
             setIsLoading(true);
             try {
-                const data = await paymentService.getTenantHistory(tenantId);
+                const data = await paymentService.getTenantHistory(tenantId, hostelId);
                 const obligations = (data?.obligations || []).map(item => ({
                     id: item.id,
                     amount: Number(item.amount),
@@ -48,7 +48,7 @@ const TenantHistoryModal = ({ isOpen, onClose, tenantId, tenantName }) => {
             }
         };
         fetchHistory();
-    }, [isOpen, tenantId]);
+    }, [isOpen, tenantId, hostelId]);
 
     const handleDownloadReceipt = async (paymentId) => {
         try {

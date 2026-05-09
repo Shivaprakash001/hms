@@ -16,7 +16,10 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const { start, end } = getDateRange(searchParams.get("from"), searchParams.get("to"));
-  const hostelId = searchParams.get("hostelId") || undefined; // Phase 4: hostel isolation
+  const hostelId = searchParams.get("hostelId") || undefined;
+  if (!hostelId) {
+    return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
+  }
 
   try {
     const scope = resolveOwnerScope(session);

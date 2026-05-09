@@ -1,5 +1,6 @@
 import { rentGenerationService } from "../services/rent-generation-service";
 import { paymentService } from "../services/payment-service";
+import { prisma } from "../db";
 
 /**
  * Strategy for Background Jobs in Next.js (Serverless):
@@ -16,12 +17,23 @@ export async function dailyReconciliation() {
 
 export async function monthlyRentGeneration() {
   console.log("[Job] Starting monthly rent generation...");
-  // 🔧 FIX C1: Use the canonical rent generation service (has lock, P2002 catch, UTC dates, preferences)
-  // The old paymentService.generateMonthlyRent was a split-brain duplicate with different rules.
-  const result = await rentGenerationService.generateMonthlyRent(undefined, undefined, "cron");
-  if ("locked" in result) {
-    console.warn(`[Job] Rent generation skipped: ${result.error}`);
-  } else {
-    console.log(`[Job] Rent generation finished: ${result.created} created, ${result.skipped} skipped.`);
+  const hostels = await prisma.hostel.findMany({
+    where: { is_active: true },
+    select: { id: true, owner_id: true },
+  });
+
+  let created = 0;
+  let skipped = 0;
+  let locked = 0;
+  for (const hostel of hostels) {
+    const result = await rentGenerationService.generateMonthlyRent(undefined, hostel.owner_id, "cron", hostel.id);
+    if ("locked" in result) {
+      locked++;
+      console.warn(`[Job] Rent generation skipped for hostel ${hostel.id}: ${result.error}`);
+    } else {
+      created += result.created;
+      skipped += result.skipped;
+    }
   }
+  console.log(`[Job] Rent generation finished: ${created} created, ${skipped} skipped, ${locked} locked.`);
 }

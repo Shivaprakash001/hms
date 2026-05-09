@@ -1,7 +1,7 @@
 import { EventEmitter } from "events";
 import { activityService } from "../services/activity.service";
 import { broadcast } from "./event-bus";
-import { invalidateDashboardCache } from "../cache/dashboard-cache";
+import { invalidateHostelDashboardCache, invalidatePortfolioCache } from "../cache/dashboard-cache";
 
 class HMSEventEmitter extends EventEmitter {
   /**
@@ -10,12 +10,14 @@ class HMSEventEmitter extends EventEmitter {
   async trigger(eventName: string, data: any) {
     console.log(`[Event Triggered]: ${eventName}`, data);
     
-    // Auto-invalidate cache if owner_id is present
     if (data.owner_id) {
-      invalidateDashboardCache(data.owner_id);
+      if (data.hostel_id) invalidateHostelDashboardCache(data.hostel_id);
+      else invalidatePortfolioCache(data.owner_id);
       
       // Auto-broadcast to SSE clients
       broadcast(data.owner_id, {
+        scope: data.hostel_id ? "hostel" : "portfolio",
+        hostelId: data.hostel_id,
         type: eventName,
         data
       });

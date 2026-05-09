@@ -1,7 +1,7 @@
 import { prisma } from "../db";
 import { eventLog } from "./event-log-service";
 import { getLogger } from "../logger";
-import { invalidateDashboardCache } from "../cache/dashboard-cache";
+import { invalidateHostelDashboardCache } from "../cache/dashboard-cache";
 
 const logger = getLogger("allocation-reconcile");
 
@@ -205,6 +205,7 @@ export class AllocationReconciliationService {
       select: {
         id: true,
         owner_id: true,
+        hostel_id: true,
         profile_id: true,
         allocations: {
           where: { is_active: true, end_date: null },
@@ -241,7 +242,7 @@ export class AllocationReconciliationService {
         new_status: "EXPIRED",
         released_allocations: t.allocations.length,
       }, t.id);
-      if (t.owner_id) invalidateDashboardCache(t.owner_id);
+      if (t.hostel_id) invalidateHostelDashboardCache(t.hostel_id);
     }
 
     return { expired_count: expired };

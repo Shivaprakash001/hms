@@ -11,9 +11,11 @@ import { useRooms } from '../../hooks/useRooms';
 import TenantHistoryModal from '../../components/owner/payments/TenantHistoryModal';
 import TenantInvitationForm from '../../components/owner/TenantInvitationForm';
 import ExtendedProfileForm from '../../components/TenantManagement/ExtendedProfileForm';
+import { useHostelContext } from '../../context/HostelContext';
 
 export default function ManageTenants() {
     const { preferences } = useAppPreferences();
+    const { hostelId } = useHostelContext();
     const location = useLocation();
     const navigate = useNavigate();
     const [searchTerm, setSearchTerm] = useState('');
@@ -24,7 +26,7 @@ export default function ManageTenants() {
     const [showLeftTenants, setShowLeftTenants] = useState(false);
     const [extendedProfileTenant, setExtendedProfileTenant] = useState(null);
 
-    const { data: tenantsResponse, isLoading: loading, error, refetch: fetchTenants } = useTenants();
+    const { data: tenantsResponse, isLoading: loading, error, refetch: fetchTenants } = useTenants(hostelId);
 
     const tenants = useMemo(() => {
         if (!tenantsResponse) return [];
@@ -604,6 +606,7 @@ export default function ManageTenants() {
                 onClose={() => setHistoryTenant(null)}
                 tenantId={historyTenant?.tenantId}
                 tenantName={historyTenant?.tenantName}
+                hostelId={hostelId}
             />
         </div >
     );
@@ -622,7 +625,8 @@ const StatCard = ({ title, value, icon: Icon, iconBg, iconColor, isCurrency = fa
 );
 
 const AddTenantModal = ({ onClose, initialData, onSave }) => {
-    const { data: floorsData, isLoading: loadingRooms } = useRooms({ grouped: true });
+    const { hostelId } = useHostelContext();
+    const { data: floorsData, isLoading: loadingRooms } = useRooms(hostelId, { grouped: true });
     
     const rooms = useMemo(() => {
         let allRooms = [];

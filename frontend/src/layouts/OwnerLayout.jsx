@@ -4,7 +4,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
     Menu, X, Home, Bed, Users, CreditCard, MessageSquare, Receipt,
     Search, Bell, ChevronLeft, ChevronRight, LogOut, Settings, User,
-    ShieldCheck, AlertCircle, CheckCircle2, Clock, ChevronDown
+    ShieldCheck, AlertCircle, CheckCircle2, Clock, ChevronDown, BarChart2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
@@ -18,6 +18,7 @@ import Avatar from '../components/common/Avatar';
 import logoPng from '/favicon-32x32.png';
 import { useAppPreferences } from '../context/AppPreferencesContext';
 import { formatDate } from '../utils/format';
+import { useOptionalHostelContext } from '../context/HostelContext';
 
 
 const LogoImage = ({ src }) => {
@@ -42,7 +43,9 @@ const LogoImage = ({ src }) => {
 
 const OwnerLayout = () => {
     const { user, logout } = useAuth();
-    const { preferences } = useAppPreferences();
+    const hostelContext = useOptionalHostelContext();
+    const hostelId = hostelContext?.hostelId || null;
+    const { preferences, refreshPreferences } = useAppPreferences();
     const navigate = useNavigate();
     const location = useLocation();
     const queryClient = useQueryClient();
@@ -63,13 +66,18 @@ const OwnerLayout = () => {
 
     // Prefetch high-probability routes
     useEffect(() => {
+        if (!hostelId) return;
         // We import services dynamically to avoid circular dependencies if any, 
         // but tenantService and roomService are available. Let's prefetch safely.
         import('../api/services').then(({ roomService, tenantService }) => {
-            queryClient.prefetchQuery({ queryKey: queryKeys.rooms.list({}), queryFn: () => roomService.getAll() });
-            queryClient.prefetchQuery({ queryKey: queryKeys.tenants.list({}), queryFn: () => tenantService.getAll() });
+            queryClient.prefetchQuery({ queryKey: queryKeys.rooms.list(hostelId, {}), queryFn: () => roomService.getAll(hostelId, {}) });
+            queryClient.prefetchQuery({ queryKey: queryKeys.tenants.list(hostelId, {}), queryFn: () => tenantService.getAll(hostelId, {}) });
         });
-    }, [queryClient]);
+    }, [queryClient, hostelId]);
+
+    useEffect(() => {
+        if (hostelId) refreshPreferences(hostelId);
+    }, [hostelId, refreshPreferences]);
 
     useEffect(() => {
         let es = null;
@@ -82,7 +90,10 @@ const OwnerLayout = () => {
                 const shortToken = await sseService.getToken();
                 if (!mounted) return;
 
-                es = new EventSource(`/api/events?token=${encodeURIComponent(shortToken)}`);
+                const eventParams = new URLSearchParams({ token: shortToken });
+                if (hostelId) eventParams.set('hostelId', hostelId);
+                else eventParams.set('scope', 'portfolio');
+                es = new EventSource(`/api/events?${eventParams.toString()}`);
 
                 es.onmessage = (event) => {
                     try {
@@ -90,30 +101,35 @@ const OwnerLayout = () => {
 
                         // React Query targeted cache invalidation
                         if (data.type === 'payment_recorded') {
-                            queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
-                            queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all() });
-                            queryClient.invalidateQueries({ queryKey: queryKeys.payments.all() });
+                            if (!hostelId) return;
+                            queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
+                            queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all(hostelId) });
+                            queryClient.invalidateQueries({ queryKey: queryKeys.payments.all(hostelId) });
                             queryClient.invalidateQueries({ queryKey: queryKeys.notifications() });
                         } else if (data.type === 'expense_created') {
-                            queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
-                            queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all() });
-                            queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all() });
+                            if (!hostelId) return;
+                            queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
+                            queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all(hostelId) });
+                            queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all(hostelId) });
                             queryClient.invalidateQueries({ queryKey: queryKeys.notifications() });
                         } else if (data.type === 'tenant_created' || data.type === 'tenant_allocated_room') {
-                            queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
-                            queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all() });
-                            queryClient.invalidateQueries({ queryKey: queryKeys.tenants.all() });
-                            queryClient.invalidateQueries({ queryKey: queryKeys.rooms.all() });
+                            if (!hostelId) return;
+                            queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
+                            queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all(hostelId) });
+                            queryClient.invalidateQueries({ queryKey: queryKeys.tenants.all(hostelId) });
+                            queryClient.invalidateQueries({ queryKey: queryKeys.rooms.all(hostelId) });
                             queryClient.invalidateQueries({ queryKey: queryKeys.notifications() });
                         } else if (data.type === 'room_allocated' || data.type === 'room_shifted') {
-                            queryClient.invalidateQueries({ queryKey: queryKeys.rooms.all() });
-                            queryClient.invalidateQueries({ queryKey: queryKeys.tenants.all() });
-                            queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
+                            if (!hostelId) return;
+                            queryClient.invalidateQueries({ queryKey: queryKeys.rooms.all(hostelId) });
+                            queryClient.invalidateQueries({ queryKey: queryKeys.tenants.all(hostelId) });
+                            queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
                         } else if (data.type === 'tenant_removed' || data.type === 'tenant_left') {
-                            queryClient.invalidateQueries({ queryKey: queryKeys.tenants.all() });
-                            queryClient.invalidateQueries({ queryKey: queryKeys.rooms.all() });
-                            queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
-                            queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all() });
+                            if (!hostelId) return;
+                            queryClient.invalidateQueries({ queryKey: queryKeys.tenants.all(hostelId) });
+                            queryClient.invalidateQueries({ queryKey: queryKeys.rooms.all(hostelId) });
+                            queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
+                            queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all(hostelId) });
                         } else if (data.type === 'reactivation_requested') {
                             queryClient.invalidateQueries({ queryKey: queryKeys.notifications() });
                         }
@@ -137,7 +153,7 @@ const OwnerLayout = () => {
             mounted = false;
             if (es) es.close();
         };
-    }, []);
+    }, [hostelId, queryClient]);
 
     useEffect(() => {
         let mounted = true;
@@ -312,13 +328,16 @@ const OwnerLayout = () => {
         }
     };
 
+    const hostels = hostelContext?.hostels || [];
+    const buildHostelPath = (section) => hostelId ? `/hostels/${hostelId}/${section}` : `/owner/${section}`;
     const menuItems = [
-        { name: 'Dashboard', icon: Home, path: '/owner/dashboard' },
-        { name: 'Rooms', icon: Bed, path: '/owner/rooms' },
-        { name: 'Tenants', icon: Users, path: '/owner/tenants' },
-        { name: 'Payments', icon: CreditCard, path: '/owner/payments' },
-        { name: 'Expenses', icon: Receipt, path: '/owner/expenses' },
-        { name: 'Activity Log', icon: Clock, path: '/owner/activities' },
+        { name: 'Dashboard', icon: Home, path: buildHostelPath('dashboard'), operational: true },
+        { name: 'Rooms', icon: Bed, path: buildHostelPath('rooms'), operational: true },
+        { name: 'Tenants', icon: Users, path: buildHostelPath('tenants'), operational: true },
+        { name: 'Payments', icon: CreditCard, path: buildHostelPath('payments'), operational: true },
+        { name: 'Expenses', icon: Receipt, path: buildHostelPath('expenses'), operational: true },
+        { name: 'Activity Log', icon: Clock, path: buildHostelPath('activities'), operational: true },
+        { name: 'Portfolio', icon: BarChart2, path: '/owner/portfolio' },
         { name: 'Billing & Plans', icon: CreditCard, path: '/owner/billing' },
     ];
 
@@ -354,7 +373,7 @@ const OwnerLayout = () => {
                 {/* Logo Section */}
                 <div
                     className="h-16 flex items-center px-6 border-b border-slate-800 cursor-pointer hover:bg-slate-800/50 transition-colors"
-                    onClick={() => navigate('/owner/dashboard')}
+                    onClick={() => navigate(hostelId ? `/hostels/${hostelId}/dashboard` : '/owner/portfolio')}
                 >
                     <div className="flex items-center gap-3 overflow-hidden">
                         <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shrink-0 shadow-sm border border-slate-800/50 overflow-hidden group-hover:border-indigo-500/30 transition-colors">
@@ -372,7 +391,7 @@ const OwnerLayout = () => {
                 <div className="flex-1 py-6 flex flex-col gap-1.5 px-3 overflow-y-auto">
                     {menuItems.map((item) => {
                         const Icon = item.icon;
-                        const isActive = location.pathname === item.path || (item.path === '/owner/dashboard' && location.pathname === '/owner');
+                        const isActive = location.pathname === item.path || (item.path === '/owner/portfolio' && location.pathname === '/owner');
 
                         return (
                             <button
@@ -515,6 +534,17 @@ const OwnerLayout = () => {
                         <button onClick={() => setMobileMenuOpen(true)} className="lg:hidden text-slate-500 hover:text-slate-900">
                             <Menu size={24} />
                         </button>
+                        {hostelId && hostels.length > 0 && (
+                            <select
+                                value={hostelId}
+                                onChange={(event) => navigate(hostelContext.buildHostelPath(event.target.value))}
+                                className="hidden sm:block h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm"
+                            >
+                                {hostels.map((hostel) => (
+                                    <option key={hostel.id} value={hostel.id}>{hostel.name}</option>
+                                ))}
+                            </select>
+                        )}
 
                         {/* Search Bar */}
                         <div className="relative hidden md:block w-80" ref={searchRef}>

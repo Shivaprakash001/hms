@@ -9,14 +9,16 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { useExpenses, useCreateExpense, useUpdateExpense, useDeleteExpense } from '../../hooks/useExpenses';
+import { useHostelContext } from '../../context/HostelContext';
 
 export default function Expenses() {
-    const { data: expensesData, isLoading, isError } = useExpenses();
+    const { hostelId } = useHostelContext();
+    const { data: expensesData, isLoading, isError } = useExpenses(hostelId);
     const expenses = Array.isArray(expensesData) ? expensesData : expensesData?.data || [];
 
-    const createMutation = useCreateExpense();
-    const updateMutation = useUpdateExpense();
-    const deleteMutation = useDeleteExpense();
+    const createMutation = useCreateExpense(hostelId);
+    const updateMutation = useUpdateExpense(hostelId);
+    const deleteMutation = useDeleteExpense(hostelId);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingExpense, setEditingExpense] = useState(null);

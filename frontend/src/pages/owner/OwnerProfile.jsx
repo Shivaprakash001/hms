@@ -24,7 +24,6 @@ import {
     X,
 } from 'lucide-react';
 import { ownerService, billingService, addonService } from '../../api/services';
-import { getActiveHostelId, setActiveHostelId } from '../../lib/hostel/activeHostel';
 import BuyRemindersModal from '../../components/owner/BuyRemindersModal';
 import { useAppPreferences } from '../../context/AppPreferencesContext';
 
@@ -667,7 +666,7 @@ export default function OwnerProfile() {
     const [pageError, setPageError] = useState('');
     const [owner, setOwner] = useState(null);
     const [hostels, setHostels] = useState([]);
-    const [activeHostelId, setActiveHostelIdState] = useState('');
+    const [activeHostelId, setSelectedHostelIdState] = useState('');
     const [hostel, setHostel] = useState(null);
     const [prefs, setPrefs] = useState(DEFAULT_PREFS);
     const [planId, setPlanId] = useState('free');
@@ -690,15 +689,13 @@ export default function OwnerProfile() {
             ]);
             const nextOwner = profileData?.owner || {};
             const nextHostels = hostelsData?.hostels || profileData?.hostels || [];
-            const ownerScope = { ...nextOwner, role: 'owner', owner_id: nextOwner.id };
-            const chosenId = selectedId || getActiveHostelId(ownerScope) || nextHostels[0]?.id || '';
+            const chosenId = selectedId || nextHostels[0]?.id || '';
             const policyResponse = chosenId ? await ownerService.getHostelPreferences(chosenId) : null;
             const nextHostel = policyResponse?.hostel || nextHostels.find((item) => item.id === chosenId) || null;
             const nextPrefs = mergePreferences(policyResponse?.compatibility_preferences || {});
-            if (chosenId) setActiveHostelId(ownerScope, chosenId);
             setOwner(nextOwner);
             setHostels(nextHostels);
-            setActiveHostelIdState(chosenId);
+            setSelectedHostelIdState(chosenId);
             setHostel(nextHostel);
             setPrefs(nextPrefs);
             setPlanId(subscriptionData?.current_plan?.id || subscriptionData?.plan_id || 'free');

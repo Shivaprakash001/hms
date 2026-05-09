@@ -2,17 +2,14 @@
  * Centralized React Query key factory.
  *
  * Rules:
- *  - Every key is a function — even zero-arg ones. This lets you call
- *    invalidateQueries(queryKeys.analytics.all()) to wipe the whole namespace
- *    and queryKeys.analytics.cashflow() to hit only that slice.
+ *  - Operational keys must receive hostelId explicitly from the URL-driven
+ *    HostelContextProvider. Browser storage is not an operational scope source.
  *  - List vs detail are namespaced separately ('list' / 'detail') so
  *    invalidateQueries(['tenants']) invalidates ALL tenant queries as intended,
  *    but setQueryData(['tenants', 'detail', id], …) never hits a list query.
  *  - Params/filters are always the last element so partial-key invalidation
  *    still works (e.g., invalidate all ['payments', 'dues'] regardless of filter).
  */
-
-import { getActiveHostelId } from '../hostel/activeHostel';
 
 const readStoredSession = () => {
   if (typeof window === 'undefined') return null;
@@ -25,92 +22,99 @@ const readStoredSession = () => {
   }
 };
 
-const scope = () => {
+const ownerScope = () => {
   const user = readStoredSession();
   const ownerId = user?.owner_id || (user?.role === 'owner' ? user?.id : null) || 'anonymous';
-  const hostelId = getActiveHostelId(user) || 'all-hostels';
-  return ['scope', ownerId, hostelId];
+  return ['owner', ownerId];
 };
 
-const key = (...parts) => [...scope(), ...parts];
+const ownerKey = (...parts) => [...ownerScope(), ...parts];
+const hostelKey = (hostelId, ...parts) => {
+  if (!hostelId) throw new Error('hostelId is required for operational query keys');
+  return ['hostel', hostelId, ...parts];
+};
 
 export const queryKeys = {
   // ── Auth / session ──────────────────────────────────────────────────────────
-  me: () => key('me'),
+  me: () => ownerKey('me'),
+
+  owner: {
+    hostels: () => ownerKey('hostels'),
+  },
 
   // ── Notifications ───────────────────────────────────────────────────────────
-  notifications: () => key('notifications'),
+  notifications: () => ownerKey('notifications'),
 
   // ── Analytics (owner dashboard) ─────────────────────────────────────────────
   analytics: {
-    all:        ()       => key('analytics'),
-    cashflow:   (range)  => range ? key('analytics', 'cashflow', range)   : key('analytics', 'cashflow'),
-    tenants:    (range)  => range ? key('analytics', 'tenants',  range)   : key('analytics', 'tenants'),
-    funnel:     (range)  => range ? key('analytics', 'funnel',   range)   : key('analytics', 'funnel'),
-    operations: (range)  => range ? key('analytics', 'operations', range) : key('analytics', 'operations'),
+    all:        (hostelId)        => hostelKey(hostelId, 'analytics'),
+    cashflow:   (hostelId, range) => range ? hostelKey(hostelId, 'analytics', 'cashflow', range)   : hostelKey(hostelId, 'analytics', 'cashflow'),
+    tenants:    (hostelId, range) => range ? hostelKey(hostelId, 'analytics', 'tenants',  range)   : hostelKey(hostelId, 'analytics', 'tenants'),
+    funnel:     (hostelId, range) => range ? hostelKey(hostelId, 'analytics', 'funnel',   range)   : hostelKey(hostelId, 'analytics', 'funnel'),
+    operations: (hostelId, range) => range ? hostelKey(hostelId, 'analytics', 'operations', range) : hostelKey(hostelId, 'analytics', 'operations'),
   },
 
   // ── Dashboard (legacy stats endpoints) ──────────────────────────────────────
   dashboard: {
-    all:     ()       => key('dashboard'),
-    stats:   ()       => key('dashboard', 'stats'),
-    summary: ()       => key('dashboard', 'summary'),
-    monthly: (months) => key('dashboard', 'monthly', months ?? 6),
+    all:     (hostelId)         => hostelKey(hostelId, 'dashboard'),
+    stats:   (hostelId)         => hostelKey(hostelId, 'dashboard', 'stats'),
+    summary: (hostelId)         => hostelKey(hostelId, 'dashboard', 'summary'),
+    monthly: (hostelId, months) => hostelKey(hostelId, 'dashboard', 'monthly', months ?? 6),
   },
 
   // ── Tenants ─────────────────────────────────────────────────────────────────
   tenants: {
-    all:            ()         => key('tenants'),
-    list:           (filters)  => key('tenants', 'list', filters ?? {}),
-    detail:         (id)       => key('tenants', 'detail', id),
-    documents:      (id)       => key('tenants', id, 'documents'),
-    paymentHistory: (id)       => key('tenants', id, 'payments'),
+    all:            (hostelId)          => hostelKey(hostelId, 'tenants'),
+    list:           (hostelId, filters) => hostelKey(hostelId, 'tenants', 'list', filters ?? {}),
+    detail:         (hostelId, id)      => hostelKey(hostelId, 'tenants', 'detail', id),
+    documents:      (hostelId, id)      => hostelKey(hostelId, 'tenants', id, 'documents'),
+    paymentHistory: (hostelId, id)      => hostelKey(hostelId, 'tenants', id, 'payments'),
   },
 
   // ── Rooms ───────────────────────────────────────────────────────────────────
   rooms: {
-    all:    ()       => key('rooms'),
-    list:   (params) => key('rooms', 'list', params ?? {}),
-    detail: (id)     => key('rooms', 'detail', id),
+    all:    (hostelId)         => hostelKey(hostelId, 'rooms'),
+    list:   (hostelId, params) => hostelKey(hostelId, 'rooms', 'list', params ?? {}),
+    detail: (hostelId, id)     => hostelKey(hostelId, 'rooms', 'detail', id),
   },
 
   // ── Allocations ─────────────────────────────────────────────────────────────
   allocations: {
-    all:    () => key('allocations'),
-    active: () => key('allocations', 'active'),
+    all:    (hostelId) => hostelKey(hostelId, 'allocations'),
+    active: (hostelId) => hostelKey(hostelId, 'allocations', 'active'),
   },
 
   // ── Payments ────────────────────────────────────────────────────────────────
   payments: {
-    all:                () => key('payments'),
-    ledger:     (params) => key('payments', 'ledger', params ?? {}),
-    dues:       (params) => key('payments', 'dues',   params ?? {}),
-    pendingVerification: () => key('payments', 'pending-verification'),
-    attempt:       (id)  => key('payments', 'attempt', id),
+    all:                 (hostelId)         => hostelKey(hostelId, 'payments'),
+    ledger:              (hostelId, params) => hostelKey(hostelId, 'payments', 'ledger', params ?? {}),
+    dues:                (hostelId, params) => hostelKey(hostelId, 'payments', 'dues',   params ?? {}),
+    pendingVerification: (hostelId)         => hostelKey(hostelId, 'payments', 'pending-verification'),
+    attempt:             (hostelId, id)     => hostelKey(hostelId, 'payments', 'attempt', id),
   },
 
   // ── Expenses ─────────────────────────────────────────────────────────────────
   expenses: {
-    all:  () => key('expenses'),
-    list: () => key('expenses', 'list'),
+    all:  (hostelId) => hostelKey(hostelId, 'expenses'),
+    list: (hostelId) => hostelKey(hostelId, 'expenses', 'list'),
   },
 
   // ── Addon / usage ────────────────────────────────────────────────────────────
   addon: {
-    all:   () => key('addon'),
-    usage: () => key('addon', 'usage'),
+    all:   () => ownerKey('addon'),
+    usage: () => ownerKey('addon', 'usage'),
   },
 
   // ── Subscription ─────────────────────────────────────────────────────────────
   subscription: {
-    all:     () => key('subscription'),
-    current: () => key('subscription', 'current'),
-    plans:   () => key('subscription', 'plans'),
+    all:     () => ownerKey('subscription'),
+    current: () => ownerKey('subscription', 'current'),
+    plans:   () => ownerKey('subscription', 'plans'),
   },
 
   // ── Activity ─────────────────────────────────────────────────────────────────
   activity: {
-    all:  ()       => key('activity'),
-    list: (params) => key('activity', 'list', params ?? {}),
+    all:  (hostelId)         => hostelKey(hostelId, 'activity'),
+    list: (hostelId, params) => hostelKey(hostelId, 'activity', 'list', params ?? {}),
   },
 };

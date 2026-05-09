@@ -4,7 +4,6 @@ import { motion } from 'framer-motion';
 import { Building2, MapPin, Phone, ArrowRight, Loader2 } from 'lucide-react';
 import { ownerService } from '../../api/services';
 import { setStoredStep } from '../../hooks/useOnboardingState';
-import { setActiveHostelId } from '../../lib/hostel/activeHostel';
 
 const HOSTEL_TYPES = [
   { value: 'BOYS',    emoji: '🎓', label: 'Boys Hostel' },
@@ -46,9 +45,6 @@ export default function OnboardingHostel() {
         hostel_type:  form.type,
         phone:        form.phone.trim() || undefined,
       });
-      if (response?.hostel?.id) {
-        setActiveHostelId({ ...response.owner, role: 'owner', owner_id: response.owner?.id }, response.hostel.id);
-      }
       setStoredStep('HOSTEL_CREATED');
       navigate('/onboarding/billing');
     } catch (err) {

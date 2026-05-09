@@ -46,16 +46,17 @@ export async function deriveOnboardingStep() {
   try {
     const profile = await ownerService.getProfile();
     const hostel = profile?.hostel;
+    const hostelId = hostel?.id || profile?.hostels?.[0]?.id;
     if (!hostel?.name) return 'ACCOUNT_CREATED';
 
     const hasPrefs = hostel?.auto_rent_day || profile?.preferences?.auto_rent_day;
     if (!hasPrefs) return 'HOSTEL_CREATED';
 
-    const rooms = await roomService.getAll({ limit: 1 });
+    const rooms = await roomService.getAll(hostelId, { limit: 1 });
     const roomCount = Array.isArray(rooms) ? rooms.length : rooms?.total ?? 0;
     if (roomCount === 0) return 'BILLING_CONFIGURED';
 
-    const tenants = await tenantService.getAll({ limit: 1, status: 'ACTIVE' });
+    const tenants = await tenantService.getAll(hostelId, { limit: 1, status: 'ACTIVE' });
     const tenantCount = Array.isArray(tenants) ? tenants.length : tenants?.total ?? 0;
     if (tenantCount === 0) return 'FIRST_ROOM_ADDED';
 

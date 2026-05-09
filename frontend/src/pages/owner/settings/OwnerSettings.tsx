@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Loader2, Menu } from 'lucide-react';
 import { ownerService, billingService, addonService } from '../../../api/services';
-import { getActiveHostelId, setActiveHostelId } from '../../../lib/hostel/activeHostel';
 import { useAppPreferences } from '../../../context/AppPreferencesContext';
 import BuyRemindersModal from '../../../components/owner/BuyRemindersModal';
 
@@ -39,7 +38,7 @@ export default function OwnerSettings() {
     const [pageError, setPageError] = useState('');
     const [owner, setOwner] = useState<any>(null);
     const [hostels, setHostels] = useState<any[]>([]);
-    const [activeHostelId, setActiveHostelIdState] = useState('');
+    const [activeHostelId, setSelectedHostelIdState] = useState('');
     const [hostel, setHostel] = useState<any>(null);
     const [prefs, setPrefs] = useState<any>(DEFAULT_PREFS);
     const [plan, setPlan] = useState<any>(null);
@@ -65,17 +64,14 @@ export default function OwnerSettings() {
             ]);
             const nextOwner = profileData?.owner || {};
             const nextHostels = hostelsData?.hostels || profileData?.hostels || [];
-            const ownerScope = { ...nextOwner, role: 'owner', owner_id: nextOwner.id };
-            const chosenId = selectedId || getActiveHostelId(ownerScope) || nextHostels[0]?.id || '';
+            const chosenId = selectedId || nextHostels[0]?.id || '';
             const policyResponse = chosenId ? await ownerService.getHostelPreferences(chosenId) : null;
             const nextHostel = policyResponse?.hostel || nextHostels.find((item: any) => item.id === chosenId) || null;
             const nextPrefs = mergePreferences(policyResponse?.compatibility_preferences || {});
             
-            if (chosenId) setActiveHostelId(ownerScope, chosenId);
-            
             setOwner(nextOwner);
             setHostels(nextHostels);
-            setActiveHostelIdState(chosenId);
+            setSelectedHostelIdState(chosenId);
             setHostel(nextHostel);
             setPrefs(nextPrefs);
             setPlan(subscriptionData?.current_plan || null);

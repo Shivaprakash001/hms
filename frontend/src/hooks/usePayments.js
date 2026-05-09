@@ -2,54 +2,57 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tansta
 import { paymentService, identityService } from '../api/services';
 import { queryKeys } from '../lib/query/queryKeys';
 
-export const useTenantPaymentHistory = (tenantId) => {
+export const useTenantPaymentHistory = (hostelId, tenantId) => {
   return useQuery({
-    queryKey: queryKeys.tenants.paymentHistory(tenantId),
+    queryKey: queryKeys.tenants.paymentHistory(hostelId, tenantId),
     queryFn:  () => paymentService.getTenantHistory(tenantId),
-    enabled:  !!tenantId,
+    enabled:  !!hostelId && !!tenantId,
     staleTime: 2 * 60 * 1000,
     gcTime:    30 * 60 * 1000,
     placeholderData: keepPreviousData,
   });
 };
 
-export const useDuesReport = (params) => {
+export const useDuesReport = (hostelId, params) => {
   return useQuery({
-    queryKey: queryKeys.payments.dues(params),
-    queryFn:  () => paymentService.getAllDues(params),
+    queryKey: queryKeys.payments.dues(hostelId, params),
+    queryFn:  () => paymentService.getAllDues(hostelId, params),
+    enabled:  !!hostelId,
     staleTime: 2 * 60 * 1000,
     gcTime:    30 * 60 * 1000,
     placeholderData: keepPreviousData,
   });
 };
 
-export const useLedger = (params) => {
+export const useLedger = (hostelId, params) => {
   return useQuery({
-    queryKey: queryKeys.payments.ledger(params),
-    queryFn:  () => paymentService.getAll(params),
+    queryKey: queryKeys.payments.ledger(hostelId, params),
+    queryFn:  () => paymentService.getAll(hostelId, params),
+    enabled:  !!hostelId,
     staleTime: 2 * 60 * 1000,
     gcTime:    30 * 60 * 1000,
     placeholderData: keepPreviousData,
   });
 };
 
-export const usePendingVerifications = () => {
+export const usePendingVerifications = (hostelId) => {
   return useQuery({
-    queryKey: queryKeys.payments.pendingVerification(),
+    queryKey: queryKeys.payments.pendingVerification(hostelId),
     queryFn:  () => paymentService.getPendingVerifications(),
+    enabled:  !!hostelId,
     staleTime: 60 * 1000,
     gcTime:    30 * 60 * 1000,
     placeholderData: keepPreviousData,
   });
 };
 
-export const useRecordPayment = () => {
+export const useRecordPayment = (hostelId) => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data) => paymentService.recordPayment(data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.payments.all() });
-      qc.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
+      qc.invalidateQueries({ queryKey: queryKeys.payments.all(hostelId) });
+      qc.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
     },
   });
 };
@@ -66,27 +69,27 @@ export const useRecordPayment = () => {
  *   // Step 2
  *   await recordOffline({ identityToken, obligationId, amountPaid, paymentMethod, ... });
  */
-export const useOfflinePayment = () => {
+export const useOfflinePayment = (hostelId) => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data) => paymentService.recordOfflinePayment(data),
     onSuccess: (_data, variables) => {
       // Precise invalidation: only the affected tenant's history + dues + dashboard
       if (variables.obligationId) {
-        qc.invalidateQueries({ queryKey: queryKeys.payments.dues() });
-        qc.invalidateQueries({ queryKey: queryKeys.payments.all() });
+        qc.invalidateQueries({ queryKey: queryKeys.payments.dues(hostelId) });
+        qc.invalidateQueries({ queryKey: queryKeys.payments.all(hostelId) });
       }
-      qc.invalidateQueries({ queryKey: queryKeys.analytics.all() });
-      qc.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
+      qc.invalidateQueries({ queryKey: queryKeys.analytics.all(hostelId) });
+      qc.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
     },
   });
 };
 
-export const useGenerateMonthlyRent = () => {
+export const useGenerateMonthlyRent = (hostelId) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (rentMonth) => paymentService.generateRent(rentMonth),
-    onSuccess:  () => qc.invalidateQueries({ queryKey: queryKeys.payments.all() }),
+    mutationFn: (rentMonth) => paymentService.generateRent(hostelId, rentMonth),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: queryKeys.payments.all(hostelId) }),
   });
 };
 

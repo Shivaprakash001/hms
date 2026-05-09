@@ -1,0 +1,71 @@
+import React, { createContext, useContext, useMemo } from 'react';
+import { Navigate, useLocation, useParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { ownerService } from '../api/services';
+import { queryKeys } from '../lib/query/queryKeys';
+
+const HostelContext = createContext(null);
+
+const operationalSegments = new Set(['dashboard', 'rooms', 'tenants', 'payments', 'expenses', 'activities', 'activity']);
+
+export function toHostelPath(hostelId, pathname) {
+  const parts = pathname.split('/').filter(Boolean);
+  const current = parts[0] === 'hostels' ? parts[2] : parts[1];
+  const section = operationalSegments.has(current) ? (current === 'activity' ? 'activities' : current) : 'dashboard';
+  const rest = parts[0] === 'hostels' ? parts.slice(3) : parts.slice(2);
+  return `/hostels/${hostelId}/${[section, ...rest].filter(Boolean).join('/')}`;
+}
+
+export function LegacyOwnerOperationalRedirect() {
+  const location = useLocation();
+  const { data: hostels = [], isLoading } = useQuery({
+    queryKey: queryKeys.owner.hostels(),
+    queryFn: ownerService.getHostels,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const firstHostel = Array.isArray(hostels) ? hostels.find((h) => h?.is_active !== false) : null;
+  if (isLoading) return null;
+  if (!firstHostel?.id) return <Navigate to="/onboarding/hostel" replace />;
+  return <Navigate to={toHostelPath(firstHostel.id, location.pathname)} replace />;
+}
+
+export function HostelContextProvider({ children }) {
+  const { hostelId } = useParams();
+  const location = useLocation();
+  const { data: hostels = [], isLoading } = useQuery({
+    queryKey: queryKeys.owner.hostels(),
+    queryFn: ownerService.getHostels,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const activeHostel = useMemo(
+    () => Array.isArray(hostels) ? hostels.find((hostel) => hostel.id === hostelId && hostel.is_active !== false) : null,
+    [hostels, hostelId],
+  );
+
+  const value = useMemo(() => ({
+    hostelId,
+    activeHostel,
+    hostels: Array.isArray(hostels) ? hostels : [],
+    buildHostelPath: (nextHostelId, pathname = location.pathname) => toHostelPath(nextHostelId, pathname),
+  }), [activeHostel, hostelId, hostels, location.pathname]);
+
+  if (!hostelId) return <LegacyOwnerOperationalRedirect />;
+  if (isLoading) return null;
+  if (!activeHostel) return <Navigate to="/owner/profile" replace />;
+
+  return <HostelContext.Provider value={value}>{children}</HostelContext.Provider>;
+}
+
+export function useHostelContext() {
+  const context = useContext(HostelContext);
+  if (!context?.hostelId) {
+    throw new Error('HostelContextProvider is required for operational pages');
+  }
+  return context;
+}
+
+export function useOptionalHostelContext() {
+  return useContext(HostelContext);
+}

@@ -6,7 +6,7 @@ import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { tenantService } from "@/lib/services/tenant-service";
 import { planGate, TenantHardCapError } from "@/lib/services/plan-gate-service";
 import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
-import { assertHostelBelongsToOwner } from "@/lib/security/scoped-query";
+import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
 
 
 /**
@@ -31,7 +31,8 @@ export async function GET(req: NextRequest) {
     const offset = Number.isNaN(parsedOffset) ? 0 : parsedOffset;
 
     const hostelId = searchParams.get("hostelId") || undefined;
-    await assertHostelBelongsToOwner(scope.owner_id, hostelId);
+    await requireHostelBelongsToOwner(scope.owner_id, hostelId);
+    if (!hostelId) return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
 
     const result = await tenantService.getAllTenants({
       status, search, ownerId: scope.owner_id, limit, offset,

@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DoorOpen, Plus, CheckCircle2, X, ArrowRight, Loader2, IndianRupee } from 'lucide-react';
-import { roomService } from '../../api/services';
+import { ownerService, roomService } from '../../api/services';
 import { setStoredStep } from '../../hooks/useOnboardingState';
 
 const CAPACITY_OPTIONS = [1, 2, 3, 4, 6, 8, 10];
@@ -25,6 +25,13 @@ export default function OnboardingRooms() {
   const [apiError, setApiError] = useState('');
   const [addedRooms, setAddedRooms] = useState([]);
   const [showForm, setShowForm] = useState(true);
+  const [hostelId, setHostelId] = useState('');
+
+  useEffect(() => {
+    ownerService.getProfile()
+      .then((profile) => setHostelId(profile?.hostel?.id || profile?.hostels?.[0]?.id || ''))
+      .catch(() => {});
+  }, []);
 
   const set = (k, v) => {
     setForm(p => ({ ...p, [k]: v }));
@@ -51,7 +58,8 @@ export default function OnboardingRooms() {
         // floor must be an integer or omitted — convert string label to index
         ...(form.floor !== '' ? { floor: Number(form.floor) } : {}),
       };
-      const room = await roomService.create(payload);
+      if (!hostelId) throw new Error('Please complete hostel setup first.');
+      const room = await roomService.create(hostelId, payload);
       setAddedRooms(r => [...r, { id: room.id || Date.now(), number: form.number, rent: Number(form.rent) }]);
       setForm(emptyForm());
       setShowForm(false);

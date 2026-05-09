@@ -138,7 +138,7 @@ export class TenantService {
     status?: string;
     search?: string;
     ownerId?: string;
-    hostelId?: string; // Phase 4: hostel isolation
+    hostelId: string; // URL-driven hostel isolation
     limit?: number;
     offset?: number;
   }) {
@@ -483,16 +483,17 @@ export class TenantService {
 
     const currentRoom = tenant.allocations[0]?.room;
 
-    const dues = await financialService.getTenantDues(tenantId, ownerId);
+    if (!tenant.hostel_id) throw new Error("HOSTEL_CONTEXT_REQUIRED: tenant hostel scope unavailable");
+    const dues = await financialService.getTenantDues(tenantId, ownerId, tenant.hostel_id);
     const paymentAgg = await prisma.payment.aggregate({
-      where: { tenant_id: tenantId, owner_id: ownerId },
+      where: { tenant_id: tenantId, owner_id: ownerId, hostel_id: tenant.hostel_id },
       _sum: { amount_paid: true },
     });
     const totalPaid = Number(paymentAgg._sum.amount_paid || 0);
     const totalDue = dues.total_due;
     const outstanding = dues.total_due;
     const allPayments = await prisma.payment.findMany({
-      where: { tenant_id: tenantId, owner_id: ownerId },
+      where: { tenant_id: tenantId, owner_id: ownerId, hostel_id: tenant.hostel_id },
       orderBy: { payment_date: "desc" },
       take: 25,
       select: {

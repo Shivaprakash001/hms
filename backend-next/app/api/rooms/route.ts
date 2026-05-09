@@ -7,8 +7,7 @@ import { prisma } from "@/lib/db";
 import { RoomCreateSchema } from "@/lib/validators";
 import { propertyService } from "@/lib/services/property-service";
 import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
-import { assertHostelBelongsToOwner, scopedRoomWhere } from "@/lib/security/scoped-query";
-import { eventLog } from "@/lib/services/event-log-service";
+import { assertHostelBelongsToOwner, requireHostelBelongsToOwner, scopedRoomWhere } from "@/lib/security/scoped-query";
 
 
 /**
@@ -26,8 +25,9 @@ export async function GET(req: NextRequest) {
     const scope = resolveOwnerScope(session);
     const { searchParams } = new URL(req.url);
     const grouped = searchParams.get("grouped") !== "false";
-    const hostelId = searchParams.get("hostelId") || undefined; // Phase 4: hostel isolation
-    await assertHostelBelongsToOwner(scope.owner_id, hostelId);
+    const hostelId = searchParams.get("hostelId") || undefined;
+    await requireHostelBelongsToOwner(scope.owner_id, hostelId);
+    if (!hostelId) return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
 
     if (grouped) {
       const floors = await propertyService.getFloorsWithRooms(scope.owner_id, hostelId);
@@ -59,43 +59,12 @@ export async function POST(req: NextRequest) {
       return apiError("Validation error", "VALIDATION_ERROR", 400);
     }
 
-    // Phase 2: accept explicit hostelId from frontend; fallback remains owner-scoped.
     let hostelId = body.hostelId;
     let hostel;
     if (hostelId) {
       hostel = await assertHostelBelongsToOwner(scope.owner_id, hostelId);
     } else {
-      hostel = await prisma.hostel.findFirst({
-        where: { owner_id: scope.owner_id, is_active: true },
-        orderBy: { created_at: "asc" },
-      });
-
-      if (!hostel) {
-        const existingHostelCount = await prisma.hostel.count({
-          where: { owner_id: scope.owner_id },
-        });
-
-        // Onboarding allows users to skip hostel details. Creating the first
-        // room still needs a deterministic owner-owned hostel boundary, so we
-        // create a minimal placeholder only when this owner has no hostel rows
-        // at all. We never borrow or infer a hostel from another owner.
-        if (existingHostelCount === 0) {
-          hostel = await prisma.hostel.create({
-            data: {
-              owner_id: scope.owner_id,
-              name: "My Hostel",
-              phone: "",
-              address: "",
-              is_active: true,
-            },
-          });
-
-          await eventLog.log("DEFAULT_HOSTEL_CREATED_FOR_ROOM_ONBOARDING", scope.owner_id, {
-            hostel_id: hostel.id,
-            reason: "ROOM_CREATION_WITHOUT_EXISTING_HOSTEL",
-          });
-        }
-      }
+      await requireHostelBelongsToOwner(scope.owner_id, hostelId);
     }
     if (!hostel) {
       return apiError("No hostel found. Please complete hostel setup first.", "NOT_FOUND", 404);

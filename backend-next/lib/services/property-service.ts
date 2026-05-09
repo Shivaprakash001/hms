@@ -214,12 +214,12 @@ export class PropertyService {
     return hostelPolicyService.updateHostelPolicy(hostelId, userId, policyPatch, userId);
   }
 
-  async getFloorsWithRooms(ownerId: string, hostelId?: string) {
+  async getFloorsWithRooms(ownerId: string, hostelId: string) {
     const rooms = await prisma.room.findMany({
       where: {
         hostel: { owner_id: ownerId },
         is_active: true,
-        ...(hostelId ? { hostel_id: hostelId } : {}),
+        hostel_id: hostelId,
       },
       include: {
         allocations: {

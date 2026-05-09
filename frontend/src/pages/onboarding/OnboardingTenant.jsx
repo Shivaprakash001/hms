@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { UserPlus, Phone, DoorOpen, IndianRupee, ArrowRight, Loader2, CheckCircle2, MessageCircle } from 'lucide-react';
-import { tenantService, roomService } from '../../api/services';
+import { tenantService, roomService, ownerService } from '../../api/services';
 import { setStoredStep } from '../../hooks/useOnboardingState';
 
 export default function OnboardingTenant() {
@@ -14,9 +14,14 @@ export default function OnboardingTenant() {
   const [addedTenant, setAddedTenant] = useState(null);
   const [rooms, setRooms] = useState([]);
   const [showInvite, setShowInvite] = useState(false);
+  const [hostelId, setHostelId] = useState('');
 
   useEffect(() => {
-    roomService.getAll({ limit: 50 }).then(r => {
+    ownerService.getProfile().then((profile) => {
+      const nextHostelId = profile?.hostel?.id || profile?.hostels?.[0]?.id || '';
+      setHostelId(nextHostelId);
+      return nextHostelId ? roomService.getAll(nextHostelId, { limit: 50 }) : [];
+    }).then(r => {
       const list = Array.isArray(r) ? r : r?.rooms ?? r?.data ?? [];
       setRooms(list);
       if (list.length === 1) {

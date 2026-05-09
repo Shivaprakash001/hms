@@ -338,7 +338,26 @@ function applyLedgerUpdate(row: Ledger, data: any) {
 
 import { RentGenerationService } from "./rent-generation-service";
 
-const service = new RentGenerationService();
+const rawService = new RentGenerationService();
+const service = {
+  generateMonthlyRent(
+    targetDate: Date | undefined,
+    ownerId: string | undefined,
+    triggerType: "cron" | "manual" = "manual",
+    hostelId?: string,
+  ) {
+    const resolvedOwnerId = ownerId || state.hostels.at(0)?.owner_id;
+    const resolvedHostelId =
+      hostelId || state.hostels.find((hostel) => hostel.owner_id === resolvedOwnerId)?.id;
+    if (!resolvedOwnerId || !resolvedHostelId) {
+      throw new Error("Test fixture missing owner/hostel context");
+    }
+    return rawService.generateMonthlyRent(targetDate, resolvedOwnerId, triggerType, resolvedHostelId);
+  },
+  previewMonthlyRent(targetDate: Date | undefined, ownerId: string, hostelId: string) {
+    return rawService.previewMonthlyRent(targetDate, ownerId, hostelId);
+  },
+};
 
 function seedOwner(opts: {
   ownerId: string;
@@ -759,27 +778,27 @@ async function testUnsupportedRentCycleSkips() {
 
 // ── Phase 5: Unified Locking ──────────────────────────────────────────────────
 
-async function testLockKeyIsOwnerAndMonthScoped() {
-  console.log("\n[P5] lock key is owner+month scoped");
+async function testLockKeyIsHostelAndMonthScoped() {
+  console.log("\n[P5] lock key is hostel+month scoped");
   resetState();
   seedOwner({ ownerId: "P5A", autoRentDay: 1 });
 
   await service.generateMonthlyRent(new Date("2026-05-02T06:00:00Z"), "P5A", "manual");
   const lockKey = state.lockLog[0];
   assert(!!lockKey, "[P5] lock key captured");
-  assert(lockKey.startsWith("rent_gen_P5A_"), "[P5] lock key starts with rent_gen_<ownerId>");
+  assert(lockKey.startsWith("rent_gen_hostel-P5A_"), "[P5] lock key starts with rent_gen_<hostelId>");
   assert(lockKey.includes("2026-05"), "[P5] lock key contains YYYY-MM month");
   assert(!lockKey.includes("T00:00:00.000Z"), "[P5] lock key does NOT use ISO datetime (uses YYYY-MM)");
 }
 
-async function testLockKeyForGlobalCronIsGlobalScoped() {
-  console.log("\n[P5] global cron uses rent_gen_global_<YYYY-MM> key");
+async function testLockKeyForCronIsHostelScoped() {
+  console.log("\n[P5] cron uses rent_gen_<hostelId>_<YYYY-MM> key");
   resetState();
   seedOwner({ ownerId: "P5B", autoRentDay: 1 });
 
   await service.generateMonthlyRent(new Date("2026-05-02T06:00:00Z"), undefined, "cron");
   const lockKey = state.lockLog[0];
-  assert(lockKey?.startsWith("rent_gen_global_"), "[P5] global lock key");
+  assert(lockKey?.startsWith("rent_gen_hostel-P5B_"), "[P5] cron lock key is hostel-scoped");
 }
 
 async function testLockContentionEmitsEvent() {
@@ -861,8 +880,8 @@ async function main() {
   await testDueDayBeforeRentDayShiftsToNextMonth();
   await testUnsupportedRentCycleSkips();
   // Phase 5: Unified Locking
-  await testLockKeyIsOwnerAndMonthScoped();
-  await testLockKeyForGlobalCronIsGlobalScoped();
+  await testLockKeyIsHostelAndMonthScoped();
+  await testLockKeyForCronIsHostelScoped();
   await testLockContentionEmitsEvent();
   // Phase 7: Observability
   await testZeroRentGeneratedEventEmittedWhenAllSkipped();

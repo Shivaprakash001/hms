@@ -20,7 +20,7 @@ const clearSessionScopedStorage = () => {
     localStorage.removeItem('hms_onboarding_step');
     localStorage.removeItem('ownerPreferences');
     Object.keys(localStorage)
-        .filter((key) => key.startsWith('hms_onboarding_step:') || key.startsWith('ownerPreferences:') || key.startsWith('activeHostel:'))
+        .filter((key) => key.startsWith('hms_onboarding_step:') || key.startsWith('ownerPreferences:'))
         .forEach((key) => localStorage.removeItem(key));
     sessionStorage.clear();
 };

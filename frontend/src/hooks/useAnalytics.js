@@ -6,10 +6,11 @@ import { queryKeys } from '../lib/query/queryKeys';
  * Owner cashflow analytics — the primary owner dashboard widget.
  * staleTime 5 min: data changes at most once per payment event, not continuously.
  */
-export const useCashflow = (range) => {
+export const useCashflow = (hostelId, range) => {
   return useQuery({
-    queryKey: queryKeys.analytics.cashflow(range),
-    queryFn:  () => analyticsService.getCashflow(range?.from, range?.to),
+    queryKey: queryKeys.analytics.cashflow(hostelId, range),
+    queryFn:  () => analyticsService.getCashflow(hostelId, range?.from, range?.to),
+    enabled:  !!hostelId,
     staleTime: 5 * 60 * 1000,
     gcTime:    10 * 60 * 1000,
     placeholderData: keepPreviousData,
@@ -20,33 +21,33 @@ export const useCashflow = (range) => {
  * Tenant analytics tab — lazy: only fetches when tab becomes active.
  * Pass enabled=false until the user navigates to that tab.
  */
-export const useTenantAnalytics = (range, enabled = true) => {
+export const useTenantAnalytics = (hostelId, range, enabled = true) => {
   return useQuery({
-    queryKey: queryKeys.analytics.tenants(range),
-    queryFn:  () => analyticsService.getTenants(range?.from, range?.to),
-    enabled,
+    queryKey: queryKeys.analytics.tenants(hostelId, range),
+    queryFn:  () => analyticsService.getTenants(hostelId, range?.from, range?.to),
+    enabled: !!hostelId && enabled,
     staleTime: 5 * 60 * 1000,
     gcTime:    10 * 60 * 1000,
     placeholderData: keepPreviousData,
   });
 };
 
-export const useFunnelAnalytics = (range, enabled = true) => {
+export const useFunnelAnalytics = (hostelId, range, enabled = true) => {
   return useQuery({
-    queryKey: queryKeys.analytics.funnel(range),
-    queryFn:  () => analyticsService.getFunnel(range?.from, range?.to),
-    enabled,
+    queryKey: queryKeys.analytics.funnel(hostelId, range),
+    queryFn:  () => analyticsService.getFunnel(hostelId, range?.from, range?.to),
+    enabled: !!hostelId && enabled,
     staleTime: 5 * 60 * 1000,
     gcTime:    10 * 60 * 1000,
     placeholderData: keepPreviousData,
   });
 };
 
-export const useOperationsAnalytics = (range, enabled = true) => {
+export const useOperationsAnalytics = (hostelId, range, enabled = true) => {
   return useQuery({
-    queryKey: queryKeys.analytics.operations(range),
-    queryFn:  () => analyticsService.getOperations(range?.from, range?.to),
-    enabled,
+    queryKey: queryKeys.analytics.operations(hostelId, range),
+    queryFn:  () => analyticsService.getOperations(hostelId, range?.from, range?.to),
+    enabled: !!hostelId && enabled,
     staleTime: 5 * 60 * 1000,
     gcTime:    10 * 60 * 1000,
     placeholderData: keepPreviousData,

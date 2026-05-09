@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { paymentService } from "@/lib/services/payment-service";
 import { authService } from "@/lib/services/auth-service";
 import { apiError } from "@/lib/utils/api-utils";
+import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
 
 export async function GET(req: Request) {
   try {
@@ -20,6 +21,9 @@ export async function GET(req: Request) {
     const status = searchParams.get("status") || undefined;
     const method = searchParams.get("method") || undefined;
     const month = searchParams.get("month") || undefined;
+    const hostelId = searchParams.get("hostelId") || undefined;
+    await requireHostelBelongsToOwner(user.id, hostelId);
+    if (!hostelId) return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
 
     const filters = {
       tenantId,
@@ -30,6 +34,7 @@ export async function GET(req: Request) {
 
     const result = await paymentService.getAllPayments(
       user.id,
+      hostelId,
       isNaN(limit) ? 50 : limit,
       isNaN(offset) ? 0 : offset,
       filters

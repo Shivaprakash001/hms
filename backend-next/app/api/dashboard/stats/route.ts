@@ -5,7 +5,7 @@ import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { dashboardService } from "@/lib/services/dashboard-service";
 import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
-import { assertHostelBelongsToOwner } from "@/lib/security/scoped-query";
+import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
 
 
 /**
@@ -21,7 +21,8 @@ export async function GET(req: NextRequest) {
   try {
     const scope = resolveOwnerScope(session);
     const hostelId = req.nextUrl.searchParams.get("hostelId") || undefined;
-    await assertHostelBelongsToOwner(scope.owner_id, hostelId);
+    await requireHostelBelongsToOwner(scope.owner_id, hostelId);
+    if (!hostelId) return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
     const stats = await dashboardService.getOwnerStats(scope.owner_id, hostelId);
     return apiResponse(stats);
   } catch (error: any) {

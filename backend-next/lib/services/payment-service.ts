@@ -547,7 +547,12 @@ export class PaymentService {
    *   Total: ₹8,700
    */
   async getTenantTotalDues(tenantId: string) {
-    return financialService.getTenantDues(tenantId);
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { owner_id: true, hostel_id: true },
+    });
+    if (!tenant?.hostel_id) throw new Error("HOSTEL_CONTEXT_REQUIRED: tenant hostel scope unavailable");
+    return financialService.getTenantDues(tenantId, tenant.owner_id || undefined, tenant.hostel_id);
   }
 
   async createPaymentIntent(obligationId: string, amount: number | null, userId: string, tenantId?: string) {
@@ -1892,10 +1897,11 @@ export class PaymentService {
     return obligation;
   }
 
-  async getDuesReport(ownerId: string, rentMonth?: Date, status?: string) {
+  async getDuesReport(ownerId: string, hostelId: string, rentMonth?: Date, status?: string) {
     const dues = await prisma.rentObligation.findMany({
       where: {
         owner_id: ownerId,
+        hostel_id: hostelId,
         ...(rentMonth && { rent_month: rentMonth }),
         ...(status ? { status: status as any } : {})
       },
@@ -1924,6 +1930,7 @@ export class PaymentService {
 
   async getAllPayments(
     ownerId: string,
+    hostelId: string,
     limit: number = 50,
     offset: number = 0,
     filters?: {
@@ -1945,6 +1952,7 @@ export class PaymentService {
     const obligations = await prisma.rentObligation.findMany({
       where: {
         owner_id: ownerId,
+        hostel_id: hostelId,
         ...(filters?.tenantId ? { tenant_id: filters.tenantId } : {}),
         ...(monthStart && nextMonthStart ? { rent_month: { gte: monthStart, lt: nextMonthStart } } : {})
       },
@@ -2030,12 +2038,12 @@ export class PaymentService {
     const pendingEntries = filteredEntries.filter((entry) => ["pending", "partial", "overdue"].includes(entry.row.status));
     const overdueEntries = filteredEntries.filter((entry) => entry.row.status === "overdue");
 
-    const operationalDues = await financialService.getOperationalDues(ownerId);
+    const operationalDues = await financialService.getOperationalDues(ownerId, hostelId);
     const stats = {
       total_collected: Number(filteredEntries.reduce((sum, entry) => sum + Number(entry.row.paidAmount || 0), 0).toFixed(2)),
       pending_dues: Number((operationalDues.pending_total || 0).toFixed(2)),
       overdue_amount: Number((operationalDues.overdue_total || 0).toFixed(2)),
-      active_tenants: await prisma.tenant.count({ where: { owner_id: ownerId, status: "ACTIVE" } }),
+      active_tenants: await prisma.tenant.count({ where: { owner_id: ownerId, hostel_id: hostelId, status: "ACTIVE" } }),
       pending_rows: pendingEntries.length,
       overdue_rows: overdueEntries.length,
     };
@@ -2129,7 +2137,8 @@ export class PaymentService {
 
     if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
 
-    const dues = await financialService.getTenantDues(tenantId);
+    if (!tenant.hostel_id) throw new Error("HOSTEL_CONTEXT_REQUIRED: tenant hostel scope unavailable");
+    const dues = await financialService.getTenantDues(tenantId, tenant.owner_id || undefined, tenant.hostel_id);
     let totalDue = dues.total_due;
     let totalPaid = 0;
     const allPayments: any[] = [];

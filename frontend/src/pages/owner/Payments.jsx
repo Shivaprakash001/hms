@@ -15,9 +15,12 @@ import { useLedger, usePendingVerifications } from '../../hooks/usePayments';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAppPreferences } from '../../context/AppPreferencesContext';
 import { formatCurrency, formatMonthYear } from '../../utils/format';
+import { useHostelContext } from '../../context/HostelContext';
+import { queryKeys } from '../../lib/query/queryKeys';
 
 const Payments = () => {
     const navigate = useNavigate();
+    const { hostelId } = useHostelContext();
     const { preferences } = useAppPreferences();
     const qc = useQueryClient();
     const [confirmingId, setConfirmingId] = useState(null);
@@ -51,8 +54,8 @@ const Payments = () => {
         month: monthFilter !== 'all' ? monthFilter : undefined,
     }), [tenantFilter, statusFilter, methodFilter, monthFilter]);
 
-    const { data: ledgerData, isLoading, refetch: refetchLedger } = useLedger(paymentFilters);
-    const { data: pendingData, refetch: refetchPending } = usePendingVerifications();
+    const { data: ledgerData, isLoading, refetch: refetchLedger } = useLedger(hostelId, paymentFilters);
+    const { data: pendingData, refetch: refetchPending } = usePendingVerifications(hostelId);
 
     const ledgerRows = ledgerData?.payments || [];
     const paymentRecords = ledgerData?.payment_records || [];
@@ -133,9 +136,9 @@ const Payments = () => {
     const handleMarkAsPaid = (_formData) => {
         // Payment recorded by PaymentDetailsDrawer. Invalidate all affected cache keys
         // so every observer (ledger, dashboard, analytics) updates without a manual refresh.
-        qc.invalidateQueries({ queryKey: queryKeys.payments.all() });
-        qc.invalidateQueries({ queryKey: queryKeys.dashboard.all() });
-        qc.invalidateQueries({ queryKey: queryKeys.analytics.all() });
+        qc.invalidateQueries({ queryKey: queryKeys.payments.all(hostelId) });
+        qc.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
+        qc.invalidateQueries({ queryKey: queryKeys.analytics.all(hostelId) });
         setSelectedPayment(null);
     };
 
@@ -215,7 +218,7 @@ const Payments = () => {
         setGenLoading(true);
         setGenResult(null);
         try {
-            const data = await paymentService.generateRent(genMonth);
+            const data = await paymentService.generateRent(hostelId, genMonth);
             setGenResult({ success: true, data });
             refetchLedger(); // refresh list
         } catch (error) {
@@ -233,7 +236,7 @@ const Payments = () => {
     const handlePreviewRent = async () => {
         setPreviewLoading(true);
         try {
-            const data = await paymentService.previewGenerateRent(genMonth);
+            const data = await paymentService.previewGenerateRent(hostelId, genMonth);
             setPreviewData(data);
         } catch (error) {
             console.error("Preview rent failed:", error);
@@ -283,7 +286,7 @@ const Payments = () => {
             alert('Tenant profile is not available for this entry.');
             return;
         }
-        navigate('/owner/tenants', { state: { selectedTenantId: payment.tenantId } });
+        navigate(`/hostels/${hostelId}/tenants`, { state: { selectedTenantId: payment.tenantId } });
     };
 
     const handleOpenOnlineTest = (payment) => {
@@ -765,6 +768,7 @@ const Payments = () => {
                 onClose={() => setHistoryTenant(null)}
                 tenantId={historyTenant?.tenantId}
                 tenantName={historyTenant?.tenantName}
+                hostelId={hostelId}
             />
         </div>
     );

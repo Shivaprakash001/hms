@@ -61,6 +61,15 @@ export async function assertHostelBelongsToOwner(ownerId: string, hostelId?: str
   return hostel;
 }
 
+export async function requireHostelBelongsToOwner(ownerId: string, hostelId?: string | null) {
+  if (!hostelId) {
+    const err: any = new Error("HOSTEL_CONTEXT_REQUIRED: hostelId is required for operational requests");
+    err.code = "HOSTEL_CONTEXT_REQUIRED";
+    throw err;
+  }
+  return assertHostelBelongsToOwner(ownerId, hostelId);
+}
+
 export async function assertTenantBelongsToOwner(tenantId: string, ownerId: string) {
   const tenant = await prisma.tenant.findFirst({
     where: { id: tenantId, owner_id: ownerId },

@@ -13,6 +13,7 @@ import { reminderService } from '../../api/services';
 import { useAppPreferences } from '../../context/AppPreferencesContext';
 import { formatCurrency } from '../../utils/format';
 import { useCashflow, useTenantAnalytics, useFunnelAnalytics, useOperationsAnalytics, useAddonUsage } from '../../hooks/useAnalytics';
+import { useHostelContext } from '../../context/HostelContext';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 // Field names from /dashboard/cashflow  → top_defaulters[].pending_amount, .days_overdue, .name
@@ -37,6 +38,8 @@ const RC = {
 // ─── main ───────────────────────────────────────────────────────────────────
 const OwnerDashboard = () => {
     const navigate = useNavigate();
+    const { hostelId } = useHostelContext();
+    const opPath = (section) => `/hostels/${hostelId}/${section}`;
     const { preferences } = useAppPreferences();
     const [tab, setTab]           = useState('cashflow');
     const [dismissed, setDismissed] = useState(false);
@@ -61,13 +64,13 @@ const OwnerDashboard = () => {
     };
 
     // Always-on: cashflow + addon (parallel, shared cache)
-    const { data: cf, isLoading } = useCashflow();
+    const { data: cf, isLoading } = useCashflow(hostelId);
     const { data: addonData }     = useAddonUsage();
 
     // Tab-specific: lazy-loaded — only fetches when tab becomes active
-    const { data: ti, isLoading: tiLoading } = useTenantAnalytics(undefined, tab === 'tenants');
-    const { data: fn, isLoading: fnLoading } = useFunnelAnalytics(undefined, tab === 'funnel');
-    const { data: op, isLoading: opLoading } = useOperationsAnalytics(undefined, tab === 'operations');
+    const { data: ti, isLoading: tiLoading } = useTenantAnalytics(hostelId, undefined, tab === 'tenants');
+    const { data: fn, isLoading: fnLoading } = useFunnelAnalytics(hostelId, undefined, tab === 'funnel');
+    const { data: op, isLoading: opLoading } = useOperationsAnalytics(hostelId, undefined, tab === 'operations');
 
     // Cashflow data shape from /dashboard/cashflow
     const cfd = cf?.data ?? {};
@@ -242,9 +245,9 @@ const S1_Cashflow = ({ cfStats, cfSeverity, cfInsights, preferences, navigate })
 
     const highRisk = cfStats.topDefaulters.filter(d => riskBadge(d) === 'HIGH').length;
     const actionItems = [
-        cfStats.overdueCount > 0 && { id: 'remind',  icon: Bell,       color: 'text-indigo-600 bg-indigo-50',  label: `${cfStats.overdueCount} tenant${cfStats.overdueCount !== 1 ? 's' : ''} unpaid — send reminders`,                    cta: 'Payments',    path: '/owner/payments' },
-        highRisk > 0             && { id: 'high',    icon: ShieldAlert, color: 'text-rose-600 bg-rose-50',      label: `${highRisk} high-risk tenant${highRisk !== 1 ? 's' : ''} — overdue > 10 days`,                                   cta: 'View',        path: '/owner/tenants'  },
-        cfStats.pending > 0      && { id: 'collect', icon: Wallet,      color: 'text-emerald-600 bg-emerald-50', label: `${formatCurrency(cfStats.pending, preferences)} collectible right now`,                                          cta: 'Collect',     path: '/owner/payments' },
+        cfStats.overdueCount > 0 && { id: 'remind',  icon: Bell,       color: 'text-indigo-600 bg-indigo-50',  label: `${cfStats.overdueCount} tenant${cfStats.overdueCount !== 1 ? 's' : ''} unpaid — send reminders`,                    cta: 'Payments',    path: opPath('payments') },
+        highRisk > 0             && { id: 'high',    icon: ShieldAlert, color: 'text-rose-600 bg-rose-50',      label: `${highRisk} high-risk tenant${highRisk !== 1 ? 's' : ''} — overdue > 10 days`,                                   cta: 'View',        path: opPath('tenants')  },
+        cfStats.pending > 0      && { id: 'collect', icon: Wallet,      color: 'text-emerald-600 bg-emerald-50', label: `${formatCurrency(cfStats.pending, preferences)} collectible right now`,                                          cta: 'Collect',     path: opPath('payments') },
     ].filter(Boolean);
 
     const last = cfStats.daily[cfStats.daily.length - 1]?.v ?? 0;
@@ -257,7 +260,7 @@ const S1_Cashflow = ({ cfStats, cfSeverity, cfInsights, preferences, navigate })
                     <h1 className="text-2xl font-black text-slate-900 tracking-tight">Cashflow</h1>
                     <p className="text-xs font-semibold text-slate-400">Revenue command center</p>
                 </div>
-                <button onClick={() => navigate('/owner/payments')} className="p-2 bg-white rounded-xl border border-slate-200 text-slate-500 active:scale-95">
+                <button onClick={() => navigate(opPath('payments'))} className="p-2 bg-white rounded-xl border border-slate-200 text-slate-500 active:scale-95">
                     <ArrowUpRight size={18} />
                 </button>
             </div>
@@ -270,7 +273,7 @@ const S1_Cashflow = ({ cfStats, cfSeverity, cfInsights, preferences, navigate })
                     { label: 'Pending',   value: formatCurrency(cfStats.pending,    preferences), sub: `${cfStats.overdueCount} unpaid`,  cls: cfStats.pending > 0 ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200' : 'bg-slate-50 text-slate-600', pulse: cfStats.pending > 0 },
                     { label: 'Overdue',   value: formatCurrency(cfStats.overdueAmt, preferences), sub: 'Past due date',                   cls: cfStats.overdueAmt > 0 ? 'bg-rose-50 text-rose-700' : 'bg-slate-50 text-slate-600' },
                 ].map(c => (
-                    <button key={c.label} onClick={() => navigate('/owner/payments')} className={`p-4 rounded-2xl text-left active:scale-95 transition-transform ${c.cls}`}>
+                    <button key={c.label} onClick={() => navigate(opPath('payments'))} className={`p-4 rounded-2xl text-left active:scale-95 transition-transform ${c.cls}`}>
                         <p className="text-[10px] font-black uppercase tracking-widest opacity-50 mb-1">{c.label}</p>
                         <p className="text-[18px] font-black tracking-tight leading-none mb-1">{c.value}</p>
                         <p className="text-[11px] font-semibold opacity-70">{c.sub}</p>
@@ -391,7 +394,7 @@ const S2_Tenants = ({ data, severity, insights, loading, preferences, navigate }
                     <h1 className="text-2xl font-black text-slate-900 tracking-tight">Tenant Intel</h1>
                     <p className="text-xs font-semibold text-slate-400">{total} scored tenants</p>
                 </div>
-                <button onClick={() => navigate('/owner/tenants')} className="p-2 bg-white rounded-xl border border-slate-200 text-slate-500 active:scale-95">
+                <button onClick={() => navigate(opPath('tenants'))} className="p-2 bg-white rounded-xl border border-slate-200 text-slate-500 active:scale-95">
                     <ArrowUpRight size={18} />
                 </button>
             </div>
@@ -505,7 +508,7 @@ const S3_Funnel = ({ data, severity, insights, loading, preferences, navigate })
                 <div className="bg-white rounded-2xl border border-slate-100 p-8 text-center shadow-sm">
                     <Target size={32} className="mx-auto mb-2 text-slate-300" />
                     <p className="text-sm font-black text-slate-500">No reminders sent this period</p>
-                    <button onClick={() => navigate('/owner/payments')} className="mt-3 px-4 py-2 bg-indigo-500 text-white text-xs font-black rounded-xl active:scale-95">
+                    <button onClick={() => navigate(opPath('payments'))} className="mt-3 px-4 py-2 bg-indigo-500 text-white text-xs font-black rounded-xl active:scale-95">
                         Go to Payments
                     </button>
                 </div>
@@ -588,7 +591,7 @@ const S4_Operations = ({ data, severity, insights, loading, preferences, navigat
                     <h1 className="text-2xl font-black text-slate-900 tracking-tight">Operations</h1>
                     <p className="text-xs font-semibold text-slate-400">Property health overview</p>
                 </div>
-                <button onClick={() => navigate('/owner/rooms')} className="p-2 bg-white rounded-xl border border-slate-200 text-slate-500 active:scale-95">
+                <button onClick={() => navigate(opPath('rooms'))} className="p-2 bg-white rounded-xl border border-slate-200 text-slate-500 active:scale-95">
                     <ArrowUpRight size={18} />
                 </button>
             </div>
@@ -611,7 +614,7 @@ const S4_Operations = ({ data, severity, insights, loading, preferences, navigat
                     <div className={`h-full rounded-full transition-all ${occ >= 80 ? 'bg-emerald-500' : occ >= 50 ? 'bg-amber-400' : 'bg-rose-500'}`} style={{ width: `${Math.min(occ, 100)}%` }} />
                 </div>
                 {vacant > 0 && (
-                    <button onClick={() => navigate('/owner/rooms')} className="w-full py-3 text-sm font-black text-white bg-indigo-500 rounded-xl active:scale-95">
+                    <button onClick={() => navigate(opPath('rooms'))} className="w-full py-3 text-sm font-black text-white bg-indigo-500 rounded-xl active:scale-95">
                         Fill {vacant} Vacant {vacant !== 1 ? 'Beds' : 'Bed'}
                     </button>
                 )}
@@ -639,7 +642,7 @@ const S4_Operations = ({ data, severity, insights, loading, preferences, navigat
                         </div>
                     </div>
                 ))}
-                <button onClick={() => navigate('/owner/expenses')} className="mt-2 w-full py-2.5 text-xs font-black text-indigo-600 bg-indigo-50 rounded-xl active:scale-95">
+                <button onClick={() => navigate(opPath('expenses'))} className="mt-2 w-full py-2.5 text-xs font-black text-indigo-600 bg-indigo-50 rounded-xl active:scale-95">
                     Manage Expenses
                 </button>
             </div>
@@ -656,10 +659,10 @@ const S4_Operations = ({ data, severity, insights, loading, preferences, navigat
 
             <div className="grid grid-cols-2 gap-3">
                 {[
-                    { label: 'All Tenants', icon: Users,     path: '/owner/tenants',     cls: 'bg-indigo-50 text-indigo-600' },
-                    { label: 'All Rooms',   icon: BedDouble,  path: '/owner/rooms',      cls: 'bg-purple-50 text-purple-600' },
-                    { label: 'Payments',    icon: Wallet,     path: '/owner/payments',   cls: 'bg-emerald-50 text-emerald-600' },
-                    { label: 'Activity',    icon: Activity,   path: '/owner/activities', cls: 'bg-slate-50 text-slate-600' },
+                    { label: 'All Tenants', icon: Users,     path: opPath('tenants'),     cls: 'bg-indigo-50 text-indigo-600' },
+                    { label: 'All Rooms',   icon: BedDouble,  path: opPath('rooms'),      cls: 'bg-purple-50 text-purple-600' },
+                    { label: 'Payments',    icon: Wallet,     path: opPath('payments'),   cls: 'bg-emerald-50 text-emerald-600' },
+                    { label: 'Activity',    icon: Activity,   path: opPath('activities'), cls: 'bg-slate-50 text-slate-600' },
                 ].map(l => { const Icon = l.icon; return (
                     <button key={l.label} onClick={() => navigate(l.path)} className={`flex items-center gap-3 p-4 rounded-2xl active:scale-95 transition-transform ${l.cls}`}>
                         <Icon size={18} /><span className="text-sm font-black">{l.label}</span><ChevronRight size={14} className="ml-auto opacity-50" />

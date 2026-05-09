@@ -16,7 +16,6 @@
 import { prisma } from "../db";
 import crypto from "crypto";
 import { resolvePreferences } from "../preferences";
-import { getHostelOperationalContext } from "../hostel-context";
 import { htmlToPdf } from "../pdf/browser";
 import { renderReceiptHTML, type ReceiptRenderData } from "../pdf/receipt-template";
 import { timed } from "../perf";
@@ -24,38 +23,29 @@ import { imagekit } from "../imagekit";
 import { incrementPdfCache } from "../metrics";
 import { acquireSystemLock, releaseSystemLock, sleep } from "../lock";
 
-/**
- * Resolve the hostel record for a payment, using the canonical hostel_id
- * chain: payment.hostel_id → hostel (preferred)
- * Fallback: payment → obligation → allocation → room → hostel (for pre-backfill data)
- */
 async function resolveHostelForPayment(payment: any): Promise<{ hostel: any; prefs: any }> {
   const ownerId = payment.tenant?.owner_id || payment.owner_id || "";
 
-  // Canonical path: payment already has hostel_id (Phase 2 write-through)
-  if (payment.hostel_id) {
-    const hostel = await prisma.hostel.findUnique({
-      where: { id: payment.hostel_id },
-    });
-    if (hostel) return { hostel, prefs: resolvePreferences(hostel) };
+  if (!payment.hostel_id) {
+    throw new Error("HOSTEL_CONTEXT_REQUIRED: Payment is missing immutable hostel context");
   }
 
-  // Fallback: derive from obligation → allocation → room → hostel
-  if (payment.obligation?.allocation_id) {
-    const allocation = await prisma.roomAllocation.findUnique({
-      where: { id: payment.obligation.allocation_id },
-      include: { room: { include: { hostel: true } } },
-    });
-    if (allocation?.room?.hostel) {
-      return { hostel: allocation.room.hostel, prefs: resolvePreferences(allocation.room.hostel) };
-    }
+  if (payment.tenant?.hostel_id && payment.tenant.hostel_id !== payment.hostel_id) {
+    throw new Error("HOSTEL_CONTEXT_MISMATCH: Payment hostel does not match tenant hostel");
   }
 
-  // Last resort: owner's first hostel (single-hostel owners only)
-  const hostel = await prisma.hostel.findFirst({
-    where: { owner_id: ownerId, is_active: true },
-    orderBy: { created_at: "asc" },
+  if (payment.obligation?.hostel_id && payment.obligation.hostel_id !== payment.hostel_id) {
+    throw new Error("HOSTEL_CONTEXT_MISMATCH: Payment hostel does not match obligation hostel");
+  }
+
+  const hostel = await prisma.hostel.findUnique({
+    where: { id: payment.hostel_id },
   });
+
+  if (!hostel) throw new Error("HOSTEL_NOT_FOUND: Payment hostel not found");
+  if (ownerId && hostel.owner_id !== ownerId) {
+    throw new Error("HOSTEL_ACCESS_DENIED: Payment hostel does not belong to owner");
+  }
   return { hostel, prefs: resolvePreferences(hostel) };
 }
 
@@ -82,7 +72,7 @@ export class ReceiptService {
    *
    * Avoids direct sequence SQL so environments without receipt_seq don't crash.
    */
-  async generateReceiptNumber(ownerId: string, offset = 0, prefs?: any): Promise<string> {
+  async generateReceiptNumber(ownerId: string, hostelId: string, offset = 0, prefs?: any): Promise<string> {
     const resolvedPrefs = prefs || resolvePreferences(null);
     const year = new Date().getFullYear();
     const prefix = `${resolvedPrefs.receipt_prefix}-${year}-`;
@@ -91,6 +81,7 @@ export class ReceiptService {
     const existingCount = await prisma.receipt.count({
       where: {
         owner_id: ownerId,
+        hostel_id: hostelId,
         issued_at: { gte: yearStart, lt: yearEnd },
       },
     });
@@ -124,12 +115,16 @@ export class ReceiptService {
     if (!canGenerateReceipts) {
       throw new Error(`${PLAN_UPGRADE_REQUIRED_ERROR}: Upgrade to Growth plan to generate receipts`);
     }
-    // Phase 2: resolve hostel from payment chain, not findFirst(owner_id)
+    // Resolve hostel from the immutable payment scope.
     const { hostel, prefs } = await resolveHostelForPayment(payment);
+    const paymentHostelId = payment.hostel_id;
+    if (!paymentHostelId) {
+      throw new Error("HOSTEL_CONTEXT_REQUIRED: Payment is missing immutable hostel context");
+    }
     let receipt = null;
 
     for (let attempt = 0; attempt < RECEIPT_NUMBER_RETRY_LIMIT; attempt += 1) {
-      const receiptNumber = await this.generateReceiptNumber(ownerId, attempt, prefs);
+      const receiptNumber = await this.generateReceiptNumber(ownerId, paymentHostelId, attempt, prefs);
       try {
         receipt = await prisma.receipt.create({
           data: {
@@ -143,7 +138,7 @@ export class ReceiptService {
             hostel_name: hostel?.name || "HMS Hostel",
             tenant_name: payment.tenant.profile.name,
             rent_month: payment.obligation.rent_month,
-            hostel_id: payment.hostel_id || hostel?.id || null, // Phase 2: immutable hostel context
+            hostel_id: paymentHostelId,
           },
         });
         break;
@@ -191,7 +186,7 @@ export class ReceiptService {
   async generatePdfBuffer(paymentId: string, options?: { autoCreate?: boolean }): Promise<Buffer> {
     const autoCreate = options?.autoCreate ?? true;
 
-    // ── Single fetch path (was: findFirst → createReceipt() → findFirst again) ──
+    // ── Single fetch path ──
     // Attempt to load existing receipt with all needed relations in one query.
     let receipt = await prisma.receipt.findFirst({
       where: { payment_id: paymentId },
@@ -258,36 +253,28 @@ export class ReceiptService {
     }
 
     try {
-      // 2. Fetch hostel + preferences + room allocation
-      // Phase 2: resolve hostel from receipt's payment chain, not findFirst(owner_id)
-      const ownerId = receipt.owner_id || receipt.tenant?.owner_id || "";
     let hostel: any = null;
     let prefs: any;
 
-    // Canonical: receipt has hostel_id (Phase 2 write-through)
-    if (receipt.hostel_id) {
-      hostel = await prisma.hostel.findUnique({ where: { id: receipt.hostel_id } });
-      prefs = resolvePreferences(hostel);
+    if (!receipt.hostel_id) {
+      throw new Error("HOSTEL_CONTEXT_REQUIRED: Receipt is missing immutable hostel context");
     }
-    // Fallback: derive from payment chain
-    if (!hostel && receipt.payment) {
-      const resolved = await resolveHostelForPayment(receipt.payment);
-      hostel = resolved.hostel;
-      prefs = resolved.prefs;
+    if (receipt.payment?.hostel_id && receipt.payment.hostel_id !== receipt.hostel_id) {
+      throw new Error("HOSTEL_CONTEXT_MISMATCH: Receipt hostel does not match payment hostel");
     }
-    if (!prefs) {
-      prefs = resolvePreferences(hostel);
-    }
+    hostel = await prisma.hostel.findUnique({ where: { id: receipt.hostel_id } });
+    if (!hostel) throw new Error("HOSTEL_NOT_FOUND: Receipt hostel not found");
+    prefs = resolvePreferences(hostel);
 
     const allocation = await prisma.roomAllocation.findFirst({
-      where: { tenant_id: receipt.tenant_id, is_active: true },
+      where: { tenant_id: receipt.tenant_id, hostel_id: receipt.hostel_id, is_active: true },
       include: { room: true },
       orderBy: { start_date: "desc" },
     });
 
     // If no active allocation, try the most recent one
     const fallbackAllocation = allocation || await prisma.roomAllocation.findFirst({
-      where: { tenant_id: receipt.tenant_id },
+      where: { tenant_id: receipt.tenant_id, hostel_id: receipt.hostel_id },
       include: { room: true },
       orderBy: { start_date: "desc" },
     });

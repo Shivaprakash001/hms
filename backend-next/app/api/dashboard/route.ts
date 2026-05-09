@@ -7,7 +7,7 @@ import { dashboardService } from "@/lib/services/dashboard-service";
 import { activityService } from "@/lib/services/activity-service";
 import { getCachedDashboard, setDashboardCache } from "@/lib/cache/dashboard-cache";
 import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
-import { assertHostelBelongsToOwner } from "@/lib/security/scoped-query";
+import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
 
 export async function GET(req: NextRequest) {
   const session = await getSession(req);
@@ -23,12 +23,13 @@ export async function GET(req: NextRequest) {
   let scope;
   try {
     scope = resolveOwnerScope(session);
-    await assertHostelBelongsToOwner(scope.owner_id, hostelId);
+    await requireHostelBelongsToOwner(scope.owner_id, hostelId);
+    if (!hostelId) return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
   } catch (error: any) {
     return apiError(error.message || "Forbidden", error.code || "FORBIDDEN", error.code === "UNAUTHORIZED" ? 401 : 403);
   }
 
-  const cacheKey = `${scope.owner_id}_${months}_${hostelId || "ALL"}`;
+  const cacheKey = `${scope.owner_id}_${months}_${hostelId}`;
 
   const cachedResult = getCachedDashboard(cacheKey);
   if (cachedResult) {
@@ -39,7 +40,7 @@ export async function GET(req: NextRequest) {
     // Run everything in parallel! The real secret to production performance
     const [summary, monthlyStats, activityRes] = await Promise.all([
       dashboardService.getOwnerStats(scope.owner_id, hostelId),
-      dashboardService.getMonthlyStats(scope.owner_id, months, hostelId),
+      dashboardService.getMonthlyStats(scope.owner_id, hostelId, months),
       activityService.getOwnerActivity({ userId: scope.owner_id, limit: 5, offset: 0 }).catch(() => ({ items: [], total: 0 }))
     ]);
 

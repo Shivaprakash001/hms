@@ -2,13 +2,11 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { ownerService } from '../api/services';
 import { useAuth } from './AuthContext';
 import { getDefaultPreferences, resolvePreferences } from '../utils/format';
-import { getActiveHostelId } from '../lib/hostel/activeHostel';
 
 const LEGACY_STORAGE_KEY = 'ownerPreferences';
 
-const getPreferenceStorageKey = (user) => {
+const getPreferenceStorageKey = (user, hostelId) => {
     const ownerId = user?.owner_id || (String(user?.role || '').toLowerCase() === 'owner' ? user?.id : null) || 'anonymous';
-    const hostelId = getActiveHostelId(user) || 'all-hostels';
     return `ownerPreferences:${ownerId}:${hostelId}`;
 };
 
@@ -35,19 +33,19 @@ export const AppPreferencesProvider = ({ children }) => {
     const updatePreferencesLocal = useCallback((nextPreferences) => {
         const merged = resolvePreferences(nextPreferences);
         setPreferences(merged);
-        localStorage.setItem(getPreferenceStorageKey(user), JSON.stringify(merged));
+        const hostelId = nextPreferences?.hostel_id || nextPreferences?.hostelId || user?.hostel_id || 'portfolio';
+        localStorage.setItem(getPreferenceStorageKey(user, hostelId), JSON.stringify(merged));
     }, [user]);
 
-    const refreshPreferences = useCallback(async () => {
+    const refreshPreferences = useCallback(async (hostelId) => {
         if (!user || !['owner', 'admin'].includes(String(user.role || '').toLowerCase())) return null;
+        if (!hostelId) return null;
         setLoading(true);
         try {
-            const activeHostelId = getActiveHostelId(user);
-            if (!activeHostelId) return null;
-            const response = await ownerService.getHostelPreferences(activeHostelId);
+            const response = await ownerService.getHostelPreferences(hostelId);
             const next = resolvePreferences(response?.compatibility_preferences || {});
             setPreferences(next);
-            localStorage.setItem(getPreferenceStorageKey(user), JSON.stringify(next));
+            localStorage.setItem(getPreferenceStorageKey(user, hostelId), JSON.stringify(next));
             localStorage.removeItem(LEGACY_STORAGE_KEY);
             return next;
         } finally {
@@ -60,12 +58,7 @@ export const AppPreferencesProvider = ({ children }) => {
             setPreferences(getDefaultPreferences());
             return;
         }
-        try {
-            const scoped = localStorage.getItem(getPreferenceStorageKey(user));
-            if (scoped) setPreferences(resolvePreferences(JSON.parse(scoped)));
-        } catch {}
-        refreshPreferences();
-    }, [user, refreshPreferences]);
+    }, [user]);
 
     const value = useMemo(() => ({
         preferences,

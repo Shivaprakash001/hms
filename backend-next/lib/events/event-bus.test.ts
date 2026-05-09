@@ -22,25 +22,25 @@ async function main() {
   console.log("\nEvent bus owner isolation");
   const ownerAEvents: any[] = [];
   const ownerBEvents: any[] = [];
-  const unscopedEvents: any[] = [];
+  const portfolioEvents: any[] = [];
 
-  const ownerA = { ownerId: "owner-a", send: (data: any) => ownerAEvents.push(data) };
-  const ownerB = { ownerId: "owner-b", send: (data: any) => ownerBEvents.push(data) };
-  const unscoped = { send: (data: any) => unscopedEvents.push(data) };
+  const ownerA = { ownerId: "owner-a", hostelId: "hostel-a", scope: "hostel" as const, send: (data: any) => ownerAEvents.push(data) };
+  const ownerB = { ownerId: "owner-b", hostelId: "hostel-b", scope: "hostel" as const, send: (data: any) => ownerBEvents.push(data) };
+  const portfolio = { ownerId: "owner-a", scope: "portfolio" as const, send: (data: any) => portfolioEvents.push(data) };
 
   addClient(ownerA);
   addClient(ownerB);
-  addClient(unscoped);
+  addClient(portfolio);
 
   try {
-    broadcast("owner-a", { type: "PAYMENT_RECORDED" });
-    assert(ownerAEvents.length === 1, "matching owner receives event");
+    broadcast("owner-a", { scope: "hostel", hostelId: "hostel-a", type: "PAYMENT_RECORDED" });
+    assert(ownerAEvents.length === 1, "matching hostel receives event");
     assert(ownerBEvents.length === 0, "other owner does not receive event");
-    assert(unscopedEvents.length === 0, "unscoped client does not receive owner event");
+    assert(portfolioEvents.length === 0, "portfolio client does not receive hostel event");
   } finally {
     removeClient(ownerA);
     removeClient(ownerB);
-    removeClient(unscoped);
+    removeClient(portfolio);
   }
 
   console.log(`\nEvent bus isolation: ${passed} passed, ${failed} failed`);

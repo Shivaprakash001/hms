@@ -28,7 +28,7 @@ import { Prisma } from "@prisma/client";
  *   Never write a raw obligation aggregate outside this file.
  */
 export class FinancialService {
-  async reconcileSettledOperationalObligations(ownerId: string): Promise<number> {
+  async reconcileSettledOperationalObligations(ownerId: string, hostelId: string): Promise<number> {
     const rows = await prisma.$queryRaw<{ one: number }[]>`
       WITH pay_agg AS (
         SELECT obligation_id, SUM(amount_paid)::float AS total_paid
@@ -40,6 +40,7 @@ export class FinancialService {
         FROM rent_obligations o
         LEFT JOIN pay_agg p ON p.obligation_id = o.id
         WHERE o.owner_id = ${ownerId}::uuid
+          AND o.hostel_id = ${hostelId}::uuid
           AND o.status IN ('PENDING', 'PARTIAL')
           AND o.amount - COALESCE(p.total_paid, 0) <= 0
       )
@@ -65,7 +66,7 @@ export class FinancialService {
     ownerId: string,
     start: Date,
     end: Date,
-    hostelId?: string,
+    hostelId: string,
   ): Promise<{
     expected_total: number;
     collected_total: number;
@@ -75,7 +76,7 @@ export class FinancialService {
     overdue_tenant_count: number;
     collection_rate: number;
   }> {
-    await this.reconcileSettledOperationalObligations(ownerId);
+    await this.reconcileSettledOperationalObligations(ownerId, hostelId);
 
     const now = new Date();
     const todayUTC = new Date(Date.UTC(
@@ -84,7 +85,7 @@ export class FinancialService {
       now.getUTCDate(),
     ));
 
-    const hostelFilter = hostelId ? Prisma.sql`AND o.hostel_id = ${hostelId}::uuid` : Prisma.empty;
+    const hostelFilter = Prisma.sql`AND o.hostel_id = ${hostelId}::uuid`;
 
     const [row] = await prisma.$queryRaw<{
       expected_total: number;
@@ -160,12 +161,13 @@ export class FinancialService {
    */
   async getOperationalOutstandingByTenants(
     ownerId: string,
+    hostelId: string,
     tenantIds: string[],
   ): Promise<Map<string, number>> {
     const ids = Array.from(new Set(tenantIds.filter(Boolean)));
     if (ids.length === 0) return new Map();
 
-    await this.reconcileSettledOperationalObligations(ownerId);
+    await this.reconcileSettledOperationalObligations(ownerId, hostelId);
 
     const rows = await prisma.$queryRaw<Array<{ tenant_id: string; outstanding: number }>>`
       SELECT
@@ -182,6 +184,7 @@ export class FinancialService {
       ) pay_agg ON pay_agg.obligation_id = o.id
       WHERE o.owner_id = ${ownerId}::uuid
         AND o.tenant_id = ANY(${ids}::uuid[])
+        AND o.hostel_id = ${hostelId}::uuid
         AND t.status = 'ACTIVE'
         AND o.status IN ('PENDING', 'PARTIAL')
       GROUP BY o.tenant_id
@@ -196,14 +199,14 @@ export class FinancialService {
    * - belonging to ACTIVE tenants only
    * - split into: pending (due_date >= today), overdue (due_date < today)
    */
-  async getOperationalDues(ownerId: string, hostelId?: string): Promise<{
+  async getOperationalDues(ownerId: string, hostelId: string): Promise<{
     pending_total: number;
     overdue_total: number;
     overdue_count: number;
     unpaid_tenant_count: number;
     overdue_tenant_count: number;
   }> {
-    await this.reconcileSettledOperationalObligations(ownerId);
+    await this.reconcileSettledOperationalObligations(ownerId, hostelId);
 
     const now = new Date();
     const todayUTC = new Date(Date.UTC(
@@ -212,7 +215,7 @@ export class FinancialService {
       now.getUTCDate(),
     ));
 
-    const hostelFilter = hostelId ? Prisma.sql`AND o.hostel_id = ${hostelId}::uuid` : Prisma.empty;
+    const hostelFilter = Prisma.sql`AND o.hostel_id = ${hostelId}::uuid`;
 
     const [row] = await prisma.$queryRaw<
       {
@@ -272,7 +275,7 @@ export class FinancialService {
   async getOperationalDefaulters(
     ownerId: string,
     limit: number = 5,
-    hostelId?: string,
+    hostelId: string,
   ): Promise<Array<{
     tenant_id: string;
     name: string;
@@ -280,7 +283,7 @@ export class FinancialService {
     days_overdue: number;
   }>> {
     const safeLimit = Math.max(1, Math.min(50, Math.floor(limit || 5)));
-    const hostelFilter = hostelId ? Prisma.sql`AND o.hostel_id = ${hostelId}::uuid` : Prisma.empty;
+    const hostelFilter = Prisma.sql`AND o.hostel_id = ${hostelId}::uuid`;
     const rows = await prisma.$queryRaw<Array<{
       tenant_id: string;
       name: string;
@@ -336,7 +339,8 @@ export class FinancialService {
    */
   async getOperationalOverdueObligations(
     asOfDate: Date = new Date(),
-    ownerId?: string,
+    ownerId: string,
+    hostelId: string,
   ): Promise<Array<{
     obligation_id: string;
     tenant_id: string;
@@ -355,8 +359,6 @@ export class FinancialService {
       asOfDate.getUTCMonth(),
       asOfDate.getUTCDate(),
     ));
-
-    const ownerFilter = ownerId ? Prisma.sql`AND o.owner_id = ${ownerId}::uuid` : Prisma.empty;
 
     const rows = await prisma.$queryRaw<Array<{
       obligation_id: string;
@@ -398,7 +400,8 @@ export class FinancialService {
         AND o.due_date < ${cutoff}::date
         AND t.status = 'ACTIVE'
         AND o.amount - COALESCE(pay_agg.total_paid, 0) > 0
-        ${ownerFilter}
+        AND o.owner_id = ${ownerId}::uuid
+        AND o.hostel_id = ${hostelId}::uuid
     `;
 
     return rows.map((r) => ({
@@ -421,7 +424,7 @@ export class FinancialService {
    * Historical outstanding — all tenants, no lifecycle filter.
    * Used for accounting reports and overdue defaulter lists.
    */
-  async getHistoricalOutstanding(ownerId: string): Promise<{
+  async getHistoricalOutstanding(ownerId: string, hostelId: string): Promise<{
     outstanding_total: number;
     overdue_total: number;
     overdue_count: number;
@@ -458,6 +461,7 @@ export class FinancialService {
         GROUP BY obligation_id
       ) pay_agg ON pay_agg.obligation_id = o.id
       WHERE o.owner_id = ${ownerId}::uuid
+        AND o.hostel_id = ${hostelId}::uuid
         AND o.status   IN ('PENDING', 'PARTIAL')
         AND o.amount - COALESCE(pay_agg.total_paid, 0) > 0
     `;
@@ -475,7 +479,7 @@ export class FinancialService {
    * Returns itemised list of PENDING/PARTIAL obligations with remaining amounts.
    * Does NOT include PAID obligations — they are settled.
    */
-  async getTenantDues(tenantId: string, ownerId?: string): Promise<{
+  async getTenantDues(tenantId: string, ownerId: string | undefined, hostelId: string): Promise<{
     tenant_id: string;
     items: TenantDueItem[];
     total_due: number;
@@ -487,6 +491,7 @@ export class FinancialService {
       where: {
         tenant_id: tenantId,
         ...(ownerId ? { owner_id: ownerId } : {}),
+        hostel_id: hostelId,
         status: { in: ["PENDING", "PARTIAL"] },
       },
       include: {

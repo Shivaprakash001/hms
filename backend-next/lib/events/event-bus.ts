@@ -1,5 +1,7 @@
 interface SSEClient {
-  ownerId?: string;
+  ownerId: string;
+  hostelId?: string;
+  scope: "hostel" | "portfolio";
   send: (data: any) => void;
 }
 
@@ -13,12 +15,10 @@ export function removeClient(client: SSEClient) {
   clients.delete(client);
 }
 
-export function broadcast(ownerId: string, event: object) {
+export function broadcast(ownerId: string, event: any) {
   for (const client of Array.from(clients)) {
-    // Never broadcast owner events to unscoped clients. A missing ownerId is a
-    // delivery bug, not permission to receive every owner's operational stream.
-    if (client.ownerId === ownerId) {
-      client.send(event);
-    }
+    if (client.ownerId !== ownerId) continue;
+    if (event?.scope === "hostel" && client.scope === "hostel" && client.hostelId === event.hostelId) client.send(event);
+    if (event?.scope === "portfolio" && client.scope === "portfolio") client.send(event);
   }
 }

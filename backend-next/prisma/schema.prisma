@@ -59,7 +59,7 @@ model Tenant {
   // Phase 2: current operational hostel. MUTABLE — updated on hostel transfer.
   // NULL when tenant has no active allocation (invited/inactive).
   // Do NOT use for historical attribution — use obligation/payment.hostel_id for that.
-  hostel_id             String?                  @db.Uuid
+  hostel_id             String                   @db.Uuid
   profile_completed     Boolean                  @default(false)
   photo_url             String?
   phone_1               String?
@@ -102,7 +102,7 @@ model Tenant {
   advance_ledger        TenantAdvanceLedger[]
   behavior_score        TenantBehaviorScore?
   profile               Profile                  @relation("TenantToProfile", fields: [profile_id], references: [id])
-  hostel                Hostel?                  @relation("TenantCurrentHostel", fields: [hostel_id], references: [id])
+  hostel                Hostel                   @relation("TenantCurrentHostel", fields: [hostel_id], references: [id])
 
   @@index([owner_id])
   @@index([hostel_id])
@@ -176,6 +176,7 @@ model Room {
   allocations RoomAllocation[]
   hostel      Hostel            @relation(fields: [hostel_id], references: [id])
 
+  @@unique([hostel_id, room_no])
   @@index([hostel_id])
   @@map("rooms")
   @@schema("public")
@@ -209,11 +210,11 @@ model RoomAllocation {
   // Phase 2: denormalized hostel_id — immutable snapshot of room.hostel_id at creation time.
   // Never changes even if room metadata changes. Enables efficient hostel-scoped queries
   // without traversing room→hostel chain on every read.
-  hostel_id   String?          @db.Uuid
+  hostel_id   String           @db.Uuid
   obligations RentObligation[]
   room        Room             @relation(fields: [room_id], references: [id])
   tenant      Tenant           @relation(fields: [tenant_id], references: [id])
-  hostel      Hostel?          @relation("AllocationHostel", fields: [hostel_id], references: [id])
+  hostel      Hostel           @relation("AllocationHostel", fields: [hostel_id], references: [id])
 
   @@index([tenant_id, is_active, end_date])
   @@index([room_id, is_active])
@@ -239,14 +240,14 @@ model RentObligation {
   obligation_type String                     @default("RENT")
   // Phase 2: historical hostel at obligation generation time. IMMUTABLE after set.
   // Source: allocation→room→hostel at generation time. Never changes on tenant transfer.
-  hostel_id       String?                    @db.Uuid
+  hostel_id       String                     @db.Uuid
   attempt_links   PaymentAttemptObligation[]
   attempts        PaymentAttempt[]
   payments        Payment[]
   reminders       ReminderLog[]
   allocation      RoomAllocation?            @relation(fields: [allocation_id], references: [id])
   tenant          Tenant                     @relation(fields: [tenant_id], references: [id])
-  hostel          Hostel?                    @relation("ObligationHostel", fields: [hostel_id], references: [id])
+  hostel          Hostel                     @relation("ObligationHostel", fields: [hostel_id], references: [id])
 
   @@unique([allocation_id, rent_month, obligation_type])
   @@index([tenant_id, rent_month])
@@ -292,11 +293,11 @@ model ReminderLog {
   converted_at         DateTime?      @db.Timestamptz(6)
   // Phase 2: historical hostel at reminder send time. IMMUTABLE after set.
   // Source: obligation.hostel_id at send time.
-  hostel_id            String?        @db.Uuid
+  hostel_id            String         @db.Uuid
 
   obligation           RentObligation @relation(fields: [obligation_id], references: [id], onDelete: Cascade)
   tenant               Tenant         @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  hostel               Hostel?        @relation("ReminderHostel", fields: [hostel_id], references: [id])
+  hostel               Hostel         @relation("ReminderHostel", fields: [hostel_id], references: [id])
 
   @@index([obligation_id])
   @@index([tenant_id])
@@ -408,11 +409,11 @@ model Payment {
   created_at           DateTime        @default(now()) @db.Timestamptz(6)
   // Phase 2: historical hostel at payment time. IMMUTABLE after set.
   // Source: obligation.hostel_id at payment creation time.
-  hostel_id            String?         @db.Uuid
+  hostel_id            String          @db.Uuid
   obligation           RentObligation  @relation(fields: [obligation_id], references: [id])
   attempt              PaymentAttempt? @relation(fields: [payment_attempt_id], references: [id])
   tenant               Tenant          @relation(fields: [tenant_id], references: [id])
-  hostel               Hostel?         @relation("PaymentHostel", fields: [hostel_id], references: [id])
+  hostel               Hostel          @relation("PaymentHostel", fields: [hostel_id], references: [id])
   receipts             Receipt?
 
   @@index([owner_id])
@@ -452,12 +453,14 @@ model PaymentAttempt {
   manual_confirmed_by   String?                    @db.Uuid
   manual_confirmed_at   DateTime?                  @db.Timestamptz(6)
   manual_confirm_ip     String?
+  hostel_id             String?                    @db.Uuid
   obligations           PaymentAttemptObligation[]
   invoice             OwnerInvoice?              @relation(fields: [invoice_id], references: [id])
   obligation          RentObligation?            @relation(fields: [obligation_id], references: [id])
   tenant              Tenant?                    @relation(fields: [tenant_id], references: [id])
   payments            Payment[]
 
+  @@index([hostel_id])
   @@map("payment_attempts")
   @@schema("public")
 }
@@ -627,9 +630,9 @@ model Expense {
   status     String?  @default("paid")
   created_at DateTime @default(now()) @db.Timestamptz(6)
   // Phase 2: hostel this expense belongs to. Mutable (correction allowed by owner).
-  hostel_id  String?  @db.Uuid
+  hostel_id  String   @db.Uuid
   owner      Profile  @relation(fields: [owner_id], references: [id])
-  hostel     Hostel?  @relation("ExpenseHostel", fields: [hostel_id], references: [id])
+  hostel     Hostel   @relation("ExpenseHostel", fields: [hostel_id], references: [id])
 
   @@index([owner_id])
   @@index([date])
@@ -654,9 +657,9 @@ model Complaint {
   created_at  DateTime  @default(now()) @db.Timestamptz(6)
   updated_at  DateTime? @updatedAt @db.Timestamptz(6)
   // Phase 2: hostel at complaint creation time. IMMUTABLE after set.
-  hostel_id   String?   @db.Uuid
+  hostel_id   String    @db.Uuid
   tenant      Tenant    @relation(fields: [tenant_id], references: [id])
-  hostel      Hostel?   @relation("ComplaintHostel", fields: [hostel_id], references: [id])
+  hostel      Hostel    @relation("ComplaintHostel", fields: [hostel_id], references: [id])
 
   @@index([hostel_id])
   @@map("complaints")
@@ -665,7 +668,7 @@ model Complaint {
 
 model Receipt {
   id                       String    @id @default(uuid()) @db.Uuid
-  receipt_number           String    @unique
+  receipt_number           String
   payment_id               String    @unique @db.Uuid
   tenant_id                String    @db.Uuid
   owner_id                 String?   @db.Uuid
@@ -682,11 +685,12 @@ model Receipt {
   receipt_template_version Int?
   // Phase 2: historical hostel at receipt issuance time. IMMUTABLE after set.
   // Source: payment.hostel_id at receipt creation time.
-  hostel_id                String?   @db.Uuid
+  hostel_id                String    @db.Uuid
   payment                  Payment   @relation(fields: [payment_id], references: [id])
   tenant                   Tenant    @relation(fields: [tenant_id], references: [id])
-  hostel                   Hostel?   @relation("ReceiptHostel", fields: [hostel_id], references: [id])
+  hostel                   Hostel    @relation("ReceiptHostel", fields: [hostel_id], references: [id])
 
+  @@unique([hostel_id, receipt_number])
   @@index([hostel_id])
   @@index([hostel_id, issued_at])
   @@map("receipts")
