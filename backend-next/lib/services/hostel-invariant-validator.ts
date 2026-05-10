@@ -129,9 +129,7 @@ export class HostelInvariantValidator {
       LIMIT 100
     `;
 
-    const totalChecked = await prisma.payment.count({
-      where: { hostel_id: { not: null } },
-    });
+    const totalChecked = await prisma.payment.count();
 
     return {
       name: "payment.hostel_id === obligation.hostel_id",
@@ -167,9 +165,7 @@ export class HostelInvariantValidator {
       LIMIT 100
     `;
 
-    const totalChecked = await prisma.receipt.count({
-      where: { hostel_id: { not: null } },
-    });
+    const totalChecked = await prisma.receipt.count();
 
     return {
       name: "receipt.hostel_id === payment.hostel_id",
@@ -205,9 +201,7 @@ export class HostelInvariantValidator {
       LIMIT 100
     `;
 
-    const totalChecked = await prisma.reminderLog.count({
-      where: { hostel_id: { not: null } },
-    });
+    const totalChecked = await prisma.reminderLog.count();
 
     return {
       name: "reminder.hostel_id === obligation.hostel_id",
@@ -242,9 +236,7 @@ export class HostelInvariantValidator {
       LIMIT 100
     `;
 
-    const totalChecked = await prisma.roomAllocation.count({
-      where: { hostel_id: { not: null } },
-    });
+    const totalChecked = await prisma.roomAllocation.count();
 
     return {
       name: "allocation.hostel_id === room.hostel_id",
@@ -282,7 +274,7 @@ export class HostelInvariantValidator {
     `;
 
     const totalChecked = await prisma.tenant.count({
-      where: { status: "ACTIVE", hostel_id: { not: null } },
+      where: { status: "ACTIVE" },
     });
 
     return {

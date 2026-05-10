@@ -160,6 +160,7 @@ export class InvitationService {
         tenantId: tenant.id,
         allocationId: allocation.id,
         ownerId,
+        hostelId: room.hostel.id,
         joiningDate,
         advanceDeposit: advance_amount,
         maintenanceCharge: maintenance_amount,
@@ -364,13 +365,14 @@ export class InvitationService {
             if (activeAllocation) {
               await tx.roomAllocation.update({
                 where: { id: activeAllocation.id },
-                data: { room_id: roomIdOverride, start_date: new Date() },
+                data: { room_id: roomIdOverride, hostel_id: targetRoom.hostel.id, start_date: new Date() },
               });
             } else {
               await tx.roomAllocation.create({
                 data: {
                   tenant_id: tenantDetails.id,
                   room_id: roomIdOverride,
+                  hostel_id: targetRoom.hostel.id,
                   start_date: new Date(),
                   is_active: true,
                 },

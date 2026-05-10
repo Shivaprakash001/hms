@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * 🔧 Phase 2 Backfill Script — Hostel ID Normalization
  *

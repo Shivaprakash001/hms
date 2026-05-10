@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
 
 const ALLOWED_MANUAL_TYPES = ["MAINTENANCE", "FINE", "EXTRA_CHARGE", "OTHER"];
 
@@ -56,7 +57,14 @@ export async function POST(req: NextRequest) {
     // Verify tenant belongs to this owner
     const tenant = await prisma.tenant.findUnique({
       where: { id: tenant_id },
-      select: { owner_id: true, allocations: { where: { is_active: true }, select: { id: true } } },
+      select: {
+        owner_id: true,
+        hostel_id: true,
+        allocations: {
+          where: { is_active: true },
+          select: { id: true, hostel_id: true, room: { select: { hostel_id: true } } },
+        },
+      },
     });
 
     if (!tenant) return apiError("Tenant not found", "NOT_FOUND", 404);
@@ -66,7 +74,19 @@ export async function POST(req: NextRequest) {
       return apiError("Tenant does not belong to your account", "FORBIDDEN", 403);
     }
 
-    const activeAllocationId = tenant.allocations[0]?.id || null;
+    if (!tenant.hostel_id) {
+      return apiError("Tenant is missing hostel context", "HOSTEL_CONTEXT_REQUIRED", 400);
+    }
+    await requireHostelBelongsToOwner(ownerId, tenant.hostel_id);
+
+    const activeAllocation = tenant.allocations[0] || null;
+    const activeAllocationId = activeAllocation?.id || null;
+    if (activeAllocation && activeAllocation.hostel_id !== tenant.hostel_id) {
+      return apiError("Active allocation hostel does not match tenant hostel", "HOSTEL_CONTEXT_MISMATCH", 409);
+    }
+    if (activeAllocation?.room?.hostel_id && activeAllocation.room.hostel_id !== tenant.hostel_id) {
+      return apiError("Active room hostel does not match tenant hostel", "HOSTEL_CONTEXT_MISMATCH", 409);
+    }
 
     // Create the obligation
     // Note: @@unique([allocation_id, rent_month, obligation_type]) prevents duplicate
@@ -75,6 +95,7 @@ export async function POST(req: NextRequest) {
       data: {
         tenant_id,
         owner_id: ownerId,
+        hostel_id: tenant.hostel_id,
         allocation_id: activeAllocationId,
         obligation_type,
         amount,

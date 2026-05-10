@@ -303,6 +303,7 @@ export class TenantAdvanceService {
           obligation_id: obligationId,
           tenant_id: tenantId,
           owner_id: ownerId,
+          hostel_id: obligation.hostel_id,
           amount_paid: adjustPaisa / 100,
           payment_method: "ADVANCE_ADJUSTMENT",
           reference_number: `ADV-${Date.now()}`,

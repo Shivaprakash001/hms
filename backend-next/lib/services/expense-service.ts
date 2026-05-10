@@ -19,8 +19,11 @@ export class ExpenseService {
     date: Date | string;
     category: string;
     status?: string;
-    hostel_id?: string;
+    hostel_id: string;
   }) {
+    if (!data.hostel_id) {
+      throw new Error("HOSTEL_CONTEXT_REQUIRED: Expense requires hostel_id");
+    }
     // Parse date safely — handle both Date objects and ISO strings
     let parsedDate: Date;
     if (data.date instanceof Date) {
@@ -42,7 +45,7 @@ export class ExpenseService {
         date: parsedDate,
         category: data.category,
         status: data.status || "paid",
-        hostel_id: data.hostel_id || null, // Phase 2: hostel-scoped expenses
+        hostel_id: data.hostel_id,
       }
     });
 

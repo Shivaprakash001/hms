@@ -29,6 +29,7 @@ export class ObligationEngine {
       tenantId: string;
       allocationId: string;
       ownerId: string;
+      hostelId: string;
       joiningDate: Date;
       advanceDeposit: number;
       maintenanceCharge: number;
@@ -39,6 +40,7 @@ export class ObligationEngine {
       tenantId,
       allocationId,
       ownerId,
+      hostelId,
       joiningDate,
       advanceDeposit,
       maintenanceCharge,
@@ -58,6 +60,7 @@ export class ObligationEngine {
         tenantId,
         allocationId,
         ownerId,
+        hostelId,
         rentMonth,
         amount: advanceDeposit,
         dueDate: joiningDate,
@@ -72,6 +75,7 @@ export class ObligationEngine {
         tenantId,
         allocationId,
         ownerId,
+        hostelId,
         rentMonth,
         amount: maintenanceCharge,
         dueDate: joiningDate,
@@ -96,6 +100,7 @@ export class ObligationEngine {
       tenantId: string;
       allocationId: string;
       ownerId: string;
+      hostelId: string;
       rentMonth: Date;
       amount: number;
       dueDate: Date;
@@ -106,6 +111,7 @@ export class ObligationEngine {
       tenantId,
       allocationId,
       ownerId,
+      hostelId,
       rentMonth,
       amount,
       dueDate,
@@ -132,6 +138,7 @@ export class ObligationEngine {
           tenant_id: tenantId,
           allocation_id: allocationId,
           owner_id: ownerId,
+          hostel_id: hostelId,
           rent_month: rentMonth,
           amount,
           total_amount: amount,

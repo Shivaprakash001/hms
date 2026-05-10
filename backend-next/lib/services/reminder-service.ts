@@ -87,7 +87,7 @@ export class ReminderService {
       const lastReminderType = remindersByObligation.get(ob.obligation_id)?.reminder_type ?? null;
       const reminderTarget = {
         id: ob.obligation_id,
-        hostel_id: hostelId || null,
+        hostel_id: hostelId,
         amount: ob.remaining_amount,
         rent_month: ob.rent_month,
         due_date: ob.due_date,
@@ -168,7 +168,7 @@ export class ReminderService {
                           due_date: todayMid,
                           status: "PENDING",
                           obligation_type: "LATE_FEE",
-                          hostel_id: hostelId || null, // Phase 2: immutable hostel context
+                          hostel_id: hostelId,
                         },
                       });
                       accumulatedFees += feeAmount;
@@ -217,7 +217,7 @@ export class ReminderService {
                           due_date: todayMid,
                           status: "PENDING",
                           obligation_type: "LATE_FEE",
-                          hostel_id: hostelId || null, // Phase 2: immutable hostel context
+                          hostel_id: hostelId,
                         },
                       });
                       accumulatedFees += feeAmount;
