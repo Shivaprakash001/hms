@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Building2, MapPin, Phone, ArrowRight, Loader2 } from 'lucide-react';
@@ -18,6 +18,20 @@ export default function OnboardingHostel() {
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [apiError, setApiError] = useState('');
+  const [existingHostelId, setExistingHostelId] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    ownerService.getHostels()
+      .then((response) => {
+        if (cancelled) return;
+        const hostels = response?.hostels || [];
+        const firstActive = hostels.find((hostel) => hostel?.is_active !== false) || hostels[0];
+        if (firstActive?.id) setExistingHostelId(firstActive.id);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const set = (k, v) => {
     setForm(p => ({ ...p, [k]: v }));
@@ -39,12 +53,17 @@ export default function OnboardingHostel() {
     setSaving(true);
     setApiError('');
     try {
-      const response = await ownerService.updateHostel({
+      const payload = {
         name:         form.name.trim(),
         city:         form.city.trim(),
         hostel_type:  form.type,
         phone:        form.phone.trim() || undefined,
-      });
+      };
+      if (existingHostelId) {
+        await ownerService.updateHostel(payload, existingHostelId);
+      } else {
+        await ownerService.createHostel(payload);
+      }
       setStoredStep('HOSTEL_CREATED');
       navigate('/onboarding/billing');
     } catch (err) {
