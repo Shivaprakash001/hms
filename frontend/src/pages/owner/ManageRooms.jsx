@@ -25,6 +25,7 @@ const ManageRooms = () => {
     const [selectedTenant, setSelectedTenant] = useState(null);
     const [selectedTenantProfile, setSelectedTenantProfile] = useState(null);
     const [tenantProfileLoading, setTenantProfileLoading] = useState(false);
+    const [deletingRoomId, setDeletingRoomId] = useState(null);
     const [filterStatus, setFilterStatus] = useState('All');
 
     const handleCallTenant = async (phone) => {
@@ -220,6 +221,36 @@ const ManageRooms = () => {
         }
     };
 
+    const handleDeleteRoom = async (room) => {
+        if (!room?.id || deletingRoomId) return;
+
+        const occupants = room.tenants || [];
+        const roomNo = room.room_no || room.number || '';
+
+        if (occupants.length > 0) {
+            alert('This room has active residents. Please shift or remove them before deleting the room.');
+            return;
+        }
+
+        if (!window.confirm(`Delete Room ${roomNo || 'this room'}? This cannot be undone.`)) return;
+
+        setDeletingRoomId(room.id);
+        try {
+            await roomService.delete(room.id);
+            if (selectedRoom?.id === room.id) {
+                setSelectedRoom(null);
+            }
+            await fetchData();
+        } catch (err) {
+            console.error(err);
+            const detail = err.response?.data?.detail || err.response?.data?.error?.message || err.response?.data?.message;
+            const msg = detail?.message || detail || err.message || 'Unknown error';
+            alert("Failed to delete room: " + msg);
+        } finally {
+            setDeletingRoomId(null);
+        }
+    };
+
     const handleShiftTenant = async (tenantId, newRoomId) => {
         try {
             const today = new Date();
@@ -335,6 +366,8 @@ const ManageRooms = () => {
                                             key={room.id}
                                             room={room}
                                             onClick={() => openRoomDetails(room)}
+                                            onDelete={() => handleDeleteRoom(room)}
+                                            isDeleting={deletingRoomId === room.id}
                                         />
                                     ))}
 
@@ -384,6 +417,8 @@ const ManageRooms = () => {
                         onAddTenant={() => setShowAddTenantModal(true)}
                         onRemoveTenant={handleRemoveTenant}
                         onCallTenant={handleCallTenant}
+                        onDeleteRoom={() => handleDeleteRoom(selectedRoom)}
+                        isDeletingRoom={deletingRoomId === selectedRoom.id}
                         onShiftTenant={(tenant) => {
                             setSelectedTenantForShift({
                                 ...tenant,
@@ -472,7 +507,7 @@ const StatCard = ({ icon, label, value, color }) => {
     );
 };
 
-const RoomCard = ({ room, onClick }) => {
+const RoomCard = ({ room, onClick, onDelete, isDeleting }) => {
     const isFull = room.tenants?.length >= room.capacity;
     const isVacant = (room.tenants?.length || 0) === 0;
     
@@ -513,8 +548,26 @@ const RoomCard = ({ room, onClick }) => {
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Room</span>
                     <span className="text-3xl font-black text-slate-900 leading-none">{room.room_no}</span>
                 </div>
-                <div className={`px-2.5 py-1 rounded-lg ${status.bg} ${status.text} text-[10px] font-black uppercase tracking-widest`}>
-                    {status.label}
+                <div className="flex items-center gap-2">
+                    <div className={`px-2.5 py-1 rounded-lg ${status.bg} ${status.text} text-[10px] font-black uppercase tracking-widest`}>
+                        {status.label}
+                    </div>
+                    <button
+                        type="button"
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            onDelete?.();
+                        }}
+                        disabled={isDeleting || !isVacant}
+                        title={isVacant ? 'Delete room' : 'Shift or remove residents before deleting'}
+                        className={`p-2 rounded-lg transition-all ${
+                            isVacant
+                                ? 'text-slate-300 hover:text-red-500 hover:bg-red-50'
+                                : 'text-slate-200 cursor-not-allowed'
+                        }`}
+                    >
+                        {isDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                    </button>
                 </div>
             </div>
 
@@ -535,7 +588,7 @@ const RoomCard = ({ room, onClick }) => {
     );
 }
 
-const RoomDetailSidebar = ({ room, onClose, onEditRoom, onAddTenant, onRemoveTenant, onShiftTenant, onOpenTenant, onCallTenant }) => {
+const RoomDetailSidebar = ({ room, onClose, onEditRoom, onDeleteRoom, isDeletingRoom, onAddTenant, onRemoveTenant, onShiftTenant, onOpenTenant, onCallTenant }) => {
     const roomInfo = room?.room || room;
     const occupants = room?.tenants || room?.occupants || roomInfo?.tenants || [];
     const capacity = roomInfo?.capacity || 0;
@@ -580,6 +633,19 @@ const RoomDetailSidebar = ({ room, onClose, onEditRoom, onAddTenant, onRemoveTen
                         <div className="flex gap-2">
                             <button onClick={onEditRoom} className="p-2 hover:bg-slate-100 rounded-xl font-bold text-slate-500 hover:text-indigo-600 transition-colors text-sm flex items-center gap-1">
                                 Edit 
+                            </button>
+                            <button
+                                onClick={onDeleteRoom}
+                                disabled={isDeletingRoom || occupants.length > 0}
+                                title={occupants.length > 0 ? 'Shift or remove residents before deleting' : 'Delete room'}
+                                className={`p-2 rounded-xl font-bold text-sm flex items-center gap-1 transition-colors ${
+                                    occupants.length > 0
+                                        ? 'text-slate-300 cursor-not-allowed'
+                                        : 'text-slate-500 hover:text-red-600 hover:bg-red-50'
+                                }`}
+                            >
+                                {isDeletingRoom ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                                Delete
                             </button>
                             <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-900 transition-colors">
                                 <X size={24} />
