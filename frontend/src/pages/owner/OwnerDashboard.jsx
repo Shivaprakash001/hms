@@ -113,10 +113,10 @@ const OwnerDashboard = () => {
                 />
             )}
             <div className="px-4 pt-3">
-                {tab === 'cashflow'    && <S1_Cashflow   cfStats={cfStats} cfSeverity={cf?.severity} cfInsights={cf?.insights ?? []} preferences={preferences} navigate={navigate} />}
-                {tab === 'tenants'     && <S2_Tenants    data={ti?.data}   severity={ti?.severity}   insights={ti?.insights ?? []}  loading={tiLoading} preferences={preferences} navigate={navigate} />}
-                {tab === 'funnel'      && <S3_Funnel     data={fn?.data}   severity={fn?.severity}   insights={fn?.insights ?? []}  loading={fnLoading} preferences={preferences} navigate={navigate} />}
-                {tab === 'operations'  && <S4_Operations data={op?.data}   severity={op?.severity}   insights={op?.insights ?? []}  loading={opLoading} preferences={preferences} navigate={navigate} />}
+                {tab === 'cashflow'    && <S1_Cashflow   cfStats={cfStats} cfSeverity={cf?.severity} cfInsights={cf?.insights ?? []} preferences={preferences} navigate={navigate} opPath={opPath} />}
+                {tab === 'tenants'     && <S2_Tenants    data={ti?.data}   severity={ti?.severity}   insights={ti?.insights ?? []}  loading={tiLoading} preferences={preferences} navigate={navigate} opPath={opPath} />}
+                {tab === 'funnel'      && <S3_Funnel     data={fn?.data}   severity={fn?.severity}   insights={fn?.insights ?? []}  loading={fnLoading} preferences={preferences} navigate={navigate} opPath={opPath} />}
+                {tab === 'operations'  && <S4_Operations data={op?.data}   severity={op?.severity}   insights={op?.insights ?? []}  loading={opLoading} preferences={preferences} navigate={navigate} opPath={opPath} />}
             </div>
             <TabBar active={tab} onChange={setTab} badge={cfStats.overdueCount} />
         </div>
@@ -237,7 +237,7 @@ const InsightStrip = ({ insights, severity }) => {
 //              overdue_amount, overdue_tenants_count,
 //              top_defaulters[]{tenant_id, name, pending_amount, days_overdue},
 //              daily_collection[]{date, amount}
-const S1_Cashflow = ({ cfStats, cfSeverity, cfInsights, preferences, navigate }) => {
+const S1_Cashflow = ({ cfStats, cfSeverity, cfInsights, preferences, navigate, opPath }) => {
     // If the owner has no tenants and no expected rent, they are likely new.
     // SmartDashboardGuidance derives real state from the server — not just local flags.
     const isNewOwner = cfStats.expected === 0 && cfStats.topDefaulters.length === 0;
@@ -298,7 +298,7 @@ const S1_Cashflow = ({ cfStats, cfSeverity, cfInsights, preferences, navigate })
                             const r = riskBadge(d);
                             return (
                                 <div key={dId(d)} className="flex items-center gap-3 px-4 py-3 active:bg-slate-50">
-                                    <button onClick={() => navigate(`/owner/tenants/${dId(d)}`)} className="flex-1 min-w-0 text-left">
+                                    <button onClick={() => navigate(opPath(`tenants/${dId(d)}`))} className="flex-1 min-w-0 text-left">
                                         <div className="flex items-center gap-2 mb-0.5">
                                             <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${RC[r]}`}>{r}</span>
                                             <p className="text-sm font-extrabold text-slate-900 truncate">{dName(d)}</p>
@@ -379,7 +379,7 @@ const S1_Cashflow = ({ cfStats, cfSeverity, cfInsights, preferences, navigate })
 // Fields: distribution{good,medium,risky}, risky_tenants[]{tenant_id,name,score,pending_amount,avg_delay_days},
 //         payment_behavior{on_time_percentage,avg_delay_days,reminder_dependency_rate},
 //         exit_insights{total_exits,top_reasons[]{reason,count},churn_rate}
-const S2_Tenants = ({ data, severity, insights, loading, preferences, navigate }) => {
+const S2_Tenants = ({ data, severity, insights, loading, preferences, navigate, opPath }) => {
     if (loading || !data) return <TabSkeleton />;
     const dist  = data.distribution    ?? { good: 0, medium: 0, risky: 0 };
     const risky = data.risky_tenants   ?? [];
@@ -436,7 +436,7 @@ const S2_Tenants = ({ data, severity, insights, loading, preferences, navigate }
                     <div className="divide-y divide-slate-50">
                         {risky.map(t => (
                             <div key={t.tenant_id} className="flex items-center gap-3 px-4 py-3 active:bg-slate-50">
-                                <button onClick={() => navigate(`/owner/tenants/${t.tenant_id}`)} className="flex-1 min-w-0 text-left">
+                                <button onClick={() => navigate(opPath(`tenants/${t.tenant_id}`))} className="flex-1 min-w-0 text-left">
                                     <div className="flex items-center gap-2 mb-0.5">
                                         <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${t.score < 30 ? RC.HIGH : RC.MEDIUM}`}>Score {t.score}</span>
                                         <p className="text-sm font-extrabold text-slate-900 truncate">{t.name}</p>
@@ -448,7 +448,7 @@ const S2_Tenants = ({ data, severity, insights, loading, preferences, navigate }
                                 </button>
                                 <div className="flex gap-1.5 shrink-0">
                                     <ReminderButton tenantId={t.tenant_id} tenantName={t.name ?? 'Tenant'} onNoCredits={() => navigate('/owner/billing')} />
-                                    <button onClick={() => navigate(`/owner/tenants/${t.tenant_id}`)} className="p-2 bg-slate-50 text-slate-500 rounded-xl active:scale-95">
+                                    <button onClick={() => navigate(opPath(`tenants/${t.tenant_id}`))} className="p-2 bg-slate-50 text-slate-500 rounded-xl active:scale-95">
                                         <ChevronRight size={14} />
                                     </button>
                                 </div>
@@ -488,7 +488,7 @@ const S2_Tenants = ({ data, severity, insights, loading, preferences, navigate }
 // Data source: /dashboard/funnel
 // Fields: reminders_sent, conversions, conversion_rate, revenue_generated,
 //         avg_time_to_pay_hours, channel_performance[]{channel,sent,converted,conversion_rate}
-const S3_Funnel = ({ data, severity, insights, loading, preferences, navigate }) => {
+const S3_Funnel = ({ data, severity, insights, loading, preferences, navigate, opPath }) => {
     if (loading || !data) return <TabSkeleton />;
     const sent     = data.reminders_sent        ?? 0;
     const conv     = data.conversions           ?? 0;
@@ -573,7 +573,7 @@ const S3_Funnel = ({ data, severity, insights, loading, preferences, navigate })
 // Fields: occupancy_rate, total_rooms, occupied_rooms, avg_vacancy_days,
 //         move_ins, move_outs, revenue, expenses, profit,
 //         complaints{pending,resolved,avg_resolution_time_hours}
-const S4_Operations = ({ data, severity, insights, loading, preferences, navigate }) => {
+const S4_Operations = ({ data, severity, insights, loading, preferences, navigate, opPath }) => {
     if (loading || !data) return <TabSkeleton />;
     const occ      = Number(data.occupancy_rate ?? 0);
     const occupied = Number(data.occupied_rooms ?? 0);
