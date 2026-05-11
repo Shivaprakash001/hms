@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, Mail, Home, Loader2, Send, X, CheckCircle2, AlertCircle, Phone, CreditCard, Wallet, Wrench, Calendar, Settings2 } from 'lucide-react';
 import api from '../../api/axios';
+import { useHostelContext } from '../../context/HostelContext';
 
 const SkeletonField = () => (
     <div className="space-y-2">
@@ -11,6 +12,7 @@ const SkeletonField = () => (
 );
 
 const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
+    const { hostelId } = useHostelContext();
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [phone, setPhone] = useState('');
@@ -47,13 +49,22 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
             setDefaultsSource(null);
             setCustomizedFields({});
             setLoadingRooms(true);
-            fetchRooms();
+            fetchRooms(hostelId);
         }
-    }, [isOpen]);
+    }, [isOpen, hostelId]);
 
-    const fetchRooms = async () => {
+    const fetchRooms = async (activeHostelId) => {
+        if (!activeHostelId) {
+            setRooms([]);
+            setError('Select a hostel before inviting a tenant.');
+            setLoadingRooms(false);
+            return;
+        }
+
         try {
-            const response = await api.get('/rooms?grouped=false');
+            const response = await api.get('/rooms', {
+                params: { grouped: false, hostelId: activeHostelId },
+            });
             const allRooms = response.data || [];
             const availableRooms = allRooms.filter(r => !r.is_full);
             setRooms(availableRooms);
