@@ -17,19 +17,30 @@ function computeNextRentDate(autoRentDay) {
 
 export default function OnboardingDone() {
   const navigate = useNavigate();
-  const [stats, setStats] = useState({ rooms: 0, tenants: 0, rentDay: 1, hostelName: '' });
+  const [stats, setStats] = useState({ rooms: 0, tenants: 0, rentDay: 1, hostelName: '', hostelId: '' });
 
   useEffect(() => {
-    ownerService.getProfile().then(p => {
+    Promise.all([
+      ownerService.getProfile().catch(() => ({})),
+      ownerService.getHostels().catch(() => ({ hostels: [] })),
+    ]).then(([p, hostelsResponse]) => {
+      const hostels = hostelsResponse?.hostels || p?.hostels || (p?.hostel?.id ? [p.hostel] : []);
+      const hostel = hostels.find((item) => item?.is_active !== false) || hostels[0] || p?.hostel || {};
       setStats({
-        rooms:      p?.hostel?.total_rooms     ?? 0,
-        tenants:    p?.hostel?.total_tenants   ?? 0,
+        rooms:      hostel?.total_rooms     ?? p?.hostel?.total_rooms ?? 0,
+        tenants:    hostel?.total_tenants   ?? p?.hostel?.total_tenants ?? 0,
         rentDay:    p?.preferences?.auto_rent_day ?? 1,
-        hostelName: p?.hostel?.name ?? 'your hostel',
+        hostelName: hostel?.name ?? p?.hostel?.name ?? 'your hostel',
+        hostelId:   hostel?.id || p?.hostel?.id || '',
       });
     }).catch(() => {});
     setStoredStep('COMPLETED');
   }, []);
+
+  const goToDashboard = () => {
+    setStoredStep('COMPLETED');
+    navigate(stats.hostelId ? `/hostels/${stats.hostelId}/dashboard` : '/owner/portfolio', { replace: true });
+  };
 
   const nextRent = computeNextRentDate(stats.rentDay);
 
@@ -124,7 +135,7 @@ export default function OnboardingDone() {
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.9 }}
           whileTap={{ scale: 0.98 }}
-          onClick={() => navigate('/owner/dashboard')}
+          onClick={goToDashboard}
           id="onboarding-go-dashboard"
           className="w-full flex items-center justify-center gap-2 py-4 px-6 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-black rounded-2xl shadow-2xl shadow-indigo-600/30 transition-all text-base"
         >

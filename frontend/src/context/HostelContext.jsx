@@ -8,6 +8,15 @@ const HostelContext = createContext(null);
 
 const operationalSegments = new Set(['dashboard', 'rooms', 'tenants', 'payments', 'expenses', 'activities', 'activity']);
 
+function normalizeHostels(response) {
+  return Array.isArray(response) ? response : (response?.hostels || []);
+}
+
+function firstActiveHostel(response) {
+  const hostels = normalizeHostels(response);
+  return hostels.find((hostel) => hostel?.is_active !== false) || hostels[0] || null;
+}
+
 export function toHostelPath(hostelId, pathname) {
   const parts = pathname.split('/').filter(Boolean);
   const current = parts[0] === 'hostels' ? parts[2] : parts[1];
@@ -24,7 +33,7 @@ export function LegacyOwnerOperationalRedirect() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const firstHostel = Array.isArray(hostels) ? hostels.find((h) => h?.is_active !== false) : null;
+  const firstHostel = firstActiveHostel(hostels);
   if (isLoading) return null;
   if (!firstHostel?.id) return <Navigate to="/onboarding/hostel" replace />;
   return <Navigate to={toHostelPath(firstHostel.id, location.pathname)} replace />;
@@ -40,14 +49,14 @@ export function HostelContextProvider({ children }) {
   });
 
   const activeHostel = useMemo(
-    () => Array.isArray(hostels) ? hostels.find((hostel) => hostel.id === hostelId && hostel.is_active !== false) : null,
+    () => normalizeHostels(hostels).find((hostel) => hostel.id === hostelId && hostel.is_active !== false) || null,
     [hostels, hostelId],
   );
 
   const value = useMemo(() => ({
     hostelId,
     activeHostel,
-    hostels: Array.isArray(hostels) ? hostels : [],
+    hostels: normalizeHostels(hostels),
     buildHostelPath: (nextHostelId, pathname = location.pathname) => toHostelPath(nextHostelId, pathname),
   }), [activeHostel, hostelId, hostels, location.pathname]);
 

@@ -14,11 +14,10 @@ export default function OnboardingPayments() {
   const [hostelId, setHostelId] = useState('');
 
   useEffect(() => {
-    ownerService.getProfile()
-      .then((profile) => {
-        const hostels = profile?.hostels || (profile?.hostel?.id ? [profile.hostel] : []);
-        const [onlyHostel] = hostels;
-        const selected = hostels.length === 1 ? onlyHostel : null;
+    ownerService.getHostels()
+      .then((response) => {
+        const hostels = response?.hostels || [];
+        const selected = hostels.find((hostel) => hostel?.is_active !== false) || hostels[0] || null;
         if (selected?.id) {
           setHostelId(selected.id);
         }

@@ -28,8 +28,12 @@ export default function OnboardingRooms() {
   const [hostelId, setHostelId] = useState('');
 
   useEffect(() => {
-    ownerService.getProfile()
-      .then((profile) => setHostelId(profile?.hostel?.id || profile?.hostels?.[0]?.id || ''))
+    ownerService.getHostels()
+      .then((response) => {
+        const hostels = response?.hostels || [];
+        const selected = hostels.find((hostel) => hostel?.is_active !== false) || hostels[0] || null;
+        setHostelId(selected?.id || '');
+      })
       .catch(() => {});
   }, []);
 
