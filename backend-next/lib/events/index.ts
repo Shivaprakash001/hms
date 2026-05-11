@@ -2,6 +2,7 @@ import { EventEmitter } from "events";
 import { activityService } from "../services/activity.service";
 import { broadcast } from "./event-bus";
 import { invalidateHostelDashboardCache, invalidatePortfolioCache } from "../cache/dashboard-cache";
+import { dashboardSnapshotService } from "../services/dashboard-snapshot-service";
 
 class HMSEventEmitter extends EventEmitter {
   /**
@@ -11,8 +12,15 @@ class HMSEventEmitter extends EventEmitter {
     console.log(`[Event Triggered]: ${eventName}`, data);
     
     if (data.owner_id) {
-      if (data.hostel_id) invalidateHostelDashboardCache(data.hostel_id);
-      else invalidatePortfolioCache(data.owner_id);
+      if (data.hostel_id) {
+        // Hostel-level event: invalidate hostel cache AND mark portfolio stale
+        // (portfolio aggregates all hostels, so any hostel mutation affects it)
+        invalidateHostelDashboardCache(data.hostel_id);
+        dashboardSnapshotService.markOwnerStale(data.owner_id).catch(() => {});
+      } else {
+        // Portfolio-level event: only invalidate portfolio cache
+        invalidatePortfolioCache(data.owner_id);
+      }
       
       // Auto-broadcast to SSE clients
       broadcast(data.owner_id, {

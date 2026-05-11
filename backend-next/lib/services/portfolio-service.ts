@@ -1,0 +1,118 @@
+import { prisma } from "../db";
+import { hostelDailySnapshotService } from "./hostel-daily-snapshot-service";
+import { dashboardSnapshotService, type PortfolioStats } from "./dashboard-snapshot-service";
+
+export interface HostelCard {
+  hostel_id: string;
+  name: string;
+  city: string | null;
+  is_active: boolean;
+  active_tenants: number;
+  total_capacity: number;
+  occupancy_rate: number;
+  collected_revenue: number;
+  pending_dues: number;
+  overdue_count: number;
+  collection_rate: number;
+  snapshot_date: string;
+  snapshot_source: "snapshot" | "live";
+  is_stale: boolean;
+}
+
+export interface PortfolioSummary {
+  aggregate: PortfolioStats;
+  hostels: HostelCard[];
+  hostel_count: number;
+  computed_at: string;
+}
+
+/**
+ * PortfolioService
+ *
+ * Provides the portfolio overview for the authenticated owner.
+ *
+ * Architectural invariant: ALL per-hostel metrics come from hostel_daily_snapshots.
+ * Aggregate metrics come from DashboardSnapshotService which itself reads from
+ * hostel_daily_snapshots — no raw transactional tables are queried here.
+ */
+export class PortfolioService {
+
+  async getPortfolioSummary(ownerId: string): Promise<PortfolioSummary> {
+    const hostels = await prisma.hostel.findMany({
+      where: { owner_id: ownerId, is_active: true },
+      select: { id: true, name: true, city: true, is_active: true },
+      orderBy: { name: "asc" },
+    });
+
+    const today = new Date();
+
+    // Fetch per-hostel snapshots (or live fallback) in parallel.
+    const snapshotResults = await Promise.all(
+      hostels.map((h) => hostelDailySnapshotService.getSnapshotOrLive(h.id, today))
+    );
+
+    const hostelCards: HostelCard[] = hostels.map((h, i) => {
+      const { source, is_stale, data: s } = snapshotResults[i];
+      const capacity       = Number(s.capacity        ?? 0);
+      const activeTenants  = Number(s.active_tenants  ?? 0);
+      const collected      = Number(s.collected_revenue ?? 0);
+      const pending        = Number(s.pending_dues     ?? 0);
+      const overdueCount   = Number(s.overdue_count    ?? 0);
+      const expectedRev    = collected + pending;
+      const collectionRate = expectedRev > 0
+        ? Math.round((collected / expectedRev) * 10_000) / 100
+        : 0;
+      const occupancyRate  = capacity > 0
+        ? Math.round((activeTenants / capacity) * 10_000) / 100
+        : 0;
+
+      return {
+        hostel_id:         h.id,
+        name:              h.name,
+        city:              h.city,
+        is_active:         h.is_active,
+        active_tenants:    activeTenants,
+        total_capacity:    capacity,
+        occupancy_rate:    occupancyRate,
+        collected_revenue: collected,
+        pending_dues:      pending,
+        overdue_count:     overdueCount,
+        collection_rate:   collectionRate,
+        snapshot_date:     typeof s.snapshot_date === "string"
+          ? s.snapshot_date
+          : today.toISOString().slice(0, 10),
+        snapshot_source:   source as "snapshot" | "live",
+        is_stale,
+      };
+    });
+
+    // Aggregate stats from portfolio snapshot cache (backed by hostel daily snapshots).
+    const aggregate = await dashboardSnapshotService.getPortfolioStats(ownerId);
+
+    return {
+      aggregate,
+      hostels:       hostelCards,
+      hostel_count:  hostels.length,
+      computed_at:   new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Force-refresh all hostel snapshots for an owner, then recompute portfolio.
+   * Use this after bulk operations (e.g. mass rent generation) or from a cron.
+   */
+  async forceRefresh(ownerId: string): Promise<void> {
+    const hostels = await prisma.hostel.findMany({
+      where: { owner_id: ownerId, is_active: true },
+      select: { id: true },
+    });
+
+    await Promise.allSettled(
+      hostels.map((h) => hostelDailySnapshotService.createSnapshot(h.id))
+    );
+
+    await dashboardSnapshotService.refreshPortfolioStats(ownerId);
+  }
+}
+
+export const portfolioService = new PortfolioService();

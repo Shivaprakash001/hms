@@ -1,7 +1,6 @@
 import { prisma } from "../db";
 import { eventSystem } from "../events";
 import { EmailService } from "./email-service";
-import { messageService } from "./message-service";
 import { eventLog } from "./event-log-service";
 import { resolveRules, calculateSingleRuleFee } from "../billing/engine";
 import { resolvePreferences } from "../preferences";
@@ -10,6 +9,7 @@ import { formatMonthYear, formatDate } from "../format";
 import { requireAutomation, consumeReminder } from "./plan-gate-service";
 import { financialService } from "./financial-service";
 import { selectReminderForOverdueDay } from "./collection-strategy-service";
+import { whatsappReminderDeliveryService } from "./notifications/whatsapp-reminder-delivery";
 
 export class ReminderService {
 
@@ -88,14 +88,17 @@ export class ReminderService {
       const reminderTarget = {
         id: ob.obligation_id,
         hostel_id: hostelId,
+        hostel_name: hostelCtx?.hostel?.name || "Your Hostel",
         amount: ob.remaining_amount,
         rent_month: ob.rent_month,
         due_date: ob.due_date,
+        days_overdue: daysOverdue,
+        send_date_key: todayMid.toISOString().slice(0, 10),
         tenant: {
           id: ob.tenant_id,
           owner_id: ob.owner_id,
           personal_email: ob.personal_email,
-          profile: { name: ob.tenant_name },
+          profile: { name: ob.tenant_name, phone: (ob as any).phone },
         },
       };
 
@@ -313,7 +316,20 @@ export class ReminderService {
     const context = await getTenantOperationalContext(tenantId, ownerId, tenant.hostel_id);
     const config = context.prefs;
 
-    await this.triggerNotification({ ...obligation, hostel_id: context.hostel.id, tenant }, "WARNING", config);
+    const today = new Date();
+    const todayMid = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+    const due = obligation.due_date || new Date();
+    const dueMid = new Date(Date.UTC(due.getFullYear(), due.getMonth(), due.getDate()));
+    const daysOverdue = Math.max(1, Math.ceil((todayMid.getTime() - dueMid.getTime()) / 86400000));
+
+    await this.triggerNotification({
+      ...obligation,
+      hostel_id: context.hostel.id,
+      hostel_name: context.hostel.name,
+      days_overdue: daysOverdue,
+      send_date_key: todayMid.toISOString().slice(0, 10),
+      tenant,
+    }, "WARNING", config);
 
     eventSystem.trigger("dashboard_updated", { reason: "manual_reminder_sent", ownerId });
 
@@ -372,13 +388,33 @@ export class ReminderService {
       }
     }
 
-    // 3️⃣ WhatsApp/SMS Notification (if enabled) — deduct quota
-    if ((config.reminder_whatsapp ?? false) && tenant.profile?.phone) {
+    // 3️⃣ WhatsApp Notification (if enabled)
+    // Delivery is intentionally routed through the typed Meta provider service.
+    // This keeps ReminderService as the business orchestrator while provider API,
+    // idempotency, retries, and delivery logs stay isolated.
+    if ((config.reminder_whatsapp ?? false) && ownerId && tenant.profile?.phone) {
       try {
-        await messageService.sendMessage(tenant.owner_id, "WHATSAPP", tenant.profile.phone, type, `Reminder: ${type} for ${formatMonthYear(obligation.rent_month, config)}`);
+        if (type === "LATE_FEE_ADDED") {
+          console.info(`[NOTIFY] WhatsApp skipped for ${tenant.id}: late-fee WhatsApp templates are out of scope.`);
+        } else {
+          await whatsappReminderDeliveryService.sendRentReminder({
+            ownerId,
+            tenantId: tenant.id,
+            hostelId: obligation.hostel_id,
+            obligationId: obligation.id,
+            phone: tenant.profile.phone,
+            tenantName: tenant.profile?.name || "Tenant",
+            hostelName: obligation.hostel_name || "Your Hostel",
+            amount: Number(obligation.amount),
+            rentMonth: obligation.rent_month,
+            dueDate: obligation.due_date,
+            daysOverdue: Number(obligation.days_overdue || 1),
+            sendDateKey: obligation.send_date_key || new Date().toISOString().slice(0, 10),
+            prefs: config,
+          });
+        }
       } catch (err: any) {
-        // If message quota exhausted, log and trigger owner notification elsewhere
-        console.warn(`[NOTIFY] WhatsApp/SMS send failed for ${tenant.id}:`, err?.message || err);
+        console.warn(`[NOTIFY] WhatsApp send failed for ${tenant.id}:`, err?.message || err);
       }
     }
 

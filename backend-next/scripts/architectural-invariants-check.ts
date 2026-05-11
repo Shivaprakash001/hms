@@ -40,15 +40,50 @@ const checks: Array<{
       /lib\/services\/deterministic-context\.test\.ts$/,
       /lib\/services\/hostel-billing-preferences-service\.ts$/,
       /lib\/services\/invitation-service\.ts$/,
-      /lib\/services\/payment-service\.ts$/,
       /lib\/services\/reminder-service\.ts$/,
       /lib\/services\/tenant-service\.ts$/,
+    ],
+  },
+  {
+    name: "no $queryRawUnsafe in operational services or API routes",
+    roots: ["lib/services", "app/api"],
+    pattern: /\$queryRawUnsafe/,
+    allow: [
+      /architectural-invariants-check\.ts$/,
+      // Approved exceptions — audit/invariant tooling only (per RAW_SQL_HARDENING_REPORT.md)
+      /lib\/services\/financial-invariants?\.ts$/,
+      /lib\/services\/financial-invariant-service\.ts$/,
+      /lib\/services\/hostel-invariant-validator\.ts$/,
+      /lib\/services\/migration-audit-service\.ts$/,
+      /lib\/services\/owner-isolation-invariant-service\.ts$/,
+      /lib\/services\/raw-sql-hardening\.test\.ts$/,
+      /scripts\//,
+    ],
+  },
+  {
+    name: "portfolio-service must not query raw transactional tables (payments, rent_obligations, tenants)",
+    roots: ["lib/services/portfolio-service.ts"],
+    pattern: /prisma\.(payment|rentObligation|tenant)\.(findMany|findFirst|groupBy|aggregate|count)\b(?![\s\S]{0,10}hostel)/,
+    allow: [],
+  },
+  {
+    name: "frontend operational hooks must include hostelId in queryKey",
+    roots: ["../frontend/src/hooks"],
+    pattern: /useQuery\(\{[\s\S]{0,600}queryKey\s*:\s*\[(?![^\]]*hostelId)/,
+    allow: [
+      /useActivation\.js$/,
+      /useSubscription\.js$/,
+      /useNotifications\.js$/,
+      /usePortfolio\.js$/,
+      /useHostels\.js$/,
     ],
   },
 ];
 
 function walk(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];
+  const stat = fs.statSync(dir);
+  if (stat.isFile()) return /\.(ts|tsx|js|jsx)$/.test(dir) ? [dir] : [];
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   return entries.flatMap((entry) => {
     const full = path.join(dir, entry.name);

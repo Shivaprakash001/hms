@@ -353,6 +353,7 @@ export class FinancialService {
     remaining_amount: number;
     tenant_name: string | null;
     personal_email: string | null;
+    phone: string | null;
   }>> {
     const cutoff = new Date(Date.UTC(
       asOfDate.getUTCFullYear(),
@@ -372,6 +373,7 @@ export class FinancialService {
       remaining_amount: number;
       tenant_name: string | null;
       personal_email: string | null;
+      phone: string | null;
     }>>`
       SELECT
         o.id                                                AS obligation_id,
@@ -384,7 +386,8 @@ export class FinancialService {
         o.amount::float                                     AS amount,
         (o.amount - COALESCE(pay_agg.total_paid, 0))::float AS remaining_amount,
         p.name                                              AS tenant_name,
-        t.personal_email
+        t.personal_email,
+        p.phone                                             AS phone
       FROM rent_obligations o
       JOIN tenants t ON t.id = o.tenant_id
       JOIN profiles p ON p.id = t.profile_id
@@ -416,6 +419,7 @@ export class FinancialService {
       remaining_amount: Number(r.remaining_amount || 0),
       tenant_name:      r.tenant_name,
       personal_email:   r.personal_email,
+      phone:            r.phone,
     }));
   }
 

@@ -14,6 +14,7 @@ import { tenantAnalyticsService } from "./tenant-analytics-service";
 import { planEnforcementService } from "./plan-enforcement-service";
 import { financialService } from "./financial-service";
 import { abandonmentService } from "./abandonment-service";
+import { assertFinancialHostelMatch, assertSameFinancialHostel, assertScopedEntityHostel, requireFinancialHostelId } from "./financial-isolation";
 
 const logger = getLogger("payment.service");
 
@@ -28,6 +29,7 @@ export class PaymentService {
    * No side-effects (events, receipts, audit logs) — callers handle those after commit.
    */
   private async _applyPaymentInTx(tx: any, data: {
+    hostelId: string;
     obligationId: string;
     amountPaid: number;
     paymentMethod: string;
@@ -38,17 +40,38 @@ export class PaymentService {
     offlineRecordedAt?: Date;
     offlineRecordedIp?: string;
     offlineNote?: string;
+    ownerId?: string;
   }) {
+    const hostelId = requireFinancialHostelId(data.hostelId, "payment application");
+
     await tx.$queryRaw`
-      SELECT id FROM rent_obligations WHERE id = ${data.obligationId}::uuid FOR UPDATE
+      SELECT id FROM rent_obligations
+      WHERE id = ${data.obligationId}::uuid
+        AND hostel_id = ${hostelId}::uuid
+      FOR UPDATE
     `;
 
     const obligation = await tx.rentObligation.findUnique({
       where: { id: data.obligationId },
-      include: { payments: { select: { amount_paid: true } } }
+      include: {
+        payments: { select: { amount_paid: true, hostel_id: true } },
+        tenant: { select: { id: true, hostel_id: true, owner_id: true } },
+        allocation: { select: { id: true, hostel_id: true } },
+      }
     });
 
     if (!obligation) throw new Error("NOT_FOUND: Obligation not found");
+    assertScopedEntityHostel("rent obligation", obligation, hostelId);
+    assertSameFinancialHostel("tenant", obligation.tenant, "rent obligation", obligation);
+    if (obligation.allocation) {
+      assertSameFinancialHostel("room allocation", obligation.allocation, "rent obligation", obligation);
+    }
+    for (const payment of obligation.payments) {
+      assertSameFinancialHostel("existing payment", payment, "rent obligation", obligation);
+    }
+    if (data.ownerId && obligation.owner_id && obligation.owner_id !== data.ownerId) {
+      throw new Error("FORBIDDEN: Obligation does not belong to this owner");
+    }
     if (obligation.status === "WAIVED") throw new Error("BAD_REQUEST: Cannot pay for waived obligation");
     if (obligation.status === "PAID") throw new Error("BAD_REQUEST: Obligation already fully paid");
 
@@ -83,9 +106,11 @@ export class PaymentService {
         offline_recorded_at: data.offlineRecordedAt || null,
         offline_recorded_ip: data.offlineRecordedIp || null,
         offline_note: data.offlineNote || null,
-        hostel_id: obligation.hostel_id || null, // Phase 2: immutable hostel context from obligation
+        hostel_id: obligation.hostel_id,
       }
     });
+
+    assertFinancialHostelMatch("created payment", payment.hostel_id, obligation.hostel_id);
 
     const newTotalPaidPaisa = totalAlreadyPaidPaisa + paymentPaisa;
     const newStatus = newTotalPaidPaisa >= obligationPaisa ? "PAID" : "PARTIAL";
@@ -95,7 +120,7 @@ export class PaymentService {
       data: { status: newStatus }
     });
 
-    return { payment, newStatus, tenantId: obligation.tenant_id, ownerId: obligation.owner_id };
+    return { payment, newStatus, tenantId: obligation.tenant_id, ownerId: obligation.owner_id, hostelId: obligation.hostel_id };
   }
 
   /**
@@ -112,12 +137,14 @@ export class PaymentService {
    * can retry without re-entering their password.
    */
   async recordOfflinePaymentWithToken(jti: string, data: {
+    hostelId: string;
     obligationId: string;
     amountPaid: number;
     paymentMethod: string;
     referenceNumber?: string;
     paymentDate?: Date;
     userId: string;
+    ownerId?: string;
     offlineRecordedBy: string;
     offlineRecordedAt: Date;
     offlineRecordedIp?: string;
@@ -160,7 +187,7 @@ export class PaymentService {
 
       receiptService.createReceipt(res.payment.id).then(async (receipt: any) => {
         try {
-          // Phase 2: resolve prefs from payment's hostel chain, not findFirst(owner_id)
+          // Resolve prefs from payment's immutable hostel chain.
           const { prefs } = await getPaymentOperationalContext(
             res.payment.id,
             res.payment.owner_id || "",
@@ -209,12 +236,14 @@ export class PaymentService {
   }
 
   async recordPayment(data: {
+    hostelId: string;
     obligationId: string;
     amountPaid: number;
     paymentMethod: string;
     referenceNumber?: string;
     paymentDate?: Date;
     userId?: string;
+    ownerId?: string;
     paymentAttemptId?: string;
     offlineRecordedBy?: string;
     offlineRecordedAt?: Date;
@@ -250,7 +279,7 @@ export class PaymentService {
       // Cash/manual payments (majority of hostel payments) were invisible to the receipt system.
       receiptService.createReceipt(res.payment.id).then(async (receipt) => {
         try {
-          // Phase 2: resolve prefs from payment's hostel chain, not findFirst(owner_id)
+          // Resolve prefs from payment's immutable hostel chain.
           const { prefs } = await getPaymentOperationalContext(
             res.payment.id,
             res.payment.owner_id || "",
@@ -319,6 +348,7 @@ export class PaymentService {
    * 7. Partial payments allowed — remaining obligations stay PENDING/PARTIAL
    */
   async recordTenantPayment(data: {
+    hostelId: string;
     tenantId: string;
     amountPaid: number;
     paymentMethod: string;
@@ -328,6 +358,8 @@ export class PaymentService {
     paymentAttemptId?: string;
     idempotencyKey?: string;
   }) {
+    const hostelId = requireFinancialHostelId(data.hostelId, "tenant payment");
+
     // ── 1. INPUT VALIDATION ──
     if (!data.tenantId) throw new Error("BAD_REQUEST: tenant_id is required");
     if (!data.paymentMethod) throw new Error("BAD_REQUEST: payment_method is required");
@@ -346,7 +378,7 @@ export class PaymentService {
     // This prevents duplicate payments from retries, double-clicks, or network failures.
     if (data.idempotencyKey) {
       const existing = await prisma.payment.findFirst({
-        where: { idempotency_key: data.idempotencyKey },
+        where: { idempotency_key: data.idempotencyKey, hostel_id: hostelId },
         select: { payment_group_id: true, amount_paid: true, created_at: true },
       });
       if (existing) {
@@ -356,7 +388,7 @@ export class PaymentService {
         });
         // Return the existing group's data
         const groupPayments = await prisma.payment.findMany({
-          where: { payment_group_id: existing.payment_group_id! },
+          where: { payment_group_id: existing.payment_group_id!, hostel_id: hostelId },
           include: { obligation: { select: { obligation_type: true, rent_month: true } } },
         });
         return {
@@ -383,6 +415,7 @@ export class PaymentService {
       const lockedRows: { id: string }[] = await tx.$queryRaw`
         SELECT id FROM rent_obligations
         WHERE tenant_id = ${data.tenantId}::uuid
+          AND hostel_id = ${hostelId}::uuid
           AND status IN ('PENDING', 'PARTIAL')
         ORDER BY due_date ASC
         FOR UPDATE
@@ -395,9 +428,24 @@ export class PaymentService {
       // Now read the full data (rows are locked, safe from concurrent modification)
       const obligations = await tx.rentObligation.findMany({
         where: { id: { in: lockedRows.map(r => r.id) } },
-        include: { payments: { select: { amount_paid: true } } },
+        include: {
+          payments: { select: { amount_paid: true, hostel_id: true } },
+          tenant: { select: { id: true, hostel_id: true, owner_id: true } },
+          allocation: { select: { id: true, hostel_id: true } },
+        },
         orderBy: { due_date: "asc" },
       });
+
+      for (const ob of obligations) {
+        assertScopedEntityHostel("rent obligation", ob, hostelId);
+        assertSameFinancialHostel("tenant", ob.tenant, "rent obligation", ob);
+        if (ob.allocation) {
+          assertSameFinancialHostel("room allocation", ob.allocation, "rent obligation", ob);
+        }
+        for (const payment of ob.payments) {
+          assertSameFinancialHostel("existing payment", payment, "rent obligation", ob);
+        }
+      }
 
       // Sort: FIFO by due_date, then RENT before LATE_FEE within same date
       obligations.sort((a: any, b: any) => {
@@ -451,9 +499,10 @@ export class PaymentService {
             payment_group_id: groupId,
             // Only first payment in group gets the idempotency key (unique constraint)
             idempotency_key: allocations.length === 0 ? (data.idempotencyKey || null) : null,
-            hostel_id: ob.hostel_id || null, // Phase 2: immutable hostel context from obligation
+            hostel_id: ob.hostel_id,
           },
         });
+        assertFinancialHostelMatch("created payment", payment.hostel_id, ob.hostel_id);
 
         const newTotalPaidPaisa = paidPaisa + allocPaisa;
         const newStatus = newTotalPaidPaisa >= duePaisa ? "PAID" : "PARTIAL";
@@ -562,6 +611,8 @@ export class PaymentService {
     });
 
     if (!obligation) throw new Error("NOT_FOUND: Obligation not found");
+    const hostelId = requireFinancialHostelId(obligation.hostel_id, "payment intent");
+    assertSameFinancialHostel("tenant", obligation.tenant, "rent obligation", obligation);
     if (tenantId && obligation.tenant_id !== tenantId) {
       throw new Error("FORBIDDEN: You can only pay your own obligations");
     }
@@ -601,6 +652,7 @@ export class PaymentService {
     const existingAttempt = await prisma.paymentAttempt.findFirst({
       where: {
         obligation_id: obligationId,
+        hostel_id: hostelId,
         status: { in: ["PENDING", "CREATED"] },
         OR: [
           { expires_at: null, created_at: { gte: new Date(Date.now() - 5 * 60 * 1000) } }, // CREATED state protection
@@ -623,7 +675,7 @@ export class PaymentService {
       });
     }
 
-    const { provider, config } = await this.getProviderForOwner(obligation.owner_id || "");
+    const { provider, config } = await this.getProviderForOwner(obligation.owner_id || "", hostelId);
     const instance = PaymentProviderFactory.getProvider(provider, config);
 
     const merchantTxnId = `hms_${obligationId.replace(/-/g, "").substring(0, 12)}_${crypto.randomBytes(4).toString("hex")}`;
@@ -645,7 +697,8 @@ export class PaymentService {
         provider: provider,
         merchant_txn_id: merchantTxnId,
         amount: validationAmount,
-        status: "CREATED"
+        status: "CREATED",
+        hostel_id: hostelId,
       }
     });
 
@@ -721,10 +774,20 @@ export class PaymentService {
       throw new Error("BAD_REQUEST: All obligations are already paid");
     }
 
+    const hostelIds = Array.from(new Set(obligations.map(o => o.hostel_id).filter(Boolean)));
+    if (hostelIds.length !== 1) {
+      throw new Error("HOSTEL_CONTEXT_MISMATCH: All selected obligations must belong to exactly one hostel");
+    }
+    const hostelId = requireFinancialHostelId(hostelIds[0], "multi-obligation payment intent");
+    for (const obligation of obligations) {
+      assertScopedEntityHostel("rent obligation", obligation, hostelId);
+      assertSameFinancialHostel("tenant", obligation.tenant, "rent obligation", obligation);
+    }
+
     const ownerId = obligations[0].owner_id || "";
-    // Phase 2: resolve from first obligation's hostel chain, not findFirst(owner_id)
+    // Resolve from the first obligation's immutable hostel chain.
     const { prefs } = await getObligationOperationalContext(obligations[0]);
-    const { provider, config } = await this.getProviderForOwner(ownerId);
+    const { provider, config } = await this.getProviderForOwner(ownerId, hostelId);
     const instance = PaymentProviderFactory.getProvider(provider, config);
 
     // ── 2. PAYMENT RULES — partial payment enforcement ──
@@ -735,6 +798,7 @@ export class PaymentService {
         where: {
           tenant_id: singleTenantId,
           status: { in: ["PENDING", "PARTIAL"] },
+          hostel_id: hostelId,
         }
       });
       const selectedNonPaid = obligations.filter(o => o.status !== "PAID" && o.status !== "WAIVED").length;
@@ -769,14 +833,25 @@ export class PaymentService {
       await tx.$queryRaw`
         SELECT id FROM rent_obligations
         WHERE id = ANY(${obligationIds}::uuid[])
+          AND hostel_id = ${hostelId}::uuid
         FOR UPDATE
       `;
 
       // Re-read with fresh payments under lock — source of truth for amounts
       const locked = await tx.rentObligation.findMany({
-        where: { id: { in: obligationIds } },
-        include: { payments: { select: { amount_paid: true } } }
+        where: { id: { in: obligationIds }, hostel_id: hostelId },
+        include: { payments: { select: { amount_paid: true, hostel_id: true } } }
       });
+
+      if (locked.length !== obligationIds.length) {
+        throw new Error("HOSTEL_CONTEXT_MISMATCH: Selected obligations changed hostel scope during payment intent creation");
+      }
+      for (const ob of locked) {
+        assertScopedEntityHostel("locked rent obligation", ob, hostelId);
+        for (const payment of ob.payments) {
+          assertSameFinancialHostel("existing payment", payment, "rent obligation", ob);
+        }
+      }
 
       let totalAmountPaisa = 0;
       const paymentBreakdown: { obligationId: string; amount: number }[] = [];
@@ -805,7 +880,7 @@ export class PaymentService {
       const existingLinks = await tx.paymentAttemptObligation.findMany({
         where: {
           obligation_id: { in: paymentBreakdown.map(p => p.obligationId) },
-          payment_attempt: { status: { in: ["CREATED", "PENDING"] } },
+          payment_attempt: { hostel_id: hostelId, status: { in: ["CREATED", "PENDING"] } },
         },
         include: { payment_attempt: true },
         orderBy: { created_at: "desc" },
@@ -863,6 +938,7 @@ export class PaymentService {
           merchant_txn_id: merchantTxnId,
           amount: totalAmount,
           status: "CREATED",
+          hostel_id: hostelId,
         }
       });
 
@@ -941,7 +1017,7 @@ export class PaymentService {
 
     if (amount <= 0) throw new Error("BAD_REQUEST: Amount must be positive");
 
-    // Phase 2: resolve prefs from tenant's hostel, not findFirst(owner_id)
+    // Resolve prefs from the tenant's explicit hostel context.
     const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId },
       include: { profile: true },
@@ -950,6 +1026,7 @@ export class PaymentService {
     if (tenant.owner_id !== ownerId) throw new Error("FORBIDDEN: Tenant does not belong to this owner");
 
     const { prefs } = await getTenantOperationalContext(tenant.id, ownerId, tenant.hostel_id);
+    const hostelId = requireFinancialHostelId(tenant.hostel_id, "advance payment intent");
 
     if (!prefs.advance_enabled) {
       throw new Error("BAD_REQUEST: Advance/deposit payments are not enabled for this hostel");
@@ -960,7 +1037,7 @@ export class PaymentService {
       throw new Error(`BAD_REQUEST: Minimum payment amount is ${formatCurrency(prefs.min_payment_amount)}`);
     }
 
-    const { provider, config } = await this.getProviderForOwner(ownerId);
+    const { provider, config } = await this.getProviderForOwner(ownerId, hostelId);
     const instance = PaymentProviderFactory.getProvider(provider, config);
 
     const txResult = await prisma.$transaction(async (tx) => {
@@ -998,6 +1075,7 @@ export class PaymentService {
           amount,
           status: "CREATED",
           payment_type: "ADVANCE",
+          hostel_id: hostelId,
         } as any,
       });
       return { attempt: newAttempt, isReused: false };
@@ -1566,6 +1644,7 @@ export class PaymentService {
     const obligationLinks = await prisma.paymentAttemptObligation.findMany({
       where: { payment_attempt_id: attemptId }
     });
+    const attemptHostelId = requireFinancialHostelId(attempt.hostel_id, "rent payment attempt finalization");
 
     // Single atomic transaction — all obligation payments succeed or all roll back.
     // _applyPaymentInTx is used directly so we don't nest prisma.$transaction calls.
@@ -1577,6 +1656,7 @@ export class PaymentService {
         for (const link of obligationLinks) {
           if (Number(link.amount) > 0) {
             const res = await this._applyPaymentInTx(tx, {
+              hostelId: attemptHostelId,
               obligationId: link.obligation_id,
               amountPaid: Number(link.amount),
               paymentMethod: "UPI",
@@ -1590,6 +1670,7 @@ export class PaymentService {
       } else if (attempt.obligation_id) {
         // Single obligation payment (legacy)
         const res = await this._applyPaymentInTx(tx, {
+          hostelId: attemptHostelId,
           obligationId: attempt.obligation_id,
           amountPaid: Number(attempt.amount),
           paymentMethod: "UPI",
@@ -1695,7 +1776,13 @@ export class PaymentService {
       hasVerifyHeader: Boolean(headers?.["x-verify"] || headers?.["X-VERIFY"]),
     });
 
-    const { instance } = await this.getProviderInstance(attempt.owner_id, attempt.provider);
+    const { instance } = attempt.payment_type === "ADDON"
+      ? { instance: PaymentProviderFactory.getProvider(attempt.provider, this.getOwnerLevelProviderConfig()) }
+      : await this.getProviderInstance(
+          attempt.owner_id,
+          attempt.provider,
+          requireFinancialHostelId(attempt.hostel_id, "payment webhook verification"),
+        );
     
     // 1. Initial parsing of the webhook payload
     const verification = await instance.verifyWebhook(headers, body);
@@ -1834,7 +1921,11 @@ export class PaymentService {
       };
     }
 
-    const { instance } = await this.getProviderInstance(attempt.owner_id, attempt.provider);
+    const { instance } = await this.getProviderInstance(
+      attempt.owner_id,
+      attempt.provider,
+      requireFinancialHostelId(attempt.hostel_id, "payment attempt verification"),
+    );
     let fetched;
 
     try {
@@ -2082,14 +2173,15 @@ export class PaymentService {
     return payments.reduce((sum: number, p: any) => sum + Number(p.amount_paid), 0);
   }
 
-  private async getProviderForOwner(ownerId: string) {
-    const hostel = await prisma.hostel.findFirst({
-      where: { owner_id: ownerId },
+  private async getProviderForOwner(ownerId: string, hostelId: string) {
+    const scopedHostelId = requireFinancialHostelId(hostelId, "payment provider resolution");
+    const hostel = await prisma.hostel.findUnique({
+      where: { id: scopedHostelId },
       include: { owner: true },
     });
 
-    if (!hostel) {
-      throw new Error("CONFIG_ERROR: No hostel found for this owner. Please set up your hostel first.");
+    if (!hostel || hostel.owner_id !== ownerId) {
+      throw new Error("HOSTEL_ACCESS_DENIED: Payment provider hostel does not belong to this owner.");
     }
 
     if (!hostel.upi_id) {
@@ -2107,11 +2199,21 @@ export class PaymentService {
     };
   }
 
-  private async getProviderInstance(ownerId: string, providerName: string) {
-    const { config } = await this.getProviderForOwner(ownerId);
+  private async getProviderInstance(ownerId: string, providerName: string, hostelId: string) {
+    const { config } = await this.getProviderForOwner(ownerId, hostelId);
     return {
       instance: PaymentProviderFactory.getProvider(providerName, config),
       config
+    };
+  }
+
+  private getOwnerLevelProviderConfig() {
+    return {
+      merchantId: process.env.PHONEPE_MERCHANT_ID!,
+      saltKey: process.env.PHONEPE_SALT_KEY!,
+      saltIndex: process.env.PHONEPE_SALT_INDEX!,
+      environment: (process.env.PHONEPE_ENV as "SANDBOX" | "PRODUCTION") || "SANDBOX",
+      callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL || ""}/api/webhooks/payments/phonepe`,
     };
   }
 
@@ -2330,7 +2432,11 @@ export class PaymentService {
       try {
         let instance = providerCache.get(attempt.owner_id);
         if (!instance) {
-          const pi = await this.getProviderInstance(attempt.owner_id, attempt.provider);
+          const pi = await this.getProviderInstance(
+            attempt.owner_id,
+            attempt.provider,
+            requireFinancialHostelId(attempt.hostel_id, "payment reconciliation"),
+          );
           instance = pi.instance;
           providerCache.set(attempt.owner_id, instance);
         }

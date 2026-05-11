@@ -1,13 +1,16 @@
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { activityService } from "@/lib/services/activity-service";
+import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-
 /**
- * 📊 Activity Collection
+ * GET /api/activity?hostelId=<uuid>&...
+ *
+ * Returns paginated activity events (payments + allocations) scoped strictly
+ * to the given hostel. hostelId is required — no owner-wide fallback.
  */
 export async function GET(req: NextRequest) {
   const session = await getSession(req);
@@ -17,21 +20,40 @@ export async function GET(req: NextRequest) {
 
   try {
     const { searchParams } = new URL(req.url);
-    const search = searchParams.get("search") || undefined;
-    const type = searchParams.get("event_type") || undefined;
-    const limit = parseInt(searchParams.get("limit") || "20");
-    const offset = parseInt(searchParams.get("offset") || "0");
+    const hostelId = searchParams.get("hostelId") || undefined;
+
+    if (!hostelId) {
+      return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
+    }
+
+    await requireHostelBelongsToOwner(session.sub, hostelId);
+
+    const search     = searchParams.get("search")     || undefined;
+    const type       = searchParams.get("event_type") || undefined;
+    const start_date = searchParams.get("start_date") || undefined;
+    const end_date   = searchParams.get("end_date")   || undefined;
+    const limit      = Math.max(1, Math.min(100, parseInt(searchParams.get("limit")  || "20")));
+    const offset     = Math.max(0, parseInt(searchParams.get("offset") || "0"));
 
     const activity = await activityService.getOwnerActivity({
       userId: session.sub,
+      hostelId,
       search,
       type,
       limit,
-      offset
+      offset,
+      start_date,
+      end_date,
     });
 
     return apiResponse(activity);
   } catch (error: any) {
+    if (error.code === "HOSTEL_CONTEXT_REQUIRED" || error.code === "HOSTEL_NOT_FOUND") {
+      return apiError(error.message, error.code, 400);
+    }
+    if (error.code === "FORBIDDEN" || error.message?.startsWith("FORBIDDEN")) {
+      return apiError(error.message, "FORBIDDEN", 403);
+    }
     return apiError(error.message || "Failed to fetch activity");
   }
 }

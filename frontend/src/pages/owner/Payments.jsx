@@ -748,6 +748,7 @@ const Payments = () => {
                 isOpen={!!selectedPayment}
                 onClose={() => setSelectedPayment(null)}
                 payment={selectedPaymentWithContext}
+                hostelId={hostelId}
                 onMarkPaid={handleMarkAsPaid}
                 onDownloadReceipt={handleDownloadFromSelection}
                 onViewTenant={handleViewTenant}

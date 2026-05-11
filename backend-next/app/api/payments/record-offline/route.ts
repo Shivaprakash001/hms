@@ -45,6 +45,10 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const { identity_token, obligation_id, amount_paid, payment_method, reference_number, payment_date, note } = body;
+    const hostelId = body.hostelId || body.hostel_id;
+    if (!hostelId) {
+      return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
+    }
 
     // ── 2 + 3. Identity token verification ────────────────────────────────────
     if (!identity_token || typeof identity_token !== "string") {
@@ -101,7 +105,7 @@ export async function POST(req: Request) {
     // ── 5. Ownership check ─────────────────────────────────────────────────────
     const obligation = await prisma.rentObligation.findUnique({
       where: { id: obligation_id },
-      select: { owner_id: true, status: true },
+      select: { owner_id: true, hostel_id: true, status: true },
     });
     if (!obligation) return apiError("Obligation not found", "NOT_FOUND", 404);
     if (obligation.owner_id !== user.owner_id && obligation.owner_id !== user.id) {
@@ -111,6 +115,9 @@ export async function POST(req: Request) {
         obligation_id,
       });
       return apiError("You can only record payments for your own tenants", "FORBIDDEN", 403);
+    }
+    if (obligation.hostel_id !== hostelId) {
+      return apiError("Obligation does not belong to requested hostel", "HOSTEL_ACCESS_DENIED", 403);
     }
 
     // ── 6. Idempotency — already fully paid ───────────────────────────────────
@@ -163,12 +170,14 @@ export async function POST(req: Request) {
     const parsedDate = payment_date ? new Date(payment_date) : undefined;
 
     const result = await paymentService.recordOfflinePaymentWithToken(identity.jti, {
+      hostelId,
       obligationId: obligation_id,
       amountPaid: parsedAmount,
       paymentMethod: method,
       referenceNumber: reference_number || undefined,
       paymentDate: parsedDate,
       userId: user.id,
+      ownerId: user.owner_id || user.id,
       offlineRecordedBy: user.id,
       offlineRecordedAt: new Date(),
       offlineRecordedIp: clientIp ?? undefined,

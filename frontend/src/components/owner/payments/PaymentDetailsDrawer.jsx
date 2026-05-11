@@ -40,7 +40,7 @@ const SectionCard = ({ title, children }) => (
     </section>
 );
 
-const PaymentDetailsDrawer = ({ isOpen, onClose, payment, onMarkPaid, onDownloadReceipt, onViewTenant, onViewHistory, onStartOnlineTest }) => {
+const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, onDownloadReceipt, onViewTenant, onViewHistory, onStartOnlineTest }) => {
     const { preferences } = useAppPreferences();
 
     // ── Step 1: identity verification ──────────────────────────────────────────
@@ -117,6 +117,7 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, onMarkPaid, onDownload
                 referenceNumber: payRef || undefined,
                 paymentDate: localDate,
                 note: payNote || undefined,
+                hostelId,
             });
             // Notify parent to refresh ledger
             onMarkPaid?.({ paymentId: payment.id, amount: parseFloat(payAmount), method: payMethod, reference_number: payRef });

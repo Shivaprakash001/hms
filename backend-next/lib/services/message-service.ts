@@ -51,17 +51,10 @@ export class MessageService {
     });
 
     try {
-      // Simulate provider send
-      const providerSuccess = true;
-      if (!providerSuccess) throw new Error("Provider delivery failed");
-
-      await (prisma as any).messageLog.update({
-          where: { id: res.logId },
-          data: { success: true, status: "SUCCESS" }
-      });
-      
-      logger.info(`Message sent for owner ${ownerId} to ${recipient} via ${channel}. Remaining credits: ${res.remaining}`);
-      return { success: true, remaining: res.remaining, logId: res.logId };
+      // This service only owns legacy quota reservation. Provider-specific
+      // delivery must happen through a real provider integration; never mark a
+      // message successful from this generic path.
+      throw new Error(`UNSUPPORTED_PROVIDER_CHANNEL: ${channel} delivery is not configured in message-service`);
     } catch (error) {
        logger.error(`Message send failed for owner ${ownerId}, issuing refund.`);
 

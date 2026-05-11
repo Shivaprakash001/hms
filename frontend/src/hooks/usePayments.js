@@ -49,7 +49,7 @@ export const usePendingVerifications = (hostelId) => {
 export const useRecordPayment = (hostelId) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data) => paymentService.recordPayment(data),
+    mutationFn: (data) => paymentService.recordPayment({ ...data, hostelId }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.payments.all(hostelId) });
       qc.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
@@ -72,7 +72,7 @@ export const useRecordPayment = (hostelId) => {
 export const useOfflinePayment = (hostelId) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data) => paymentService.recordOfflinePayment(data),
+    mutationFn: (data) => paymentService.recordOfflinePayment({ ...data, hostelId }),
     onSuccess: (_data, variables) => {
       // Precise invalidation: only the affected tenant's history + dues + dashboard
       if (variables.obligationId) {

@@ -263,6 +263,9 @@ model TenantAdvanceLedger {
   id             String              @id @default(uuid()) @db.Uuid
   tenant_id      String              @db.Uuid
   owner_id       String              @db.Uuid
+  // Phase 5: hostel_id added for cross-hostel isolation of advance deposits.
+  // NOT NULL enforced via step2 migration after backfill from tenant.hostel_id.
+  hostel_id      String              @db.Uuid
   type           AdvanceLedgerType
   reason         AdvanceLedgerReason
   amount         Decimal             @db.Decimal(10, 2)
@@ -277,6 +280,8 @@ model TenantAdvanceLedger {
 
   @@index([tenant_id])
   @@index([owner_id])
+  @@index([hostel_id])
+  @@index([tenant_id, hostel_id])
   @@index([tenant_id, created_at])
   @@map("tenant_advance_ledger")
   @@schema("public")
@@ -492,15 +497,30 @@ model IdentityToken {
 }
 
 model WhatsappLog {
-  id            String   @id @default(uuid()) @db.Uuid
-  phone         String
-  template      String
-  obligation_id String?  @db.Uuid
-  status        String
-  error_message String?
-  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  id                     String   @id @default(uuid()) @db.Uuid
+  phone                  String
+  template               String
+  template_name          String?
+  obligation_id          String?  @db.Uuid
+  owner_id               String?  @db.Uuid
+  tenant_id              String?  @db.Uuid
+  hostel_id              String?  @db.Uuid
+  status                 String
+  delivery_status        String   @default("UNKNOWN")
+  provider_message_id    String?
+  idempotency_key        String?  @unique
+  provider_error_code    String?
+  provider_error_message String?
+  error_message          String?
+  attempt_count          Int      @default(0)
+  provider_response      Json?
+  created_at             DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([obligation_id, template, created_at])
+  @@index([owner_id, created_at])
+  @@index([tenant_id, created_at])
+  @@index([hostel_id, created_at])
+  @@index([delivery_status, created_at])
   @@map("whatsapp_logs")
   @@schema("public")
 }

@@ -4,28 +4,43 @@ import { formatCurrency } from "../format";
 export class ActivityService {
   async getOwnerActivity(params: {
     userId: string;
+    hostelId: string;
     search?: string;
     type?: string;
     limit?: number;
     offset?: number;
+    start_date?: string;
+    end_date?: string;
   }) {
-    const { userId, search, type, limit = 20, offset = 0 } = params;
+    const { userId, hostelId, search, type, limit = 20, offset = 0, start_date, end_date } = params;
 
-    // In a real app, I'd use an ActivityLog table. 
-    // For this migration, I'll aggregate from Payments and Allocations as the original does.
+    if (!hostelId) throw new Error("HOSTEL_CONTEXT_REQUIRED: hostelId is required for activity queries");
+
+    const dateFilter: any = {};
+    if (start_date) dateFilter.gte = new Date(start_date);
+    if (end_date)   dateFilter.lte = new Date(end_date);
+
     const [payments, allocations] = await Promise.all([
       prisma.payment.findMany({
-        where: { owner_id: userId },
+        where: {
+          owner_id: userId,
+          hostel_id: hostelId,
+          ...(Object.keys(dateFilter).length > 0 ? { payment_date: dateFilter } : {}),
+        },
         include: { tenant: { include: { profile: true } } },
         orderBy: { payment_date: "desc" },
-        take: 100
+        take: 200,
       }),
       prisma.roomAllocation.findMany({
-        where: { tenant: { owner_id: userId } },
+        where: {
+          hostel_id: hostelId,
+          tenant: { owner_id: userId },
+          ...(Object.keys(dateFilter).length > 0 ? { start_date: dateFilter } : {}),
+        },
         include: { tenant: { include: { profile: true } }, room: true },
         orderBy: { start_date: "desc" },
-        take: 100
-      })
+        take: 200,
+      }),
     ]);
 
     let events: any[] = [];

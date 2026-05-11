@@ -117,4 +117,10 @@ export const queryKeys = {
     all:  (hostelId)         => hostelKey(hostelId, 'activity'),
     list: (hostelId, params) => hostelKey(hostelId, 'activity', 'list', params ?? {}),
   },
+
+  // ── Portfolio (owner-scoped — aggregates hostel snapshots, never raw tables) ─
+  portfolio: {
+    all:     () => ownerKey('portfolio'),
+    summary: () => ownerKey('portfolio', 'summary'),
+  },
 };

@@ -1,21 +1,17 @@
 import { prisma } from "../db";
-import { dashboardService } from "./dashboard-service";
 import { getLogger } from "../logger";
-import { timed } from "../perf";
 import { incrementSnapshot } from "../metrics";
 import { acquireSystemLock, releaseSystemLock } from "../lock";
+import { hostelDailySnapshotService } from "./hostel-daily-snapshot-service";
 
-const logger = getLogger("dashboard-snapshot-service");
+const logger = getLogger("portfolio-snapshot-service");
 
-const SNAPSHOT_TTL_MS = 60_000;
-
-type MonthlyPoint = {
-  month: string;
-  year: number;
-  collected: number;
-  due: number;
-  collection_rate: number;
-};
+/**
+ * Portfolio TTL — how long a freshly-computed portfolio row is trusted
+ * before triggering a recompute on next read. Portfolio data is low-frequency;
+ * 5-minute staleness is acceptable.
+ */
+const PORTFOLIO_TTL_MS = 5 * 60 * 1_000;
 
 function utcMonthStart(date: Date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
@@ -27,27 +23,40 @@ function toDate(v: any): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-function isFresh(ts: Date | null, now: Date) {
-  return !!ts && now.getTime() - ts.getTime() <= SNAPSHOT_TTL_MS;
+function isFresh(ts: Date | null, ttlMs: number): boolean {
+  return !!ts && Date.now() - ts.getTime() <= ttlMs;
 }
 
-function lockKey(ownerId: string, kind: "stats" | "monthly", months?: number) {
-  return kind === "monthly"
-    ? `dashboard_snapshot_${ownerId}_monthly_${months || 6}`
-    : `dashboard_snapshot_${ownerId}_stats`;
+export interface PortfolioStats {
+  total_rooms: number;
+  total_capacity: number;
+  active_tenants: number;
+  vacant_beds: number;
+  occupancy_rate: number;
+  rent_collected_this_month: number;
+  expenses_this_month: number;
+  pending_dues: number;
+  overdue_total: number;
+  overdue_count: number;
+  collection_rate: number;
 }
 
+/**
+ * PortfolioSnapshotService
+ *
+ * Computes and caches portfolio-level aggregates for an owner by reading
+ * exclusively from `hostel_daily_snapshots` (one row per hostel per day).
+ *
+ * Architectural invariant: NO raw transactional table (payments, obligations,
+ * tenants) is ever queried here. Portfolio metrics are derived snapshots, not
+ * live aggregations across all hostels.
+ */
 export class DashboardSnapshotService {
-  private async fetchSnapshotRow(ownerId: string) {
-    const rows = await prisma.$queryRaw<any[]>`
-      SELECT *
-      FROM owner_dashboard_snapshots
-      WHERE owner_id = ${ownerId}::uuid
-      LIMIT 1
-    `;
-    return rows[0] || null;
-  }
 
+  /**
+   * Mark portfolio snapshot stale for an owner.
+   * Called when any hostel-level financial mutation occurs.
+   */
   async markOwnerStale(ownerId: string) {
     const month = utcMonthStart(new Date());
     await prisma.$executeRaw`
@@ -58,187 +67,203 @@ export class DashboardSnapshotService {
     `;
   }
 
-  async getOwnerStats(ownerId: string) {
-    throw new Error("HOSTEL_CONTEXT_REQUIRED: owner dashboard snapshots are deprecated for operational stats");
-    const now = new Date();
-    const row: any = await this.fetchSnapshotRow(ownerId);
-
+  /**
+   * Returns cached portfolio stats if fresh; otherwise triggers a recompute
+   * from hostel_daily_snapshots and returns the freshly-computed result.
+   */
+  async getPortfolioStats(ownerId: string): Promise<PortfolioStats> {
+    const row = await this.fetchSnapshotRow(ownerId);
     const statsComputedAt = toDate(row?.stats_computed_at);
-    const fresh = row && !row.is_stale && isFresh(statsComputedAt, now);
+    const fresh = row && !row.is_stale && isFresh(statsComputedAt, PORTFOLIO_TTL_MS);
+
     if (fresh) {
-      logger.info("snapshot_stats_hit", { owner_id: ownerId, age_ms: now.getTime() - statsComputedAt!.getTime() });
+      logger.info("portfolio_stats_hit", { owner_id: ownerId });
       incrementSnapshot("stats_hit");
       return this.mapStatsRow(row);
     }
 
-    logger.info("snapshot_stats_miss", { owner_id: ownerId, is_stale: row?.is_stale ?? null, has_row: !!row });
+    logger.info("portfolio_stats_miss", { owner_id: ownerId, is_stale: row?.is_stale ?? null });
     incrementSnapshot("stats_miss");
-    await timed("snapshot.stats.recompute", () => this.refreshStats(ownerId, row), { owner_id: ownerId, slow_ms: 3_000 });
-    const updated: any = await this.fetchSnapshotRow(ownerId);
+
+    await this.refreshPortfolioStats(ownerId);
+
+    const updated = await this.fetchSnapshotRow(ownerId);
     if (updated) return this.mapStatsRow(updated);
 
-    // Fallback in case lock contention and row not yet present.
-    throw new Error("HOSTEL_CONTEXT_REQUIRED: owner dashboard snapshots are deprecated for operational stats");
+    return this.emptyStats();
   }
 
-  async getMonthlyStats(ownerId: string, months: number) {
-    const now = new Date();
-    const row: any = await this.fetchSnapshotRow(ownerId);
-
-    const monthlyComputedAt = toDate(row?.monthly_computed_at);
-    const hasCorrectMonths = Number(row?.monthly_trend_months || 0) === months;
-    const fresh = row && !row.is_stale && hasCorrectMonths && isFresh(monthlyComputedAt, now);
-    if (fresh && Array.isArray(row.monthly_trend)) {
-      logger.info("snapshot_monthly_hit", { owner_id: ownerId, months, age_ms: now.getTime() - monthlyComputedAt!.getTime() });
-      incrementSnapshot("monthly_hit");
-      return row.monthly_trend as MonthlyPoint[];
+  /**
+   * Recompute portfolio snapshot by aggregating over today's hostel snapshots.
+   * Writes result back to `owner_dashboard_snapshots`.
+   * Protected by a per-owner system lock to prevent concurrent recomputes.
+   */
+  async refreshPortfolioStats(ownerId: string): Promise<void> {
+    const lockKey = `portfolio_snapshot_${ownerId}`;
+    const acquired = await acquireSystemLock(lockKey, 30);
+    if (!acquired) {
+      logger.info("portfolio_stats_lock_busy", { owner_id: ownerId });
+      incrementSnapshot("lock_contention");
+      return;
     }
 
-    logger.info("snapshot_monthly_miss", { owner_id: ownerId, months, is_stale: row?.is_stale ?? null });
-    incrementSnapshot("monthly_miss");
-    await timed("snapshot.monthly.recompute", () => this.refreshMonthly(ownerId, months, row), { owner_id: ownerId, months, slow_ms: 3_000 });
-    const updatedRows: any[] = await prisma.$queryRaw<any[]>`
-      SELECT monthly_trend
-      FROM owner_dashboard_snapshots
+    try {
+      const hostels = await prisma.hostel.findMany({
+        where: { owner_id: ownerId, is_active: true },
+        select: { id: true },
+      });
+
+      if (hostels.length === 0) {
+        await this.writePortfolioRow(ownerId, this.emptyStats());
+        return;
+      }
+
+      // Ensure today's snapshot exists for each hostel; use cached row if present.
+      const today = new Date();
+      const snapshots = await Promise.all(
+        hostels.map((h) =>
+          hostelDailySnapshotService.getSnapshotOrLive(h.id, today).then((r) => r.data)
+        )
+      );
+
+      const agg = snapshots.reduce(
+        (acc, s) => {
+          const capacity        = Number(s.capacity           ?? s.active_tenants ?? 0);
+          const activeTenants   = Number(s.active_tenants     ?? 0);
+          const collected       = Number(s.collected_revenue  ?? 0);
+          const expenses        = Number(s.expenses           ?? 0);
+          const pending         = Number(s.pending_dues       ?? 0);
+          const overdueCnt      = Number(s.overdue_count      ?? 0);
+          // Derive overdue amount: use pending_dues as a proxy when overdue_amount is not stored
+          const overdueAmount   = Number((s as any).overdue_amount ?? pending);
+
+          acc.total_capacity               += capacity;
+          acc.active_tenants               += activeTenants;
+          acc.rent_collected_this_month    += collected;
+          acc.expenses_this_month          += expenses;
+          acc.pending_dues                 += pending;
+          acc.overdue_total                += overdueAmount;
+          acc.overdue_count                += overdueCnt;
+          return acc;
+        },
+        {
+          total_capacity: 0,
+          active_tenants: 0,
+          rent_collected_this_month: 0,
+          expenses_this_month: 0,
+          pending_dues: 0,
+          overdue_total: 0,
+          overdue_count: 0,
+        }
+      );
+
+      const roomCounts = await prisma.room.groupBy({
+        by: ["hostel_id"],
+        where: { hostel: { owner_id: ownerId, is_active: true }, is_active: true },
+        _sum: { capacity: true },
+        _count: { id: true },
+      });
+
+      const totalRooms    = roomCounts.reduce((s, r) => s + Number(r._count.id || 0), 0);
+      const totalCapacity = roomCounts.reduce((s, r) => s + Number(r._sum.capacity || 0), 0);
+      const vacantBeds    = Math.max(0, totalCapacity - agg.active_tenants);
+      const occupancyRate = totalCapacity > 0
+        ? Math.round((agg.active_tenants / totalCapacity) * 10_000) / 100
+        : 0;
+
+      // Expected revenue is collected + pending; guard against divide-by-zero.
+      const expectedRevenue = agg.rent_collected_this_month + agg.pending_dues;
+      const collectionRate  = expectedRevenue > 0
+        ? Math.round((agg.rent_collected_this_month / expectedRevenue) * 10_000) / 100
+        : 0;
+
+      const stats: PortfolioStats = {
+        total_rooms:               totalRooms,
+        total_capacity:            totalCapacity,
+        active_tenants:            agg.active_tenants,
+        vacant_beds:               vacantBeds,
+        occupancy_rate:            occupancyRate,
+        rent_collected_this_month: agg.rent_collected_this_month,
+        expenses_this_month:       agg.expenses_this_month,
+        pending_dues:              agg.pending_dues,
+        overdue_total:             agg.overdue_total,
+        overdue_count:             agg.overdue_count,
+        collection_rate:           collectionRate,
+      };
+
+      await this.writePortfolioRow(ownerId, stats);
+      logger.info("portfolio_stats_refreshed", { owner_id: ownerId, hostels: hostels.length });
+    } finally {
+      await releaseSystemLock(lockKey);
+    }
+  }
+
+  private async fetchSnapshotRow(ownerId: string) {
+    const rows = await prisma.$queryRaw<any[]>`
+      SELECT * FROM owner_dashboard_snapshots
       WHERE owner_id = ${ownerId}::uuid
       LIMIT 1
     `;
-    const updated: any = updatedRows[0] || null;
-    if (updated?.monthly_trend && Array.isArray(updated.monthly_trend)) {
-      return updated.monthly_trend as MonthlyPoint[];
-    }
-
-    throw new Error("HOSTEL_CONTEXT_REQUIRED: owner dashboard snapshots are deprecated for operational monthly stats");
+    return rows[0] ?? null;
   }
 
-  private mapStatsRow(row: any) {
+  private async writePortfolioRow(ownerId: string, s: PortfolioStats) {
+    const snapshotMonth = utcMonthStart(new Date());
+    const now           = new Date();
+    await prisma.$executeRaw`
+      INSERT INTO owner_dashboard_snapshots (
+        owner_id, snapshot_month,
+        active_tenant_count, total_room_count, total_capacity, vacant_beds, occupancy_rate,
+        rent_collected_month, expenses_month, pending_dues, overdue_total, overdue_count,
+        collection_rate, stats_computed_at, is_stale, updated_at
+      ) VALUES (
+        ${ownerId}::uuid, ${snapshotMonth}::date,
+        ${s.active_tenants}, ${s.total_rooms}, ${s.total_capacity}, ${s.vacant_beds},
+        ${s.occupancy_rate}, ${s.rent_collected_this_month}, ${s.expenses_this_month},
+        ${s.pending_dues}, ${s.overdue_total}, ${s.overdue_count},
+        ${s.collection_rate}, ${now}, false, NOW()
+      )
+      ON CONFLICT (owner_id) DO UPDATE SET
+        snapshot_month          = EXCLUDED.snapshot_month,
+        active_tenant_count     = EXCLUDED.active_tenant_count,
+        total_room_count        = EXCLUDED.total_room_count,
+        total_capacity          = EXCLUDED.total_capacity,
+        vacant_beds             = EXCLUDED.vacant_beds,
+        occupancy_rate          = EXCLUDED.occupancy_rate,
+        rent_collected_month    = EXCLUDED.rent_collected_month,
+        expenses_month          = EXCLUDED.expenses_month,
+        pending_dues            = EXCLUDED.pending_dues,
+        overdue_total           = EXCLUDED.overdue_total,
+        overdue_count           = EXCLUDED.overdue_count,
+        collection_rate         = EXCLUDED.collection_rate,
+        stats_computed_at       = EXCLUDED.stats_computed_at,
+        is_stale                = false,
+        updated_at              = NOW()
+    `;
+  }
+
+  private mapStatsRow(row: any): PortfolioStats {
     return {
-      total_rooms: Number(row.total_room_count || 0),
-      total_tenants: Number(row.tenant_count || 0),
-      active_tenants: Number(row.active_tenant_count || 0),
-      total_capacity: Number(row.total_capacity || 0),
-      vacant_beds: Number(row.vacant_beds || 0),
-      occupancy_rate: Number(row.occupancy_rate || 0),
-      revenue: Number(row.rent_collected_month || 0),
-      expenses_this_month: Number(row.expenses_month || 0),
-      rent_collected_this_month: Number(row.rent_collected_month || 0),
-      pending_dues: Number(row.pending_dues || 0),
-      overdue_amount: Number(row.overdue_total || 0),
-      overdue_count: Number(row.overdue_count || 0),
-      collection_rate: Number(row.collection_rate || 0),
+      total_rooms:               Number(row.total_room_count        || 0),
+      total_capacity:            Number(row.total_capacity          || 0),
+      active_tenants:            Number(row.active_tenant_count     || 0),
+      vacant_beds:               Number(row.vacant_beds             || 0),
+      occupancy_rate:            Number(row.occupancy_rate          || 0),
+      rent_collected_this_month: Number(row.rent_collected_month    || 0),
+      expenses_this_month:       Number(row.expenses_month          || 0),
+      pending_dues:              Number(row.pending_dues            || 0),
+      overdue_total:             Number(row.overdue_total           || 0),
+      overdue_count:             Number(row.overdue_count           || 0),
+      collection_rate:           Number(row.collection_rate         || 0),
     };
   }
 
-  private async refreshStats(ownerId: string, existingRow: any) {
-    throw new Error("HOSTEL_CONTEXT_REQUIRED: owner dashboard snapshots are deprecated for operational stats");
-    const key = lockKey(ownerId, "stats");
-    const acquired = await this.acquireLock(key);
-    if (!acquired) {
-      logger.info("stats_refresh_lock_busy", { owner_id: ownerId });
-      return;
-    }
-
-    try {
-      const stats = {
-        total_tenants: 0,
-        active_tenants: 0,
-        total_rooms: 0,
-        total_capacity: 0,
-        vacant_beds: 0,
-        occupancy_rate: 0,
-        rent_collected_this_month: 0,
-        expenses_this_month: 0,
-        pending_dues: 0,
-        overdue_amount: 0,
-        overdue_count: 0,
-      };
-      const monthly: MonthlyPoint[] = [];
-      const collectionRate = Number(monthly?.[0]?.collection_rate || 0);
-      const snapshotMonth = utcMonthStart(new Date());
-      const now = new Date();
-
-      await prisma.$executeRaw`
-        INSERT INTO owner_dashboard_snapshots (
-          owner_id, snapshot_month, tenant_count, active_tenant_count, total_room_count, total_capacity,
-          vacant_beds, occupancy_rate, rent_collected_month, expenses_month, pending_dues, overdue_total,
-          overdue_count, collection_rate, stats_computed_at, is_stale, updated_at
-        )
-        VALUES (
-          ${ownerId}::uuid, ${snapshotMonth}::date, ${Number(stats.total_tenants || 0)}, ${Number(stats.active_tenants || 0)},
-          ${Number(stats.total_rooms || 0)}, ${Number(stats.total_capacity || 0)}, ${Number(stats.vacant_beds || 0)},
-          ${Number(stats.occupancy_rate || 0)}, ${Number(stats.rent_collected_this_month || 0)},
-          ${Number(stats.expenses_this_month || 0)}, ${Number(stats.pending_dues || 0)},
-          ${Number(stats.overdue_amount || 0)}, ${Number(stats.overdue_count || 0)},
-          ${collectionRate}, ${now}, false, NOW()
-        )
-        ON CONFLICT (owner_id) DO UPDATE SET
-          snapshot_month = EXCLUDED.snapshot_month,
-          tenant_count = EXCLUDED.tenant_count,
-          active_tenant_count = EXCLUDED.active_tenant_count,
-          total_room_count = EXCLUDED.total_room_count,
-          total_capacity = EXCLUDED.total_capacity,
-          vacant_beds = EXCLUDED.vacant_beds,
-          occupancy_rate = EXCLUDED.occupancy_rate,
-          rent_collected_month = EXCLUDED.rent_collected_month,
-          expenses_month = EXCLUDED.expenses_month,
-          pending_dues = EXCLUDED.pending_dues,
-          overdue_total = EXCLUDED.overdue_total,
-          overdue_count = EXCLUDED.overdue_count,
-          collection_rate = EXCLUDED.collection_rate,
-          stats_computed_at = EXCLUDED.stats_computed_at,
-          is_stale = false,
-          updated_at = NOW()
-      `;
-    } finally {
-      await this.releaseLock(key);
-    }
-  }
-
-  private async refreshMonthly(ownerId: string, months: number, existingRow: any) {
-    const trend: MonthlyPoint[] = [];
-    throw new Error("HOSTEL_CONTEXT_REQUIRED: owner dashboard snapshots are deprecated for operational monthly stats");
-    const key = lockKey(ownerId, "monthly", months);
-    const acquired = await this.acquireLock(key);
-    if (!acquired) {
-      logger.info("monthly_refresh_lock_busy", { owner_id: ownerId, months });
-      return;
-    }
-
-    try {
-      throw new Error("HOSTEL_CONTEXT_REQUIRED: owner dashboard snapshots are deprecated for operational monthly stats");
-      const now = new Date();
-      const snapshotMonth = utcMonthStart(now);
-      const staleValue = existingRow ? !!existingRow.is_stale : false;
-
-      await prisma.$executeRaw`
-        INSERT INTO owner_dashboard_snapshots (
-          owner_id, snapshot_month, monthly_trend, monthly_trend_months,
-          monthly_computed_at, is_stale, updated_at
-        )
-        VALUES (
-          ${ownerId}::uuid, ${snapshotMonth}::date, ${JSON.stringify(trend)}::jsonb,
-          ${months}, ${now}, ${staleValue}, NOW()
-        )
-        ON CONFLICT (owner_id) DO UPDATE SET
-          snapshot_month = EXCLUDED.snapshot_month,
-          monthly_trend = EXCLUDED.monthly_trend,
-          monthly_trend_months = EXCLUDED.monthly_trend_months,
-          monthly_computed_at = EXCLUDED.monthly_computed_at,
-          updated_at = NOW()
-      `;
-    } finally {
-      await this.releaseLock(key);
-    }
-  }
-
-  private async acquireLock(key: string) {
-    const result = await acquireSystemLock(key, 20);
-    if (!result) incrementSnapshot("lock_contention");
-    return result;
-  }
-
-  private async releaseLock(key: string) {
-    await releaseSystemLock(key);
+  private emptyStats(): PortfolioStats {
+    return {
+      total_rooms: 0, total_capacity: 0, active_tenants: 0, vacant_beds: 0,
+      occupancy_rate: 0, rent_collected_this_month: 0, expenses_this_month: 0,
+      pending_dues: 0, overdue_total: 0, overdue_count: 0, collection_rate: 0,
+    };
   }
 }
 

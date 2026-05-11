@@ -1,4 +1,5 @@
 import { prisma } from "../db";
+import { Prisma } from "@prisma/client";
 import { getLogger } from "../logger";
 import { getTenantOperationalContext } from "../hostel-context";
 
@@ -69,7 +70,11 @@ export class TenantAdvanceService {
     await this._assertOwnership(tenantId, ownerId);
     await this._assertAdvanceEnabled(ownerId, tenantId);
 
-    return prisma.$transaction(async (tx) => {
+    return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const tenant = await tx.tenant.findUniqueOrThrow({
+        where: { id: tenantId },
+        select: { id: true, hostel_id: true },
+      });
       await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${tenantId}::uuid FOR UPDATE`;
       const currentBalance = await this._computeBalance(tx, tenantId);
       const newBalance = Math.round((currentBalance + amount) * 100) / 100;
@@ -77,6 +82,7 @@ export class TenantAdvanceService {
         data: {
           tenant_id: tenantId,
           owner_id: ownerId,
+          hostel_id: tenant.hostel_id,
           type: "CREDIT",
           reason,
           amount,
@@ -115,15 +121,22 @@ export class TenantAdvanceService {
     const { tenantId, ownerId, createdBy, amount, referenceId, referenceType, notes } = params;
 
     // Idempotency: if a ledger entry already exists for this reference, return it.
-    const existing = await tx.$queryRaw<{ id: string }[]>`
-      SELECT id FROM tenant_advance_ledger
-      WHERE reference_id = ${referenceId}::uuid AND reference_type = ${referenceType}
-      LIMIT 1
-    `;
-    if (existing.length > 0) {
+    const existing = await tx.tenantAdvanceLedger.findFirst({
+      where: {
+        reference_id: referenceId,
+        reference_type: referenceType,
+      },
+      select: { id: true },
+    });
+    if (existing) {
       logger.info("advance.credit.already_credited", { reference_id: referenceId, reference_type: referenceType });
       return { alreadyCredited: true };
     }
+
+    const tenant = await tx.tenant.findUniqueOrThrow({
+      where: { id: tenantId },
+      select: { id: true, hostel_id: true },
+    });
 
     const currentBalance = await this._computeBalance(tx, tenantId);
     const newBalance = Math.round((currentBalance + amount) * 100) / 100;
@@ -132,6 +145,7 @@ export class TenantAdvanceService {
       data: {
         tenant_id: tenantId,
         owner_id: ownerId,
+        hostel_id: tenant.hostel_id,
         type: "CREDIT",
         reason: "DEPOSIT",
         amount,
@@ -183,7 +197,11 @@ export class TenantAdvanceService {
     const effectiveRefundStatus =
       reason === "REFUND" ? (refundStatus ?? "PENDING") : null;
 
-    return prisma.$transaction(async (tx) => {
+    return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const tenant = await tx.tenant.findUniqueOrThrow({
+        where: { id: tenantId },
+        select: { id: true, hostel_id: true },
+      });
       await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${tenantId}::uuid FOR UPDATE`;
       const currentBalance = await this._computeBalance(tx, tenantId);
 
@@ -199,6 +217,7 @@ export class TenantAdvanceService {
         data: {
           tenant_id: tenantId,
           owner_id: ownerId,
+          hostel_id: tenant.hostel_id,
           type: "DEBIT",
           reason,
           amount,
@@ -260,7 +279,7 @@ export class TenantAdvanceService {
     await this._assertOwnership(tenantId, ownerId);
     await this._assertAdvanceEnabled(ownerId, tenantId);
 
-    return prisma.$transaction(async (tx) => {
+    return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Lock tenant row first (always first to avoid deadlock ordering)
       await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${tenantId}::uuid FOR UPDATE`;
       // Lock obligation row
@@ -325,6 +344,7 @@ export class TenantAdvanceService {
         data: {
           tenant_id: tenantId,
           owner_id: ownerId,
+          hostel_id: obligation.hostel_id,
           type: "DEBIT",
           reason: "ADJUSTMENT",
           amount,
@@ -377,17 +397,24 @@ export class TenantAdvanceService {
   }
 
   /**
-   * Compute live balance from ledger entries inside a transaction.
+   * Compute the current balance from all ledger entries.
+   * CREDIT increases balance, DEBIT decreases it.
    * Always recompute — never trust a single balance_after snapshot.
    */
-  private async _computeBalance(tx: any, tenantId: string): Promise<number> {
-    const result = await tx.$queryRaw<{ balance: string }[]>`
-      SELECT
-        COALESCE(SUM(CASE WHEN type = 'CREDIT' THEN amount ELSE -amount END), 0)::TEXT AS balance
-      FROM tenant_advance_ledger
-      WHERE tenant_id = ${tenantId}::uuid
-    `;
-    return parseFloat(result[0]?.balance ?? "0");
+  private async _computeBalance(tx: Prisma.TransactionClient, tenantId: string): Promise<number> {
+    const [credits, debits] = await Promise.all([
+      tx.tenantAdvanceLedger.aggregate({
+        where: { tenant_id: tenantId, type: "CREDIT" },
+        _sum: { amount: true },
+      }),
+      tx.tenantAdvanceLedger.aggregate({
+        where: { tenant_id: tenantId, type: "DEBIT" },
+        _sum: { amount: true },
+      }),
+    ]);
+    const creditSum = Number(credits._sum.amount ?? 0);
+    const debitSum = Number(debits._sum.amount ?? 0);
+    return Math.round((creditSum - debitSum) * 100) / 100;
   }
 }
 

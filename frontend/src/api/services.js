@@ -410,7 +410,7 @@ export const paymentService = {
         const response = await api.get('/payments/dues', { params: { ...params, hostelId } });
         return response.data;
     },
-    getTenantHistory: async (tenantId) => {
+    getTenantHistory: async (tenantId, hostelId) => {
         try {
             const storedTenant = localStorage.getItem('tenantUser');
             const storedOwner = localStorage.getItem('ownerUser');
@@ -492,7 +492,7 @@ export const paymentService = {
             throw error;
         }
     },
-    recordOfflinePayment: async ({ identityToken, obligationId, amountPaid, paymentMethod, referenceNumber, paymentDate, note }) => {
+    recordOfflinePayment: async ({ identityToken, obligationId, amountPaid, paymentMethod, referenceNumber, paymentDate, note, hostelId }) => {
         const response = await axios.post('/api/payments/record-offline', {
             identity_token: identityToken,
             obligation_id: obligationId,
@@ -501,6 +501,7 @@ export const paymentService = {
             reference_number: referenceNumber,
             payment_date: paymentDate,
             note,
+            hostelId,
         }, { withCredentials: true });
         return response.data;
     },
@@ -689,6 +690,14 @@ export const rentService = {
         const response = await api.post('/rent/generate', { ...(month ? { month } : {}), hostelId });
         return response.data;
     }
+};
+
+// --- Portfolio Service (owner-scoped — reads hostel snapshot aggregates) ---
+export const portfolioService = {
+    getSummary: async () => {
+        const response = await requestWithRetry(() => api.get('/owner/portfolio/summary'));
+        return response.data;
+    },
 };
 
 // --- Activity Service ---

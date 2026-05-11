@@ -56,6 +56,10 @@ export async function POST(req: Request) {
     }
 
     const data = await req.json();
+    const hostelId = data.hostelId || data.hostel_id;
+    if (!hostelId) {
+      return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
+    }
 
     // Authorization check for manual recording: only OWNER/ADMIN
     if (user.role !== "OWNER" && user.role !== "ADMIN") {
@@ -63,12 +67,14 @@ export async function POST(req: Request) {
     }
 
     const result = await paymentService.recordPayment({
+      hostelId,
       obligationId: data.obligation_id,
       amountPaid: Number(data.amount_paid),
       paymentMethod: data.payment_method,
       referenceNumber: data.reference_number,
       paymentDate: data.payment_date ? new Date(data.payment_date) : undefined,
-      userId: user.id
+      userId: user.id,
+      ownerId: user.id,
     });
 
     return NextResponse.json(result);

@@ -42,15 +42,17 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     let tenantId = body.tenant_id;
+    let hostelId = body.hostelId || body.hostel_id;
 
     // Tenants pay their own dues
     if (user.role === "TENANT") {
       const tenant = await prisma.tenant.findUnique({
         where: { profile_id: user.id },
-        select: { id: true },
+        select: { id: true, hostel_id: true },
       });
       if (!tenant) return apiError("Tenant not found", "NOT_FOUND", 404);
       tenantId = tenant.id;
+      hostelId = tenant.hostel_id;
     }
 
     // Owners can record payments for their tenants
@@ -60,11 +62,15 @@ export async function POST(req: Request) {
       }
       const tenant = await prisma.tenant.findUnique({
         where: { id: tenantId },
-        select: { owner_id: true },
+        select: { owner_id: true, hostel_id: true },
       });
       if (!tenant) return apiError("Tenant not found", "NOT_FOUND", 404);
       if (user.role === "OWNER" && tenant.owner_id !== user.id) {
         return apiError("Forbidden: not your tenant", "FORBIDDEN", 403);
+      }
+      if (!hostelId) return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
+      if (tenant.hostel_id !== hostelId) {
+        return apiError("Tenant does not belong to requested hostel", "HOSTEL_ACCESS_DENIED", 403);
       }
     }
 
@@ -78,6 +84,7 @@ export async function POST(req: Request) {
     }
 
     const result = await paymentService.recordTenantPayment({
+      hostelId,
       tenantId,
       amountPaid,
       paymentMethod: body.payment_method,

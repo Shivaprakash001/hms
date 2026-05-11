@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { DoorOpen, Plus, CheckCircle2, X, ArrowRight, Loader2, IndianRupee } from 'lucide-react';
+import { DoorOpen, Plus, CheckCircle2, X, ArrowRight, Loader2, IndianRupee, Trash2 } from 'lucide-react';
 import { ownerService, roomService } from '../../api/services';
 import { setStoredStep } from '../../hooks/useOnboardingState';
 
@@ -22,6 +22,7 @@ export default function OnboardingRooms() {
   const [form, setForm] = useState(emptyForm());
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  const [deletingRoomId, setDeletingRoomId] = useState(null);
   const [apiError, setApiError] = useState('');
   const [addedRooms, setAddedRooms] = useState([]);
   const [showForm, setShowForm] = useState(true);
@@ -80,6 +81,24 @@ export default function OnboardingRooms() {
     navigate('/onboarding/tenant');
   };
 
+  const handleDeleteRoom = async (roomId) => {
+    if (!roomId || deletingRoomId) return;
+    setDeletingRoomId(roomId);
+    setApiError('');
+    try {
+      await roomService.delete(roomId);
+      setAddedRooms((rooms) => {
+        const nextRooms = rooms.filter((room) => room.id !== roomId);
+        if (nextRooms.length === 0) setShowForm(true);
+        return nextRooms;
+      });
+    } catch (err) {
+      setApiError(err?.response?.data?.error?.message || err?.response?.data?.detail || 'Could not delete room. Try again.');
+    } finally {
+      setDeletingRoomId(null);
+    }
+  };
+
   return (
     <div className="space-y-5">
       <div>
@@ -113,7 +132,19 @@ export default function OnboardingRooms() {
               <p className="text-sm font-black text-emerald-900">Room {room.number}</p>
               <p className="text-xs text-emerald-700 font-medium">₹{Number(room.rent).toLocaleString('en-IN')}/month</p>
             </div>
-            <DoorOpen size={14} className="text-emerald-400" />
+            <button
+              type="button"
+              onClick={() => handleDeleteRoom(room.id)}
+              disabled={deletingRoomId === room.id}
+              aria-label={`Delete room ${room.number}`}
+              title="Delete room"
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-emerald-700 hover:text-red-600 hover:bg-red-50 disabled:opacity-60 transition-colors"
+            >
+              {deletingRoomId === room.id
+                ? <Loader2 size={15} className="animate-spin" />
+                : <Trash2 size={15} />
+              }
+            </button>
           </motion.div>
         ))}
       </AnimatePresence>
