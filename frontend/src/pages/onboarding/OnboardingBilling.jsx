@@ -134,12 +134,10 @@ export default function OnboardingBilling() {
       const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
       if (tz) setTimezone(tz);
     } catch {}
-    ownerService.getProfile()
-      .then((profile) => {
-        const owner = profile?.owner || {};
-        const hostels = profile?.hostels || (profile?.hostel?.id ? [profile.hostel] : []);
-        const [onlyHostel] = hostels;
-        const selected = hostels.length === 1 ? onlyHostel : null;
+    ownerService.getHostels()
+      .then((response) => {
+        const hostels = response?.hostels || [];
+        const selected = hostels.find((hostel) => hostel?.is_active !== false) || hostels[0] || null;
         if (selected?.id) {
           setHostelId(selected.id);
         }
@@ -160,18 +158,26 @@ export default function OnboardingBilling() {
         timezone:         timezone,
         auto_generate_rent: true,
         auto_send_reminders: autoReminders,
-        billing_defaults: {
-          advance_deposit: advanceDeposit,
-          maintenance_charge: maintenanceType === 'NONE' ? 0 : maintenanceCharge,
-          maintenance_type: maintenanceType,
-          auto_fill_room_rent: true,
-          allow_override: true,
-        },
       }, hostelId);
+      await ownerService.updateHostelBillingDefaults(hostelId, {
+        advance_deposit: advanceDeposit,
+        maintenance_charge: maintenanceType === 'NONE' ? 0 : maintenanceCharge,
+        maintenance_type: maintenanceType,
+        auto_fill_room_rent: true,
+        allow_override: true,
+      });
       setStoredStep('BILLING_CONFIGURED');
       navigate('/onboarding/rooms');
     } catch (err) {
-      setApiError(err?.response?.data?.error?.message || err?.response?.data?.detail || 'Could not save. Try again.');
+      const data = err?.response?.data;
+      setApiError(
+        data?.error?.message ||
+        data?.message ||
+        (typeof data?.error === 'string' ? data.error : '') ||
+        data?.detail ||
+        err?.message ||
+        'Could not save. Try again.'
+      );
     } finally {
       setSaving(false);
     }
