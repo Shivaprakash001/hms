@@ -107,7 +107,7 @@ export async function DELETE(
     }
 
     await prisma.room.delete({ where: { id: params.id } });
-    return apiResponse(null, 204);
+    return new Response(null, { status: 204 });
   } catch (error: any) {
     return apiError(error.message || "Failed to delete room");
   }
