@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
     const [summary, monthlyStats, activityRes] = await Promise.all([
       dashboardService.getOwnerStats(scope.owner_id, hostelId),
       dashboardService.getMonthlyStats(scope.owner_id, hostelId, months),
-      activityService.getOwnerActivity({ userId: scope.owner_id, limit: 5, offset: 0 }).catch(() => ({ items: [], total: 0 }))
+      activityService.getOwnerActivity({ userId: scope.owner_id, hostelId, limit: 5, offset: 0 }).catch(() => ({ items: [], total: 0 }))
     ]);
 
     const finalResponse = {

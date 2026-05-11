@@ -4,11 +4,12 @@ export const runtime = "nodejs";
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { activityService } from "@/lib/services/activity-service";
+import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
 
 
 /**
  * 🔍 Audit & Activity Timeline
- * Access: Owner/Admin only
+ * Access: Owner/Admin only, hostel-scoped
  */
 export async function GET(req: NextRequest) {
   const session = await getSession(req);
@@ -17,6 +18,18 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url);
+  const hostelId = searchParams.get("hostelId");
+  if (!hostelId) {
+    return apiError("hostelId query parameter is required", "BAD_REQUEST", 400);
+  }
+
+  // Validate hostel ownership
+  try {
+    await requireHostelBelongsToOwner(session.sub, hostelId);
+  } catch (error: any) {
+    return apiError(error.message, error.code || "FORBIDDEN", 403);
+  }
+
   const search = searchParams.get("search") || undefined;
   const type = searchParams.get("type") || undefined;
   const offset = parseInt(searchParams.get("offset") || "0");
@@ -25,6 +38,7 @@ export async function GET(req: NextRequest) {
   try {
     const activity = await activityService.getOwnerActivity({
       userId: session.sub,
+      hostelId,
       search,
       type,
       offset,
