@@ -128,6 +128,7 @@ export async function POST(req: NextRequest) {
         payment_domain: PAYMENT_DOMAIN.PLATFORM_BILLING,
         scope_type: PAYMENT_SCOPE.PLATFORM,
         flow_type: PAYMENT_FLOW.SUBSCRIPTION,
+        payment_type: "SUBSCRIPTION",
         merchant_context_type: MERCHANT_CONTEXT.HMS_PLATFORM,
         merchant_context_id: providerContext.merchant_context_id,
         settlement_status: SETTLEMENT_STATUS.NOT_SETTLED,
@@ -143,7 +144,7 @@ export async function POST(req: NextRequest) {
       reason: "platform billing subscription attempt created",
       actorId: session.sub,
       operationalOwnerId: session.sub,
-      financialOwnerId: null,
+      financialOwnerId: providerContext.financial_owner_id,
       hostelId: null,
       metadata: { paymentDomain: PAYMENT_DOMAIN.PLATFORM_BILLING, flowType: PAYMENT_FLOW.SUBSCRIPTION },
     }).catch(() => {});
@@ -162,6 +163,8 @@ export async function POST(req: NextRequest) {
           invoice_id: invoice.id,
           plan_id: plan.id,
           plan_name: plan.name,
+          payment_type: "SUBSCRIPTION",
+          flow_type: PAYMENT_FLOW.SUBSCRIPTION,
           attempt_id: attempt.id
         }
       });
@@ -175,7 +178,7 @@ export async function POST(req: NextRequest) {
         reason: "platform billing checkout created",
         actorId: session.sub,
         operationalOwnerId: session.sub,
-        financialOwnerId: null,
+        financialOwnerId: providerContext.financial_owner_id,
         hostelId: null,
         data: {
           gateway_txn_id: result.gateway_txn_id,
@@ -197,7 +200,7 @@ export async function POST(req: NextRequest) {
         plan_name: plan.name,
         invoice_id: invoice.id,
         invoice_number: invoiceNumber,
-        amount_paise: (plan.price_inr || 0) * 100,
+        amount_paise: plan.price_inr || 0,
         payment_attempt_id: updatedAttempt.id
       });
 
@@ -222,17 +225,23 @@ export async function POST(req: NextRequest) {
 
     } catch (error: any) {
       // Payment provider failed — mark attempt FAILED
-      await paymentStatusEventService.updateAttemptStatusOutsideTransaction({
-        attemptId: attempt.id,
-        fromStatus: "CREATED",
-        toStatus: "FAILED",
-        source: "CREATE_INTENT",
-        reason: "platform billing provider create failed",
-        actorId: session.sub,
-        operationalOwnerId: session.sub,
-        financialOwnerId: null,
-        hostelId: null,
-        data: { settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE, raw_create_response: { error: String(error) } as any },
+      await prisma.$transaction(async (tx) => {
+        await tx.ownerInvoice.updateMany({
+          where: { id: invoice.id, status: "PENDING" },
+          data: { status: "FAILED" },
+        });
+        await paymentStatusEventService.updateAttemptStatus(tx, {
+          attemptId: attempt.id,
+          fromStatus: "CREATED",
+          toStatus: "FAILED",
+          source: "CREATE_INTENT",
+          reason: "platform billing provider create failed",
+          actorId: session.sub,
+          operationalOwnerId: session.sub,
+          financialOwnerId: providerContext.financial_owner_id,
+          hostelId: null,
+          data: { settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE, raw_create_response: { error: String(error) } as any },
+        });
       }).catch(() => {});
 
       logger.error("billing.upgrade.intent_failed", {

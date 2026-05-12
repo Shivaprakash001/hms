@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
     CreditCard, Users, Building2, CheckCircle2, XCircle,
     Clock3, CalendarDays, TrendingUp, Loader2, RefreshCw,
@@ -299,6 +300,8 @@ function BillingHistory({ items }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function BillingPlans() {
+    const [searchParams] = useSearchParams();
+    const navigate = useNavigate();
     const { data: subscription, isLoading: subLoading, error: subError, refetch: refetchSub } = useSubscription();
     const { data: plans = [], isLoading: plansLoading, error: plansError, refetch: refetchPlans } = usePlans();
     
@@ -307,12 +310,45 @@ export default function BillingPlans() {
 
     const [upgrading, setUpgrading]   = useState(null);
     const [upgradeError, setUpgradeError] = useState('');
+    const [returnStatus, setReturnStatus] = useState('');
     const [buyModalOpen, setBuyModalOpen] = useState(false);
+    const verifiedReturnRef = useRef(false);
 
     const load = () => {
         refetchSub();
         refetchPlans();
     };
+
+    useEffect(() => {
+        const merchantTxnId = searchParams.get('merchant_txn_id');
+        if (!merchantTxnId || verifiedReturnRef.current) return;
+
+        verifiedReturnRef.current = true;
+        setReturnStatus('Verifying subscription payment...');
+
+        api.post('/payments/verify', { merchant_txn_id: merchantTxnId })
+            .then((res) => {
+                const data = res.data?.attempt || res.data?.data?.attempt || res.data?.data || res.data;
+                const status = data?.status || res.data?.status;
+                if (status === 'SUCCESS') {
+                    setReturnStatus('Subscription activated successfully.');
+                } else {
+                    setReturnStatus(status ? `Payment status: ${status}` : 'Payment is still processing.');
+                }
+                return Promise.all([refetchSub(), refetchPlans()]);
+            })
+            .catch((e) => {
+                setReturnStatus(e?.response?.data?.error?.message || 'Could not verify subscription payment yet.');
+            })
+            .finally(() => {
+                const nextParams = new URLSearchParams(searchParams);
+                nextParams.delete('merchant_txn_id');
+                nextParams.delete('flow_type');
+                nextParams.delete('payment_type');
+                const suffix = nextParams.toString();
+                navigate(`/owner/billing${suffix ? `?${suffix}` : ''}`, { replace: true });
+            });
+    }, [navigate, refetchPlans, refetchSub, searchParams]);
 
     const handleUpgrade = async (planId) => {
         setUpgrading(planId);
@@ -374,6 +410,13 @@ export default function BillingPlans() {
                 <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 text-amber-700 text-sm rounded-xl px-4 py-3">
                     <AlertTriangle size={15} className="flex-shrink-0" />
                     <span>{upgradeError}</span>
+                </div>
+            )}
+
+            {returnStatus && (
+                <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded-xl px-4 py-3">
+                    <CheckCircle2 size={15} className="flex-shrink-0" />
+                    <span>{returnStatus}</span>
                 </div>
             )}
 

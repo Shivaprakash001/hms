@@ -8,8 +8,6 @@ import { apiError } from "@/lib/utils/api-utils";
 import { prisma } from "@/lib/db";
 import { getLogger } from "@/lib/logger";
 
-import { planEnforcementService } from "@/lib/services/plan-enforcement-service";
-
 const logger = getLogger("verify");
 
 export async function POST(req: Request) {
@@ -17,10 +15,6 @@ export async function POST(req: Request) {
     const user = await authService.getCurrentUser(req);
     if (!user) {
       return apiError("Unauthorized", "UNAUTHORIZED", 401);
-    }
-
-    if (user.role === "OWNER") {
-      await planEnforcementService.assertSubscriptionActive(user.id);
     }
 
     // user.id is profile_id, but payment attempts store tenant_id (tenants table PK).

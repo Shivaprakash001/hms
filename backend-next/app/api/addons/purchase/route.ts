@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
       reason: "platform addon attempt created",
       actorId: user.sub,
       operationalOwnerId: user.sub,
-      financialOwnerId: null,
+      financialOwnerId: providerContext.financial_owner_id,
       hostelId: null,
       metadata: { paymentDomain: PAYMENT_DOMAIN.PLATFORM_BILLING, flowType: PAYMENT_FLOW.ADDON, pack },
     }).catch(() => {});
@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
       reason: "platform addon checkout created",
       actorId: user.sub,
       operationalOwnerId: user.sub,
-      financialOwnerId: null,
+      financialOwnerId: providerContext.financial_owner_id,
       hostelId: null,
       data: {
         gateway_txn_id: result.gateway_txn_id,

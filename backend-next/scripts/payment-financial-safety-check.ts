@@ -76,6 +76,65 @@ const checks: Check[] = [
     `,
   },
   {
+    id: "PLATFORM_BILLING_USES_HMS_CONTEXT",
+    severity: "CRITICAL",
+    description: "PlatformBilling attempts must use HMS platform merchant context and must not require hostel scope.",
+    sql: `
+      SELECT pa.id, pa.owner_id, pa.hostel_id,
+             'HMS_PLATFORM context with null hostel_id' AS expected,
+             CONCAT(COALESCE(pa.merchant_context_type, 'null'), ', hostel=', COALESCE(pa.hostel_id::text, 'null')) AS actual,
+             jsonb_build_object('flow_type', pa.flow_type, 'scope_type', pa.scope_type, 'merchant_context_id', pa.merchant_context_id) AS metadata
+      FROM payment_attempts pa
+      WHERE (pa.payment_domain = 'PLATFORM_BILLING' OR pa.invoice_id IS NOT NULL OR pa.flow_type = 'SUBSCRIPTION')
+        AND (
+          pa.merchant_context_type IS DISTINCT FROM 'HMS_PLATFORM'
+          OR pa.scope_type IS DISTINCT FROM 'PLATFORM'
+          OR pa.hostel_id IS NOT NULL
+        )
+      LIMIT 1000
+    `,
+  },
+  {
+    id: "PLATFORM_BILLING_SETTLEMENT_HAS_INVOICE_TRANSITION",
+    severity: "CRITICAL",
+    description: "Settled PlatformBilling subscription attempts must have a canonical OwnerInvoice transition.",
+    sql: `
+      SELECT pa.id, pa.owner_id, pa.hostel_id,
+             'OwnerInvoice PAID with paid_at' AS expected,
+             CONCAT(COALESCE(oi.status, 'missing'), ', paid_at=', COALESCE(oi.paid_at::text, 'null')) AS actual,
+             jsonb_build_object('invoice_id', pa.invoice_id, 'settlement_status', pa.settlement_status, 'flow_type', pa.flow_type) AS metadata
+      FROM payment_attempts pa
+      LEFT JOIN owner_invoices oi ON oi.id = pa.invoice_id
+      WHERE (pa.payment_domain = 'PLATFORM_BILLING' OR pa.flow_type = 'SUBSCRIPTION' OR pa.invoice_id IS NOT NULL)
+        AND COALESCE(pa.flow_type, 'SUBSCRIPTION') = 'SUBSCRIPTION'
+        AND pa.status = 'SUCCESS'
+        AND (
+          pa.invoice_id IS NULL
+          OR oi.id IS NULL
+          OR oi.status <> 'PAID'
+          OR oi.paid_at IS NULL
+        )
+      LIMIT 1000
+    `,
+  },
+  {
+    id: "PLATFORM_BILLING_HAS_NO_RENT_OBLIGATION_LINKAGE",
+    severity: "CRITICAL",
+    description: "PlatformBilling attempts must not link to rent obligations through legacy fields or junction rows.",
+    sql: `
+      SELECT pa.id, pa.owner_id, pa.hostel_id,
+             'no obligation linkage' AS expected,
+             'rent obligation linkage present' AS actual,
+             jsonb_build_object('obligation_id', pa.obligation_id, 'linked_obligations', COUNT(pao.id)) AS metadata
+      FROM payment_attempts pa
+      LEFT JOIN payment_attempt_obligations pao ON pao.payment_attempt_id = pa.id
+      WHERE (pa.payment_domain = 'PLATFORM_BILLING' OR pa.invoice_id IS NOT NULL OR pa.flow_type = 'SUBSCRIPTION')
+        AND (pa.obligation_id IS NOT NULL OR pao.id IS NOT NULL)
+      GROUP BY pa.id
+      LIMIT 1000
+    `,
+  },
+  {
     id: "RENT_COLLECTION_HAS_HOSTEL_SCOPE",
     severity: "CRITICAL",
     description: "Active RentCollection operational attempts must carry hostel_id.",

@@ -27,8 +27,8 @@ export class PaymentStatusEventService {
     await this.append(tx, {
       ...input,
       operationalOwnerId: input.operationalOwnerId || updated.owner_id || null,
-      financialOwnerId: input.financialOwnerId || updated.owner_id || null,
-      hostelId: input.hostelId || updated.hostel_id || null,
+      financialOwnerId: input.financialOwnerId === undefined ? updated.owner_id || null : input.financialOwnerId,
+      hostelId: input.hostelId === undefined ? updated.hostel_id || null : input.hostelId,
     });
     return updated;
   }

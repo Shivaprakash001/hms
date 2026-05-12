@@ -110,9 +110,11 @@ export class PhonePeProvider extends PaymentProvider {
     // guaranteed identifier in useSearchParams() regardless of what params
     // PhonePe appends. Without this, a POST-mode redirect loses all data
     // because the browser navigates to the URL and the POST body is discarded.
+    const frontendUrl = process.env.NEXT_PUBLIC_FRONTEND_URL || "https://trishul.solutions";
     const returnBase =
-      process.env.PHONEPE_REDIRECT_URL ||
-      `${process.env.NEXT_PUBLIC_FRONTEND_URL || "https://trishul.solutions"}/payment-return`;
+      data.metadata?.flow_type === "SUBSCRIPTION" || data.metadata?.invoice_id
+        ? `${frontendUrl}/owner/billing`
+        : process.env.PHONEPE_REDIRECT_URL || `${frontendUrl}/payment-return`;
     const sep = returnBase.includes("?") ? "&" : "?";
     // For ADDON payments, embed attempt_id so the frontend can run the verify fallback
     // and show the correct success state without relying solely on sessionStorage.
@@ -122,10 +124,13 @@ export class PhonePeProvider extends PaymentProvider {
     const paymentTypeParam = data.metadata?.payment_type
       ? `&payment_type=${encodeURIComponent(data.metadata.payment_type)}`
       : "";
+    const flowTypeParam = data.metadata?.flow_type
+      ? `&flow_type=${encodeURIComponent(data.metadata.flow_type)}`
+      : "";
     const creditsParam = data.metadata?.credits
       ? `&credits=${encodeURIComponent(data.metadata.credits)}`
       : "";
-    const redirectUrl = `${returnBase}${sep}merchant_txn_id=${encodeURIComponent(data.merchant_txn_id)}${attemptIdParam}${paymentTypeParam}${creditsParam}`;
+    const redirectUrl = `${returnBase}${sep}merchant_txn_id=${encodeURIComponent(data.merchant_txn_id)}${attemptIdParam}${paymentTypeParam}${flowTypeParam}${creditsParam}`;
 
     // Clean v2 payload — no v1 fields (paymentInstrument, top-level redirectUrl/redirectMode/callbackUrl).
     // Having both paymentInstrument (v1) and paymentFlow (v2) causes the API to ignore paymentFlow
@@ -146,7 +151,9 @@ export class PhonePeProvider extends PaymentProvider {
       expireAfter: 1800,
       paymentFlow: {
         type: "PG_CHECKOUT",
-        message: `Rent payment - ${data.tenant_name || "Tenant"}`,
+        message: data.metadata?.flow_type === "SUBSCRIPTION" || data.metadata?.invoice_id
+          ? `HMS subscription - ${data.tenant_name || "Owner"}`
+          : `Rent payment - ${data.tenant_name || "Tenant"}`,
         merchantUrls: {
           redirectUrl,
         },
@@ -207,8 +214,8 @@ export class PhonePeProvider extends PaymentProvider {
 
     // Guard: if checkoutUrl points back to our own site it means PhonePe echoed our
     // return URL instead of giving a checkout page — this breaks the entire flow.
-    const frontendOrigin = process.env.NEXT_PUBLIC_FRONTEND_URL || "https://trishul.solutions";
-    if (!checkoutUrl || checkoutUrl.startsWith(frontendOrigin) || checkoutUrl.includes("/payment-return")) {
+    const frontendOrigin = frontendUrl;
+    if (!checkoutUrl || checkoutUrl.startsWith(frontendOrigin) || checkoutUrl.includes("/payment-return") || checkoutUrl.includes("/owner/billing")) {
       console.error("[PhonePe] Bad checkoutUrl from response:", { checkoutUrl, orderId, responseData });
       throw new Error(
         `PhonePe did not return a valid checkout URL. Got: ${checkoutUrl ?? "null"}. ` +

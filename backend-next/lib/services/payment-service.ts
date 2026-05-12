@@ -40,6 +40,40 @@ export class PaymentService {
     };
   }
 
+  private hmsFinancialOwnerId() {
+    return process.env.HMS_FINANCIAL_OWNER_ID || null;
+  }
+
+  private isPlatformBillingAttempt(attempt: any) {
+    return attempt?.payment_domain === PAYMENT_DOMAIN.PLATFORM_BILLING
+      || Boolean(attempt?.invoice_id)
+      || attempt?.flow_type === PAYMENT_FLOW.SUBSCRIPTION
+      || attempt?.flow_type === PAYMENT_FLOW.ADDON;
+  }
+
+  private isAddonAttempt(attempt: any) {
+    return (attempt?.payment_domain === PAYMENT_DOMAIN.PLATFORM_BILLING
+      && attempt?.flow_type === PAYMENT_FLOW.ADDON)
+      || attempt?.payment_type === "ADDON";
+  }
+
+  private isSubscriptionAttempt(attempt: any) {
+    return this.isPlatformBillingAttempt(attempt)
+      && (Boolean(attempt?.invoice_id) || attempt?.flow_type === PAYMENT_FLOW.SUBSCRIPTION);
+  }
+
+  private async getProviderInstanceForAttempt(attempt: any, label: string) {
+    if (this.isPlatformBillingAttempt(attempt)) {
+      return {
+        instance: PaymentProviderFactory.getProvider(attempt.provider, this.getOwnerLevelProviderConfig()),
+        config: this.getOwnerLevelProviderConfig(),
+      };
+    }
+
+    const hostelId = requireFinancialHostelId(attempt.hostel_id, label);
+    return this.getProviderInstance(attempt.owner_id, attempt.provider, hostelId);
+  }
+
   private async updateAttemptStatus(tx: any, params: {
     attemptId: string;
     fromStatus?: string | null;
@@ -1395,7 +1429,7 @@ export class PaymentService {
     // or already terminal (SUCCESS/FAILED/etc.). Re-read and return — no work.
     const preLockAttempt = await prisma.paymentAttempt.findUnique({
       where: { id: attemptId },
-      select: { status: true, owner_id: true, hostel_id: true },
+      select: { status: true, owner_id: true, hostel_id: true, payment_domain: true, flow_type: true, invoice_id: true },
     });
 
     const lockResult = await prisma.paymentAttempt.updateMany({
@@ -1426,7 +1460,7 @@ export class PaymentService {
       reason: "attempt claimed for settlement",
       actorId: context?.actor?.id || null,
       operationalOwnerId: preLockAttempt?.owner_id || null,
-      financialOwnerId: preLockAttempt?.owner_id || null,
+      financialOwnerId: this.isPlatformBillingAttempt(preLockAttempt) ? this.hmsFinancialOwnerId() : preLockAttempt?.owner_id || null,
       hostelId: preLockAttempt?.hostel_id || null,
     });
 
@@ -1440,7 +1474,7 @@ export class PaymentService {
     // ──────────────────────────────────────────────────────────────
     // 🎁 ADDON PATH: Reminder pack credit allocation
     // ──────────────────────────────────────────────────────────────
-    if (attempt.payment_type === "ADDON") {
+    if (this.isAddonAttempt(attempt)) {
       // Non-success statuses: record and exit
       if (status !== "SUCCESS") {
         logger.info("addons.webhook.non_success", { ...requestMeta, attempt_id: attemptId, status });
@@ -1451,8 +1485,8 @@ export class PaymentService {
           source: context?.source === "reconcile" ? "RECONCILE" : "VERIFY",
           reason: "provider returned non-success status for addon",
           operationalOwnerId: attempt.owner_id,
-          financialOwnerId: null,
-          hostelId: attempt.hostel_id,
+          financialOwnerId: this.hmsFinancialOwnerId(),
+          hostelId: null,
           data: { gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null, settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE },
         });
       }
@@ -1491,8 +1525,8 @@ export class PaymentService {
           source: context?.source === "reconcile" ? "RECONCILE" : "VERIFY",
           reason: "addon amount mismatch",
           operationalOwnerId: attempt.owner_id,
-          financialOwnerId: null,
-          hostelId: attempt.hostel_id,
+          financialOwnerId: this.hmsFinancialOwnerId(),
+          hostelId: null,
           data: { raw_webhook_payload: rawPayload || null, settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE },
         });
         throw new Error(`VALIDATION_ERROR: Amount mismatch for addon pack "${pack}". Expected ₹${expectedAmount}, got ₹${Number(attempt.amount)}.`);
@@ -1529,8 +1563,8 @@ export class PaymentService {
           source: context?.source === "reconcile" ? "RECONCILE" : "VERIFY",
           reason: "addon credits credited atomically",
           operationalOwnerId: attempt.owner_id,
-          financialOwnerId: null,
-          hostelId: attempt.hostel_id,
+          financialOwnerId: this.hmsFinancialOwnerId(),
+          hostelId: null,
           metadata: { pack, credits },
         });
 
@@ -1595,7 +1629,7 @@ export class PaymentService {
     // ──────────────────────────────────────────────────────────────
     // 🧾 BILLING PATH: Invoice payment (plan upgrade/renewal)
     // ──────────────────────────────────────────────────────────────
-    if (attempt.invoice_id && attempt.invoice) {
+    if (this.isSubscriptionAttempt(attempt) && attempt.invoice_id && attempt.invoice) {
       const invoice = attempt.invoice;
 
       // SAFETY 1: Idempotency — if invoice already PAID, do nothing
@@ -1612,7 +1646,7 @@ export class PaymentService {
           source: context?.source === "reconcile" ? "RECONCILE" : "VERIFY",
           reason: "platform billing invoice already paid",
           operationalOwnerId: attempt.owner_id,
-          financialOwnerId: null,
+          financialOwnerId: this.hmsFinancialOwnerId(),
           hostelId: null,
           data: {
             gateway_txn_id: gatewayTxnId,
@@ -1628,20 +1662,26 @@ export class PaymentService {
       // SAFETY 2: Non-SUCCESS statuses → mark attempt but leave invoice PENDING
       if (status !== "SUCCESS") {
         logger.info("payments.finalize.billing_non_success", { ...requestMeta, attempt_id: attemptId, status });
-        return await this.updateAttemptStatusOutsideTx({
-          attemptId,
-          fromStatus: "PROCESSING",
-          toStatus: status,
-          source: context?.source === "reconcile" ? "RECONCILE" : "VERIFY",
-          reason: "provider returned non-success status for platform billing",
-          operationalOwnerId: attempt.owner_id,
-          financialOwnerId: null,
-          hostelId: null,
-          data: {
-            gateway_txn_id: gatewayTxnId,
-            raw_webhook_payload: rawPayload || null,
-            settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE,
-          },
+        return await prisma.$transaction(async (tx) => {
+          await tx.ownerInvoice.updateMany({
+            where: { id: invoice.id, status: "PENDING" },
+            data: { status: status === "EXPIRED" ? "EXPIRED" : "FAILED" },
+          });
+          return this.updateAttemptStatus(tx, {
+            attemptId,
+            fromStatus: "PROCESSING",
+            toStatus: status,
+            source: context?.source === "reconcile" ? "RECONCILE" : "VERIFY",
+            reason: "provider returned non-success status for platform billing",
+            operationalOwnerId: attempt.owner_id,
+            financialOwnerId: this.hmsFinancialOwnerId(),
+            hostelId: null,
+            data: {
+              gateway_txn_id: gatewayTxnId,
+              raw_webhook_payload: rawPayload || null,
+              settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE,
+            },
+          });
         });
       }
 
@@ -1685,19 +1725,25 @@ export class PaymentService {
           invoice_id: invoice.id,
           expires_at: invoice.expires_at.toISOString(),
         });
-        await this.updateAttemptStatusOutsideTx({
-          attemptId,
-          fromStatus: "PROCESSING",
-          toStatus: "FAILED",
-          source: context?.source === "reconcile" ? "RECONCILE" : "VERIFY",
-          reason: "platform billing invoice expired",
-          operationalOwnerId: attempt.owner_id,
-          financialOwnerId: null,
-          hostelId: null,
-          data: {
-            raw_webhook_payload: rawPayload || null,
-            settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE,
-          },
+        await prisma.$transaction(async (tx) => {
+          await tx.ownerInvoice.updateMany({
+            where: { id: invoice.id, status: "PENDING" },
+            data: { status: "EXPIRED" },
+          });
+          await this.updateAttemptStatus(tx, {
+            attemptId,
+            fromStatus: "PROCESSING",
+            toStatus: "EXPIRED",
+            source: context?.source === "reconcile" ? "RECONCILE" : "VERIFY",
+            reason: "platform billing invoice expired",
+            operationalOwnerId: attempt.owner_id,
+            financialOwnerId: this.hmsFinancialOwnerId(),
+            hostelId: null,
+            data: {
+              raw_webhook_payload: rawPayload || null,
+              settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE,
+            },
+          });
         }).catch(() => {});
         throw new Error(`VALIDATION_ERROR: Invoice expired on ${invoice.expires_at.toISOString()}. Payment rejected.`);
       }
@@ -1786,7 +1832,7 @@ export class PaymentService {
           source: context?.source === "reconcile" ? "RECONCILE" : "VERIFY",
           reason: "platform billing invoice paid",
           operationalOwnerId: invoice.owner_id,
-          financialOwnerId: null,
+          financialOwnerId: this.hmsFinancialOwnerId(),
           hostelId: null,
           data: {
             gateway_txn_id: gatewayTxnId,
@@ -1888,7 +1934,7 @@ export class PaymentService {
     // ──────────────────────────────────────────────────────────────
     // 💎 ADVANCE PATH: Gateway-driven deposit, no obligation linkage
     // ──────────────────────────────────────────────────────────────
-    if ((attempt as any).payment_type === "ADVANCE") {
+    if ((attempt as any).payment_domain === PAYMENT_DOMAIN.RENT_COLLECTION && (attempt as any).flow_type === PAYMENT_FLOW.ADVANCE) {
       if (!attempt.tenant_id) {
         throw new Error("INTERNAL: ADVANCE payment attempt is missing tenant_id");
       }
@@ -2144,8 +2190,8 @@ export class PaymentService {
       source: "WEBHOOK",
       reason: "webhook claimed attempt for provider source-of-truth verification",
       operationalOwnerId: attempt.owner_id,
-      financialOwnerId: attempt.owner_id,
-      hostelId: attempt.hostel_id,
+      financialOwnerId: this.isPlatformBillingAttempt(attempt) ? this.hmsFinancialOwnerId() : attempt.owner_id,
+      hostelId: this.isPlatformBillingAttempt(attempt) ? null : attempt.hostel_id,
       metadata: { provider: providerStr, webhookEventId: context?.webhookEventId || null },
     }).catch((error) => {
       logger.warn("payments.webhook.status_event_failed", {
@@ -2163,13 +2209,7 @@ export class PaymentService {
       hasVerifyHeader: Boolean(headers?.["x-verify"] || headers?.["X-VERIFY"]),
     });
 
-    const { instance } = attempt.payment_type === "ADDON"
-      ? { instance: PaymentProviderFactory.getProvider(attempt.provider, this.getOwnerLevelProviderConfig()) }
-      : await this.getProviderInstance(
-          attempt.owner_id,
-          attempt.provider,
-          requireFinancialHostelId(attempt.hostel_id, "payment webhook verification"),
-        );
+    const { instance } = await this.getProviderInstanceForAttempt(attempt, "payment webhook verification");
     
     // 1. Initial parsing of the webhook payload
     const verification = await instance.verifyWebhook(headers, body);
@@ -2356,11 +2396,7 @@ export class PaymentService {
       };
     }
 
-    const { instance } = await this.getProviderInstance(
-      attempt.owner_id,
-      attempt.provider,
-      requireFinancialHostelId(attempt.hostel_id, "payment attempt verification"),
-    );
+    const { instance } = await this.getProviderInstanceForAttempt(attempt, "payment attempt verification");
     let fetched;
 
     try {
@@ -2784,9 +2820,11 @@ export class PaymentService {
     const run = await (prisma as any).paymentReconciliationRun.create({
       data: {
         payment_domain: options?.paymentDomain || (options?.hostelId ? PAYMENT_DOMAIN.RENT_COLLECTION : PAYMENT_DOMAIN.PLATFORM_BILLING),
-        scope_type: options?.hostelId ? PAYMENT_SCOPE.HOSTEL : PAYMENT_SCOPE.OWNER,
+        scope_type: options?.hostelId ? PAYMENT_SCOPE.HOSTEL : PAYMENT_SCOPE.PLATFORM,
         operational_owner_id: options?.ownerId || null,
-        financial_owner_id: options?.ownerId || null,
+        financial_owner_id: (options?.paymentDomain === PAYMENT_DOMAIN.PLATFORM_BILLING || (!options?.hostelId && !options?.ownerId))
+          ? this.hmsFinancialOwnerId()
+          : options?.ownerId || null,
         hostel_id: options?.hostelId || null,
       },
     });
@@ -2794,10 +2832,12 @@ export class PaymentService {
       await (prisma as any).paymentReconciliationItem.create({
         data: {
           reconciliation_run_id: run.id,
-          operational_owner_id: options?.ownerId || data.operational_owner_id || null,
-          financial_owner_id: options?.ownerId || data.financial_owner_id || null,
-          hostel_id: options?.hostelId || data.hostel_id || null,
           ...data,
+          operational_owner_id: options?.ownerId || data.operational_owner_id || null,
+          financial_owner_id: options?.paymentDomain === PAYMENT_DOMAIN.PLATFORM_BILLING
+            ? this.hmsFinancialOwnerId()
+            : options?.ownerId || data.financial_owner_id || null,
+          hostel_id: options?.hostelId || data.hostel_id || null,
         },
       }).catch((error: any) => logger.warn("payments.reconcile.item_failed", { run_id: run.id, error: String(error) }));
     };
@@ -2827,10 +2867,10 @@ export class PaymentService {
         fromStatus: "PENDING_VERIFICATION",
         toStatus: "PENDING",
         source: "RECONCILE",
-        reason: "stale provider verification lock reset",
-        operationalOwnerId: stale.owner_id,
-        financialOwnerId: stale.owner_id,
-        hostelId: stale.hostel_id,
+          reason: "stale provider verification lock reset",
+          operationalOwnerId: stale.owner_id,
+          financialOwnerId: this.isPlatformBillingAttempt(stale) ? this.hmsFinancialOwnerId() : stale.owner_id,
+          hostelId: this.isPlatformBillingAttempt(stale) ? null : stale.hostel_id,
       }).then(() => { stalePendingVerificationReset++; }).catch(() => {});
       await createItem({
         payment_attempt_id: stale.id,
@@ -2858,8 +2898,8 @@ export class PaymentService {
           source: "RECONCILE",
           reason: "stale processing recovered because ledger exists",
           operationalOwnerId: stale.owner_id,
-          financialOwnerId: stale.owner_id,
-          hostelId: stale.hostel_id,
+          financialOwnerId: this.isPlatformBillingAttempt(stale) ? this.hmsFinancialOwnerId() : stale.owner_id,
+          hostelId: this.isPlatformBillingAttempt(stale) ? null : stale.hostel_id,
           data: { settlement_status: SETTLEMENT_STATUS.SETTLED, settled_at: new Date() },
         }).catch(() => {});
         staleProcessingRecovered++;
@@ -2876,8 +2916,8 @@ export class PaymentService {
           source: "RECONCILE",
           reason: "stale processing without ledger reset",
           operationalOwnerId: stale.owner_id,
-          financialOwnerId: stale.owner_id,
-          hostelId: stale.hostel_id,
+          financialOwnerId: this.isPlatformBillingAttempt(stale) ? this.hmsFinancialOwnerId() : stale.owner_id,
+          hostelId: this.isPlatformBillingAttempt(stale) ? null : stale.hostel_id,
         }).catch(() => {});
         staleProcessingReset++;
         await createItem({ payment_attempt_id: stale.id, anomaly_type: "STALE_PROCESSING", severity: "MEDIUM", action: "RESET_TO_PENDING", result: "REPAIRED" });
@@ -2909,8 +2949,8 @@ export class PaymentService {
         source: "RECONCILE",
         reason: "stale created attempt expired",
         operationalOwnerId: stale.owner_id,
-        financialOwnerId: stale.owner_id,
-        hostelId: stale.hostel_id,
+        financialOwnerId: this.isPlatformBillingAttempt(stale) ? this.hmsFinancialOwnerId() : stale.owner_id,
+        hostelId: this.isPlatformBillingAttempt(stale) ? null : stale.hostel_id,
         data: { settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE },
       }).then(() => { staleCreatedExpired++; }).catch(() => {});
       await createItem({ payment_attempt_id: stale.id, anomaly_type: "STALE_CREATED", severity: "LOW", action: "EXPIRE", result: "REPAIRED" });
@@ -2931,8 +2971,8 @@ export class PaymentService {
         source: "RECONCILE",
         reason: "attempt expired by gateway expiry",
         operationalOwnerId: stale.owner_id,
-        financialOwnerId: stale.owner_id,
-        hostelId: stale.hostel_id,
+        financialOwnerId: this.isPlatformBillingAttempt(stale) ? this.hmsFinancialOwnerId() : stale.owner_id,
+        hostelId: this.isPlatformBillingAttempt(stale) ? null : stale.hostel_id,
         data: { settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE },
       }).then(() => { autoExpired++; }).catch(() => {});
       await createItem({ payment_attempt_id: stale.id, anomaly_type: "STALE_PENDING", severity: "LOW", action: "EXPIRE", result: "REPAIRED" });
@@ -2946,7 +2986,8 @@ export class PaymentService {
     const orphanSuccessList = await prisma.paymentAttempt.findMany({
       where: {
         status: "SUCCESS",
-        payment_type: { notIn: ["ADDON", "ADVANCE"] },
+        OR: [{ payment_domain: PAYMENT_DOMAIN.RENT_COLLECTION }, { payment_domain: null }],
+        flow_type: { notIn: [PAYMENT_FLOW.ADDON, PAYMENT_FLOW.SUBSCRIPTION, PAYMENT_FLOW.ADVANCE] },
         invoice_id: null,
         ...ownerFilter,
         ...hostelFilter,
@@ -3019,15 +3060,13 @@ export class PaymentService {
 
     for (const attempt of pending) {
       try {
-        const attemptHostelId = attempt.payment_type === "ADDON" || attempt.invoice_id
+        const attemptHostelId = this.isPlatformBillingAttempt(attempt)
           ? null
           : requireFinancialHostelId(attempt.hostel_id, "payment reconciliation");
-        const cacheKey = [attempt.owner_id, attemptHostelId || "platform", attempt.provider].join(":");
+        const cacheKey = [attempt.owner_id, (attempt as any).payment_domain || "LEGACY", attemptHostelId || "platform", attempt.provider].join(":");
         let instance = providerCache.get(cacheKey);
         if (!instance) {
-          const pi = attemptHostelId
-            ? await this.getProviderInstance(attempt.owner_id, attempt.provider, attemptHostelId)
-            : { instance: PaymentProviderFactory.getProvider(attempt.provider, this.getOwnerLevelProviderConfig()) };
+          const pi = await this.getProviderInstanceForAttempt(attempt, "payment reconciliation");
           instance = pi.instance;
           providerCache.set(cacheKey, instance);
         }

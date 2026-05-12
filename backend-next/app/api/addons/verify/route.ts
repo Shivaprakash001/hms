@@ -7,6 +7,8 @@ import { prisma } from "@/lib/db";
 import { PaymentProviderFactory } from "@/lib/services/payments/provider-factory";
 import { paymentService } from "@/lib/services/payment-service";
 import { getLogger } from "@/lib/logger";
+import { getProviderContext } from "@/lib/services/payments/merchant-context";
+import { PAYMENT_DOMAIN, PAYMENT_FLOW, PAYMENT_SCOPE } from "@/lib/services/payments/financial-domain";
 
 const logger = getLogger("addons.verify");
 
@@ -71,22 +73,15 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Query the payment gateway for status
-    const hostel = await prisma.hostel.findFirst({
-      where: { owner_id: user.sub, is_active: true },
-      select: { upi_id: true },
+    const providerContext = await getProviderContext({
+      paymentDomain: PAYMENT_DOMAIN.PLATFORM_BILLING,
+      flowType: PAYMENT_FLOW.ADDON,
+      operationalOwnerId: user.sub,
+      financialOwnerId: null,
+      scopeType: PAYMENT_SCOPE.PLATFORM,
     });
 
-    const config = {
-      merchantId: process.env.PHONEPE_MERCHANT_ID!,
-      saltKey:    process.env.PHONEPE_SALT_KEY!,
-      saltIndex:  process.env.PHONEPE_SALT_INDEX!,
-      environment: (process.env.PHONEPE_ENV as "SANDBOX" | "PRODUCTION") || "SANDBOX",
-      callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL || ""}/api/webhooks/payments/phonepe`,
-      upiId: hostel?.upi_id || undefined,
-    };
-
-    const provider = PaymentProviderFactory.getProvider(attempt.provider, config);
+    const provider = PaymentProviderFactory.getProvider(attempt.provider, providerContext.config);
     const statusResult = await provider.fetchStatus(attempt.merchant_txn_id, attempt.gateway_txn_id || undefined);
 
     logger.info("addons.verify.status_checked", {
