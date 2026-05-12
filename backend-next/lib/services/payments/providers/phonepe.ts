@@ -15,8 +15,12 @@ import crypto from "crypto";
 export class PhonePeProvider extends PaymentProvider {
 
   // ─── Environment helpers ───────────────────────────────────────
+  private get environment() {
+    return String(this.config?.environment || process.env.PHONEPE_ENV || "").trim().toLowerCase();
+  }
+
   private get isProduction() {
-    return process.env.PHONEPE_ENV === "production";
+    return ["production", "prod", "live"].includes(this.environment);
   }
 
   private get baseUrl() {
@@ -32,15 +36,15 @@ export class PhonePeProvider extends PaymentProvider {
   }
 
   private get clientId() {
-    return process.env.PHONEPE_CLIENT_ID || "";
+    return String(this.config?.clientId || process.env.PHONEPE_CLIENT_ID || "").trim();
   }
 
   private get clientSecret() {
-    return process.env.PHONEPE_CLIENT_SECRET || "";
+    return String(this.config?.clientSecret || process.env.PHONEPE_CLIENT_SECRET || "").trim();
   }
 
   private get clientVersion() {
-    return process.env.PHONEPE_CLIENT_VERSION || "1";
+    return String(this.config?.clientVersion || process.env.PHONEPE_CLIENT_VERSION || "1").trim();
   }
 
   // ─── Credential guard ────────────────────────────────────────
@@ -48,13 +52,13 @@ export class PhonePeProvider extends PaymentProvider {
     if (!this.clientId || !this.clientSecret) {
       throw new Error(
         "PhonePe credentials not configured. " +
-        "Set PHONEPE_CLIENT_ID, PHONEPE_CLIENT_SECRET, and PHONEPE_ENV=production " +
+        "Set PHONEPE_CLIENT_ID, PHONEPE_CLIENT_SECRET, PHONEPE_CLIENT_VERSION, and PHONEPE_ENV=production " +
         "in your Vercel environment variables."
       );
     }
     if (!this.isProduction) {
       console.warn(
-        "[PhonePe] ⚠️  PHONEPE_ENV is not 'production'. " +
+        `[PhonePe] ⚠️  PHONEPE_ENV is '${this.environment || "unset"}', not 'production'. ` +
         "Using sandbox endpoint — real PhonePe accounts cannot complete sandbox payments. " +
         "Set PHONEPE_ENV=production for live payments."
       );
@@ -87,7 +91,13 @@ export class PhonePeProvider extends PaymentProvider {
     const data = await response.json();
 
     if (!response.ok || !data.access_token) {
-      console.error("[PhonePe] OAuth token error:", data);
+      console.error("[PhonePe] OAuth token error:", {
+        status: response.status,
+        environment: this.isProduction ? "PRODUCTION" : "SANDBOX",
+        clientVersion: this.clientVersion,
+        clientIdSuffix: this.clientId ? this.clientId.slice(-6) : null,
+        response: data,
+      });
       throw new Error(`PhonePe OAuth failed: ${data.message || response.statusText}`);
     }
 

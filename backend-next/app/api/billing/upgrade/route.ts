@@ -14,6 +14,12 @@ import crypto from "crypto";
 
 const logger = getLogger("billing.upgrade");
 
+function isProviderConfigurationError(error: any) {
+  const message = String(error?.message || error || "");
+  return message.includes("PhonePe OAuth failed")
+    || message.includes("PhonePe credentials not configured");
+}
+
 /**
  * 💳 Plan Upgrade Payment Flow
  * POST /api/billing/upgrade
@@ -253,9 +259,11 @@ export async function POST(req: NextRequest) {
         error: String(error),
       });
       return apiError(
-        "Failed to create payment intent. Please try again.",
+        isProviderConfigurationError(error)
+          ? "PhonePe platform merchant authentication failed. Check PHONEPE_CLIENT_ID, PHONEPE_CLIENT_SECRET, PHONEPE_CLIENT_VERSION, and PHONEPE_ENV in Vercel."
+          : "Failed to create payment intent. Please try again.",
         "PAYMENT_PROVIDER_ERROR",
-        500
+        isProviderConfigurationError(error) ? 502 : 500
       );
     }
 

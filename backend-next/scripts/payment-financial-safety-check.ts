@@ -344,6 +344,16 @@ const checks: Check[] = [
       FROM payment_attempts pa
       WHERE pa.status IN ('SUCCESS', 'FAILED', 'EXPIRED', 'CANCELLED')
         AND pa.provider IS NOT NULL
+        AND (
+          pa.gateway_txn_id IS NOT NULL
+          OR pa.provider_order_id IS NOT NULL
+          OR pa.provider_transaction_id IS NOT NULL
+          OR EXISTS (
+            SELECT 1 FROM payment_attempt_status_events e
+            WHERE e.payment_attempt_id = pa.id
+              AND e.source IN ('WEBHOOK', 'VERIFY', 'RECONCILE')
+          )
+        )
         AND pa.created_at > TIMESTAMPTZ '2026-05-12 00:00:00+00'
         AND NOT EXISTS (
           SELECT 1 FROM payment_provider_verification_snapshots s

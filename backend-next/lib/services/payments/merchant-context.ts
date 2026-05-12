@@ -35,6 +35,9 @@ export async function getProviderContext(params: {
       financial_owner_id: financialOwnerId || process.env.HMS_FINANCIAL_OWNER_ID || null,
       hostel_id: null,
       config: {
+        clientId: process.env.PHONEPE_CLIENT_ID || "",
+        clientSecret: process.env.PHONEPE_CLIENT_SECRET || "",
+        clientVersion: process.env.PHONEPE_CLIENT_VERSION || "1",
         merchantId: process.env.PHONEPE_MERCHANT_ID || "",
         saltKey: process.env.PHONEPE_SALT_KEY || "",
         saltIndex: process.env.PHONEPE_SALT_INDEX || "",
