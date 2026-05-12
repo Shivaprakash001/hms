@@ -1494,6 +1494,7 @@ export class PaymentService {
       // ── Security: validate pack is from allow-list ────────────────
       const pack = attempt.addon_pack as string | null;
       const PACK_MAP: Record<string, { credits: number; amount: number }> = {
+        "TEST_1": { credits: 1, amount: 1 },
         "200": { credits: 200, amount: 99 },
         "500": { credits: 500, amount: 199 },
       };

@@ -19,6 +19,16 @@ import { addonService } from '../../api/services';
 
 const PACKS = [
     {
+        id: 'TEST_1',
+        credits: 1,
+        amount: 1,
+        label: 'Test Reminder',
+        price: '₹1',
+        perCredit: 'Payment test pack',
+        daysLabel: '1 reminder credit',
+        badge: 'Test',
+    },
+    {
         id: '200',
         credits: 200,
         amount: 99,
@@ -65,7 +75,7 @@ const URGENCY = {
 };
 
 export default function BuyRemindersModal({ onClose, trigger = 'manual', currentCredits = null }) {
-    const [selected, setSelected] = useState('500');
+    const [selected, setSelected] = useState('TEST_1');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 

@@ -17,6 +17,7 @@ const logger = getLogger("addons.purchase");
 // ─── Addon pack catalog ───────────────────────────────────────────────────────
 
 const ADDON_PACKS: Record<string, { credits: number; amount: number; label: string }> = {
+  "TEST_1": { credits: 1, amount: 1, label: "Test Reminder — ₹1" },
   "200": { credits: 200, amount:  99, label: "200 Reminders — ₹99" },
   "500": { credits: 500, amount: 199, label: "500 Reminders — ₹199" },
 };
@@ -25,7 +26,7 @@ const ADDON_PACKS: Record<string, { credits: number; amount: number; label: stri
  * POST /api/addons/purchase
  * Creates a PhonePe payment intent for a reminder credit pack.
  *
- * Body: { pack: "200" | "500" }
+ * Body: { pack: "TEST_1" | "200" | "500" }
  * Response: { checkout_url, attempt_id, amount, credits }
  */
 export async function POST(req: NextRequest) {
