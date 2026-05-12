@@ -10,7 +10,7 @@ import { formatCurrency } from '../../../utils/format';
 const POLL_INTERVAL_MS = 4000;
 const TERMINAL_STATUSES = ['SUCCESS', 'FAILED', 'EXPIRED', 'CANCELLED'];
 
-const OnlinePaymentTestModal = ({ isOpen, onClose, obligation, onSettled }) => {
+const OnlinePaymentModal = ({ isOpen, onClose, obligation, onSettled }) => {
     const { preferences } = useAppPreferences();
     const [loading, setLoading] = useState(false);
     const [attempt, setAttempt] = useState(null);
@@ -118,7 +118,7 @@ const OnlinePaymentTestModal = ({ isOpen, onClose, obligation, onSettled }) => {
                     >
                         <div className="flex items-start justify-between border-b border-slate-100 bg-slate-50 px-6 py-5 rounded-t-3xl">
                             <div>
-                                <h2 className="text-xl font-black text-slate-900">Owner Payment Cycle Test</h2>
+                                <h2 className="text-xl font-black text-slate-900">Online Rent Payment</h2>
                                 <p className="text-sm text-slate-500">Tenant: {obligation.tenantName} • Room {obligation.room}</p>
                             </div>
                             <button onClick={onClose} className="rounded-full p-2 text-slate-400 hover:bg-slate-200 hover:text-slate-700">
@@ -148,7 +148,7 @@ const OnlinePaymentTestModal = ({ isOpen, onClose, obligation, onSettled }) => {
                                         className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-4 font-bold text-white hover:bg-slate-800 disabled:bg-slate-400"
                                     >
                                         {loading ? <Loader2 size={18} className="animate-spin" /> : <Smartphone size={18} />}
-                                        {loading ? 'Creating test intent...' : 'Create Test Payment Intent'}
+                                        {loading ? 'Creating payment link...' : 'Create PhonePe Payment Link'}
                                     </button>
                                 </div>
                             ) : (
@@ -240,4 +240,4 @@ const OnlinePaymentTestModal = ({ isOpen, onClose, obligation, onSettled }) => {
     );
 };
 
-export default OnlinePaymentTestModal;
+export default OnlinePaymentModal;

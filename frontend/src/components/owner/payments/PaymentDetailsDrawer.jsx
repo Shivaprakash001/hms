@@ -40,7 +40,7 @@ const SectionCard = ({ title, children }) => (
     </section>
 );
 
-const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, onDownloadReceipt, onViewTenant, onViewHistory, onStartOnlineTest }) => {
+const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, onDownloadReceipt, onViewTenant, onViewHistory, onStartOnlinePayment }) => {
     const { preferences } = useAppPreferences();
 
     // ── Step 1: identity verification ──────────────────────────────────────────
@@ -154,7 +154,7 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
             complete: Boolean(createdDate)
         },
         {
-            label: payment.method === 'UPI' ? 'Razorpay Checkout' : 'Payment Captured',
+            label: payment.method === 'UPI' ? 'PhonePe Checkout' : 'Payment Captured',
             value: payment.status === 'paid' ? formatDate(paidDate, preferences, 'Not available') : 'Awaiting payment',
             complete: payment.status === 'paid'
         },
@@ -326,11 +326,11 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
                                 </div>
                                 {payment.status !== 'paid' && Number(payment.balance || 0) > 0 && payment.status !== 'waived' && (
                                     <button
-                                        onClick={() => onStartOnlineTest?.(payment)}
+                                        onClick={() => onStartOnlinePayment?.(payment)}
                                         className="mb-4 w-full py-3.5 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-xl font-bold hover:bg-indigo-100 transition-all flex items-center justify-center gap-2"
                                     >
                                         <Smartphone size={18} />
-                                        Start Online Test Checkout
+                                        Start Online Checkout
                                     </button>
                                 )}
                 {/* ── Password confirmation modal ─────────────────────────────── */}

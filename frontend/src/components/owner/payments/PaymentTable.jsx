@@ -4,7 +4,7 @@ import { CheckCircle, Clock, AlertCircle, Eye, History, Download, Landmark, Smar
 import { useAppPreferences } from '../../../context/AppPreferencesContext';
 import { formatCurrency, formatMonthYear } from '../../../utils/format';
 
-const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadReceipt, onStartOnlineTest }) => {
+const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadReceipt, onStartOnlinePayment }) => {
     const { preferences } = useAppPreferences();
     const handleCallTenant = async (phone) => {
         if (!phone) {
@@ -122,10 +122,10 @@ const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadRece
                                     {Number(payment.balance || 0) > 0 && payment.status !== 'waived' && (
                                         <button
                                             className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                                            title="Test Online Payment"
+                                            title="Start Online Payment"
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                onStartOnlineTest?.(payment);
+                                                onStartOnlinePayment?.(payment);
                                             }}
                                         >
                                             <Smartphone size={18} />

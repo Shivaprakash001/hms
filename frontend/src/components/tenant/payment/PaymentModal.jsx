@@ -97,7 +97,7 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, obligationIds = [
                 return; // Do not unset loading or change state, page is unloading
             }
 
-            // Fallback for manual Direct UPI implementations
+            // Fallback for manual UPI reference review when hosted checkout is unavailable.
             setAttempt(intent);
             setStatus(intent.status);
             setStep('pay');
@@ -184,8 +184,8 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, obligationIds = [
                             <div>
                                 <h2 className="text-xl font-black text-slate-900">Pay Rent</h2>
                                 <p className="text-sm font-medium text-slate-500">
-                                    {step === 'init' && 'Pay directly via any UPI app'}
-                                    {step === 'pay' && 'Complete payment in your UPI app'}
+                                    {step === 'init' && 'Continue to secure PhonePe checkout'}
+                                    {step === 'pay' && 'Complete payment and submit the reference'}
                                     {step === 'reference' && 'Submit your transaction ID'}
                                     {step === 'done' && 'Payment confirmed!'}
                                 </p>
@@ -216,8 +216,8 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, obligationIds = [
                                                 <Smartphone size={20} />
                                             </div>
                                             <div>
-                                                <p className="font-bold text-slate-900">UPI Direct Payment</p>
-                                                <p className="text-sm text-slate-500">Pay directly to your hostel owner via PhonePe, GPay, Paytm, or any UPI app.</p>
+                                                <p className="font-bold text-slate-900">Secure PhonePe Checkout</p>
+                                                <p className="text-sm text-slate-500">You'll be redirected to PhonePe to complete this rent payment.</p>
                                             </div>
                                         </div>
                                     </div>
@@ -240,7 +240,7 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, obligationIds = [
                                 </div>
                             )}
 
-                            {/* Step 2: Pay — UPI Link + QR */}
+                            {/* Step 2: Pay — Manual reference fallback */}
                             {step === 'pay' && attempt && (
                                 <div className="space-y-4">
                                     {/* QR Code */}
@@ -249,28 +249,28 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, obligationIds = [
                                     </div>
 
                                     <div className="grid grid-cols-1 gap-3">
-                                        {/* Open UPI App */}
+                                        {/* Open Payment App */}
                                         <button
                                             onClick={handleOpenUpi}
                                             className="inline-flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white hover:bg-indigo-500"
                                         >
                                             <Smartphone size={16} />
-                                            Open UPI App to Pay
+                                            Open Payment App
                                         </button>
 
-                                        {/* Copy UPI Link */}
+                                        {/* Copy Payment Link */}
                                         <button
                                             onClick={handleCopy}
                                             className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
                                         >
                                             <Copy size={16} />
-                                            {copied ? 'Copied!' : 'Copy UPI Link'}
+                                            {copied ? 'Copied!' : 'Copy Payment Link'}
                                         </button>
                                     </div>
 
                                     <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                                        <p className="font-semibold">After completing payment:</p>
-                                        <p className="mt-1">Note down the <span className="font-bold">UPI Transaction ID</span> shown in your UPI app.</p>
+                                        <p className="font-semibold">Manual review required:</p>
+                                        <p className="mt-1">Enter the <span className="font-bold">UPI Transaction ID</span> only if hosted checkout was unavailable.</p>
                                     </div>
 
                                     <button

@@ -9,7 +9,7 @@ import PaymentStatsCard from '../../components/owner/payments/PaymentStatsCard';
 import PaymentTable from '../../components/owner/payments/PaymentTable';
 import PaymentDetailsDrawer from '../../components/owner/payments/PaymentDetailsDrawer';
 import TenantHistoryModal from '../../components/owner/payments/TenantHistoryModal';
-import OnlinePaymentTestModal from '../../components/owner/payments/OnlinePaymentTestModal';
+import OnlinePaymentModal from '../../components/owner/payments/OnlinePaymentModal';
 import { billingService, paymentService } from '../../api/services';
 import { useLedger, usePendingVerifications } from '../../hooks/usePayments';
 import { useQueryClient } from '@tanstack/react-query';
@@ -38,7 +38,7 @@ const Payments = () => {
     const [pageSize, setPageSize] = useState(25);
     const [selectedPayment, setSelectedPayment] = useState(null);
     const [historyTenant, setHistoryTenant] = useState(null);
-    const [onlineTestTarget, setOnlineTestTarget] = useState(null);
+    const [onlinePaymentTarget, setOnlinePaymentTarget] = useState(null);
     const [exportLoading, setExportLoading] = useState(false);
     const [showGenModal, setShowGenModal] = useState(false);
     const [genMonth, setGenMonth] = useState('');
@@ -289,7 +289,7 @@ const Payments = () => {
         navigate(`/hostels/${hostelId}/tenants`, { state: { selectedTenantId: payment.tenantId } });
     };
 
-    const handleOpenOnlineTest = (payment) => {
+    const handleOpenOnlinePayment = (payment) => {
         if (!payment?.obligationId) {
             alert('No rent entry selected for payment.');
             return;
@@ -298,7 +298,7 @@ const Payments = () => {
             alert('This rent entry has no pending balance.');
             return;
         }
-        setOnlineTestTarget(payment);
+        setOnlinePaymentTarget(payment);
     };
 
     const handleOnlineSettled = () => {
@@ -564,7 +564,7 @@ const Payments = () => {
                     onSelectPayment={setSelectedPayment}
                     onViewHistory={setHistoryTenant}
                     onDownloadReceipt={handleDownloadReceipt}
-                    onStartOnlineTest={handleOpenOnlineTest}
+                    onStartOnlinePayment={handleOpenOnlinePayment}
                 />
 
                 {/* Pagination */}
@@ -753,13 +753,13 @@ const Payments = () => {
                 onDownloadReceipt={handleDownloadFromSelection}
                 onViewTenant={handleViewTenant}
                 onViewHistory={setHistoryTenant}
-                onStartOnlineTest={handleOpenOnlineTest}
+                onStartOnlinePayment={handleOpenOnlinePayment}
             />
 
-            <OnlinePaymentTestModal
-                isOpen={!!onlineTestTarget}
-                onClose={() => setOnlineTestTarget(null)}
-                obligation={onlineTestTarget}
+            <OnlinePaymentModal
+                isOpen={!!onlinePaymentTarget}
+                onClose={() => setOnlinePaymentTarget(null)}
+                obligation={onlinePaymentTarget}
                 onSettled={handleOnlineSettled}
             />
 

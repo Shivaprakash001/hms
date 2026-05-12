@@ -11,7 +11,7 @@ import { useState } from "react";
  * - Method selection
  */
 export function InitiatePaymentButton({ obligationId, amount }: { obligationId: string, amount: number }) {
-  const [method, setMethod] = useState("RAZORPAY");
+  const [method, setMethod] = useState("PHONEPE");
 
   const mutation = useMutation({
     mutationFn: (data: any) => api.post("/payments/initiate", data),
@@ -36,8 +36,7 @@ export function InitiatePaymentButton({ obligationId, amount }: { obligationId: 
         className="border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none"
         disabled={mutation.isPending}
       >
-        <option value="RAZORPAY">Razorpay Gateway</option>
-        <option value="PHONEPE">PhonePe UPI</option>
+        <option value="PHONEPE">PhonePe Checkout</option>
       </select>
       
       <button
