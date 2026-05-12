@@ -11,6 +11,10 @@
     "prisma:push": "DOTENV_CONFIG_PATH=../.env node -r dotenv/config ./node_modules/prisma/build/index.js db push",
     "prisma:studio": "DOTENV_CONFIG_PATH=../.env node -r dotenv/config ./node_modules/prisma/build/index.js studio",
     "check:invariants": "tsx scripts/architectural-invariants-check.ts",
+    "check:financial-safety": "DOTENV_CONFIG_PATH=../.env node -r dotenv/config ./node_modules/.bin/tsx scripts/payment-financial-safety-check.ts",
+    "check:payment-production": "DOTENV_CONFIG_PATH=../.env node -r dotenv/config ./node_modules/.bin/tsx scripts/payment-production-readiness-check.ts",
+    "chaos:payments": "DOTENV_CONFIG_PATH=../.env node -r dotenv/config ./node_modules/.bin/tsx scripts/payment-chaos-simulation.ts",
+    "repair:financial-dirty-data": "DOTENV_CONFIG_PATH=../.env node -r dotenv/config ./node_modules/.bin/tsx scripts/payment-dirty-data-repair.ts",
     "postinstall": "DOTENV_CONFIG_PATH=../.env node -r dotenv/config ./node_modules/prisma/build/index.js generate",
     "seed": "tsx prisma/seed.ts",
     "reconcile:allocations": "tsx scripts/reconcile-allocations.ts"

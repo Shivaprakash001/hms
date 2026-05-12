@@ -521,8 +521,10 @@ export const paymentService = {
      * Reconcile pending payments with Razorpay (admin/owner).
      * @param {string[]} [paymentIds] - Optional list of payment IDs; omit to reconcile all pending.
      */
-    reconcilePayments: async (paymentIds) => {
+    reconcilePayments: async (paymentIds, hostelId, paymentDomain) => {
         const body = paymentIds ? { payment_ids: paymentIds } : {};
+        if (hostelId) body.hostelId = hostelId;
+        if (paymentDomain) body.paymentDomain = paymentDomain;
         const response = await api.post('/payments/reconcile', body);
         return response.data;
     },
@@ -546,8 +548,8 @@ export const paymentService = {
         const response = await api.post('/payments/confirm', { attempt_id: attemptId, action: 'reject' });
         return response.data;
     },
-    getPendingVerifications: async () => {
-        const response = await api.get('/payments/pending-verification');
+    getPendingVerifications: async (hostelId) => {
+        const response = await api.get('/payments/pending-verification', { params: { hostelId } });
         return response.data;
     },
     manualConfirmPayment: async (attemptId) => {
@@ -611,9 +613,9 @@ export const paymentService = {
         const response = await api.post('/payments/bulk-generate', data);
         return response.data;
     },
-    previewPayment: async (obligationIds) => {
+    previewPayment: async (obligationIds, hostelId) => {
         const response = await api.get('/payments/preview', { 
-            params: { ids: obligationIds.join(',') } 
+            params: { ids: obligationIds.join(','), ...(hostelId ? { hostelId } : {}) }
         });
         return response.data;
     }

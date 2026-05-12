@@ -6,6 +6,7 @@ import { paymentService } from "@/lib/services/payment-service";
 import { authService } from "@/lib/services/auth-service";
 import { apiError } from "@/lib/utils/api-utils";
 import { prisma } from "@/lib/db";
+import { paymentStatusEventService } from "@/lib/services/payment-status-event-service";
 
 /**
  * POST /api/payments/submit-reference
@@ -77,7 +78,7 @@ export async function POST(req: Request) {
       return apiError("Payment attempt not found", "NOT_FOUND", 404);
     }
 
-    if (attempt.status === "SUCCESS" || attempt.status === "PENDING_VERIFICATION") {
+    if (attempt.status === "SUCCESS" || attempt.status === "PENDING_MANUAL_CONFIRMATION") {
       return NextResponse.json({
         message: attempt.status === "SUCCESS"
           ? "Payment already confirmed"
@@ -97,12 +98,17 @@ export async function POST(req: Request) {
       );
     }
 
-    // ─── Store reference and set PENDING_VERIFICATION ───
+    // ─── Store reference and quarantine as manual-owner-review flow ───
     const updated = await prisma.paymentAttempt.update({
       where: { id: attempt_id },
       data: {
         gateway_txn_id: cleanRef,
-        status: "PENDING_VERIFICATION",
+        status: "PENDING_MANUAL_CONFIRMATION",
+        flow_type: "MANUAL_UPI_REFERENCE",
+        payment_domain: "RENT_COLLECTION",
+        scope_type: "HOSTEL",
+        merchant_context_type: "OWNER_HOSTEL",
+        merchant_context_id: attempt.hostel_id || null,
         raw_webhook_payload: {
           source: "tenant_submission",
           upi_reference: cleanRef,
@@ -111,11 +117,22 @@ export async function POST(req: Request) {
         } as any,
       },
     });
+    await paymentStatusEventService.appendOutsideTransaction({
+      attemptId: attempt_id,
+      fromStatus: attempt.status,
+      toStatus: "PENDING_MANUAL_CONFIRMATION",
+      source: "MANUAL_CONFIRM",
+      reason: "tenant submitted manual UPI reference",
+      operationalOwnerId: attempt.owner_id,
+      financialOwnerId: attempt.owner_id,
+      hostelId: attempt.hostel_id,
+      metadata: { upi_reference: cleanRef },
+    }).catch(() => {});
 
     return NextResponse.json({
       message: "UPI reference submitted. Payment will be confirmed shortly.",
       attempt: updated,
-      status: "PENDING_VERIFICATION",
+      status: "PENDING_MANUAL_CONFIRMATION",
     });
   } catch (error: any) {
     console.error("Error submitting UPI reference:", error);

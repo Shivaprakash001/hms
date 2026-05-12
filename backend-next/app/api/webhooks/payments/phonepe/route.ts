@@ -6,6 +6,8 @@ import { paymentService } from "@/lib/services/payment-service";
 import { getLogger } from "@/lib/logger";
 import { incrementWebhook } from "@/lib/metrics";
 import { randomUUID } from "crypto";
+import { paymentWebhookEventService } from "@/lib/services/payment-webhook-event-service";
+import { paymentOperationalAnomalyService } from "@/lib/services/payment-operational-anomaly-service";
 
 const logger = getLogger("webhook.phonepe");
 
@@ -24,6 +26,7 @@ export async function POST(req: Request) {
   let statusCode = 200;
   let merchantOrderId = "unknown";
   const requestId = req.headers.get("x-request-id") || randomUUID();
+  let webhookEventId: string | null = null;
 
   try {
     const headers: Record<string, string> = {};
@@ -34,26 +37,61 @@ export async function POST(req: Request) {
     const authHeader = headers["authorization"] || headers["Authorization"];
     const webhookUsername = process.env.PHONEPE_WEBHOOK_USERNAME;
     const webhookPassword = process.env.PHONEPE_WEBHOOK_PASSWORD;
-
-    if (webhookUsername && webhookPassword && authHeader && authHeader.startsWith("Basic ")) {
-      const encoded = authHeader.substring(6);
-      const decoded = Buffer.from(encoded, "base64").toString("utf-8");
-      const [username, password] = decoded.split(":");
-
-      if (username !== webhookUsername || password !== webhookPassword) {
-        logger.warn("webhook.phonepe.auth_invalid", {
-          request_id: requestId,
-          ip: req.headers.get("x-forwarded-for") || "unknown",
-        });
-        return new Response("Unauthorized", { status: 401 });
-      }
-    }
-
     const rawBody = await req.text();
 
     if (!rawBody || rawBody.trim().length === 0) {
       logger.info("webhook.phonepe.validation_ping_empty", { request_id: requestId });
       return new Response("Webhook verified", { status: 200 });
+    }
+
+    let signatureVerified = false;
+    let signatureFailureReason: string | null = null;
+
+    if (!webhookUsername || !webhookPassword) {
+      signatureFailureReason = "PHONEPE_WEBHOOK_USERNAME/PASSWORD not configured";
+    } else if (!authHeader) {
+      signatureFailureReason = "missing authorization header";
+    } else if (authHeader.startsWith("Basic ")) {
+      const encoded = authHeader.substring(6);
+      const decoded = Buffer.from(encoded, "base64").toString("utf-8");
+      const [username, password] = decoded.split(":");
+
+      signatureVerified = username === webhookUsername && password === webhookPassword;
+      if (!signatureVerified) signatureFailureReason = "invalid basic auth credentials";
+    } else {
+      signatureFailureReason = "unsupported authorization scheme";
+    }
+
+    const eventRecord = await paymentWebhookEventService.recordReceived({
+      provider: "PHONEPE",
+      rawBody,
+      headers,
+      signatureVerified,
+      signatureAlgorithm: "BASIC_AUTH",
+      signatureFailureReason,
+    });
+    webhookEventId = eventRecord.event.id;
+
+    if (eventRecord.duplicate && eventRecord.event.processing_status === "PROCESSED") {
+      return NextResponse.json({ success: true, duplicate: true, data: eventRecord.event.processing_result }, { status: 200 });
+    }
+
+    if (!signatureVerified) {
+      logger.warn("webhook.phonepe.auth_invalid", {
+        request_id: requestId,
+        ip: req.headers.get("x-forwarded-for") || "unknown",
+        reason: signatureFailureReason,
+      });
+      if (webhookEventId) {
+        await paymentWebhookEventService.markFailed(webhookEventId, signatureFailureReason || "signature verification failed", "FAILED");
+      }
+      await paymentOperationalAnomalyService.create({
+        anomalyType: "WEBHOOK_SIGNATURE_FAILED",
+        severity: "HIGH",
+        webhookEventId: webhookEventId || null,
+        metadata: { reason: signatureFailureReason, provider: "PHONEPE" },
+      });
+      return new Response("Unauthorized", { status: 401 });
     }
 
     const body = JSON.parse(rawBody);
@@ -72,7 +110,7 @@ export async function POST(req: Request) {
       state: body.payload.state,
     });
 
-    const result = await paymentService.handlePaymentWebhook("PHONEPE", headers, body, { requestId });
+    const result = await paymentService.handlePaymentWebhook("PHONEPE", headers, body, { requestId, webhookEventId: webhookEventId || undefined });
 
     logger.metrics("webhook_processed", {
       request_id: requestId,
@@ -94,6 +132,9 @@ export async function POST(req: Request) {
     });
 
     incrementWebhook(false);
+    if (webhookEventId) {
+      await paymentWebhookEventService.markFailed(webhookEventId, error.message || String(error)).catch(() => {});
+    }
 
     logger.metrics("webhook_processed", {
       request_id: requestId,

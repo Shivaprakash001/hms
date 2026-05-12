@@ -38,7 +38,7 @@ export const useLedger = (hostelId, params) => {
 export const usePendingVerifications = (hostelId) => {
   return useQuery({
     queryKey: queryKeys.payments.pendingVerification(hostelId),
-    queryFn:  () => paymentService.getPendingVerifications(),
+    queryFn:  () => paymentService.getPendingVerifications(hostelId),
     enabled:  !!hostelId,
     staleTime: 60 * 1000,
     gcTime:    30 * 60 * 1000,

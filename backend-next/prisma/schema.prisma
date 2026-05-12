@@ -459,6 +459,17 @@ model PaymentAttempt {
   manual_confirmed_at   DateTime?                  @db.Timestamptz(6)
   manual_confirm_ip     String?
   hostel_id             String?                    @db.Uuid
+  payment_domain        String?                    // PLATFORM_BILLING | RENT_COLLECTION
+  scope_type            String?                    // PLATFORM | OWNER | HOSTEL
+  flow_type             String?                    // SUBSCRIPTION | ADDON | RENT | ADVANCE | MANUAL_UPI_REFERENCE
+  merchant_context_type String?                    // HMS_PLATFORM | OWNER_HOSTEL
+  merchant_context_id   String?
+  settlement_status     String?                    // NOT_APPLICABLE | NOT_SETTLED | SETTLED | SETTLEMENT_FAILED
+  settled_at            DateTime?                  @db.Timestamptz(6)
+  merchant_transaction_id String?                  @unique
+  provider_transaction_id String?
+  provider_order_id       String?
+  provider_reference_id   String?
   obligations           PaymentAttemptObligation[]
   invoice             OwnerInvoice?              @relation(fields: [invoice_id], references: [id])
   obligation          RentObligation?            @relation(fields: [obligation_id], references: [id])
@@ -466,7 +477,169 @@ model PaymentAttempt {
   payments            Payment[]
 
   @@index([hostel_id])
+  @@index([payment_domain])
+  @@index([flow_type])
+  @@index([settlement_status])
+  @@index([merchant_context_type, merchant_context_id])
+  @@index([provider, provider_transaction_id])
+  @@index([provider, provider_order_id])
   @@map("payment_attempts")
+  @@schema("public")
+}
+
+model PaymentWebhookEvent {
+  id                      String    @id @default(uuid()) @db.Uuid
+  provider                String
+  payment_domain          String?
+  flow_type               String?
+  merchant_context_type   String?
+  merchant_context_id     String?
+  merchant_transaction_id String?
+  provider_transaction_id String?
+  provider_order_id       String?
+  provider_reference_id   String?
+  event_hash              String    @unique
+  raw_payload             Json
+  headers_redacted        Json?
+  received_at             DateTime  @default(now()) @db.Timestamptz(6)
+  processing_status       String    @default("RECEIVED")
+  processing_result       Json?
+  payment_attempt_id      String?   @db.Uuid
+  operational_owner_id    String?   @db.Uuid
+  financial_owner_id      String?   @db.Uuid
+  hostel_id               String?   @db.Uuid
+  signature_verified      Boolean   @default(false)
+  signature_algorithm     String?
+  signature_failure_reason String?
+  error_message           String?
+  processed_at            DateTime? @db.Timestamptz(6)
+
+  @@index([provider, received_at])
+  @@index([payment_attempt_id])
+  @@index([hostel_id, received_at])
+  @@index([operational_owner_id, received_at])
+  @@index([processing_status])
+  @@map("payment_webhook_events")
+  @@schema("public")
+}
+
+model PaymentProviderVerificationSnapshot {
+  id                         String    @id @default(uuid()) @db.Uuid
+  provider                   String
+  payment_domain             String?
+  flow_type                  String?
+  source                     String
+  payment_attempt_id         String?   @db.Uuid
+  webhook_event_id           String?   @db.Uuid
+  reconciliation_run_id      String?   @db.Uuid
+  merchant_transaction_id    String?
+  provider_transaction_id    String?
+  provider_order_id          String?
+  provider_reference_id      String?
+  provider_status            String?
+  normalized_status          String
+  amount                     Decimal?  @db.Decimal(10, 2)
+  raw_response               Json?
+  raw_response_hash          String
+  verified_at                DateTime  @default(now()) @db.Timestamptz(6)
+  operational_owner_id       String?   @db.Uuid
+  financial_owner_id         String?   @db.Uuid
+  hostel_id                  String?   @db.Uuid
+
+  @@index([payment_attempt_id, verified_at])
+  @@index([hostel_id, verified_at])
+  @@index([provider, verified_at])
+  @@index([raw_response_hash])
+  @@map("payment_provider_verification_snapshots")
+  @@schema("public")
+}
+
+model PaymentAttemptStatusEvent {
+  id                      String   @id @default(uuid()) @db.Uuid
+  payment_attempt_id      String   @db.Uuid
+  transition_sequence     Int
+  from_status             String?
+  to_status               String
+  reason                  String?
+  source                  String
+  actor_id                String?  @db.Uuid
+  operational_owner_id    String?  @db.Uuid
+  financial_owner_id      String?  @db.Uuid
+  hostel_id               String?  @db.Uuid
+  metadata                Json?
+  created_at              DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([payment_attempt_id, transition_sequence])
+  @@index([payment_attempt_id, created_at])
+  @@index([hostel_id, created_at])
+  @@map("payment_attempt_status_events")
+  @@schema("public")
+}
+
+model PaymentOperationalAnomaly {
+  id                      String    @id @default(uuid()) @db.Uuid
+  anomaly_type            String
+  severity                String
+  payment_domain          String?
+  flow_type               String?
+  payment_attempt_id      String?   @db.Uuid
+  payment_id              String?   @db.Uuid
+  webhook_event_id        String?   @db.Uuid
+  reconciliation_run_id   String?   @db.Uuid
+  operational_owner_id    String?   @db.Uuid
+  financial_owner_id      String?   @db.Uuid
+  hostel_id               String?   @db.Uuid
+  status                  String    @default("OPEN")
+  detected_at             DateTime  @default(now()) @db.Timestamptz(6)
+  resolved_at             DateTime? @db.Timestamptz(6)
+  metadata                Json?
+
+  @@index([anomaly_type, status])
+  @@index([payment_attempt_id])
+  @@index([hostel_id, detected_at])
+  @@index([operational_owner_id, detected_at])
+  @@map("payment_operational_anomalies")
+  @@schema("public")
+}
+
+model PaymentReconciliationRun {
+  id                    String   @id @default(uuid()) @db.Uuid
+  payment_domain        String
+  scope_type            String?
+  operational_owner_id  String?  @db.Uuid
+  financial_owner_id    String?  @db.Uuid
+  hostel_id             String?  @db.Uuid
+  status                String   @default("RUNNING")
+  started_at            DateTime @default(now()) @db.Timestamptz(6)
+  completed_at          DateTime? @db.Timestamptz(6)
+  summary               Json?
+  error_message         String?
+
+  @@index([payment_domain, started_at])
+  @@index([hostel_id, started_at])
+  @@map("payment_reconciliation_runs")
+  @@schema("public")
+}
+
+model PaymentReconciliationItem {
+  id                    String   @id @default(uuid()) @db.Uuid
+  reconciliation_run_id String   @db.Uuid
+  payment_attempt_id    String?  @db.Uuid
+  payment_id            String?  @db.Uuid
+  anomaly_type          String
+  severity              String
+  action                String
+  result                String
+  operational_owner_id  String?  @db.Uuid
+  financial_owner_id    String?  @db.Uuid
+  hostel_id             String?  @db.Uuid
+  metadata              Json?
+  created_at            DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([reconciliation_run_id])
+  @@index([payment_attempt_id])
+  @@index([hostel_id, created_at])
+  @@map("payment_reconciliation_items")
   @@schema("public")
 }
 

@@ -6,6 +6,8 @@ import { paymentService } from "@/lib/services/payment-service";
 import { authService } from "@/lib/services/auth-service";
 import { apiError } from "@/lib/utils/api-utils";
 import { prisma } from "@/lib/db";
+import { paymentStatusEventService } from "@/lib/services/payment-status-event-service";
+import { SETTLEMENT_STATUS } from "@/lib/services/payments/financial-domain";
 
 /**
  * POST /api/payments/confirm
@@ -59,7 +61,7 @@ export async function POST(req: Request) {
       });
     }
 
-    const CONFIRMABLE = ["PENDING_MANUAL_CONFIRMATION", "PENDING_VERIFICATION"];
+    const CONFIRMABLE = ["PENDING_MANUAL_CONFIRMATION"];
     if (!CONFIRMABLE.includes(attempt.status) && action === "confirm") {
       return apiError(
         `Cannot confirm a payment in status '${attempt.status}'. Expected PENDING_MANUAL_CONFIRMATION.`,
@@ -94,18 +96,29 @@ export async function POST(req: Request) {
       });
     } else {
       // Reject — mark as FAILED
-      const rejected = await prisma.paymentAttempt.update({
-        where: { id: attempt_id },
-        data: {
-          status: "FAILED",
-          raw_webhook_payload: {
-            ...(attempt.raw_webhook_payload as any || {}),
-            rejection: {
-              rejected_by: user.id,
-              rejected_at: new Date().toISOString(),
-            },
-          } as any,
-        },
+      const rejected = await prisma.$transaction(async (tx) => {
+        const updated = await paymentStatusEventService.updateAttemptStatus(tx, {
+          attemptId: attempt_id,
+          fromStatus: attempt.status,
+          toStatus: "FAILED",
+          source: "MANUAL_REJECT",
+          reason: "owner rejected manual payment review",
+          actorId: user.id,
+          operationalOwnerId: attempt.owner_id,
+          financialOwnerId: attempt.owner_id,
+          hostelId: attempt.hostel_id,
+          data: {
+            settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE,
+            raw_webhook_payload: {
+              ...(attempt.raw_webhook_payload as any || {}),
+              rejection: {
+                rejected_by: user.id,
+                rejected_at: new Date().toISOString(),
+              },
+            } as any,
+          },
+        });
+        return updated;
       });
 
       return NextResponse.json({

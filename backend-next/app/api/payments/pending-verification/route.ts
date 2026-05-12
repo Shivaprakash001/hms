@@ -22,10 +22,18 @@ export async function GET(req: Request) {
     if (user.role !== "OWNER" && user.role !== "ADMIN") {
       return apiError("Only owners can view pending verifications", "FORBIDDEN", 403);
     }
+    const { searchParams } = new URL(req.url);
+    const hostelId = searchParams.get("hostelId");
+    if (!hostelId) return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
+    if (user.role === "OWNER") {
+      const hostel = await prisma.hostel.findUnique({ where: { id: hostelId }, select: { owner_id: true } });
+      if (!hostel || hostel.owner_id !== user.id) return apiError("Forbidden", "FORBIDDEN", 403);
+    }
 
     const attempts = await prisma.paymentAttempt.findMany({
       where: {
-        owner_id: user.id,
+        ...(user.role === "OWNER" ? { owner_id: user.id } : {}),
+        hostel_id: hostelId,
         status: { in: ["PENDING_VERIFICATION", "PENDING_MANUAL_CONFIRMATION"] },
       },
       include: {
@@ -48,6 +56,7 @@ export async function GET(req: Request) {
     const items = attempts.map((a: any) => ({
       attempt_id: a.id,
       status: a.status,
+      flow_type: a.flow_type || (a.raw_webhook_payload?.source === "tenant_submission" ? "MANUAL_UPI_REFERENCE" : "RENT"),
       tenant_name: a.tenant?.profile?.name || "Unknown",
       tenant_email: a.tenant?.profile?.email || "",
       tenant_phone: a.tenant?.profile?.phone || "",

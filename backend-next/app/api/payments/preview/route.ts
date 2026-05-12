@@ -35,6 +35,19 @@ export async function GET(req: Request) {
         return apiError("Tenant enrollment not found", "NOT_FOUND", 404);
       }
       tenantId = tenant.id;
+    } else if (user.role === "OWNER") {
+      const hostelId = searchParams.get("hostelId");
+      if (!hostelId) return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
+      const hostel = await prisma.hostel.findUnique({ where: { id: hostelId }, select: { owner_id: true } });
+      if (!hostel || hostel.owner_id !== user.id) return apiError("Forbidden", "FORBIDDEN", 403);
+      const count = await prisma.rentObligation.count({
+        where: { id: { in: obligationIds }, owner_id: user.id, hostel_id: hostelId },
+      });
+      if (count !== obligationIds.length) {
+        return apiError("All obligations must belong to the requested hostel", "FORBIDDEN", 403);
+      }
+    } else if (user.role !== "ADMIN") {
+      return apiError("Forbidden", "FORBIDDEN", 403);
     }
 
     const preview = await paymentService.previewPaymentAmount(obligationIds, user.id, tenantId);

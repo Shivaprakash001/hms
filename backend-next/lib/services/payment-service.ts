@@ -15,14 +15,69 @@ import { planEnforcementService } from "./plan-enforcement-service";
 import { financialService } from "./financial-service";
 import { abandonmentService } from "./abandonment-service";
 import { assertFinancialHostelMatch, assertSameFinancialHostel, assertScopedEntityHostel, requireFinancialHostelId } from "./financial-isolation";
+import { getProviderContext } from "./payments/merchant-context";
+import { PAYMENT_DOMAIN, PAYMENT_FLOW, PAYMENT_SCOPE, SETTLEMENT_STATUS } from "./payments/financial-domain";
+import { paymentStatusEventService } from "./payment-status-event-service";
+import { paymentOperationalAnomalyService } from "./payment-operational-anomaly-service";
+import { paymentWebhookEventService } from "./payment-webhook-event-service";
+import { paymentProviderVerificationSnapshotService } from "./payment-provider-verification-snapshot-service";
 
 const logger = getLogger("payment.service");
+type MaybeHostelId = string | null;
 
 export class PaymentService {
   // 🔧 FIX C1: Old calculateProratedRent, generateMonthlyRent, previewMonthlyRent DELETED.
   // These were a split-brain duplicate of RentGenerationService with different rules:
   //   - No lock, no P2002 catch, hardcoded due day to 10th, local time instead of UTC.
   // Use rentGenerationService (lib/services/rent-generation-service.ts) exclusively.
+
+  private attemptIdentityData(merchantTxnId: string, result?: any) {
+    return {
+      merchant_transaction_id: merchantTxnId,
+      provider_order_id: result?.provider_order_id || result?.gateway_txn_id || null,
+      provider_transaction_id: result?.provider_transaction_id || null,
+      provider_reference_id: result?.provider_reference_id || result?.provider_transaction_id || result?.provider_order_id || result?.gateway_txn_id || null,
+    };
+  }
+
+  private async updateAttemptStatus(tx: any, params: {
+    attemptId: string;
+    fromStatus?: string | null;
+    toStatus: string;
+    source: string;
+    reason?: string;
+    data?: any;
+    actorId?: string | null;
+    metadata?: any;
+    operationalOwnerId?: string | null;
+    financialOwnerId?: string | null;
+    hostelId?: MaybeHostelId;
+  }) {
+    const updated = await tx.paymentAttempt.update({
+      where: { id: params.attemptId },
+      data: {
+        ...(params.data || {}),
+        status: params.toStatus,
+      },
+    });
+    await paymentStatusEventService.append(tx, {
+      attemptId: params.attemptId,
+      fromStatus: params.fromStatus,
+      toStatus: params.toStatus,
+      source: params.source,
+      reason: params.reason,
+      actorId: params.actorId || null,
+      operationalOwnerId: params.operationalOwnerId || updated.owner_id || null,
+      financialOwnerId: params.financialOwnerId || updated.owner_id || null,
+      hostelId: params.hostelId || updated.hostel_id || null,
+      metadata: params.metadata,
+    });
+    return updated;
+  }
+
+  private async updateAttemptStatusOutsideTx(params: any) {
+    return prisma.$transaction((tx) => this.updateAttemptStatus(tx, params));
+  }
 
   /**
    * Core DB-only payment logic — must be called inside an existing transaction.
@@ -174,6 +229,7 @@ export class PaymentService {
         obligation_id: data.obligationId,
         tenant_id: res.payment.tenant_id,
         owner_id: res.payment.owner_id,
+        hostel_id: res.payment.hostel_id,
         amount: data.amountPaid,
         method: data.paymentMethod,
       });
@@ -258,6 +314,7 @@ export class PaymentService {
         obligation_id: data.obligationId,
         tenant_id: res.payment.tenant_id,
         owner_id: res.payment.owner_id,
+        hostel_id: res.payment.hostel_id,
         amount: data.amountPaid,
         method: data.paymentMethod
       });
@@ -515,6 +572,7 @@ export class PaymentService {
         allocations.push({
           payment_id: payment.id,
           obligation_id: ob.id,
+          owner_id: payment.owner_id,
           obligation_type: ob.obligation_type,
           rent_month: ob.rent_month,
           allocated: allocRupees,
@@ -541,6 +599,8 @@ export class PaymentService {
         payment_id: alloc.payment_id,
         obligation_id: alloc.obligation_id,
         tenant_id: data.tenantId,
+        owner_id: (alloc as any).owner_id,
+        hostel_id: data.hostelId,
         amount: alloc.allocated,
         method: data.paymentMethod,
         group_id: txResult.groupId,
@@ -669,13 +729,28 @@ export class PaymentService {
         return existingAttempt;
       }
       // Otherwise expire the stale attempt so we create a fresh one with checkout_url
-      await prisma.paymentAttempt.update({
-        where: { id: existingAttempt.id },
-        data: { status: "EXPIRED" }
+      await this.updateAttemptStatusOutsideTx({
+        attemptId: existingAttempt.id,
+        fromStatus: existingAttempt.status,
+        toStatus: "EXPIRED",
+        source: "CREATE_INTENT",
+        reason: "stale single-obligation checkout attempt expired before replacement",
+        operationalOwnerId: existingAttempt.owner_id,
+        financialOwnerId: existingAttempt.owner_id,
+        hostelId: existingAttempt.hostel_id,
+        data: { settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE },
       });
     }
 
-    const { provider, config } = await this.getProviderForOwner(obligation.owner_id || "", hostelId);
+    const providerContext = await getProviderContext({
+      paymentDomain: PAYMENT_DOMAIN.RENT_COLLECTION,
+      flowType: PAYMENT_FLOW.RENT,
+      operationalOwnerId: obligation.owner_id || "",
+      financialOwnerId: obligation.owner_id || "",
+      hostelId,
+      scopeType: PAYMENT_SCOPE.HOSTEL,
+    });
+    const { provider, config } = providerContext;
     const instance = PaymentProviderFactory.getProvider(provider, config);
 
     const merchantTxnId = `hms_${obligationId.replace(/-/g, "").substring(0, 12)}_${crypto.randomBytes(4).toString("hex")}`;
@@ -696,10 +771,27 @@ export class PaymentService {
         owner_id: obligation.owner_id || "",
         provider: provider,
         merchant_txn_id: merchantTxnId,
+        merchant_transaction_id: merchantTxnId,
         amount: validationAmount,
         status: "CREATED",
         hostel_id: hostelId,
+        payment_domain: providerContext.payment_domain,
+        scope_type: providerContext.scope_type,
+        flow_type: providerContext.flow_type,
+        merchant_context_type: providerContext.merchant_context_type,
+        merchant_context_id: providerContext.merchant_context_id,
+        settlement_status: SETTLEMENT_STATUS.NOT_SETTLED,
       }
+    });
+    await paymentStatusEventService.appendOutsideTransaction({
+      attemptId: attempt.id,
+      fromStatus: null,
+      toStatus: "CREATED",
+      source: "CREATE_INTENT",
+      reason: "rent single obligation attempt created",
+      operationalOwnerId: obligation.owner_id || "",
+      financialOwnerId: obligation.owner_id || "",
+      hostelId,
     });
 
     try {
@@ -716,11 +808,18 @@ export class PaymentService {
         }
       });
 
-      return await prisma.paymentAttempt.update({
-        where: { id: attempt.id },
+      return await this.updateAttemptStatusOutsideTx({
+        attemptId: attempt.id,
+        fromStatus: "CREATED",
+        toStatus: "PENDING",
+        source: "CREATE_INTENT",
+        reason: "provider checkout created",
+        operationalOwnerId: obligation.owner_id || "",
+        financialOwnerId: obligation.owner_id || "",
+        hostelId,
         data: {
-          status: "PENDING",
           gateway_txn_id: result.gateway_txn_id,
+          ...this.attemptIdentityData(merchantTxnId, result),
           upi_intent_url: result.upi_intent_url,
           qr_payload: result.qr_payload,
           checkout_url: result.checkout_url,
@@ -735,9 +834,16 @@ export class PaymentService {
         merchantTxnId,
         error: String(error),
       });
-      await prisma.paymentAttempt.update({
-        where: { id: attempt.id },
-        data: { status: "FAILED", raw_create_response: { error: String(error) } as any }
+      await this.updateAttemptStatusOutsideTx({
+        attemptId: attempt.id,
+        fromStatus: "CREATED",
+        toStatus: "FAILED",
+        source: "CREATE_INTENT",
+        reason: "provider checkout creation failed",
+        operationalOwnerId: obligation.owner_id || "",
+        financialOwnerId: obligation.owner_id || "",
+        hostelId,
+        data: { raw_create_response: { error: String(error) } as any, settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE }
       });
       throw error;
     }
@@ -787,7 +893,15 @@ export class PaymentService {
     const ownerId = obligations[0].owner_id || "";
     // Resolve from the first obligation's immutable hostel chain.
     const { prefs } = await getObligationOperationalContext(obligations[0]);
-    const { provider, config } = await this.getProviderForOwner(ownerId, hostelId);
+    const providerContext = await getProviderContext({
+      paymentDomain: PAYMENT_DOMAIN.RENT_COLLECTION,
+      flowType: PAYMENT_FLOW.RENT,
+      operationalOwnerId: ownerId,
+      financialOwnerId: ownerId,
+      hostelId,
+      scopeType: PAYMENT_SCOPE.HOSTEL,
+    });
+    const { provider, config } = providerContext;
     const instance = PaymentProviderFactory.getProvider(provider, config);
 
     // ── 2. PAYMENT RULES — partial payment enforcement ──
@@ -912,9 +1026,16 @@ export class PaymentService {
         }
 
         // Stale: CREATED > 2 min with no checkout_url, or PENDING with expired URL
-        await tx.paymentAttempt.update({
-          where: { id: existingAttempt.id },
-          data: { status: "EXPIRED" },
+        await this.updateAttemptStatus(tx, {
+          attemptId: existingAttempt.id,
+          fromStatus: existingAttempt.status,
+          toStatus: "EXPIRED",
+          source: "CREATE_INTENT",
+          reason: "stale multi-obligation checkout attempt expired before replacement",
+          operationalOwnerId: existingAttempt.owner_id,
+          financialOwnerId: existingAttempt.owner_id,
+          hostelId: existingAttempt.hostel_id,
+          data: { settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE },
         });
       }
 
@@ -936,10 +1057,27 @@ export class PaymentService {
           owner_id: ownerId,
           provider,
           merchant_txn_id: merchantTxnId,
+          merchant_transaction_id: merchantTxnId,
           amount: totalAmount,
           status: "CREATED",
           hostel_id: hostelId,
+          payment_domain: providerContext.payment_domain,
+          scope_type: providerContext.scope_type,
+          flow_type: providerContext.flow_type,
+          merchant_context_type: providerContext.merchant_context_type,
+          merchant_context_id: providerContext.merchant_context_id,
+          settlement_status: SETTLEMENT_STATUS.NOT_SETTLED,
         }
+      });
+      await paymentStatusEventService.append(tx, {
+        attemptId: newAttempt.id,
+        fromStatus: null,
+        toStatus: "CREATED",
+        source: "CREATE_INTENT",
+        reason: "rent multi-obligation attempt created",
+        operationalOwnerId: ownerId,
+        financialOwnerId: ownerId,
+        hostelId,
       });
 
       await tx.paymentAttemptObligation.createMany({
@@ -973,11 +1111,18 @@ export class PaymentService {
         }
       });
 
-      return await prisma.paymentAttempt.update({
-        where: { id: attempt.id },
+      return await this.updateAttemptStatusOutsideTx({
+        attemptId: attempt.id,
+        fromStatus: "CREATED",
+        toStatus: "PENDING",
+        source: "CREATE_INTENT",
+        reason: "provider checkout created",
+        operationalOwnerId: ownerId,
+        financialOwnerId: ownerId,
+        hostelId,
         data: {
-          status: "PENDING",
           gateway_txn_id: result.gateway_txn_id,
+          ...this.attemptIdentityData(attempt.merchant_txn_id, result),
           upi_intent_url: result.upi_intent_url,
           qr_payload: result.qr_payload,
           checkout_url: result.checkout_url,
@@ -992,9 +1137,16 @@ export class PaymentService {
         merchantTxnId: attempt.merchant_txn_id,
         error: String(error),
       });
-      await prisma.paymentAttempt.update({
-        where: { id: attempt.id },
-        data: { status: "FAILED", raw_create_response: { error: String(error) } as any }
+      await this.updateAttemptStatusOutsideTx({
+        attemptId: attempt.id,
+        fromStatus: "CREATED",
+        toStatus: "FAILED",
+        source: "CREATE_INTENT",
+        reason: "provider checkout creation failed",
+        operationalOwnerId: ownerId,
+        financialOwnerId: ownerId,
+        hostelId,
+        data: { raw_create_response: { error: String(error) } as any, settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE }
       });
       throw error;
     }
@@ -1037,7 +1189,15 @@ export class PaymentService {
       throw new Error(`BAD_REQUEST: Minimum payment amount is ${formatCurrency(prefs.min_payment_amount)}`);
     }
 
-    const { provider, config } = await this.getProviderForOwner(ownerId, hostelId);
+    const providerContext = await getProviderContext({
+      paymentDomain: PAYMENT_DOMAIN.RENT_COLLECTION,
+      flowType: PAYMENT_FLOW.ADVANCE,
+      operationalOwnerId: ownerId,
+      financialOwnerId: ownerId,
+      hostelId,
+      scopeType: PAYMENT_SCOPE.HOSTEL,
+    });
+    const { provider, config } = providerContext;
     const instance = PaymentProviderFactory.getProvider(provider, config);
 
     const txResult = await prisma.$transaction(async (tx) => {
@@ -1062,7 +1222,17 @@ export class PaymentService {
         if (isInFlight || hasValidCheckout) {
           return { attempt: existing, isReused: true };
         }
-        await tx.paymentAttempt.update({ where: { id: existing.id }, data: { status: "EXPIRED" } });
+        await this.updateAttemptStatus(tx, {
+          attemptId: existing.id,
+          fromStatus: existing.status,
+          toStatus: "EXPIRED",
+          source: "CREATE_INTENT",
+          reason: "stale advance checkout attempt expired before replacement",
+          operationalOwnerId: existing.owner_id,
+          financialOwnerId: existing.owner_id,
+          hostelId: existing.hostel_id,
+          data: { settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE },
+        });
       }
 
       const merchantTxnId = `hms_adv_${crypto.randomBytes(6).toString("hex")}`;
@@ -1072,11 +1242,28 @@ export class PaymentService {
           owner_id: ownerId,
           provider,
           merchant_txn_id: merchantTxnId,
+          merchant_transaction_id: merchantTxnId,
           amount,
           status: "CREATED",
           payment_type: "ADVANCE",
           hostel_id: hostelId,
+          payment_domain: providerContext.payment_domain,
+          scope_type: providerContext.scope_type,
+          flow_type: providerContext.flow_type,
+          merchant_context_type: providerContext.merchant_context_type,
+          merchant_context_id: providerContext.merchant_context_id,
+          settlement_status: SETTLEMENT_STATUS.NOT_SETTLED,
         } as any,
+      });
+      await paymentStatusEventService.append(tx, {
+        attemptId: newAttempt.id,
+        fromStatus: null,
+        toStatus: "CREATED",
+        source: "CREATE_INTENT",
+        reason: "advance payment attempt created",
+        operationalOwnerId: ownerId,
+        financialOwnerId: ownerId,
+        hostelId,
       });
       return { attempt: newAttempt, isReused: false };
     });
@@ -1093,11 +1280,18 @@ export class PaymentService {
         tenant_phone: tenant.profile.phone || "",
         metadata: { tenant_id: tenantId, attempt_id: attempt.id, payment_type: "ADVANCE" },
       });
-      return await prisma.paymentAttempt.update({
-        where: { id: attempt.id },
+      return await this.updateAttemptStatusOutsideTx({
+        attemptId: attempt.id,
+        fromStatus: "CREATED",
+        toStatus: "PENDING",
+        source: "CREATE_INTENT",
+        reason: "provider checkout created",
+        operationalOwnerId: ownerId,
+        financialOwnerId: ownerId,
+        hostelId,
         data: {
-          status: "PENDING",
           gateway_txn_id: result.gateway_txn_id,
+          ...this.attemptIdentityData(attempt.merchant_txn_id, result),
           upi_intent_url: result.upi_intent_url,
           qr_payload: result.qr_payload,
           checkout_url: result.checkout_url,
@@ -1106,9 +1300,16 @@ export class PaymentService {
         },
       });
     } catch (error) {
-      await prisma.paymentAttempt.update({
-        where: { id: attempt.id },
-        data: { status: "FAILED", raw_create_response: { error: String(error) } as any },
+      await this.updateAttemptStatusOutsideTx({
+        attemptId: attempt.id,
+        fromStatus: "CREATED",
+        toStatus: "FAILED",
+        source: "CREATE_INTENT",
+        reason: "provider checkout creation failed",
+        operationalOwnerId: ownerId,
+        financialOwnerId: ownerId,
+        hostelId,
+        data: { raw_create_response: { error: String(error) } as any, settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE },
       });
       throw error;
     }
@@ -1192,6 +1393,11 @@ export class PaymentService {
     //   PENDING_VERIFICATION → webhook claimed it, now we finalize
     // If count === 0 the attempt is already PROCESSING (another caller beat us)
     // or already terminal (SUCCESS/FAILED/etc.). Re-read and return — no work.
+    const preLockAttempt = await prisma.paymentAttempt.findUnique({
+      where: { id: attemptId },
+      select: { status: true, owner_id: true, hostel_id: true },
+    });
+
     const lockResult = await prisma.paymentAttempt.updateMany({
       where: { id: attemptId, status: { in: ["PENDING", "PENDING_VERIFICATION", "PENDING_MANUAL_CONFIRMATION"] } },
       data: { status: "PROCESSING" },
@@ -1212,6 +1418,17 @@ export class PaymentService {
     }
 
     logger.info("payments.finalize.lock_acquired", { ...requestMeta, attempt_id: attemptId, incoming_status: status });
+    await paymentStatusEventService.appendOutsideTransaction({
+      attemptId,
+      fromStatus: preLockAttempt?.status || null,
+      toStatus: "PROCESSING",
+      source: context?.source === "reconcile" ? "RECONCILE" : context?.source === "MANUAL_CONFIRM" ? "MANUAL_CONFIRM" : "VERIFY",
+      reason: "attempt claimed for settlement",
+      actorId: context?.actor?.id || null,
+      operationalOwnerId: preLockAttempt?.owner_id || null,
+      financialOwnerId: preLockAttempt?.owner_id || null,
+      hostelId: preLockAttempt?.hostel_id || null,
+    });
 
     // ── Step 2: Read current state (status = PROCESSING — we own the lock) ─────
     const attempt = await prisma.paymentAttempt.findUnique({
@@ -1227,9 +1444,16 @@ export class PaymentService {
       // Non-success statuses: record and exit
       if (status !== "SUCCESS") {
         logger.info("addons.webhook.non_success", { ...requestMeta, attempt_id: attemptId, status });
-        return await prisma.paymentAttempt.update({
-          where: { id: attemptId },
-          data: { status: status as any, gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null },
+        return await this.updateAttemptStatusOutsideTx({
+          attemptId,
+          fromStatus: "PROCESSING",
+          toStatus: status,
+          source: context?.source === "reconcile" ? "RECONCILE" : "VERIFY",
+          reason: "provider returned non-success status for addon",
+          operationalOwnerId: attempt.owner_id,
+          financialOwnerId: null,
+          hostelId: attempt.hostel_id,
+          data: { gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null, settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE },
         });
       }
 
@@ -1260,9 +1484,16 @@ export class PaymentService {
           actual_paise: actualAmountPaisa,
         });
         // Mark attempt FAILED — do NOT credit
-        await prisma.paymentAttempt.update({
-          where: { id: attemptId },
-          data: { status: "FAILED", raw_webhook_payload: rawPayload || null },
+        await this.updateAttemptStatusOutsideTx({
+          attemptId,
+          fromStatus: "PROCESSING",
+          toStatus: "FAILED",
+          source: context?.source === "reconcile" ? "RECONCILE" : "VERIFY",
+          reason: "addon amount mismatch",
+          operationalOwnerId: attempt.owner_id,
+          financialOwnerId: null,
+          hostelId: attempt.hostel_id,
+          data: { raw_webhook_payload: rawPayload || null, settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE },
         });
         throw new Error(`VALIDATION_ERROR: Amount mismatch for addon pack "${pack}". Expected ₹${expectedAmount}, got ₹${Number(attempt.amount)}.`);
       }
@@ -1281,6 +1512,8 @@ export class PaymentService {
             gateway_txn_id: gatewayTxnId,
             raw_webhook_payload: rawPayload || null,
             confirmed_at: new Date(),
+            settlement_status: SETTLEMENT_STATUS.SETTLED,
+            settled_at: new Date(),
           },
         });
 
@@ -1289,6 +1522,17 @@ export class PaymentService {
           logger.info("addons.webhook.idempotent_skip", { ...requestMeta, attempt_id: attemptId });
           return;
         }
+        await paymentStatusEventService.append(tx, {
+          attemptId,
+          fromStatus: "PROCESSING",
+          toStatus: "SUCCESS",
+          source: context?.source === "reconcile" ? "RECONCILE" : "VERIFY",
+          reason: "addon credits credited atomically",
+          operationalOwnerId: attempt.owner_id,
+          financialOwnerId: null,
+          hostelId: attempt.hostel_id,
+          metadata: { pack, credits },
+        });
 
         // ── Soft cap: prevent abuse / overflow ────────────────────
         const current = await tx.addonUsage.findUnique({
@@ -1361,9 +1605,22 @@ export class PaymentService {
           invoice_id: invoice.id,
           attempt_id: attemptId,
         });
-        await prisma.paymentAttempt.update({
-          where: { id: attemptId },
-          data: { status: "SUCCESS", gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null, confirmed_at: new Date() }
+        await this.updateAttemptStatusOutsideTx({
+          attemptId,
+          fromStatus: "PROCESSING",
+          toStatus: "SUCCESS",
+          source: context?.source === "reconcile" ? "RECONCILE" : "VERIFY",
+          reason: "platform billing invoice already paid",
+          operationalOwnerId: attempt.owner_id,
+          financialOwnerId: null,
+          hostelId: null,
+          data: {
+            gateway_txn_id: gatewayTxnId,
+            raw_webhook_payload: rawPayload || null,
+            confirmed_at: new Date(),
+            settlement_status: SETTLEMENT_STATUS.SETTLED,
+            settled_at: new Date(),
+          },
         }).catch(() => {});
         return attempt;
       }
@@ -1371,9 +1628,20 @@ export class PaymentService {
       // SAFETY 2: Non-SUCCESS statuses → mark attempt but leave invoice PENDING
       if (status !== "SUCCESS") {
         logger.info("payments.finalize.billing_non_success", { ...requestMeta, attempt_id: attemptId, status });
-        return await prisma.paymentAttempt.update({
-          where: { id: attemptId },
-          data: { status: status as any, gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null }
+        return await this.updateAttemptStatusOutsideTx({
+          attemptId,
+          fromStatus: "PROCESSING",
+          toStatus: status,
+          source: context?.source === "reconcile" ? "RECONCILE" : "VERIFY",
+          reason: "provider returned non-success status for platform billing",
+          operationalOwnerId: attempt.owner_id,
+          financialOwnerId: null,
+          hostelId: null,
+          data: {
+            gateway_txn_id: gatewayTxnId,
+            raw_webhook_payload: rawPayload || null,
+            settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE,
+          },
         });
       }
 
@@ -1417,9 +1685,19 @@ export class PaymentService {
           invoice_id: invoice.id,
           expires_at: invoice.expires_at.toISOString(),
         });
-        await prisma.paymentAttempt.update({
-          where: { id: attemptId },
-          data: { status: "FAILED", raw_webhook_payload: rawPayload || null }
+        await this.updateAttemptStatusOutsideTx({
+          attemptId,
+          fromStatus: "PROCESSING",
+          toStatus: "FAILED",
+          source: context?.source === "reconcile" ? "RECONCILE" : "VERIFY",
+          reason: "platform billing invoice expired",
+          operationalOwnerId: attempt.owner_id,
+          financialOwnerId: null,
+          hostelId: null,
+          data: {
+            raw_webhook_payload: rawPayload || null,
+            settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE,
+          },
         }).catch(() => {});
         throw new Error(`VALIDATION_ERROR: Invoice expired on ${invoice.expires_at.toISOString()}. Payment rejected.`);
       }
@@ -1500,14 +1778,22 @@ export class PaymentService {
           }
         });
 
-        // Mark attempt SUCCESS — we hold the PROCESSING lock, update by id
-        await tx.paymentAttempt.update({
-          where: { id: attemptId },
+        // Mark attempt SUCCESS inside the same transaction as the subscription mutation.
+        await this.updateAttemptStatus(tx, {
+          attemptId,
+          fromStatus: "PROCESSING",
+          toStatus: "SUCCESS",
+          source: context?.source === "reconcile" ? "RECONCILE" : "VERIFY",
+          reason: "platform billing invoice paid",
+          operationalOwnerId: invoice.owner_id,
+          financialOwnerId: null,
+          hostelId: null,
           data: {
-            status: "SUCCESS",
             gateway_txn_id: gatewayTxnId,
             raw_webhook_payload: rawPayload || null,
             confirmed_at: now,
+            settlement_status: SETTLEMENT_STATUS.SETTLED,
+            settled_at: now,
           },
         });
 
@@ -1548,9 +1834,20 @@ export class PaymentService {
 
     if (status !== "SUCCESS") {
       logger.info("payments.finalize.rent_non_success", { ...requestMeta, attempt_id: attemptId, status });
-      return await prisma.paymentAttempt.update({
-        where: { id: attemptId },
-        data: { status: status as any, gateway_txn_id: gatewayTxnId, raw_webhook_payload: rawPayload || null },
+      return await this.updateAttemptStatusOutsideTx({
+        attemptId,
+        fromStatus: "PROCESSING",
+        toStatus: status,
+        source: context?.source === "reconcile" ? "RECONCILE" : "VERIFY",
+        reason: "provider returned non-success status",
+        operationalOwnerId: attempt.owner_id,
+        financialOwnerId: attempt.owner_id,
+        hostelId: attempt.hostel_id,
+        data: {
+          gateway_txn_id: gatewayTxnId,
+          raw_webhook_payload: rawPayload || null,
+          settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE,
+        },
       });
     }
 
@@ -1570,8 +1867,15 @@ export class PaymentService {
           owner_id: attempt.owner_id,
         });
         // We hold the PROCESSING lock — update by id is safe.
-        return await prisma.paymentAttempt.update({
-          where: { id: attemptId },
+        return await this.updateAttemptStatusOutsideTx({
+          attemptId,
+          fromStatus: "PROCESSING",
+          toStatus: "PENDING_MANUAL_CONFIRMATION",
+          source: "WEBHOOK",
+          reason: "plan gate requires owner manual confirmation",
+          operationalOwnerId: attempt.owner_id,
+          financialOwnerId: attempt.owner_id,
+          hostelId: attempt.hostel_id,
           data: {
             status: "PENDING_MANUAL_CONFIRMATION",
             gateway_txn_id: gatewayTxnId ?? null,
@@ -1579,29 +1883,6 @@ export class PaymentService {
           },
         });
       }
-    }
-
-    // We hold the PROCESSING lock — no try/catch or status guard needed.
-    const updatedAttempt = await prisma.paymentAttempt.update({
-      where: { id: attemptId },
-      data: {
-        status: "SUCCESS",
-        gateway_txn_id: gatewayTxnId,
-        raw_webhook_payload: rawPayload || null,
-        confirmed_at: new Date(),
-        // Audit trail — populated only for owner manual confirmations
-        ...(isManualConfirm && context?.actor ? {
-          manual_confirmed_by: context.actor.id,
-          manual_confirmed_at: new Date(),
-          manual_confirm_ip: context.actor.ip ?? null,
-        } : {}),
-      },
-    });
-    logger.info("payments.finalize.marked_success", { ...requestMeta, attempt_id: attemptId, gateway_txn_id: gatewayTxnId ?? null, source: context?.source ?? "auto" });
-
-    // Single source of truth: check if payments already exist (RENT path)
-    if (attempt.payments.length > 0) {
-      return updatedAttempt;
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -1612,7 +1893,7 @@ export class PaymentService {
         throw new Error("INTERNAL: ADVANCE payment attempt is missing tenant_id");
       }
       const advanceTenantId: string = attempt.tenant_id;
-      await prisma.$transaction(async (tx) => {
+      const finalizedAdvance = await prisma.$transaction(async (tx) => {
         // Lock ordering: tenant row first (consistent with adjustAgainstObligation)
         await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${advanceTenantId}::uuid FOR UPDATE`;
         await tenantAdvanceService.creditIdempotentInTx(tx, {
@@ -1622,6 +1903,29 @@ export class PaymentService {
           referenceId: attempt.id,
           referenceType: "PAYMENT_ATTEMPT",
           createdBy: attempt.owner_id,
+        });
+        return this.updateAttemptStatus(tx, {
+          attemptId,
+          fromStatus: "PROCESSING",
+          toStatus: "SUCCESS",
+          source: context?.source === "reconcile" ? "RECONCILE" : isManualConfirm ? "MANUAL_CONFIRM" : "VERIFY",
+          reason: "advance ledger credited atomically",
+          actorId: context?.actor?.id || null,
+          operationalOwnerId: attempt.owner_id,
+          financialOwnerId: attempt.owner_id,
+          hostelId: attempt.hostel_id,
+          data: {
+            gateway_txn_id: gatewayTxnId,
+            raw_webhook_payload: rawPayload || null,
+            confirmed_at: new Date(),
+            settlement_status: SETTLEMENT_STATUS.SETTLED,
+            settled_at: new Date(),
+            ...(isManualConfirm && context?.actor ? {
+              manual_confirmed_by: context.actor.id,
+              manual_confirmed_at: new Date(),
+              manual_confirm_ip: context.actor.ip ?? null,
+            } : {}),
+          },
         });
       });
       logger.info("payments.finalize.advance_credited", {
@@ -1637,7 +1941,7 @@ export class PaymentService {
         tenant_id: attempt.tenant_id,
         gateway_txn_id: gatewayTxnId || null,
       });
-      return updatedAttempt;
+      return finalizedAdvance;
     }
 
     // Use ONLY junction table - no fallback to raw_create_response
@@ -1650,7 +1954,28 @@ export class PaymentService {
     // _applyPaymentInTx is used directly so we don't nest prisma.$transaction calls.
     const appliedPayments: { payment: any; newStatus: string; tenantId: string; ownerId: string }[] = [];
 
-    await prisma.$transaction(async (tx) => {
+    let updatedAttempt: any = null;
+    if (attempt.payments.length > 0) {
+      updatedAttempt = await this.updateAttemptStatusOutsideTx({
+        attemptId,
+        fromStatus: "PROCESSING",
+        toStatus: "SUCCESS",
+        source: context?.source === "reconcile" ? "RECONCILE" : isManualConfirm ? "MANUAL_CONFIRM" : "VERIFY",
+        reason: "rent attempt already has ledger payments",
+        actorId: context?.actor?.id || null,
+        operationalOwnerId: attempt.owner_id,
+        financialOwnerId: attempt.owner_id,
+        hostelId: attempt.hostel_id,
+        data: {
+          gateway_txn_id: gatewayTxnId,
+          raw_webhook_payload: rawPayload || null,
+          confirmed_at: new Date(),
+          settlement_status: SETTLEMENT_STATUS.SETTLED,
+          settled_at: new Date(),
+        },
+      });
+    } else {
+    updatedAttempt = await prisma.$transaction(async (tx) => {
       if (obligationLinks.length > 0) {
         // Multi-obligation payment: use junction table
         for (const link of obligationLinks) {
@@ -1681,7 +2006,36 @@ export class PaymentService {
         appliedPayments.push(res);
       }
       // If neither — invoice payment or no linkage (handled in billing path above)
+      if (appliedPayments.length === 0) {
+        throw new Error("SETTLEMENT_FAILED: Rent payment attempt has no linked obligations to settle");
+      }
+      const finalized = await this.updateAttemptStatus(tx, {
+        attemptId,
+        fromStatus: "PROCESSING",
+        toStatus: "SUCCESS",
+        source: context?.source === "reconcile" ? "RECONCILE" : isManualConfirm ? "MANUAL_CONFIRM" : "VERIFY",
+        reason: "rent ledger settled atomically",
+        actorId: context?.actor?.id || null,
+        operationalOwnerId: attempt.owner_id,
+        financialOwnerId: attempt.owner_id,
+        hostelId: attempt.hostel_id,
+        data: {
+          gateway_txn_id: gatewayTxnId,
+          raw_webhook_payload: rawPayload || null,
+          confirmed_at: new Date(),
+          settlement_status: SETTLEMENT_STATUS.SETTLED,
+          settled_at: new Date(),
+          ...(isManualConfirm && context?.actor ? {
+            manual_confirmed_by: context.actor.id,
+            manual_confirmed_at: new Date(),
+            manual_confirm_ip: context.actor.ip ?? null,
+          } : {}),
+        },
+      });
+      return finalized;
     });
+    }
+    logger.info("payments.finalize.marked_success", { ...requestMeta, attempt_id: attemptId, gateway_txn_id: gatewayTxnId ?? null, source: context?.source ?? "auto" });
 
     // Post-transaction side-effects: events, receipts, audit logs
     for (const { payment, tenantId: tId } of appliedPayments) {
@@ -1690,6 +2044,7 @@ export class PaymentService {
         obligation_id: payment.obligation_id,
         tenant_id: tId,
         owner_id: payment.owner_id,
+        hostel_id: payment.hostel_id,
         amount: Number(payment.amount_paid),
         method: "UPI",
         attempt_id: attemptId,
@@ -1710,7 +2065,7 @@ export class PaymentService {
     return updatedAttempt;
   }
 
-  async handlePaymentWebhook(providerName: string, headers: any, body: any, context?: { requestId?: string }) {
+  async handlePaymentWebhook(providerName: string, headers: any, body: any, context?: { requestId?: string; webhookEventId?: string }) {
     const providerStr = providerName.toUpperCase();
     const requestMeta = context?.requestId ? { request_id: context.requestId } : {};
     
@@ -1734,12 +2089,20 @@ export class PaymentService {
     }
 
     // Direct lookup - O(1) and safe
-    const attempt = await prisma.paymentAttempt.findUnique({
-      where: { merchant_txn_id: merchantOrderId }
+    const attempt = await prisma.paymentAttempt.findFirst({
+      where: {
+        OR: [
+          { merchant_txn_id: merchantOrderId },
+          { merchant_transaction_id: merchantOrderId },
+        ],
+      }
     });
 
     if (!attempt) {
       throw new Error(`NOT_FOUND: Payment attempt not found for merchant_txn_id: ${merchantOrderId}`);
+    }
+    if (context?.webhookEventId) {
+      await paymentWebhookEventService.markProcessing(context.webhookEventId).catch(() => {});
     }
 
     if (attempt.provider !== providerStr) {
@@ -1765,8 +2128,32 @@ export class PaymentService {
         status: attempt.status,
       });
       incrementWebhook(true); // Already processed, not an error
+      if (context?.webhookEventId) {
+        await paymentWebhookEventService.markProcessed(context.webhookEventId, {
+          attempt_id: attempt.id,
+          status: attempt.status,
+          idempotent: true,
+        }).catch(() => {});
+      }
       return { success: true, message: `Attempt already processed or locked` };
     }
+    await paymentStatusEventService.appendOutsideTransaction({
+      attemptId: attempt.id,
+      fromStatus: attempt.status,
+      toStatus: "PENDING_VERIFICATION",
+      source: "WEBHOOK",
+      reason: "webhook claimed attempt for provider source-of-truth verification",
+      operationalOwnerId: attempt.owner_id,
+      financialOwnerId: attempt.owner_id,
+      hostelId: attempt.hostel_id,
+      metadata: { provider: providerStr, webhookEventId: context?.webhookEventId || null },
+    }).catch((error) => {
+      logger.warn("payments.webhook.status_event_failed", {
+        ...requestMeta,
+        attempt_id: attempt.id,
+        error: String(error),
+      });
+    });
 
     logger.info("payments.webhook.attempt_matched", {
       ...requestMeta,
@@ -1805,12 +2192,49 @@ export class PaymentService {
       });
       throw e;
     }
+    await paymentProviderVerificationSnapshotService.record({
+      provider: providerStr,
+      source: "WEBHOOK",
+      attempt,
+      webhookEventId: context?.webhookEventId || null,
+      providerTransactionId: sourceOfTruth.provider_transaction_id || verification.provider_transaction_id || null,
+      providerOrderId: sourceOfTruth.provider_order_id || verification.provider_order_id || sourceOfTruth.gateway_txn_id || verification.gateway_txn_id || null,
+      providerReferenceId: sourceOfTruth.provider_reference_id || verification.provider_reference_id || null,
+      providerStatus: (sourceOfTruth as any).provider_status || sourceOfTruth.status,
+      normalizedStatus: sourceOfTruth.status,
+      amount: verification.amount ?? null,
+      rawResponse: sourceOfTruth.raw_status,
+    });
     
     if (sourceOfTruth.status === "PENDING" && verification.status === "SUCCESS") {
       throw new Error(`SECURITY_ERROR: Webhook claimed SUCCESS but Provider API claims PENDING for ${attempt.merchant_txn_id}`);
     }
 
     const finalStatus = sourceOfTruth.status !== "PENDING" ? sourceOfTruth.status : verification.status;
+
+    await prisma.paymentAttempt.update({
+      where: { id: attempt.id },
+      data: {
+        provider_transaction_id: sourceOfTruth.provider_transaction_id || verification.provider_transaction_id || null,
+        provider_order_id: sourceOfTruth.provider_order_id || verification.provider_order_id || sourceOfTruth.gateway_txn_id || verification.gateway_txn_id || null,
+        provider_reference_id: sourceOfTruth.provider_reference_id || verification.provider_reference_id || sourceOfTruth.provider_transaction_id || verification.provider_transaction_id || sourceOfTruth.gateway_txn_id || verification.gateway_txn_id || null,
+      } as any,
+    }).catch(async (error: any) => {
+      if (String(error?.message || error).includes("Unique")) {
+        await paymentOperationalAnomalyService.create({
+          anomalyType: "DUPLICATE_PROVIDER_REFERENCE",
+          severity: "HIGH",
+          paymentDomain: (attempt as any).payment_domain,
+          flowType: (attempt as any).flow_type,
+          paymentAttemptId: attempt.id,
+          webhookEventId: context?.webhookEventId || null,
+          operationalOwnerId: attempt.owner_id,
+          financialOwnerId: attempt.owner_id,
+          hostelId: attempt.hostel_id,
+          metadata: { provider: providerStr },
+        });
+      }
+    });
 
     if (finalStatus === "SUCCESS") {
       const expectedPaise = Math.round(Number(attempt.amount) * 100);
@@ -1838,16 +2262,22 @@ export class PaymentService {
       status: verification.status,
     });
     
-    incrementWebhook(true);
-    incrementPayment("success");
-    
-    return await this.finalizePaymentAttempt(
+    const result = await this.finalizePaymentAttempt(
       attempt.id,
       finalStatus,
       sourceOfTruth.gateway_txn_id || verification.gateway_txn_id || undefined,
       verification.raw_event,
       context
     );
+    incrementWebhook(true);
+    if (result?.status === "SUCCESS") incrementPayment("success");
+    if (context?.webhookEventId) {
+      await paymentWebhookEventService.markProcessed(context.webhookEventId, {
+        attempt_id: attempt.id,
+        final_status: result?.status || finalStatus,
+      }).catch(() => {});
+    }
+    return result;
   }
 
   async verifyPaymentStatus(params: {
@@ -1868,8 +2298,13 @@ export class PaymentService {
       where: {
         OR: [
           ...(attemptId ? [{ id: attemptId }] : []),
-          ...(merchantTxnId ? [{ merchant_txn_id: merchantTxnId }] : []),
-          ...(gatewayTxnId ? [{ gateway_txn_id: gatewayTxnId }] : []),
+          ...(merchantTxnId ? [{ merchant_txn_id: merchantTxnId }, { merchant_transaction_id: merchantTxnId }] : []),
+          ...(gatewayTxnId ? [
+            { gateway_txn_id: gatewayTxnId },
+            { provider_transaction_id: gatewayTxnId },
+            { provider_order_id: gatewayTxnId },
+            { provider_reference_id: gatewayTxnId },
+          ] : []),
         ]
       }
     });
@@ -1929,7 +2364,22 @@ export class PaymentService {
     let fetched;
 
     try {
-      fetched = await instance.fetchStatus(attempt.merchant_txn_id, gatewayTxnId || attempt.gateway_txn_id || undefined);
+      fetched = await instance.fetchStatus(
+        (attempt as any).merchant_transaction_id || attempt.merchant_txn_id,
+        gatewayTxnId || (attempt as any).provider_order_id || attempt.gateway_txn_id || undefined
+      );
+      await paymentProviderVerificationSnapshotService.record({
+        provider: attempt.provider,
+        source: "VERIFY",
+        attempt,
+        providerTransactionId: fetched.provider_transaction_id || null,
+        providerOrderId: fetched.provider_order_id || fetched.gateway_txn_id || null,
+        providerReferenceId: fetched.provider_reference_id || null,
+        providerStatus: (fetched as any).provider_status || fetched.status,
+        normalizedStatus: fetched.status,
+        amount: (fetched as any).amount ?? null,
+        rawResponse: fetched.raw_status,
+      });
     } catch (error) {
       logger.error("payments.verify.fetch_status_failed", {
         attemptId: attempt.id,
@@ -1962,7 +2412,7 @@ export class PaymentService {
     const finalized = await this.finalizePaymentAttempt(
       attempt.id,
       fetched.status,
-      fetched.gateway_txn_id || undefined,
+      fetched.provider_transaction_id || fetched.gateway_txn_id || undefined,
       { source: "verify", payload: fetched.raw_status }
     );
 
@@ -2312,17 +2762,45 @@ export class PaymentService {
 
   async reconcilePendingAttempts(options?: {
     ownerId?: string;
+    hostelId?: MaybeHostelId;
+    paymentDomain?: string;
     attemptIds?: string[];
   }) {
     const now = new Date();
     const ownerFilter = options?.ownerId ? { owner_id: options.ownerId } : {};
+    const hostelFilter = options?.hostelId ? { hostel_id: options.hostelId } : {};
+    const domainFilter = options?.paymentDomain ? { payment_domain: options.paymentDomain } : {};
     const idFilter = options?.attemptIds?.length
       ? { OR: [
           { id: { in: options.attemptIds } },
           { merchant_txn_id: { in: options.attemptIds } },
+          { merchant_transaction_id: { in: options.attemptIds } },
           { gateway_txn_id: { in: options.attemptIds } },
+          { provider_transaction_id: { in: options.attemptIds } },
+          { provider_order_id: { in: options.attemptIds } },
+          { provider_reference_id: { in: options.attemptIds } },
         ] }
       : {};
+    const run = await (prisma as any).paymentReconciliationRun.create({
+      data: {
+        payment_domain: options?.paymentDomain || (options?.hostelId ? PAYMENT_DOMAIN.RENT_COLLECTION : PAYMENT_DOMAIN.PLATFORM_BILLING),
+        scope_type: options?.hostelId ? PAYMENT_SCOPE.HOSTEL : PAYMENT_SCOPE.OWNER,
+        operational_owner_id: options?.ownerId || null,
+        financial_owner_id: options?.ownerId || null,
+        hostel_id: options?.hostelId || null,
+      },
+    });
+    const createItem = async (data: any) => {
+      await (prisma as any).paymentReconciliationItem.create({
+        data: {
+          reconciliation_run_id: run.id,
+          operational_owner_id: options?.ownerId || data.operational_owner_id || null,
+          financial_owner_id: options?.ownerId || data.financial_owner_id || null,
+          hostel_id: options?.hostelId || data.hostel_id || null,
+          ...data,
+        },
+      }).catch((error: any) => logger.warn("payments.reconcile.item_failed", { run_id: run.id, error: String(error) }));
+    };
 
     // ── Pass 0: Release stale PROCESSING / PENDING_VERIFICATION locks ──────────
     // If a server crashed while holding PROCESSING (or while PENDING_VERIFICATION
@@ -2339,13 +2817,33 @@ export class PaymentService {
     //     (the payment TX never committed; normal reconciliation will retry)
     const staleLockCutoff = new Date(now.getTime() - 5 * 60 * 1000);
 
-    const stalePendingVerificationResult = await prisma.paymentAttempt.updateMany({
-      where: { status: "PENDING_VERIFICATION", updated_at: { lt: staleLockCutoff }, ...ownerFilter, ...idFilter },
-      data: { status: "PENDING" },
+    const stalePendingVerificationList = await prisma.paymentAttempt.findMany({
+      where: { status: "PENDING_VERIFICATION", updated_at: { lt: staleLockCutoff }, ...ownerFilter, ...hostelFilter, ...domainFilter, ...idFilter },
     });
+    let stalePendingVerificationReset = 0;
+    for (const stale of stalePendingVerificationList) {
+      await this.updateAttemptStatusOutsideTx({
+        attemptId: stale.id,
+        fromStatus: "PENDING_VERIFICATION",
+        toStatus: "PENDING",
+        source: "RECONCILE",
+        reason: "stale provider verification lock reset",
+        operationalOwnerId: stale.owner_id,
+        financialOwnerId: stale.owner_id,
+        hostelId: stale.hostel_id,
+      }).then(() => { stalePendingVerificationReset++; }).catch(() => {});
+      await createItem({
+        payment_attempt_id: stale.id,
+        anomaly_type: "STALE_PENDING_VERIFICATION",
+        severity: "MEDIUM",
+        action: "RESET_TO_PENDING",
+        result: "REPAIRED",
+        metadata: { merchant_transaction_id: (stale as any).merchant_transaction_id || stale.merchant_txn_id },
+      });
+    }
 
     const staleProcessingList = await prisma.paymentAttempt.findMany({
-      where: { status: "PROCESSING", updated_at: { lt: staleLockCutoff }, ...ownerFilter, ...idFilter },
+      where: { status: "PROCESSING", updated_at: { lt: staleLockCutoff }, ...ownerFilter, ...hostelFilter, ...domainFilter, ...idFilter },
       include: { payments: { select: { id: true } } },
     });
 
@@ -2353,15 +2851,36 @@ export class PaymentService {
     let staleProcessingReset = 0;
     for (const stale of staleProcessingList) {
       if ((stale as any).payments.length > 0) {
-        await prisma.paymentAttempt.update({ where: { id: stale.id }, data: { status: "SUCCESS" } }).catch(() => {});
+        await this.updateAttemptStatusOutsideTx({
+          attemptId: stale.id,
+          fromStatus: "PROCESSING",
+          toStatus: "SUCCESS",
+          source: "RECONCILE",
+          reason: "stale processing recovered because ledger exists",
+          operationalOwnerId: stale.owner_id,
+          financialOwnerId: stale.owner_id,
+          hostelId: stale.hostel_id,
+          data: { settlement_status: SETTLEMENT_STATUS.SETTLED, settled_at: new Date() },
+        }).catch(() => {});
         staleProcessingRecovered++;
+        await createItem({ payment_attempt_id: stale.id, anomaly_type: "STALE_PROCESSING", severity: "HIGH", action: "MARK_SUCCESS_WITH_EXISTING_LEDGER", result: "REPAIRED" });
         logger.warn("payments.reconcile.stale_processing_recovered", {
           attempt_id: stale.id, merchant_txn_id: stale.merchant_txn_id,
           payment_count: (stale as any).payments.length,
         });
       } else {
-        await prisma.paymentAttempt.update({ where: { id: stale.id }, data: { status: "PENDING" } }).catch(() => {});
+        await this.updateAttemptStatusOutsideTx({
+          attemptId: stale.id,
+          fromStatus: "PROCESSING",
+          toStatus: "PENDING",
+          source: "RECONCILE",
+          reason: "stale processing without ledger reset",
+          operationalOwnerId: stale.owner_id,
+          financialOwnerId: stale.owner_id,
+          hostelId: stale.hostel_id,
+        }).catch(() => {});
         staleProcessingReset++;
+        await createItem({ payment_attempt_id: stale.id, anomaly_type: "STALE_PROCESSING", severity: "MEDIUM", action: "RESET_TO_PENDING", result: "REPAIRED" });
         logger.warn("payments.reconcile.stale_processing_reset", {
           attempt_id: stale.id, merchant_txn_id: stale.merchant_txn_id,
         });
@@ -2369,7 +2888,7 @@ export class PaymentService {
     }
 
     logger.info("payments.reconcile.stale_lock_sweep", {
-      pending_verification_reset: stalePendingVerificationResult.count,
+      pending_verification_reset: stalePendingVerificationReset,
       processing_recovered: staleProcessingRecovered,
       processing_reset: staleProcessingReset,
     });
@@ -2378,23 +2897,91 @@ export class PaymentService {
     // CREATED = PaymentAttempt was inserted but gateway call never returned / crashed.
     // 10-minute grace window; anything older is a ghost attempt.
     const staleCreatedCutoff = new Date(now.getTime() - 10 * 60 * 1000);
-    const staleCreatedResult = await prisma.paymentAttempt.updateMany({
-      where: { status: "CREATED", created_at: { lt: staleCreatedCutoff }, ...ownerFilter, ...idFilter },
-      data: { status: "EXPIRED" },
+    const staleCreatedList = await prisma.paymentAttempt.findMany({
+      where: { status: "CREATED", created_at: { lt: staleCreatedCutoff }, ...ownerFilter, ...hostelFilter, ...domainFilter, ...idFilter },
     });
+    let staleCreatedExpired = 0;
+    for (const stale of staleCreatedList) {
+      await this.updateAttemptStatusOutsideTx({
+        attemptId: stale.id,
+        fromStatus: "CREATED",
+        toStatus: "EXPIRED",
+        source: "RECONCILE",
+        reason: "stale created attempt expired",
+        operationalOwnerId: stale.owner_id,
+        financialOwnerId: stale.owner_id,
+        hostelId: stale.hostel_id,
+        data: { settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE },
+      }).then(() => { staleCreatedExpired++; }).catch(() => {});
+      await createItem({ payment_attempt_id: stale.id, anomaly_type: "STALE_CREATED", severity: "LOW", action: "EXPIRE", result: "REPAIRED" });
+    }
 
     // ── Pass 2: Auto-expire PENDING attempts past their expires_at ──
     // These are gateway-issued expiry times. Proactively mark EXPIRED without
     // hitting the provider API — the gateway already considers them invalid.
-    const autoExpireResult = await prisma.paymentAttempt.updateMany({
-      where: { status: "PENDING", expires_at: { lt: now }, ...ownerFilter, ...idFilter },
-      data: { status: "EXPIRED" },
+    const autoExpireList = await prisma.paymentAttempt.findMany({
+      where: { status: "PENDING", expires_at: { lt: now }, ...ownerFilter, ...hostelFilter, ...domainFilter, ...idFilter },
     });
+    let autoExpired = 0;
+    for (const stale of autoExpireList) {
+      await this.updateAttemptStatusOutsideTx({
+        attemptId: stale.id,
+        fromStatus: "PENDING",
+        toStatus: "EXPIRED",
+        source: "RECONCILE",
+        reason: "attempt expired by gateway expiry",
+        operationalOwnerId: stale.owner_id,
+        financialOwnerId: stale.owner_id,
+        hostelId: stale.hostel_id,
+        data: { settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE },
+      }).then(() => { autoExpired++; }).catch(() => {});
+      await createItem({ payment_attempt_id: stale.id, anomaly_type: "STALE_PENDING", severity: "LOW", action: "EXPIRE", result: "REPAIRED" });
+    }
 
     logger.info("payments.reconcile.sweep", {
-      stale_created_expired: staleCreatedResult.count,
-      auto_expired_by_expiry: autoExpireResult.count,
+      stale_created_expired: staleCreatedExpired,
+      auto_expired_by_expiry: autoExpired,
     });
+
+    const orphanSuccessList = await prisma.paymentAttempt.findMany({
+      where: {
+        status: "SUCCESS",
+        payment_type: { notIn: ["ADDON", "ADVANCE"] },
+        invoice_id: null,
+        ...ownerFilter,
+        ...hostelFilter,
+        ...domainFilter,
+        ...idFilter,
+      },
+      include: { payments: { select: { id: true } } },
+    });
+    let orphanSuccess = 0;
+    for (const orphan of orphanSuccessList) {
+      if ((orphan as any).payments.length > 0) continue;
+      orphanSuccess++;
+      await paymentOperationalAnomalyService.create({
+        anomalyType: "ORPHAN_SUCCESS",
+        severity: "CRITICAL",
+        paymentDomain: (orphan as any).payment_domain || PAYMENT_DOMAIN.RENT_COLLECTION,
+        flowType: (orphan as any).flow_type || PAYMENT_FLOW.RENT,
+        paymentAttemptId: orphan.id,
+        reconciliationRunId: run.id,
+        operationalOwnerId: orphan.owner_id,
+        financialOwnerId: orphan.owner_id,
+        hostelId: orphan.hostel_id,
+        metadata: { merchant_transaction_id: (orphan as any).merchant_transaction_id || orphan.merchant_txn_id },
+      });
+      await createItem({
+        payment_attempt_id: orphan.id,
+        anomaly_type: "ORPHAN_SUCCESS",
+        severity: "CRITICAL",
+        action: "DETECT_ONLY",
+        result: "MANUAL_REVIEW_REQUIRED",
+        operational_owner_id: orphan.owner_id,
+        financial_owner_id: orphan.owner_id,
+        hostel_id: orphan.hostel_id,
+      });
+    }
 
     // ── Pass 3: Query provider for remaining PENDING attempts (48h window) ──
     // 48h instead of 24h to catch delayed webhook delivery on flaky connections.
@@ -2413,6 +3000,8 @@ export class PaymentService {
         status: "PENDING",
         created_at: { gte: pendingCutoff, lt: backoffFloor },
         ...ownerFilter,
+        ...hostelFilter,
+        ...domainFilter,
         ...idFilter,
       }
     });
@@ -2424,24 +3013,42 @@ export class PaymentService {
     let cancelled = 0;
     let errors = 0;
 
-    // Cache provider instances keyed by owner_id to avoid N identical DB reads
-    // for owners with multiple pending attempts.
+    // Cache provider instances by owner + hostel + provider so multi-hostel owners
+    // cannot reconcile one hostel through another hostel's merchant context.
     const providerCache = new Map<string, any>();
 
     for (const attempt of pending) {
       try {
-        let instance = providerCache.get(attempt.owner_id);
+        const attemptHostelId = attempt.payment_type === "ADDON" || attempt.invoice_id
+          ? null
+          : requireFinancialHostelId(attempt.hostel_id, "payment reconciliation");
+        const cacheKey = [attempt.owner_id, attemptHostelId || "platform", attempt.provider].join(":");
+        let instance = providerCache.get(cacheKey);
         if (!instance) {
-          const pi = await this.getProviderInstance(
-            attempt.owner_id,
-            attempt.provider,
-            requireFinancialHostelId(attempt.hostel_id, "payment reconciliation"),
-          );
+          const pi = attemptHostelId
+            ? await this.getProviderInstance(attempt.owner_id, attempt.provider, attemptHostelId)
+            : { instance: PaymentProviderFactory.getProvider(attempt.provider, this.getOwnerLevelProviderConfig()) };
           instance = pi.instance;
-          providerCache.set(attempt.owner_id, instance);
+          providerCache.set(cacheKey, instance);
         }
 
-        const fetched = await instance.fetchStatus(attempt.merchant_txn_id, attempt.gateway_txn_id || undefined);
+        const fetched = await instance.fetchStatus(
+          (attempt as any).merchant_transaction_id || attempt.merchant_txn_id,
+          (attempt as any).provider_order_id || attempt.gateway_txn_id || undefined
+        );
+        await paymentProviderVerificationSnapshotService.record({
+          provider: attempt.provider,
+          source: "RECONCILE",
+          attempt,
+          reconciliationRunId: run.id,
+          providerTransactionId: fetched.provider_transaction_id || null,
+          providerOrderId: fetched.provider_order_id || fetched.gateway_txn_id || null,
+          providerReferenceId: fetched.provider_reference_id || null,
+          providerStatus: (fetched as any).provider_status || fetched.status,
+          normalizedStatus: fetched.status,
+          amount: (fetched as any).amount ?? null,
+          rawResponse: fetched.raw_status,
+        });
 
         // If the provider still says PENDING but expires_at has now passed
         // (may have just crossed the boundary during this reconcile run)
@@ -2453,7 +3060,7 @@ export class PaymentService {
         const finalized = await this.finalizePaymentAttempt(
           attempt.id,
           nextStatus,
-          fetched.gateway_txn_id || undefined,
+          fetched.provider_transaction_id || fetched.gateway_txn_id || undefined,
           { source: "reconcile", payload: fetched.raw_status }
         );
 
@@ -2474,13 +3081,14 @@ export class PaymentService {
       }
     }
 
-    return {
+    const summary = {
       processed: pending.length,
-      stale_pending_verification_reset: stalePendingVerificationResult.count,
+      stale_pending_verification_reset: stalePendingVerificationReset,
       stale_processing_recovered: staleProcessingRecovered,
       stale_processing_reset: staleProcessingReset,
-      stale_created_expired: staleCreatedResult.count,
-      auto_expired: autoExpireResult.count,
+      stale_created_expired: staleCreatedExpired,
+      auto_expired: autoExpired,
+      orphan_success: orphanSuccess,
       success,
       failed,
       pending: pendingCount,
@@ -2488,6 +3096,11 @@ export class PaymentService {
       cancelled,
       errors,
     };
+    await (prisma as any).paymentReconciliationRun.update({
+      where: { id: run.id },
+      data: { status: "COMPLETED", completed_at: new Date(), summary: summary as any },
+    }).catch(() => {});
+    return summary;
   }
 }
 

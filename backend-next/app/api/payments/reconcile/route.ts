@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { paymentService } from "@/lib/services/payment-service";
 import { authService } from "@/lib/services/auth-service";
 import { apiError } from "@/lib/utils/api-utils";
+import { prisma } from "@/lib/db";
 
 export async function POST(req: Request) {
   try {
@@ -17,12 +18,32 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json().catch(() => ({} as any));
+    const hostelId = typeof body?.hostelId === "string" ? body.hostelId : undefined;
+    const domain = typeof body?.paymentDomain === "string" ? body.paymentDomain : undefined;
     const ids = Array.isArray(body?.payment_ids)
       ? body.payment_ids.filter((v: any) => typeof v === "string" && v.trim().length > 0)
       : [];
 
+    if (user.role === "OWNER") {
+      if (!hostelId) {
+        return apiError("hostelId is required for owner reconciliation", "BAD_REQUEST", 400);
+      }
+      const hostel = await prisma.hostel.findUnique({
+        where: { id: hostelId },
+        select: { id: true, owner_id: true },
+      });
+      if (!hostel || hostel.owner_id !== user.id) {
+        return apiError("Hostel not found or access denied", "FORBIDDEN", 403);
+      }
+    }
+    if (user.role === "ADMIN" && !domain) {
+      return apiError("paymentDomain is required for admin reconciliation", "BAD_REQUEST", 400);
+    }
+
     const result = await paymentService.reconcilePendingAttempts({
       ownerId: user.role === "OWNER" ? user.id : undefined,
+      hostelId: hostelId || null,
+      paymentDomain: domain,
       attemptIds: ids,
     });
 

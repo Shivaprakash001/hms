@@ -61,6 +61,24 @@ const checks: Array<{
     ],
   },
   {
+    name: "settled Payment ledger rows must not be mutated by operational code",
+    roots: ["lib/services", "app/api"],
+    pattern: /prisma\.payment\.(update|updateMany|upsert|delete|deleteMany)\b|tx\.payment\.(update|updateMany|upsert|delete|deleteMany)\b/,
+    allow: [
+      /architectural-invariants-check\.ts$/,
+    ],
+  },
+  {
+    name: "payment attempt status changes must use transition helper",
+    roots: ["lib/services", "app/api/payments", "app/api/addons", "app/api/billing", "app/api/webhooks"],
+    pattern: /paymentAttempt\.(update|updateMany)\([\s\S]{0,450}status\s*:/,
+    allow: [
+      /payment-service\.ts$/,
+      /payment-status-event-service\.ts$/,
+      /submit-reference\/route\.ts$/,
+    ],
+  },
+  {
     name: "portfolio-service must not query raw transactional tables (payments, rent_obligations, tenants)",
     roots: ["lib/services/portfolio-service.ts"],
     pattern: /prisma\.(payment|rentObligation|tenant)\.(findMany|findFirst|groupBy|aggregate|count)\b(?![\s\S]{0,10}hostel)/,

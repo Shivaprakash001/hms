@@ -5,6 +5,7 @@ export const maxDuration = 30; // Puppeteer needs more time than default
 import { NextResponse } from "next/server";
 import { receiptService } from "@/lib/services/receipt-service";
 import { authService } from "@/lib/services/auth-service";
+import { prisma } from "@/lib/db";
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
@@ -14,6 +15,35 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     }
 
     const { id: paymentId } = params;
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+      select: {
+        id: true,
+        owner_id: true,
+        tenant_id: true,
+        hostel_id: true,
+        tenant: { select: { profile_id: true, owner_id: true } },
+      },
+    });
+    if (!payment) {
+      return new NextResponse(JSON.stringify({ error: "Payment not found" }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (user.role === "TENANT") {
+      if (payment.tenant?.profile_id !== user.id) {
+        return new NextResponse(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+      }
+    } else if (user.role === "OWNER") {
+      if (payment.owner_id !== user.id && payment.tenant?.owner_id !== user.id) {
+        return new NextResponse(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+      }
+      const hostel = await prisma.hostel.findUnique({ where: { id: payment.hostel_id }, select: { owner_id: true } });
+      if (!hostel || hostel.owner_id !== user.id) {
+        return new NextResponse(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+      }
+    } else if (user.role !== "ADMIN") {
+      return new NextResponse(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+    }
 
     // Owners/admins may auto-generate new receipts (plan-gated in service).
     // Tenants can only fetch already-created receipts.

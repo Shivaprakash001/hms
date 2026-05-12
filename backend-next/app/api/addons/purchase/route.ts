@@ -7,6 +7,9 @@ import { prisma } from "@/lib/db";
 import { PaymentProviderFactory } from "@/lib/services/payments/provider-factory";
 import { getLogger } from "@/lib/logger";
 import { eventLog } from "@/lib/services/event-log-service";
+import { paymentStatusEventService } from "@/lib/services/payment-status-event-service";
+import { getProviderContext } from "@/lib/services/payments/merchant-context";
+import { PAYMENT_DOMAIN, PAYMENT_FLOW, PAYMENT_SCOPE, MERCHANT_CONTEXT, SETTLEMENT_STATUS } from "@/lib/services/payments/financial-domain";
 import crypto from "crypto";
 
 const logger = getLogger("addons.purchase");
@@ -44,8 +47,15 @@ export async function POST(req: NextRequest) {
 
     const packDef = ADDON_PACKS[pack];
 
-    // Get provider config (PhonePe credentials from env)
-    const config = await getProviderConfig(user.sub);
+    // Platform add-ons are HMS revenue and must use HMS platform merchant context.
+    const providerContext = await getProviderContext({
+      paymentDomain: PAYMENT_DOMAIN.PLATFORM_BILLING,
+      flowType: PAYMENT_FLOW.ADDON,
+      operationalOwnerId: user.sub,
+      financialOwnerId: null,
+      scopeType: PAYMENT_SCOPE.PLATFORM,
+    });
+    const config = providerContext.config;
     const provider = "PHONEPE";
     const instance = PaymentProviderFactory.getProvider(provider, config);
 
@@ -62,12 +72,31 @@ export async function POST(req: NextRequest) {
         owner_id: user.sub,
         provider,
         merchant_txn_id: merchantTxnId,
+        merchant_transaction_id: merchantTxnId,
         amount: packDef.amount,
         status: "CREATED",
         payment_type: "ADDON",
         addon_pack: pack,
+        payment_domain: PAYMENT_DOMAIN.PLATFORM_BILLING,
+        scope_type: PAYMENT_SCOPE.PLATFORM,
+        flow_type: PAYMENT_FLOW.ADDON,
+        merchant_context_type: MERCHANT_CONTEXT.HMS_PLATFORM,
+        merchant_context_id: providerContext.merchant_context_id,
+        settlement_status: SETTLEMENT_STATUS.NOT_SETTLED,
       },
     });
+    await paymentStatusEventService.appendOutsideTransaction({
+      attemptId: attempt.id,
+      fromStatus: null,
+      toStatus: "CREATED",
+      source: "CREATE_INTENT",
+      reason: "platform addon attempt created",
+      actorId: user.sub,
+      operationalOwnerId: user.sub,
+      financialOwnerId: null,
+      hostelId: null,
+      metadata: { paymentDomain: PAYMENT_DOMAIN.PLATFORM_BILLING, flowType: PAYMENT_FLOW.ADDON, pack },
+    }).catch(() => {});
 
     logger.info("addons.purchase.intent_start", {
       owner_id: user.sub,
@@ -91,11 +120,21 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    const updated = await prisma.paymentAttempt.update({
-      where: { id: attempt.id },
+    const updated = await paymentStatusEventService.updateAttemptStatusOutsideTransaction({
+      attemptId: attempt.id,
+      fromStatus: "CREATED",
+      toStatus: "PENDING",
+      source: "CREATE_INTENT",
+      reason: "platform addon checkout created",
+      actorId: user.sub,
+      operationalOwnerId: user.sub,
+      financialOwnerId: null,
+      hostelId: null,
       data: {
-        status: "PENDING",
         gateway_txn_id: result.gateway_txn_id,
+        provider_order_id: result.provider_order_id || result.gateway_txn_id || null,
+        provider_transaction_id: result.provider_transaction_id || null,
+        provider_reference_id: result.provider_reference_id || result.provider_order_id || result.gateway_txn_id || null,
         checkout_url: result.checkout_url,
         expires_at: result.expires_at,
         raw_create_response: result.raw_response as any,
@@ -128,20 +167,4 @@ export async function POST(req: NextRequest) {
     logger.error("addons.purchase.failed", { error: err?.message });
     return NextResponse.json({ error: "INTERNAL_ERROR", message: err?.message }, { status: 500 });
   }
-}
-
-async function getProviderConfig(ownerId: string) {
-  const hostel = await prisma.hostel.findFirst({
-    where: { owner_id: ownerId, is_active: true },
-    select: { upi_id: true },
-  });
-
-  return {
-    merchantId: process.env.PHONEPE_MERCHANT_ID!,
-    saltKey: process.env.PHONEPE_SALT_KEY!,
-    saltIndex: process.env.PHONEPE_SALT_INDEX!,
-    environment: (process.env.PHONEPE_ENV as "SANDBOX" | "PRODUCTION") || "SANDBOX",
-    callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL || ""}/api/webhooks/payments/phonepe`,
-    upiId: hostel?.upi_id || undefined,
-  };
 }

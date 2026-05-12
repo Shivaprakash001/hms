@@ -7,6 +7,9 @@ import { prisma } from "@/lib/db";
 import { getLogger } from "@/lib/logger";
 import { PaymentProviderFactory } from "@/lib/services/payments/provider-factory";
 import { eventLog } from "@/lib/services/event-log-service";
+import { paymentStatusEventService } from "@/lib/services/payment-status-event-service";
+import { PAYMENT_DOMAIN, PAYMENT_FLOW, PAYMENT_SCOPE, MERCHANT_CONTEXT, SETTLEMENT_STATUS } from "@/lib/services/payments/financial-domain";
+import { getProviderContext } from "@/lib/services/payments/merchant-context";
 import crypto from "crypto";
 
 const logger = getLogger("billing.upgrade");
@@ -73,20 +76,14 @@ export async function POST(req: NextRequest) {
       return apiError("Session expired. Please log in again.", "UNAUTHORIZED", 401);
     }
 
-    // 4. Validate payment provider config BEFORE creating any DB records
-    // (prevents orphaned PENDING invoices when UPI is missing)
-    const hostel = await prisma.hostel.findFirst({
-      where: { owner_id: session.sub },
-      select: { id: true, name: true, upi_id: true }
+    // 4. Platform billing uses HMS merchant credentials, never hostel UPI context.
+    const providerContext = await getProviderContext({
+      paymentDomain: PAYMENT_DOMAIN.PLATFORM_BILLING,
+      flowType: PAYMENT_FLOW.SUBSCRIPTION,
+      operationalOwnerId: session.sub,
+      financialOwnerId: null,
+      scopeType: PAYMENT_SCOPE.PLATFORM,
     });
-
-    if (!hostel?.upi_id) {
-      return apiError(
-        "Payment configuration missing. Please set your UPI ID in hostel settings.",
-        "CONFIG_ERROR",
-        400
-      );
-    }
 
     // 5. Create invoice (PENDING)
     // price_inr stores the value in PAISE (same unit as old price_paise column).
@@ -112,11 +109,7 @@ export async function POST(req: NextRequest) {
     });
 
     const provider = "PHONEPE";
-    const config = {
-      owner_upi_id: hostel.upi_id,
-      owner_name: hostel.name || owner.name,
-      hostel_id: hostel.id
-    };
+    const config = providerContext.config;
 
     // 6. Create payment attempt (invoice_id, NO obligation_id, NO tenant_id)
     // Billing attempts have no associated tenant — tenant_id is nullable for this case.
@@ -131,10 +124,29 @@ export async function POST(req: NextRequest) {
         owner_id: session.sub,
         provider: provider,
         merchant_txn_id: merchantTxnId,
+        merchant_transaction_id: merchantTxnId,
+        payment_domain: PAYMENT_DOMAIN.PLATFORM_BILLING,
+        scope_type: PAYMENT_SCOPE.PLATFORM,
+        flow_type: PAYMENT_FLOW.SUBSCRIPTION,
+        merchant_context_type: MERCHANT_CONTEXT.HMS_PLATFORM,
+        merchant_context_id: providerContext.merchant_context_id,
+        settlement_status: SETTLEMENT_STATUS.NOT_SETTLED,
         amount: amountRupees,
         status: "CREATED"
       }
     });
+    await paymentStatusEventService.appendOutsideTransaction({
+      attemptId: attempt.id,
+      fromStatus: null,
+      toStatus: "CREATED",
+      source: "CREATE_INTENT",
+      reason: "platform billing subscription attempt created",
+      actorId: session.sub,
+      operationalOwnerId: session.sub,
+      financialOwnerId: null,
+      hostelId: null,
+      metadata: { paymentDomain: PAYMENT_DOMAIN.PLATFORM_BILLING, flowType: PAYMENT_FLOW.SUBSCRIPTION },
+    }).catch(() => {});
 
     // 7. Create PhonePe payment intent
     const providerInstance = PaymentProviderFactory.getProvider(provider, config);
@@ -155,11 +167,21 @@ export async function POST(req: NextRequest) {
       });
 
       // 8. Update attempt with checkout URL
-      const updatedAttempt = await prisma.paymentAttempt.update({
-        where: { id: attempt.id },
+      const updatedAttempt = await paymentStatusEventService.updateAttemptStatusOutsideTransaction({
+        attemptId: attempt.id,
+        fromStatus: "CREATED",
+        toStatus: "PENDING",
+        source: "CREATE_INTENT",
+        reason: "platform billing checkout created",
+        actorId: session.sub,
+        operationalOwnerId: session.sub,
+        financialOwnerId: null,
+        hostelId: null,
         data: {
-          status: "PENDING",
           gateway_txn_id: result.gateway_txn_id,
+          provider_order_id: result.provider_order_id || result.gateway_txn_id || null,
+          provider_transaction_id: result.provider_transaction_id || null,
+          provider_reference_id: result.provider_reference_id || result.provider_order_id || result.gateway_txn_id || null,
           checkout_url: result.checkout_url,
           upi_intent_url: result.upi_intent_url,
           qr_payload: result.qr_payload,
@@ -200,10 +222,18 @@ export async function POST(req: NextRequest) {
 
     } catch (error: any) {
       // Payment provider failed — mark attempt FAILED
-      await prisma.paymentAttempt.update({
-        where: { id: attempt.id },
-        data: { status: "FAILED", raw_create_response: { error: String(error) } as any }
-      });
+      await paymentStatusEventService.updateAttemptStatusOutsideTransaction({
+        attemptId: attempt.id,
+        fromStatus: "CREATED",
+        toStatus: "FAILED",
+        source: "CREATE_INTENT",
+        reason: "platform billing provider create failed",
+        actorId: session.sub,
+        operationalOwnerId: session.sub,
+        financialOwnerId: null,
+        hostelId: null,
+        data: { settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE, raw_create_response: { error: String(error) } as any },
+      }).catch(() => {});
 
       logger.error("billing.upgrade.intent_failed", {
         request_id: requestId,

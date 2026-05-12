@@ -168,10 +168,8 @@ export class PhonePeProvider extends PaymentProvider {
       merchantOrderId: data.merchant_txn_id,
       amount: data.amount,
       amountInPaise,
-      redirectUrl,
       url,
     });
-    console.info("[PhonePe] Full request payload:", JSON.stringify(payload));
 
     const response = await fetch(url, {
       method: "POST",
@@ -190,7 +188,11 @@ export class PhonePeProvider extends PaymentProvider {
       throw new Error(`PhonePe order creation failed: ${responseData.message || response.statusText}`);
     }
 
-    console.info("[PhonePe] Raw response:", JSON.stringify(responseData));
+    console.info("[PhonePe] Create order response received:", {
+      merchantOrderId: data.merchant_txn_id,
+      orderId: responseData?.orderId || responseData?.data?.orderId || null,
+      hasRedirectUrl: Boolean(responseData?.data?.instrumentResponse?.redirectInfo?.url || responseData?.redirectUrl),
+    });
 
     // Extract checkout URL. PAY_PAGE returns it nested inside instrumentResponse (v1-style);
     // some v2 sandbox builds surface it at the top level as redirectUrl.
@@ -224,6 +226,9 @@ export class PhonePeProvider extends PaymentProvider {
       qr_payload: null,
       expires_at: new Date(Date.now() + 30 * 60 * 1000),
       gateway_txn_id: orderId,
+      provider_order_id: orderId,
+      provider_transaction_id: null,
+      provider_reference_id: orderId,
       raw_response: responseData,
     };
   }
@@ -282,6 +287,8 @@ export class PhonePeProvider extends PaymentProvider {
       if (!isValid) {
         throw new Error("Invalid webhook authorization credentials");
       }
+    } else {
+      throw new Error("Invalid webhook authorization credentials");
     }
 
     // 2. Parse payload
@@ -314,11 +321,16 @@ export class PhonePeProvider extends PaymentProvider {
     // 4. Extract payment details
     const paymentDetail = payload.paymentDetails?.[0];
     const gatewayTxnId = paymentDetail?.transactionId || payload.orderId || null;
+    const providerOrderId = payload.orderId || null;
+    const providerTxnId = paymentDetail?.transactionId || null;
     const amountInPaise = payload.amount || paymentDetail?.amount || 0;
 
     return {
       merchant_txn_id: payload.merchantOrderId,
       gateway_txn_id: gatewayTxnId,
+      provider_transaction_id: providerTxnId,
+      provider_order_id: providerOrderId,
+      provider_reference_id: providerTxnId || providerOrderId,
       status,
       amount: amountInPaise / 100,
       raw_event: parsed,
@@ -354,6 +366,9 @@ export class PhonePeProvider extends PaymentProvider {
     return {
       status,
       gateway_txn_id: responseData.orderId || responseData.payload?.orderId || gateway_txn_id || null,
+      provider_order_id: responseData.orderId || responseData.payload?.orderId || gateway_txn_id || null,
+      provider_transaction_id: responseData.transactionId || responseData.payload?.transactionId || null,
+      provider_reference_id: responseData.transactionId || responseData.payload?.transactionId || responseData.orderId || responseData.payload?.orderId || gateway_txn_id || null,
       raw_status: responseData,
     };
   }

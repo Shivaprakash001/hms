@@ -3,6 +3,8 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { paymentService } from "@/lib/services/payment-service";
+import { prisma } from "@/lib/db";
+import { PAYMENT_DOMAIN } from "@/lib/services/payments/financial-domain";
 
 export async function GET(req: NextRequest) {
   try {
@@ -14,8 +16,33 @@ export async function GET(req: NextRequest) {
 
     console.info("[cron.reconcile-payments] Starting reconciliation sweep...");
 
-    // Reconcile pending attempts from the last 24 hours
-    const result = await paymentService.reconcilePendingAttempts();
+    const platform = await paymentService.reconcilePendingAttempts({
+      paymentDomain: PAYMENT_DOMAIN.PLATFORM_BILLING,
+    });
+
+    const hostels = await prisma.hostel.findMany({
+      where: { is_active: true },
+      select: { id: true, owner_id: true },
+    });
+
+    const rentResults = [];
+    for (const hostel of hostels) {
+      rentResults.push({
+        hostel_id: hostel.id,
+        owner_id: hostel.owner_id,
+        result: await paymentService.reconcilePendingAttempts({
+          ownerId: hostel.owner_id,
+          hostelId: hostel.id,
+          paymentDomain: PAYMENT_DOMAIN.RENT_COLLECTION,
+        }),
+      });
+    }
+
+    const result = {
+      platform,
+      hostels_processed: rentResults.length,
+      rent: rentResults,
+    };
 
     console.info("[cron.reconcile-payments] Finished successfully.", result);
 

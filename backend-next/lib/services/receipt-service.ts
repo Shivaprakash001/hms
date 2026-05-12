@@ -111,10 +111,8 @@ export class ReceiptService {
     if (!payment) throw new Error("NOT_FOUND: Payment not found");
 
     const ownerId = payment.tenant.owner_id || payment.owner_id || "";
-    const canGenerateReceipts = await this.canOwnerGenerateReceipts(ownerId);
-    if (!canGenerateReceipts) {
-      throw new Error(`${PLAN_UPGRADE_REQUIRED_ERROR}: Upgrade to Growth plan to generate receipts`);
-    }
+    // Receipt rows are financial audit artifacts and must exist for every settled payment.
+    // Product/plan gating should apply to PDF/email delivery surfaces, not to ledger evidence.
     // Resolve hostel from the immutable payment scope.
     const { hostel, prefs } = await resolveHostelForPayment(payment);
     const paymentHostelId = payment.hostel_id;

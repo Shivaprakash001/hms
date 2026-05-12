@@ -6,12 +6,18 @@ export interface CreateIntentResult {
   qr_payload?: string | null;
   expires_at?: Date | null;
   gateway_txn_id?: string | null;
+  provider_transaction_id?: string | null;
+  provider_order_id?: string | null;
+  provider_reference_id?: string | null;
   raw_response: any;
 }
 
 export interface WebhookVerificationResult {
   merchant_txn_id: string;
   gateway_txn_id?: string | null;
+  provider_transaction_id?: string | null;
+  provider_order_id?: string | null;
+  provider_reference_id?: string | null;
   status: "SUCCESS" | "FAILED" | "PENDING" | "CANCELLED" | "EXPIRED";
   amount?: number | null;
   raw_event: any;
@@ -20,6 +26,9 @@ export interface WebhookVerificationResult {
 export interface FetchStatusResult {
   status: "SUCCESS" | "FAILED" | "PENDING" | "CANCELLED" | "EXPIRED";
   gateway_txn_id?: string | null;
+  provider_transaction_id?: string | null;
+  provider_order_id?: string | null;
+  provider_reference_id?: string | null;
   raw_status: any;
 }
 

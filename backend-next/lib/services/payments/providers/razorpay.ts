@@ -47,6 +47,9 @@ export class RazorpayProvider extends PaymentProvider {
       qr_payload: resData.upi_qr || resData.qr_code || upiLink,
       expires_at: new Date(expireBy * 1000),
       gateway_txn_id: resData.id,
+      provider_order_id: resData.id,
+      provider_transaction_id: null,
+      provider_reference_id: resData.id,
       raw_response: resData,
     };
   }
@@ -78,6 +81,9 @@ export class RazorpayProvider extends PaymentProvider {
     return {
       merchant_txn_id: link.reference_id || payment.notes?.merchant_txn_id,
       gateway_txn_id: payment.id || link.id,
+      provider_transaction_id: payment.id || null,
+      provider_order_id: link.id || null,
+      provider_reference_id: payment.id || link.id || null,
       status: statusMap[String(link.status || payment.status).toLowerCase()] || "PENDING",
       amount: (payment.amount || link.amount) / 100,
       raw_event: data,
@@ -99,6 +105,9 @@ export class RazorpayProvider extends PaymentProvider {
     return {
       status: statusMap[String(data.status).toLowerCase()] || "PENDING",
       gateway_txn_id: data.id,
+      provider_order_id: data.id,
+      provider_transaction_id: data.payments?.[0]?.payment_id || null,
+      provider_reference_id: data.payments?.[0]?.payment_id || data.id,
       raw_status: data,
     };
   }
