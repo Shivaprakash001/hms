@@ -66,11 +66,10 @@ const OnlinePaymentModal = ({ isOpen, onClose, obligation, onSettled }) => {
         setError('');
         try {
             const intent = await paymentService.createIntent({
-                obligation_id: obligation.obligationId,
-                amount,
+                obligation_ids: [obligation.obligationId],
             });
 
-            // ✅ If direct checkout URL is present, redirect immediately for better UX
+            // Redirect to hosted checkout when the provider returns a checkout URL.
             if (intent.checkout_url) {
                 localStorage.setItem('lastPaymentAttemptId', intent.id);
                 localStorage.setItem('lastPaymentMerchantTxnId', intent.merchant_txn_id);
