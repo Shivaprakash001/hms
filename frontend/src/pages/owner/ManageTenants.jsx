@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Plus, User, Phone, Home, CreditCard, Calendar, CheckCircle2, AlertCircle, X, Save, History, Trash2, RefreshCw, ToggleLeft, ToggleRight, XCircle, Clock } from 'lucide-react';
+import { Search, Plus, User, Phone, Home, CreditCard, Calendar, CheckCircle2, AlertCircle, X, Save, History, Trash2, RefreshCw, ToggleLeft, ToggleRight, XCircle, Clock, Upload } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
@@ -277,6 +277,13 @@ export default function ManageTenants() {
                             className="p-2.5 text-slate-500 hover:bg-slate-100 rounded-xl transition-colors"
                         >
                             <RefreshCw size={20} />
+                        </button>
+                        <button
+                            onClick={() => navigate('/owner/bulk-import')}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl font-semibold text-sm transition-all flex items-center gap-2 shadow-lg shadow-emerald-600/20 active:scale-95"
+                        >
+                            <Upload size={18} />
+                            Bulk Import
                         </button>
                         <button
                             onClick={() => setShowInviteModal(true)}

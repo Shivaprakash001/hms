@@ -39,6 +39,8 @@ const BillingPlans      = lazy(() => import('./pages/owner/BillingPlans.jsx'));
 const OwnerProfile      = lazy(() => import('./pages/owner/settings/OwnerSettings'));
 const Portfolio         = lazy(() => import('./pages/owner/Portfolio.jsx'));
 const TenantProfilePage = lazy(() => import('./pages/owner/TenantProfilePage.jsx'));
+const BulkImport        = lazy(() => import('./pages/owner/BulkImport.jsx'));
+const BulkImportConfirm = lazy(() => import('./pages/owner/BulkImportConfirm.jsx'));
 
 // ── Tenant pages — code-split per route ──────────────────────────────────────
 const TenantDashboard     = lazy(() => import('./pages/tenant/TenantDashboard.jsx'));
@@ -116,6 +118,8 @@ function App() {
                 <Route path="dashboard"  element={<OwnerDashboard />} />
                 <Route path="tenants"    element={<ManageTenants />} />
                 <Route path="tenants/:id" element={<TenantProfilePage />} />
+                <Route path="bulk-import" element={<BulkImport />} />
+                <Route path="bulk-import/:batchId/confirm" element={<BulkImportConfirm />} />
                 <Route path="rooms"      element={<ManageRooms />} />
                 <Route path="payments"   element={<Payments />} />
                 <Route path="expenses"   element={<Expenses />} />
