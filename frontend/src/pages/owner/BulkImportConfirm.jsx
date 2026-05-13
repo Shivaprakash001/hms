@@ -4,7 +4,7 @@ import { CheckCircle2, AlertTriangle, XCircle, Upload } from 'lucide-react';
 
 export default function BulkImportConfirm() {
     const navigate = useNavigate();
-    const { batchId } = useParams();
+    const { batchId, hostelId } = useParams();
     const [isImporting, setIsImporting] = useState(false);
     const [error, setError] = useState(null);
     const [importResult, setImportResult] = useState(null);
@@ -46,7 +46,7 @@ export default function BulkImportConfirm() {
     };
 
     const handleCancel = () => {
-        navigate('/owner/bulk-import');
+        navigate(`/hostels/${hostelId}/bulk-import`);
     };
 
     // Success Screen
@@ -126,13 +126,13 @@ export default function BulkImportConfirm() {
                     {/* Actions */}
                     <div className="flex gap-4">
                         <button
-                            onClick={() => navigate('/owner/tenants')}
+                            onClick={() => navigate(`/hostels/${hostelId}/tenants`)}
                             className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-3 px-6 rounded-xl font-bold shadow-lg shadow-indigo-600/20 transition-all active:scale-95"
                         >
                             View Imported Tenants
                         </button>
                         <button
-                            onClick={() => navigate('/owner/bulk-import')}
+                            onClick={() => navigate(`/hostels/${hostelId}/bulk-import`)}
                             className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 py-3 px-6 rounded-xl font-bold transition-all active:scale-95"
                         >
                             Import More Tenants

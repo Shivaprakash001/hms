@@ -66,7 +66,7 @@ export default function BulkImport() {
             }
 
             // Navigate to confirmation page
-            navigate(`/owner/bulk-import/${result.batch_id}/confirm`);
+            navigate(`/hostels/${hostelId}/bulk-import/${result.batch_id}/confirm`);
         } catch (err) {
             setError(err.message || 'Upload failed. Please try again.');
         } finally {
