@@ -210,14 +210,14 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, obligationIds = [
                             {/* Step 1: Initial — Create Intent */}
                             {step === 'init' && (
                                 <div className="space-y-4">
-                                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                                    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
                                         <div className="flex items-center gap-3">
-                                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-600 text-white">
+                                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-600 text-white">
                                                 <Smartphone size={20} />
                                             </div>
                                             <div>
-                                                <p className="font-bold text-slate-900">Secure PhonePe Checkout</p>
-                                                <p className="text-sm text-slate-500">You'll be redirected to PhonePe to complete this rent payment.</p>
+                                                <p className="font-bold text-slate-900">Online rent checkout paused</p>
+                                                <p className="text-sm text-amber-800">Rent payments must be collected directly by the hostel owner until owner merchant onboarding is enabled.</p>
                                             </div>
                                         </div>
                                     </div>
@@ -230,12 +230,12 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, obligationIds = [
                                     )}
 
                                     <button
-                                        onClick={handleCreateIntent}
-                                        disabled={loading}
-                                        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-4 font-bold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                                        type="button"
+                                        disabled
+                                        className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-2xl bg-slate-300 px-4 py-4 font-bold text-white"
                                     >
-                                        {loading ? <Loader2 size={18} className="animate-spin" /> : <ShieldCheck size={18} />}
-                                        {loading ? 'Generating payment link...' : 'Pay Now'}
+                                        <ShieldCheck size={18} />
+                                        Contact owner to pay directly
                                     </button>
                                 </div>
                             )}

@@ -53,8 +53,10 @@ Scope:
 
 Merchant context:
 
-- currently routed by `OWNER_HOSTEL` contract through existing credentials,
-- future owner merchant onboarding plugs into this context without changing settlement semantics.
+- `OWNER_HOSTEL` only.
+- PhonePe hosted checkout for rent/advance is quarantined until owner merchant onboarding and owner merchant credentials exist.
+- HMS platform merchant credentials must never be used for tenant rent, advance, maintenance, or hostel operational obligations.
+- Future owner merchant onboarding plugs into this context without changing settlement semantics.
 
 Every operational RentCollection flow requires `hostel_id`.
 
@@ -156,6 +158,8 @@ Forbidden:
 - manual owner confirmation of provider attempts before provider success is established,
 - provider webhook settlement from raw webhook claims without source-of-truth verification,
 - RentCollection mutation without `hostel_id`,
+- RentCollection provider routing to `HMS_PLATFORM`,
+- PhonePe hosted rent/advance checkout before direct owner merchant routing exists,
 - PlatformBilling attempts creating rent ledger rows,
 - deleting or editing settled `Payment` rows.
 

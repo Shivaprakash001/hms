@@ -16,7 +16,7 @@ import { financialService } from "./financial-service";
 import { abandonmentService } from "./abandonment-service";
 import { assertFinancialHostelMatch, assertSameFinancialHostel, assertScopedEntityHostel, requireFinancialHostelId } from "./financial-isolation";
 import { getProviderContext } from "./payments/merchant-context";
-import { PAYMENT_DOMAIN, PAYMENT_FLOW, PAYMENT_SCOPE, SETTLEMENT_STATUS } from "./payments/financial-domain";
+import { PAYMENT_DOMAIN, PAYMENT_FLOW, PAYMENT_SCOPE, SETTLEMENT_STATUS, MERCHANT_CONTEXT } from "./payments/financial-domain";
 import { paymentStatusEventService } from "./payment-status-event-service";
 import { paymentOperationalAnomalyService } from "./payment-operational-anomaly-service";
 import { paymentWebhookEventService } from "./payment-webhook-event-service";
@@ -71,7 +71,41 @@ export class PaymentService {
     }
 
     const hostelId = requireFinancialHostelId(attempt.hostel_id, label);
+    await this.blockRentCollectionPhonePePlatformLeak({
+      ownerId: attempt.owner_id,
+      hostelId,
+      flowType: (attempt as any).flow_type || PAYMENT_FLOW.RENT,
+      paymentAttemptId: attempt.id,
+      source: label,
+    });
     return this.getProviderInstance(attempt.owner_id, attempt.provider, hostelId);
+  }
+
+  private async blockRentCollectionPhonePePlatformLeak(input: {
+    ownerId: string;
+    hostelId: string;
+    flowType: string;
+    paymentAttemptId?: string | null;
+    source: string;
+  }): Promise<never> {
+    await paymentOperationalAnomalyService.create({
+      anomalyType: "RENT_COLLECTION_PLATFORM_MERCHANT_BLOCKED",
+      severity: "CRITICAL",
+      paymentDomain: PAYMENT_DOMAIN.RENT_COLLECTION,
+      flowType: input.flowType,
+      paymentAttemptId: input.paymentAttemptId || null,
+      operationalOwnerId: input.ownerId,
+      financialOwnerId: input.ownerId,
+      hostelId: input.hostelId,
+      metadata: {
+        source: input.source,
+        reason: "Blocked RentCollection provider access because only HMS platform PhonePe credentials exist. Tenant rent must not route through HMS platform merchant.",
+        forbidden_merchant_context_type: MERCHANT_CONTEXT.HMS_PLATFORM,
+      },
+    });
+    throw new Error(
+      "CONFIG_ERROR: Online PhonePe rent collection is disabled until owner merchant onboarding is implemented. Use manual UPI/reference collection for tenant rent."
+    );
   }
 
   private async updateAttemptStatus(tx: any, params: {

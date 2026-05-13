@@ -134,6 +134,13 @@ const OnlinePaymentModal = ({ isOpen, onClose, obligation, onSettled }) => {
 
                             {!attempt ? (
                                 <div className="space-y-4">
+                                    <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                                        <AlertCircle size={18} className="mt-0.5 shrink-0" />
+                                        <span>
+                                            PhonePe rent checkout is paused until owner merchant onboarding is available. Record rent through offline/manual collection for now.
+                                        </span>
+                                    </div>
+
                                     {error && (
                                         <div className="flex items-start gap-3 rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                                             <AlertCircle size={18} className="mt-0.5 shrink-0" />
@@ -142,12 +149,12 @@ const OnlinePaymentModal = ({ isOpen, onClose, obligation, onSettled }) => {
                                     )}
 
                                     <button
-                                        onClick={handleCreateIntent}
-                                        disabled={loading}
-                                        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-4 font-bold text-white hover:bg-slate-800 disabled:bg-slate-400"
+                                        type="button"
+                                        disabled
+                                        className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-2xl bg-slate-300 px-4 py-4 font-bold text-white"
                                     >
-                                        {loading ? <Loader2 size={18} className="animate-spin" /> : <Smartphone size={18} />}
-                                        {loading ? 'Creating payment link...' : 'Create PhonePe Payment Link'}
+                                        <Smartphone size={18} />
+                                        PhonePe rent checkout paused
                                     </button>
                                 </div>
                             ) : (

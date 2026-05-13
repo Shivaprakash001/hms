@@ -152,6 +152,48 @@ const checks: Check[] = [
     `,
   },
   {
+    id: "RENT_COLLECTION_NEVER_USES_HMS_PLATFORM_MERCHANT",
+    severity: "CRITICAL",
+    description: "RentCollection attempts must never resolve to the HMS platform merchant context.",
+    sql: `
+      SELECT pa.id, pa.owner_id, pa.hostel_id,
+             'OWNER_HOSTEL merchant context' AS expected,
+             COALESCE(pa.merchant_context_type, 'null') AS actual,
+             jsonb_build_object('status', pa.status, 'flow_type', pa.flow_type, 'merchant_context_id', pa.merchant_context_id, 'merchant_transaction_id', COALESCE(pa.merchant_transaction_id, pa.merchant_txn_id)) AS metadata
+      FROM payment_attempts pa
+      WHERE COALESCE(pa.payment_domain, 'RENT_COLLECTION') = 'RENT_COLLECTION'
+        AND COALESCE(pa.flow_type, CASE WHEN pa.payment_type = 'ADVANCE' THEN 'ADVANCE' ELSE 'RENT' END) IN ('RENT', 'ADVANCE', 'MANUAL_UPI_REFERENCE')
+        AND (
+          pa.merchant_context_type = 'HMS_PLATFORM'
+          OR pa.scope_type = 'PLATFORM'
+          OR pa.hostel_id IS NULL
+        )
+      LIMIT 1000
+    `,
+  },
+  {
+    id: "PHONEPE_RENT_COLLECTION_QUARANTINED_UNTIL_OWNER_MERCHANTS",
+    severity: "HIGH",
+    description: "PhonePe RentCollection checkout attempts are quarantined until direct owner merchant credentials/onboarding exist.",
+    sql: `
+      SELECT pa.id, pa.owner_id, pa.hostel_id,
+             'no active PhonePe RentCollection hosted checkout' AS expected,
+             CONCAT(pa.status, ', checkout=', CASE WHEN pa.checkout_url IS NULL THEN 'none' ELSE 'present' END) AS actual,
+             jsonb_build_object('flow_type', pa.flow_type, 'merchant_context_type', pa.merchant_context_type, 'provider_order_id', pa.provider_order_id, 'merchant_transaction_id', COALESCE(pa.merchant_transaction_id, pa.merchant_txn_id)) AS metadata
+      FROM payment_attempts pa
+      WHERE COALESCE(pa.payment_domain, 'RENT_COLLECTION') = 'RENT_COLLECTION'
+        AND COALESCE(pa.flow_type, CASE WHEN pa.payment_type = 'ADVANCE' THEN 'ADVANCE' ELSE 'RENT' END) IN ('RENT', 'ADVANCE')
+        AND pa.provider = 'PHONEPE'
+        AND pa.status IN ('CREATED', 'PENDING', 'PENDING_VERIFICATION', 'PROCESSING', 'SUCCESS')
+        AND (
+          pa.checkout_url IS NOT NULL
+          OR pa.provider_order_id IS NOT NULL
+          OR pa.gateway_txn_id IS NOT NULL
+        )
+      LIMIT 1000
+    `,
+  },
+  {
     id: "PAYMENT_HOSTEL_MATCHES_OBLIGATION",
     severity: "CRITICAL",
     description: "Payment ledger hostel_id must match the rent obligation hostel_id.",
