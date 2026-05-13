@@ -60,6 +60,7 @@ export default function OnboardingRooms() {
       const payload = {
         room_no:  form.number.trim(),
         capacity: form.capacity,
+        base_rent: Number(form.rent),
         // floor must be an integer or omitted — convert string label to index
         ...(form.floor !== '' ? { floor: Number(form.floor) } : {}),
       };

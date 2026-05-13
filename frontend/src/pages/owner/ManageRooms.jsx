@@ -117,13 +117,8 @@ const ManageRooms = () => {
             await roomService.create(hostelId, {
                 room_no: roomData.number,
                 capacity: parseInt(roomData.capacity),
-                type: roomData.type,
-                price: parseFloat(roomData.rent),
-                // Note: 'price' and 'type' are sent but need confirming if schema calls for them.
-                // Assuming RoomCreate schema might be loose or I need to update it.
-                // room_schema.py showed RoomCreate had room_no, capacity.
-                // If I send extra fields, Pydantic ignores them unless Extra.forbid.
-                // So this is safe, even if backend doesn't use them yet.
+                room_type: roomData.type,
+                base_rent: parseFloat(roomData.rent) || 0,
             });
             await fetchData();
             setShowAddRoomModal(false);

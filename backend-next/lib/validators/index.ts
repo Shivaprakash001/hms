@@ -57,9 +57,10 @@ export const ReactivationRequestSchema = z.object({
 // --- Property & Room Schemas ---
 export const RoomCreateSchema = z.object({
   room_no: z.string().min(1),
-  capacity: z.number().int().positive(),
-  floor: z.number().int().optional(),
+  capacity: z.coerce.number().int().positive(),
+  floor: z.coerce.number().int().optional(),
   room_type: z.string().optional(),
+  base_rent: z.coerce.number().nonnegative().optional(),
 });
 
 export const AllocationSchema = z.object({

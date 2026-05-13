@@ -85,6 +85,7 @@ export async function POST(req: NextRequest) {
         capacity: validated.data.capacity,
         floor: validated.data.floor,
         room_type: validated.data.room_type,
+        base_rent: validated.data.base_rent,
       },
     });
 

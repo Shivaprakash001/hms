@@ -9,7 +9,7 @@ const AddTenantModal = ({ selectedRoom, onClose, onAdd }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedProfile, setSelectedProfile] = useState(null);
     const [formData, setFormData] = useState({
-        rent: selectedRoom?.tenants?.[0]?.rent || 8000,
+        rent: selectedRoom?.base_rent || selectedRoom?.tenants?.[0]?.rent || '',
         joinDate: new Date().toISOString().split('T')[0]
     });
     const [submitting, setSubmitting] = useState(false);

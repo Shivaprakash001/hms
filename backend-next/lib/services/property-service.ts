@@ -270,6 +270,7 @@ export class PropertyService {
         id: room.id,
         room_no: room.room_no,
         capacity: room.capacity,
+        base_rent: room.base_rent,
         occupied: tenants.length,
         floor: floorNum,
         tenants,

@@ -651,6 +651,16 @@ const AddTenantModal = ({ onClose, initialData, onSave }) => {
     });
     const [submitting, setSubmitting] = useState(false);
 
+    const handleRoomChange = (roomId) => {
+        const selectedRoom = rooms.find((room) => String(room.id) === String(roomId));
+        const baseRent = Number(selectedRoom?.base_rent ?? 0);
+        setFormData({
+            ...formData,
+            roomId,
+            ...(!initialData && baseRent > 0 ? { rent: String(baseRent) } : {}),
+        });
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setSubmitting(true);
@@ -706,7 +716,7 @@ const AddTenantModal = ({ onClose, initialData, onSave }) => {
                                 <label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">Room</label>
                                 <select
                                     value={formData.roomId}
-                                    onChange={e => setFormData({ ...formData, roomId: e.target.value })}
+                                    onChange={e => handleRoomChange(e.target.value)}
                                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold"
                                     required
                                 >
@@ -716,6 +726,7 @@ const AddTenantModal = ({ onClose, initialData, onSave }) => {
                                         : rooms.map(r => (
                                             <option key={r.id} value={r.id}>
                                                 Room {r.number ?? r.room_no} — {r.occupied ?? 0}/{r.capacity} occupied
+                                                {Number(r.base_rent || 0) > 0 ? ` — ₹${Number(r.base_rent).toLocaleString('en-IN')}` : ''}
                                             </option>
                                         ))
                                     }

@@ -38,7 +38,8 @@ export default function OnboardingTenant() {
   const handleRoomChange = (roomId) => {
     set('room_id', roomId);
     const room = rooms.find(r => String(r.id) === String(roomId));
-    if (room?.base_rent) set('rent', String(room.base_rent));
+    const baseRent = Number(room?.base_rent ?? 0);
+    if (baseRent > 0) set('rent', String(baseRent));
   };
 
   const validate = () => {
@@ -212,7 +213,7 @@ export default function OnboardingTenant() {
                 <option value="">Select a room (optional)</option>
                 {rooms.map(r => (
                   <option key={r.id} value={r.id}>
-                    Room {r.room_number} — ₹{Number(r.base_rent).toLocaleString('en-IN')}
+                    Room {r.room_no ?? r.room_number ?? r.number} — ₹{Number(r.base_rent || 0).toLocaleString('en-IN')}
                   </option>
                 ))}
               </select>
