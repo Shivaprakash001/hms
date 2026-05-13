@@ -3,7 +3,9 @@ import { X, Bed, Plus } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const AddRoomModal = ({ floor, onClose, onAdd }) => {
+    const floorNumber = Number.isInteger(Number(floor?.number)) ? String(floor.number) : '';
     const [formData, setFormData] = useState({
+        floor: floorNumber,
         number: '',
         capacity: '2',
         type: 'Non-AC',
@@ -37,7 +39,7 @@ const AddRoomModal = ({ floor, onClose, onAdd }) => {
                 <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                     <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
                         <Bed size={20} className="text-indigo-600" />
-                        Add Room to Floor {floor.number}
+                        {floorNumber ? `Add Room to Floor ${floorNumber}` : 'Add Room'}
                     </h3>
                     <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors">
                         <X size={20} />
@@ -45,6 +47,19 @@ const AddRoomModal = ({ floor, onClose, onAdd }) => {
                 </div>
 
                 <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                    <div className="space-y-1.5">
+                        <label className="text-sm font-semibold text-slate-700">Floor Number</label>
+                        <input
+                            type="number"
+                            value={formData.floor}
+                            onChange={(e) => setFormData({ ...formData, floor: e.target.value })}
+                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
+                            placeholder="e.g. 1"
+                            required
+                            min="0"
+                        />
+                    </div>
+
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1.5">
                             <label className="text-sm font-semibold text-slate-700">Room Number</label>

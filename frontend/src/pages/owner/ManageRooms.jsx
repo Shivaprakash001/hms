@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Layers, LayoutGrid, Users, DoorOpen, BedDouble, Trash2, ArrowRightLeft, X, Phone, Calendar, CreditCard, Mail, Loader2 } from 'lucide-react';
 import AddRoomModal from '../../components/owner/rooms/AddRoomModal';
+import AddFloorModal from '../../components/owner/rooms/AddFloorModal';
 import AddTenantModal from '../../components/owner/rooms/AddTenantModal';
 import ShiftTenantModal from '../../components/owner/rooms/ShiftTenantModal';
 import EditRoomModal from '../../components/owner/rooms/EditRoomModal';
@@ -17,7 +18,8 @@ const ManageRooms = () => {
     // State
     const [selectedRoom, setSelectedRoom] = useState(null);
     const [showAddRoomModal, setShowAddRoomModal] = useState(false);
-    const [showAddFloorModal, setShowAddFloorModal] = useState(false); // We'll reuse AddRoomModal for this
+    const [showAddFloorModal, setShowAddFloorModal] = useState(false);
+    const [selectedFloorForRoom, setSelectedFloorForRoom] = useState(null);
     const [showAddTenantModal, setShowAddTenantModal] = useState(false);
     const [showEditRoomModal, setShowEditRoomModal] = useState(false);
     const [showShiftTenantModal, setShowShiftTenantModal] = useState(false);
@@ -117,17 +119,25 @@ const ManageRooms = () => {
             await roomService.create(hostelId, {
                 room_no: roomData.number,
                 capacity: parseInt(roomData.capacity),
+                floor: parseInt(roomData.floor, 10),
                 room_type: roomData.type,
                 base_rent: parseFloat(roomData.rent) || 0,
             });
             await fetchData();
             setShowAddRoomModal(false);
             setShowAddFloorModal(false);
+            setSelectedFloorForRoom(null);
         } catch (err) {
             const detail = err.response?.data?.detail;
             const msg = detail?.message || detail || err.message || 'Unknown error';
             alert("Failed to create room: " + msg);
         }
+    };
+
+    const handleAddFloor = (floorNumber) => {
+        setSelectedFloorForRoom(Number(floorNumber));
+        setShowAddFloorModal(false);
+        setShowAddRoomModal(true);
     };
 
     const handleAddTenant = async (room, tenantData) => {
@@ -327,7 +337,10 @@ const ManageRooms = () => {
                         Add Floor
                     </button>
                     <button
-                        onClick={() => setShowAddRoomModal(true)}
+                        onClick={() => {
+                            setSelectedFloorForRoom(null);
+                            setShowAddRoomModal(true);
+                        }}
                         className="flex-1 md:flex-none px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-100"
                     >
                         <Plus size={18} />
@@ -369,6 +382,7 @@ const ManageRooms = () => {
                                 {/* Add Room Button for this floor */}
                                 <button
                                     onClick={() => {
+                                        setSelectedFloorForRoom(floor.number);
                                         setShowAddRoomModal(true);
                                     }}
                                     className="h-[180px] rounded-24px border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-3 text-slate-400 hover:border-indigo-300 hover:text-indigo-500 hover:bg-indigo-50/30 transition-all group"
@@ -429,11 +443,24 @@ const ManageRooms = () => {
             {/* Modals */}
             <AnimatePresence>
                 {(showAddRoomModal || showAddFloorModal) && (
-                    <AddRoomModal
-                        floor={{ number: 'New' }}
-                        onClose={() => { setShowAddRoomModal(false); setShowAddFloorModal(false); }}
-                        onAdd={handleAddRoom}
-                    />
+                    <>
+                        {showAddFloorModal && (
+                            <AddFloorModal
+                                onClose={() => setShowAddFloorModal(false)}
+                                onAdd={handleAddFloor}
+                            />
+                        )}
+                        {showAddRoomModal && (
+                            <AddRoomModal
+                                floor={{ number: selectedFloorForRoom ?? 'New' }}
+                                onClose={() => {
+                                    setShowAddRoomModal(false);
+                                    setSelectedFloorForRoom(null);
+                                }}
+                                onAdd={handleAddRoom}
+                            />
+                        )}
+                    </>
                 )}
                 {showAddTenantModal && selectedRoom && (
                     <AddTenantModal

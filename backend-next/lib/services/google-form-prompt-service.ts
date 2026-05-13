@@ -33,7 +33,8 @@ ${roomList}
 Optional Notes:
 ${optionalNotes}
 
-Create the form with EXACTLY the following fields, in this exact order:
+Create the form with EXACTLY the following fields, in this exact order.
+Every field must be marked Required: Yes.
 
 1. Full Name
 Type: Short answer
@@ -46,8 +47,8 @@ Validation: Must be exactly 10 digits only
 
 3. Email Address
 Type: Short answer
-Required: No
-Validation: Must be a valid email address if provided
+Required: Yes
+Validation: Must be a valid email address
 
 4. Current Room
 Type: Dropdown
@@ -74,6 +75,7 @@ DO NOT create extra onboarding questions.
 DO NOT modify dropdown room values.
 DO NOT add descriptions that change the meaning of fields.
 Optional notes are context only. Do not create additional fields from optional notes.
+ALL fields must be required. Do not make any field optional.
 
 The HMS import system depends on exact field consistency. Generate only this operational tenant onboarding form.
 
