@@ -255,6 +255,14 @@ export class AuthService {
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
     const effectiveRedirectUri = this.getGoogleCodeRedirectUri(redirectUri);
 
+    if (!clientId || !clientSecret) {
+      console.error("[auth.googleLogin] Google OAuth env vars missing", {
+        hasClientId: Boolean(clientId),
+        hasClientSecret: Boolean(clientSecret),
+      });
+      throw new Error("UNAUTHORIZED: Google login is not configured");
+    }
+
     const exchangeCode = async (exchangeRedirectUri: string) => {
       const response = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
@@ -280,26 +288,46 @@ export class AuthService {
       return { response, redirectUri: exchangeRedirectUri, error };
     };
 
-    // 1. Exchange code for tokens. Popup mode binds the code to the page origin,
-    // while redirect mode binds it to the callback URL.
-    let tokenExchange = await exchangeCode(effectiveRedirectUri);
+    const exchangeRedirectUris: string[] = [effectiveRedirectUri];
+
+    try {
+      const parsed = new URL(effectiveRedirectUri);
+      if (parsed.pathname === "/callback" && !parsed.search && !parsed.hash) {
+        exchangeRedirectUris.push(parsed.origin);
+      }
+    } catch {
+      // Non-URL redirect values such as "postmessage" are valid for Google token exchange.
+    }
+
+    // Google Identity Services popup code flow can require this sentinel redirect_uri.
+    exchangeRedirectUris.push("postmessage");
+
+    // 1. Exchange code for tokens. Try the exact redirect binding first, then
+    // safe compatibility fallbacks for popup/browser-delivered auth codes.
+    const uniqueRedirectUris = Array.from(new Set(exchangeRedirectUris.filter(Boolean)));
+    let tokenExchange = await exchangeCode(uniqueRedirectUris[0]);
+    const failedExchanges: Array<{ status: number; error?: string; error_description?: string; redirect_uri: string }> = [];
 
     if (!tokenExchange.response.ok) {
-      let originFallback: string | null = null;
-      try {
-        const parsed = new URL(effectiveRedirectUri);
-        if (parsed.pathname === "/callback" && !parsed.search && !parsed.hash) {
-          originFallback = parsed.origin;
-        }
-      } catch {
-        originFallback = null;
-      }
+      failedExchanges.push({
+        status: tokenExchange.response.status,
+        error: tokenExchange.error?.error,
+        error_description: tokenExchange.error?.error_description,
+        redirect_uri: tokenExchange.redirectUri,
+      });
 
-      if (originFallback && originFallback !== effectiveRedirectUri) {
-        const fallbackExchange = await exchangeCode(originFallback);
+      for (const fallbackRedirectUri of uniqueRedirectUris.slice(1)) {
+        const fallbackExchange = await exchangeCode(fallbackRedirectUri);
         if (fallbackExchange.response.ok) {
           tokenExchange = fallbackExchange;
+          break;
         }
+        failedExchanges.push({
+          status: fallbackExchange.response.status,
+          error: fallbackExchange.error?.error,
+          error_description: fallbackExchange.error?.error_description,
+          redirect_uri: fallbackExchange.redirectUri,
+        });
       }
     }
 
@@ -310,6 +338,7 @@ export class AuthService {
         error: googleError?.error,
         error_description: googleError?.error_description,
         redirect_uri: tokenExchange.redirectUri,
+        attempts: failedExchanges,
       });
       throw new Error("UNAUTHORIZED: Failed to exchange Google code");
     }
