@@ -190,6 +190,14 @@ export const bulkImportService = {
         const response = await api.post('/bulk-import/upload', formData);
         return response.data;
     },
+    getBatchPreview: async (batchId) => {
+        const response = await api.get(`/bulk-import/${batchId}/confirm`);
+        return response.data;
+    },
+    confirmBatchImport: async (batchId) => {
+        const response = await api.post(`/bulk-import/${batchId}/confirm`);
+        return response.data;
+    },
 };
 
 // --- Billing & Plans Service ---

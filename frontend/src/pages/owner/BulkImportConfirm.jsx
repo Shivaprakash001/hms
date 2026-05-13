@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { CheckCircle2, AlertTriangle, XCircle, Upload } from 'lucide-react';
+import { bulkImportService } from '../../api/services';
 
 function formatCurrency(value) {
     const amount = Number(value || 0);
@@ -20,22 +21,15 @@ export default function BulkImportConfirm() {
 
         async function loadBatchPreview() {
             try {
-                const response = await fetch(`/api/bulk-import/${batchId}/confirm`, {
-                    method: 'GET',
-                    credentials: 'include',
-                });
-                const result = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(result.error?.message || result.error || 'Failed to load import preview');
-                }
+                const result = await bulkImportService.getBatchPreview(batchId);
 
                 if (!cancelled) {
                     setBatchPreview(result);
                 }
             } catch (err) {
                 if (!cancelled) {
-                    setError(err.message || 'Failed to load import preview');
+                    const message = err?.response?.data?.error?.message || err?.response?.data?.error || err.message;
+                    setError(message || 'Failed to load import preview');
                 }
             }
         }
@@ -59,23 +53,11 @@ export default function BulkImportConfirm() {
         setError(null);
 
         try {
-            const response = await fetch(`/api/bulk-import/${batchId}/confirm`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                credentials: 'include',
-            });
-
-            const result = await response.json();
-
-            if (!response.ok) {
-                throw new Error(result.error?.message || result.error || 'Import failed');
-            }
-
+            const result = await bulkImportService.confirmBatchImport(batchId);
             setImportResult(result);
         } catch (err) {
-            setError(err.message || 'Import failed. Please try again.');
+            const message = err?.response?.data?.error?.message || err?.response?.data?.error || err.message;
+            setError(message || 'Import failed. Please try again.');
         } finally {
             setIsImporting(false);
         }
