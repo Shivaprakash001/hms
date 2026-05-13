@@ -29,6 +29,11 @@ model Profile {
   id                    String             @id @default(uuid()) @db.Uuid
   owner_id              String?            @db.Uuid
   emergency_contact     String?
+  password_reset_required Boolean          @default(false)
+  password_reset_at     DateTime?          @db.Timestamptz(6)
+  is_imported           Boolean            @default(false)
+  import_batch_id       String?            @db.Uuid
+  onboarding_expires_at DateTime?          @db.Timestamptz(6)
   expenses              Expense[]
   hostels               Hostel[]
   notifications         Notification[]
@@ -38,12 +43,15 @@ model Profile {
   tenants               Profile[]          @relation("OwnerTenant")
   refresh_tokens        RefreshToken[]
   tenant_details        Tenant?            @relation("TenantToProfile")
+  import_batch          BulkImportBatch?   @relation("ImportBatchProfile", fields: [import_batch_id], references: [id])
+  uploaded_batches      BulkImportBatch[]  @relation("UploadedByProfile")
 
   @@index([owner_id])
   @@index([name])
   @@index([phone])
   @@index([email])
   @@index([owner_id, created_at])
+  @@index([password_reset_required, is_active])
   @@map("profiles")
   @@schema("public")
 }
@@ -156,6 +164,7 @@ model Hostel {
   reminders_sent      ReminderLog[]        @relation("ReminderHostel")
   expenses            Expense[]            @relation("ExpenseHostel")
   complaints          Complaint[]          @relation("ComplaintHostel")
+  bulk_import_batches BulkImportBatch[]
 
   @@map("hostels")
   @@schema("public")
@@ -1319,5 +1328,56 @@ enum AdvanceLedgerReason {
   REFUND
   CORRECTION
 
+  @@schema("public")
+}
+
+model LoginAttempt {
+  id              String    @id @default(uuid()) @db.Uuid
+  identifier      String
+  ip_address      String?
+  attempt_type    String
+  success         Boolean   @default(false)
+  failure_reason  String?
+  user_agent      String?
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@index([identifier, created_at(sort: Desc)])
+  @@index([ip_address, created_at(sort: Desc)])
+  @@index([attempt_type, created_at(sort: Desc)])
+  @@index([identifier, ip_address, created_at(sort: Desc)])
+  @@map("login_attempts")
+  @@schema("public")
+}
+
+model BulkImportBatch {
+  id                    String    @id @default(uuid()) @db.Uuid
+  owner_id              String    @db.Uuid
+  hostel_id             String    @db.Uuid
+  filename              String
+  file_size             Int?
+  total_rows            Int       @default(0)
+  valid_rows            Int       @default(0)
+  failed_rows           Int       @default(0)
+  imported_rows         Int       @default(0)
+  duplicate_rows        Int       @default(0)
+  status                String    @default("PENDING")
+  validation_errors     Json?
+  import_summary        Json?
+  import_source_version String    @default("google_form_v1")
+  uploaded_by           String    @db.Uuid
+  uploaded_at           DateTime  @default(now()) @db.Timestamptz(6)
+  validated_at          DateTime? @db.Timestamptz(6)
+  imported_at           DateTime? @db.Timestamptz(6)
+  created_at            DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime? @updatedAt @db.Timestamptz(6)
+  
+  owner             Profile   @relation("UploadedByProfile", fields: [uploaded_by], references: [id])
+  hostel            Hostel    @relation(fields: [hostel_id], references: [id])
+  imported_profiles Profile[] @relation("ImportBatchProfile")
+
+  @@index([owner_id, created_at(sort: Desc)])
+  @@index([hostel_id, created_at(sort: Desc)])
+  @@index([status, created_at(sort: Desc)])
+  @@map("bulk_import_batches")
   @@schema("public")
 }

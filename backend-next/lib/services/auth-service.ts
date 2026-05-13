@@ -47,6 +47,10 @@ export class AuthService {
     const isValid = await this.verifyOrMigrateLegacyPassword(profile, password);
     if (!isValid) throw new Error("UNAUTHORIZED: Invalid email or password");
 
+    if (profile.password_reset_required) {
+      throw new Error("PASSWORD_RESET_REQUIRED: You must reset your password on first login");
+    }
+
     let tenantId = null;
     let tenantProfileCompleted = null;
 
@@ -114,6 +118,138 @@ export class AuthService {
       owner_id: effectiveOwnerId || null,
       tenant_id: tenantId,
       is_profile_completed: tenantId ? tenantProfileCompleted : profile.is_profile_completed,
+    };
+  }
+
+  async loginWithPhone(phone: string, password: string) {
+    const normalizedPhone = phone.trim();
+
+    const profile = await prisma.profile.findFirst({
+      where: {
+        phone: normalizedPhone,
+        role: "TENANT",
+      },
+    });
+
+    if (!profile) throw new Error("UNAUTHORIZED: Invalid phone or password");
+    if (!profile.is_active) throw new Error("FORBIDDEN: Account is disabled");
+
+    const isValid = await this.verifyOrMigrateLegacyPassword(profile, password);
+    if (!isValid) throw new Error("UNAUTHORIZED: Invalid phone or password");
+
+    if (profile.password_reset_required) {
+      if (profile.onboarding_expires_at && profile.onboarding_expires_at < new Date()) {
+        throw new Error("ONBOARDING_EXPIRED: Your onboarding credentials have expired. Please contact the hostel owner for assistance.");
+      }
+      throw new Error("PASSWORD_RESET_REQUIRED: You must reset your password on first login");
+    }
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { profile_id: profile.id },
+      select: {
+        id: true,
+        profile_completed: true,
+        status: true,
+      },
+    });
+
+    if (!tenant) {
+      throw new Error("UNAUTHORIZED: Tenant record not found");
+    }
+
+    if (tenant.status === "INVITED") {
+      throw new Error("FORBIDDEN: Account not activated. Please check your email.");
+    }
+
+    if (tenant.status !== "ACTIVE") {
+      throw new Error("FORBIDDEN: Account is not active");
+    }
+
+    const token = await generateToken({
+      sub: profile.id,
+      role: profile.role,
+      email: profile.email,
+      owner_id: profile.owner_id || null,
+      tenant_id: tenant.id,
+    });
+
+    const refreshToken = generateRefreshToken();
+    const refreshTokenHash = hashToken(refreshToken);
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30);
+
+    await prisma.refreshToken.create({
+      data: {
+        user_id: profile.id,
+        token_hash: refreshTokenHash,
+        expires_at: expiresAt,
+      },
+    });
+
+    return {
+      access_token: token,
+      refresh_token: refreshToken,
+      token_type: "bearer",
+      role: profile.role,
+      name: profile.name,
+      user_id: profile.id,
+      owner_id: profile.owner_id || null,
+      tenant_id: tenant.id,
+      is_profile_completed: tenant.profile_completed,
+      password_reset_required: profile.password_reset_required,
+      is_imported: profile.is_imported,
+    };
+  }
+
+  async resetOnboardingPassword(
+    phone: string,
+    currentPassword: string,
+    newPassword: string
+  ) {
+    const normalizedPhone = phone.trim();
+
+    const profile = await prisma.profile.findFirst({
+      where: {
+        phone: normalizedPhone,
+        role: "TENANT",
+        password_reset_required: true,
+      },
+    });
+
+    if (!profile) {
+      throw new Error("UNAUTHORIZED: Invalid request or password already reset");
+    }
+
+    const isValid = await this.verifyOrMigrateLegacyPassword(profile, currentPassword);
+    if (!isValid) {
+      throw new Error("UNAUTHORIZED: Current password is incorrect");
+    }
+
+    if (newPassword.length < 8) {
+      throw new Error("VALIDATION_ERROR: New password must be at least 8 characters");
+    }
+
+    const hasLetter = /[a-zA-Z]/.test(newPassword);
+    const hasNumber = /[0-9]/.test(newPassword);
+    if (!hasLetter || !hasNumber) {
+      throw new Error("VALIDATION_ERROR: Password must contain at least one letter and one number");
+    }
+
+    const hashedNewPassword = await hashPassword(newPassword);
+
+    await prisma.profile.update({
+      where: { id: profile.id },
+      data: {
+        password_hash: hashedNewPassword,
+        password_reset_required: false,
+        password_reset_at: new Date(),
+        onboarding_expires_at: null,
+      },
+    });
+
+    return {
+      success: true,
+      message: "Password reset successfully. You can now log in with your new password.",
     };
   }
 
