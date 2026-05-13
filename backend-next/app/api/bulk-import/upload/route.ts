@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
             row: r.row,
             reason: r.duplicateReason,
           })),
-        },
+        } as any,
         uploaded_by: session.sub,
       },
     });
