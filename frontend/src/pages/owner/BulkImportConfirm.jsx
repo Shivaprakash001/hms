@@ -1,11 +1,32 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { CheckCircle2, AlertTriangle, XCircle, Upload } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, XCircle, Upload, Clock3 } from 'lucide-react';
 import { bulkImportService } from '../../api/services';
 
 function formatCurrency(value) {
     const amount = Number(value || 0);
     return `Rs. ${amount.toLocaleString('en-IN')}`;
+}
+
+const fieldLabels = {
+    name: 'Full Name',
+    phone: 'Phone Number',
+    email: 'Email Address',
+    room_no: 'Current Room',
+    onboarding_password: 'Temporary Onboarding Password',
+    joining_date: 'Joining Date',
+};
+
+function formatError(error) {
+    if (!error) return 'This row needs attention.';
+    const field = fieldLabels[error.field] || error.field;
+    return field ? `${field}: ${error.message}` : error.message;
+}
+
+function rowIdentity(row) {
+    const data = row?.data || {};
+    const parts = [data.name, data.phone, data.room_no].filter(Boolean);
+    return parts.length ? parts.join(' / ') : 'No readable tenant details';
 }
 
 export default function BulkImportConfirm() {
@@ -47,6 +68,9 @@ export default function BulkImportConfirm() {
         duplicate_rows: 0,
         warnings: 0,
     };
+    const invalidRows = batchPreview?.preview?.invalid || [];
+    const duplicateRows = batchPreview?.preview?.duplicates || [];
+    const isLoadingPreview = !batchPreview && !error;
 
     const handleConfirm = async () => {
         setIsImporting(true);
@@ -80,7 +104,7 @@ export default function BulkImportConfirm() {
                             </div>
                             <div>
                                 <h3 className="text-xl font-bold text-emerald-900 mb-2">
-                                    🎉 Import Successful!
+                                    Import Successful
                                 </h3>
                                 <div className="text-sm text-emerald-800 space-y-1">
                                     <p>
@@ -169,12 +193,12 @@ export default function BulkImportConfirm() {
                 <div>
                     <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Confirm Import</h1>
                     <p className="text-slate-500 text-sm mt-2">
-                        Review the validation results before proceeding with the import
+                        HMS checked the sheet. Fix invalid rows first, then import the valid tenants.
                     </p>
                 </div>
 
                 {/* Validation Summary */}
-                <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div className="bg-white shadow-lg rounded-2xl border border-slate-100 p-6">
                         <p className="text-sm font-semibold text-slate-500 mb-2">Total Rows</p>
                         <p className="text-3xl font-black text-slate-900">{validation.total_rows}</p>
@@ -193,9 +217,36 @@ export default function BulkImportConfirm() {
                     </div>
                 </div>
 
+                {(validation.invalid_rows > 0 || validation.duplicate_rows > 0) && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
+                        <div className="flex gap-3">
+                            <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                            <div>
+                                <h2 className="text-base font-bold text-amber-950">Some rows need your attention</h2>
+                                <p className="text-sm text-amber-800 mt-1">
+                                    Import is paused because HMS found rows it cannot safely create. The reasons are listed below with the spreadsheet row number.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Resolved Rent Preview */}
                 <div className="bg-white shadow-lg rounded-2xl border border-slate-100 p-6">
-                    <h3 className="text-lg font-bold text-slate-900 mb-4">Resolved Rent Preview</h3>
+                    <div className="flex items-start justify-between gap-4 mb-4">
+                        <div>
+                            <h3 className="text-lg font-bold text-slate-900">Ready to import</h3>
+                            <p className="text-sm text-slate-500 mt-1">
+                                These rows passed validation. Rent is resolved from room configuration.
+                            </p>
+                        </div>
+                        {isLoadingPreview && (
+                            <span className="inline-flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600">
+                                <Clock3 size={14} />
+                                Checking sheet
+                            </span>
+                        )}
+                    </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                             <thead>
@@ -222,7 +273,7 @@ export default function BulkImportConfirm() {
                                 {!batchPreview?.preview?.valid?.length && (
                                     <tr>
                                         <td colSpan="5" className="py-8 text-center text-slate-500">
-                                            {error ? 'Preview unavailable' : 'Loading preview...'}
+                                            {isLoadingPreview ? 'Checking rows and resolving rent...' : 'No valid rows are ready to import yet.'}
                                         </td>
                                     </tr>
                                 )}
@@ -233,6 +284,56 @@ export default function BulkImportConfirm() {
                         Rent comes from room configuration, not the uploaded file.
                     </p>
                 </div>
+
+                {(invalidRows.length > 0 || duplicateRows.length > 0) && (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                        {invalidRows.length > 0 && (
+                            <div className="bg-white shadow-lg rounded-2xl border border-rose-100 p-6">
+                                <h3 className="text-lg font-bold text-slate-900">Rows to fix</h3>
+                                <p className="text-sm text-slate-500 mt-1 mb-4">
+                                    Update these rows in the sheet and upload again.
+                                </p>
+                                <div className="space-y-3">
+                                    {invalidRows.map((row) => (
+                                        <div key={row.row} className="rounded-xl border border-rose-100 bg-rose-50 p-4">
+                                            <div className="flex items-center justify-between gap-3">
+                                                <p className="text-sm font-bold text-rose-950">Row {row.row}</p>
+                                                <p className="text-xs font-semibold text-rose-700 truncate">{rowIdentity(row)}</p>
+                                            </div>
+                                            <ul className="mt-3 space-y-2">
+                                                {(row.errors || []).map((rowError, idx) => (
+                                                    <li key={idx} className="text-sm text-rose-800">
+                                                        {formatError(rowError)}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {duplicateRows.length > 0 && (
+                            <div className="bg-white shadow-lg rounded-2xl border border-yellow-100 p-6">
+                                <h3 className="text-lg font-bold text-slate-900">Duplicate rows</h3>
+                                <p className="text-sm text-slate-500 mt-1 mb-4">
+                                    HMS skipped these rows to avoid creating duplicate tenants.
+                                </p>
+                                <div className="space-y-3">
+                                    {duplicateRows.map((row) => (
+                                        <div key={row.row} className="rounded-xl border border-yellow-100 bg-yellow-50 p-4">
+                                            <div className="flex items-center justify-between gap-3">
+                                                <p className="text-sm font-bold text-yellow-950">Row {row.row}</p>
+                                                <p className="text-xs font-semibold text-yellow-700 truncate">{rowIdentity(row)}</p>
+                                            </div>
+                                            <p className="mt-2 text-sm text-yellow-800">{row.reason || 'Duplicate tenant data found.'}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {/* Error Message */}
                 {error && (
@@ -265,7 +366,7 @@ export default function BulkImportConfirm() {
                         {isImporting ? (
                             <>
                                 <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></div>
-                                <span>Importing...</span>
+                                <span>Creating tenants...</span>
                             </>
                         ) : (
                             <>

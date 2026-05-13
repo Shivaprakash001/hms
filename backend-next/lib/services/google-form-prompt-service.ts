@@ -45,21 +45,19 @@ Type: Short answer
 Required: Yes
 Validation: Must be exactly 10 digits only
 
-3. Email Address
-Type: Short answer
-Required: Yes
-Validation: Must be a valid email address
-
-4. Current Room
+3. Current Room
 Type: Dropdown
 Required: Yes
 Dropdown options: Use ONLY the exact room values listed above.
 Do not rename, reformat, sort, expand, or modify room values.
 
-5. Temporary Onboarding Password
+4. Temporary Onboarding Password
 Type: Short answer
 Required: Yes
 Validation: Minimum 6 characters
+
+Do not create a separate Email Address question.
+If email collection is needed, use Google Forms responder email collection only.
 
 Strict generation rules:
 
@@ -72,6 +70,7 @@ DO NOT add decorative content.
 DO NOT change field order.
 DO NOT infer additional tenant data.
 DO NOT create extra onboarding questions.
+DO NOT create a custom Email Address field.
 DO NOT modify dropdown room values.
 DO NOT add descriptions that change the meaning of fields.
 Optional notes are context only. Do not create additional fields from optional notes.
@@ -81,6 +80,8 @@ The HMS import system depends on exact field consistency. Generate only this ope
 
 Expected import schema:
 ${GOOGLE_FORM_IMPORT_SCHEMA.join("\n")}
+
+Email address is not a custom form question. HMS reads email_address from the Google Forms responder email column when that setting is enabled.
 
 Operational warning:
 ${GOOGLE_FORM_OPERATIONAL_WARNING}`;

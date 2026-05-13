@@ -109,10 +109,12 @@ export async function POST(req: NextRequest) {
           valid_rows: validRowsForImport,
           invalid: validation.invalidRows.map((r) => ({
             row: r.row,
+            data: sanitizeImportRowForStorage(r.data),
             errors: r.errors,
           })),
           duplicates: validation.duplicates.map((r) => ({
             row: r.row,
+            data: sanitizeImportRowForStorage(r.data),
             reason: r.duplicateReason,
           })),
         } as any,
@@ -135,7 +137,7 @@ export async function POST(req: NextRequest) {
         preview: {
           valid: validation.validRows.slice(0, 5).map(sanitizeValidatedRow),
           invalid: validation.invalidRows.slice(0, 10).map(sanitizeValidatedRow),
-          duplicates: validation.duplicates.slice(0, 5),
+          duplicates: validation.duplicates.slice(0, 5).map(sanitizeValidatedRow),
         },
       },
       200
@@ -206,5 +208,15 @@ function sanitizeValidatedRow(row: any) {
       onboarding_password: row.data?.onboarding_password ? "***" : undefined,
       onboarding_password_hash: undefined,
     },
+  };
+}
+
+function sanitizeImportRowForStorage(row: TenantImportRow): Partial<TenantImportRow> {
+  return {
+    name: row.name,
+    phone: row.phone,
+    email: row.email,
+    room_no: row.room_no,
+    onboarding_password: row.onboarding_password ? "***" : undefined,
   };
 }

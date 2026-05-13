@@ -155,7 +155,7 @@ export default function BulkImport() {
                         <div>
                             <h2 className="text-xl font-black text-slate-900 tracking-tight">Generate Google Form Prompt</h2>
                             <p className="text-sm text-slate-500 mt-1">
-                                Creates a strict copy-paste prompt using {activeHostel?.name || 'this hostel'} and its active room list.
+                                Creates a strict copy-paste prompt using {activeHostel?.name || 'this hostel'} and its active room list. Google Forms will provide the responder email column; HMS will not ask for a second email field.
                             </p>
                         </div>
                         {generatedPrompt?.room_count ? (
@@ -245,6 +245,9 @@ export default function BulkImport() {
                                     <p className="text-sm text-amber-800 mt-1">{generatedPrompt.warning}</p>
                                     <p className="text-xs text-amber-700 mt-2">
                                         Expected schema: {generatedPrompt.schema?.join(', ')}
+                                    </p>
+                                    <p className="text-xs text-amber-700 mt-1">
+                                        Email comes from Google Forms responder email collection. Do not add a custom Email Address question.
                                     </p>
                                 </div>
                             </div>

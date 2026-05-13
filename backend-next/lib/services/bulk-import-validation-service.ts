@@ -107,15 +107,30 @@ export class BulkImportValidationService {
 
   private normalizeRows(rawData: any[]): TenantImportRow[] {
     return rawData.map((row) => ({
-      name: String(row.name || row.Name || row.NAME || "").trim(),
-      phone: String(row.phone || row.Phone || row.PHONE || row.mobile || row.Mobile || "").trim(),
-      email: String(row.email || row.Email || row.EMAIL || "").trim() || undefined,
-      room_no: String(row.room_no || row.room || row.Room || row.ROOM || row.room_number || "").trim(),
-      onboarding_password: String(row.onboarding_password || row.password || row.Password || "").trim(),
-      profile_type: String(row.profile_type || row.type || "STUDENT").trim(),
-      emergency_contact: String(row.emergency_contact || row.emergency || "").trim() || undefined,
-      gender: String(row.gender || row.Gender || "").trim() || undefined,
+      name: this.readCell(row, ["Full Name", "full_name", "name", "Name", "NAME"]),
+      phone: this.readCell(row, ["Phone Number", "phone_number", "phone", "Phone", "PHONE", "mobile", "Mobile"]),
+      email: this.readCell(row, ["Email Address", "Email Address_1", "email_address", "email", "Email", "EMAIL"]) || undefined,
+      room_no: this.readCell(row, ["Current Room", "current_room", "room_no", "room", "Room", "ROOM", "room_number"]),
+      onboarding_password: this.readCell(row, [
+        "Temporary Onboarding Password",
+        "temporary_onboarding_password",
+        "onboarding_password",
+        "password",
+        "Password",
+      ]),
+      profile_type: this.readCell(row, ["profile_type", "type"]) || "STUDENT",
+      emergency_contact: this.readCell(row, ["emergency_contact", "emergency"]) || undefined,
+      gender: this.readCell(row, ["gender", "Gender"]) || undefined,
     }));
+  }
+
+  private readCell(row: Record<string, any>, keys: string[]): string {
+    for (const key of keys) {
+      if (row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== "") {
+        return String(row[key]).trim();
+      }
+    }
+    return "";
   }
 
   private parseNumber(value: any): number | undefined {
