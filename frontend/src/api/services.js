@@ -177,6 +177,17 @@ export const ownerService = {
     }
 };
 
+// --- Bulk Import / Onboarding Campaign Services ---
+export const bulkImportService = {
+    generateGoogleFormPrompt: async ({ hostelId, notes }) => {
+        const response = await api.post('/bulk-import/google-form-prompt', {
+            hostel_id: hostelId,
+            notes,
+        });
+        return response.data;
+    },
+};
+
 // --- Billing & Plans Service ---
 export const billingService = {
 

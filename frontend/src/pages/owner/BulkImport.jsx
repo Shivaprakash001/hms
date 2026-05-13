@@ -1,17 +1,23 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, AlertTriangle, FileSpreadsheet, HelpCircle, IndianRupee, CalendarDays } from 'lucide-react';
+import { Upload, AlertTriangle, FileSpreadsheet, HelpCircle, IndianRupee, CalendarDays, Clipboard, CheckCircle2 } from 'lucide-react';
 import { useHostelContext } from '../../context/HostelContext';
+import { bulkImportService } from '../../api/services';
 
 export default function BulkImport() {
     const navigate = useNavigate();
-    const { hostelId } = useHostelContext();
+    const { hostelId, activeHostel } = useHostelContext();
     const [file, setFile] = useState(null);
     const [joiningDate, setJoiningDate] = useState(() => new Date().toISOString().slice(0, 10));
     const [advanceDeposit, setAdvanceDeposit] = useState('');
     const [maintenanceCharge, setMaintenanceCharge] = useState('');
     const [maintenanceType, setMaintenanceType] = useState('MONTHLY');
     const [billingStartMode, setBillingStartMode] = useState('JOINING_DATE');
+    const [promptNotes, setPromptNotes] = useState('');
+    const [generatedPrompt, setGeneratedPrompt] = useState(null);
+    const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
+    const [promptError, setPromptError] = useState(null);
+    const [copyStatus, setCopyStatus] = useState('');
     const [isUploading, setIsUploading] = useState(false);
     const [error, setError] = useState(null);
 
@@ -83,6 +89,42 @@ export default function BulkImport() {
         }
     };
 
+    const handleGeneratePrompt = async () => {
+        if (!hostelId) {
+            setPromptError('Hostel context is required before generating a prompt.');
+            return;
+        }
+
+        setIsGeneratingPrompt(true);
+        setPromptError(null);
+        setCopyStatus('');
+
+        try {
+            const result = await bulkImportService.generateGoogleFormPrompt({
+                hostelId,
+                notes: promptNotes,
+            });
+            setGeneratedPrompt(result);
+        } catch (err) {
+            const message = err?.response?.data?.error?.message || err?.response?.data?.error || err.message;
+            setPromptError(message || 'Failed to generate Google Form prompt.');
+        } finally {
+            setIsGeneratingPrompt(false);
+        }
+    };
+
+    const handleCopyPrompt = async () => {
+        if (!generatedPrompt?.prompt) return;
+
+        try {
+            await navigator.clipboard.writeText(generatedPrompt.prompt);
+            setCopyStatus('Prompt copied');
+        } catch (err) {
+            console.error('Prompt copy failed:', err);
+            setCopyStatus('Copy failed');
+        }
+    };
+
     return (
         <div className="font-sans pb-20">
             <div className="max-w-4xl mx-auto space-y-8">
@@ -113,6 +155,109 @@ export default function BulkImport() {
                                 </ul>
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                {/* Google Form Prompt Generator */}
+                <div className="bg-white shadow-lg rounded-[2.5rem] border border-slate-100 p-8">
+                    <div className="flex items-start justify-between gap-4 mb-6">
+                        <div>
+                            <h2 className="text-xl font-black text-slate-900 tracking-tight">Generate Google Form Prompt</h2>
+                            <p className="text-sm text-slate-500 mt-1">
+                                Creates a strict copy-paste prompt using {activeHostel?.name || 'this hostel'} and its active room list.
+                            </p>
+                        </div>
+                        {generatedPrompt?.room_count ? (
+                            <div className="bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl px-3 py-2 text-xs font-bold whitespace-nowrap">
+                                {generatedPrompt.room_count} rooms
+                            </div>
+                        ) : null}
+                    </div>
+
+                    <div className="space-y-4">
+                        <label className="space-y-2 block">
+                            <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Optional onboarding notes</span>
+                            <textarea
+                                value={promptNotes}
+                                onChange={(e) => setPromptNotes(e.target.value)}
+                                rows={3}
+                                placeholder="Example: Use your temporary onboarding password during first login."
+                                className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-800 focus:border-emerald-500 focus:outline-none resize-y"
+                            />
+                        </label>
+
+                        {promptError && (
+                            <div className="bg-rose-50 border-l-4 border-rose-400 rounded-xl p-4">
+                                <div className="flex gap-3">
+                                    <AlertTriangle className="h-5 w-5 text-rose-600 flex-shrink-0" />
+                                    <p className="text-sm font-semibold text-rose-700">{promptError}</p>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex flex-col sm:flex-row gap-3">
+                            <button
+                                onClick={handleGeneratePrompt}
+                                disabled={!hostelId || isGeneratingPrompt}
+                                className={`flex-1 py-3 px-5 rounded-xl font-bold text-sm transition-all shadow-lg flex items-center justify-center gap-2 ${
+                                    !hostelId || isGeneratingPrompt
+                                        ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                        : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/20 active:scale-95'
+                                }`}
+                            >
+                                {isGeneratingPrompt ? (
+                                    <>
+                                        <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></div>
+                                        <span>Generating...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <FileSpreadsheet size={18} />
+                                        <span>Generate Prompt</span>
+                                    </>
+                                )}
+                            </button>
+
+                            <button
+                                onClick={handleCopyPrompt}
+                                disabled={!generatedPrompt?.prompt}
+                                className={`sm:w-44 py-3 px-5 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${
+                                    generatedPrompt?.prompt
+                                        ? 'bg-slate-900 hover:bg-slate-800 text-white active:scale-95'
+                                        : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                }`}
+                            >
+                                <Clipboard size={18} />
+                                <span>Copy Prompt</span>
+                            </button>
+                        </div>
+
+                        {copyStatus && (
+                            <div className={`flex items-center gap-2 text-sm font-semibold ${
+                                copyStatus === 'Prompt copied' ? 'text-emerald-700' : 'text-rose-700'
+                            }`}>
+                                <CheckCircle2 size={16} />
+                                <span>{copyStatus}</span>
+                            </div>
+                        )}
+
+                        {generatedPrompt?.prompt && (
+                            <div className="space-y-3">
+                                <textarea
+                                    readOnly
+                                    value={generatedPrompt.prompt}
+                                    rows={18}
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-5 font-mono text-slate-800 focus:outline-none"
+                                />
+                                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                                    <p className="text-sm font-bold text-amber-900">Operational Warning</p>
+                                    <p className="text-sm text-amber-800 mt-1">{generatedPrompt.warning}</p>
+                                    <p className="text-xs text-amber-700 mt-2">
+                                        Expected schema: {generatedPrompt.schema?.join(', ')}
+                                    </p>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 
