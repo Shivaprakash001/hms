@@ -2,20 +2,22 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/lib/providers";
-import { api } from "@/lib/api-client";
 
 /**
- * Bulk Tenant Import - Upload & Validate
+ * Tenant Onboarding Campaign - Upload & Validate
  * 
  * Allows hostel owners to upload XLSX/CSV files containing tenant data
  * for bulk import. Validates the file and shows preview before import.
  */
 export default function BulkImportPage() {
   const router = useRouter();
-  const { user } = useAuth();
   const [file, setFile] = useState<File | null>(null);
   const [hostelId, setHostelId] = useState<string>("");
+  const [joiningDate, setJoiningDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [advanceDeposit, setAdvanceDeposit] = useState("");
+  const [maintenanceCharge, setMaintenanceCharge] = useState("");
+  const [maintenanceType, setMaintenanceType] = useState("MONTHLY");
+  const [billingStartMode, setBillingStartMode] = useState("JOINING_DATE");
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,6 +62,11 @@ export default function BulkImportPage() {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("hostel_id", hostelId);
+      formData.append("joining_date", joiningDate);
+      formData.append("advance_deposit", advanceDeposit);
+      formData.append("maintenance_charge", maintenanceCharge);
+      formData.append("maintenance_type", maintenanceType);
+      formData.append("billing_start_mode", billingStartMode);
 
       const response = await fetch("/api/bulk-import/upload", {
         method: "POST",
@@ -70,7 +77,7 @@ export default function BulkImportPage() {
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || "Upload failed");
+        throw new Error(result.error?.message || result.error || "Upload failed");
       }
 
       // Navigate to confirmation page
@@ -84,9 +91,9 @@ export default function BulkImportPage() {
 
   return (
     <div className="p-8 max-w-4xl mx-auto">
-      <h1 className="text-3xl font-bold mb-2">Bulk Tenant Import</h1>
+      <h1 className="text-3xl font-bold mb-2">Tenant Onboarding Campaign</h1>
       <p className="text-gray-600 mb-8">
-        Upload an Excel file to import multiple tenants at once.
+        Configure owner defaults, collect tenant identity details, and import with room-derived rent.
       </p>
 
       {/* Security Warning */}
@@ -132,10 +139,70 @@ export default function BulkImportPage() {
             </p>
           </div>
 
+          {/* Campaign Defaults */}
+          <div>
+            <h2 className="text-sm font-semibold text-gray-800 mb-3">Owner Defaults</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <label className="space-y-2">
+                <span className="block text-sm font-medium text-gray-700">Joining Date</span>
+                <input
+                  type="date"
+                  value={joiningDate}
+                  onChange={(e) => setJoiningDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </label>
+              <label className="space-y-2">
+                <span className="block text-sm font-medium text-gray-700">Billing Start</span>
+                <select
+                  value={billingStartMode}
+                  onChange={(e) => setBillingStartMode(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="JOINING_DATE">Joining date</option>
+                  <option value="IMPORT_DATE">Import date</option>
+                </select>
+              </label>
+              <label className="space-y-2">
+                <span className="block text-sm font-medium text-gray-700">Deposit</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={advanceDeposit}
+                  onChange={(e) => setAdvanceDeposit(e.target.value)}
+                  placeholder="Use hostel default"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </label>
+              <label className="space-y-2">
+                <span className="block text-sm font-medium text-gray-700">Maintenance</span>
+                <div className="grid grid-cols-[1fr_140px] gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    value={maintenanceCharge}
+                    onChange={(e) => setMaintenanceCharge(e.target.value)}
+                    placeholder="Use default"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <select
+                    value={maintenanceType}
+                    onChange={(e) => setMaintenanceType(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="MONTHLY">Monthly</option>
+                    <option value="ONE_TIME">One-time</option>
+                    <option value="NONE">None</option>
+                  </select>
+                </div>
+              </label>
+            </div>
+          </div>
+
           {/* File Upload */}
           <div>
             <label htmlFor="file" className="block text-sm font-medium text-gray-700 mb-2">
-              Upload Excel File
+              Upload Tenant Identity File
             </label>
             <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-gray-400">
               <div className="space-y-1 text-center">
@@ -216,7 +283,7 @@ export default function BulkImportPage() {
                   Validating...
                 </span>
               ) : (
-                "Upload & Validate"
+                "Review Campaign"
               )}
             </button>
           </div>
@@ -225,15 +292,17 @@ export default function BulkImportPage() {
 
       {/* Instructions */}
       <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <h3 className="text-sm font-medium text-blue-800 mb-2">Required Columns</h3>
+        <h3 className="text-sm font-medium text-blue-800 mb-2">Tenant-Entered Columns</h3>
         <ul className="text-sm text-blue-700 space-y-1 list-disc list-inside">
           <li><strong>name</strong> - Tenant name (required)</li>
           <li><strong>phone</strong> - Phone number, 10 digits (required)</li>
           <li><strong>room_no</strong> - Room number (required)</li>
-          <li><strong>monthly_rent</strong> - Monthly rent amount (required)</li>
           <li><strong>onboarding_password</strong> - Password for first login (required, 6+ chars, letter+number)</li>
           <li><strong>email</strong> - Email address (optional but recommended)</li>
         </ul>
+        <p className="text-sm text-blue-700 mt-3 font-medium">
+          Rent is resolved from room configuration. Deposit, maintenance, and billing dates come from owner defaults above.
+        </p>
       </div>
     </div>
   );

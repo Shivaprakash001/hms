@@ -1,6 +1,10 @@
 import * as XLSX from "xlsx";
 import { prisma } from "../db";
 import { getLogger } from "../logger";
+import {
+  hostelBillingPreferencesService,
+  type MaintenanceType,
+} from "./hostel-billing-preferences-service";
 
 const logger = getLogger("bulk-import-validation");
 
@@ -9,15 +13,26 @@ export interface TenantImportRow {
   phone: string;
   email?: string;
   room_no: string;
-  monthly_rent: number | undefined;
+  monthly_rent?: number;
   advance_deposit?: number;
   maintenance_charge?: number;
-  maintenance_type?: "MONTHLY" | "ONE_TIME" | "NONE";
+  maintenance_type?: MaintenanceType;
   joining_date?: string;
+  billing_start_mode?: "JOINING_DATE" | "IMPORT_DATE";
   onboarding_password: string;
+  onboarding_password_hash?: string;
   profile_type?: string;
   emergency_contact?: string;
   gender?: string;
+  rent_source?: "ROOM_CONFIG";
+}
+
+export interface ImportDefaults {
+  joining_date?: string;
+  advance_deposit?: number;
+  maintenance_charge?: number;
+  maintenance_type?: MaintenanceType;
+  billing_start_mode?: "JOINING_DATE" | "IMPORT_DATE";
 }
 
 export interface ValidationError {
@@ -96,11 +111,6 @@ export class BulkImportValidationService {
       phone: String(row.phone || row.Phone || row.PHONE || row.mobile || row.Mobile || "").trim(),
       email: String(row.email || row.Email || row.EMAIL || "").trim() || undefined,
       room_no: String(row.room_no || row.room || row.Room || row.ROOM || row.room_number || "").trim(),
-      monthly_rent: this.parseNumber(row.monthly_rent || row.rent || row.Rent || row.RENT || 0),
-      advance_deposit: this.parseNumber(row.advance_deposit || row.advance || row.Advance || row.ADVANCE),
-      maintenance_charge: this.parseNumber(row.maintenance_charge || row.maintenance || row.Maintenance),
-      maintenance_type: this.normalizeMaintenanceType(row.maintenance_type),
-      joining_date: String(row.joining_date || row.join_date || row.date || "").trim() || undefined,
       onboarding_password: String(row.onboarding_password || row.password || row.Password || "").trim(),
       profile_type: String(row.profile_type || row.type || "STUDENT").trim(),
       emergency_contact: String(row.emergency_contact || row.emergency || "").trim() || undefined,
@@ -126,14 +136,24 @@ export class BulkImportValidationService {
   async validateRows(
     rows: TenantImportRow[],
     hostelId: string,
-    ownerId: string
+    ownerId: string,
+    importDefaults: ImportDefaults = {}
   ): Promise<ValidationResult> {
     const validatedRows: ValidatedRow[] = [];
     const existingPhones = await this.getExistingPhones(ownerId);
     const existingEmails = await this.getExistingEmails(ownerId);
     const hostelRooms = await this.getHostelRooms(hostelId);
+    const billingDefaults = await hostelBillingPreferencesService.getBillingDefaults(hostelId);
     const phonesSeen = new Set<string>();
     const emailsSeen = new Set<string>();
+    const roomAssignmentsSeen = new Map<string, number>();
+    const defaultJoiningDate = importDefaults.joining_date || this.formatDate(new Date());
+    const defaultMaintenanceType = importDefaults.maintenance_type || billingDefaults.maintenance_type;
+    const defaultMaintenanceCharge = defaultMaintenanceType === "NONE"
+      ? 0
+      : (importDefaults.maintenance_charge ?? billingDefaults.maintenance_charge);
+    const defaultAdvanceDeposit = importDefaults.advance_deposit ?? billingDefaults.advance_deposit;
+    const defaultBillingStartMode = importDefaults.billing_start_mode || "JOINING_DATE";
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -213,24 +233,36 @@ export class BulkImportValidationService {
         } else if (!room.is_active) {
           warnings.push(`Room ${row.room_no} is inactive`);
         } else {
-          const currentOccupancy = room._count.allocations;
-          if (currentOccupancy >= room.capacity) {
+          if (!room.base_rent || room.base_rent <= 0) {
             errors.push({
               row: rowNumber,
               field: "room_no",
-              message: `Room ${row.room_no} is full (${currentOccupancy}/${room.capacity})`,
+              message: `Room ${row.room_no} does not have rent configured`,
               value: row.room_no,
             });
+          }
+
+          const currentOccupancy = room._count.allocations;
+          const assignmentsInFile = roomAssignmentsSeen.get(room.id) || 0;
+          if (currentOccupancy + assignmentsInFile + 1 > room.capacity) {
+            errors.push({
+              row: rowNumber,
+              field: "room_no",
+              message: `Room ${row.room_no} capacity would be exceeded (${currentOccupancy + assignmentsInFile + 1}/${room.capacity})`,
+              value: row.room_no,
+            });
+          } else {
+            roomAssignmentsSeen.set(room.id, assignmentsInFile + 1);
           }
         }
       }
 
-      if (!row.monthly_rent || row.monthly_rent <= 0) {
+      if (!this.parseDate(defaultJoiningDate)) {
         errors.push({
           row: rowNumber,
-          field: "monthly_rent",
-          message: "Monthly rent must be greater than 0",
-          value: row.monthly_rent,
+          field: "joining_date",
+          message: "Invalid owner default joining date (use YYYY-MM-DD or DD/MM/YYYY)",
+          value: defaultJoiningDate,
         });
       }
 
@@ -250,30 +282,21 @@ export class BulkImportValidationService {
         });
       }
 
-      if (row.joining_date) {
-        const date = this.parseDate(row.joining_date);
-        if (!date) {
-          errors.push({
-            row: rowNumber,
-            field: "joining_date",
-            message: "Invalid date format (use YYYY-MM-DD or DD/MM/YYYY)",
-            value: row.joining_date,
-          });
-        }
-      }
-
-      if (row.maintenance_type && !["MONTHLY", "ONE_TIME", "NONE"].includes(row.maintenance_type)) {
-        errors.push({
-          row: rowNumber,
-          field: "maintenance_type",
-          message: "Maintenance type must be MONTHLY, ONE_TIME, or NONE",
-          value: row.maintenance_type,
-        });
-      }
+      const room = row.room_no ? hostelRooms.find((r) => r.room_no === row.room_no) : undefined;
 
       validatedRows.push({
         row: rowNumber,
-        data: { ...row, phone: normalizedPhone || row.phone },
+        data: {
+          ...row,
+          phone: normalizedPhone || row.phone,
+          monthly_rent: room?.base_rent ? Number(room.base_rent) : undefined,
+          advance_deposit: defaultAdvanceDeposit,
+          maintenance_charge: defaultMaintenanceCharge,
+          maintenance_type: defaultMaintenanceType,
+          joining_date: defaultJoiningDate,
+          billing_start_mode: defaultBillingStartMode,
+          rent_source: "ROOM_CONFIG",
+        },
         errors,
         warnings,
         isDuplicate,
@@ -350,6 +373,13 @@ export class BulkImportValidationService {
     return null;
   }
 
+  private formatDate(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
   private async getExistingPhones(ownerId: string): Promise<Set<string>> {
     const profiles = await prisma.profile.findMany({
       where: {
@@ -373,7 +403,7 @@ export class BulkImportValidationService {
     return new Set(profiles.map((p) => p.email.toLowerCase()));
   }
 
-  private async getHostelRooms(hostelId: string): Promise<Array<{ id: string; room_no: string; is_active: boolean; capacity: number; _count: { allocations: number } }>> {
+  private async getHostelRooms(hostelId: string): Promise<Array<{ id: string; room_no: string; is_active: boolean; capacity: number; base_rent: number | null; _count: { allocations: number } }>> {
     const hostelRooms = await prisma.room.findMany({
       where: { hostel_id: hostelId },
       select: {
@@ -381,6 +411,7 @@ export class BulkImportValidationService {
         room_no: true,
         is_active: true,
         capacity: true,
+        base_rent: true,
         _count: {
           select: {
             allocations: {

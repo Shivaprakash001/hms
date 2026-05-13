@@ -6,6 +6,8 @@ import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { bulkImportValidationService } from "@/lib/services/bulk-import-validation-service";
 import { prisma } from "@/lib/db";
 import crypto from "crypto";
+import { hashPassword } from "@/lib/auth";
+import type { ImportDefaults, TenantImportRow } from "@/lib/services/bulk-import-validation-service";
 
 /**
  * 📤 Bulk Import - Upload and Validate
@@ -70,6 +72,8 @@ export async function POST(req: NextRequest) {
 
     const fileBuffer = Buffer.from(await file.arrayBuffer());
 
+    const importDefaults = parseImportDefaults(formData);
+
     const rows = await bulkImportValidationService.parseFile(
       fileBuffer,
       file.name
@@ -78,10 +82,16 @@ export async function POST(req: NextRequest) {
     const validation = await bulkImportValidationService.validateRows(
       rows,
       hostelId,
-      session.sub
+      session.sub,
+      importDefaults
     );
 
     const batchId = crypto.randomUUID();
+    const validRowsForImport = await Promise.all(validation.validRows.map(async (r) => ({
+      row: r.row,
+      data: await secureImportRow(r.data),
+    })));
+
     await prisma.bulkImportBatch.create({
       data: {
         id: batchId,
@@ -95,6 +105,8 @@ export async function POST(req: NextRequest) {
         duplicate_rows: validation.summary.duplicates,
         status: "VALIDATED",
         validation_errors: {
+          defaults: importDefaults,
+          valid_rows: validRowsForImport,
           invalid: validation.invalidRows.map((r) => ({
             row: r.row,
             errors: r.errors,
@@ -104,6 +116,7 @@ export async function POST(req: NextRequest) {
             reason: r.duplicateReason,
           })),
         } as any,
+        import_source_version: "tenant_identity_collection_v2",
         uploaded_by: session.sub,
       },
     });
@@ -120,8 +133,8 @@ export async function POST(req: NextRequest) {
           warnings: validation.summary.warnings,
         },
         preview: {
-          valid: validation.validRows.slice(0, 5),
-          invalid: validation.invalidRows.slice(0, 10),
+          valid: validation.validRows.slice(0, 5).map(sanitizeValidatedRow),
+          invalid: validation.invalidRows.slice(0, 10).map(sanitizeValidatedRow),
           duplicates: validation.duplicates.slice(0, 5),
         },
       },
@@ -144,4 +157,54 @@ export async function POST(req: NextRequest) {
     const status = statusMap[normalizedCode] || 500;
     return apiError(normalizedMessage, normalizedCode || "UPLOAD_ERROR", status);
   }
+}
+
+function parseImportDefaults(formData: FormData): ImportDefaults {
+  const maintenanceType = String(formData.get("maintenance_type") || "").toUpperCase();
+  return {
+    joining_date: stringValue(formData.get("joining_date")),
+    advance_deposit: numberValue(formData.get("advance_deposit")),
+    maintenance_charge: numberValue(formData.get("maintenance_charge")),
+    maintenance_type: ["MONTHLY", "ONE_TIME", "NONE"].includes(maintenanceType)
+      ? maintenanceType as ImportDefaults["maintenance_type"]
+      : undefined,
+    billing_start_mode: formData.get("billing_start_mode") === "IMPORT_DATE"
+      ? "IMPORT_DATE"
+      : "JOINING_DATE",
+  };
+}
+
+function stringValue(value: FormDataEntryValue | null) {
+  const text = String(value || "").trim();
+  return text || undefined;
+}
+
+function numberValue(value: FormDataEntryValue | null) {
+  const text = String(value || "").trim();
+  if (!text) return undefined;
+  const num = Number(text);
+  if (!Number.isFinite(num) || num < 0) {
+    throw new Error("VALIDATION_ERROR: Import default amounts must be zero or greater");
+  }
+  return num;
+}
+
+async function secureImportRow(row: TenantImportRow): Promise<TenantImportRow> {
+  const { onboarding_password, ...rest } = row;
+  return {
+    ...rest,
+    onboarding_password: "",
+    onboarding_password_hash: await hashPassword(onboarding_password),
+  };
+}
+
+function sanitizeValidatedRow(row: any) {
+  return {
+    ...row,
+    data: {
+      ...row.data,
+      onboarding_password: row.data?.onboarding_password ? "***" : undefined,
+      onboarding_password_hash: undefined,
+    },
+  };
 }

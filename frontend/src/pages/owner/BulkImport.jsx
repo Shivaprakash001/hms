@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, AlertTriangle, FileSpreadsheet, HelpCircle } from 'lucide-react';
+import { Upload, AlertTriangle, FileSpreadsheet, HelpCircle, IndianRupee, CalendarDays } from 'lucide-react';
 import { useHostelContext } from '../../context/HostelContext';
-import { apiService } from '../../api/services';
 
 export default function BulkImport() {
     const navigate = useNavigate();
     const { hostelId } = useHostelContext();
     const [file, setFile] = useState(null);
+    const [joiningDate, setJoiningDate] = useState(() => new Date().toISOString().slice(0, 10));
+    const [advanceDeposit, setAdvanceDeposit] = useState('');
+    const [maintenanceCharge, setMaintenanceCharge] = useState('');
+    const [maintenanceType, setMaintenanceType] = useState('MONTHLY');
+    const [billingStartMode, setBillingStartMode] = useState('JOINING_DATE');
     const [isUploading, setIsUploading] = useState(false);
     const [error, setError] = useState(null);
 
@@ -52,6 +56,11 @@ export default function BulkImport() {
             const formData = new FormData();
             formData.append('file', file);
             formData.append('hostel_id', hostelId);
+            formData.append('joining_date', joiningDate);
+            formData.append('advance_deposit', advanceDeposit);
+            formData.append('maintenance_charge', maintenanceCharge);
+            formData.append('maintenance_type', maintenanceType);
+            formData.append('billing_start_mode', billingStartMode);
 
             const response = await fetch('/api/bulk-import/upload', {
                 method: 'POST',
@@ -62,7 +71,7 @@ export default function BulkImport() {
             const result = await response.json();
 
             if (!response.ok) {
-                throw new Error(result.error || 'Upload failed');
+                throw new Error(result.error?.message || result.error || 'Upload failed');
             }
 
             // Navigate to confirmation page
@@ -79,9 +88,9 @@ export default function BulkImport() {
             <div className="max-w-4xl mx-auto space-y-8">
                 {/* Header */}
                 <div>
-                    <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Bulk Tenant Import</h1>
+                    <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Tenant Onboarding Campaign</h1>
                     <p className="text-slate-500 text-sm mt-2">
-                        Upload an Excel file to import multiple tenants at once
+                        Configure owner defaults, collect tenant identity details, and import with room-derived rent.
                     </p>
                 </div>
 
@@ -110,11 +119,77 @@ export default function BulkImport() {
                 {/* Upload Form */}
                 <div className="bg-white shadow-lg rounded-[2.5rem] border border-slate-100 p-8">
                     <div className="space-y-6">
+                        {/* Campaign Defaults */}
+                        <div>
+                            <div className="flex items-center gap-2 mb-4">
+                                <CalendarDays size={18} className="text-slate-500" />
+                                <h2 className="text-sm font-bold text-slate-800">Owner Defaults</h2>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <label className="space-y-2">
+                                    <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Joining Date</span>
+                                    <input
+                                        type="date"
+                                        value={joiningDate}
+                                        onChange={(e) => setJoiningDate(e.target.value)}
+                                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800 focus:border-emerald-500 focus:outline-none"
+                                    />
+                                </label>
+                                <label className="space-y-2">
+                                    <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Billing Start</span>
+                                    <select
+                                        value={billingStartMode}
+                                        onChange={(e) => setBillingStartMode(e.target.value)}
+                                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800 focus:border-emerald-500 focus:outline-none"
+                                    >
+                                        <option value="JOINING_DATE">Joining date</option>
+                                        <option value="IMPORT_DATE">Import date</option>
+                                    </select>
+                                </label>
+                                <label className="space-y-2">
+                                    <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Deposit</span>
+                                    <div className="relative">
+                                        <IndianRupee size={16} className="absolute left-4 top-3.5 text-slate-400" />
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            value={advanceDeposit}
+                                            onChange={(e) => setAdvanceDeposit(e.target.value)}
+                                            placeholder="Use hostel default"
+                                            className="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-4 text-sm font-semibold text-slate-800 focus:border-emerald-500 focus:outline-none"
+                                        />
+                                    </div>
+                                </label>
+                                <label className="space-y-2">
+                                    <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Maintenance</span>
+                                    <div className="grid grid-cols-[1fr_140px] gap-2">
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            value={maintenanceCharge}
+                                            onChange={(e) => setMaintenanceCharge(e.target.value)}
+                                            placeholder="Use default"
+                                            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800 focus:border-emerald-500 focus:outline-none"
+                                        />
+                                        <select
+                                            value={maintenanceType}
+                                            onChange={(e) => setMaintenanceType(e.target.value)}
+                                            className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm font-semibold text-slate-800 focus:border-emerald-500 focus:outline-none"
+                                        >
+                                            <option value="MONTHLY">Monthly</option>
+                                            <option value="ONE_TIME">One-time</option>
+                                            <option value="NONE">None</option>
+                                        </select>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
                         {/* File Upload */}
                         <div>
                             <label className="block text-sm font-bold text-slate-700 mb-3">
                                 <FileSpreadsheet className="inline mr-2 mb-1" size={16} />
-                                Upload Excel File
+                                Upload Tenant Identity File
                             </label>
                             <div className="mt-2 flex justify-center px-6 pt-8 pb-8 border-2 border-slate-200 border-dashed rounded-2xl hover:border-slate-300 transition-colors bg-slate-50">
                                 <div className="space-y-2 text-center">
@@ -186,7 +261,7 @@ export default function BulkImport() {
                                 ) : (
                                     <>
                                         <Upload size={18} />
-                                        <span>Upload & Validate</span>
+                                        <span>Review Campaign</span>
                                     </>
                                 )}
                             </button>
@@ -199,7 +274,7 @@ export default function BulkImport() {
                     <div className="flex gap-3">
                         <HelpCircle className="text-blue-600 flex-shrink-0" size={20} />
                         <div>
-                            <h3 className="text-sm font-bold text-blue-900 mb-3">Required Columns</h3>
+                            <h3 className="text-sm font-bold text-blue-900 mb-3">Tenant-Entered Columns</h3>
                             <ul className="text-sm text-blue-800 space-y-2">
                                 <li className="flex gap-2">
                                     <span className="font-bold min-w-[180px]">name</span>
@@ -214,10 +289,6 @@ export default function BulkImport() {
                                     <span>Room number (required)</span>
                                 </li>
                                 <li className="flex gap-2">
-                                    <span className="font-bold min-w-[180px]">monthly_rent</span>
-                                    <span>Monthly rent amount (required)</span>
-                                </li>
-                                <li className="flex gap-2">
                                     <span className="font-bold min-w-[180px]">onboarding_password</span>
                                     <span>Password for first login (required, 6+ chars, letter+number)</span>
                                 </li>
@@ -226,6 +297,9 @@ export default function BulkImport() {
                                     <span>Email address (optional but recommended)</span>
                                 </li>
                             </ul>
+                            <p className="text-sm text-blue-800 mt-4 font-semibold">
+                                Rent is resolved from room configuration. Deposit, maintenance, and billing dates come from owner defaults above.
+                            </p>
                         </div>
                     </div>
                 </div>

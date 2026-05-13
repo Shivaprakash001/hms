@@ -63,7 +63,9 @@ export class TenantMigrationService {
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const billingStartDate = joiningDate > today ? joiningDate : today;
+      const billingStartDate = data.billing_start_mode === "IMPORT_DATE"
+        ? today
+        : joiningDate;
 
       const inviteDefaults = await hostelBillingPreferencesService.resolveTenantInviteDefaults(
         room.id,
@@ -71,7 +73,7 @@ export class TenantMigrationService {
       );
       const resolved = inviteDefaults.resolved_values;
 
-      const monthlyRent = data.monthly_rent ?? resolved.monthly_rent;
+      const monthlyRent = Number(room.base_rent || resolved.monthly_rent);
       const advanceAmount = data.advance_deposit ?? resolved.advance_deposit;
       const maintenanceType = (data.maintenance_type || resolved.maintenance_type) as "MONTHLY" | "ONE_TIME" | "NONE";
       const maintenanceAmount = maintenanceType === "NONE"
@@ -86,7 +88,7 @@ export class TenantMigrationService {
         };
       }
 
-      const hashedOnboardingPassword = await hashPassword(data.onboarding_password);
+      const hashedOnboardingPassword = data.onboarding_password_hash || await hashPassword(data.onboarding_password);
 
       const onboardingExpiresAt = new Date();
       onboardingExpiresAt.setDate(onboardingExpiresAt.getDate() + 30);

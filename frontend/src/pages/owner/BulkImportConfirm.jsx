@@ -1,6 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { CheckCircle2, AlertTriangle, XCircle, Upload } from 'lucide-react';
+
+function formatCurrency(value) {
+    const amount = Number(value || 0);
+    return `Rs. ${amount.toLocaleString('en-IN')}`;
+}
 
 export default function BulkImportConfirm() {
     const navigate = useNavigate();
@@ -8,15 +13,46 @@ export default function BulkImportConfirm() {
     const [isImporting, setIsImporting] = useState(false);
     const [error, setError] = useState(null);
     const [importResult, setImportResult] = useState(null);
+    const [batchPreview, setBatchPreview] = useState(null);
 
-    // Placeholder validation data (would come from API in production)
-    const [validation] = useState({
+    useEffect(() => {
+        let cancelled = false;
+
+        async function loadBatchPreview() {
+            try {
+                const response = await fetch(`/api/bulk-import/${batchId}/confirm`, {
+                    method: 'GET',
+                    credentials: 'include',
+                });
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.error?.message || result.error || 'Failed to load import preview');
+                }
+
+                if (!cancelled) {
+                    setBatchPreview(result);
+                }
+            } catch (err) {
+                if (!cancelled) {
+                    setError(err.message || 'Failed to load import preview');
+                }
+            }
+        }
+
+        loadBatchPreview();
+        return () => {
+            cancelled = true;
+        };
+    }, [batchId]);
+
+    const validation = batchPreview?.validation || {
         total_rows: 0,
-        valid: 0,
-        invalid: 0,
-        duplicates: 0,
-        warnings: [],
-    });
+        valid_rows: 0,
+        invalid_rows: 0,
+        duplicate_rows: 0,
+        warnings: 0,
+    };
 
     const handleConfirm = async () => {
         setIsImporting(true);
@@ -34,7 +70,7 @@ export default function BulkImportConfirm() {
             const result = await response.json();
 
             if (!response.ok) {
-                throw new Error(result.error || 'Import failed');
+                throw new Error(result.error?.message || result.error || 'Import failed');
             }
 
             setImportResult(result);
@@ -163,37 +199,56 @@ export default function BulkImportConfirm() {
                     </div>
                     <div className="bg-emerald-50 shadow-lg rounded-2xl border border-emerald-200 p-6">
                         <p className="text-sm font-semibold text-emerald-700 mb-2">Valid</p>
-                        <p className="text-3xl font-black text-emerald-900">{validation.valid}</p>
+                        <p className="text-3xl font-black text-emerald-900">{validation.valid_rows}</p>
                     </div>
                     <div className="bg-rose-50 shadow-lg rounded-2xl border border-rose-200 p-6">
                         <p className="text-sm font-semibold text-rose-700 mb-2">Invalid</p>
-                        <p className="text-3xl font-black text-rose-900">{validation.invalid}</p>
+                        <p className="text-3xl font-black text-rose-900">{validation.invalid_rows}</p>
                     </div>
                     <div className="bg-yellow-50 shadow-lg rounded-2xl border border-yellow-200 p-6">
                         <p className="text-sm font-semibold text-yellow-700 mb-2">Duplicates</p>
-                        <p className="text-3xl font-black text-yellow-900">{validation.duplicates}</p>
+                        <p className="text-3xl font-black text-yellow-900">{validation.duplicate_rows}</p>
                     </div>
                 </div>
 
-                {/* Warnings */}
-                {validation.warnings.length > 0 && (
-                    <div className="bg-yellow-50 border-l-4 border-yellow-400 rounded-xl p-6">
-                        <h3 className="text-sm font-bold text-yellow-900 mb-3 flex items-center gap-2">
-                            <AlertTriangle size={18} />
-                            Warnings
-                        </h3>
-                        <ul className="list-disc list-inside text-sm text-yellow-800 space-y-1">
-                            {validation.warnings.map((warning, idx) => (
-                                <li key={idx}>{warning}</li>
-                            ))}
-                        </ul>
+                {/* Resolved Rent Preview */}
+                <div className="bg-white shadow-lg rounded-2xl border border-slate-100 p-6">
+                    <h3 className="text-lg font-bold text-slate-900 mb-4">Resolved Rent Preview</h3>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                                    <th className="py-3 pr-4">Tenant</th>
+                                    <th className="py-3 pr-4">Room</th>
+                                    <th className="py-3 pr-4">Derived Rent</th>
+                                    <th className="py-3 pr-4">Deposit</th>
+                                    <th className="py-3 pr-4">Maintenance</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {(batchPreview?.preview?.valid || []).map((row) => (
+                                    <tr key={row.row} className="border-b border-slate-100">
+                                        <td className="py-3 pr-4 font-semibold text-slate-900">{row.data.name}</td>
+                                        <td className="py-3 pr-4 text-slate-700">{row.data.room_no}</td>
+                                        <td className="py-3 pr-4 font-bold text-emerald-700">{formatCurrency(row.data.monthly_rent)}</td>
+                                        <td className="py-3 pr-4 text-slate-700">{formatCurrency(row.data.advance_deposit)}</td>
+                                        <td className="py-3 pr-4 text-slate-700">
+                                            {formatCurrency(row.data.maintenance_charge)} {row.data.maintenance_type?.toLowerCase?.()}
+                                        </td>
+                                    </tr>
+                                ))}
+                                {!batchPreview?.preview?.valid?.length && (
+                                    <tr>
+                                        <td colSpan="5" className="py-8 text-center text-slate-500">
+                                            {error ? 'Preview unavailable' : 'Loading preview...'}
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
                     </div>
-                )}
-
-                {/* Note */}
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
-                    <p className="text-sm text-blue-800 font-semibold">
-                        <strong>Note:</strong> Validation details will be loaded from the batch. Click "Confirm Import" to proceed with importing valid rows.
+                    <p className="text-xs text-slate-500 mt-4">
+                        Rent comes from room configuration, not the uploaded file.
                     </p>
                 </div>
 
@@ -218,9 +273,9 @@ export default function BulkImportConfirm() {
                     </button>
                     <button
                         onClick={handleConfirm}
-                        disabled={isImporting || validation.valid === 0}
+                        disabled={isImporting || validation.valid_rows === 0}
                         className={`flex-1 py-3 px-6 rounded-xl font-bold transition-all shadow-lg flex items-center justify-center gap-2 ${
-                            isImporting || validation.valid === 0
+                            isImporting || validation.valid_rows === 0
                                 ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
                                 : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20 active:scale-95'
                         }`}
@@ -233,7 +288,7 @@ export default function BulkImportConfirm() {
                         ) : (
                             <>
                                 <Upload size={18} />
-                                <span>Confirm Import ({validation.valid} valid rows)</span>
+                                <span>Confirm Import ({validation.valid_rows} valid rows)</span>
                             </>
                         )}
                     </button>
