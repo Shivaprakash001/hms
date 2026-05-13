@@ -88,17 +88,26 @@ export default function ManageTenants() {
     const handleSaveTenant = async (data) => {
         try {
             if (tenantToEdit) {
-                await tenantService.update(tenantToEdit.id, {
+                if (tenantToEdit.status !== 'INVITED') {
+                    alert('Tenant details are locked after activation.');
+                    return;
+                }
+                const result = await tenantService.update(tenantToEdit.id, {
+                    invitation_edit: true,
+                    name: data.name,
+                    email: data.email,
+                    phone: data.phone || '',
+                    room_id: data.roomId,
                     monthly_rent: parseFloat(data.rent),
-                    status: data.status,
-                    joined_on: data.joinDate
+                    joining_date: data.joinDate,
                 });
-                alert("Tenant updated successfully");
+                alert(result?.message || "Invitation updated and resent successfully");
             }
             fetchTenants();
             setShowAddModal(false);
+            setTenantToEdit(null);
         } catch (err) {
-            alert("Error saving tenant: " + (err.response?.data?.detail || err.message));
+            alert("Error saving tenant: " + (err.response?.data?.error?.message || err.response?.data?.detail || err.message));
         }
     };
 
@@ -157,6 +166,12 @@ export default function ManageTenants() {
         } catch (err) {
             alert('Error cancelling invitation: ' + (err.response?.data?.error?.message || err.message));
         }
+    };
+
+    const handleEditInvitation = (tenant, e) => {
+        e.stopPropagation();
+        setTenantToEdit(tenant);
+        setShowAddModal(true);
     };
 
     // Filter Logic
@@ -448,6 +463,13 @@ export default function ManageTenants() {
                                                 <div className="flex items-center justify-end gap-1">
                                                     {tenant.status === 'INVITED' && (<>
                                                         <button
+                                                            onClick={(e) => handleEditInvitation(tenant, e)}
+                                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-700 hover:bg-slate-50 border border-slate-200 bg-white"
+                                                            title="Edit Invitation"
+                                                        >
+                                                            <Save size={14} /> Edit
+                                                        </button>
+                                                        <button
                                                             onClick={(e) => handleResendInvitation(tenant, e)}
                                                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-indigo-600 hover:bg-indigo-50 border border-indigo-200 bg-indigo-50/50"
                                                             title="Resend Invitation"
@@ -546,12 +568,20 @@ export default function ManageTenants() {
                                         </div>
                                         <div className="flex items-center gap-2">
                                             {tenant.status === 'INVITED' && (
-                                                <button
-                                                    onClick={(e) => handleCancelInvitation(tenant, e)}
-                                                    className="px-3 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all active:scale-95 bg-rose-50 text-rose-600 border border-rose-100"
-                                                >
-                                                    Cancel Invite
-                                                </button>
+                                                <>
+                                                    <button
+                                                        onClick={(e) => handleEditInvitation(tenant, e)}
+                                                        className="px-3 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all active:scale-95 bg-slate-50 text-slate-600 border border-slate-100"
+                                                    >
+                                                        Edit Invite
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => handleCancelInvitation(tenant, e)}
+                                                        className="px-3 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all active:scale-95 bg-rose-50 text-rose-600 border border-rose-100"
+                                                    >
+                                                        Cancel Invite
+                                                    </button>
+                                                </>
                                             )}
                                             {(tenant.status === 'ACTIVE' || tenant.status === 'LEFT') && (
                                                 <button
@@ -585,7 +615,7 @@ export default function ManageTenants() {
             <AnimatePresence>
                 {showAddModal && (
                     <AddTenantModal
-                        onClose={() => setShowAddModal(false)}
+                        onClose={() => { setShowAddModal(false); setTenantToEdit(null); }}
                         initialData={tenantToEdit}
                         onSave={handleSaveTenant}
                     />
@@ -627,6 +657,7 @@ const StatCard = ({ title, value, icon: Icon, iconBg, iconColor, isCurrency = fa
 const AddTenantModal = ({ onClose, initialData, onSave }) => {
     const { hostelId } = useHostelContext();
     const { data: floorsData, isLoading: loadingRooms } = useRooms(hostelId, { grouped: true });
+    const isInvitationEdit = initialData?.status === 'INVITED';
     
     const rooms = useMemo(() => {
         let allRooms = [];
@@ -690,8 +721,13 @@ const AddTenantModal = ({ onClose, initialData, onSave }) => {
                 <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                     <div>
                         <h2 className="text-2xl font-black text-slate-900">
-                            {initialData ? 'Edit Details' : 'New Tenant'}
+                            {isInvitationEdit ? 'Edit Invitation' : initialData ? 'Details Locked' : 'New Tenant'}
                         </h2>
+                        {isInvitationEdit && (
+                            <p className="text-xs text-slate-500 font-semibold mt-1">
+                                Changes are allowed only before tenant activation.
+                            </p>
+                        )}
                     </div>
                     <button onClick={onClose} className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-900 transition-colors shadow-sm">
                         <X size={20} />
@@ -711,7 +747,7 @@ const AddTenantModal = ({ onClose, initialData, onSave }) => {
                             </div>
                         </div>
 
-                        {!initialData && (
+                        {(!initialData || isInvitationEdit) && (
                             <div className="space-y-2">
                                 <label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">Room</label>
                                 <select
@@ -735,6 +771,18 @@ const AddTenantModal = ({ onClose, initialData, onSave }) => {
                         )}
 
                         <div className="grid grid-cols-2 gap-4">
+                            {isInvitationEdit && (
+                                <div className="space-y-2 col-span-2">
+                                    <label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">Email</label>
+                                    <input
+                                        type="email"
+                                        required
+                                        value={formData.email}
+                                        onChange={e => setFormData({ ...formData, email: e.target.value })}
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+                                    />
+                                </div>
+                            )}
                             <div className="space-y-2">
                                 <label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">Rent</label>
                                 <input type="number" required value={formData.rent} onChange={e => setFormData({ ...formData, rent: e.target.value })} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold" />
@@ -770,8 +818,8 @@ const AddTenantModal = ({ onClose, initialData, onSave }) => {
 
                     <div className="pt-4 flex gap-4">
                         <button type="button" onClick={onClose} className="flex-1 py-4 rounded-xl bg-slate-100 text-slate-500 font-bold hover:bg-slate-200 transition-colors">Cancel</button>
-                        <button type="submit" disabled={submitting} className="flex-1 py-4 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-colors shadow-lg">
-                            {submitting ? 'Saving...' : 'Save Details'}
+                        <button type="submit" disabled={submitting || (initialData && !isInvitationEdit)} className="flex-1 py-4 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-colors shadow-lg disabled:opacity-50">
+                            {submitting ? 'Saving...' : isInvitationEdit ? 'Save & Resend' : 'Save Details'}
                         </button>
                     </div>
                 </form>

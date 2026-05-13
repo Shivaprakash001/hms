@@ -96,6 +96,15 @@ export const InvitationSchema = z.object({
   maintenance_type: z.enum(["MONTHLY", "ONE_TIME", "NONE"]).optional(), // defaults to hostel billing policy
 });
 
+export const InvitationUpdateSchema = z.object({
+  email: z.string().email(),
+  name: z.string().min(2),
+  phone: z.string().optional(),
+  room_id: z.string().uuid(),
+  monthly_rent: z.coerce.number().positive(),
+  joining_date: z.string().optional(),
+});
+
 export const ActivationSchema = z.object({
   token: z.string().min(1),
   password: z.string().min(8),

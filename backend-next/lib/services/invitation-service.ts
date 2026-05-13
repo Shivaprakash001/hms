@@ -7,6 +7,7 @@ import { getLogger } from "../logger";
 import { planEnforcementService } from "./plan-enforcement-service";
 import { allocationReconciliationService } from "./allocation-reconciliation-service";
 import { hostelBillingPreferencesService, type MaintenanceType } from "./hostel-billing-preferences-service";
+import { eventLog } from "./event-log-service";
 
 const logger = getLogger("invitation-service");
 
@@ -456,6 +457,194 @@ export class InvitationService {
     return {
       message: "Invitation resent successfully",
       action: "RESENT",
+      email: normalizedEmail,
+      activation_link: activationLink,
+      email_sent: true,
+    };
+  }
+
+  async updateInvitation(
+    tenantId: string,
+    ownerId: string,
+    data: {
+      email: string;
+      name: string;
+      phone?: string;
+      room_id: string;
+      monthly_rent: number;
+      joining_date?: string;
+    }
+  ) {
+    const normalizedEmail = String(data.email || "").trim().toLowerCase();
+    const joiningDate = data.joining_date ? new Date(data.joining_date) : new Date();
+    joiningDate.setHours(0, 0, 0, 0);
+
+    const tenant = await prisma.tenant.findFirst({
+      where: { id: tenantId, owner_id: ownerId },
+      include: {
+        profile: true,
+        allocations: {
+          where: { is_active: true, end_date: null },
+          orderBy: { start_date: "desc" },
+          take: 1,
+        },
+        payments: { select: { id: true }, take: 1 },
+      },
+    });
+
+    if (!tenant) throw new Error("NOT_FOUND: Tenant invitation not found");
+    if (tenant.status !== "INVITED") {
+      throw new Error("VALIDATION: Invitation can be edited only before tenant activation");
+    }
+    if (tenant.payments.length > 0) {
+      throw new Error("VALIDATION: Invitation cannot be edited after payment activity exists");
+    }
+
+    const targetRoom = await prisma.room.findFirst({
+      where: { id: data.room_id, is_active: true, hostel: { owner_id: ownerId, is_active: true } },
+      include: {
+        hostel: true,
+        allocations: {
+          where: {
+            is_active: true,
+            end_date: null,
+            tenant_id: { not: tenantId },
+          },
+          select: { id: true },
+        },
+      },
+    });
+    if (!targetRoom || !targetRoom.hostel) throw new Error("NOT_FOUND: Target room not found");
+    if (targetRoom.allocations.length >= targetRoom.capacity) {
+      throw new Error("CAPACITY_EXCEEDED: Target room is already at full capacity");
+    }
+
+    const emailOwner = await prisma.profile.findUnique({
+      where: { email: normalizedEmail },
+      select: { id: true, owner_id: true },
+    });
+    if (emailOwner && emailOwner.id !== tenant.profile_id) {
+      throw new Error("ALREADY_EXISTS: A user with this email already exists");
+    }
+
+    const token = crypto.randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.profile.update({
+        where: { id: tenant.profile_id },
+        data: {
+          email: normalizedEmail,
+          name: data.name,
+          phone: data.phone || null,
+          invitation_token: token,
+          invitation_expires_at: expiresAt,
+        },
+      });
+
+      await tx.tenant.update({
+        where: { id: tenant.id },
+        data: {
+          monthly_rent: Number(data.monthly_rent),
+          joined_on: joiningDate,
+          billing_start_date: joiningDate,
+          hostel_id: targetRoom.hostel_id,
+        },
+      });
+
+      const activeAllocation = tenant.allocations[0];
+      if (activeAllocation) {
+        await tx.roomAllocation.update({
+          where: { id: activeAllocation.id },
+          data: {
+            room_id: targetRoom.id,
+            hostel_id: targetRoom.hostel_id,
+            start_date: joiningDate,
+          },
+        });
+      } else {
+        await tx.roomAllocation.create({
+          data: {
+            tenant_id: tenant.id,
+            room_id: targetRoom.id,
+            hostel_id: targetRoom.hostel_id,
+            start_date: joiningDate,
+            is_active: true,
+          },
+        });
+      }
+
+      await tx.rentObligation.updateMany({
+        where: {
+          tenant_id: tenant.id,
+          status: { in: ["PENDING", "PARTIAL"] },
+          payments: { none: {} },
+        },
+        data: {
+          owner_id: ownerId,
+          hostel_id: targetRoom.hostel_id,
+          rent_month: joiningDate,
+        },
+      });
+    });
+
+    await allocationReconciliationService.reconcileTenant(tenant.id).catch((err: any) => {
+      logger.error("reconcile_after_invitation_update_failed", {
+        tenant_id: tenant.id,
+        room_id: targetRoom.id,
+        error: String(err?.message || err),
+      });
+    });
+
+    const owner = await prisma.profile.findUnique({ where: { id: ownerId } });
+    if (!owner) throw new Error("INTERNAL_ERROR: Cannot resend, missing owner details.");
+
+    let baseUrl = process.env.NEXT_PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || "https://trishul.solutions";
+    if (!baseUrl.startsWith("http")) {
+      baseUrl = `https://${baseUrl}`;
+    } else if (baseUrl.startsWith("http://") && !baseUrl.includes("localhost")) {
+      baseUrl = baseUrl.replace("http://", "https://");
+    }
+    const activationLink = `${baseUrl}/activate?token=${token}`;
+
+    const emailResult = await EmailService.sendInvitation({
+      toEmail: normalizedEmail,
+      tenantName: data.name,
+      ownerName: owner.name,
+      hostelName: targetRoom.hostel.name,
+      roomNumber: targetRoom.room_no,
+      roomRent: Number(data.monthly_rent),
+      activationLink,
+    });
+
+    await eventLog.log("INVITATION_UPDATED_BY_OWNER", ownerId, {
+      tenant_id: tenant.id,
+      room_id: targetRoom.id,
+      hostel_id: targetRoom.hostel_id,
+      email: normalizedEmail,
+      email_sent: emailResult.sent,
+    }, tenant.id);
+
+    await eventSystem.trigger("tenant_updated", {
+      owner_id: ownerId,
+      tenant_id: tenant.id,
+      hostel_id: targetRoom.hostel_id,
+    });
+
+    if (!emailResult.sent) {
+      return {
+        message: "Invitation updated, but email delivery failed",
+        action: "UPDATED",
+        email: normalizedEmail,
+        activation_link: activationLink,
+        email_sent: false,
+        email_error: String(emailResult.error || "unknown"),
+      };
+    }
+
+    return {
+      message: "Invitation updated and resent successfully",
+      action: "UPDATED",
       email: normalizedEmail,
       activation_link: activationLink,
       email_sent: true,
