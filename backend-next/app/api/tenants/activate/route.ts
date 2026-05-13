@@ -47,3 +47,26 @@ export async function POST(req: NextRequest) {
   }
 }
 
+export async function GET(req: NextRequest) {
+  try {
+    const token = new URL(req.url).searchParams.get("token");
+    if (!token) return apiError("Activation token is required", "VALIDATION_ERROR", 400);
+
+    const result = await invitationService.validateActivationToken(token);
+    return apiResponse(result, 200);
+  } catch (error: any) {
+    const rawMessage = String(error?.message || "Failed to validate activation link");
+    const [maybeCode, ...rest] = rawMessage.split(":");
+    const normalizedCode = maybeCode?.trim();
+    const normalizedMessage = rest.length > 0 ? rest.join(":").trim() : rawMessage;
+
+    const statusMap: Record<string, number> = {
+      INVALID: 410,
+      VALIDATION_ERROR: 400,
+      INTERNAL_ERROR: 500,
+    };
+
+    const status = statusMap[normalizedCode] || 500;
+    return apiError(normalizedMessage, normalizedCode || "ACTIVATION_ERROR", status);
+  }
+}

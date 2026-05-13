@@ -254,6 +254,10 @@ export class InvitationService {
         logger.error(`No tenant record found for profile ${profile.id} during activation.`);
         throw new Error("INTERNAL_ERROR: Could not find associated tenant record.");
     }
+    if (tenant.status !== "INVITED") {
+        logger.warn(`Activation rejected for tenant ${tenant.id}: status=${tenant.status}`);
+        throw new Error("INVALID: Activation link has already been used");
+    }
 
     const hashedPassword = await hashPassword(password);
 
@@ -281,6 +285,33 @@ export class InvitationService {
     logger.info(`Successfully activated account for email: ${profile.email}`);
 
     return { success: true, message: "Account activated successfully." };
+  }
+
+  async validateActivationToken(token: string) {
+    const profile = await prisma.profile.findFirst({
+      where: {
+        invitation_token: token,
+        invitation_expires_at: { gte: new Date() },
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        tenant_details: {
+          select: { status: true },
+        },
+      },
+    });
+
+    if (!profile || profile.tenant_details?.status !== "INVITED") {
+      throw new Error("INVALID: Activation link expired or already used");
+    }
+
+    return {
+      valid: true,
+      email: profile.email,
+      name: profile.name,
+    };
   }
 
   async resendInvitation(

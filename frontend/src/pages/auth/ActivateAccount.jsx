@@ -13,8 +13,35 @@ const ActivateAccount = () => {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [isCheckingToken, setIsCheckingToken] = useState(true);
     const [error, setError] = useState('');
     const [isSuccess, setIsSuccess] = useState(false);
+    const [isInvalidLink, setIsInvalidLink] = useState(false);
+
+    useEffect(() => {
+        if (!token) {
+            setIsCheckingToken(false);
+            setIsInvalidLink(true);
+            return;
+        }
+
+        let mounted = true;
+        api.get('/tenants/activate', { params: { token } })
+            .then(() => {
+                if (!mounted) return;
+                setIsCheckingToken(false);
+                setIsInvalidLink(false);
+            })
+            .catch((err) => {
+                if (!mounted) return;
+                setIsCheckingToken(false);
+                setIsInvalidLink(true);
+                setError(err.response?.data?.error?.message || 'This activation link has expired or has already been used.');
+                setTimeout(() => navigate('/login', { replace: true }), 1800);
+            });
+
+        return () => { mounted = false; };
+    }, [navigate, token]);
 
     const handleActivate = async (e) => {
         e.preventDefault();
@@ -34,24 +61,44 @@ const ActivateAccount = () => {
             await api.post('/tenants/activate', { token, password, confirm_password: confirmPassword });
             setIsSuccess(true);
             setTimeout(() => {
-                navigate('/login');
-            }, 3000);
+                navigate('/login', { replace: true });
+            }, 1200);
         } catch (err) {
-            setError(err.response?.data?.error?.message || err.response?.data?.detail?.message || "Activation failed. The link might be expired.");
+            const code = err.response?.data?.error?.code;
+            const message = err.response?.data?.error?.message || err.response?.data?.detail?.message || "Activation failed. The link might be expired.";
+            setError(message);
+            if (code === 'INVALID' || err.response?.status === 410) {
+                setIsInvalidLink(true);
+                setTimeout(() => navigate('/login', { replace: true }), 1800);
+            }
         } finally {
             setIsLoading(false);
         }
     };
 
-    if (!token) {
+    if (isCheckingToken) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+                <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center">
+                    <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mx-auto mb-4" />
+                    <h2 className="text-xl font-bold text-slate-900 mb-2">Checking activation link</h2>
+                    <p className="text-slate-500">Please wait...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (!token || isInvalidLink) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
                 <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center">
                     <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 text-red-600">
                         <ShieldCheck size={32} />
                     </div>
-                    <h2 className="text-2xl font-bold text-slate-900 mb-2">Invalid Link</h2>
-                    <p className="text-slate-500 mb-6">This activation link is invalid or has expired.</p>
+                    <h2 className="text-2xl font-bold text-slate-900 mb-2">Activation Link Closed</h2>
+                    <p className="text-slate-500 mb-6">
+                        {error || 'This activation link is invalid, expired, or already used. Redirecting you to login...'}
+                    </p>
                     <button onClick={() => navigate('/login')} className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold">Return to Login</button>
                 </div>
             </div>
