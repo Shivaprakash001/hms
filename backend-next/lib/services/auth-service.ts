@@ -314,7 +314,29 @@ export class AuthService {
       });
     }
 
-    if (profile.role === "OWNER" && !profile.owner_id) {
+    if (!profile.is_active) {
+      throw new Error("FORBIDDEN: Account is disabled");
+    }
+
+    let tenantId = profile.tenant_details?.id || null;
+    let tenantProfileCompleted = profile.tenant_details ? profile.tenant_details.profile_completed : profile.is_profile_completed;
+
+    if (profile.role === "TENANT" && profile.tenant_details?.status === "INVITED") {
+      throw new Error("FORBIDDEN: Account not activated. Please check your email.");
+    }
+
+    let effectiveOwnerId = profile.owner_id;
+    if (profile.role === "OWNER" && (!effectiveOwnerId || effectiveOwnerId.trim() === "")) {
+      console.warn("[auth.googleLogin] repairing missing owner_id for OWNER", { user_id: profile.id });
+      const updated = await prisma.profile.update({
+        where: { id: profile.id },
+        data: { owner_id: profile.id },
+        select: { owner_id: true },
+      });
+      effectiveOwnerId = updated.owner_id;
+    }
+
+    if (profile.role === "OWNER" && !effectiveOwnerId) {
       throw new Error("UNAUTHORIZED: Invalid OWNER: missing owner_id");
     }
 
@@ -323,7 +345,8 @@ export class AuthService {
       sub: profile.id,
       role: profile.role,
       email: profile.email,
-      owner_id: profile.owner_id || null,
+      owner_id: effectiveOwnerId || null,
+      tenant_id: tenantId,
     });
 
     // 5. Create refresh token (same as email login)
@@ -347,8 +370,9 @@ export class AuthService {
       role: profile.role,
       name: profile.name,
       user_id: profile.id,
-      tenant_id: profile.tenant_details?.id || null,
-      is_profile_completed: profile.tenant_details ? profile.tenant_details.profile_completed : profile.is_profile_completed,
+      owner_id: effectiveOwnerId || null,
+      tenant_id: tenantId,
+      is_profile_completed: tenantProfileCompleted,
     };
   }
 }

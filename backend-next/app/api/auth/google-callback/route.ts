@@ -44,6 +44,8 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     if (error.message.startsWith("UNAUTHORIZED")) 
       return apiError(error.message.split(": ")[1], "UNAUTHORIZED", 401);
+    if (error.message.startsWith("FORBIDDEN"))
+      return apiError(error.message.split(": ")[1], "FORBIDDEN", 403);
     return apiError(error.message || "Google authentication failed");
   }
 }

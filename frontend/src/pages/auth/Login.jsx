@@ -34,21 +34,43 @@ const Login = () => {
     const [password, setPassword] = useState('');
     const navigate = useNavigate();
 
-    const { login } = useAuth();
+    const { login, loginWithGoogle } = useAuth();
     const [error, setError] = useState('');
 
-    const onLoginSuccess = () => {
-        navigate('/owner/dashboard');
+    const navigateForUser = (user) => {
+        const role = (user?.role || '').toLowerCase();
+        if (role === 'owner' || role === 'admin') {
+            navigate('/owner/dashboard');
+        } else if (role === 'tenant') {
+            if (!user.is_profile_completed) {
+                navigate('/complete-profile', { replace: true });
+            } else {
+                navigate('/tenant/dashboard');
+            }
+        }
     };
 
     const loginGoogle = useGoogleLogin({
-        onSuccess: tokenResponse => {
-            console.log(tokenResponse);
-            onLoginSuccess();
+        onSuccess: async (tokenResponse) => {
+            setIsLoading(true);
+            setError('');
+            try {
+                if (!tokenResponse?.code) {
+                    throw new Error('Google did not return an authorization code.');
+                }
+
+                const redirectUri = import.meta.env.VITE_GOOGLE_REDIRECT_URI || `${window.location.origin}/callback`;
+                const user = await loginWithGoogle(tokenResponse.code, redirectUri);
+                navigateForUser(user);
+            } catch (err) {
+                console.error('Google login failed:', err);
+                setError(err.message || 'Google authentication failed');
+            } finally {
+                setIsLoading(false);
+            }
         },
         onError: () => {
-            console.log('Login Failed');
-            alert("Login Failed. Please check console.");
+            setError('Google authentication failed. Please try again.');
         },
         flow: 'auth-code',
         redirect_uri: import.meta.env.VITE_GOOGLE_REDIRECT_URI || `${window.location.origin}/callback`
@@ -60,16 +82,7 @@ const Login = () => {
         setError('');
         try {
             const user = await login(email, password);
-            const role = (user?.role || '').toLowerCase();
-            if (role === 'owner' || role === 'admin') {
-                navigate('/owner/dashboard');
-            } else if (role === 'tenant') {
-                if (!user.is_profile_completed) {
-                    navigate('/complete-profile', { replace: true });
-                } else {
-                    navigate('/tenant/dashboard');
-                }
-            }
+            navigateForUser(user);
         } catch (err) {
             console.error("Login error:", err);
             setError(err.message || 'Login failed');
@@ -232,9 +245,10 @@ const Login = () => {
                         whileHover={{ scale: 1.02, backgroundColor: '#f8fafc' }}
                         whileTap={{ scale: 0.98 }}
                         onClick={() => loginGoogle()}
+                        disabled={isLoading}
                         className="w-full flex items-center justify-center gap-3 py-3.5 px-4 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-slate-200 transition-all"
                     >
-                        <GoogleIcon />
+                        {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <GoogleIcon />}
                         <span className="text-sm">Sign in with Google</span>
                     </motion.button>
 
