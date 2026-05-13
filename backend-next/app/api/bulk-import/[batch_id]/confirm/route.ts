@@ -133,7 +133,7 @@ export async function POST(
       },
     });
 
-    const subscription = await prisma.subscription.findUnique({
+    const subscription = await prisma.ownerSubscription.findUnique({
       where: { owner_id: session.sub },
       include: { plan: true },
     });

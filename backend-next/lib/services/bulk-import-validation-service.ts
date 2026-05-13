@@ -109,7 +109,7 @@ export class BulkImportValidationService {
     return rawData.map((row) => ({
       name: this.readCell(row, ["Full Name", "full_name", "name", "Name", "NAME"]),
       phone: this.readCell(row, ["Phone Number", "phone_number", "phone", "Phone", "PHONE", "mobile", "Mobile"]),
-      email: this.readCell(row, ["Email Address", "Email Address_1", "email_address", "email", "Email", "EMAIL"]) || undefined,
+      email: this.readCell(row, ["Username", "Email Address", "Email Address_1", "email_address", "email", "Email", "EMAIL"]) || undefined,
       room_no: this.readCell(row, ["Current Room", "current_room", "room_no", "room", "Room", "ROOM", "room_number"]),
       onboarding_password: this.readCell(row, [
         "Temporary Onboarding Password",
