@@ -68,22 +68,13 @@ export default function BulkImport() {
             formData.append('maintenance_type', maintenanceType);
             formData.append('billing_start_mode', billingStartMode);
 
-            const response = await fetch('/api/bulk-import/upload', {
-                method: 'POST',
-                body: formData,
-                credentials: 'include',
-            });
-
-            const result = await response.json();
-
-            if (!response.ok) {
-                throw new Error(result.error?.message || result.error || 'Upload failed');
-            }
+            const result = await bulkImportService.uploadTenantIdentityFile(formData);
 
             // Navigate to confirmation page
             navigate(`/hostels/${hostelId}/bulk-import/${result.batch_id}/confirm`);
         } catch (err) {
-            setError(err.message || 'Upload failed. Please try again.');
+            const message = err?.response?.data?.error?.message || err?.response?.data?.error || err.message;
+            setError(message || 'Upload failed. Please try again.');
         } finally {
             setIsUploading(false);
         }

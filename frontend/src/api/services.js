@@ -186,6 +186,10 @@ export const bulkImportService = {
         });
         return response.data;
     },
+    uploadTenantIdentityFile: async (formData) => {
+        const response = await api.post('/bulk-import/upload', formData);
+        return response.data;
+    },
 };
 
 // --- Billing & Plans Service ---
