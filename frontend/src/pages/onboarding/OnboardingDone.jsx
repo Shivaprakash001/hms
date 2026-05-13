@@ -48,7 +48,7 @@ export default function OnboardingDone() {
     { icon: '🏠', label: 'Hostel created',         detail: stats.hostelName,              ok: true },
     { icon: '🚪', label: 'Rooms added',             detail: `${stats.rooms} room${stats.rooms !== 1 ? 's' : ''}`, ok: stats.rooms > 0 },
     { icon: '👤', label: 'Tenants added',           detail: `${stats.tenants} tenant${stats.tenants !== 1 ? 's' : ''}`, ok: stats.tenants > 0 },
-    { icon: '⚡', label: 'Rent automation enabled', detail: `Generates on the ${stats.rentDay}${['st','nd','rd'][((stats.rentDay % 10) - 1)] ?? 'th'} every month`, ok: true },
+    { icon: '⚡', label: 'Billing schedule saved', detail: `Cycle starts on the ${stats.rentDay}${['st','nd','rd'][((stats.rentDay % 10) - 1)] ?? 'th'} every month`, ok: true },
   ];
 
   return (
@@ -120,7 +120,7 @@ export default function OnboardingDone() {
         <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/10">
           <Bell size={14} className="text-indigo-300" />
           <p className="text-xs text-indigo-200 font-medium">
-            Reminders will send automatically after the due date. No manual work needed.
+            Automatic reminders are available after upgrading to Starter.
           </p>
         </div>
       </motion.div>

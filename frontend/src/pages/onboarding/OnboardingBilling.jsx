@@ -47,15 +47,15 @@ function TimelinePreview({ rentDay, dueDay }) {
   const nextMonth = new Date(new Date().setMonth(new Date().getMonth() + 1)).toLocaleString('default', { month: 'long' });
 
   const events = [
-    { day: `${thisMonth} ${rentDay}`, label: '📋 Rent generated', sub: 'Tenants see the due bill instantly', color: 'bg-indigo-100 text-indigo-700' },
+    { day: `${thisMonth} ${rentDay}`, label: '📋 Rent schedule saved', sub: 'Use this as the monthly billing date for this hostel', color: 'bg-indigo-100 text-indigo-700' },
     { day: `${shifted ? nextMonth : thisMonth} ${dueDay}`, label: '📅 Due date', sub: 'Tenants must pay by this day', color: 'bg-violet-100 text-violet-700' },
-    { day: 'From due date +1', label: '🔔 Reminders start', sub: 'Automatic WhatsApp + in-app alerts', color: 'bg-amber-100 text-amber-700' },
+    { day: 'After due date', label: '🔔 Reminder window', sub: 'Automatic reminders unlock on Starter', color: 'bg-amber-100 text-amber-700' },
   ];
 
   return (
     <div className="bg-gradient-to-br from-slate-900 to-indigo-950 rounded-2xl p-5 space-y-3">
       <p className="text-[10px] font-black uppercase tracking-widest text-indigo-300 mb-4">
-        Automation Timeline Preview
+        Billing Timeline Preview
       </p>
       {events.map((e, i) => (
         <motion.div
@@ -119,7 +119,6 @@ export default function OnboardingBilling() {
   const navigate = useNavigate();
   const [rentDay, setRentDay] = useState(1);
   const [dueDay, setDueDay]   = useState(5);
-  const [autoReminders, setAutoReminders] = useState(true);
   const [timezone, setTimezone] = useState('Asia/Kolkata');
   const [advanceDeposit, setAdvanceDeposit] = useState(5000);
   const [maintenanceCharge, setMaintenanceCharge] = useState(1000);
@@ -156,8 +155,8 @@ export default function OnboardingBilling() {
         auto_rent_day:    rentDay,
         due_day:          dueDay,
         timezone:         timezone,
-        auto_generate_rent: true,
-        auto_send_reminders: autoReminders,
+        auto_generate_rent: false,
+        auto_send_reminders: false,
       }, hostelId);
       await ownerService.updateHostelBillingDefaults(hostelId, {
         advance_deposit: advanceDeposit,
@@ -193,10 +192,10 @@ export default function OnboardingBilling() {
           <span className="text-xs font-black uppercase tracking-widest text-amber-600">Critical Step</span>
         </div>
         <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-          Set up rent automation
+          Set up rent billing
         </h1>
         <p className="text-slate-500 mt-1 text-sm">
-          This is what saves you hours every month. You won't need to chase tenants manually.
+          Save the billing dates and tenant defaults for this hostel. Automation can be enabled after upgrading.
         </p>
       </div>
 
@@ -211,8 +210,8 @@ export default function OnboardingBilling() {
         id="onboarding-rent-day"
         value={rentDay}
         onChange={setRentDay}
-        label="Generate rent on the ___th of every month"
-        hint="Tenants will see a new bill on this day"
+        label="Rent cycle starts on the ___th of every month"
+        hint="This becomes the default monthly billing date"
       />
 
       {/* Due Day */}
@@ -221,7 +220,7 @@ export default function OnboardingBilling() {
         value={dueDay}
         onChange={setDueDay}
         label="Tenants must pay by the ___th"
-        hint="Reminders start automatically after this date"
+        hint="This is used for dues and reminder timing"
       />
 
       {/* Timeline preview — updates live */}
@@ -285,22 +284,17 @@ export default function OnboardingBilling() {
         </div>
       </div>
 
-      {/* Auto-reminders toggle */}
+      {/* Automation availability */}
       <div className="flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-200">
         <div>
           <p className="text-sm font-black text-slate-900">🔔 Auto-reminders</p>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Tenants get WhatsApp + in-app reminders after due date
+            WhatsApp and in-app reminders unlock on Starter
           </p>
         </div>
-        <button
-          type="button"
-          id="onboarding-reminders-toggle"
-          onClick={() => setAutoReminders(r => !r)}
-          className={`relative w-12 h-6 rounded-full transition-colors ${autoReminders ? 'bg-indigo-600' : 'bg-slate-200'}`}
-        >
-          <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${autoReminders ? 'translate-x-6' : 'translate-x-0.5'}`} />
-        </button>
+        <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full">
+          Starter
+        </span>
       </div>
 
       {/* Timezone (collapsed, auto-detected) */}
