@@ -5,6 +5,13 @@ import { LoginSchema } from "../validators";
 import { randomUUID } from "crypto";
 
 export class AuthService {
+  private getGoogleCodeRedirectUri(redirectUri?: string) {
+    if (!redirectUri) {
+      return process.env.GOOGLE_REDIRECT_URI || "https://hms-sand-five.vercel.app/callback";
+    }
+    return redirectUri;
+  }
+
   private async verifyOrMigrateLegacyPassword(profile: { id: string; password_hash: string | null }, inputPassword: string) {
     const stored = profile.password_hash;
     if (!stored) return false;
@@ -246,26 +253,68 @@ export class AuthService {
   async googleLogin(code: string, redirectUri?: string) {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    const effectiveRedirectUri = redirectUri || process.env.GOOGLE_REDIRECT_URI || "https://hms-sand-five.vercel.app/callback";
+    const effectiveRedirectUri = this.getGoogleCodeRedirectUri(redirectUri);
 
-    // 1. Exchange code for tokens
-    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        code,
-        client_id: clientId!,
-        client_secret: clientSecret!,
-        redirect_uri: effectiveRedirectUri,
-        grant_type: "authorization_code",
-      }),
-    });
+    const exchangeCode = async (exchangeRedirectUri: string) => {
+      const response = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          code,
+          client_id: clientId!,
+          client_secret: clientSecret!,
+          redirect_uri: exchangeRedirectUri,
+          grant_type: "authorization_code",
+        }),
+      });
 
-    if (!tokenRes.ok) {
+      if (response.ok) return { response, redirectUri: exchangeRedirectUri, error: null as any };
+
+      let error: any = null;
+      try {
+        error = await response.json();
+      } catch {
+        error = { statusText: response.statusText };
+      }
+
+      return { response, redirectUri: exchangeRedirectUri, error };
+    };
+
+    // 1. Exchange code for tokens. Popup mode binds the code to the page origin,
+    // while redirect mode binds it to the callback URL.
+    let tokenExchange = await exchangeCode(effectiveRedirectUri);
+
+    if (!tokenExchange.response.ok) {
+      let originFallback: string | null = null;
+      try {
+        const parsed = new URL(effectiveRedirectUri);
+        if (parsed.pathname === "/callback" && !parsed.search && !parsed.hash) {
+          originFallback = parsed.origin;
+        }
+      } catch {
+        originFallback = null;
+      }
+
+      if (originFallback && originFallback !== effectiveRedirectUri) {
+        const fallbackExchange = await exchangeCode(originFallback);
+        if (fallbackExchange.response.ok) {
+          tokenExchange = fallbackExchange;
+        }
+      }
+    }
+
+    if (!tokenExchange.response.ok) {
+      const googleError = tokenExchange.error;
+      console.error("[auth.googleLogin] Google code exchange failed", {
+        status: tokenExchange.response.status,
+        error: googleError?.error,
+        error_description: googleError?.error_description,
+        redirect_uri: tokenExchange.redirectUri,
+      });
       throw new Error("UNAUTHORIZED: Failed to exchange Google code");
     }
 
-    const { access_token } = await tokenRes.json();
+    const { access_token } = await tokenExchange.response.json();
 
     // 2. Get user info
     const userRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {

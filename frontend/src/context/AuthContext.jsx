@@ -136,7 +136,7 @@ export const AuthProvider = ({ children }) => {
 
     const loginWithGoogle = async (code, redirectUri) => {
         try {
-            // Pass the redirect_uri so the backend can use the same value when exchanging the code with Google
+            // Pass the same redirect_uri/origin used by Google Identity Services when issuing the code.
             const response = await api.post('/auth/google-callback', { code, redirect_uri: redirectUri });
             queryClient.clear();
             clearSessionScopedStorage();

@@ -59,7 +59,7 @@ const Login = () => {
                     throw new Error('Google did not return an authorization code.');
                 }
 
-                const redirectUri = import.meta.env.VITE_GOOGLE_REDIRECT_URI || `${window.location.origin}/callback`;
+                const redirectUri = window.location.origin;
                 const user = await loginWithGoogle(tokenResponse.code, redirectUri);
                 navigateForUser(user);
             } catch (err) {
@@ -73,7 +73,8 @@ const Login = () => {
             setError('Google authentication failed. Please try again.');
         },
         flow: 'auth-code',
-        redirect_uri: import.meta.env.VITE_GOOGLE_REDIRECT_URI || `${window.location.origin}/callback`
+        ux_mode: 'popup',
+        scope: 'openid email profile',
     });
 
     const handleLogin = async (e) => {
