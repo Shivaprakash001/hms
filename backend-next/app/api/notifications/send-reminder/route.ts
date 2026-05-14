@@ -39,6 +39,8 @@ export async function POST(req: NextRequest) {
       return apiResponse({
         success: false,
         message: `No unpaid obligations found for ${result.tenant_name}`,
+        tenant_name: result.tenant_name,
+        channels: result.channels,
       });
     }
 

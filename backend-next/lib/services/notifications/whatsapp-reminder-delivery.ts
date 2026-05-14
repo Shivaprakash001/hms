@@ -149,7 +149,17 @@ export class WhatsAppReminderDeliveryService {
         ${input.idempotencyKey},
         0
       )
-      ON CONFLICT (idempotency_key) DO NOTHING
+      ON CONFLICT (idempotency_key) DO UPDATE
+      SET status = 'PENDING',
+          delivery_status = 'PENDING',
+          provider_message_id = NULL,
+          provider_error_code = NULL,
+          provider_error_message = NULL,
+          error_message = NULL,
+          attempt_count = 0,
+          provider_response = NULL
+      WHERE whatsapp_logs.status = 'FAILED'
+         OR whatsapp_logs.delivery_status IN ('FAILED_FINAL', 'FAILED_RETRYABLE')
       RETURNING id::text, delivery_status
     `;
 

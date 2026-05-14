@@ -390,15 +390,12 @@ export class ReminderService {
         result.credited = true;
       } catch (creditErr: any) {
         if (creditErr?.code === "NO_REMINDERS_LEFT") {
-          result.in_app = { attempted: false, sent: false, skipped: true, reason: "NO_REMINDERS_LEFT" };
-          result.email = { attempted: false, sent: false, skipped: true, reason: "NO_REMINDERS_LEFT" };
-          result.whatsapp = { attempted: false, sent: false, skipped: true, reason: "NO_REMINDERS_LEFT" };
           logger.warn("reminder.notification.skipped", {
             tenant_id: tenant.id,
             owner_id: ownerId,
             reason: "NO_REMINDERS_LEFT",
           });
-          return result;
+          throw creditErr;
         }
         throw creditErr;
       }
