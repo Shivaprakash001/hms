@@ -34,6 +34,7 @@ const RC = {
     MEDIUM: 'bg-amber-100 text-amber-700 border-amber-200',
     LOW:    'bg-emerald-100 text-emerald-700 border-emerald-200',
 };
+const apiErrorCode = err => err?.response?.data?.error?.code ?? err?.response?.data?.code;
 
 // ─── main ───────────────────────────────────────────────────────────────────
 const OwnerDashboard = () => {
@@ -154,10 +155,10 @@ const AlertBanner = ({ cronStopped, creditsLow, cfStats, preferences, onDismiss,
 // ─── optimistic reminder button ─────────────────────────────────────────────
 // States: idle → sending → sent (3s) → idle  |  idle → sending → error (2s) → idle
 const ReminderButton = ({ tenantId, tenantName, onNoCredits }) => {
-    const [s, setS] = useState('idle'); // idle | sent | error
+    const [s, setS] = useState('idle'); // idle | sending | sent | error
     const tap = async () => {
         if (s !== 'idle') return; // block while feedback is showing
-        setS('sent'); // optimistic: ✅ immediately
+        setS('sending');
         try {
             const res = await reminderService.sendToTenant(tenantId);
             if (!res?.success) {
@@ -167,11 +168,12 @@ const ReminderButton = ({ tenantId, tenantName, onNoCredits }) => {
                 setTimeout(() => setS('idle'), 3000);
             }
         } catch (err) {
-            if (err?.response?.data?.code === 'NO_REMINDERS_LEFT') { onNoCredits?.(); }
+            if (apiErrorCode(err) === 'NO_REMINDERS_LEFT') { onNoCredits?.(); }
             setS('error');
             setTimeout(() => setS('idle'), 2000);
         }
     };
+    if (s === 'sending') return <div className="shrink-0 p-2.5 bg-indigo-50 text-indigo-600 rounded-xl" title={`Sending reminder to ${tenantName}`}><RefreshCw size={14} className="animate-spin" /></div>;
     if (s === 'sent')  return <div className="shrink-0 p-2.5 bg-emerald-50 text-emerald-600 rounded-xl" title={`Reminder sent to ${tenantName}`}><CheckCircle2 size={14} /></div>;
     if (s === 'error') return <button onClick={() => { setS('idle'); tap(); }} className="shrink-0 p-2.5 bg-rose-50 text-rose-600 rounded-xl active:scale-95" title="Failed — tap to retry"><Bell size={14} /></button>;
     return (
@@ -183,22 +185,23 @@ const ReminderButton = ({ tenantId, tenantName, onNoCredits }) => {
 
 const RemindAllButton = ({ tenants, onNoCredits }) => {
     const [s, setS] = useState('idle');
+    const tenantIds = tenants.map(dId).filter(Boolean);
     const tap = async () => {
-        if (s === 'sending') return;
+        if (s === 'sending' || tenantIds.length === 0) return;
         setS('sending');
         try {
-            const res = await reminderService.sendBulk(tenants.map(dId));
+            const res = await reminderService.sendBulk(tenantIds);
             setS(res.sent > 0 ? 'sent' : 'error');
             setTimeout(() => setS('idle'), 3000);
         } catch (err) {
-            if (err?.response?.data?.code === 'NO_REMINDERS_LEFT') { onNoCredits?.(); }
+            if (apiErrorCode(err) === 'NO_REMINDERS_LEFT') { onNoCredits?.(); }
             setS('error');
             setTimeout(() => setS('idle'), 2000);
         }
     };
     const label = s === 'sent' ? 'All Sent ✓' : s === 'error' ? 'Some Failed' : s === 'sending' ? '...' : 'Remind All';
     return (
-        <button onClick={tap} disabled={s === 'sending'} className={`text-xs font-black px-3 py-1.5 rounded-xl active:scale-95 disabled:opacity-50 transition ${
+        <button onClick={tap} disabled={s === 'sending' || tenantIds.length === 0} className={`text-xs font-black px-3 py-1.5 rounded-xl active:scale-95 disabled:opacity-50 transition ${
             s === 'sent' ? 'bg-emerald-50 text-emerald-700' : s === 'error' ? 'bg-rose-50 text-rose-700' : 'bg-indigo-50 text-indigo-600'
         }`}>{label}</button>
     );
@@ -245,7 +248,7 @@ const S1_Cashflow = ({ cfStats, cfSeverity, cfInsights, preferences, navigate, o
 
     const highRisk = cfStats.topDefaulters.filter(d => riskBadge(d) === 'HIGH').length;
     const actionItems = [
-        cfStats.overdueCount > 0 && { id: 'remind',  icon: Bell,       color: 'text-indigo-600 bg-indigo-50',  label: `${cfStats.overdueCount} tenant${cfStats.overdueCount !== 1 ? 's' : ''} unpaid — send reminders`,                    cta: 'Payments',    path: opPath('payments') },
+        cfStats.overdueCount > 0 && { id: 'remind',  icon: Bell,       color: 'text-indigo-600 bg-indigo-50',  label: `${cfStats.overdueCount} tenant${cfStats.overdueCount !== 1 ? 's' : ''} unpaid — send reminders`,                    cta: 'Remind',      path: null },
         highRisk > 0             && { id: 'high',    icon: ShieldAlert, color: 'text-rose-600 bg-rose-50',      label: `${highRisk} high-risk tenant${highRisk !== 1 ? 's' : ''} — overdue > 10 days`,                                   cta: 'View',        path: opPath('tenants')  },
         cfStats.pending > 0      && { id: 'collect', icon: Wallet,      color: 'text-emerald-600 bg-emerald-50', label: `${formatCurrency(cfStats.pending, preferences)} collectible right now`,                                          cta: 'Collect',     path: opPath('payments') },
     ].filter(Boolean);
@@ -329,7 +332,11 @@ const S1_Cashflow = ({ cfStats, cfSeverity, cfInsights, preferences, navigate, o
                             <div key={item.id} className="flex items-center gap-3 px-4 py-3">
                                 <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${item.color}`}><Icon size={16} /></div>
                                 <p className="flex-1 text-sm font-semibold text-slate-700 leading-snug">{item.label}</p>
-                                <button onClick={() => navigate(item.path)} className="shrink-0 text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-xl active:scale-95 whitespace-nowrap">{item.cta}</button>
+                                {item.id === 'remind' ? (
+                                    <RemindAllButton tenants={cfStats.topDefaulters} onNoCredits={() => navigate('/owner/billing')} />
+                                ) : (
+                                    <button onClick={() => navigate(item.path)} className="shrink-0 text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-xl active:scale-95 whitespace-nowrap">{item.cta}</button>
+                                )}
                             </div>
                         ); })}
                     </div>

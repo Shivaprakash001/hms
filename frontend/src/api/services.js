@@ -830,6 +830,12 @@ export const reminderService = {
             tenants.map(id => api.post('/notifications/send-reminder', { tenant_id: id }).then(r => r.data))
         );
         const sent = results.filter(r => r.status === 'fulfilled' && r.value?.success).length;
+        const noCredits = results.some(r => r.status === 'rejected' && (r.reason?.response?.data?.error?.code || r.reason?.response?.data?.code) === 'NO_REMINDERS_LEFT');
+        if (noCredits) {
+            const err = new Error('No reminder credits left');
+            err.response = { data: { error: { code: 'NO_REMINDERS_LEFT' } } };
+            throw err;
+        }
         const failed = results.length - sent;
         return { sent, failed, total: results.length };
     },

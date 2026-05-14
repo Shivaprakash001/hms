@@ -529,7 +529,7 @@ function NotificationsSection({ prefs, activeHostel, addonUsage, onSave, onTopup
                 <SettingsCard title="Channels">
                     <ChannelRow icon={Mail} tone="blue" title="Email" description="Send reminders via email" checked={watch('reminder_email')} onChange={(v) => setValue('reminder_email', v, { shouldDirty: true })} />
                     <ChannelRow icon={Monitor} tone="green" title="In-app" description="Show inside tenant dashboard" checked={watch('reminder_in_app')} onChange={(v) => setValue('reminder_in_app', v, { shouldDirty: true })} />
-                    <ChannelRow icon={MessageCircle} title="WhatsApp" description="Coming soon" checked={false} disabled badge="Coming soon" onChange={() => {}} />
+                    <ChannelRow icon={MessageCircle} tone="green" title="WhatsApp" description="Send rent reminders through WhatsApp" checked={watch('reminder_whatsapp')} onChange={(v) => setValue('reminder_whatsapp', v, { shouldDirty: true })} />
                 </SettingsCard>
                 <SettingsCard title="Reminder schedule" description="Days after due date to trigger a reminder">
                     <div className="flex flex-wrap gap-2">
