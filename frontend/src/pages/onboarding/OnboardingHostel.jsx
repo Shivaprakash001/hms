@@ -19,7 +19,7 @@ export default function OnboardingHostel() {
 
   const handleContinue = () => {
     // In a real app, we'd save the hostel details here
-    navigate('/onboarding/rooms');
+    navigate('/onboarding/automation');
   };
 
   return (
@@ -96,7 +96,7 @@ export default function OnboardingHostel() {
             onClick={handleContinue}
             className="w-full h-14 bg-brand-gradient text-white rounded-2xl font-black text-lg shadow-xl shadow-purple-100 flex items-center justify-center gap-3 group transition-all hover:scale-[1.01] active:scale-95"
           >
-            Continue to Room Setup
+            Continue to Automation
             <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
           </Button>
         </div>

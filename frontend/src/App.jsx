@@ -23,6 +23,7 @@ const OnboardingShell    = lazy(() => import('./pages/onboarding/OnboardingShell
 const OnboardingWelcome  = lazy(() => import('./pages/onboarding/OnboardingWelcome.jsx'));
 const OnboardingPlans    = lazy(() => import('./pages/onboarding/OnboardingPlans.jsx'));
 const OnboardingHostel   = lazy(() => import('./pages/onboarding/OnboardingHostel.jsx'));
+const OnboardingAutomation = lazy(() => import('./pages/onboarding/OnboardingAutomation.jsx'));
 const OnboardingBilling  = lazy(() => import('./pages/onboarding/OnboardingBilling.jsx'));
 const OnboardingRooms    = lazy(() => import('./pages/onboarding/OnboardingRooms.jsx'));
 const OnboardingTenant   = lazy(() => import('./pages/onboarding/OnboardingTenant.jsx'));
@@ -80,6 +81,7 @@ function App() {
               <Route path="welcome"  element={<OnboardingWelcome />} />
               <Route path="plans"    element={<OnboardingPlans />} />
               <Route path="hostel"   element={<OnboardingHostel />} />
+              <Route path="automation" element={<OnboardingAutomation />} />
               <Route path="checklist" element={<OnboardingChecklist />} />
               <Route path="billing"  element={<OnboardingBilling />} />
               <Route path="rooms"    element={<OnboardingRooms />} />
