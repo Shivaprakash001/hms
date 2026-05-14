@@ -150,7 +150,14 @@ export class WhatsAppReminderDeliveryService {
         0
       )
       ON CONFLICT (idempotency_key) DO UPDATE
-      SET status = 'PENDING',
+      SET phone = EXCLUDED.phone,
+          template = EXCLUDED.template,
+          template_name = EXCLUDED.template_name,
+          owner_id = EXCLUDED.owner_id,
+          tenant_id = EXCLUDED.tenant_id,
+          hostel_id = EXCLUDED.hostel_id,
+          obligation_id = EXCLUDED.obligation_id,
+          status = 'PENDING',
           delivery_status = 'PENDING',
           provider_message_id = NULL,
           provider_error_code = NULL,
