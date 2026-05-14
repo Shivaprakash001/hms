@@ -122,6 +122,7 @@ export class WhatsAppReminderDeliveryService {
   }): Promise<ReservationResult | null> {
     const rows = await prisma.$queryRaw<ReservationResult[]>`
       INSERT INTO whatsapp_logs (
+        id,
         phone,
         template,
         template_name,
@@ -135,6 +136,7 @@ export class WhatsAppReminderDeliveryService {
         attempt_count
       )
       VALUES (
+        gen_random_uuid(),
         ${input.phone},
         ${input.templateName},
         ${input.templateName},
