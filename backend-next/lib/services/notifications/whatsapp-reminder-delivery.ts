@@ -142,8 +142,8 @@ export class WhatsAppReminderDeliveryService {
         ${input.ownerId}::uuid,
         ${input.tenantId}::uuid,
         ${input.hostelId}::uuid,
-        'RESERVED',
-        'RESERVED',
+        'PENDING',
+        'PENDING',
         ${input.idempotencyKey},
         0
       )
