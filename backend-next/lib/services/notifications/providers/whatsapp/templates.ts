@@ -1,4 +1,4 @@
-import { formatCurrency, formatDate, formatMonthYear } from "@/lib/format";
+import { formatDate, formatMonthYear } from "@/lib/format";
 import type { HostelPreferences } from "@/lib/preferences";
 
 export enum WhatsAppRentReminderTemplate {
@@ -23,12 +23,22 @@ type TemplateDefinition = {
   buildParameters: (data: RentReminderTemplateVariables) => string[];
 };
 
+function formatTemplateAmount(amount: number): string {
+  const value = Number(amount);
+  if (!Number.isFinite(value)) return "0";
+
+  return new Intl.NumberFormat("en-IN", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
 const TEMPLATE_REGISTRY: Record<WhatsAppRentReminderTemplate, TemplateDefinition> = {
   [WhatsAppRentReminderTemplate.RENT_DUE_REMINDER]: {
     metaName: "rent_due_reminder_v1",
     buildParameters: (data) => [
       data.tenantName || "Tenant",
-      formatCurrency(data.amount, data.prefs),
+      formatTemplateAmount(data.amount),
       formatMonthYear(data.rentMonth, data.prefs),
       formatDate(data.dueDate, data.prefs),
       data.hostelName || "Your Hostel",
@@ -38,7 +48,7 @@ const TEMPLATE_REGISTRY: Record<WhatsAppRentReminderTemplate, TemplateDefinition
     metaName: "rent_due_today_v1",
     buildParameters: (data) => [
       data.tenantName || "Tenant",
-      formatCurrency(data.amount, data.prefs),
+      formatTemplateAmount(data.amount),
       formatMonthYear(data.rentMonth, data.prefs),
       data.hostelName || "Your Hostel",
     ],
@@ -47,7 +57,7 @@ const TEMPLATE_REGISTRY: Record<WhatsAppRentReminderTemplate, TemplateDefinition
     metaName: "rent_overdue_reminder_v1",
     buildParameters: (data) => [
       data.tenantName || "Tenant",
-      formatCurrency(data.amount, data.prefs),
+      formatTemplateAmount(data.amount),
       formatMonthYear(data.rentMonth, data.prefs),
       String(Math.max(1, Math.floor(data.daysOverdue))),
       data.hostelName || "Your Hostel",
