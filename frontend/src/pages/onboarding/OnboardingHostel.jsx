@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Building, MapPin, Layers, LayoutGrid, Users, 
-  Wifi, Coffee, Shirt, Car, Battery, BookOpen, Video,
+  Building, MapPin, 
   Image as ImageIcon, Phone, ArrowRight, ArrowLeft, CheckCircle2, Star
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -11,8 +10,7 @@ import { useNavigate } from 'react-router-dom';
 
 const steps = [
   { id: 1, title: 'Basic Details' },
-  { id: 2, title: 'Amenities' },
-  { id: 3, title: 'Branding' }
+  { id: 2, title: 'Branding' }
 ];
 
 export default function OnboardingHostel() {
@@ -35,21 +33,12 @@ export default function OnboardingHostel() {
   const navigate = useNavigate();
 
   const nextStep = () => {
-    if (currentStep < 3) setCurrentStep(currentStep + 1);
+    if (currentStep < 2) setCurrentStep(currentStep + 1);
     else navigate('/onboarding/rooms');
   };
 
   const prevStep = () => {
     if (currentStep > 1) setCurrentStep(currentStep - 1);
-  };
-
-  const toggleAmenity = (amenity) => {
-    setFormData(prev => ({
-      ...prev,
-      amenities: prev.amenities.includes(amenity) 
-        ? prev.amenities.filter(a => a !== amenity)
-        : [...prev.amenities, amenity]
-    }));
   };
 
   const renderStep = () => {
@@ -120,34 +109,6 @@ export default function OnboardingHostel() {
         return (
           <motion.div 
             initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
-            className="grid grid-cols-2 sm:grid-cols-3 gap-4"
-          >
-            {[
-              { id: 'wifi', name: 'WiFi', icon: <Wifi /> },
-              { id: 'food', name: 'Food', icon: <Coffee /> },
-              { id: 'laundry', name: 'Laundry', icon: <Shirt /> },
-              { id: 'parking', name: 'Parking', icon: <Car /> },
-              { id: 'backup', name: 'Power Backup', icon: <Battery /> },
-              { id: 'study', name: 'Study Area', icon: <BookOpen /> },
-              { id: 'cctv', name: 'CCTV', icon: <Video /> }
-            ].map((amenity) => (
-              <button
-                key={amenity.id}
-                onClick={() => toggleAmenity(amenity.id)}
-                className={`p-6 rounded-[2.5rem] border-2 transition-all flex flex-col items-center gap-3 ${formData.amenities.includes(amenity.id) ? 'border-purple-500 bg-purple-50 text-purple-700 shadow-lg shadow-purple-50' : 'border-slate-100 bg-white text-slate-400 hover:border-slate-200'}`}
-              >
-                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${formData.amenities.includes(amenity.id) ? 'bg-white shadow-md' : 'bg-slate-50'}`}>
-                  {React.cloneElement(amenity.icon, { className: "w-7 h-7" })}
-                </div>
-                <span className="text-[10px] font-black uppercase tracking-widest">{amenity.name}</span>
-              </button>
-            ))}
-          </motion.div>
-        );
-      case 3:
-        return (
-          <motion.div 
-            initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
             className="space-y-8"
           >
             <div className="flex flex-col items-center">
@@ -197,7 +158,7 @@ export default function OnboardingHostel() {
         <div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">Hostel Setup</h1>
           <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">
-            Step {currentStep} of 3: <span className="text-purple-600">{steps[currentStep-1].title}</span>
+            Step {currentStep} of 2: <span className="text-purple-600">{steps[currentStep-1].title}</span>
           </p>
         </div>
       </div>
@@ -223,7 +184,7 @@ export default function OnboardingHostel() {
           onClick={nextStep}
           className={`h-14 flex-1 bg-brand-gradient text-white rounded-2xl font-black text-lg shadow-xl shadow-purple-100 flex items-center justify-center gap-3 group transition-all hover:scale-[1.02] active:scale-95`}
         >
-          {currentStep === 3 ? 'Complete Setup' : 'Continue'}
+          {currentStep === 2 ? 'Complete Setup' : 'Continue'}
           <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
         </Button>
       </div>
