@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/Card";
+import PhoneOtpVerification from '@/components/auth/PhoneOtpVerification';
+import { indianPhoneDigits, normalizeIndianPhone } from '@/lib/phone';
 
 const SlideVariant = {
     initial: { opacity: 0, x: 20 },
@@ -66,6 +68,7 @@ const CompleteProfile = () => {
     const [error, setError] = useState('');
     const [isSuccess, setIsSuccess] = useState(false);
     const [isProfilePhotoRequired, setIsProfilePhotoRequired] = useState(false);
+    const [phoneVerification, setPhoneVerification] = useState(null);
 
     useEffect(() => {
         setFormData(prev => ({
@@ -89,7 +92,15 @@ const CompleteProfile = () => {
 
     if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-600">Loading...</div>;
 
-    const handleChange = (e) => setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        if (name === 'phone') {
+            setPhoneVerification(null);
+            setFormData(prev => ({ ...prev, phone: indianPhoneDigits(value) }));
+            return;
+        }
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
 
     const handleFileChange = (e) => {
         const file = e.target.files?.[0];
@@ -124,7 +135,8 @@ const CompleteProfile = () => {
     // Step Validations
     const validateStep1 = () => {
         if (!formData.name.trim()) return 'Please enter your full name';
-        if (!formData.phone.trim()) return 'We need your phone number';
+        if (!normalizeIndianPhone(formData.phone)) return 'Enter a valid Indian mobile number';
+        if (!phoneVerification?.idToken || phoneVerification.phone !== normalizeIndianPhone(formData.phone)) return 'Please verify your mobile number with OTP';
         if (!formData.emergency_contact.trim()) return 'Emergency contact is required for your safety';
         if (!formData.gender) return 'Please select your gender';
         if (!formData.permanent_address.trim()) return 'Permanent address is required';
@@ -177,7 +189,8 @@ const CompleteProfile = () => {
             // Map the frontend state into the API schema
             const payload = {
                 name: formData.name.trim(),
-                phone: formData.phone.trim(),
+                phone: normalizeIndianPhone(formData.phone),
+                firebase_phone_id_token: phoneVerification.idToken,
                 emergency_contact: formData.emergency_contact.trim(),
                 gender: formData.gender,
                 personal_email: formData.personal_email?.trim() || null,
@@ -351,7 +364,7 @@ const CompleteProfile = () => {
                                                 <div className="grid grid-cols-2 gap-4">
                                                     <div>
                                                         <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 block">Your Phone</Label>
-                                                        <Input name="phone" value={formData.phone} onChange={handleChange} className="h-12 bg-slate-50/50" placeholder="+91" />
+                                                        <Input name="phone" value={indianPhoneDigits(formData.phone)} onChange={handleChange} className="h-12 bg-slate-50/50" placeholder="10-digit mobile" />
                                                     </div>
                                                     <div>
                                                         <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 block">Gender</Label>
@@ -368,6 +381,11 @@ const CompleteProfile = () => {
                                                     <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 block">Emergency Contact (Parent)</Label>
                                                     <Input name="emergency_contact" value={formData.emergency_contact} onChange={handleChange} className="h-12 bg-slate-50/50" placeholder="Parent's Mobile" />
                                                 </div>
+                                                <PhoneOtpVerification
+                                                    phone={formData.phone}
+                                                    onVerified={setPhoneVerification}
+                                                    disabled={isLoading}
+                                                />
                                                 <div>
                                                     <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 block">Date of Birth</Label>
                                                     <Input name="date_of_birth" type="date" value={formData.date_of_birth} onChange={handleChange} className="h-12 bg-slate-50/50" />

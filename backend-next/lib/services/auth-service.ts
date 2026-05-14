@@ -258,6 +258,7 @@ export class AuthService {
     password: string;
     name:     string;
     phone?:   string;
+    mobile_verified?: boolean;
     role?:    string;
   }) {
     const normalizedEmail = data.email.trim().toLowerCase();
@@ -300,6 +301,7 @@ export class AuthService {
           password_hash: hashedPassword,
           name:     data.name,
           phone:    data.phone || null,
+          mobile_verified: Boolean(data.mobile_verified),
           role:     "OWNER",
           is_active: true,
           owner_id:  userId,

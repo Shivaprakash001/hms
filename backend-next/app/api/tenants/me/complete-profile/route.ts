@@ -8,6 +8,7 @@ import { prisma } from "@/lib/db";
 import { TenantProfileUpdateSchema } from "@/lib/validators";
 import { getTenantOperationalContext } from "@/lib/hostel-context";
 import { imagekit, IMAGEKIT_URL_ENDPOINT } from "@/lib/imagekit";
+import { normalizeIndianPhone, verifyFirebasePhoneToken } from "@/lib/firebase-admin";
 
 
 /**
@@ -44,6 +45,14 @@ export async function POST(req: NextRequest) {
     }
 
     const payload = validated.data;
+    const normalizedPhone = normalizeIndianPhone(payload.phone);
+    if (!normalizedPhone) {
+      return apiError("Valid Indian mobile number is required", "VALIDATION_ERROR", 400);
+    }
+    if (!payload.firebase_phone_id_token) {
+      return apiError("Mobile OTP verification is required", "PHONE_VERIFICATION_REQUIRED", 403);
+    }
+    await verifyFirebasePhoneToken(payload.firebase_phone_id_token, normalizedPhone);
     
     // Default mapped values
     let gender = payload.gender;
@@ -99,7 +108,8 @@ export async function POST(req: NextRequest) {
         data: {
           name: payload.name || undefined,
           email: payload.personal_email || undefined,
-          phone: payload.phone || undefined,
+          phone: normalizedPhone,
+          mobile_verified: true,
           emergency_contact: payload.emergency_contact || undefined,
           is_profile_completed: true,
         }
@@ -109,7 +119,8 @@ export async function POST(req: NextRequest) {
       const tenantUpdate = await tx.tenant.update({
         where: { profile_id: session.sub },
         data: {
-          phone_1: payload.phone || undefined,
+          phone_1: normalizedPhone,
+          mobile_verified: true,
           personal_email: payload.personal_email || undefined,
           gender: gender || undefined,
           date_of_birth: payload.date_of_birth ? new Date(payload.date_of_birth) : undefined,
@@ -143,6 +154,9 @@ export async function POST(req: NextRequest) {
     const msg = String(error?.message || "");
     if (error?.code === "P2002" || msg.includes("aadhaar_number")) {
       return apiError("This Aadhaar number is already registered with another account.", "DUPLICATE", 409);
+    }
+    if (msg.startsWith("PHONE_VERIFICATION_FAILED")) {
+      return apiError(msg.split(": ")[1] || "Mobile verification failed", "PHONE_VERIFICATION_FAILED", 403);
     }
     return apiError(error?.message || "Failed to complete profile");
   }

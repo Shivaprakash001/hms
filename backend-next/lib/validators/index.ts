@@ -11,6 +11,7 @@ export const RegisterSchema = z.object({
   password: z.string().min(8).max(64),
   name:     z.string().min(2),
   phone:    z.string().optional(),
+  firebase_phone_id_token: z.string().min(1),
   role:     z.enum(["OWNER", "admin"]).optional(), // frontend sends 'admin' as default
 });
 
@@ -23,6 +24,7 @@ export const ChangePasswordSchema = z.object({
 export const TenantProfileUpdateSchema = z.object({
   name: z.string().optional(),
   phone: z.string().optional(),
+  firebase_phone_id_token: z.string().optional(),
   emergency_contact: z.string().optional(),
   phone_1: z.string().optional(),
   phone_2: z.string().optional(),

@@ -14,6 +14,7 @@ model Profile {
   email                 String             @unique
   name                  String
   phone                 String?
+  mobile_verified       Boolean            @default(false)
   password_hash         String?
   role                  Role
   is_active             Boolean            @default(true)
@@ -71,6 +72,7 @@ model Tenant {
   profile_completed     Boolean                  @default(false)
   photo_url             String?
   phone_1               String?
+  mobile_verified       Boolean                  @default(false)
   phone_2               String?
   phone_3               String?
   personal_email        String?

@@ -8,6 +8,8 @@ import { setStoredStep } from '../../hooks/useOnboardingState';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import PhoneOtpVerification from '@/components/auth/PhoneOtpVerification';
+import { indianPhoneDigits, normalizeIndianPhone } from '@/lib/phone';
 
 const PW_RULES = [
     { label: '8+ characters',        test: v => v.length >= 8 },
@@ -23,6 +25,7 @@ const Register = () => {
     const navigate = useNavigate();
     const { loginWithGoogle } = useAuth();
     const [showPw, setShowPw] = useState(false);
+    const [phoneVerification, setPhoneVerification] = useState(null);
 
     const [formData, setFormData] = useState({
         name:            '',
@@ -60,6 +63,7 @@ const Register = () => {
         if (name === 'phone') {
             const cleaned = value.replace(/\D/g, '').slice(0, 10);
             setFormData(p => ({ ...p, [name]: cleaned }));
+            setPhoneVerification(null);
         } else {
             setFormData(p => ({ ...p, [name]: value }));
         }
@@ -69,6 +73,7 @@ const Register = () => {
         if (!formData.name.trim())  return 'Enter your full name';
         if (!formData.email.trim()) return 'Enter your email';
         if (!formData.phone.trim() || formData.phone.length !== 10) return 'Enter a valid 10-digit phone number';
+        if (!phoneVerification?.idToken || phoneVerification.phone !== normalizeIndianPhone(formData.phone)) return 'Please verify your mobile number with OTP';
         for (const rule of PW_RULES) {
             if (!rule.test(formData.password)) return `Password: ${rule.label.toLowerCase()} needed`;
         }
@@ -89,7 +94,11 @@ const Register = () => {
         setIsLoading(true);
         try {
             console.log("Submitting registration...", formData);
-            await authService.register(formData);
+            await authService.register({
+                ...formData,
+                phone: normalizeIndianPhone(formData.phone),
+                firebase_phone_id_token: phoneVerification.idToken,
+            });
             setSuccess(true);
             setStoredStep('ACCOUNT_CREATED');
             setTimeout(() => navigate('/onboarding/welcome'), 2000);
@@ -188,7 +197,7 @@ const Register = () => {
                                     <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-purple-600 transition-colors" />
                                     <Input 
                                         name="phone"
-                                        value={formData.phone}
+                                        value={indianPhoneDigits(formData.phone)}
                                         onChange={handleChange}
                                         placeholder="10-digit number" 
                                         className="pl-11 h-12 rounded-xl border-slate-100 bg-slate-50/50"
@@ -198,6 +207,12 @@ const Register = () => {
                                 </div>
                             </div>
                         </div>
+
+                        <PhoneOtpVerification
+                            phone={formData.phone}
+                            onVerified={setPhoneVerification}
+                            disabled={isLoading}
+                        />
 
                         <div className="space-y-1.5">
                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Email Address</label>
