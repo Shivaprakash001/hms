@@ -96,7 +96,7 @@ export class TenantMigrationService {
       const { obligationEngine } = await import("./obligation-engine");
 
       const result = await prisma.$transaction(async (tx) => {
-        await tx.$executeRaw`SELECT id FROM rooms WHERE id = ${room.id} FOR UPDATE`;
+        await tx.$executeRaw`SELECT id FROM rooms WHERE id = ${room.id}::uuid FOR UPDATE`;
 
         const currentOccupancy = await tx.roomAllocation.count({
           where: {

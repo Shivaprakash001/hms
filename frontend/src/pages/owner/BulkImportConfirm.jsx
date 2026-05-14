@@ -93,6 +93,9 @@ export default function BulkImportConfirm() {
 
     // Success Screen
     if (importResult) {
+        const failedImports = (importResult.result?.results || []).filter((row) => !row.success);
+        const fallbackErrors = importResult.result?.errors || [];
+
         return (
             <div className="font-sans pb-20">
                 <div className="max-w-4xl mx-auto space-y-8">
@@ -151,14 +154,19 @@ export default function BulkImportConfirm() {
                     </div>
 
                     {/* Failure Details */}
-                    {importResult.result?.failures && importResult.result.failures.length > 0 && (
+                    {(failedImports.length > 0 || fallbackErrors.length > 0) && (
                         <div className="bg-white shadow-lg rounded-2xl border border-slate-100 p-6">
                             <h3 className="text-lg font-bold text-slate-900 mb-4">Failed Imports</h3>
                             <div className="space-y-3">
-                                {importResult.result.failures.map((failure, idx) => (
+                                {failedImports.map((failure, idx) => (
                                     <div key={idx} className="bg-rose-50 border border-rose-200 rounded-xl p-4">
                                         <p className="text-sm font-bold text-rose-900">Row {failure.row}</p>
-                                        <p className="text-sm text-rose-700 mt-1">{failure.error}</p>
+                                        <p className="text-sm text-rose-700 mt-1 whitespace-pre-wrap">{failure.error || 'Tenant could not be created.'}</p>
+                                    </div>
+                                ))}
+                                {failedImports.length === 0 && fallbackErrors.map((failure, idx) => (
+                                    <div key={idx} className="bg-rose-50 border border-rose-200 rounded-xl p-4">
+                                        <p className="text-sm text-rose-700 whitespace-pre-wrap">{failure}</p>
                                     </div>
                                 ))}
                             </div>
