@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { User, Mail, Phone, KeyRound, Lock, ArrowRight, Loader2, Chrome, CheckCircle2 } from 'lucide-react';
+import { User, Mail, Phone, KeyRound, Lock, ArrowRight, Loader2, Chrome, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, Link } from 'react-router-dom';
 import { authService } from '../../api/services';
 import { setStoredStep } from '../../hooks/useOnboardingState';
@@ -54,12 +54,21 @@ const Register = () => {
         scope: 'openid email profile',
     });
 
-    const handleChange = (e) => setFormData(p => ({ ...p, [e.target.name]: e.target.value }));
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        // Clean phone number input to digits only if it's the phone field
+        if (name === 'phone') {
+            const cleaned = value.replace(/\D/g, '').slice(0, 10);
+            setFormData(p => ({ ...p, [name]: cleaned }));
+        } else {
+            setFormData(p => ({ ...p, [name]: value }));
+        }
+    };
 
     const validate = () => {
         if (!formData.name.trim())  return 'Enter your full name';
         if (!formData.email.trim()) return 'Enter your email';
-        if (!formData.phone.trim() || !/^\d{10}$/.test(formData.phone.trim())) return 'Enter valid 10-digit phone';
+        if (!formData.phone.trim() || formData.phone.length !== 10) return 'Enter a valid 10-digit phone number';
         for (const rule of PW_RULES) {
             if (!rule.test(formData.password)) return `Password: ${rule.label.toLowerCase()} needed`;
         }
@@ -68,24 +77,26 @@ const Register = () => {
     };
 
     const handleRegister = async (e) => {
-        e.preventDefault();
-        console.log("Registering...", formData);
+        if (e) e.preventDefault();
         setError('');
-        const err = validate();
-        if (err) { 
-            console.error("Validation failed:", err);
-            setError(err); 
+        
+        const validationErr = validate();
+        if (validationErr) { 
+            setError(validationErr); 
             return; 
         }
 
         setIsLoading(true);
         try {
+            console.log("Submitting registration...", formData);
             await authService.register(formData);
             setSuccess(true);
             setStoredStep('ACCOUNT_CREATED');
             setTimeout(() => navigate('/onboarding/welcome'), 2000);
         } catch (err) {
-            setError(err?.response?.data?.detail || 'Registration failed');
+            console.error("Registration error details:", err.response?.data);
+            const serverMsg = err?.response?.data?.detail || err?.response?.data?.message || 'Registration failed';
+            setError(serverMsg);
         } finally {
             setIsLoading(false);
         }
@@ -121,7 +132,6 @@ const Register = () => {
 
     return (
         <div className="min-h-screen bg-slate-50 relative overflow-hidden flex flex-col items-center justify-center p-4 md:p-8">
-            {/* Background Decorative Elements */}
             <div className="absolute top-0 left-0 w-full h-full pointer-events-none overflow-hidden">
                 <div className="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] bg-purple-200/40 rounded-full blur-3xl animate-pulse" />
                 <div className="absolute -bottom-[10%] -right-[10%] w-[40%] h-[40%] bg-indigo-200/40 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }} />
@@ -142,12 +152,19 @@ const Register = () => {
                         <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em]">Start your property management journey</p>
                     </div>
 
-                    {error && (
-                        <div className="bg-rose-50 text-rose-600 p-4 rounded-2xl text-xs font-bold mb-6 border border-rose-100 flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 bg-rose-600 rounded-full animate-pulse" />
-                            {error}
-                        </div>
-                    )}
+                    <AnimatePresence mode="wait">
+                        {error && (
+                            <motion.div 
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                className="bg-rose-50 text-rose-600 p-4 rounded-2xl text-xs font-bold mb-6 border border-rose-100 flex items-center gap-3 overflow-hidden"
+                            >
+                                <AlertCircle className="w-5 h-5 shrink-0" />
+                                <span>{error}</span>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
 
                     <form className="space-y-4" onSubmit={handleRegister}>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -173,9 +190,10 @@ const Register = () => {
                                         name="phone"
                                         value={formData.phone}
                                         onChange={handleChange}
-                                        placeholder="9876543210" 
+                                        placeholder="10-digit number" 
                                         className="pl-11 h-12 rounded-xl border-slate-100 bg-slate-50/50"
                                         required
+                                        type="tel"
                                     />
                                 </div>
                             </div>
