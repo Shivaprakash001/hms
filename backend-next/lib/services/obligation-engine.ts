@@ -31,6 +31,9 @@ export class ObligationEngine {
       ownerId: string;
       hostelId: string;
       joiningDate: Date;
+      billingStartDate?: Date;
+      monthlyRent?: number;
+      createRent?: boolean;
       advanceDeposit: number;
       maintenanceCharge: number;
       maintenanceType: string; // "MONTHLY" | "ONE_TIME"
@@ -42,6 +45,9 @@ export class ObligationEngine {
       ownerId,
       hostelId,
       joiningDate,
+      billingStartDate,
+      monthlyRent,
+      createRent,
       advanceDeposit,
       maintenanceCharge,
       maintenanceType,
@@ -53,6 +59,24 @@ export class ObligationEngine {
     const rentMonth = new Date(
       Date.UTC(joiningDate.getFullYear(), joiningDate.getMonth(), 1)
     );
+
+    // ── RENT obligation ─────────────────────────────────────────
+    // Active bulk-imported tenants should owe rent immediately from the
+    // configured billing start date. Invited tenants keep rent generation on
+    // the normal monthly job unless callers explicitly opt in.
+    if (createRent && monthlyRent && monthlyRent > 0) {
+      const wasCreated = await this.upsertObligation(tx, {
+        tenantId,
+        allocationId,
+        ownerId,
+        hostelId,
+        rentMonth,
+        amount: monthlyRent,
+        dueDate: billingStartDate || joiningDate,
+        obligationType: "RENT",
+      });
+      if (wasCreated) created.push("RENT");
+    }
 
     // ── ADVANCE obligation ──────────────────────────────────────
     if (advanceDeposit > 0) {
