@@ -18,7 +18,7 @@ export default function OnboardingWelcome() {
 
   const handleStart = () => {
     setStoredStep('ACCOUNT_CREATED');
-    navigate('/onboarding/hostel');
+    navigate('/onboarding/plans');
   };
 
   return (

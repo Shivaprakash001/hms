@@ -256,9 +256,9 @@ const Login = () => {
                     {/* Footer Links */}
                     <div className="mt-8 pt-6 border-t border-slate-100 flex flex-col gap-4">
                         <div className="flex items-center justify-center text-sm text-slate-500 font-medium">
-                            Don't have an account?{' '}
+                            New to HMS?{' '}
                             <Link to="/register" className="ml-1 text-indigo-600 hover:text-indigo-700 font-bold transition-colors">
-                                Create Account
+                                Create New Account
                             </Link>
                         </div>
                         <div className="flex items-center justify-between text-xs text-slate-400 font-bold">

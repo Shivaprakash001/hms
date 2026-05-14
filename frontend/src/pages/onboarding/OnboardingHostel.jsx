@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Building2, MapPin, Phone, ArrowRight, Loader2 } from 'lucide-react';
+import { ArrowRight, Building2, DoorOpen, ImagePlus, Layers, Loader2, MapPin, Phone, Sparkles, Utensils, Wifi } from 'lucide-react';
 import { ownerService } from '../../api/services';
 import { setStoredStep } from '../../hooks/useOnboardingState';
 
@@ -14,7 +14,21 @@ const HOSTEL_TYPES = [
 
 export default function OnboardingHostel() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: '', city: '', type: '', phone: '' });
+  const [form, setForm] = useState({
+    name: '',
+    city: '',
+    type: '',
+    phone: '',
+    address: '',
+    state: '',
+    pincode: '',
+    floors: 2,
+    rooms: 12,
+    amenities: [],
+    hasFood: true,
+    hasWifi: true,
+    logo: null,
+  });
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [apiError, setApiError] = useState('');
@@ -42,8 +56,25 @@ export default function OnboardingHostel() {
     const e = {};
     if (!form.name.trim()) e.name = 'Hostel name is needed';
     if (!form.city.trim()) e.city = 'City is needed to show the right timezone';
+    if (!form.address.trim()) e.address = 'Address helps tenants identify the property';
     if (!form.type)        e.type = 'Choose your hostel type';
     return e;
+  };
+
+  const toggleAmenity = (amenity) => {
+    setForm((prev) => ({
+      ...prev,
+      amenities: prev.amenities.includes(amenity)
+        ? prev.amenities.filter((item) => item !== amenity)
+        : [...prev.amenities, amenity],
+    }));
+  };
+
+  const getLatestHostelId = async () => {
+    const response = await ownerService.getHostels();
+    const hostels = response?.hostels || [];
+    const active = hostels.find((hostel) => hostel?.is_active !== false) || hostels[0];
+    return active?.id || existingHostelId;
   };
 
   const handleSave = async () => {
@@ -56,7 +87,9 @@ export default function OnboardingHostel() {
       const payload = {
         name:         form.name.trim(),
         city:         form.city.trim(),
-        hostel_type:  form.type,
+        state:        form.state.trim() || undefined,
+        pincode:      form.pincode.trim() || undefined,
+        address:      form.address.trim(),
         phone:        form.phone.trim() || undefined,
       };
       if (existingHostelId) {
@@ -64,8 +97,20 @@ export default function OnboardingHostel() {
       } else {
         await ownerService.createHostel(payload);
       }
+      const hostelId = await getLatestHostelId();
+      if (hostelId && form.logo) {
+        await ownerService.uploadLogo(form.logo, hostelId);
+      }
+      localStorage.setItem('hms_onboarding_hostel_profile', JSON.stringify({
+        hostel_type: form.type,
+        planned_floors: form.floors,
+        planned_rooms: form.rooms,
+        amenities: form.amenities,
+        has_food: form.hasFood,
+        has_wifi: form.hasWifi,
+      }));
       setStoredStep('HOSTEL_CREATED');
-      navigate('/onboarding/billing');
+      navigate('/onboarding/checklist');
     } catch (err) {
       setApiError(err?.response?.data?.error?.message || err?.response?.data?.detail || 'Could not save. Try again.');
     } finally {
@@ -80,7 +125,7 @@ export default function OnboardingHostel() {
           Tell us about your hostel
         </h1>
         <p className="text-slate-500 mt-1 text-sm">
-          Just the basics — you can add more details later.
+          Create the business profile tenants will recognize. You can fine-tune rooms and rent after this.
         </p>
       </div>
 
@@ -111,25 +156,53 @@ export default function OnboardingHostel() {
         {errors.name && <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.name}</p>}
       </div>
 
-      {/* City */}
+      {/* Address */}
       <div>
         <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-1.5">
-          City *
+          Address *
         </label>
         <div className="relative">
-          <MapPin size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            id="onboarding-hostel-city"
-            type="text"
-            value={form.city}
-            onChange={e => set('city', e.target.value)}
-            placeholder="e.g. Hyderabad"
-            className={`w-full pl-10 pr-4 py-3.5 rounded-xl border bg-white text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all ${
-              errors.city ? 'border-red-400 ring-1 ring-red-400' : 'border-slate-200'
+          <MapPin size={16} className="absolute left-3.5 top-3.5 text-slate-400" />
+          <textarea
+            id="onboarding-hostel-address"
+            value={form.address}
+            onChange={e => set('address', e.target.value)}
+            placeholder="Building, street, landmark"
+            rows={3}
+            className={`w-full pl-10 pr-4 py-3.5 rounded-xl border bg-white text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all resize-none ${
+              errors.address ? 'border-red-400 ring-1 ring-red-400' : 'border-slate-200'
             }`}
           />
         </div>
-        {errors.city && <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.city}</p>}
+        {errors.address && <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.address}</p>}
+      </div>
+
+      {/* City */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="sm:col-span-1">
+          <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-1.5">
+            City *
+          </label>
+          <input
+              id="onboarding-hostel-city"
+              type="text"
+              value={form.city}
+              onChange={e => set('city', e.target.value)}
+              placeholder="Hyderabad"
+              className={`w-full px-4 py-3.5 rounded-xl border bg-white text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all ${
+                errors.city ? 'border-red-400 ring-1 ring-red-400' : 'border-slate-200'
+              }`}
+            />
+          {errors.city && <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.city}</p>}
+        </div>
+        <div>
+          <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-1.5">State</label>
+          <input value={form.state} onChange={e => set('state', e.target.value)} placeholder="Telangana" className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
+        <div>
+          <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-1.5">Pincode</label>
+          <input value={form.pincode} onChange={e => set('pincode', e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="500001" className="w-full px-4 py-3.5 rounded-xl border border-slate-200 bg-white text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
       </div>
 
       {/* Hostel Type */}
@@ -158,6 +231,80 @@ export default function OnboardingHostel() {
         {errors.type && <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.type}</p>}
       </div>
 
+      {/* Business shape */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-4">
+        <div className="flex items-center gap-2">
+          <Sparkles size={16} className="text-indigo-600" />
+          <p className="text-sm font-black text-slate-900">Property shape</p>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-1.5">Floors</label>
+            <div className="relative">
+              <Layers size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input type="number" min="1" max="20" value={form.floors} onChange={e => set('floors', Math.max(1, Number(e.target.value) || 1))} className="w-full pl-10 pr-4 py-3.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-black focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-1.5">Rooms</label>
+            <div className="relative">
+              <DoorOpen size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input type="number" min="1" max="500" value={form.rooms} onChange={e => set('rooms', Math.max(1, Number(e.target.value) || 1))} className="w-full pl-10 pr-4 py-3.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-black focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Amenities */}
+      <div>
+        <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">
+          Amenities
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          {['Laundry', 'Parking', 'Power Backup', 'Study Area'].map((amenity) => (
+            <button
+              key={amenity}
+              type="button"
+              onClick={() => toggleAmenity(amenity)}
+              className={`rounded-2xl border px-3 py-3 text-sm font-black transition-all ${
+                form.amenities.includes(amenity)
+                  ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                  : 'border-slate-200 bg-white text-slate-500'
+              }`}
+            >
+              {amenity}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <button type="button" onClick={() => set('hasFood', !form.hasFood)} className={`rounded-2xl border p-4 text-left transition-all ${form.hasFood ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-white text-slate-500'}`}>
+          <Utensils size={18} className="mb-2" />
+          <p className="text-sm font-black">Food</p>
+          <p className="text-xs font-semibold opacity-70">{form.hasFood ? 'Available' : 'Not offered'}</p>
+        </button>
+        <button type="button" onClick={() => set('hasWifi', !form.hasWifi)} className={`rounded-2xl border p-4 text-left transition-all ${form.hasWifi ? 'border-sky-300 bg-sky-50 text-sky-800' : 'border-slate-200 bg-white text-slate-500'}`}>
+          <Wifi size={18} className="mb-2" />
+          <p className="text-sm font-black">WiFi</p>
+          <p className="text-xs font-semibold opacity-70">{form.hasWifi ? 'Available' : 'Not offered'}</p>
+        </button>
+      </div>
+
+      {/* Logo */}
+      <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-4">
+        <label className="flex cursor-pointer items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+            <ImagePlus size={22} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-black text-slate-900">Hostel logo</p>
+            <p className="truncate text-xs font-semibold text-slate-500">{form.logo ? form.logo.name : 'PNG, JPG or WEBP. Optional but recommended.'}</p>
+          </div>
+          <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => set('logo', e.target.files?.[0] || null)} />
+        </label>
+      </div>
+
       {/* Phone — Optional */}
       <div>
         <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-1.5">
@@ -180,7 +327,7 @@ export default function OnboardingHostel() {
       <div className="text-center pt-1">
         <button
           type="button"
-          onClick={() => navigate('/onboarding/billing')}
+          onClick={() => navigate('/onboarding/checklist')}
           className="text-sm text-slate-400 hover:text-slate-600 font-semibold transition-colors"
         >
           Skip for now →
@@ -196,7 +343,7 @@ export default function OnboardingHostel() {
           id="onboarding-hostel-continue"
           className="w-full flex items-center justify-center gap-2 py-4 px-6 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-black rounded-2xl shadow-2xl shadow-indigo-600/25 transition-all text-base"
         >
-          {saving ? <Loader2 size={18} className="animate-spin" /> : <>Continue <ArrowRight size={18} /></>}
+          {saving ? <Loader2 size={18} className="animate-spin" /> : <>Create Hostel <ArrowRight size={18} /></>}
         </motion.button>
       </div>
     </div>

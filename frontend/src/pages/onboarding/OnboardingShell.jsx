@@ -7,8 +7,9 @@ import { activationService } from '../../api/services';
 // Step definitions for the progress bar
 const STEPS = [
   { path: '/onboarding/welcome',  label: 'Welcome', step: 'WELCOME'   },
+  { path: '/onboarding/plans',    label: 'Plan',    step: 'PLAN'      },
   { path: '/onboarding/hostel',   label: 'Hostel',  step: 'HOSTEL'    },
-  { path: '/onboarding/billing',  label: 'Billing', step: 'BILLING'   },
+  { path: '/onboarding/checklist', label: 'Launch', step: 'CHECKLIST' },
   { path: '/onboarding/rooms',    label: 'Rooms',   step: 'ROOMS'     },
   { path: '/onboarding/tenant',   label: 'Tenant',  step: 'TENANT'    },
   { path: '/onboarding/payments', label: 'Pay',     step: 'PAYMENTS'  },
@@ -16,11 +17,13 @@ const STEPS = [
 ];
 
 const BACK_MAP = {
-  '/onboarding/hostel':   '/onboarding/welcome',
+  '/onboarding/plans':    '/onboarding/welcome',
+  '/onboarding/hostel':   '/onboarding/plans',
+  '/onboarding/checklist': '/onboarding/hostel',
   '/onboarding/billing':  '/onboarding/hostel',
-  '/onboarding/rooms':    '/onboarding/billing',
-  '/onboarding/tenant':   '/onboarding/rooms',
-  '/onboarding/payments': '/onboarding/tenant',
+  '/onboarding/rooms':    '/onboarding/checklist',
+  '/onboarding/tenant':   '/onboarding/checklist',
+  '/onboarding/payments': '/onboarding/checklist',
 };
 
 export default function OnboardingShell() {
@@ -99,5 +102,4 @@ export default function OnboardingShell() {
     </div>
   );
 }
-
 

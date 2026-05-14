@@ -21,12 +21,14 @@ const GoogleCallback  = lazy(() => import('./pages/auth/GoogleCallback.jsx').the
 // ── Onboarding — new owner activation flow ────────────────────────────────────
 const OnboardingShell    = lazy(() => import('./pages/onboarding/OnboardingShell.jsx'));
 const OnboardingWelcome  = lazy(() => import('./pages/onboarding/OnboardingWelcome.jsx'));
+const OnboardingPlans    = lazy(() => import('./pages/onboarding/OnboardingPlans.jsx'));
 const OnboardingHostel   = lazy(() => import('./pages/onboarding/OnboardingHostel.jsx'));
 const OnboardingBilling  = lazy(() => import('./pages/onboarding/OnboardingBilling.jsx'));
 const OnboardingRooms    = lazy(() => import('./pages/onboarding/OnboardingRooms.jsx'));
 const OnboardingTenant   = lazy(() => import('./pages/onboarding/OnboardingTenant.jsx'));
 const OnboardingPayments = lazy(() => import('./pages/onboarding/OnboardingPayments.jsx'));
 const OnboardingDone     = lazy(() => import('./pages/onboarding/OnboardingDone.jsx'));
+const OnboardingChecklist = lazy(() => import('./pages/onboarding/OnboardingChecklist.jsx'));
 
 // ── Owner pages — code-split per route ───────────────────────────────────────
 const OwnerDashboard    = lazy(() => import('./pages/owner/OwnerDashboard.jsx'));
@@ -76,7 +78,9 @@ function App() {
             <Route path="/onboarding" element={<OnboardingShell />}>
               <Route index element={<Navigate to="welcome" replace />} />
               <Route path="welcome"  element={<OnboardingWelcome />} />
+              <Route path="plans"    element={<OnboardingPlans />} />
               <Route path="hostel"   element={<OnboardingHostel />} />
+              <Route path="checklist" element={<OnboardingChecklist />} />
               <Route path="billing"  element={<OnboardingBilling />} />
               <Route path="rooms"    element={<OnboardingRooms />} />
               <Route path="tenant"   element={<OnboardingTenant />} />

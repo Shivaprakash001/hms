@@ -79,7 +79,7 @@ export default function OnboardingRooms() {
 
   const handleContinue = () => {
     if (addedRooms.length > 0) setStoredStep('FIRST_ROOM_ADDED');
-    navigate('/onboarding/tenant');
+    navigate('/onboarding/checklist');
   };
 
   const handleDeleteRoom = async (roomId) => {
@@ -288,7 +288,7 @@ export default function OnboardingRooms() {
             id="onboarding-rooms-continue"
             className="w-full flex items-center justify-center gap-2 py-4 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-2xl shadow-indigo-600/25 transition-all text-base"
           >
-            Continue <ArrowRight size={18} />
+            Back to Checklist <ArrowRight size={18} />
           </motion.button>
         </div>
       )}

@@ -1,23 +1,21 @@
 /**
- * 🧾 Receipt Service — Puppeteer-Based PDF Generation
+ * 🧾 Receipt Service — PDF-Lib Based Generation
  *
  * Responsibilities:
  * 1. Create receipt records (idempotent, race-safe sequence)
  * 2. Fetch all data needed for the receipt template
- * 3. Render HTML via receipt-template.ts
- * 4. Convert to PDF via Puppeteer headless browser
+ * 3. Render directly to PDF via pdf-lib
  *
  * PDF Cache:
  * Generated PDFs are stored in ImageKit and the URL is persisted on the
  * receipt row. Subsequent requests for the same payment return the cached
- * PDF without running Puppeteer. Template version bumps auto-invalidate.
+ * PDF without re-rendering. Template version bumps auto-invalidate.
  */
 
 import { prisma } from "../db";
 import crypto from "crypto";
 import { resolvePreferences } from "../preferences";
-import { htmlToPdf } from "../pdf/browser";
-import { renderReceiptHTML, type ReceiptRenderData } from "../pdf/receipt-template";
+import { generateReceiptPdf, type ReceiptRenderData } from "../pdf/receipt-template-pdf-lib";
 import { timed } from "../perf";
 import { imagekit } from "../imagekit";
 import { incrementPdfCache } from "../metrics";
@@ -49,9 +47,9 @@ async function resolveHostelForPayment(payment: any): Promise<{ hostel: any; pre
   return { hostel, prefs: resolvePreferences(hostel) };
 }
 
-// ── Template version: bump when receipt HTML/CSS layout changes ──
-// This triggers a one-time Puppeteer re-render for all existing receipts.
-const RECEIPT_TEMPLATE_VERSION = 1;
+// ── Template version: bump when receipt layout changes ──
+// This triggers a one-time re-render for all existing receipts.
+const RECEIPT_TEMPLATE_VERSION = 2;
 
 const RECEIPT_NUMBER_RETRY_LIMIT = 10;
 const PLAN_UPGRADE_REQUIRED_ERROR = "PLAN_UPGRADE_REQUIRED";
@@ -178,8 +176,7 @@ export class ReceiptService {
    * Flow:
    * 1. Fetch/create receipt record
    * 2. Fetch all related data (hostel, tenant, room, obligation)
-   * 3. Render HTML from template
-   * 4. Convert HTML → PDF via headless Chromium
+   * 3. Convert directly to PDF via pdf-lib
    */
   async generatePdfBuffer(paymentId: string, options?: { autoCreate?: boolean }): Promise<Buffer> {
     const autoCreate = options?.autoCreate ?? true;
@@ -322,13 +319,13 @@ export class ReceiptService {
       footer: prefs.receipt_footer || null,
     };
 
-    // 4. Render HTML → PDF via Puppeteer
-    const html = renderReceiptHTML(renderData);
-    const pdfBuffer = await timed(
-      "pdf.render.puppeteer",
-      () => htmlToPdf(html),
+    // 4. Render PDF directly via pdf-lib
+    const pdfUint8Array = await timed(
+      "pdf.render.pdflib",
+      () => generateReceiptPdf(renderData),
       { payment_id: paymentId, slow_ms: 3_000 }
     );
+    const pdfBuffer = Buffer.from(pdfUint8Array);
 
     // 5. Upload & cache the rendered PDF ──────────────────────────────────────
     // Best-effort: failure here does not break the response.
@@ -436,8 +433,8 @@ export class ReceiptService {
       footer: context?.footer,
     };
 
-    const html = renderReceiptHTML(renderData);
-    return htmlToPdf(html);
+    const pdfUint8Array = await generateReceiptPdf(renderData);
+    return Buffer.from(pdfUint8Array);
   }
 }
 

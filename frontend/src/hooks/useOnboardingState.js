@@ -4,10 +4,13 @@ import { ownerService, roomService, tenantService } from '../api/services';
 // Onboarding steps in order
 export const ONBOARDING_STEPS = [
   'ACCOUNT_CREATED',
+  'PLAN_SELECTED',
   'HOSTEL_CREATED',
-  'BILLING_CONFIGURED',
+  'CHECKLIST_STARTED',
   'FIRST_ROOM_ADDED',
   'FIRST_TENANT_ADDED',
+  'FIRST_RENT_GENERATED',
+  'FIRST_PAYMENT_COLLECTED',
   'COLLECTIONS_ENABLED',
   'COMPLETED',
 ];
@@ -47,10 +50,10 @@ export async function deriveOnboardingStep() {
     const profile = await ownerService.getProfile();
     const hostel = profile?.hostel;
     const hostelId = hostel?.id || profile?.hostels?.[0]?.id;
-    if (!hostel?.name) return 'ACCOUNT_CREATED';
+    if (!hostel?.name) return 'PLAN_SELECTED';
 
     const hasPrefs = hostel?.auto_rent_day || profile?.preferences?.auto_rent_day;
-    if (!hasPrefs) return 'HOSTEL_CREATED';
+    if (!hasPrefs) return 'CHECKLIST_STARTED';
 
     const rooms = await roomService.getAll(hostelId, { limit: 1 });
     const roomCount = Array.isArray(rooms) ? rooms.length : rooms?.total ?? 0;
@@ -72,21 +75,27 @@ export async function deriveOnboardingStep() {
 // Map step name → route path
 export const STEP_ROUTES = {
   ACCOUNT_CREATED:      '/onboarding/welcome',
-  HOSTEL_CREATED:       '/onboarding/billing',
-  BILLING_CONFIGURED:   '/onboarding/rooms',
+  PLAN_SELECTED:        '/onboarding/hostel',
+  HOSTEL_CREATED:       '/onboarding/checklist',
+  CHECKLIST_STARTED:    '/onboarding/checklist',
   FIRST_ROOM_ADDED:     '/onboarding/tenant',
   FIRST_TENANT_ADDED:   '/onboarding/payments',
+  FIRST_RENT_GENERATED: '/onboarding/checklist',
+  FIRST_PAYMENT_COLLECTED: '/onboarding/checklist',
   COLLECTIONS_ENABLED:  '/onboarding/done',
-  COMPLETED:            '/owner/dashboard',
+  COMPLETED:            '/owner/portfolio',
 };
 
 // Human-readable step labels for progress indicator
 export const STEP_LABELS = {
   ACCOUNT_CREATED:      'Account',
+  PLAN_SELECTED:        'Plan',
   HOSTEL_CREATED:       'Hostel',
-  BILLING_CONFIGURED:   'Billing',
+  CHECKLIST_STARTED:    'Launch',
   FIRST_ROOM_ADDED:     'Rooms',
   FIRST_TENANT_ADDED:   'Tenants',
+  FIRST_RENT_GENERATED: 'Rent',
+  FIRST_PAYMENT_COLLECTED: 'Payment',
   COLLECTIONS_ENABLED:  'Payments',
   COMPLETED:            'Done',
 };

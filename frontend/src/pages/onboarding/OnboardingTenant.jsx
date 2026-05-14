@@ -73,7 +73,7 @@ export default function OnboardingTenant() {
     }
   };
 
-  const handleContinue = () => navigate('/onboarding/payments');
+  const handleContinue = () => navigate('/onboarding/checklist');
 
   // WhatsApp invite URL
   const waMessage = addedTenant
@@ -133,7 +133,7 @@ export default function OnboardingTenant() {
             id="onboarding-tenant-continue"
             className="w-full flex items-center justify-center gap-2 py-4 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-2xl shadow-indigo-600/25 transition-all text-base"
           >
-            Continue to Payments <ArrowRight size={18} />
+            Back to Checklist <ArrowRight size={18} />
           </button>
         </div>
       </div>
