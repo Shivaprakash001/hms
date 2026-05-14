@@ -43,7 +43,7 @@ export default function OnboardingPayments() {
         await ownerService.updateHostel({ upi_id: upiId.trim() }, hostelId);
       }
       setStoredStep('COLLECTIONS_ENABLED');
-      navigate('/onboarding/done');
+      navigate('/onboarding/checklist');
     } catch (err) {
       setApiError(err?.response?.data?.error?.message || err?.response?.data?.detail || 'Could not save. Try again.');
     } finally {
@@ -53,7 +53,7 @@ export default function OnboardingPayments() {
 
   const handleSkip = () => {
     setStoredStep('COLLECTIONS_ENABLED');
-    navigate('/onboarding/done');
+    navigate('/onboarding/checklist');
   };
 
   return (
@@ -137,7 +137,7 @@ export default function OnboardingPayments() {
           id="onboarding-payments-continue"
           className="w-full flex items-center justify-center gap-2 py-4 px-6 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-black rounded-2xl shadow-2xl shadow-indigo-600/25 transition-all text-base"
         >
-          {saving ? <Loader2 size={18} className="animate-spin" /> : <>Save & Continue <ArrowRight size={18} /></>}
+          {saving ? <Loader2 size={18} className="animate-spin" /> : <>Back to Checklist <ArrowRight size={18} /></>}
         </motion.button>
       </div>
     </div>

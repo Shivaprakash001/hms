@@ -20,11 +20,11 @@ const CHECKLIST = [
     cta:   'Set up hostel',
   },
   {
-    id:    'billing',
-    label: 'Rent automation configured',
-    done:  (data) => Boolean(data?.preferences?.auto_rent_day),
-    path:  '/onboarding/billing',
-    cta:   'Configure billing',
+    id:    'launch',
+    label: 'Business launch checklist opened',
+    done:  (data) => Boolean(data?.hostel?.name),
+    path:  '/onboarding/checklist',
+    cta:   'Open checklist',
   },
   {
     id:    'rooms',

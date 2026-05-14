@@ -118,7 +118,13 @@ const Register = () => {
 
     setIsLoading(true);
     try {
-      const { confirmPassword, ...payload } = formData;
+      const payload = {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        password: formData.password,
+        role: formData.role,
+      };
       await authService.register(payload);
       setSuccess(true);
       setStoredStep('ACCOUNT_CREATED');

@@ -3,11 +3,12 @@ import axios from 'axios';
 // Force production traffic to the Vercel API deployment.
 // This avoids stale/misconfigured VITE_API_URL values.
 const PRODUCTION_API_URL = 'https://hms-r68g.vercel.app/api';
-const isLocalDev = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
+const isLocalDev = typeof window !== 'undefined' && LOCAL_HOSTNAMES.has(window.location.hostname);
 
 let baseURL;
 if (isLocalDev) {
-    baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+    baseURL = '/api';
 } else {
     baseURL = PRODUCTION_API_URL;
 }
