@@ -18,6 +18,47 @@ import { formatCurrency, formatMonthYear } from '../../utils/format';
 import { useHostelContext } from '../../context/HostelContext';
 import { queryKeys } from '../../lib/query/queryKeys';
 
+function normalizeRentPreview(previewData) {
+    if (!previewData) return null;
+
+    const items = Array.isArray(previewData.items) ? previewData.items : [];
+    const alreadyGenerated = Number(
+        previewData.tenants_already_generated
+        ?? items.filter((item) => item.already_generated).length
+        ?? 0
+    );
+    const willCreate = Number(
+        previewData.tenants_to_create
+        ?? previewData.will_create
+        ?? items.filter((item) => !item.will_skip).length
+        ?? 0
+    );
+    const willSkip = Number(
+        previewData.will_skip
+        ?? Math.max(items.length - willCreate, 0)
+        ?? 0
+    );
+    const totalTenants = Number(
+        previewData.tenants
+        ?? previewData.total
+        ?? items.length
+        ?? 0
+    );
+    const totalAmount = Number(
+        previewData.total_amount
+        ?? items.reduce((sum, item) => sum + (!item.will_skip ? Number(item.rent_amount || 0) : 0), 0)
+    );
+
+    return {
+        items,
+        totalTenants,
+        alreadyGenerated,
+        willCreate,
+        willSkip,
+        totalAmount,
+    };
+}
+
 const Payments = () => {
     const navigate = useNavigate();
     const { hostelId } = useHostelContext();
@@ -46,6 +87,7 @@ const Payments = () => {
     const [genResult, setGenResult] = useState(null);
     const [previewData, setPreviewData] = useState(null);
     const [previewLoading, setPreviewLoading] = useState(false);
+    const rentPreview = useMemo(() => normalizeRentPreview(previewData), [previewData]);
 
     const paymentFilters = useMemo(() => ({
         tenant_id: tenantFilter !== 'all' ? tenantFilter : undefined,
@@ -659,13 +701,32 @@ const Payments = () => {
                                                 </ul>
                                             </div>
 
-                                            {previewData && (
+                                            {rentPreview && (
                                                 <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-sm text-indigo-800">
                                                     <p className="font-bold mb-1">Preview</p>
-                                                    <p>Total tenants: <span className="font-semibold">{previewData.tenants || 0}</span></p>
-                                                    <p>Rent already added: <span className="font-semibold">{previewData.tenants_already_generated || 0}</span></p>
-                                                    <p>New rents to create: <span className="font-semibold">{previewData.tenants_to_create || 0}</span></p>
-                                                    <p>Total amount: <span className="font-semibold">{formatCurrency(previewData.total_amount || 0, preferences)}</span></p>
+                                                    <p>Total tenants: <span className="font-semibold">{rentPreview.totalTenants}</span></p>
+                                                    <p>Rent already added: <span className="font-semibold">{rentPreview.alreadyGenerated}</span></p>
+                                                    <p>New rents to create: <span className="font-semibold">{rentPreview.willCreate}</span></p>
+                                                    <p>Skipped: <span className="font-semibold">{rentPreview.willSkip}</span></p>
+                                                    <p>Total amount: <span className="font-semibold">{formatCurrency(rentPreview.totalAmount, preferences)}</span></p>
+                                                    {rentPreview.items.length > 0 && (
+                                                        <div className="mt-3 max-h-36 overflow-y-auto rounded-lg border border-indigo-100 bg-white/70">
+                                                            {rentPreview.items.map((item) => (
+                                                                <div key={item.allocation_id} className="flex items-center justify-between gap-3 border-b border-indigo-50 px-3 py-2 last:border-b-0">
+                                                                    <div className="min-w-0">
+                                                                        <p className="truncate font-semibold text-indigo-950">{item.tenant_name || 'Tenant'}</p>
+                                                                        <p className="text-xs text-indigo-500">Room {item.room_no || '-'}</p>
+                                                                    </div>
+                                                                    <div className="shrink-0 text-right">
+                                                                        <p className="font-semibold">{formatCurrency(Number(item.rent_amount || 0), preferences)}</p>
+                                                                        <p className={`text-xs font-semibold ${item.will_skip ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                                                            {item.already_generated ? 'Already added' : item.will_skip ? 'Skipped' : 'Will create'}
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
 
