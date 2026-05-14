@@ -1,369 +1,267 @@
 import { useState } from 'react';
-import { User, Mail, Phone, KeyRound, Lock, ArrowRight, Loader2, CheckCircle2, Sparkles } from 'lucide-react';
+import { User, Mail, Phone, KeyRound, Lock, ArrowRight, Loader2, Chrome, CheckCircle2 } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { motion } from 'framer-motion';
 import { useNavigate, Link } from 'react-router-dom';
 import { authService } from '../../api/services';
 import { setStoredStep } from '../../hooks/useOnboardingState';
 import { useAuth } from '../../context/AuthContext';
-
-const GoogleIcon = () => (
-  <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-  </svg>
-);
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 
 const PW_RULES = [
-  { label: '8+ characters',        test: v => v.length >= 8 },
-  { label: 'Uppercase letter',     test: v => /[A-Z]/.test(v) },
-  { label: 'Lowercase letter',     test: v => /[a-z]/.test(v) },
-  { label: 'Number',               test: v => /[0-9]/.test(v) },
-  { label: 'Special character',    test: v => /[!@#$%^&*(),.?":{}|<>]/.test(v) },
+    { label: '8+ characters',        test: v => v.length >= 8 },
+    { label: 'Uppercase letter',     test: v => /[A-Z]/.test(v) },
+    { label: 'Number',               test: v => /[0-9]/.test(v) },
+    { label: 'Special character',    test: v => /[!@#$%^&*(),.?":{}|<>]/.test(v) },
 ];
 
-const PasswordStrength = ({ password }) => {
-  if (!password) return null;
-  const passed = PW_RULES.filter(r => r.test(password)).length;
-  const pct = Math.round((passed / PW_RULES.length) * 100);
-  const color = passed < 2 ? 'bg-red-500' : passed < 4 ? 'bg-amber-400' : 'bg-emerald-500';
-  return (
-    <div className="mt-2 space-y-1.5">
-      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-        <motion.div
-          className={`h-full rounded-full ${color}`}
-          animate={{ width: `${pct}%` }}
-          transition={{ duration: 0.3 }}
-        />
-      </div>
-      <div className="flex flex-wrap gap-x-3 gap-y-1">
-        {PW_RULES.map(r => (
-          <span key={r.label} className={`text-[11px] font-medium flex items-center gap-1 ${r.test(password) ? 'text-emerald-600' : 'text-slate-400'}`}>
-            <span>{r.test(password) ? '✓' : '·'}</span> {r.label}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-};
-
 const Register = () => {
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError]     = useState('');
-  const [success, setSuccess] = useState(false);
-  const navigate = useNavigate();
-  const { loginWithGoogle } = useAuth();
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError]     = useState('');
+    const [success, setSuccess] = useState(false);
+    const navigate = useNavigate();
+    const { loginWithGoogle } = useAuth();
+    const [showPw, setShowPw] = useState(false);
 
-  const [formData, setFormData] = useState({
-    name:            '',
-    email:           '',
-    phone:           '',
-    password:        '',
-    confirmPassword: '',
-    role:            'admin',
-  });
+    const [formData, setFormData] = useState({
+        name:            '',
+        email:           '',
+        phone:           '',
+        password:        '',
+        confirmPassword: '',
+        role:            'admin',
+    });
 
-  const [showPw, setShowPw] = useState(false);
+    const googleSignup = useGoogleLogin({
+        onSuccess: async (tokenResponse) => {
+            setIsLoading(true);
+            setError('');
+            try {
+                if (!tokenResponse?.code) throw new Error('Google did not return an authorization code.');
+                await loginWithGoogle(tokenResponse.code, window.location.origin);
+                setStoredStep('ACCOUNT_CREATED');
+                navigate('/onboarding/welcome');
+            } catch (err) {
+                setError(err.message || 'Google signup failed');
+            } finally {
+                setIsLoading(false);
+            }
+        },
+        onError: () => setError('Google signup failed'),
+        flow: 'auth-code',
+        ux_mode: 'popup',
+        scope: 'openid email profile',
+    });
 
-  const googleSignup = useGoogleLogin({
-    onSuccess: async (tokenResponse) => {
-      setIsLoading(true);
-      setError('');
-      try {
-        if (!tokenResponse?.code) throw new Error('Google did not return an authorization code.');
-        await loginWithGoogle(tokenResponse.code, window.location.origin);
-        setStoredStep('ACCOUNT_CREATED');
-        navigate('/onboarding/welcome');
-      } catch (err) {
-        setError(err.message || 'Google signup failed. Please try again.');
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    onError: () => setError('Google signup failed. Please try again.'),
-    flow: 'auth-code',
-    ux_mode: 'popup',
-    scope: 'openid email profile',
-  });
+    const handleChange = (e) => setFormData(p => ({ ...p, [e.target.name]: e.target.value }));
 
-  const handleChange = (e) => setFormData(p => ({ ...p, [e.target.name]: e.target.value }));
+    const validate = () => {
+        if (!formData.name.trim())  return 'Enter your full name';
+        if (!formData.email.trim()) return 'Enter your email';
+        if (!formData.phone.trim() || !/^\d{10}$/.test(formData.phone.trim())) return 'Enter valid 10-digit phone';
+        for (const rule of PW_RULES) {
+            if (!rule.test(formData.password)) return `Password: ${rule.label.toLowerCase()} needed`;
+        }
+        if (formData.password !== formData.confirmPassword) return 'Passwords do not match';
+        return null;
+    };
 
-  const getApiError = (err) => {
-    const d = err?.response?.data;
-    if (d?.error?.message) return d.error.message;
-    if (typeof d?.detail === 'string') return d.detail;
-    if (Array.isArray(d?.detail)) return d.detail.map(x => x?.msg).filter(Boolean).join(', ') || 'Registration failed';
-    return err?.message || 'Registration failed';
-  };
+    const handleRegister = async (e) => {
+        e.preventDefault();
+        setError('');
+        const err = validate();
+        if (err) { setError(err); return; }
 
-  const validate = () => {
-    if (!formData.name.trim())  return 'Please enter your full name';
-    if (!formData.email.trim()) return 'Please enter your email';
-    if (!formData.phone.trim() || !/^\d{10}$/.test(formData.phone.trim()))
-      return 'Please enter a valid 10-digit phone number';
-    for (const rule of PW_RULES) {
-      if (!rule.test(formData.password)) return `Password must include: ${rule.label.toLowerCase()}`;
-    }
-    if (formData.password !== formData.confirmPassword) return 'Passwords do not match';
-    return null;
-  };
+        setIsLoading(true);
+        try {
+            await authService.register(formData);
+            setSuccess(true);
+            setStoredStep('ACCOUNT_CREATED');
+            setTimeout(() => navigate('/onboarding/welcome'), 2000);
+        } catch (err) {
+            setError(err?.response?.data?.detail || 'Registration failed');
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
-  const handleRegister = async (e) => {
-    e.preventDefault();
-    setError('');
-    const err = validate();
-    if (err) { setError(err); return; }
-
-    setIsLoading(true);
-    try {
-      const payload = {
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
-        password: formData.password,
-        role: formData.role,
-      };
-      await authService.register(payload);
-      setSuccess(true);
-      setStoredStep('ACCOUNT_CREATED');
-      // Brief success moment, then redirect into onboarding
-      setTimeout(() => navigate('/onboarding/welcome'), 1500);
-    } catch (err) {
-      setError(getApiError(err));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  if (success) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <motion.div
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="bg-white p-10 rounded-3xl shadow-2xl border border-slate-100 text-center max-w-sm w-full"
-        >
-          <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <CheckCircle2 size={40} className="text-emerald-500" />
-          </div>
-          <h2 className="text-2xl font-black text-slate-900 mb-2">Account Created! 🎉</h2>
-          <p className="text-slate-500 font-medium mb-6">Setting up your hostel dashboard…</p>
-          <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: '100%' }}
-              transition={{ duration: 1.5 }}
-              className="bg-indigo-500 h-full rounded-full"
-            />
-          </div>
-        </motion.div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Ambient blobs */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <motion.div
-          animate={{ y: [0, -20, 0], opacity: [0.4, 0.7, 0.4] }}
-          transition={{ duration: 8, repeat: Infinity }}
-          className="absolute -top-[10%] left-[15%] w-[500px] h-[500px] bg-indigo-100/50 rounded-full blur-[80px]"
-        />
-        <motion.div
-          animate={{ y: [0, 30, 0], opacity: [0.3, 0.5, 0.3] }}
-          transition={{ duration: 10, repeat: Infinity, delay: 1.5 }}
-          className="absolute bottom-[5%] right-[10%] w-[500px] h-[500px] bg-violet-100/40 rounded-full blur-[90px]"
-        />
-      </div>
-
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className="w-full max-w-[420px] relative z-10"
-      >
-        <div className="bg-white/80 backdrop-blur-xl border border-slate-100 p-8 rounded-3xl shadow-2xl shadow-slate-200/50 relative overflow-hidden">
-          {/* Accent bar */}
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-violet-500 to-pink-500" />
-
-          {/* Header */}
-          <div className="text-center mb-8">
-            <motion.div
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ delay: 0.1 }}
-              className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br from-indigo-600 to-violet-700 rounded-2xl mb-4 shadow-xl shadow-indigo-600/25 text-white"
-            >
-              <Sparkles className="w-7 h-7" />
-            </motion.div>
-            <h1 className="text-2xl font-black tracking-tight text-slate-900">
-              Start managing your hostel
-            </h1>
-            <p className="text-slate-500 text-sm font-medium mt-1.5">
-              No credit card. No long forms. Just your hostel, automated.
-            </p>
-          </div>
-
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              className="bg-red-50 text-red-600 px-4 py-3 rounded-xl text-sm font-medium mb-5 border border-red-100"
-            >
-              {error}
-            </motion.div>
-          )}
-
-          <button
-            type="button"
-            onClick={() => googleSignup()}
-            disabled={isLoading}
-            className="mb-5 flex w-full items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-sm font-black text-slate-700 transition-all hover:bg-slate-50 disabled:opacity-60"
-          >
-            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <GoogleIcon />}
-            Continue with Google
-          </button>
-
-          <div className="relative mb-5">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100" /></div>
-            <div className="relative flex justify-center">
-              <span className="bg-white px-3 text-[10px] font-black uppercase tracking-widest text-slate-300">or create with email</span>
-            </div>
-          </div>
-
-          <form onSubmit={handleRegister} className="space-y-4">
-            {/* Name */}
-            <div>
-              <label className="block text-[10px] font-black text-slate-400 mb-1 uppercase tracking-widest">Full Name</label>
-              <div className="relative">
-                <User size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  id="register-name"
-                  name="name"
-                  type="text"
-                  value={formData.name}
-                  onChange={handleChange}
-                  placeholder="Rajesh Kumar"
-                  required
-                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all font-medium text-sm"
-                />
-              </div>
-            </div>
-
-            {/* Email */}
-            <div>
-              <label className="block text-[10px] font-black text-slate-400 mb-1 uppercase tracking-widest">Email</label>
-              <div className="relative">
-                <Mail size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  id="register-email"
-                  name="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  placeholder="you@example.com"
-                  required
-                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all font-medium text-sm"
-                />
-              </div>
-            </div>
-
-            {/* Phone */}
-            <div>
-              <label className="block text-[10px] font-black text-slate-400 mb-1 uppercase tracking-widest">Phone</label>
-              <div className="relative">
-                <Phone size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  id="register-phone"
-                  name="phone"
-                  type="tel"
-                  value={formData.phone}
-                  onChange={e => setFormData(p => ({ ...p, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
-                  placeholder="10-digit mobile"
-                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all font-medium text-sm"
-                />
-              </div>
-            </div>
-
-            {/* Password */}
-            <div>
-              <label className="block text-[10px] font-black text-slate-400 mb-1 uppercase tracking-widest">Password</label>
-              <div className="relative">
-                <KeyRound size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  id="register-password"
-                  name="password"
-                  type={showPw ? 'text' : 'password'}
-                  value={formData.password}
-                  onChange={handleChange}
-                  placeholder="••••••••"
-                  required
-                  className="w-full pl-10 pr-10 py-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all font-medium text-sm"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPw(p => !p)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+    if (success) {
+        return (
+            <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+                <motion.div
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className="bg-white p-12 rounded-[3rem] shadow-2xl border border-slate-100 text-center max-w-md w-full"
                 >
-                  {showPw ? 'Hide' : 'Show'}
-                </button>
-              </div>
-              <PasswordStrength password={formData.password} />
+                    <div className="w-24 h-24 bg-emerald-50 text-emerald-600 rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-xl shadow-emerald-50">
+                        <CheckCircle2 className="w-12 h-12" />
+                    </div>
+                    <h2 className="text-3xl font-black text-slate-900 mb-3 tracking-tight">Account Created! 🎉</h2>
+                    <p className="text-slate-500 font-medium mb-8">Launching your onboarding experience…</p>
+                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                        <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: '100%' }}
+                            transition={{ duration: 2 }}
+                            className="bg-brand-gradient h-full rounded-full"
+                        />
+                    </div>
+                </motion.div>
+            </div>
+        );
+    }
+
+    const strength = PW_RULES.filter(r => r.test(formData.password)).length;
+
+    return (
+        <div className="min-h-screen bg-slate-50 relative overflow-hidden flex flex-col items-center justify-center p-4 md:p-8">
+            {/* Background Decorative Elements */}
+            <div className="absolute top-0 left-0 w-full h-full pointer-events-none overflow-hidden">
+                <div className="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] bg-purple-200/40 rounded-full blur-3xl animate-pulse" />
+                <div className="absolute -bottom-[10%] -right-[10%] w-[40%] h-[40%] bg-indigo-200/40 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }} />
             </div>
 
-            {/* Confirm password */}
-            <div>
-              <label className="block text-[10px] font-black text-slate-400 mb-1 uppercase tracking-widest">Confirm Password</label>
-              <div className="relative">
-                <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  id="register-confirm-password"
-                  name="confirmPassword"
-                  type="password"
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  placeholder="••••••••"
-                  required
-                  className={`w-full pl-10 pr-4 py-3 bg-slate-50 border rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all font-medium text-sm ${
-                    formData.confirmPassword && formData.confirmPassword !== formData.password
-                      ? 'border-red-300'
-                      : 'border-slate-100'
-                  }`}
-                />
-              </div>
-            </div>
-
-            {/* Submit */}
-            <motion.button
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.99 }}
-              type="submit"
-              id="register-submit"
-              disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl shadow-lg shadow-indigo-600/20 text-sm font-black text-white bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all disabled:opacity-60 mt-2"
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, ease: "easeOut" }}
+                className="w-full max-w-xl z-10"
             >
-              {isLoading
-                ? <Loader2 className="h-4 w-4 animate-spin" />
-                : <> Create My Account <ArrowRight className="h-4 w-4" /></>
-              }
-            </motion.button>
-          </form>
+                <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 p-8 md:p-12">
+                    <div className="flex flex-col items-center mb-10 text-center">
+                        <div className="w-16 h-16 bg-brand-gradient rounded-2xl flex items-center justify-center mb-6 shadow-xl shadow-purple-200">
+                            <span className="text-white text-2xl font-black">H</span>
+                        </div>
+                        <h1 className="text-3xl font-black text-slate-900 mb-2 tracking-tight">Create Account</h1>
+                        <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em]">Start your property management journey</p>
+                    </div>
 
-          <div className="mt-7 pt-5 border-t border-slate-100 text-center">
-            <p className="text-sm text-slate-500 font-medium">
-              Already have an account?{' '}
-              <Link to="/login" className="text-indigo-600 hover:text-indigo-700 font-bold transition-colors">
-                Sign In
-              </Link>
-            </p>
-          </div>
+                    {error && (
+                        <div className="bg-rose-50 text-rose-600 p-4 rounded-2xl text-xs font-bold mb-6 border border-rose-100 flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 bg-rose-600 rounded-full animate-pulse" />
+                            {error}
+                        </div>
+                    )}
+
+                    <form className="space-y-4" onSubmit={handleRegister}>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Full Name</label>
+                                <div className="relative group">
+                                    <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-purple-600 transition-colors" />
+                                    <Input 
+                                        name="name"
+                                        value={formData.name}
+                                        onChange={handleChange}
+                                        placeholder="John Doe" 
+                                        className="pl-11 h-12 rounded-xl border-slate-100 bg-slate-50/50"
+                                        required
+                                    />
+                                </div>
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Phone Number</label>
+                                <div className="relative group">
+                                    <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-purple-600 transition-colors" />
+                                    <Input 
+                                        name="phone"
+                                        value={formData.phone}
+                                        onChange={handleChange}
+                                        placeholder="9876543210" 
+                                        className="pl-11 h-12 rounded-xl border-slate-100 bg-slate-50/50"
+                                        required
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Email Address</label>
+                            <div className="relative group">
+                                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-purple-600 transition-colors" />
+                                <Input 
+                                    name="email"
+                                    type="email"
+                                    value={formData.email}
+                                    onChange={handleChange}
+                                    placeholder="name@company.com" 
+                                    className="pl-11 h-12 rounded-xl border-slate-100 bg-slate-50/50"
+                                    required
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Password</label>
+                                <div className="relative group">
+                                    <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-purple-600 transition-colors" />
+                                    <Input 
+                                        name="password"
+                                        type={showPw ? "text" : "password"} 
+                                        value={formData.password}
+                                        onChange={handleChange}
+                                        placeholder="••••••••" 
+                                        className="pl-11 h-12 rounded-xl border-slate-100 bg-slate-50/50"
+                                        required
+                                    />
+                                </div>
+                                <div className="flex gap-1 h-1 mt-1 px-1">
+                                    {[1, 2, 3, 4].map(i => (
+                                        <div key={i} className={`h-full flex-1 rounded-full ${i <= strength ? 'bg-purple-500' : 'bg-slate-100'}`} />
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Confirm Password</label>
+                                <div className="relative group">
+                                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-purple-600 transition-colors" />
+                                    <Input 
+                                        name="confirmPassword"
+                                        type="password" 
+                                        value={formData.confirmPassword}
+                                        onChange={handleChange}
+                                        placeholder="••••••••" 
+                                        className="pl-11 h-12 rounded-xl border-slate-100 bg-slate-50/50"
+                                        required
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <Button 
+                            disabled={isLoading}
+                            className="w-full h-14 bg-brand-gradient hover:opacity-90 text-white rounded-2xl font-black text-lg transition-all duration-300 shadow-xl shadow-purple-100 flex items-center justify-center gap-3 group mt-4"
+                        >
+                            {isLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : <>Get Started <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" /></>}
+                        </Button>
+
+                        <div className="relative my-6">
+                            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100" /></div>
+                            <div className="relative flex justify-center"><span className="bg-white px-4 text-[10px] font-black uppercase tracking-widest text-slate-300">Or signup with</span></div>
+                        </div>
+
+                        <Button 
+                            type="button"
+                            variant="outline" 
+                            onClick={() => googleSignup()}
+                            disabled={isLoading}
+                            className="w-full h-14 border-slate-100 rounded-2xl font-bold text-slate-600 hover:bg-slate-50 transition-all flex items-center justify-center gap-3 active:scale-95"
+                        >
+                            <Chrome className="w-5 h-5" />
+                            Sign up with Google
+                        </Button>
+                    </form>
+
+                    <p className="mt-8 text-center text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+                        Already have an account?{' '}
+                        <Link to="/login" className="text-purple-600 hover:underline">Login</Link>
+                    </p>
+                </div>
+            </motion.div>
         </div>
-      </motion.div>
-    </div>
-  );
+    );
 };
 
 export default Register;

@@ -2,22 +2,21 @@ import React, { useState, useMemo, useEffect } from 'react';
 import SmartDashboardGuidance from '../../components/SmartDashboardGuidance';
 import FirstSuccessMoment from '../../components/FirstSuccessMoment';
 import { useNavigate } from 'react-router-dom';
-import { AreaChart, Area, ResponsiveContainer } from 'recharts';
+import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
 import {
     AlertTriangle, X, Bell, Users, BedDouble, ArrowUpRight,
     Home, BarChart2, Zap, RefreshCw, ShieldAlert, TrendingUp,
     TrendingDown, ChevronRight, Target, Activity, Wallet,
-    CheckCircle2, Clock, LayoutDashboard
+    CheckCircle2, Clock, LayoutDashboard, Sparkles, ArrowRight
 } from 'lucide-react';
 import { reminderService } from '../../api/services';
 import { useAppPreferences } from '../../context/AppPreferencesContext';
 import { formatCurrency } from '../../utils/format';
 import { useCashflow, useTenantAnalytics, useFunnelAnalytics, useOperationsAnalytics, useAddonUsage } from '../../hooks/useAnalytics';
 import { useHostelContext } from '../../context/HostelContext';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
-// Field names from /dashboard/cashflow  → top_defaulters[].pending_amount, .days_overdue, .name
-// Field names from /dashboard/tenants  → risky_tenants[].pending_amount, .avg_delay_days, .score, .name
 const dAmt  = d => Number(d?.pending_amount  ?? 0);
 const dDays = d => Number(d?.days_overdue    ?? d?.avg_delay_days ?? 0);
 const dName = d => d?.name ?? 'Tenant';
@@ -30,9 +29,9 @@ const riskBadge = d => {
     return 'LOW';
 };
 const RC = {
-    HIGH:   'bg-rose-100 text-rose-700 border-rose-200',
-    MEDIUM: 'bg-amber-100 text-amber-700 border-amber-200',
-    LOW:    'bg-emerald-100 text-emerald-700 border-emerald-200',
+    HIGH:   'bg-rose-50 text-rose-600 border-rose-100',
+    MEDIUM: 'bg-amber-50 text-amber-600 border-amber-100',
+    LOW:    'bg-emerald-50 text-emerald-600 border-emerald-100',
 };
 const apiErrorCode = err => err?.response?.data?.error?.code ?? err?.response?.data?.code;
 
@@ -48,7 +47,6 @@ const OwnerDashboard = () => {
     // ── Milestone notifications (for FirstSuccessMoment) ─────────────────────
     const [milestoneNotifs, setMilestoneNotifs] = useState([]);
     useEffect(() => {
-        // Fetch unread notifications; filter milestone types in FirstSuccessMoment
         import('../../api/services').then(({ notificationService }) => {
             notificationService.getAll().then(data => {
                 const notifs = Array.isArray(data) ? data : (data?.notifications ?? []);
@@ -64,16 +62,12 @@ const OwnerDashboard = () => {
         });
     };
 
-    // Always-on: cashflow + addon (parallel, shared cache)
     const { data: cf, isLoading } = useCashflow(hostelId);
     const { data: addonData }     = useAddonUsage();
-
-    // Tab-specific: lazy-loaded — only fetches when tab becomes active
     const { data: ti, isLoading: tiLoading } = useTenantAnalytics(hostelId, undefined, tab === 'tenants');
     const { data: fn, isLoading: fnLoading } = useFunnelAnalytics(hostelId, undefined, tab === 'funnel');
     const { data: op, isLoading: opLoading } = useOperationsAnalytics(hostelId, undefined, tab === 'operations');
 
-    // Cashflow data shape from /dashboard/cashflow
     const cfd = cf?.data ?? {};
     const cfStats = useMemo(() => ({
         expected:      Number(cfd.expected_rent         ?? 0),
@@ -91,14 +85,16 @@ const OwnerDashboard = () => {
     const showBanner  = cronStopped || creditsLow || (!dismissed && cfStats.overdueCount > 0);
 
     if (isLoading) return (
-        <div className="min-h-[60vh] flex items-center justify-center">
-            <RefreshCw size={24} className="text-indigo-400 animate-spin" />
+        <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4">
+            <div className="w-12 h-12 bg-purple-50 rounded-2xl flex items-center justify-center text-purple-600 animate-pulse shadow-xl shadow-purple-50">
+                <RefreshCw size={24} className="animate-spin" />
+            </div>
+            <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em]">Syncing Intelligence...</p>
         </div>
     );
 
     return (
-        <div className="relative pb-28 bg-slate-50 min-h-screen -mx-3 sm:-mx-8 -mt-3 sm:-mt-8">
-            {/* First-success milestone celebrations */}
+        <div className="relative pb-28 min-h-screen">
             <FirstSuccessMoment
                 notifications={milestoneNotifs}
                 onDismiss={handleMilestoneDismiss}
@@ -113,11 +109,14 @@ const OwnerDashboard = () => {
                     onView={() => setTab('tenants')}
                 />
             )}
-            <div className="px-4 pt-3">
-                {tab === 'cashflow'    && <S1_Cashflow   cfStats={cfStats} cfSeverity={cf?.severity} cfInsights={cf?.insights ?? []} preferences={preferences} navigate={navigate} opPath={opPath} />}
-                {tab === 'tenants'     && <S2_Tenants    data={ti?.data}   severity={ti?.severity}   insights={ti?.insights ?? []}  loading={tiLoading} preferences={preferences} navigate={navigate} opPath={opPath} />}
-                {tab === 'funnel'      && <S3_Funnel     data={fn?.data}   severity={fn?.severity}   insights={fn?.insights ?? []}  loading={fnLoading} preferences={preferences} navigate={navigate} opPath={opPath} />}
-                {tab === 'operations'  && <S4_Operations data={op?.data}   severity={op?.severity}   insights={op?.insights ?? []}  loading={opLoading} preferences={preferences} navigate={navigate} opPath={opPath} />}
+            
+            <div className="px-4 pt-4 sm:pt-6 space-y-6">
+                <AnimatePresence mode="wait">
+                    {tab === 'cashflow'    && <motion.div key="cf" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}><S1_Cashflow   cfStats={cfStats} cfSeverity={cf?.severity} cfInsights={cf?.insights ?? []} preferences={preferences} navigate={navigate} opPath={opPath} /></motion.div>}
+                    {tab === 'tenants'     && <motion.div key="ti" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}><S2_Tenants    data={ti?.data}   severity={ti?.severity}   insights={ti?.insights ?? []}  loading={tiLoading} preferences={preferences} navigate={navigate} opPath={opPath} /></motion.div>}
+                    {tab === 'funnel'      && <motion.div key="fn" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}><S3_Funnel     data={fn?.data}   severity={fn?.severity}   insights={fn?.insights ?? []}  loading={fnLoading} preferences={preferences} navigate={navigate} opPath={opPath} /></motion.div>}
+                    {tab === 'operations'  && <motion.div key="op" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}><S4_Operations data={op?.data}   severity={op?.severity}   insights={op?.insights ?? []}  loading={opLoading} preferences={preferences} navigate={navigate} opPath={opPath} /></motion.div>}
+                </AnimatePresence>
             </div>
             <TabBar active={tab} onChange={setTab} badge={cfStats.overdueCount} />
         </div>
@@ -127,190 +126,177 @@ const OwnerDashboard = () => {
 // ─── alert banner ───────────────────────────────────────────────────────────
 const AlertBanner = ({ cronStopped, creditsLow, cfStats, preferences, onDismiss, onBuyCredits, onView }) => {
     const crit = cronStopped || cfStats.overdueCount > 5;
-    const b = crit ? { wrap: 'bg-rose-50 border-rose-200', icon: 'text-rose-500', title: 'text-rose-800', sub: 'text-rose-600', x: 'text-rose-300' } : { wrap: 'bg-amber-50 border-amber-200', icon: 'text-amber-500', title: 'text-amber-800', sub: 'text-amber-600', x: 'text-amber-300' };
-    const title = cronStopped ? 'Reminders paused — credits exhausted' : creditsLow ? 'Credits running low — reminders may stop' : `${formatCurrency(cfStats.overdueAmt, preferences)} overdue — collect now`;
-    const sub   = cronStopped ? 'Tenants may miss deadlines. Buy credits immediately.' : creditsLow ? 'Auto-reminders will stop soon.' : `${cfStats.overdueCount} tenant${cfStats.overdueCount !== 1 ? 's' : ''} haven't paid this month.`;
+    const theme = crit 
+        ? { wrap: 'bg-rose-50/80 backdrop-blur-md border-rose-100', icon: 'text-rose-500', title: 'text-rose-900', sub: 'text-rose-700/80', button: 'bg-rose-500 text-white', secondary: 'bg-rose-100 text-rose-700' }
+        : { wrap: 'bg-amber-50/80 backdrop-blur-md border-amber-100', icon: 'text-amber-500', title: 'text-amber-900', sub: 'text-amber-700/80', button: 'bg-amber-500 text-white', secondary: 'bg-amber-100 text-amber-700' };
+    
+    const title = cronStopped ? 'Reminders Paused' : creditsLow ? 'Credits Low' : 'Action Required';
+    const sub   = cronStopped ? 'Credits exhausted. Tenants may miss deadlines.' : creditsLow ? 'Auto-reminders will stop soon.' : `${cfStats.overdueCount} tenants unpaid this month.`;
+
     return (
-        <div className={`mx-4 mt-4 mb-1 rounded-2xl border p-4 ${b.wrap}`}>
-            <div className="flex items-start gap-3">
-                <AlertTriangle size={17} className={`shrink-0 mt-0.5 ${b.icon}`} />
-                <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-extrabold ${b.title}`}>{title}</p>
-                    <p className={`text-xs mt-0.5 ${b.sub}`}>{sub}</p>
+        <motion.div 
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`mx-4 mt-4 rounded-[2rem] border p-6 ${theme.wrap} shadow-xl shadow-slate-100/50`}
+        >
+            <div className="flex items-start gap-4">
+                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${theme.secondary}`}>
+                    <AlertTriangle size={20} className={theme.icon} />
                 </div>
-                <button onClick={onDismiss} className={`shrink-0 ${b.x}`}><X size={14} /></button>
+                <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-black uppercase tracking-tight ${theme.title}`}>{title}</p>
+                    <p className={`text-xs mt-1 font-medium leading-relaxed ${theme.sub}`}>{sub}</p>
+                </div>
+                <button onClick={onDismiss} className="p-2 text-slate-400 hover:text-slate-600 transition-colors"><X size={18} /></button>
             </div>
-            <div className="flex gap-2 mt-3">
+            <div className="flex gap-3 mt-5">
                 {(cronStopped || creditsLow) && (
-                    <button onClick={onBuyCredits} className="flex-1 py-2 bg-rose-500 text-white text-xs font-black rounded-xl active:scale-95">Buy Credits</button>
+                    <button onClick={onBuyCredits} className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl active:scale-95 transition-all shadow-lg ${theme.button}`}>Recharge Now</button>
                 )}
                 {cfStats.overdueCount > 0 && (
-                    <button onClick={onView} className={`flex-1 py-2 text-xs font-black rounded-xl active:scale-95 ${(cronStopped || creditsLow) ? 'bg-rose-100 text-rose-700' : 'bg-amber-500 text-white'}`}>View Defaulters</button>
+                    <button onClick={onView} className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl active:scale-95 transition-all ${theme.secondary}`}>View Defaulters</button>
                 )}
             </div>
-        </div>
+        </motion.div>
     );
 };
 
-// ─── optimistic reminder button ─────────────────────────────────────────────
-// States: idle → sending → sent (3s) → idle  |  idle → sending → error (2s) → idle
+// ─── shared components ───────────────────────────────────────────────────────
 const ReminderButton = ({ tenantId, tenantName, onNoCredits }) => {
-    const [s, setS] = useState('idle'); // idle | sending | sent | error
+    const [s, setS] = useState('idle');
     const tap = async () => {
-        if (s !== 'idle') return; // block while feedback is showing
+        if (s !== 'idle') return;
         setS('sending');
         try {
             const res = await reminderService.sendToTenant(tenantId);
-            if (!res?.success) {
-                setS('error');
-                setTimeout(() => setS('idle'), 2000);
-            } else {
-                setTimeout(() => setS('idle'), 3000);
-            }
+            if (!res?.success) { setS('error'); setTimeout(() => setS('idle'), 2000); }
+            else { setS('sent'); setTimeout(() => setS('idle'), 3000); }
         } catch (err) {
-            if (apiErrorCode(err) === 'NO_REMINDERS_LEFT') { onNoCredits?.(); }
-            setS('error');
-            setTimeout(() => setS('idle'), 2000);
+            if (apiErrorCode(err) === 'NO_REMINDERS_LEFT') onNoCredits?.();
+            setS('error'); setTimeout(() => setS('idle'), 2000);
         }
     };
-    if (s === 'sending') return <div className="shrink-0 p-2.5 bg-indigo-50 text-indigo-600 rounded-xl" title={`Sending reminder to ${tenantName}`}><RefreshCw size={14} className="animate-spin" /></div>;
-    if (s === 'sent')  return <div className="shrink-0 p-2.5 bg-emerald-50 text-emerald-600 rounded-xl" title={`Reminder sent to ${tenantName}`}><CheckCircle2 size={14} /></div>;
-    if (s === 'error') return <button onClick={() => { setS('idle'); tap(); }} className="shrink-0 p-2.5 bg-rose-50 text-rose-600 rounded-xl active:scale-95" title="Failed — tap to retry"><Bell size={14} /></button>;
+    const variants = {
+        idle: { bg: 'bg-slate-50', text: 'text-slate-400', icon: Bell },
+        sending: { bg: 'bg-indigo-50', text: 'text-indigo-600', icon: RefreshCw },
+        sent: { bg: 'bg-emerald-50', text: 'text-emerald-600', icon: CheckCircle2 },
+        error: { bg: 'bg-rose-50', text: 'text-rose-600', icon: AlertTriangle }
+    };
+    const Current = variants[s];
     return (
-        <button onClick={tap} className="shrink-0 p-2.5 bg-indigo-50 text-indigo-600 rounded-xl active:scale-95" title={`Send reminder to ${tenantName}`}>
-            <Bell size={14} />
+        <button onClick={tap} className={`shrink-0 p-3 ${Current.bg} ${Current.text} rounded-2xl transition-all active:scale-90`}>
+            <Current.icon size={16} className={s === 'sending' ? 'animate-spin' : ''} />
         </button>
     );
 };
 
-const RemindAllButton = ({ tenants, onNoCredits }) => {
-    const [s, setS] = useState('idle');
-    const tenantIds = tenants.map(dId).filter(Boolean);
-    const tap = async () => {
-        if (s === 'sending' || tenantIds.length === 0) return;
-        setS('sending');
-        try {
-            const res = await reminderService.sendBulk(tenantIds);
-            setS(res.sent > 0 ? 'sent' : 'error');
-            setTimeout(() => setS('idle'), 3000);
-        } catch (err) {
-            if (apiErrorCode(err) === 'NO_REMINDERS_LEFT') { onNoCredits?.(); }
-            setS('error');
-            setTimeout(() => setS('idle'), 2000);
-        }
-    };
-    const label = s === 'sent' ? 'All Sent ✓' : s === 'error' ? 'Some Failed' : s === 'sending' ? '...' : 'Remind All';
-    return (
-        <button onClick={tap} disabled={s === 'sending' || tenantIds.length === 0} className={`text-xs font-black px-3 py-1.5 rounded-xl active:scale-95 disabled:opacity-50 transition ${
-            s === 'sent' ? 'bg-emerald-50 text-emerald-700' : s === 'error' ? 'bg-rose-50 text-rose-700' : 'bg-indigo-50 text-indigo-600'
-        }`}>{label}</button>
-    );
-};
-
-// shared loading skeleton
 const TabSkeleton = () => (
-    <div className="space-y-3 pt-4 animate-pulse">
-        <div className="bg-slate-100 rounded-2xl h-28" />
-        <div className="bg-slate-100 rounded-2xl h-20" />
-        <div className="bg-slate-100 rounded-2xl h-20" />
+    <div className="space-y-4 animate-pulse">
+        <div className="bg-slate-100 rounded-[2.5rem] h-40" />
+        <div className="grid grid-cols-2 gap-4">
+            <div className="bg-slate-100 rounded-[2rem] h-24" />
+            <div className="bg-slate-100 rounded-[2rem] h-24" />
+        </div>
+        <div className="bg-slate-100 rounded-[2rem] h-60" />
     </div>
 );
 
-// shared insight strip — uses server-provided insights[] + severity
 const InsightStrip = ({ insights, severity }) => {
     if (!insights?.length) return null;
-    const cls = severity === 'HIGH' ? 'bg-rose-50 border-rose-100 text-rose-700'
+    const theme = severity === 'HIGH' ? 'bg-rose-50 border-rose-100 text-rose-700'
         : severity === 'MEDIUM'     ? 'bg-amber-50 border-amber-100 text-amber-700'
-        : 'bg-emerald-50 border-emerald-100 text-emerald-700';
+        : 'bg-indigo-50 border-indigo-100 text-indigo-700';
     return (
-        <div className={`rounded-2xl border p-4 ${cls}`}>
-            <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-2">Insights</p>
-            {insights.slice(0, 3).map((ins, i) => (
-                <div key={i} className="flex items-start gap-2 text-xs font-semibold leading-snug mb-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-current mt-1 shrink-0 opacity-60" />{ins}
-                </div>
-            ))}
+        <div className={`rounded-[2rem] border p-6 ${theme} shadow-sm relative overflow-hidden`}>
+            <div className="absolute top-0 right-0 p-4 opacity-10"><Sparkles size={40} /></div>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-60 mb-4 flex items-center gap-2">
+                <Zap size={12} /> Intelligence Report
+            </p>
+            <div className="space-y-3">
+                {insights.slice(0, 3).map((ins, i) => (
+                    <div key={i} className="flex items-start gap-3 text-xs font-bold leading-relaxed">
+                        <div className="w-1.5 h-1.5 rounded-full bg-current mt-1.5 shrink-0 opacity-40" />
+                        {ins}
+                    </div>
+                ))}
+            </div>
         </div>
     );
 };
 
-// ─── screen 1: cashflow command ───────────────────────────────────────────────
-// Data source: /dashboard/cashflow
-// Fields used: expected_rent, collected_amount, pending_amount, collection_rate,
-//              overdue_amount, overdue_tenants_count,
-//              top_defaulters[]{tenant_id, name, pending_amount, days_overdue},
-//              daily_collection[]{date, amount}
+// ─── screen 1: cashflow ───────────────────────────────────────────────────────
 const S1_Cashflow = ({ cfStats, cfSeverity, cfInsights, preferences, navigate, opPath }) => {
-    // If the owner has no tenants and no expected rent, they are likely new.
-    // SmartDashboardGuidance derives real state from the server — not just local flags.
     const isNewOwner = cfStats.expected === 0 && cfStats.topDefaulters.length === 0;
     if (isNewOwner) return <SmartDashboardGuidance />;
 
     const highRisk = cfStats.topDefaulters.filter(d => riskBadge(d) === 'HIGH').length;
     const actionItems = [
-        cfStats.overdueCount > 0 && { id: 'remind',  icon: Bell,       color: 'text-indigo-600 bg-indigo-50',  label: `${cfStats.overdueCount} tenant${cfStats.overdueCount !== 1 ? 's' : ''} unpaid — send reminders`,                    cta: 'Remind',      path: null },
-        highRisk > 0             && { id: 'high',    icon: ShieldAlert, color: 'text-rose-600 bg-rose-50',      label: `${highRisk} high-risk tenant${highRisk !== 1 ? 's' : ''} — overdue > 10 days`,                                   cta: 'View',        path: opPath('tenants')  },
-        cfStats.pending > 0      && { id: 'collect', icon: Wallet,      color: 'text-emerald-600 bg-emerald-50', label: `${formatCurrency(cfStats.pending, preferences)} collectible right now`,                                          cta: 'Collect',     path: opPath('payments') },
+        cfStats.overdueCount > 0 && { id: 'remind',  icon: Bell,       color: 'text-indigo-600 bg-indigo-50',  label: `${cfStats.overdueCount} Unpaid Dues`, desc: 'Send bulk WhatsApp reminders', path: null },
+        highRisk > 0             && { id: 'high',    icon: ShieldAlert, color: 'text-rose-600 bg-rose-50',      label: `${highRisk} Critical Defaulters`, desc: 'Overdue by 10+ days', path: opPath('tenants') },
+        cfStats.pending > 0      && { id: 'collect', icon: Wallet,      color: 'text-emerald-600 bg-emerald-50', label: 'Potential Revenue', desc: `${formatCurrency(cfStats.pending, preferences)} collectible`, path: opPath('payments') },
     ].filter(Boolean);
 
-    const last = cfStats.daily[cfStats.daily.length - 1]?.v ?? 0;
-    const prev = cfStats.daily[cfStats.daily.length - 2]?.v ?? 0;
-
     return (
-        <div className="space-y-4 pt-2">
-            <div className="flex items-center justify-between py-1">
+        <div className="space-y-6">
+            <header className="flex items-end justify-between">
                 <div>
-                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">Cashflow</h1>
-                    <p className="text-xs font-semibold text-slate-400">Revenue command center</p>
+                    <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.3em] mb-1">Financial State</p>
+                    <h1 className="text-4xl font-black text-slate-900 tracking-tighter">Overview</h1>
                 </div>
-                <button onClick={() => navigate(opPath('payments'))} className="p-2 bg-white rounded-xl border border-slate-200 text-slate-500 active:scale-95">
-                    <ArrowUpRight size={18} />
-                </button>
-            </div>
+                <div className="flex gap-2">
+                    <button onClick={() => navigate(opPath('payments'))} className="p-3 bg-white rounded-2xl border border-slate-100 text-slate-400 hover:text-slate-900 shadow-sm transition-all active:scale-95">
+                        <ArrowUpRight size={20} />
+                    </button>
+                </div>
+            </header>
 
-            {/* money grid — 4 cards from cashflow API */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-4">
                 {[
-                    { label: 'Expected',  value: formatCurrency(cfStats.expected,   preferences), sub: 'Total this month',              cls: 'bg-indigo-50 text-indigo-700' },
-                    { label: 'Collected', value: formatCurrency(cfStats.collected,  preferences), sub: `${cfStats.rate.toFixed(1)}% rate`, cls: 'bg-emerald-50 text-emerald-700' },
-                    { label: 'Pending',   value: formatCurrency(cfStats.pending,    preferences), sub: `${cfStats.overdueCount} unpaid`,  cls: cfStats.pending > 0 ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200' : 'bg-slate-50 text-slate-600', pulse: cfStats.pending > 0 },
-                    { label: 'Overdue',   value: formatCurrency(cfStats.overdueAmt, preferences), sub: 'Past due date',                   cls: cfStats.overdueAmt > 0 ? 'bg-rose-50 text-rose-700' : 'bg-slate-50 text-slate-600' },
+                    { label: 'Expected',  value: formatCurrency(cfStats.expected, preferences), sub: 'Monthly Goal', icon: <Target size={14}/>, cls: 'bg-white border-slate-100 text-slate-900' },
+                    { label: 'Collected', value: formatCurrency(cfStats.collected, preferences), sub: `${cfStats.rate.toFixed(1)}% Yield`, icon: <CheckCircle2 size={14}/>, cls: 'bg-emerald-50 border-emerald-100 text-emerald-900' },
+                    { label: 'Pending',   value: formatCurrency(cfStats.pending, preferences), sub: `${cfStats.overdueCount} Tenants`, icon: <Clock size={14}/>, cls: 'bg-white border-slate-100 text-slate-900', highlight: cfStats.pending > 0 },
+                    { label: 'Overdue',   value: formatCurrency(cfStats.overdueAmt, preferences), sub: 'Past Due Date', icon: <AlertTriangle size={14}/>, cls: cfStats.overdueAmt > 0 ? 'bg-rose-50 border-rose-100 text-rose-900' : 'bg-white border-slate-100 text-slate-900' },
                 ].map(c => (
-                    <button key={c.label} onClick={() => navigate(opPath('payments'))} className={`p-4 rounded-2xl text-left active:scale-95 transition-transform ${c.cls}`}>
-                        <p className="text-[10px] font-black uppercase tracking-widest opacity-50 mb-1">{c.label}</p>
-                        <p className="text-[18px] font-black tracking-tight leading-none mb-1">{c.value}</p>
-                        <p className="text-[11px] font-semibold opacity-70">{c.sub}</p>
-                        {c.pulse && <span className="mt-2 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" /><span className="text-[10px] font-black text-rose-500">Action needed</span></span>}
+                    <button key={c.label} onClick={() => navigate(opPath('payments'))} className={`p-6 rounded-[2rem] border text-left active:scale-95 transition-all shadow-sm group relative overflow-hidden ${c.cls}`}>
+                        <div className="flex items-center gap-2 mb-3 opacity-40 group-hover:opacity-100 transition-opacity">
+                            {c.icon}
+                            <p className="text-[10px] font-black uppercase tracking-widest">{c.label}</p>
+                        </div>
+                        <p className="text-2xl font-black tracking-tighter mb-1">{c.value}</p>
+                        <p className="text-[10px] font-bold opacity-60 uppercase tracking-wider">{c.sub}</p>
+                        {c.highlight && <div className="absolute top-4 right-4 w-2 h-2 bg-rose-500 rounded-full animate-ping" />}
                     </button>
                 ))}
             </div>
 
-            {/* top defaulters — fields from API: tenant_id, name, pending_amount, days_overdue */}
             {cfStats.topDefaulters.length > 0 && (
-                <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-slate-50">
-                        <div className="flex items-center gap-2">
-                            <ShieldAlert size={15} className="text-rose-500" />
-                            <span className="text-sm font-black text-slate-900">Top Defaulters</span>
-                            <span className="text-[11px] font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full">{cfStats.topDefaulters.length}</span>
+                <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-50 overflow-hidden">
+                    <div className="p-6 flex items-center justify-between bg-slate-50/50 border-b border-slate-100">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-rose-500 shadow-sm">
+                                <ShieldAlert size={20} />
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-black text-slate-900">Critical Dues</h3>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{cfStats.topDefaulters.length} Pending Actions</p>
+                            </div>
                         </div>
-                        <RemindAllButton tenants={cfStats.topDefaulters} onNoCredits={() => navigate('/owner/billing')} />
                     </div>
                     <div className="divide-y divide-slate-50">
                         {cfStats.topDefaulters.map(d => {
                             const r = riskBadge(d);
                             return (
-                                <div key={dId(d)} className="flex items-center gap-3 px-4 py-3 active:bg-slate-50">
-                                    <button onClick={() => navigate(opPath(`tenants/${dId(d)}`))} className="flex-1 min-w-0 text-left">
-                                        <div className="flex items-center gap-2 mb-0.5">
-                                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${RC[r]}`}>{r}</span>
-                                            <p className="text-sm font-extrabold text-slate-900 truncate">{dName(d)}</p>
+                                <div key={dId(d)} className="p-5 flex items-center gap-4 hover:bg-slate-50/50 transition-colors">
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className={`text-[8px] font-black px-2 py-0.5 rounded-full border ${RC[r]}`}>{r}</span>
+                                            <p className="text-sm font-black text-slate-900 truncate">{dName(d)}</p>
                                         </div>
                                         <div className="flex items-center gap-3">
-                                            <span className="text-sm font-black text-rose-600">{formatCurrency(dAmt(d), preferences)}</span>
-                                            {dDays(d) > 0 && <span className="text-xs font-semibold text-slate-400">{dDays(d)}d overdue</span>}
+                                            <span className="text-base font-black text-slate-900">{formatCurrency(dAmt(d), preferences)}</span>
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{dDays(d)} Days Overdue</span>
                                         </div>
-                                    </button>
+                                    </div>
                                     <ReminderButton tenantId={dId(d)} tenantName={dName(d)} onNoCredits={() => navigate('/owner/billing')} />
                                 </div>
                             );
@@ -319,57 +305,60 @@ const S1_Cashflow = ({ cfStats, cfSeverity, cfInsights, preferences, navigate, o
                 </div>
             )}
 
-            {/* action center */}
-            {actionItems.length > 0 ? (
-                <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
-                    <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-50">
-                        <Zap size={15} className="text-amber-500" />
-                        <span className="text-sm font-black text-slate-900">Action Center</span>
-                        <span className="text-[11px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">{actionItems.length}</span>
-                    </div>
-                    <div className="divide-y divide-slate-50">
+            <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white relative overflow-hidden shadow-2xl shadow-indigo-100">
+                <div className="absolute top-0 right-0 p-8 opacity-10 rotate-12"><Activity size={100} /></div>
+                <div className="relative z-10">
+                    <p className="text-indigo-400 text-[10px] font-black uppercase tracking-[0.3em] mb-4">Action Center</p>
+                    <div className="space-y-6">
                         {actionItems.map(item => { const Icon = item.icon; return (
-                            <div key={item.id} className="flex items-center gap-3 px-4 py-3">
-                                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${item.color}`}><Icon size={16} /></div>
-                                <p className="flex-1 text-sm font-semibold text-slate-700 leading-snug">{item.label}</p>
-                                {item.id === 'remind' ? (
-                                    <RemindAllButton tenants={cfStats.topDefaulters} onNoCredits={() => navigate('/owner/billing')} />
-                                ) : (
-                                    <button onClick={() => navigate(item.path)} className="shrink-0 text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-xl active:scale-95 whitespace-nowrap">{item.cta}</button>
-                                )}
+                            <div key={item.id} className="flex items-center gap-4">
+                                <div className={`w-12 h-12 rounded-[1.2rem] flex items-center justify-center shrink-0 ${item.color} shadow-lg`}>
+                                    <Icon size={20} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-black tracking-tight">{item.label}</p>
+                                    <p className="text-xs text-white/50 font-medium">{item.desc}</p>
+                                </div>
+                                <button 
+                                    onClick={() => item.path ? navigate(item.path) : null}
+                                    className="w-10 h-10 bg-white/10 hover:bg-white/20 rounded-xl flex items-center justify-center transition-all active:scale-90"
+                                >
+                                    <ArrowRight size={18} />
+                                </button>
                             </div>
                         ); })}
                     </div>
                 </div>
-            ) : (
-                <div className="bg-white rounded-2xl border border-slate-100 p-6 text-center shadow-sm">
-                    <CheckCircle2 size={28} className="mx-auto mb-2 text-emerald-400" />
-                    <p className="text-sm font-black text-slate-600">All clear — no urgent actions</p>
-                </div>
-            )}
+            </div>
 
-            {/* sparkline — daily_collection from API */}
             {cfStats.daily.length > 0 && (
-                <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
-                    <div className="flex items-center justify-between mb-3">
+                <div className="bg-white rounded-[2.5rem] border border-slate-100 p-8 shadow-xl shadow-slate-50">
+                    <div className="flex items-center justify-between mb-8">
                         <div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Daily Collection</p>
-                            <p className="text-lg font-black text-slate-900">{formatCurrency(last, preferences)}</p>
+                            <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Collection Trend</p>
+                            <h3 className="text-xl font-black text-slate-900">Revenue Flow</h3>
                         </div>
-                        <span className={`flex items-center gap-1 text-xs font-black px-2 py-1 rounded-xl ${last >= prev ? 'text-emerald-600 bg-emerald-50' : 'text-rose-600 bg-rose-50'}`}>
-                            {last >= prev ? <TrendingUp size={13} /> : <TrendingDown size={13} />} vs prev day
-                        </span>
+                        <div className="text-right">
+                            <p className="text-2xl font-black text-slate-900">{formatCurrency(cfStats.daily[cfStats.daily.length - 1]?.v ?? 0, preferences)}</p>
+                            <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Today's Batch</p>
+                        </div>
                     </div>
-                    <div className="h-16">
+                    <div className="h-40">
                         <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart data={cfStats.daily} margin={{ top: 2, right: 2, left: 2, bottom: 0 }}>
+                            <AreaChart data={cfStats.daily}>
                                 <defs>
-                                    <linearGradient id="spark" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%"  stopColor="#6366f1" stopOpacity={0.3} />
-                                        <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                                    <linearGradient id="colorV" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
+                                        <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
                                     </linearGradient>
                                 </defs>
-                                <Area type="monotone" dataKey="v" stroke="#6366f1" strokeWidth={2} fill="url(#spark)" dot={false} />
+                                <XAxis dataKey="label" hide />
+                                <YAxis hide />
+                                <Tooltip 
+                                    contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', fontSize: '12px', fontWeight: 'bold' }}
+                                    formatter={(value) => formatCurrency(value, preferences)}
+                                />
+                                <Area type="monotone" dataKey="v" stroke="#6366f1" strokeWidth={4} fillOpacity={1} fill="url(#colorV)" />
                             </AreaChart>
                         </ResponsiveContainer>
                     </div>
@@ -382,107 +371,72 @@ const S1_Cashflow = ({ cfStats, cfSeverity, cfInsights, preferences, navigate, o
 };
 
 // ─── screen 2: tenant intelligence ───────────────────────────────────────────
-// Data source: /dashboard/tenants
-// Fields: distribution{good,medium,risky}, risky_tenants[]{tenant_id,name,score,pending_amount,avg_delay_days},
-//         payment_behavior{on_time_percentage,avg_delay_days,reminder_dependency_rate},
-//         exit_insights{total_exits,top_reasons[]{reason,count},churn_rate}
 const S2_Tenants = ({ data, severity, insights, loading, preferences, navigate, opPath }) => {
     if (loading || !data) return <TabSkeleton />;
     const dist  = data.distribution    ?? { good: 0, medium: 0, risky: 0 };
     const risky = data.risky_tenants   ?? [];
     const beh   = data.payment_behavior ?? {};
-    const exit  = data.exit_insights    ?? {};
     const total = (dist.good + dist.medium + dist.risky) || 1;
 
     return (
-        <div className="space-y-4 pt-2">
-            <div className="flex items-center justify-between py-1">
+        <div className="space-y-6">
+            <header className="flex items-end justify-between">
                 <div>
-                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">Tenant Intel</h1>
-                    <p className="text-xs font-semibold text-slate-400">{total} scored tenants</p>
+                    <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.3em] mb-1">Member Insights</p>
+                    <h1 className="text-4xl font-black text-slate-900 tracking-tighter">Tenants</h1>
                 </div>
-                <button onClick={() => navigate(opPath('tenants'))} className="p-2 bg-white rounded-xl border border-slate-200 text-slate-500 active:scale-95">
-                    <ArrowUpRight size={18} />
+                <button onClick={() => navigate(opPath('tenants'))} className="p-3 bg-white rounded-2xl border border-slate-100 text-slate-400 shadow-sm active:scale-95">
+                    <Users size={20} />
                 </button>
+            </header>
+
+            <div className="bg-white rounded-[2.5rem] border border-slate-100 p-8 shadow-xl shadow-slate-50">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-6">Tenant Health Pulse</p>
+                <div className="flex h-12 gap-1 mb-6">
+                    <div className="bg-emerald-400 rounded-l-2xl flex items-center justify-center text-white text-[10px] font-black" style={{ width: `${(dist.good / total) * 100}%` }}>{dist.good > 0 && Math.round((dist.good/total)*100)+'%'}</div>
+                    <div className="bg-amber-400 flex items-center justify-center text-white text-[10px] font-black" style={{ width: `${(dist.medium / total) * 100}%` }}>{dist.medium > 0 && Math.round((dist.medium/total)*100)+'%'}</div>
+                    <div className="bg-rose-500 rounded-r-2xl flex items-center justify-center text-white text-[10px] font-black" style={{ width: `${(dist.risky / total) * 100}%` }}>{dist.risky > 0 && Math.round((dist.risky/total)*100)+'%'}</div>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                    <div className="text-center"><p className="text-lg font-black text-emerald-600">{dist.good}</p><p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Stable</p></div>
+                    <div className="text-center border-x border-slate-50"><p className="text-lg font-black text-amber-600">{dist.medium}</p><p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Watch</p></div>
+                    <div className="text-center"><p className="text-lg font-black text-rose-600">{dist.risky}</p><p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">At Risk</p></div>
+                </div>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Health Distribution</p>
-                <div className="flex rounded-xl overflow-hidden h-4 gap-0.5 mb-3">
-                    {dist.good   > 0 && <div className="bg-emerald-400 rounded-l-xl" style={{ width: `${(dist.good   / total) * 100}%` }} />}
-                    {dist.medium > 0 && <div className="bg-amber-400"                 style={{ width: `${(dist.medium / total) * 100}%` }} />}
-                    {dist.risky  > 0 && <div className="bg-rose-500 rounded-r-xl"     style={{ width: `${(dist.risky  / total) * 100}%` }} />}
-                </div>
-                <div className="flex justify-between text-[11px] font-black">
-                    <span className="text-emerald-600">{dist.good} Good</span>
-                    <span className="text-amber-600">{dist.medium} Medium</span>
-                    <span className="text-rose-600">{dist.risky} Risky</span>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-4">
                 {[
-                    { label: 'On-Time',    value: `${beh.on_time_percentage ?? 0}%`,  cls: (beh.on_time_percentage ?? 0) >= 70 ? 'text-emerald-700 bg-emerald-50' : 'text-rose-700 bg-rose-50' },
-                    { label: 'Avg Delay',  value: (beh.avg_delay_days ?? 0) > 0 ? `${Math.round(beh.avg_delay_days)}d` : '—', cls: (beh.avg_delay_days ?? 0) > 7 ? 'text-rose-700 bg-rose-50' : 'text-slate-700 bg-slate-50' },
-                    { label: 'Need Remind',value: `${beh.reminder_dependency_rate ?? 0}%`, cls: 'text-indigo-700 bg-indigo-50' },
+                    { label: 'On-Time', value: `${beh.on_time_percentage ?? 0}%`, color: 'text-emerald-600 bg-emerald-50' },
+                    { label: 'Avg Delay', value: `${Math.round(beh.avg_delay_days ?? 0)}d`, color: 'text-amber-600 bg-amber-50' },
+                    { label: 'Dependent', value: `${beh.reminder_dependency_rate ?? 0}%`, color: 'text-indigo-600 bg-indigo-50' }
                 ].map(c => (
-                    <div key={c.label} className={`rounded-2xl p-3 text-center ${c.cls}`}>
-                        <p className="text-xl font-black">{c.value}</p>
-                        <p className="text-[9px] font-black uppercase tracking-widest opacity-60 mt-0.5">{c.label}</p>
+                    <div key={c.label} className={`p-5 rounded-[2rem] text-center ${c.color} shadow-sm border border-black/5`}>
+                        <p className="text-xl font-black mb-1">{c.value}</p>
+                        <p className="text-[8px] font-black uppercase tracking-widest opacity-60">{c.label}</p>
                     </div>
                 ))}
             </div>
 
-            {risky.length > 0 ? (
-                <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
-                    <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-50">
-                        <ShieldAlert size={15} className="text-rose-500" />
-                        <span className="text-sm font-black text-slate-900">Risky Tenants</span>
-                        <span className="text-[11px] font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full">{risky.length}</span>
+            {risky.length > 0 && (
+                <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-50 overflow-hidden">
+                    <div className="p-6 bg-rose-50/50 border-b border-slate-100 flex items-center gap-3">
+                        <ShieldAlert className="text-rose-500" size={18} />
+                        <h3 className="text-sm font-black text-slate-900">Risk Mitigation List</h3>
                     </div>
                     <div className="divide-y divide-slate-50">
                         {risky.map(t => (
-                            <div key={t.tenant_id} className="flex items-center gap-3 px-4 py-3 active:bg-slate-50">
-                                <button onClick={() => navigate(opPath(`tenants/${t.tenant_id}`))} className="flex-1 min-w-0 text-left">
-                                    <div className="flex items-center gap-2 mb-0.5">
-                                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${t.score < 30 ? RC.HIGH : RC.MEDIUM}`}>Score {t.score}</span>
-                                        <p className="text-sm font-extrabold text-slate-900 truncate">{t.name}</p>
+                            <div key={t.tenant_id} className="p-5 flex items-center gap-4 hover:bg-slate-50/50 transition-colors">
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                                        <p className="text-sm font-black text-slate-900">{t.name}</p>
                                     </div>
-                                    <div className="flex items-center gap-3">
-                                        {t.pending_amount > 0 && <span className="text-sm font-black text-rose-600">{formatCurrency(t.pending_amount, preferences)}</span>}
-                                        {t.avg_delay_days > 0 && <span className="text-xs text-slate-400">{Math.round(t.avg_delay_days)}d avg delay</span>}
-                                    </div>
-                                </button>
-                                <div className="flex gap-1.5 shrink-0">
-                                    <ReminderButton tenantId={t.tenant_id} tenantName={t.name ?? 'Tenant'} onNoCredits={() => navigate('/owner/billing')} />
-                                    <button onClick={() => navigate(opPath(`tenants/${t.tenant_id}`))} className="p-2 bg-slate-50 text-slate-500 rounded-xl active:scale-95">
-                                        <ChevronRight size={14} />
-                                    </button>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Score: {t.score} · {formatCurrency(t.pending_amount, preferences)} due</p>
                                 </div>
+                                <ReminderButton tenantId={t.tenant_id} tenantName={t.name} onNoCredits={() => navigate('/owner/billing')} />
                             </div>
                         ))}
                     </div>
-                </div>
-            ) : (
-                <div className="bg-white rounded-2xl border border-slate-100 p-8 text-center shadow-sm">
-                    <CheckCircle2 size={32} className="mx-auto mb-2 text-emerald-400" />
-                    <p className="text-sm font-black text-slate-600">No risky tenants — all on track</p>
-                </div>
-            )}
-
-            {exit.total_exits > 0 && (
-                <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Exit Signals</p>
-                    <div className="flex items-center gap-6 mb-3">
-                        <div><p className="text-2xl font-black text-slate-900">{exit.total_exits}</p><p className="text-[10px] font-black text-slate-400 uppercase">Exits</p></div>
-                        <div><p className="text-2xl font-black text-rose-600">{exit.churn_rate}%</p><p className="text-[10px] font-black text-slate-400 uppercase">Churn Rate</p></div>
-                    </div>
-                    {exit.top_reasons?.slice(0, 3).map((r, i) => (
-                        <div key={i} className="flex items-center justify-between text-xs py-1 border-t border-slate-50">
-                            <span className="flex items-center gap-2 font-semibold text-slate-600"><span className="w-1.5 h-1.5 bg-slate-300 rounded-full" />{r.reason}</span>
-                            <span className="font-black text-slate-900">{r.count}</span>
-                        </div>
-                    ))}
                 </div>
             )}
 
@@ -492,82 +446,86 @@ const S2_Tenants = ({ data, severity, insights, loading, preferences, navigate, 
 };
 
 // ─── screen 3: funnel ─────────────────────────────────────────────────────────
-// Data source: /dashboard/funnel
-// Fields: reminders_sent, conversions, conversion_rate, revenue_generated,
-//         avg_time_to_pay_hours, channel_performance[]{channel,sent,converted,conversion_rate}
 const S3_Funnel = ({ data, severity, insights, loading, preferences, navigate, opPath }) => {
     if (loading || !data) return <TabSkeleton />;
-    const sent     = data.reminders_sent        ?? 0;
-    const conv     = data.conversions           ?? 0;
-    const rate     = Number(data.conversion_rate       ?? 0);
-    const revenue  = Number(data.revenue_generated     ?? 0);
-    const hours    = Number(data.avg_time_to_pay_hours ?? 0);
-    const channels = data.channel_performance   ?? [];
+    const sent = data.reminders_sent ?? 0;
+    const rate = Number(data.conversion_rate ?? 0);
+    const revenue = Number(data.revenue_generated ?? 0);
+    const channels = data.channel_performance ?? [];
 
     return (
-        <div className="space-y-4 pt-2">
-            <div className="py-1">
-                <h1 className="text-2xl font-black text-slate-900 tracking-tight">Revenue Funnel</h1>
-                <p className="text-xs font-semibold text-slate-400">Reminder → payment pipeline</p>
+        <div className="space-y-6">
+            <header className="flex items-end justify-between">
+                <div>
+                    <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.3em] mb-1">Pipeline Analysis</p>
+                    <h1 className="text-4xl font-black text-slate-900 tracking-tighter">Funnel</h1>
+                </div>
+                <button onClick={() => navigate(opPath('payments'))} className="p-3 bg-white rounded-2xl border border-slate-100 text-slate-400 shadow-sm active:scale-95">
+                    <Target size={20} />
+                </button>
+            </header>
+
+            <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-indigo-100 relative overflow-hidden">
+                <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-indigo-500/20 rounded-full blur-3xl" />
+                <div className="flex justify-between items-center mb-10">
+                    <div>
+                        <p className="text-indigo-400 text-[10px] font-black uppercase tracking-widest mb-1">Conversion Rate</p>
+                        <h2 className="text-5xl font-black tracking-tighter">{rate.toFixed(1)}%</h2>
+                    </div>
+                    <div className="w-16 h-16 bg-white/10 rounded-2xl flex items-center justify-center text-indigo-400">
+                        <TrendingUp size={32} />
+                    </div>
+                </div>
+                <div className="space-y-6">
+                    <div className="space-y-2">
+                        <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-white/40">
+                            <span>Reminders Sent</span>
+                            <span>{sent}</span>
+                        </div>
+                        <div className="h-3 bg-white/10 rounded-full overflow-hidden">
+                            <motion.div initial={{ width: 0 }} animate={{ width: '100%' }} className="h-full bg-indigo-500" />
+                        </div>
+                    </div>
+                    <div className="space-y-2">
+                        <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-white/40">
+                            <span>Payments Recieved</span>
+                            <span>{data.conversions}</span>
+                        </div>
+                        <div className="h-3 bg-white/10 rounded-full overflow-hidden">
+                            <motion.div initial={{ width: 0 }} animate={{ width: `${rate}%` }} className="h-full bg-emerald-400" />
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            {sent === 0 ? (
-                <div className="bg-white rounded-2xl border border-slate-100 p-8 text-center shadow-sm">
-                    <Target size={32} className="mx-auto mb-2 text-slate-300" />
-                    <p className="text-sm font-black text-slate-500">No reminders sent this period</p>
-                    <button onClick={() => navigate(opPath('payments'))} className="mt-3 px-4 py-2 bg-indigo-500 text-white text-xs font-black rounded-xl active:scale-95">
-                        Go to Payments
-                    </button>
+            <div className="grid grid-cols-2 gap-4">
+                <div className="bg-white rounded-[2rem] border border-slate-100 p-6 shadow-sm">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Automated Revenue</p>
+                    <p className="text-2xl font-black text-slate-900">{formatCurrency(revenue, preferences)}</p>
+                    <p className="text-[10px] font-bold text-emerald-500 uppercase mt-1">Via Reminders</p>
                 </div>
-            ) : (
-                <>
-                    <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm space-y-3">
-                        {[
-                            { label: 'Reminders Sent',     value: sent, pct: 100,                              color: 'bg-indigo-500' },
-                            { label: 'Payments Converted', value: conv, pct: Math.max(Math.round(rate), 4),    color: 'bg-emerald-500' },
-                        ].map((s, i) => (
-                            <div key={i}>
-                                <div className="flex justify-between items-center mb-1">
-                                    <span className="text-xs font-black text-slate-600">{s.label}</span>
-                                    <span className="text-sm font-black text-slate-900">{s.value}</span>
+                <div className="bg-white rounded-[2rem] border border-slate-100 p-6 shadow-sm">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Avg Pay Time</p>
+                    <p className="text-2xl font-black text-slate-900">{data.avg_time_to_pay_hours?.toFixed(1)}h</p>
+                    <p className="text-[10px] font-bold text-indigo-500 uppercase mt-1">Post Alert</p>
+                </div>
+            </div>
+
+            {channels.length > 0 && (
+                <div className="bg-white rounded-[2.5rem] border border-slate-100 p-8 shadow-xl shadow-slate-50">
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-6">Channel Efficiency</p>
+                    <div className="space-y-5">
+                        {channels.map((ch, i) => (
+                            <div key={i} className="flex items-center gap-4">
+                                <span className="text-xs font-black text-slate-600 w-20 uppercase tracking-tighter">{ch.channel}</span>
+                                <div className="flex-1 h-3 bg-slate-50 rounded-full overflow-hidden">
+                                    <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${ch.conversion_rate}%` }} />
                                 </div>
-                                <div className="h-8 bg-slate-50 rounded-xl overflow-hidden">
-                                    <div className={`h-full ${s.color} rounded-xl flex items-center px-3`} style={{ width: `${s.pct}%` }}>
-                                        <span className="text-[11px] font-black text-white">{s.pct}%</span>
-                                    </div>
-                                </div>
+                                <span className="text-xs font-black text-slate-900">{ch.conversion_rate.toFixed(0)}%</span>
                             </div>
                         ))}
                     </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-emerald-50 rounded-2xl p-4">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 opacity-70 mb-1">Revenue via Reminders</p>
-                            <p className="text-xl font-black text-emerald-700">{formatCurrency(revenue, preferences)}</p>
-                            <p className="text-xs font-semibold text-emerald-600 mt-1">{rate.toFixed(1)}% conversion</p>
-                        </div>
-                        <div className="bg-indigo-50 rounded-2xl p-4">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 opacity-70 mb-1">Avg Pay Time</p>
-                            <p className="text-xl font-black text-indigo-700">{hours > 0 ? `${hours.toFixed(1)}h` : '—'}</p>
-                            <p className="text-xs font-semibold text-indigo-600 mt-1">After reminder</p>
-                        </div>
-                    </div>
-
-                    {channels.length > 0 && (
-                        <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Channel Performance</p>
-                            {channels.map((ch, i) => (
-                                <div key={i} className="flex items-center gap-3 mb-2">
-                                    <span className="text-xs font-black text-slate-700 w-24 truncate uppercase">{ch.channel}</span>
-                                    <div className="flex-1 h-2.5 bg-slate-50 rounded-full overflow-hidden">
-                                        <div className="h-full bg-indigo-400 rounded-full" style={{ width: `${Math.max(ch.conversion_rate, 3)}%` }} />
-                                    </div>
-                                    <span className="text-xs font-black text-slate-900 w-10 text-right">{ch.conversion_rate.toFixed(1)}%</span>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </>
+                </div>
             )}
 
             <InsightStrip insights={insights} severity={severity} />
@@ -576,104 +534,91 @@ const S3_Funnel = ({ data, severity, insights, loading, preferences, navigate, o
 };
 
 // ─── screen 4: operations ─────────────────────────────────────────────────────
-// Data source: /dashboard/operations
-// Fields: occupancy_rate, total_rooms, occupied_rooms, avg_vacancy_days,
-//         move_ins, move_outs, revenue, expenses, profit,
-//         complaints{pending,resolved,avg_resolution_time_hours}
 const S4_Operations = ({ data, severity, insights, loading, preferences, navigate, opPath }) => {
     if (loading || !data) return <TabSkeleton />;
-    const occ      = Number(data.occupancy_rate ?? 0);
-    const occupied = Number(data.occupied_rooms ?? 0);
-    const rev      = Number(data.revenue        ?? 0);
-    const exp      = Number(data.expenses       ?? 0);
-    const profit   = Number(data.profit         ?? 0);
-    const cp       = data.complaints ?? {};
-    const vacant   = occ > 0 ? Math.max(0, Math.round(occupied * 100 / occ) - occupied) : 0;
-    const profitPct = rev > 0 ? Math.round((profit / rev) * 100) : 0;
+    const occ = Number(data.occupancy_rate ?? 0);
+    const rev = Number(data.revenue ?? 0);
+    const exp = Number(data.expenses ?? 0);
+    const profit = Number(data.profit ?? 0);
+    const vacant = occ > 0 ? Math.max(0, Math.round(Number(data.occupied_rooms) * 100 / occ) - Number(data.occupied_rooms)) : 0;
 
     return (
-        <div className="space-y-4 pt-2">
-            <div className="flex items-center justify-between py-1">
+        <div className="space-y-6">
+            <header className="flex items-end justify-between">
                 <div>
-                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">Operations</h1>
-                    <p className="text-xs font-semibold text-slate-400">Property health overview</p>
+                    <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.3em] mb-1">Property Status</p>
+                    <h1 className="text-4xl font-black text-slate-900 tracking-tighter">Operations</h1>
                 </div>
-                <button onClick={() => navigate(opPath('rooms'))} className="p-2 bg-white rounded-xl border border-slate-200 text-slate-500 active:scale-95">
-                    <ArrowUpRight size={18} />
+                <button onClick={() => navigate(opPath('rooms'))} className="p-3 bg-white rounded-2xl border border-slate-100 text-slate-400 shadow-sm active:scale-95">
+                    <Home size={20} />
                 </button>
-            </div>
+            </header>
 
-            <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
+            <div className="bg-white rounded-[2.5rem] border border-slate-100 p-8 shadow-xl shadow-slate-50">
+                <div className="flex justify-between items-start mb-8">
                     <div>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Occupancy</p>
-                        <p className="text-3xl font-black text-slate-900 mt-1">{occ.toFixed(1)}%</p>
-                        <p className="text-xs font-semibold text-slate-400 mt-0.5">{occupied} beds occupied · {data.total_rooms} rooms</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Occupancy Rate</p>
+                        <h2 className="text-5xl font-black text-slate-900 tracking-tighter">{occ.toFixed(1)}%</h2>
                     </div>
                     {vacant > 0 && (
-                        <div className="text-right">
-                            <p className="text-2xl font-black text-amber-600">{vacant}</p>
-                            <p className="text-xs font-black text-amber-500">vacant</p>
+                        <div className="bg-amber-50 text-amber-600 px-4 py-2 rounded-2xl border border-amber-100 text-center">
+                            <p className="text-xl font-black">{vacant}</p>
+                            <p className="text-[8px] font-black uppercase tracking-widest">Vacant</p>
                         </div>
                     )}
                 </div>
-                <div className="h-3 bg-slate-100 rounded-full overflow-hidden mb-4">
-                    <div className={`h-full rounded-full transition-all ${occ >= 80 ? 'bg-emerald-500' : occ >= 50 ? 'bg-amber-400' : 'bg-rose-500'}`} style={{ width: `${Math.min(occ, 100)}%` }} />
+                <div className="h-4 bg-slate-50 rounded-full overflow-hidden mb-8">
+                    <motion.div 
+                        initial={{ width: 0 }} 
+                        animate={{ width: `${occ}%` }} 
+                        className={`h-full rounded-full ${occ >= 80 ? 'bg-emerald-500' : 'bg-indigo-500'}`} 
+                    />
                 </div>
-                {vacant > 0 && (
-                    <button onClick={() => navigate(opPath('rooms'))} className="w-full py-3 text-sm font-black text-white bg-indigo-500 rounded-xl active:scale-95">
-                        Fill {vacant} Vacant {vacant !== 1 ? 'Beds' : 'Bed'}
-                    </button>
-                )}
-                <div className="flex gap-4 mt-3 pt-3 border-t border-slate-50">
-                    <div><p className="text-sm font-black text-emerald-600">+{data.move_ins ?? 0}</p><p className="text-[10px] font-black text-slate-400 uppercase">Move-ins</p></div>
-                    <div><p className="text-sm font-black text-rose-500">-{data.move_outs ?? 0}</p><p className="text-[10px] font-black text-slate-400 uppercase">Move-outs</p></div>
-                    {data.avg_vacancy_days > 0 && <div><p className="text-sm font-black text-amber-600">{data.avg_vacancy_days}d</p><p className="text-[10px] font-black text-slate-400 uppercase">Avg Vacant</p></div>}
+                <div className="grid grid-cols-3 gap-4 pt-6 border-t border-slate-50">
+                    <div className="text-center"><p className="text-lg font-black text-emerald-600">+{data.move_ins || 0}</p><p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">In</p></div>
+                    <div className="text-center border-x border-slate-50"><p className="text-lg font-black text-rose-500">-{data.move_outs || 0}</p><p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Out</p></div>
+                    <div className="text-center"><p className="text-lg font-black text-slate-900">{data.total_rooms || 0}</p><p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Rooms</p></div>
                 </div>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Revenue vs Expenses</p>
-                {[
-                    { label: 'Revenue',  value: rev,    color: 'bg-emerald-500', pct: 100 },
-                    { label: 'Expenses', value: exp,    color: 'bg-rose-400',    pct: rev > 0 ? Math.min(Math.round((exp / rev) * 100), 100) : 0 },
-                    { label: 'Profit',   value: profit, color: profit >= 0 ? 'bg-indigo-500' : 'bg-rose-600', pct: Math.max(Math.abs(profitPct), 4) },
-                ].map(row => (
-                    <div key={row.label} className="mb-3">
-                        <div className="flex justify-between items-center mb-1">
-                            <span className="text-xs font-black text-slate-600">{row.label}</span>
-                            <span className="text-sm font-black text-slate-900">{formatCurrency(row.value, preferences)}</span>
+            <div className="bg-white rounded-[2.5rem] border border-slate-100 p-8 shadow-xl shadow-slate-50">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-8">P&L Performance</p>
+                <div className="space-y-6">
+                    {[
+                        { label: 'Revenue', value: rev, color: 'bg-emerald-500', max: rev },
+                        { label: 'Expenses', value: exp, color: 'bg-rose-400', max: rev },
+                        { label: 'Profit', value: profit, color: 'bg-indigo-500', max: rev }
+                    ].map(row => (
+                        <div key={row.label}>
+                            <div className="flex justify-between items-center mb-2 px-1">
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{row.label}</span>
+                                <span className="text-sm font-black text-slate-900">{formatCurrency(row.value, preferences)}</span>
+                            </div>
+                            <div className="h-3 bg-slate-50 rounded-full overflow-hidden">
+                                <motion.div 
+                                    initial={{ width: 0 }} 
+                                    animate={{ width: `${(row.value / row.max) * 100}%` }} 
+                                    className={`h-full ${row.color} rounded-full`} 
+                                />
+                            </div>
                         </div>
-                        <div className="h-2.5 bg-slate-50 rounded-full overflow-hidden">
-                            <div className={`h-full ${row.color} rounded-full`} style={{ width: `${Math.min(row.pct, 100)}%` }} />
-                        </div>
-                    </div>
-                ))}
-                <button onClick={() => navigate(opPath('expenses'))} className="mt-2 w-full py-2.5 text-xs font-black text-indigo-600 bg-indigo-50 rounded-xl active:scale-95">
-                    Manage Expenses
+                    ))}
+                </div>
+                <button onClick={() => navigate(opPath('expenses'))} className="w-full mt-10 h-14 bg-slate-50 border border-slate-100 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-100 active:scale-95 transition-all">
+                    Detail Expense Audit
                 </button>
             </div>
 
-            {cp.pending > 0 && (
-                <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4">
-                    <div className="flex items-center gap-2 mb-1">
-                        <Clock size={14} className="text-amber-600" />
-                        <p className="text-sm font-extrabold text-amber-800">{cp.pending} complaint{cp.pending !== 1 ? 's' : ''} pending</p>
-                    </div>
-                    <p className="text-xs text-amber-600">Avg resolution: {cp.avg_resolution_time_hours?.toFixed(1)}h · {cp.resolved} resolved</p>
-                </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-4">
                 {[
-                    { label: 'All Tenants', icon: Users,     path: opPath('tenants'),     cls: 'bg-indigo-50 text-indigo-600' },
-                    { label: 'All Rooms',   icon: BedDouble,  path: opPath('rooms'),      cls: 'bg-purple-50 text-purple-600' },
-                    { label: 'Payments',    icon: Wallet,     path: opPath('payments'),   cls: 'bg-emerald-50 text-emerald-600' },
-                    { label: 'Activity',    icon: Activity,   path: opPath('activities'), cls: 'bg-slate-50 text-slate-600' },
-                ].map(l => { const Icon = l.icon; return (
-                    <button key={l.label} onClick={() => navigate(l.path)} className={`flex items-center gap-3 p-4 rounded-2xl active:scale-95 transition-transform ${l.cls}`}>
-                        <Icon size={18} /><span className="text-sm font-black">{l.label}</span><ChevronRight size={14} className="ml-auto opacity-50" />
-                    </button>
+                    { label: 'Complaints', value: data.complaints?.pending || 0, icon: MessageSquare, cls: 'bg-white text-slate-900' },
+                    { label: 'Maintenance', value: 'Active', icon: Activity, cls: 'bg-white text-slate-900' }
+                ].map((item, i) => { const Icon = item.icon; return (
+                    <div key={i} className={`p-6 rounded-[2rem] border border-slate-100 shadow-sm ${item.cls}`}>
+                        <Icon className="text-slate-400 mb-4" size={20} />
+                        <p className="text-2xl font-black mb-1">{item.value}</p>
+                        <p className="text-[9px] font-black uppercase tracking-widest opacity-60">{item.label}</p>
+                    </div>
                 ); })}
             </div>
 
@@ -685,26 +630,29 @@ const S4_Operations = ({ data, severity, insights, loading, preferences, navigat
 // ─── bottom tab bar ──────────────────────────────────────────────────────────
 const TabBar = ({ active, onChange, badge }) => {
     const tabs = [
-        { id: 'cashflow',   label: 'Cashflow',   Icon: LayoutDashboard },
-        { id: 'tenants',    label: 'Tenants',     Icon: Users           },
-        { id: 'funnel',     label: 'Funnel',      Icon: BarChart2       },
-        { id: 'operations', label: 'Operations',  Icon: Home            },
+        { id: 'cashflow',   label: 'Revenue',    Icon: Wallet },
+        { id: 'tenants',    label: 'Tenants',     Icon: Users  },
+        { id: 'funnel',     label: 'Funnel',      Icon: Target },
+        { id: 'operations', label: 'Assets',      Icon: Home   },
     ];
     return (
-        <div className="fixed bottom-0 inset-x-0 z-40 bg-white border-t border-slate-200 safe-bottom">
-            <div className="flex h-16 max-w-lg mx-auto">
+        <div className="fixed bottom-0 inset-x-0 z-50 bg-white/80 backdrop-blur-xl border-t border-slate-100 pb-safe">
+            <div className="flex h-20 max-w-lg mx-auto items-center px-4">
                 {tabs.map(t => {
                     const on = active === t.id;
                     return (
-                        <button key={t.id} onClick={() => onChange(t.id)} className={`flex-1 flex flex-col items-center justify-center gap-0.5 relative transition-colors active:scale-95 ${on ? 'text-indigo-600' : 'text-slate-400'}`}>
-                            <div className="relative">
-                                <t.Icon size={20} strokeWidth={on ? 2.5 : 1.8} />
+                        <button 
+                            key={t.id} 
+                            onClick={() => onChange(t.id)} 
+                            className={`flex-1 flex flex-col items-center justify-center gap-1.5 transition-all duration-300 relative ${on ? 'text-purple-600' : 'text-slate-400'}`}
+                        >
+                            <div className={`p-2 rounded-2xl transition-all ${on ? 'bg-purple-50 scale-110 shadow-lg shadow-purple-50/50' : ''}`}>
+                                <t.Icon size={20} strokeWidth={on ? 2.5 : 2} />
                                 {t.id === 'tenants' && badge > 0 && (
-                                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 rounded-full text-[9px] font-black text-white flex items-center justify-center">{badge > 9 ? '9+' : badge}</span>
+                                    <span className="absolute top-1 right-1/4 w-4 h-4 bg-rose-500 rounded-full text-[8px] font-black text-white flex items-center justify-center shadow-lg border-2 border-white">{badge}</span>
                                 )}
                             </div>
-                            <span className={`text-[10px] font-black tracking-wide ${on ? 'text-indigo-600' : 'text-slate-400'}`}>{t.label}</span>
-                            {on && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-0.5 bg-indigo-600 rounded-full" />}
+                            <span className={`text-[8px] font-black uppercase tracking-widest transition-opacity ${on ? 'opacity-100' : 'opacity-40'}`}>{t.label}</span>
                         </button>
                     );
                 })}
@@ -712,5 +660,12 @@ const TabBar = ({ active, onChange, badge }) => {
         </div>
     );
 };
+
+// Dummy component for missing icon
+const MessageSquare = ({ size, className }) => (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+    </svg>
+);
 
 export default OwnerDashboard;

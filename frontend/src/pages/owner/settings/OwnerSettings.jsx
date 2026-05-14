@@ -4,11 +4,12 @@ import {
     AlertCircle, Bell, Bot, Building2, CalendarClock, CheckCircle,
     ChevronLeft, CreditCard, Loader2, Lock, Mail, Menu, MessageCircle,
     Monitor, Receipt, Settings2, ShieldCheck, UploadCloud, User,
-    Users, X, Check, ArrowRight, Zap, Globe, Shield, Sparkles
+    Users, X, Check, ArrowRight, Zap, Globe, Shield, Sparkles, Plus,
+    RefreshCw
 } from 'lucide-react';
-import { ownerService, billingService, addonService } from '../../api/services';
-import BuyRemindersModal from '../../components/owner/BuyRemindersModal';
-import { useAppPreferences } from '../../context/AppPreferencesContext';
+import { ownerService, billingService, addonService } from '../../../api/services';
+import BuyRemindersModal from '../../../components/owner/BuyRemindersModal';
+import { useAppPreferences } from '../../../context/AppPreferencesContext';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const DEFAULT_BILLING_DEFAULTS = {
@@ -69,7 +70,6 @@ const sections = [
 ];
 
 const groups = ['ACCOUNT', 'BILLING', 'COMMUNICATION', 'CONTROL'];
-const sectionById = Object.fromEntries(sections.map((section) => [section.id, section]));
 
 const inputClass = 'w-full rounded-2xl border border-slate-100 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-purple-400 focus:outline-none focus:ring-4 focus:ring-purple-50 transition-all disabled:bg-slate-50 disabled:text-slate-400';
 
@@ -127,7 +127,7 @@ function SaveButton({ dirty, saving, saved }) {
             disabled={!dirty || saving}
             className={`h-12 px-8 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 ${
                 dirty 
-                ? 'bg-brand-gradient text-white shadow-xl shadow-purple-100' 
+                ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100' 
                 : 'bg-slate-100 text-slate-400 cursor-not-allowed'
             }`}
         >
@@ -150,10 +150,10 @@ function Field({ label, hint, error, children }) {
 
 // ─── Sections ───────────────────────────────────────────────────────────────
 
-function ProfileSection({ owner, onSave, formState }) {
+function ProfileSection({ owner, formState }) {
     const { register, formState: { errors } } = formState.form;
     return (
-        <SectionCard title="Personal Details" description="Your account identify" icon={User}>
+        <SectionCard title="Personal Details" description="Your account identity" icon={User}>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <Field label="Full Name" error={errors.name?.message}>
                     <input className={inputClass} {...register('name', { required: 'Name is required' })} />
@@ -181,7 +181,7 @@ function ProfileSection({ owner, onSave, formState }) {
 }
 
 function HostelSection({ hostel, onUploadLogo, formState }) {
-    const { register, setValue, watch, formState: { errors } } = formState.form;
+    const { register, watch, formState: { errors } } = formState.form;
     const [uploading, setUploading] = useState(false);
     const fileRef = useRef(null);
 
@@ -244,7 +244,7 @@ function HostelSection({ hostel, onUploadLogo, formState }) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function OwnerProfile() {
+export default function OwnerSettings() {
     const { updatePreferencesLocal } = useAppPreferences();
     const [loading, setLoading] = useState(true);
     const [pageError, setPageError] = useState('');
@@ -257,6 +257,7 @@ export default function OwnerProfile() {
     const [activeSection, setActiveSection] = useState('profile');
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
+    const [buyCreditsModal, setBuyCreditsModal] = useState(null);
 
     const form = useForm({
         defaultValues: DEFAULT_PREFS,
@@ -284,6 +285,7 @@ export default function OwnerProfile() {
             setPrefs(nextPrefs);
             setPlanId(subData?.current_plan?.id || 'free');
             form.reset(nextPrefs);
+            updatePreferencesLocal(nextPrefs);
         } finally {
             setLoading(false);
         }
@@ -321,6 +323,9 @@ export default function OwnerProfile() {
         </div>
     );
 
+    const sectionById = Object.fromEntries(sections.map(s => [s.id, s]));
+    const active = sectionById[activeSection];
+
     return (
         <div className="pb-20">
             <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
@@ -348,26 +353,23 @@ export default function OwnerProfile() {
                             <div className="space-y-1">
                                 {sections.filter(s => s.group === group).map(section => {
                                     const Icon = section.icon;
-                                    const active = activeSection === section.id;
+                                    const isActive = activeSection === section.id;
                                     return (
                                         <button
                                             key={section.id}
-                                            onClick={() => {
-                                                setActiveSection(section.id);
-                                                // Reset form with appropriate section defaults if needed
-                                            }}
+                                            onClick={() => setActiveSection(section.id)}
                                             className={`w-full flex items-center gap-4 px-6 py-4 rounded-3xl transition-all duration-300 group ${
-                                                active 
+                                                isActive 
                                                 ? 'bg-white border border-slate-100 shadow-xl shadow-slate-100/50 text-purple-600 font-black' 
                                                 : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
                                             }`}
                                         >
-                                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all ${active ? 'bg-purple-50 text-purple-600' : 'bg-slate-50 text-slate-400 group-hover:bg-white shadow-sm'}`}>
+                                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all ${isActive ? 'bg-purple-50 text-purple-600' : 'bg-slate-50 text-slate-400 group-hover:bg-white shadow-sm'}`}>
                                                 <Icon size={18} />
                                             </div>
                                             <div className="text-left">
                                                 <p className="text-sm tracking-tight">{section.label}</p>
-                                                {active && <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest truncate">{section.description}</p>}
+                                                {isActive && <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest truncate">{section.description}</p>}
                                             </div>
                                         </button>
                                     );
@@ -375,6 +377,16 @@ export default function OwnerProfile() {
                             </div>
                         </div>
                     ))}
+                    
+                    <button 
+                        onClick={() => navigate('/onboarding/hostel')}
+                        className="w-full flex items-center gap-4 px-6 py-4 rounded-3xl text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-all border border-dashed border-slate-200 mt-4"
+                    >
+                        <div className="w-10 h-10 rounded-2xl flex items-center justify-center bg-slate-50 text-slate-400">
+                            <Plus size={18} />
+                        </div>
+                        <p className="text-sm font-bold tracking-tight">Add New Hostel</p>
+                    </button>
                 </div>
 
                 {/* Content Area */}
@@ -385,7 +397,6 @@ export default function OwnerProfile() {
                                 {activeSection === 'profile' && <ProfileSection owner={owner} formState={{form}} />}
                                 {activeSection === 'hostel' && <HostelSection hostel={hostel} onUploadLogo={(f) => ownerService.uploadLogo(f, activeHostelId)} formState={{form}} />}
                                 
-                                {/* Other sections simplified for briefity in this premium refinement, but follow same pattern */}
                                 {activeSection === 'billing' && (
                                     <SectionCard title="Rent & Billing" description="Financial rules" icon={CalendarClock}>
                                         <div className="grid grid-cols-3 gap-6">
@@ -406,7 +417,7 @@ export default function OwnerProfile() {
                                                 <span className="text-5xl font-black tracking-tighter">248</span>
                                                 <span className="text-white/40 text-sm font-bold">Remaining</span>
                                             </div>
-                                            <button type="button" className="h-12 px-6 bg-white text-slate-900 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-100 transition-all active:scale-95">Top Up Credits</button>
+                                            <button type="button" onClick={() => setBuyCreditsModal('manual')} className="h-12 px-6 bg-white text-slate-900 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-100 transition-all active:scale-95">Top Up Credits</button>
                                         </div>
                                         <ToggleRow title="WhatsApp Reminders" description="High conversion alerts via WhatsApp API" checked={form.watch('reminder_whatsapp')} onChange={(v) => form.setValue('reminder_whatsapp', v, {shouldDirty:true})} />
                                         <ToggleRow title="Email Reminders" description="Professional PDF invoices via email" checked={form.watch('reminder_email')} onChange={(v) => form.setValue('reminder_email', v, {shouldDirty:true})} />
@@ -428,7 +439,7 @@ export default function OwnerProfile() {
                                         <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center text-slate-300 mx-auto mb-6">
                                             <Settings2 size={40} />
                                         </div>
-                                        <p className="text-slate-400 text-xs font-black uppercase tracking-widest">Section under maintenance</p>
+                                        <p className="text-slate-400 text-xs font-black uppercase tracking-widest">Section refinement in progress</p>
                                     </div>
                                 )}
                             </div>
@@ -440,6 +451,7 @@ export default function OwnerProfile() {
                     </form>
                 </div>
             </div>
+            {buyCreditsModal && <BuyRemindersModal isOpen={!!buyCreditsModal} onClose={() => setBuyCreditsModal(null)} trigger={buyCreditsModal} onSuccess={() => load(activeHostelId)} />}
         </div>
     );
 }

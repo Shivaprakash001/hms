@@ -38,7 +38,7 @@ const Payments          = lazy(() => import('./pages/owner/Payments.jsx'));
 const Expenses          = lazy(() => import('./pages/owner/Expenses.jsx'));
 const ActivityHistory   = lazy(() => import('./pages/owner/ActivityHistory.jsx'));
 const BillingPlans      = lazy(() => import('./pages/owner/BillingPlans.jsx'));
-const OwnerProfile      = lazy(() => import('./pages/owner/settings/OwnerSettings'));
+const OwnerProfile      = lazy(() => import('./pages/owner/settings/OwnerSettings.jsx'));
 const Portfolio         = lazy(() => import('./pages/owner/Portfolio.jsx'));
 const TenantProfilePage = lazy(() => import('./pages/owner/TenantProfilePage.jsx'));
 const BulkImport        = lazy(() => import('./pages/owner/BulkImport.jsx'));

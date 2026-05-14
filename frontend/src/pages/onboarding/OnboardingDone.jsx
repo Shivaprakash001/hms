@@ -1,146 +1,100 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { CheckCircle2, CalendarCheck, Bell, LayoutDashboard } from 'lucide-react';
-import { ownerService } from '../../api/services';
-import { setStoredStep } from '../../hooks/useOnboardingState';
+import { CheckCircle2, Sparkles, LayoutDashboard, Check, ArrowRight } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
+import { useNavigate } from 'react-router-dom';
 
-function computeNextRentDate(autoRentDay) {
-  const now = new Date();
-  const day = autoRentDay || 1;
-  let candidate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), day));
-  if (candidate <= now) {
-    candidate = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, day));
-  }
-  return candidate.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' });
-}
+const checklistItems = [
+  "Hostel details configured",
+  "Room inventory generated",
+  "Pricing plans activated",
+  "Payment tracking enabled",
+  "Owner dashboard ready"
+];
 
 export default function OnboardingDone() {
   const navigate = useNavigate();
-  const [stats, setStats] = useState({ rooms: 0, tenants: 0, rentDay: 1, hostelName: '', hostelId: '' });
+  const [showChecklist, setShowChecklist] = useState(false);
 
   useEffect(() => {
-    Promise.all([
-      ownerService.getProfile().catch(() => ({})),
-      ownerService.getHostels().catch(() => ({ hostels: [] })),
-    ]).then(([p, hostelsResponse]) => {
-      const hostels = hostelsResponse?.hostels || p?.hostels || (p?.hostel?.id ? [p.hostel] : []);
-      const hostel = hostels.find((item) => item?.is_active !== false) || hostels[0] || p?.hostel || {};
-      setStats({
-        rooms:      hostel?.total_rooms     ?? p?.hostel?.total_rooms ?? 0,
-        tenants:    hostel?.total_tenants   ?? p?.hostel?.total_tenants ?? 0,
-        rentDay:    p?.preferences?.auto_rent_day ?? 1,
-        hostelName: hostel?.name ?? p?.hostel?.name ?? 'your hostel',
-        hostelId:   hostel?.id || p?.hostel?.id || '',
-      });
-    }).catch(() => {});
-    setStoredStep('COMPLETED');
+    const timer = setTimeout(() => setShowChecklist(true), 800);
+    return () => clearTimeout(timer);
   }, []);
 
-  const goToDashboard = () => {
-    setStoredStep('COMPLETED');
-    navigate(stats.hostelId ? `/hostels/${stats.hostelId}/dashboard` : '/owner/portfolio', { replace: true });
-  };
-
-  const nextRent = computeNextRentDate(stats.rentDay);
-
-  const items = [
-    { icon: '🏠', label: 'Hostel created',         detail: stats.hostelName,              ok: true },
-    { icon: '🚪', label: 'Rooms added',             detail: `${stats.rooms} room${stats.rooms !== 1 ? 's' : ''}`, ok: stats.rooms > 0 },
-    { icon: '👤', label: 'Tenants added',           detail: `${stats.tenants} tenant${stats.tenants !== 1 ? 's' : ''}`, ok: stats.tenants > 0 },
-    { icon: '⚡', label: 'Billing schedule saved', detail: `Cycle starts on the ${stats.rentDay}${['st','nd','rd'][((stats.rentDay % 10) - 1)] ?? 'th'} every month`, ok: true },
-  ];
-
   return (
-    <div className="flex flex-col items-center text-center pt-4 space-y-6">
-      {/* Celebration icon */}
-      <motion.div
-        initial={{ scale: 0.5, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ type: 'spring', stiffness: 200, damping: 14, delay: 0.1 }}
-      >
-        <div className="w-24 h-24 bg-gradient-to-br from-emerald-400 to-indigo-500 rounded-3xl flex items-center justify-center shadow-2xl shadow-indigo-500/30 mx-auto">
-          <span className="text-5xl">🎉</span>
-        </div>
-      </motion.div>
+    <div className="bg-white rounded-[3.5rem] shadow-2xl border border-slate-100 p-8 md:p-16 text-center relative overflow-hidden w-full max-w-2xl mx-auto">
+      {/* Decorative background sparks */}
+      <motion.div 
+        animate={{ rotate: 360 }}
+        transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
+        className="absolute top-0 right-0 -mr-24 -mt-24 w-80 h-80 bg-purple-50 rounded-full opacity-60 blur-[100px]"
+      />
+      <motion.div 
+        animate={{ rotate: -360 }}
+        transition={{ duration: 40, repeat: Infinity, ease: "linear" }}
+        className="absolute bottom-0 left-0 -ml-24 -mb-24 w-80 h-80 bg-indigo-50 rounded-full opacity-60 blur-[100px]"
+      />
 
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-      >
-        <h1 className="text-3xl font-black text-slate-900 tracking-tight">
-          Your hostel is live!
-        </h1>
-        <p className="text-slate-500 mt-2 font-medium">
-          You're now fully operational. Here's what's set up:
-        </p>
-      </motion.div>
-
-      {/* Setup summary checklist */}
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
-        className="w-full bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden"
-      >
-        {items.map((item, i) => (
-          <motion.div
-            key={item.label}
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.5 + i * 0.08 }}
-            className={`flex items-center gap-4 px-5 py-4 ${i < items.length - 1 ? 'border-b border-slate-50' : ''}`}
-          >
-            <span className="text-xl">{item.icon}</span>
-            <div className="flex-1 text-left min-w-0">
-              <p className="text-sm font-black text-slate-900">{item.label}</p>
-              <p className="text-xs text-slate-500 font-medium truncate">{item.detail}</p>
-            </div>
-            {item.ok
-              ? <CheckCircle2 size={18} className="text-emerald-500 shrink-0" />
-              : <span className="text-xs font-black text-amber-500 bg-amber-50 px-2 py-0.5 rounded-full shrink-0">Add later</span>
-            }
-          </motion.div>
-        ))}
-      </motion.div>
-
-      {/* Next rent date highlight */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.97 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ delay: 0.7 }}
-        className="w-full bg-gradient-to-br from-indigo-600 to-violet-600 rounded-2xl p-5 text-left"
-      >
-        <div className="flex items-center gap-2 mb-3">
-          <CalendarCheck size={16} className="text-indigo-200" />
-          <p className="text-xs font-black text-indigo-200 uppercase tracking-widest">Next Automation</p>
-        </div>
-        <p className="text-xl font-black text-white">📋 Rent generates on {nextRent}</p>
-        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/10">
-          <Bell size={14} className="text-indigo-300" />
-          <p className="text-xs text-indigo-200 font-medium">
-            Automatic reminders are available after upgrading to Starter.
-          </p>
-        </div>
-      </motion.div>
-
-      {/* Padding for sticky button */}
-      <div className="h-20" />
-
-      {/* Sticky CTA */}
-      <div className="fixed bottom-8 left-4 right-4" style={{ left: '50%', transform: 'translateX(-50%)', width: 'calc(100% - 32px)', maxWidth: '512px' }}>
-        <motion.button
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.9 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={goToDashboard}
-          id="onboarding-go-dashboard"
-          className="w-full flex items-center justify-center gap-2 py-4 px-6 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-black rounded-2xl shadow-2xl shadow-indigo-600/30 transition-all text-base"
+      <div className="relative z-10">
+        <motion.div
+          initial={{ scale: 0, rotate: -180 }}
+          animate={{ scale: 1, rotate: 0 }}
+          transition={{ type: "spring", damping: 12, stiffness: 100, delay: 0.2 }}
+          className="w-32 h-32 bg-emerald-50 text-emerald-600 rounded-[2.5rem] flex items-center justify-center mx-auto mb-10 shadow-2xl shadow-emerald-100/50"
         >
-          <LayoutDashboard size={18} /> Go to Dashboard
-        </motion.button>
+          <CheckCircle2 className="w-16 h-16" />
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+        >
+          <h1 className="text-4xl md:text-5xl font-black text-slate-900 mb-4 tracking-tighter">You're All Set!</h1>
+          <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.3em] mb-12">Property Management Reimagined</p>
+        </motion.div>
+
+        <div className="max-w-xs mx-auto space-y-4 mb-14">
+          {checklistItems.map((item, idx) => (
+            <motion.div
+              key={idx}
+              initial={{ opacity: 0, x: -20 }}
+              animate={showChecklist ? { opacity: 1, x: 0 } : {}}
+              transition={{ delay: 1 + (idx * 0.15) }}
+              className="flex items-center gap-4 text-left p-2 rounded-2xl hover:bg-slate-50 transition-colors group"
+            >
+              <div className="w-6 h-6 bg-emerald-500 text-white rounded-full flex items-center justify-center flex-shrink-0 shadow-lg shadow-emerald-200">
+                <Check className="w-3.5 h-3.5 stroke-[4]" />
+              </div>
+              <span className="text-sm font-bold text-slate-700 tracking-tight group-hover:text-slate-900 transition-colors">{item}</span>
+            </motion.div>
+          ))}
+        </div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 2 }}
+          className="space-y-6"
+        >
+          <Button 
+            onClick={() => navigate('/owner/dashboard')}
+            className="w-full h-18 bg-slate-900 text-white rounded-[1.5rem] font-black text-2xl shadow-2xl hover:bg-slate-800 transition-all flex items-center justify-center gap-4 group active:scale-95"
+          >
+            <LayoutDashboard className="w-7 h-7" />
+            Go to Dashboard
+            <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
+          </Button>
+          
+          <div className="flex items-center justify-center gap-3">
+            <div className="h-px flex-1 bg-slate-100" />
+            <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+              <Sparkles className="w-3 h-3 text-purple-400" />
+              Powered by HosteFlow Premium
+            </p>
+            <div className="h-px flex-1 bg-slate-100" />
+          </div>
+        </motion.div>
       </div>
     </div>
   );

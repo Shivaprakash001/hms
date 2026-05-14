@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: any) {
     console.error("[ACTIVATION GET]", error);
-    return apiError(error?.message || "Failed to fetch activation state");
+    return apiError(error?.message || "Failed to fetch activation state", "INTERNAL_ERROR", 500, { stack: error?.stack });
   }
 }
 
