@@ -5,6 +5,9 @@ import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { reminderService } from "@/lib/services/reminder-service";
 import { eventLog } from "@/lib/services/event-log-service";
+import { getLogger } from "@/lib/logger";
+
+const logger = getLogger("api.notifications.send-reminder");
 
 /**
  * 🔔 MANUAL REMINDER
@@ -42,12 +45,23 @@ export async function POST(req: NextRequest) {
     await eventLog.log("MANUAL_REMINDER_SENT", session.sub, {
       tenant_id,
       tenant_name: result.tenant_name,
+      channels: result.channels,
     });
+
+    const whatsapp = result.channels?.whatsapp;
+    const message = whatsapp?.sent
+      ? `WhatsApp reminder sent to ${result.tenant_name}`
+      : whatsapp?.skipped
+        ? `Reminder recorded for ${result.tenant_name}; WhatsApp skipped (${whatsapp.reason || "unknown"})`
+        : whatsapp?.attempted
+          ? `Reminder recorded for ${result.tenant_name}; WhatsApp failed (${whatsapp.error_code || "WHATSAPP_SEND_FAILED"})`
+          : `Reminder sent to ${result.tenant_name}`;
 
     return apiResponse({
       success: true,
-      message: `Reminder sent to ${result.tenant_name}`,
+      message,
       tenant_name: result.tenant_name,
+      channels: result.channels,
     });
   } catch (error: any) {
     if (error?.httpStatus === 404) {
@@ -60,7 +74,10 @@ export async function POST(req: NextRequest) {
         402
       );
     }
-    console.error("[SEND_REMINDER]", error);
+    logger.error("send_reminder.failed", {
+      error: error?.message || String(error),
+      code: error?.code,
+    });
     return apiError(error.message || "Failed to send reminder");
   }
 }

@@ -10,6 +10,32 @@ import { requireAutomation, consumeReminder } from "./plan-gate-service";
 import { financialService } from "./financial-service";
 import { selectReminderForOverdueDay } from "./collection-strategy-service";
 import { whatsappReminderDeliveryService } from "./notifications/whatsapp-reminder-delivery";
+import { getLogger } from "../logger";
+
+const logger = getLogger("reminder-service");
+
+type ChannelDeliveryStatus = {
+  attempted: boolean;
+  sent: boolean;
+  skipped: boolean;
+  reason?: string;
+  error_code?: string;
+  error_message?: string;
+  log_id?: string;
+  provider_message_id?: string | null;
+  idempotency_key?: string;
+};
+
+type NotificationDeliveryResult = {
+  credited: boolean;
+  in_app: ChannelDeliveryStatus;
+  email: ChannelDeliveryStatus;
+  whatsapp: ChannelDeliveryStatus;
+};
+
+function emptyChannel(): ChannelDeliveryStatus {
+  return { attempted: false, sent: false, skipped: false };
+}
 
 export class ReminderService {
 
@@ -290,7 +316,11 @@ export class ReminderService {
    * Sends to the oldest unpaid obligation for the tenant.
    * Security: verifies tenant.owner_id === ownerId before sending.
    */
-  async sendManualReminder(tenantId: string, ownerId: string): Promise<{ sent: number; tenant_name: string }> {
+  async sendManualReminder(tenantId: string, ownerId: string): Promise<{
+    sent: number;
+    tenant_name: string;
+    channels?: NotificationDeliveryResult;
+  }> {
     const tenant = await prisma.tenant.findFirst({
       where: { id: tenantId, owner_id: ownerId, status: "ACTIVE" },
       select: { id: true, personal_email: true, owner_id: true, hostel_id: true, profile: { select: { name: true, phone: true } } },
@@ -322,7 +352,7 @@ export class ReminderService {
     const dueMid = new Date(Date.UTC(due.getFullYear(), due.getMonth(), due.getDate()));
     const daysOverdue = Math.max(1, Math.ceil((todayMid.getTime() - dueMid.getTime()) / 86400000));
 
-    await this.triggerNotification({
+    const channels = await this.triggerNotification({
       ...obligation,
       hostel_id: context.hostel.id,
       hostel_name: context.hostel.name,
@@ -333,21 +363,42 @@ export class ReminderService {
 
     eventSystem.trigger("dashboard_updated", { reason: "manual_reminder_sent", ownerId });
 
-    return { sent: 1, tenant_name: tenant.profile?.name ?? "Tenant" };
+    const sent = channels.in_app.sent ||
+      channels.email.sent ||
+      channels.whatsapp.sent ||
+      channels.whatsapp.reason === "DUPLICATE_REMINDER"
+      ? 1
+      : 0;
+
+    return { sent, tenant_name: tenant.profile?.name ?? "Tenant", channels };
   }
 
-  private async triggerNotification(obligation: any, type: string, config: any) {
+  private async triggerNotification(obligation: any, type: string, config: any): Promise<NotificationDeliveryResult> {
     const tenant = obligation.tenant;
     const ownerId = tenant.owner_id;
+    const result: NotificationDeliveryResult = {
+      credited: false,
+      in_app: emptyChannel(),
+      email: emptyChannel(),
+      whatsapp: emptyChannel(),
+    };
 
     if (ownerId) {
       // 🔒 Deduct one reminder credit (addon-based). Skip notification if exhausted.
       try {
         await consumeReminder(ownerId);
+        result.credited = true;
       } catch (creditErr: any) {
         if (creditErr?.code === "NO_REMINDERS_LEFT") {
-          console.warn(`[NOTIFY] Skipped reminder for ${tenant.id}. No reminder credits remaining.`);
-          return;
+          result.in_app = { attempted: false, sent: false, skipped: true, reason: "NO_REMINDERS_LEFT" };
+          result.email = { attempted: false, sent: false, skipped: true, reason: "NO_REMINDERS_LEFT" };
+          result.whatsapp = { attempted: false, sent: false, skipped: true, reason: "NO_REMINDERS_LEFT" };
+          logger.warn("reminder.notification.skipped", {
+            tenant_id: tenant.id,
+            owner_id: ownerId,
+            reason: "NO_REMINDERS_LEFT",
+          });
+          return result;
         }
         throw creditErr;
       }
@@ -358,6 +409,7 @@ export class ReminderService {
 
     // 1️⃣ In-App Notification (Always log an audit entry at minimum)
     if (canInApp) {
+      result.in_app.attempted = true;
       await prisma.reminderLog.create({
         data: {
           obligation_id: obligation.id,
@@ -367,10 +419,14 @@ export class ReminderService {
           hostel_id: obligation.hostel_id || null, // Phase 2: immutable hostel context
         }
       });
+      result.in_app.sent = true;
+    } else {
+      result.in_app = { attempted: false, sent: false, skipped: true, reason: "IN_APP_DISABLED" };
     }
 
     // 2️⃣ Email Notification
     if (canEmail && tenant.personal_email) {
+      result.email.attempted = true;
       try {
         const mailData = {
           toEmail: tenant.personal_email,
@@ -383,21 +439,52 @@ export class ReminderService {
         };
 
         await EmailService.sendReminderBatch(mailData);
+        result.email.sent = true;
       } catch (err) {
-        console.error(`[NOTIFY] Email failed for ${tenant.id}:`, err);
+        result.email.error_code = "EMAIL_SEND_FAILED";
+        result.email.error_message = err instanceof Error ? err.message : String(err);
+        logger.error("reminder.email.failed", {
+          tenant_id: tenant.id,
+          owner_id: ownerId,
+          error: result.email.error_message,
+        });
       }
+    } else {
+      result.email = {
+        attempted: false,
+        sent: false,
+        skipped: true,
+        reason: canEmail ? "TENANT_EMAIL_MISSING" : "EMAIL_DISABLED",
+      };
     }
 
     // 3️⃣ WhatsApp Notification (if enabled)
     // Delivery is intentionally routed through the typed Meta provider service.
     // This keeps ReminderService as the business orchestrator while provider API,
     // idempotency, retries, and delivery logs stay isolated.
-    if ((config.reminder_whatsapp ?? false) && ownerId && tenant.profile?.phone) {
+    if (!(config.reminder_whatsapp ?? false)) {
+      result.whatsapp = { attempted: false, sent: false, skipped: true, reason: "WHATSAPP_DISABLED" };
+    } else if (!ownerId) {
+      result.whatsapp = { attempted: false, sent: false, skipped: true, reason: "OWNER_MISSING" };
+    } else if (!tenant.profile?.phone) {
+      result.whatsapp = { attempted: false, sent: false, skipped: true, reason: "TENANT_PHONE_MISSING" };
+    } else {
+      result.whatsapp.attempted = true;
       try {
         if (type === "LATE_FEE_ADDED") {
-          console.info(`[NOTIFY] WhatsApp skipped for ${tenant.id}: late-fee WhatsApp templates are out of scope.`);
+          result.whatsapp = {
+            attempted: false,
+            sent: false,
+            skipped: true,
+            reason: "LATE_FEE_TEMPLATE_OUT_OF_SCOPE",
+          };
+          logger.info("reminder.whatsapp.skipped", {
+            tenant_id: tenant.id,
+            owner_id: ownerId,
+            reason: "LATE_FEE_TEMPLATE_OUT_OF_SCOPE",
+          });
         } else {
-          await whatsappReminderDeliveryService.sendRentReminder({
+          const delivery = await whatsappReminderDeliveryService.sendRentReminder({
             ownerId,
             tenantId: tenant.id,
             hostelId: obligation.hostel_id,
@@ -412,13 +499,54 @@ export class ReminderService {
             sendDateKey: obligation.send_date_key || new Date().toISOString().slice(0, 10),
             prefs: config,
           });
+
+          result.whatsapp.sent = Boolean(delivery.sent);
+          result.whatsapp.skipped = Boolean(delivery.skipped);
+          result.whatsapp.log_id = delivery.logId;
+          result.whatsapp.provider_message_id = delivery.providerMessageId;
+          result.whatsapp.idempotency_key = delivery.idempotencyKey;
+          if (delivery.skipped) {
+            result.whatsapp.reason = "DUPLICATE_REMINDER";
+          }
         }
       } catch (err: any) {
-        console.warn(`[NOTIFY] WhatsApp send failed for ${tenant.id}:`, err?.message || err);
+        result.whatsapp.sent = false;
+        result.whatsapp.error_code = err?.providerCode || err?.code || "WHATSAPP_SEND_FAILED";
+        result.whatsapp.error_message = String(err?.message || err).slice(0, 500);
+        logger.warn("reminder.whatsapp.failed", {
+          tenant_id: tenant.id,
+          owner_id: ownerId,
+          obligation_id: obligation.id,
+          error_code: result.whatsapp.error_code,
+          error: result.whatsapp.error_message,
+        });
       }
     }
 
-    console.log(`[NOTIFY] [${type}] to ${obligation.tenant.profile?.name} (tenant_id: ${obligation.tenant.id}) triggered`);
+    logger.info("reminder.notification.triggered", {
+      type,
+      tenant_id: obligation.tenant.id,
+      owner_id: ownerId,
+      in_app: result.in_app,
+      email: {
+        attempted: result.email.attempted,
+        sent: result.email.sent,
+        skipped: result.email.skipped,
+        reason: result.email.reason,
+        error_code: result.email.error_code,
+      },
+      whatsapp: {
+        attempted: result.whatsapp.attempted,
+        sent: result.whatsapp.sent,
+        skipped: result.whatsapp.skipped,
+        reason: result.whatsapp.reason,
+        error_code: result.whatsapp.error_code,
+        log_id: result.whatsapp.log_id,
+        provider_message_id: result.whatsapp.provider_message_id,
+      },
+    });
+
+    return result;
   }
 }
 
