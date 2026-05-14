@@ -9,6 +9,7 @@ const PUBLIC_ROUTES = [
   "/api/auth/google-callback",
   "/api/tenants/activate",
   "/api/webhooks/payments/phonepe",
+  "/api/webhooks/notifications/whatsapp",
   "/api/plans",
   // Vercel-Cron hits these with `Authorization: Bearer $CRON_SECRET`,
   // which is NOT a JWT. Each route handler enforces the secret check
