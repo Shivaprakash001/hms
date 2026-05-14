@@ -11,7 +11,16 @@ const firebaseConfig = {
     measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
-const missingConfig = Object.entries(firebaseConfig).some(([, value]) => !value);
+const requiredFirebaseConfig = {
+    apiKey: firebaseConfig.apiKey,
+    authDomain: firebaseConfig.authDomain,
+    projectId: firebaseConfig.projectId,
+    storageBucket: firebaseConfig.storageBucket,
+    messagingSenderId: firebaseConfig.messagingSenderId,
+    appId: firebaseConfig.appId,
+};
+
+const missingConfig = Object.entries(requiredFirebaseConfig).some(([, value]) => !value);
 
 export const isFirebasePhoneAuthConfigured = !missingConfig;
 
