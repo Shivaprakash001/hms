@@ -108,7 +108,7 @@ export default function OnboardingAutomation() {
         </div>
 
         <Button 
-          onClick={() => navigate('/onboarding/rooms')}
+          onClick={() => navigate('/onboarding/tenant')}
           className="w-full h-16 bg-brand-gradient text-white rounded-2xl font-black text-xl shadow-xl shadow-purple-100 flex items-center justify-center gap-3 group transition-all hover:scale-[1.01] active:scale-95 mt-4"
         >
           Save & Continue

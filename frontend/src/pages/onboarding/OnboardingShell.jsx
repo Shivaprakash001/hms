@@ -9,7 +9,6 @@ const STEPS = [
   { path: '/onboarding/plans',      label: 'Plan',       step: 'PLAN'      },
   { path: '/onboarding/hostel',     label: 'Hostel',     step: 'HOSTEL'    },
   { path: '/onboarding/automation', label: 'Automation', step: 'AUTOMATION' },
-  { path: '/onboarding/rooms',      label: 'Rooms',      step: 'ROOMS'     },
   { path: '/onboarding/tenant',     label: 'Tenant',     step: 'TENANT'    },
   { path: '/onboarding/done',       label: 'Done',       step: 'COMPLETED' },
 ];
@@ -18,8 +17,7 @@ const BACK_MAP = {
   '/onboarding/plans':      '/onboarding/welcome',
   '/onboarding/hostel':     '/onboarding/plans',
   '/onboarding/automation': '/onboarding/hostel',
-  '/onboarding/rooms':      '/onboarding/automation',
-  '/onboarding/tenant':     '/onboarding/rooms',
+  '/onboarding/tenant':     '/onboarding/automation',
 };
 
 export default function OnboardingShell() {
