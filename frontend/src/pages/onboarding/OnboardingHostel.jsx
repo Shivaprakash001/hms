@@ -11,9 +11,8 @@ import { useNavigate } from 'react-router-dom';
 
 const steps = [
   { id: 1, title: 'Basic Details' },
-  { id: 2, title: 'Structure' },
-  { id: 3, title: 'Amenities' },
-  { id: 4, title: 'Branding' }
+  { id: 2, title: 'Amenities' },
+  { id: 3, title: 'Branding' }
 ];
 
 export default function OnboardingHostel() {
@@ -36,7 +35,7 @@ export default function OnboardingHostel() {
   const navigate = useNavigate();
 
   const nextStep = () => {
-    if (currentStep < 4) setCurrentStep(currentStep + 1);
+    if (currentStep < 3) setCurrentStep(currentStep + 1);
     else navigate('/onboarding/rooms');
   };
 
@@ -50,13 +49,6 @@ export default function OnboardingHostel() {
       amenities: prev.amenities.includes(amenity) 
         ? prev.amenities.filter(a => a !== amenity)
         : [...prev.amenities, amenity]
-    }));
-  };
-
-  const updateCount = (field, delta) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: Math.max(1, prev[field] + delta)
     }));
   };
 
@@ -128,46 +120,6 @@ export default function OnboardingHostel() {
         return (
           <motion.div 
             initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
-            className="space-y-6"
-          >
-            {[
-              { label: 'Number of Floors', field: 'floors', icon: <Layers className="w-5 h-5" /> },
-              { label: 'Number of Rooms', field: 'rooms', icon: <LayoutGrid className="w-5 h-5" /> },
-              { label: 'Total Bed Capacity', field: 'capacity', icon: <Users className="w-5 h-5" /> }
-            ].map((item) => (
-              <div key={item.field} className="flex items-center justify-between p-6 rounded-[2rem] bg-white border border-slate-100 shadow-lg shadow-slate-50/50">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-purple-50 rounded-2xl flex items-center justify-center text-purple-600">
-                    {item.icon}
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-900">{item.label}</h3>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Adjust counts</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <button 
-                    onClick={() => updateCount(item.field, -1)}
-                    className="w-12 h-12 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600 hover:bg-slate-100 transition-all active:scale-90 font-bold"
-                  >
-                    -
-                  </button>
-                  <span className="text-2xl font-black text-slate-900 w-10 text-center tabular-nums">{formData[item.field]}</span>
-                  <button 
-                    onClick={() => updateCount(item.field, 1)}
-                    className="w-12 h-12 rounded-xl bg-purple-600 flex items-center justify-center text-white hover:bg-purple-700 shadow-lg shadow-purple-100 transition-all active:scale-90 font-bold"
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
-            ))}
-          </motion.div>
-        );
-      case 3:
-        return (
-          <motion.div 
-            initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
             className="grid grid-cols-2 sm:grid-cols-3 gap-4"
           >
             {[
@@ -192,7 +144,7 @@ export default function OnboardingHostel() {
             ))}
           </motion.div>
         );
-      case 4:
+      case 3:
         return (
           <motion.div 
             initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
@@ -245,7 +197,7 @@ export default function OnboardingHostel() {
         <div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">Hostel Setup</h1>
           <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">
-            Step {currentStep} of 4: <span className="text-purple-600">{steps[currentStep-1].title}</span>
+            Step {currentStep} of 3: <span className="text-purple-600">{steps[currentStep-1].title}</span>
           </p>
         </div>
       </div>
@@ -271,7 +223,7 @@ export default function OnboardingHostel() {
           onClick={nextStep}
           className={`h-14 flex-1 bg-brand-gradient text-white rounded-2xl font-black text-lg shadow-xl shadow-purple-100 flex items-center justify-center gap-3 group transition-all hover:scale-[1.02] active:scale-95`}
         >
-          {currentStep === 4 ? 'Complete Setup' : 'Continue'}
+          {currentStep === 3 ? 'Complete Setup' : 'Continue'}
           <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
         </Button>
       </div>
