@@ -69,9 +69,14 @@ const Register = () => {
 
     const handleRegister = async (e) => {
         e.preventDefault();
+        console.log("Registering...", formData);
         setError('');
         const err = validate();
-        if (err) { setError(err); return; }
+        if (err) { 
+            console.error("Validation failed:", err);
+            setError(err); 
+            return; 
+        }
 
         setIsLoading(true);
         try {
@@ -231,6 +236,7 @@ const Register = () => {
                         </div>
 
                         <Button 
+                            type="submit"
                             disabled={isLoading}
                             className="w-full h-14 bg-brand-gradient hover:opacity-90 text-white rounded-2xl font-black text-lg transition-all duration-300 shadow-xl shadow-purple-100 flex items-center justify-center gap-3 group mt-4"
                         >

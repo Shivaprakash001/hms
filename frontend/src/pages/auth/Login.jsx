@@ -140,6 +140,7 @@ const Login = () => {
                         </div>
 
                         <Button 
+                            type="submit"
                             disabled={isLoading}
                             className="w-full h-14 bg-brand-gradient hover:opacity-90 text-white rounded-2xl font-black text-lg transition-all duration-300 shadow-xl shadow-purple-100 flex items-center justify-center gap-3 group mt-2"
                         >
