@@ -229,18 +229,18 @@ export class PropertyService {
   async getFloorsWithRooms(ownerId: string, hostelId: string) {
     const rooms = await prisma.rooms.findMany({
       where: {
-        hostel: { owner_id: ownerId },
+        hostels: { owner_id: ownerId },
         is_active: true,
         hostel_id: hostelId,
       },
       include: {
-        allocations: {
+        room_allocations: {
           where: { is_active: true, end_date: null },
           include: {
             tenant: {
               include: {
-                profile: true,
-                obligations: {
+                profiles: true,
+                rent_obligations: {
                   where: { status: { in: ["PENDING", "PARTIAL"] } },
                   include: { payments: { select: { amount_paid: true, payment_date: true } } }
                 }
@@ -260,10 +260,10 @@ export class PropertyService {
         floorsMap.set(floorNum, { id: `f${floorNum}`, number: floorNum, rooms: [] });
       }
 
-      const tenants = room.allocations.map((a: any) => {
+      const tenants = room.room_allocations.map((a: any) => {
         const tenant = a.tenant;
-        const profile = tenant.profile;
-        const summary = financialService.getTenantPaymentSummary(tenant.id, tenant.obligations || []);
+        const profile = tenant.profiles;
+        const summary = financialService.getTenantPaymentSummary(tenant.id, tenant.rent_obligations || []);
         const pendingDues = Number(summary.pending_amount || 0);
 
         return {
@@ -295,15 +295,15 @@ export class PropertyService {
 
   async getRoomOverview(roomId: string, ownerId: string) {
     const room = await prisma.rooms.findFirst({
-      where: { id: roomId, hostel: { owner_id: ownerId } },
+      where: { id: roomId, hostels: { owner_id: ownerId } },
       include: {
-        allocations: {
+        room_allocations: {
           where: { is_active: true, end_date: null },
           include: {
             tenant: {
               include: {
-                profile: true,
-                obligations: {
+                profiles: true,
+                rent_obligations: {
                   where: { status: { in: ["PENDING", "PARTIAL"] } },
                   include: { payments: { select: { amount_paid: true, payment_date: true } } }
                 }
@@ -316,14 +316,15 @@ export class PropertyService {
 
     if (!room) throw new Error("NOT_FOUND: Room not found");
 
-    const tenants = room.allocations.map((a: any) => {
+    const tenants = room.room_allocations.map((a: any) => {
       const tenant = a.tenant;
-      const profile = tenant.profile;
-      const summary = financialService.getTenantPaymentSummary(tenant.id, tenant.obligations || []);
+      const profile = tenant.profiles;
+      const obligations = tenant.rent_obligations || [];
+      const summary = financialService.getTenantPaymentSummary(tenant.id, obligations);
       const pendingDues = Number(summary.pending_amount || 0);
 
       // Extract last payment info
-      const allPayments = tenant.obligations.flatMap((o: any) => o.payments);
+      const allPayments = obligations.flatMap((o: any) => o.payments);
       const lastPayment = allPayments.length > 0 
         ? allPayments.sort((p1: any, p2: any) => new Date(p2.payment_date).getTime() - new Date(p1.payment_date).getTime())[0]
         : null;
@@ -345,7 +346,7 @@ export class PropertyService {
         last_payment_amount: lastPayment ? Number(lastPayment.amount_paid) : 0,
         pending_dues: pendingDues,
         status: tenant.status,
-        obligations: tenant.obligations
+        obligations
       };
     });
 
@@ -385,7 +386,7 @@ export class PropertyService {
     const room = await prisma.rooms.findFirst({
       where: {
         id: roomId,
-        hostel: { owner_id: ownerId }
+        hostels: { owner_id: ownerId }
       }
     });
 

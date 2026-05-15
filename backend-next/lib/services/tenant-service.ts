@@ -12,6 +12,16 @@ import { imagekit } from "../imagekit";
 const logger = getLogger("tenant-service");
 
 export class TenantService {
+  private withLegacyTenantRelations(tenant: any) {
+    if (!tenant) return tenant;
+    return {
+      ...tenant,
+      profile: tenant.profile ?? tenant.profiles,
+      allocations: tenant.allocations ?? tenant.room_allocations ?? [],
+      obligations: tenant.obligations ?? tenant.rent_obligations ?? [],
+    };
+  }
+
   async getTenantById(id: string, requestingUser: { sub: string; role: string }) {
     const tenant = await prisma.tenants.findUnique({
       where: { id },
@@ -41,11 +51,10 @@ export class TenantService {
         gender: true,
         permanent_address: true,
         temporary_address: true,
-        document_verified: true,
         created_at: true,
         updated_at: true,
-        profile: true,
-        allocations: {
+        profiles: true,
+        room_allocations: {
           where: { is_active: true, end_date: null },
           orderBy: { start_date: "desc" },
           take: 1,
@@ -69,7 +78,7 @@ export class TenantService {
     }
 
     const verification_badge = await documentService.getVerificationBadge(id);
-    return { ...tenant, verification_badge };
+    return { ...this.withLegacyTenantRelations(tenant), verification_badge };
   }
 
   async getTenantByProfile(profileId: string, requestingUser: { sub: string; role: string }) {
@@ -101,11 +110,10 @@ export class TenantService {
         gender: true,
         permanent_address: true,
         temporary_address: true,
-        document_verified: true,
         created_at: true,
         updated_at: true,
-        profile: true,
-        allocations: {
+        profiles: true,
+        room_allocations: {
           where: { is_active: true, end_date: null },
           orderBy: { start_date: "desc" },
           take: 1,
@@ -129,7 +137,7 @@ export class TenantService {
     }
 
     const verification_badge = await documentService.getVerificationBadge(tenant.id);
-    return { ...tenant, verification_badge };
+    return { ...this.withLegacyTenantRelations(tenant), verification_badge };
   }
 
   async getAllTenants(params: {
@@ -150,8 +158,8 @@ export class TenantService {
 
     if (search) {
       where.OR = [
-        { profile: { name: { contains: search, mode: "insensitive" } } },
-        { profile: { email: { contains: search, mode: "insensitive" } } },
+        { profiles: { name: { contains: search, mode: "insensitive" } } },
+        { profiles: { email: { contains: search, mode: "insensitive" } } },
         { roll_number: { contains: search, mode: "insensitive" } },
       ];
     }
@@ -160,12 +168,12 @@ export class TenantService {
       prisma.tenants.findMany({
         where,
         include: {
-          profile: true,
-          allocations: {
+          profiles: true,
+          room_allocations: {
             where: { is_active: true, end_date: null },
             include: { room: true },
           },
-          obligations: {
+          rent_obligations: {
             where: { status: { in: ["PENDING", "PARTIAL"] } },
             include: { payments: { select: { amount_paid: true, payment_date: true } } }
           }
@@ -178,9 +186,10 @@ export class TenantService {
     ]);
 
     const mappedTenants = tenants.map((s: any) => {
-      const summary = financialService.getTenantPaymentSummary(s.id, s.obligations ?? []);
+      const tenant = this.withLegacyTenantRelations(s);
+      const summary = financialService.getTenantPaymentSummary(tenant.id, tenant.obligations ?? []);
       return {
-        ...s,
+        ...tenant,
         payment_summary: summary,
       };
     });
@@ -303,7 +312,7 @@ export class TenantService {
           branch: true,
           temporary_address: true,
           permanent_address: true,
-          profile: {
+          profiles: {
             select: {
               name: true,
               email: true,
@@ -333,7 +342,7 @@ export class TenantService {
   }
 
   private checkProfileCompletion(tenant: any) {
-    const p = tenant.profile;
+    const p = tenant.profile ?? tenant.profiles;
     const required = [
       p.name, p.email, p.phone || tenant.phone_1,
       p.emergency_contact, tenant.college_name,
@@ -346,18 +355,19 @@ export class TenantService {
   async requestReactivation(profileId: string, requestedBy: string) {
     const tenant = await prisma.tenants.findUnique({
       where: { profile_id: profileId },
-      include: { profile: true },
+      include: { profiles: true },
     });
+    const legacyTenant = this.withLegacyTenantRelations(tenant);
 
-    if (!tenant) throw new Error("NOT_FOUND: Tenant record not found");
-    if (tenant.status === "ACTIVE") throw new Error("BAD_REQUEST: Account is already active");
-    if (!tenant.owner_id) throw new Error("BAD_REQUEST: Owner not linked for this tenant");
+    if (!legacyTenant) throw new Error("NOT_FOUND: Tenant record not found");
+    if (legacyTenant.status === "ACTIVE") throw new Error("BAD_REQUEST: Account is already active");
+    if (!legacyTenant.owner_id) throw new Error("BAD_REQUEST: Owner not linked for this tenant");
 
     // Check rate limit: 1 request per 24 hours
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const recent = await prisma.reactivation_requests.findFirst({
       where: {
-        tenant_id: tenant.id,
+        tenant_id: legacyTenant.id,
         created_at: { gte: cutoff },
       },
       orderBy: { created_at: "desc" },
@@ -369,19 +379,19 @@ export class TenantService {
 
     const request = await prisma.reactivation_requests.create({
       data: {
-        tenant_id: tenant.id,
-        owner_id: tenant.owner_id,
+        tenant_id: legacyTenant.id,
+        owner_id: legacyTenant.owner_id,
         requested_by_profile_id: requestedBy,
-        current_status: tenant.status,
+        current_status: legacyTenant.status,
         status: "PENDING",
       },
     });
 
     await eventSystem.trigger("reactivation_requested", {
       requestId: request.id,
-      tenantId: tenant.id,
-      ownerId: tenant.owner_id,
-      tenantName: tenant.profile.name,
+      tenantId: legacyTenant.id,
+      ownerId: legacyTenant.owner_id,
+      tenantName: legacyTenant.profile.name,
     });
 
     return request;
@@ -392,10 +402,10 @@ export class TenantService {
       where: { owner_id: ownerId },
       orderBy: { created_at: "desc" },
       include: {
-        tenant: {
+        tenants: {
           include: {
-            profile: true,
-            allocations: {
+            profiles: true,
+            room_allocations: {
               where: { is_active: true, end_date: null },
               include: { room: true }
             }
@@ -405,12 +415,12 @@ export class TenantService {
     });
 
     return requests.map((req: any) => {
-      const tenant = req.tenant;
+      const tenant = this.withLegacyTenantRelations(req.tenants);
       const profile = tenant.profile;
       const room = tenant.allocations[0]?.room;
       return {
         id: req.id,
-        tenant_id: req.tenant.id,
+        tenant_id: tenant.id,
         owner_id: req.owner_id,
         current_status: req.current_status,
         status: req.status,
@@ -461,33 +471,35 @@ export class TenantService {
     const tenant = await prisma.tenants.findFirst({
       where: { id: tenantId, owner_id: ownerId },
       include: {
-        profile: true,
-        allocations: {
+        profiles: true,
+        room_allocations: {
           where: { is_active: true, end_date: null },
           include: { room: true },
         },
-        obligations: {
+        rent_obligations: {
           where: { status: { in: ["PENDING", "PARTIAL"] } },
           include: { payments: { select: { amount_paid: true, payment_date: true, payment_method: true, reference_number: true } } }
         }
       }
     });
 
-    if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
+    const legacyTenant = this.withLegacyTenantRelations(tenant);
 
-    const currentRoom = tenant.allocations[0]?.room;
+    if (!legacyTenant) throw new Error("NOT_FOUND: Tenant not found");
 
-    if (!tenant.hostel_id) throw new Error("HOSTEL_CONTEXT_REQUIRED: tenant hostel scope unavailable");
-    const dues = await financialService.getTenantDues(tenantId, ownerId, tenant.hostel_id);
+    const currentRoom = legacyTenant.allocations[0]?.room;
+
+    if (!legacyTenant.hostel_id) throw new Error("HOSTEL_CONTEXT_REQUIRED: tenant hostel scope unavailable");
+    const dues = await financialService.getTenantDues(tenantId, ownerId, legacyTenant.hostel_id);
     const paymentAgg = await prisma.payments.aggregate({
-      where: { tenant_id: tenantId, owner_id: ownerId, hostel_id: tenant.hostel_id },
+      where: { tenant_id: tenantId, owner_id: ownerId, hostel_id: legacyTenant.hostel_id },
       _sum: { amount_paid: true },
     });
     const totalPaid = Number(paymentAgg._sum.amount_paid || 0);
     const totalDue = dues.total_due;
     const outstanding = dues.total_due;
     const allPayments = await prisma.payments.findMany({
-      where: { tenant_id: tenantId, owner_id: ownerId, hostel_id: tenant.hostel_id },
+      where: { tenant_id: tenantId, owner_id: ownerId, hostel_id: legacyTenant.hostel_id },
       orderBy: { payment_date: "desc" },
       take: 25,
       select: {
@@ -513,22 +525,22 @@ export class TenantService {
     const floor = currentRoom?.floor ?? null;
 
     return {
-      id: tenant.id,
-      name: tenant.profile.name,
-      phone: tenant.phone_1 || tenant.profile.phone,
-      guardian_phone: tenant.phone_2 || tenant.profile.emergency_contact,
-      email: tenant.profile.email,
-      roll_number: tenant.roll_number,
-      course: tenant.course,
-      year_of_study: tenant.year_of_study,
-      section: tenant.section,
-      branch: tenant.branch,
-      college_name: tenant.college_name,
+      id: legacyTenant.id,
+      name: legacyTenant.profile.name,
+      phone: legacyTenant.phone_1 || legacyTenant.profile.phone,
+      guardian_phone: legacyTenant.phone_2 || legacyTenant.profile.emergency_contact,
+      email: legacyTenant.profile.email,
+      roll_number: legacyTenant.roll_number,
+      course: legacyTenant.course,
+      year_of_study: legacyTenant.year_of_study,
+      section: legacyTenant.section,
+      branch: legacyTenant.branch,
+      college_name: legacyTenant.college_name,
       room_number: currentRoom?.room_no || null,
       floor: floor,
-      joined_at: tenant.joined_on,
-      status: tenant.status,
-      rent: Number(tenant.monthly_rent),
+      joined_at: legacyTenant.joined_on,
+      status: legacyTenant.status,
+      rent: Number(legacyTenant.monthly_rent),
       total_paid: totalPaid,
       total_due: totalDue,
       outstanding: outstanding,
@@ -543,8 +555,8 @@ export class TenantService {
         ...data,
         owner_id: ownerId,
       },
-      include: { profile: true },
-    });
+      include: { profiles: true },
+    }).then((tenant: any) => this.withLegacyTenantRelations(tenant));
   }
 
   async cancelInvitation(tenantId: string, ownerId: string) {
@@ -554,9 +566,10 @@ export class TenantService {
         id: true,
         owner_id: true,
         status: true,
-        allocations: { where: { is_active: true, end_date: null }, select: { id: true } },
+        room_allocations: { where: { is_active: true, end_date: null }, select: { id: true } },
       },
     });
+    const legacyTenant = this.withLegacyTenantRelations(tenant);
     if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
     if (tenant.owner_id !== ownerId) throw new Error("FORBIDDEN: You can only manage your own tenants");
     if (tenant.status !== "INVITED") {
@@ -569,7 +582,7 @@ export class TenantService {
         where: { id: tenantId },
         data: { status: "CANCELLED" as any },
       });
-      if (tenant.allocations.length > 0) {
+      if (legacyTenant.allocations.length > 0) {
         await tx.roomAllocation.updateMany({
           where: { tenant_id: tenantId, is_active: true, end_date: null },
           data: { is_active: false, end_date: now },
@@ -592,7 +605,7 @@ export class TenantService {
 
     await eventLog.log("INVITATION_CANCELLED_BY_OWNER", ownerId, {
       tenant_id: tenantId,
-      released_allocations: tenant.allocations.length,
+      released_allocations: legacyTenant.allocations.length,
     }, tenantId);
     await eventSystem.trigger("tenant_status_changed", {
       owner_id: ownerId,
@@ -630,7 +643,7 @@ export class TenantService {
     const updated = await prisma.tenants.update({
       where: { id },
       data,
-      include: { profile: true },
+      include: { profiles: true },
     });
     if (typeof data.status !== "undefined") {
       await allocationReconciliationService.reconcileTenant(id).catch((err: any) => {
@@ -646,7 +659,7 @@ export class TenantService {
         status: data.status,
       });
     }
-    return updated;
+    return this.withLegacyTenantRelations(updated);
   }
 
   async deleteTenant(id: string, ownerId: string) {
@@ -672,7 +685,7 @@ export class TenantService {
     const updated = await prisma.tenants.update({
       where: { id },
       data: { status: "LEFT" },
-      include: { profile: true },
+      include: { profiles: true },
     });
     await allocationReconciliationService.reconcileTenant(id).catch((err: any) => {
       logger.error("reconcile_after_tenant_delete_failed", {
@@ -685,7 +698,7 @@ export class TenantService {
       tenant_id: id,
       status: "LEFT",
     });
-    return updated;
+    return this.withLegacyTenantRelations(updated);
   }
 
   async reactivateTenant(id: string, rent: number, joinedOn: Date, ownerId: string) {
@@ -704,7 +717,7 @@ export class TenantService {
         monthly_rent: rent,
         joined_on: joinedOn,
       },
-      include: { profile: true },
+      include: { profiles: true },
     });
     await allocationReconciliationService.reconcileTenant(id).catch((err: any) => {
       logger.error("reconcile_after_tenant_reactivate_failed", {
@@ -717,7 +730,7 @@ export class TenantService {
       tenant_id: id,
       status: "ACTIVE",
     });
-    return updated;
+    return this.withLegacyTenantRelations(updated);
   }
 }
 
