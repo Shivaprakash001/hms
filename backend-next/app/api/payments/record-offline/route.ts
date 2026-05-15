@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { paymentService } from "@/lib/services/payment-service";
 import { authService } from "@/lib/services/auth-service";
 import { verifyIdentityToken } from "@/lib/auth-edge";
@@ -86,7 +87,9 @@ export async function POST(req: Request) {
       logger.warn("payments.record_offline.rate_limited", { owner_id: user.id });
       return apiError("Too many payment recordings. Please wait a moment.", "RATE_LIMIT", 429);
     }
-    await prisma.actionLog.create({ data: { owner_id: user.id, action: "OFFLINE_PAYMENT" } });
+    await prisma.actionLog.create({
+      data: { id: randomUUID(), owner_id: user.id, action: "OFFLINE_PAYMENT" },
+    });
 
     // ── Input validation ───────────────────────────────────────────────────────
     if (!obligation_id || typeof obligation_id !== "string") {

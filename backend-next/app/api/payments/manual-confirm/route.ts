@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { paymentService } from "@/lib/services/payment-service";
 import { authService } from "@/lib/services/auth-service";
 import { apiError } from "@/lib/utils/api-utils";
@@ -57,7 +58,9 @@ export async function POST(req: Request) {
     }
 
     // Log before processing — counts even if the attempt below fails
-    await prisma.actionLog.create({ data: { owner_id: user.id, action: "MANUAL_CONFIRM" } });
+    await prisma.actionLog.create({
+      data: { id: randomUUID(), owner_id: user.id, action: "MANUAL_CONFIRM" },
+    });
 
     // ── Fetch & validate attempt ───────────────────────────────────────────────
     const attempt = await prisma.paymentAttempt.findUnique({ where: { id: attempt_id } });

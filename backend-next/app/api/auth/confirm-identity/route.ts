@@ -65,7 +65,9 @@ export async function POST(req: Request) {
 
     if (!isValid) {
       // Log the failure — contributes to the rate-limit window
-      await prisma.actionLog.create({ data: { owner_id: user.id, action: "IDENTITY_FAIL" } });
+      await prisma.actionLog.create({
+        data: { id: randomUUID(), owner_id: user.id, action: "IDENTITY_FAIL" },
+      });
       logger.warn("auth.confirm_identity.invalid_password", { user_id: user.id });
       return apiError("Invalid credentials", "UNAUTHORIZED", 401);
     }
