@@ -35,7 +35,7 @@ model activity_logs {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model addon_transactions {
+model addonTransactions {
   id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   owner_id           String   @db.Uuid
   payment_attempt_id String?  @db.Uuid
@@ -44,15 +44,17 @@ model addon_transactions {
   created_at         DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([owner_id])
+  @@map("addon_transactions")
   @@schema("public")
 }
 
-model addon_usage {
+model addonUsage {
   owner_id            String  @id @db.Uuid
   reminders_remaining Int     @default(0)
   reminders_used      Int     @default(0)
   auto_topup          Boolean @default(false)
 
+  @@map("addon_usage")
   @@schema("public")
 }
 
@@ -90,8 +92,8 @@ model bulk_import_batches {
   created_at                                             DateTime   @default(now()) @db.Timestamptz(6)
   updated_at                                             DateTime?  @db.Timestamptz(6)
   hostels                                                hostels    @relation(fields: [hostel_id], references: [id])
-  profiles_bulk_import_batches_uploaded_byToprofiles     profiles   @relation("bulk_import_batches_uploaded_byToprofiles", fields: [uploaded_by], references: [id])
-  profiles_profiles_import_batch_idTobulk_import_batches profiles[] @relation("profiles_import_batch_idTobulk_import_batches")
+  profiles_bulk_import_batches_uploaded_byToprofiles     profile   @relation("bulk_import_batches_uploaded_byToprofiles", fields: [uploaded_by], references: [id])
+  profiles_profiles_import_batch_idTobulk_import_batches profile[] @relation("profiles_import_batch_idTobulk_import_batches")
 
   @@index([hostel_id, created_at(sort: Desc)])
   @@index([owner_id, created_at(sort: Desc)])
@@ -131,7 +133,7 @@ model expenses {
   created_at DateTime @default(now()) @db.Timestamptz(6)
   hostel_id  String   @db.Uuid
   hostels    hostels  @relation(fields: [hostel_id], references: [id])
-  profiles   profiles @relation(fields: [owner_id], references: [id])
+  profiles   profile @relation(fields: [owner_id], references: [id])
 
   @@index([date])
   @@index([hostel_id, date])
@@ -228,7 +230,7 @@ model hostels {
   bulk_import_batches bulk_import_batches[]
   complaints          complaints[]
   expenses            expenses[]
-  profiles            profiles              @relation(fields: [owner_id], references: [id])
+  profiles            profile              @relation(fields: [owner_id], references: [id])
   payments            payments[]
   receipts            receipts[]
   reminder_logs       reminder_logs[]
@@ -326,7 +328,7 @@ model notifications {
   type       String
   is_read    Boolean  @default(false)
   created_at DateTime @default(now()) @db.Timestamptz(6)
-  profiles   profiles @relation(fields: [profile_id], references: [id])
+  profiles   profile @relation(fields: [profile_id], references: [id])
 
   @@schema("public")
 }
@@ -346,7 +348,7 @@ model overflow_ledger {
   idempotency_key                 String          @unique
   created_at                      DateTime        @default(now()) @db.Timestamptz(6)
   processed_at                    DateTime?       @db.Timestamptz(6)
-  owner_invoices                  owner_invoices? @relation(fields: [invoice_id], references: [id])
+  owner_invoices                  ownerInvoice? @relation(fields: [invoice_id], references: [id])
 
   @@unique([owner_id, billing_month])
   @@index([billing_month], map: "idx_ol_billing_month")
@@ -387,7 +389,7 @@ model owner_dashboard_snapshots {
   @@schema("public")
 }
 
-model owner_invoices {
+model ownerInvoice {
   id                  String               @id @db.Uuid
   owner_id            String               @db.Uuid
   subscription_id     String?              @db.Uuid
@@ -402,13 +404,14 @@ model owner_invoices {
   created_at          DateTime             @default(now()) @db.Timestamptz(6)
   line_items          Json?
   overflow_ledger     overflow_ledger[]
-  profiles            profiles             @relation(fields: [owner_id], references: [id], onDelete: Cascade)
+  profiles            profile             @relation(fields: [owner_id], references: [id], onDelete: Cascade)
   plans               plans?               @relation(fields: [plan_id], references: [id])
   owner_subscriptions owner_subscriptions? @relation(fields: [subscription_id], references: [id])
-  payment_attempts    payment_attempts[]
+  attempts            paymentAttempt[]
 
   @@index([owner_id, created_at(sort: Desc)])
   @@index([status])
+  @@map("owner_invoices")
   @@schema("public")
 }
 
@@ -441,8 +444,8 @@ model owner_subscriptions {
   auto_renew     Boolean          @default(true)
   created_at     DateTime         @default(now()) @db.Timestamptz(6)
   updated_at     DateTime?        @db.Timestamptz(6)
-  owner_invoices owner_invoices[]
-  profiles       profiles         @relation(fields: [owner_id], references: [id], onDelete: Cascade)
+  owner_invoices ownerInvoice[]
+  profiles       profile         @relation(fields: [owner_id], references: [id], onDelete: Cascade)
   plans          plans            @relation(fields: [plan_id], references: [id])
 
   @@index([owner_id])
@@ -478,7 +481,7 @@ model payment_attempt_obligations {
   amount             Decimal          @db.Decimal(10, 2)
   created_at         DateTime         @default(now()) @db.Timestamptz(6)
   rent_obligations   rent_obligations @relation(fields: [obligation_id], references: [id])
-  payment_attempts   payment_attempts @relation(fields: [payment_attempt_id], references: [id], onDelete: Cascade)
+  payment_attempts   paymentAttempt @relation(fields: [payment_attempt_id], references: [id], onDelete: Cascade)
 
   @@unique([payment_attempt_id, obligation_id])
   @@schema("public")
@@ -506,7 +509,7 @@ model payment_attempt_status_events {
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-model payment_attempts {
+model paymentAttempt {
   id                          String                        @id @db.Uuid
   obligation_id               String?                       @db.Uuid
   invoice_id                  String?                       @db.Uuid
@@ -543,8 +546,8 @@ model payment_attempts {
   provider_transaction_id     String?
   provider_order_id           String?
   provider_reference_id       String?
-  payment_attempt_obligations payment_attempt_obligations[]
-  owner_invoices              owner_invoices?               @relation(fields: [invoice_id], references: [id])
+  obligations                 payment_attempt_obligations[]
+  invoice                     ownerInvoice?               @relation(fields: [invoice_id], references: [id])
   rent_obligations            rent_obligations?             @relation(fields: [obligation_id], references: [id])
   tenants                     tenants?                      @relation(fields: [tenant_id], references: [id])
   payments                    payments[]
@@ -556,6 +559,7 @@ model payment_attempts {
   @@index([provider, provider_order_id])
   @@index([provider, provider_transaction_id])
   @@index([settlement_status])
+  @@map("payment_attempts")
   @@schema("public")
 }
 
@@ -708,8 +712,8 @@ model payments {
   offline_note        String?
   hostel_id           String            @db.Uuid
   hostels             hostels           @relation(fields: [hostel_id], references: [id])
-  rent_obligations    rent_obligations  @relation(fields: [obligation_id], references: [id])
-  payment_attempts    payment_attempts? @relation(fields: [payment_attempt_id], references: [id])
+  obligation          rent_obligations  @relation(fields: [obligation_id], references: [id])
+  payment_attempts    paymentAttempt? @relation(fields: [payment_attempt_id], references: [id])
   tenants             tenants           @relation(fields: [tenant_id], references: [id])
   receipts            receipts?
 
@@ -741,7 +745,7 @@ model plans {
   overflow_enabled                Boolean               @default(false)
   overflow_hard_cap               Int                   @default(0)
   overflow_price_per_tenant_paise Int                   @default(0)
-  owner_invoices                  owner_invoices[]
+  owner_invoices                  ownerInvoice[]
   owner_subscriptions             owner_subscriptions[]
   subscriptions                   subscriptions[]
 
@@ -749,7 +753,7 @@ model plans {
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model profiles {
+model profile {
   email                                                             String                @unique
   name                                                              String
   phone                                                             String?
@@ -778,11 +782,11 @@ model profiles {
   expenses                                                          expenses[]
   hostels                                                           hostels[]
   notifications                                                     notifications[]
-  owner_invoices                                                    owner_invoices[]
+  owner_invoices                                                    ownerInvoice[]
   owner_subscriptions                                               owner_subscriptions?
   bulk_import_batches_profiles_import_batch_idTobulk_import_batches bulk_import_batches?  @relation("profiles_import_batch_idTobulk_import_batches", fields: [import_batch_id], references: [id])
-  profiles                                                          profiles?             @relation("profilesToprofiles", fields: [owner_id], references: [id])
-  other_profiles                                                    profiles[]            @relation("profilesToprofiles")
+  profiles                                                          profile?              @relation("profilesToprofiles", fields: [owner_id], references: [id])
+  other_profiles                                                    profile[]             @relation("profilesToprofiles")
   refresh_tokens                                                    refresh_tokens[]
   tenants                                                           tenants?
 
@@ -792,6 +796,7 @@ model profiles {
   @@index([owner_id])
   @@index([password_reset_required, is_active])
   @@index([phone])
+  @@map("profiles")
   @@schema("public")
 }
 
@@ -847,7 +852,7 @@ model refresh_tokens {
   token_hash String   @unique
   expires_at DateTime @db.Timestamptz(6)
   created_at DateTime @default(now()) @db.Timestamptz(6)
-  profiles   profiles @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  profiles   profile @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@index([expires_at])
   @@index([user_id])
@@ -934,7 +939,7 @@ model rent_obligations {
   obligation_type             String                        @default("RENT")
   hostel_id                   String                        @db.Uuid
   payment_attempt_obligations payment_attempt_obligations[]
-  payment_attempts            payment_attempts[]
+  payment_attempts            paymentAttempt[]
   payments                    payments[]
   reminder_logs               reminder_logs[]
   room_allocations            room_allocations?             @relation(fields: [allocation_id], references: [id])
@@ -1026,7 +1031,7 @@ model subscriptions {
   @@schema("public")
 }
 
-model system_event_logs {
+model systemEventLog {
   id         String   @id @db.Uuid
   event_type String
   owner_id   String?  @db.Uuid
@@ -1037,6 +1042,7 @@ model system_event_logs {
   @@index([created_at])
   @@index([event_type])
   @@index([owner_id])
+  @@map("system_event_logs")
   @@schema("public")
 }
 
@@ -1143,7 +1149,7 @@ model tenants {
   hostel_id              String                  @db.Uuid
   mobile_verified        Boolean                 @default(false)
   complaints             complaints[]
-  payment_attempts       payment_attempts[]
+  payment_attempts       paymentAttempt[]
   payments               payments[]
   reactivation_requests  reactivation_requests[]
   receipts               receipts[]
@@ -1153,7 +1159,7 @@ model tenants {
   tenant_advance_ledger  tenant_advance_ledger[]
   tenant_behavior_scores tenant_behavior_scores?
   hostels                hostels                 @relation(fields: [hostel_id], references: [id])
-  profiles               profiles                @relation(fields: [profile_id], references: [id])
+  profiles               profile                @relation(fields: [profile_id], references: [id])
 
   @@index([hostel_id])
   @@index([owner_id])
