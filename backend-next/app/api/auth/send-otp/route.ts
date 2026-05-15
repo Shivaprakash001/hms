@@ -19,10 +19,20 @@ export async function POST(req: NextRequest) {
       return apiError("Invalid Indian phone number", "VALIDATION_ERROR", 400);
     }
 
-    await msg91Service.sendOtp(normalizedPhone);
+    console.log("Send OTP endpoint reached:", {
+      phone,
+      normalizedPhone,
+      msg91AuthKeyExists: Boolean(process.env.MSG91_AUTH_KEY),
+      msg91TemplateId: process.env.MSG91_TEMPLATE_ID,
+    });
+
+    const result = await msg91Service.sendOtp(normalizedPhone);
+
+    console.log("Send OTP endpoint MSG91 result:", result);
 
     return apiResponse({ message: "OTP sent successfully" });
   } catch (error: any) {
+    console.error("Send OTP endpoint error:", error);
     return apiError(error.message || "Failed to send OTP", "INTERNAL_ERROR", 500);
   }
 }
