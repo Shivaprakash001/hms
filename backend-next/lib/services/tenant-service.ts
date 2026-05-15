@@ -41,7 +41,6 @@ export class TenantService {
         gender: true,
         permanent_address: true,
         temporary_address: true,
-        aadhaar_number: true,
         document_verified: true,
         created_at: true,
         updated_at: true,
@@ -102,7 +101,6 @@ export class TenantService {
         gender: true,
         permanent_address: true,
         temporary_address: true,
-        aadhaar_number: true,
         document_verified: true,
         created_at: true,
         updated_at: true,
@@ -209,7 +207,7 @@ export class TenantService {
 
     const profileFields = ["name", "email", "phone", "emergency_contact"];
     const tenantFields = [
-      "photo_url", "phone_1", "phone_2", "phone_3", "aadhaar_number", "personal_email",
+      "photo_url", "phone_1", "phone_2", "phone_3", "personal_email",
       "college_name", "roll_number", "course", "year_of_study", "section", "branch",
       "temporary_address", "permanent_address", "gender", "profile_type",
       "office_name", "office_location", "job_role", "date_of_birth"
@@ -227,10 +225,7 @@ export class TenantService {
       tenantUpdate.gender = null;
     }
 
-    // Sanitize aadhaar: empty string or null → skip (don't overwrite existing value with blank)
-    if ("aadhaar_number" in tenantUpdate && !tenantUpdate.aadhaar_number) {
-      delete tenantUpdate.aadhaar_number;
-    }
+    // Aadhaar is now stored in identification_documents table, not on tenant record
 
     // Legacy address mapping
     if (data.address) {
@@ -280,8 +275,8 @@ export class TenantService {
         } catch (error: any) {
           const code = (error as any)?.code;
           const msg = String(error?.message || error);
-          if (code === "P2002" || msg.includes("aadhaar_number")) {
-            throw new Error("VALIDATION: This Aadhaar number is already registered with another account.");
+          if (code === "P2002") {
+            throw new Error("VALIDATION: This record violates a unique constraint.");
           }
           if (msg.includes("tenants.gender") && Object.prototype.hasOwnProperty.call(tenantUpdate, "gender")) {
             delete tenantUpdate.gender;
@@ -302,7 +297,6 @@ export class TenantService {
           profile_completed: true,
           phone_1: true,
           phone_2: true,
-          aadhaar_number: true,
           college_name: true,
           roll_number: true,
           year_of_study: true,
@@ -342,7 +336,7 @@ export class TenantService {
     const p = tenant.profile;
     const required = [
       p.name, p.email, p.phone || tenant.phone_1,
-      p.emergency_contact, tenant.aadhaar_number, tenant.college_name,
+      p.emergency_contact, tenant.college_name,
       tenant.roll_number, tenant.year_of_study, tenant.branch,
       tenant.temporary_address || tenant.permanent_address,
     ];

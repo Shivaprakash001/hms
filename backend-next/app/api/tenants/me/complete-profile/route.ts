@@ -17,7 +17,7 @@ const OTP_ACTION  = "tenant_onboarding";
 /**
  * 👨‍🎓 COMPLETE TENANT PROFILE (Onboarding)
  * POST /api/tenants/me/complete-profile
- * Parses FormData for profile details and Aadhaar upload handled elsewhere for now.
+ * Parses FormData for profile details. Aadhaar documents uploaded via document service.
  */
 export async function POST(req: NextRequest) {
   const session = await getSession(req);
@@ -160,7 +160,6 @@ export async function POST(req: NextRequest) {
           office_location: payload.office_location || null,
           job_role: payload.job_role || null,
 
-          aadhaar_number: payload.aadhaar_number ?? undefined,
           photo_url: photoUrl || undefined,
           profile_completed: true,
         }
@@ -173,8 +172,8 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     console.error(error);
     const msg = String(error?.message || "");
-    if (error?.code === "P2002" || msg.includes("aadhaar_number")) {
-      return apiError("This Aadhaar number is already registered with another account.", "DUPLICATE", 409);
+    if (error?.code === "P2002") {
+      return apiError("This record violates a unique constraint.", "DUPLICATE", 409);
     }
     return apiError(error?.message || "Failed to complete profile");
   }

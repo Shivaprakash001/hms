@@ -49,7 +49,6 @@ export async function GET(req: NextRequest) {
         date_of_birth: true,
         permanent_address: true,
         temporary_address: true,
-        aadhaar_number: true,
         document_verified: true,
         created_at: true,
         updated_at: true,
