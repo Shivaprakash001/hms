@@ -10,13 +10,14 @@ datasource db {
   schemas   = ["public"]
 }
 
-model action_logs {
+model actionLog {
   id         String   @id @db.Uuid
   owner_id   String   @db.Uuid
   action     String
   created_at DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([owner_id, action, created_at(sort: Desc)])
+  @@map("action_logs")
   @@schema("public")
 }
 
@@ -235,7 +236,7 @@ model hostels {
   receipts            receipts[]
   reminder_logs       reminder_logs[]
   rent_obligations    rent_obligations[]
-  room_allocations    room_allocations[]
+  room_allocations    roomAllocation[]
   rooms               rooms[]
   tenants             tenants[]
 
@@ -942,7 +943,7 @@ model rent_obligations {
   payment_attempts            paymentAttempt[]
   payments                    payments[]
   reminder_logs               reminder_logs[]
-  room_allocations            room_allocations?             @relation(fields: [allocation_id], references: [id])
+  room_allocations            roomAllocation?             @relation(fields: [allocation_id], references: [id])
   hostels                     hostels                       @relation(fields: [hostel_id], references: [id])
   tenants                     tenants                       @relation(fields: [tenant_id], references: [id])
 
@@ -970,7 +971,7 @@ model room_activity_logs {
   @@schema("public")
 }
 
-model room_allocations {
+model roomAllocation {
   id               String             @id @db.Uuid
   tenant_id        String             @db.Uuid
   room_id          String             @db.Uuid
@@ -981,14 +982,15 @@ model room_allocations {
   updated_at       DateTime?          @db.Timestamptz(6)
   hostel_id        String             @db.Uuid
   rent_obligations rent_obligations[]
-  hostels          hostels            @relation(fields: [hostel_id], references: [id])
-  rooms            rooms              @relation(fields: [room_id], references: [id])
-  tenants          tenants            @relation(fields: [tenant_id], references: [id])
+  hostel           hostels            @relation(fields: [hostel_id], references: [id])
+  room             rooms              @relation(fields: [room_id], references: [id])
+  tenant           tenants            @relation(fields: [tenant_id], references: [id])
 
   @@index([hostel_id])
   @@index([hostel_id, is_active])
   @@index([room_id, is_active])
   @@index([tenant_id, is_active, end_date])
+  @@map("room_allocations")
   @@schema("public")
 }
 
@@ -1004,7 +1006,7 @@ model rooms {
   updated_at         DateTime?            @db.Timestamptz(6)
   base_rent          Int?
   room_activity_logs room_activity_logs[]
-  room_allocations   room_allocations[]
+  room_allocations   roomAllocation[]
   hostels            hostels              @relation(fields: [hostel_id], references: [id])
 
   @@unique([hostel_id, room_no])
@@ -1155,7 +1157,7 @@ model tenants {
   receipts               receipts[]
   reminder_logs          reminder_logs[]
   rent_obligations       rent_obligations[]
-  room_allocations       room_allocations[]
+  room_allocations       roomAllocation[]
   tenant_advance_ledger  tenant_advance_ledger[]
   tenant_behavior_scores tenant_behavior_scores?
   hostels                hostels                 @relation(fields: [hostel_id], references: [id])
