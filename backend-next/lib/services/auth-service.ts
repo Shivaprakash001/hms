@@ -102,6 +102,7 @@ export class AuthService {
 
     await prisma.refresh_tokens.create({
       data: {
+        id: randomUUID(),
         user_id: profile.id,
         token_hash: refreshTokenHash,
         expires_at: expiresAt,
@@ -180,6 +181,7 @@ export class AuthService {
 
     await prisma.refresh_tokens.create({
       data: {
+        id: randomUUID(),
         user_id: profile.id,
         token_hash: refreshTokenHash,
         expires_at: expiresAt,
@@ -573,6 +575,7 @@ export class AuthService {
 
     await prisma.refresh_tokens.create({
       data: {
+        id: randomUUID(),
         user_id: profile.id,
         token_hash: refreshTokenHash,
         expires_at: expiresAt,

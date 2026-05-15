@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { apiResponse, apiError } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { generateToken, generateRefreshToken, hashToken } from "@/lib/auth";
@@ -80,6 +81,7 @@ export async function POST(req: NextRequest) {
       }),
       prisma.refresh_tokens.create({
         data: {
+          id: randomUUID(),
           user_id: tokenRecord.profile.id,
           token_hash: newRefreshTokenHash,
           expires_at: expiresAt,
