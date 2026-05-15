@@ -23,13 +23,13 @@ export class MessageService {
 
     const res = await prisma.$transaction(async (tx) => {
       // Find oldest pack with credits
-      const packs = await (tx as any).messagePack.findMany({ where: { owner_id: ownerId, messages_remaining: { gt: 0 } }, orderBy: { purchased_at: "asc" }, take: 1 });
+      const packs = await (tx as any).message_packs.findMany({ where: { owner_id: ownerId, messages_remaining: { gt: 0 } }, orderBy: { purchased_at: "asc" }, take: 1 });
       if (!packs || packs.length === 0) throw new Error("FORBIDDEN: Message quota exhausted");
       
       const usedPackId = packs[0].id;
 
       // ATOMIC UPDATE to lock in decrement
-      const updateResult = await (tx as any).messagePack.updateMany({
+      const updateResult = await (tx as any).message_packs.updateMany({
         where: { id: usedPackId, messages_remaining: { gt: 0 } },
         data: { messages_remaining: { decrement: 1 } }
       });
@@ -39,7 +39,7 @@ export class MessageService {
       }
 
       const id = require("crypto").randomUUID();
-      await (tx as any).messageLog.create({ 
+      await (tx as any).message_logs.create({
         data: { 
           id, owner_id: ownerId, channel, template, recipient, 
           success: null, status: "RESERVED", deduction: 1, pack_id: usedPackId,
@@ -59,11 +59,11 @@ export class MessageService {
        logger.error(`Message send failed for owner ${ownerId}, issuing refund.`);
 
        await prisma.$transaction(async (tx) => {
-           await (tx as any).messagePack.update({
+           await (tx as any).message_packs.update({
                where: { id: res.usedPackId },
                data: { messages_remaining: { increment: 1 } }
            });
-           await (tx as any).messageLog.update({
+           await (tx as any).message_logs.update({
                where: { id: res.logId },
                data: { success: false, status: "FAILED", provider_response: (error as Error).message }
            });

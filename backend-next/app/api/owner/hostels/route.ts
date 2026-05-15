@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
           select: {
             id: true,
             capacity: true,
-            allocations: {
+            room_allocations: {
               where: { is_active: true, end_date: null },
               select: { id: true },
             },
@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
     const result = hostels.map((hostel) => {
       const totalRooms = hostel.rooms.length;
       const totalCapacity = hostel.rooms.reduce((s, r) => s + r.capacity, 0);
-      const occupiedBeds = hostel.rooms.reduce((s, r) => s + r.allocations.length, 0);
+      const occupiedBeds = hostel.rooms.reduce((s, r) => s + r.room_allocations.length, 0);
       const vacantBeds = Math.max(totalCapacity - occupiedBeds, 0);
       const occupancyRate = totalCapacity > 0 ? Math.round((occupiedBeds / totalCapacity) * 100) : 0;
 

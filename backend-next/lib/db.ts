@@ -14,6 +14,60 @@ export const prisma: any =
     log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
   });
 
+const delegateAliases: Record<string, string> = {
+  refreshToken: "refresh_tokens",
+  identityToken: "identity_tokens",
+  tenant: "tenants",
+  hostel: "hostels",
+  room: "rooms",
+  rentObligation: "rent_obligations",
+  reminderLog: "reminder_logs",
+  payment: "payments",
+  expense: "expenses",
+  plan: "plans",
+  ownerSubscription: "owner_subscriptions",
+  bulkImportBatch: "bulk_import_batches",
+  activityLog: "activity_logs",
+  notification: "notifications",
+  rentGenerationLedger: "rent_generation_ledgers",
+  rentGenerationLog: "rent_generation_logs",
+  tenantAdvanceLedger: "tenant_advance_ledger",
+  tenantBehaviorScore: "tenant_behavior_scores",
+  reactivationRequest: "reactivation_requests",
+  tenantTransferLog: "tenant_transfer_logs",
+  ownerDashboardSnapshot: "owner_dashboard_snapshots",
+  tokenBlacklist: "token_blacklist",
+  hostelInvariantCheck: "hostel_invariant_checks",
+  receipt: "receipts",
+  overflowLedger: "overflow_ledger",
+  ownerUsageSnapshot: "owner_usage_snapshots",
+  paymentAttemptObligation: "payment_attempt_obligations",
+  usageTracking: "usage_tracking",
+  roomActivityLog: "room_activity_logs",
+  loginAttempt: "login_attempts",
+  subscription: "subscriptions",
+  autopayAttempt: "autopay_attempts",
+  messageLog: "message_logs",
+  messagePack: "message_packs",
+  messagePacks: "message_packs",
+  hostelDailySnapshot: "hostel_daily_snapshots",
+  ownerOnboardingState: "owner_onboarding_states",
+  paymentWebhookEvent: "payment_webhook_events",
+  paymentAttemptStatusEvent: "payment_attempt_status_events",
+  paymentProviderVerificationSnapshot: "payment_provider_verification_snapshots",
+  paymentOperationalAnomaly: "payment_operational_anomalies",
+  paymentReconciliationItem: "payment_reconciliation_items",
+  paymentReconciliationRun: "payment_reconciliation_runs",
+  migrationAuditRun: "migration_audit_runs",
+  financialInvariantFailure: "financial_invariant_failures",
+};
+
+for (const [alias, target] of Object.entries(delegateAliases)) {
+  if (!prisma[alias] && prisma[target]) {
+    prisma[alias] = prisma[target];
+  }
+}
+
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
 // Supabase Client for RPC calls (Atomic Operations)
