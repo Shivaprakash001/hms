@@ -49,7 +49,7 @@ export default function MoveOutManagement() {
     try { setLoading(true);
       const p = { hostelId }; if (tab) p.status = tab;
       const r = await api.get('/move-out/requests', { params: p });
-      setRequests(r.data?.data?.requests || []); setTotal(r.data?.data?.total || 0);
+      setRequests(r.data?.requests || r.data?.data?.requests || []); setTotal(r.data?.total || r.data?.data?.total || 0);
     } catch { setMsg({ type: 'error', text: 'Failed to load requests' }); }
     finally { setLoading(false); }
   }, [hostelId, tab]);
@@ -58,7 +58,7 @@ export default function MoveOutManagement() {
 
   const openDetail = async (id) => {
     setDetailLoading(true); setSelected(id);
-    try { const r = await api.get(`/move-out/requests/${id}`); setDetail(r.data?.data); }
+    try { const r = await api.get(`/move-out/requests/${id}`); setDetail(r.data?.data || r.data); }
     catch { setMsg({ type: 'error', text: 'Failed to load details' }); }
     finally { setDetailLoading(false); }
   };
