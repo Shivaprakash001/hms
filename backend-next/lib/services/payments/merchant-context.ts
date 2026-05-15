@@ -58,7 +58,7 @@ export async function getProviderContext(params: {
     throw new Error("HOSTEL_CONTEXT_REQUIRED: hostelId is required for rent collection provider routing");
   }
 
-  const hostel = await prisma.hostel.findUnique({
+  const hostel = await prisma.hostels.findUnique({
     where: { id: hostelId },
     include: { owner: true },
   });

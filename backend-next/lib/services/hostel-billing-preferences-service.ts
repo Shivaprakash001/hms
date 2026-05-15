@@ -102,7 +102,7 @@ function sanitizeBillingDefaultsPayload(payload: Partial<BillingDefaults>) {
 
 export class HostelBillingPreferencesService {
   async getBillingDefaults(hostelId: string): Promise<BillingDefaults> {
-    const hostel = await prisma.hostel.findUnique({
+    const hostel = await prisma.hostels.findUnique({
       where: { id: hostelId },
       select: { id: true, preferences_config: true },
     });
@@ -115,7 +115,7 @@ export class HostelBillingPreferencesService {
     payload: Partial<BillingDefaults>,
     ownerId?: string
   ): Promise<BillingDefaults> {
-    const hostel = await prisma.hostel.findFirst({
+    const hostel = await prisma.hostels.findFirst({
       where: {
         id: hostelId,
         is_active: true,
@@ -137,7 +137,7 @@ export class HostelBillingPreferencesService {
       billing_defaults: nextDefaults,
     };
 
-    await prisma.hostel.update({
+    await prisma.hostels.update({
       where: { id: hostel.id },
       data: { preferences_config },
     });
@@ -151,7 +151,7 @@ export class HostelBillingPreferencesService {
   }
 
   async resolveTenantInviteDefaults(roomId: string, ownerId?: string): Promise<TenantInviteDefaults> {
-    const room = await prisma.room.findFirst({
+    const room = await prisma.rooms.findFirst({
       where: {
         id: roomId,
         is_active: true,

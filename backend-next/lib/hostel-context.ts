@@ -70,7 +70,7 @@ export async function getHostelOperationalContext(
     throw err;
   }
 
-  const hostel = await prisma.hostel.findUnique({
+  const hostel = await prisma.hostels.findUnique({
     where: { id: hostelId },
     select: {
       id: true,
@@ -132,7 +132,7 @@ export async function resolveHostelIdFromTenant(tenantId: string): Promise<strin
 
   // ── Phase 2: Dual-Read Validation ──
   try {
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await prisma.tenants.findUnique({
       where: { id: tenantId },
       select: { hostel_id: true }
     });
@@ -244,7 +244,7 @@ export async function resolveHostelIdFromObligation(
 
   // ── Phase 2: Dual-Read Validation ──
   try {
-    const obligation = await prisma.rentObligation.findUnique({
+    const obligation = await prisma.rent_obligations.findUnique({
       where: { id: obligationId },
       select: { hostel_id: true }
     });
@@ -275,7 +275,7 @@ export async function batchGetHostelContexts(
   const uniqueIds = Array.from(new Set(hostelIds.filter(Boolean)));
   if (uniqueIds.length === 0) return new Map();
 
-  const hostels = await prisma.hostel.findMany({
+  const hostels = await prisma.hostels.findMany({
     where: {
       id: { in: uniqueIds },
       is_active: true,

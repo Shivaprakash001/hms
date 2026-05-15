@@ -252,7 +252,7 @@ function applyLedgerUpdate(row: Ledger, data: any) {
     );
   },
   // Direct createMany is still needed for non-transactional paths in tests (none currently).
-  // The transaction path uses tx.rentObligation.createMany above.
+  // The transaction path uses tx.rent_obligations.createMany above.
   createMany: async ({ data, skipDuplicates }: any) => {
     if (state.failCreateMany) throw new Error("SIMULATED_CREATE_MANY_FAILURE");
     let count = 0;

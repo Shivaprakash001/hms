@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify ownership
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await prisma.tenants.findUnique({
       where: { id: tenant_id },
       select: { owner_id: true }
     });

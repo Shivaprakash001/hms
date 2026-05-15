@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
 
     // Tenants can only view their own dues
     if (user.role === "TENANT") {
-      const tenant = await prisma.tenant.findUnique({
+      const tenant = await prisma.tenants.findUnique({
         where: { profile_id: user.id },
         select: { id: true },
       });
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
 
     // Owners can only view their own tenants
     if (user.role === "OWNER") {
-      const tenant = await prisma.tenant.findUnique({
+      const tenant = await prisma.tenants.findUnique({
         where: { id: tenantId },
         select: { owner_id: true },
       });

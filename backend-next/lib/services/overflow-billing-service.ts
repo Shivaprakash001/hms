@@ -74,7 +74,7 @@ export class OverflowBillingService {
    * Safe to call repeatedly — pure read operation.
    */
   async calculateForOwner(ownerId: string, billingMonth?: string): Promise<OverflowCalcResult | null> {
-    const sub = await prisma.ownerSubscription.findUnique({
+    const sub = await prisma.owner_subscriptions.findUnique({
       where: { owner_id: ownerId },
       include: {
         plan: {
@@ -96,7 +96,7 @@ export class OverflowBillingService {
     const monthDate = this._billingMonthDate(billingMonth);
     const idempotencyKey = `${ownerId}:${monthDate.toISOString().slice(0, 10)}`;
 
-    const activeTenants = await prisma.tenant.count({
+    const activeTenants = await prisma.tenants.count({
       where: { owner_id: ownerId, status: { notIn: ["LEFT", "CANCELLED", "EXPIRED"] } },
     });
 
@@ -139,7 +139,7 @@ export class OverflowBillingService {
     }
 
     // Idempotency: if already processed this month, return existing record
-    const existing = await prisma.overflowLedger.findUnique({
+    const existing = await prisma.overflow_ledger.findUnique({
       where: { idempotency_key: calc.idempotency_key },
     });
     if (existing) {
@@ -158,7 +158,7 @@ export class OverflowBillingService {
     }
 
     // Save usage snapshot (upsert — safe if already exists)
-    await prisma.ownerUsageSnapshot.upsert({
+    await prisma.owner_usage_snapshots.upsert({
       where: { owner_id_billing_month: { owner_id: ownerId, billing_month: calc.billing_month } },
       create: {
         owner_id: ownerId,
@@ -181,7 +181,7 @@ export class OverflowBillingService {
 
     // No overflow — record ZERO entry and exit
     if (calc.overflow_count === 0) {
-      await prisma.overflowLedger.create({
+      await prisma.overflow_ledger.create({
         data: {
           owner_id: ownerId,
           billing_month: calc.billing_month,
@@ -235,7 +235,7 @@ export class OverflowBillingService {
         },
       });
 
-      const ledger = await tx.overflowLedger.create({
+      const ledger = await tx.overflow_ledger.create({
         data: {
           owner_id: ownerId,
           billing_month: calc.billing_month,
@@ -287,7 +287,7 @@ export class OverflowBillingService {
     details: Array<{ owner_id: string; status: string; overflow_count: number; overflow_amount_paise: number }>;
   }> {
     // ACTIVE subscriptions only; overflow eligibility is decided in calculateForOwner()
-    const eligibleSubs = await prisma.ownerSubscription.findMany({
+    const eligibleSubs = await prisma.owner_subscriptions.findMany({
       where: {
         status: "ACTIVE",
       },
@@ -344,7 +344,7 @@ export class OverflowBillingService {
    * Pure read, no writes. Always returns a valid structure.
    */
   async getOverflowStatus(ownerId: string): Promise<OverflowStatus> {
-    const sub = await prisma.ownerSubscription.findUnique({
+    const sub = await prisma.owner_subscriptions.findUnique({
       where: { owner_id: ownerId },
       include: {
         plan: {
@@ -378,7 +378,7 @@ export class OverflowBillingService {
 
     const plan = sub.plan;
 
-    const activeTenants = await prisma.tenant.count({
+    const activeTenants = await prisma.tenants.count({
       where: { owner_id: ownerId, status: { notIn: ["LEFT", "CANCELLED", "EXPIRED"] } },
     });
 
@@ -407,7 +407,7 @@ export class OverflowBillingService {
     let upgradeNudge = disabled.upgrade_nudge;
     const nextPlanId = NEXT_PLAN[plan.id];
     if (overflowEnabled && overflowCount > 0 && nextPlanId) {
-      const nextPlan = await prisma.plan.findUnique({ where: { id: nextPlanId }, select: { price_inr: true, name: true } });
+      const nextPlan = await prisma.plans.findUnique({ where: { id: nextPlanId }, select: { price_inr: true, name: true } });
       if (nextPlan) {
         const priceGapPaise = nextPlan.price_inr - plan.price_inr;
         const nudgeThresholdPaise = Math.round(priceGapPaise * NUDGE_THRESHOLD_RATIO);

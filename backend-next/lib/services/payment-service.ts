@@ -174,7 +174,7 @@ export class PaymentService {
       FOR UPDATE
     `;
 
-    const obligation = await tx.rentObligation.findUnique({
+    const obligation = await tx.rent_obligations.findUnique({
       where: { id: data.obligationId },
       include: {
         payments: { select: { amount_paid: true, hostel_id: true } },
@@ -212,7 +212,7 @@ export class PaymentService {
       throw new Error("BAD_REQUEST: Payment amount must be positive");
     }
 
-    const payment = await tx.payment.create({
+    const payment = await tx.payments.create({
       data: {
         obligation_id: data.obligationId,
         tenant_id: obligation.tenant_id,
@@ -238,7 +238,7 @@ export class PaymentService {
     const newTotalPaidPaisa = totalAlreadyPaidPaisa + paymentPaisa;
     const newStatus = newTotalPaidPaisa >= obligationPaisa ? "PAID" : "PARTIAL";
 
-    await tx.rentObligation.update({
+    await tx.rent_obligations.update({
       where: { id: data.obligationId },
       data: { status: newStatus }
     });
@@ -325,7 +325,7 @@ export class PaymentService {
             timezone: prefs.timezone,
           };
           const pdfBuffer = await receiptService.renderReceiptPdf(receipt, renderContext);
-          const tenant = await prisma.tenant.findUnique({
+          const tenant = await prisma.tenants.findUnique({
             where: { id: res.payment.tenant_id },
             include: { profile: true },
           });
@@ -419,7 +419,7 @@ export class PaymentService {
             timezone: prefs.timezone,
           };
           const pdfBuffer = await receiptService.renderReceiptPdf(receipt, renderContext);
-          const tenant = await prisma.tenant.findUnique({
+          const tenant = await prisma.tenants.findUnique({
             where: { id: res.payment.tenant_id },
             include: { profile: true },
           });
@@ -502,7 +502,7 @@ export class PaymentService {
     // If caller provides a key, check if this payment was already processed.
     // This prevents duplicate payments from retries, double-clicks, or network failures.
     if (data.idempotencyKey) {
-      const existing = await prisma.payment.findFirst({
+      const existing = await prisma.payments.findFirst({
         where: { idempotency_key: data.idempotencyKey, hostel_id: hostelId },
         select: { payment_group_id: true, amount_paid: true, created_at: true },
       });
@@ -512,7 +512,7 @@ export class PaymentService {
           payment_group_id: existing.payment_group_id,
         });
         // Return the existing group's data
-        const groupPayments = await prisma.payment.findMany({
+        const groupPayments = await prisma.payments.findMany({
           where: { payment_group_id: existing.payment_group_id!, hostel_id: hostelId },
           include: { obligation: { select: { obligation_type: true, rent_month: true } } },
         });
@@ -551,7 +551,7 @@ export class PaymentService {
       }
 
       // Now read the full data (rows are locked, safe from concurrent modification)
-      const obligations = await tx.rentObligation.findMany({
+      const obligations = await tx.rent_obligations.findMany({
         where: { id: { in: lockedRows.map(r => r.id) } },
         include: {
           payments: { select: { amount_paid: true, hostel_id: true } },
@@ -611,7 +611,7 @@ export class PaymentService {
         const allocPaisa = Math.min(remainingPaisa, outstandingPaisa);
         const allocRupees = allocPaisa / 100;
 
-        const payment = await tx.payment.create({
+        const payment = await tx.payments.create({
           data: {
             obligation_id: ob.id,
             tenant_id: data.tenantId,
@@ -632,7 +632,7 @@ export class PaymentService {
         const newTotalPaidPaisa = paidPaisa + allocPaisa;
         const newStatus = newTotalPaidPaisa >= duePaisa ? "PAID" : "PARTIAL";
 
-        await tx.rentObligation.update({
+        await tx.rent_obligations.update({
           where: { id: ob.id },
           data: { status: newStatus },
         });
@@ -700,7 +700,7 @@ export class PaymentService {
     });
 
     // 🎉 First-payment milestone: fires once for the owner's very first tenant payment.
-    const ownerIdForMilestone = txResult.allocations[0] ? await prisma.rentObligation.findUnique({
+    const ownerIdForMilestone = txResult.allocations[0] ? await prisma.rent_obligations.findUnique({
       where: { id: txResult.allocations[0].obligation_id },
       select: { owner_id: true },
     }).then(ob => ob?.owner_id ?? null).catch(() => null) : null;
@@ -724,7 +724,7 @@ export class PaymentService {
    *   Total: ₹8,700
    */
   async getTenantTotalDues(tenantId: string) {
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await prisma.tenants.findUnique({
       where: { id: tenantId },
       select: { owner_id: true, hostel_id: true },
     });
@@ -733,7 +733,7 @@ export class PaymentService {
   }
 
   async createPaymentIntent(obligationId: string, amount: number | null, userId: string, tenantId?: string) {
-    const obligation = await prisma.rentObligation.findUnique({
+    const obligation = await prisma.rent_obligations.findUnique({
       where: { id: obligationId },
       include: { tenant: { include: { profile: true } } }
     });
@@ -919,7 +919,7 @@ export class PaymentService {
 
   async createMultiObligationPaymentIntent(obligationIds: string[], userId: string, tenantId?: string) {
     // ── 1. INITIAL VALIDATION (outside tx — fast-path rejects, no locks needed) ──
-    const obligations = await prisma.rentObligation.findMany({
+    const obligations = await prisma.rent_obligations.findMany({
       where: { id: { in: obligationIds } },
       include: { tenant: { include: { profile: true } } }
     });
@@ -976,7 +976,7 @@ export class PaymentService {
     // Rule: if partial payments are disabled, tenant must cover ALL outstanding obligations,
     // not just a selected subset. Compare against the live DB count, not the selection.
     if (!prefs.allow_partial_payments) {
-      const tenantTotalOutstanding = await prisma.rentObligation.count({
+      const tenantTotalOutstanding = await prisma.rent_obligations.count({
         where: {
           tenant_id: singleTenantId,
           status: { in: ["PENDING", "PARTIAL"] },
@@ -1020,7 +1020,7 @@ export class PaymentService {
       `;
 
       // Re-read with fresh payments under lock — source of truth for amounts
-      const locked = await tx.rentObligation.findMany({
+      const locked = await tx.rent_obligations.findMany({
         where: { id: { in: obligationIds }, hostel_id: hostelId },
         include: { payments: { select: { amount_paid: true, hostel_id: true } } }
       });
@@ -1059,7 +1059,7 @@ export class PaymentService {
       }
 
       // Dedup check inside the same tx — eliminates TOCTOU race
-      const existingLinks = await tx.paymentAttemptObligation.findMany({
+      const existingLinks = await tx.payment_attempt_obligations.findMany({
         where: {
           obligation_id: { in: paymentBreakdown.map(p => p.obligationId) },
           payment_attempt: { hostel_id: hostelId, status: { in: ["CREATED", "PENDING"] } },
@@ -1148,7 +1148,7 @@ export class PaymentService {
         hostelId,
       });
 
-      await tx.paymentAttemptObligation.createMany({
+      await tx.payment_attempt_obligations.createMany({
         data: paymentBreakdown.map(item => ({
           payment_attempt_id: newAttempt.id,
           obligation_id: item.obligationId,
@@ -1238,7 +1238,7 @@ export class PaymentService {
     if (amount <= 0) throw new Error("BAD_REQUEST: Amount must be positive");
 
     // Resolve prefs from the tenant's explicit hostel context.
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await prisma.tenants.findUnique({
       where: { id: tenantId },
       include: { profile: true },
     });
@@ -1384,7 +1384,7 @@ export class PaymentService {
   }
 
   async previewPaymentAmount(obligationIds: string[], userId: string, tenantId?: string) {
-    const obligations = await prisma.rentObligation.findMany({
+    const obligations = await prisma.rent_obligations.findMany({
       where: { id: { in: obligationIds } },
       include: { payments: { select: { amount_paid: true } } }
     });
@@ -1630,7 +1630,7 @@ export class PaymentService {
         });
 
         // Audit trail: immutable ledger entry
-        await tx.addonTransaction.create({
+        await tx.addonTransactions.create({
           data: {
             owner_id: attempt.owner_id,
             payment_attempt_id: attemptId,
@@ -1810,7 +1810,7 @@ export class PaymentService {
         `;
 
         // Fetch current subscription (now locked for this transaction)
-        const currentSub = await tx.ownerSubscription.findUnique({
+        const currentSub = await tx.owner_subscriptions.findUnique({
           where: { owner_id: invoice.owner_id }
         });
 
@@ -1839,7 +1839,7 @@ export class PaymentService {
         }
 
         // Upsert subscription (single-owner invariant)
-        await tx.ownerSubscription.upsert({
+        await tx.owner_subscriptions.upsert({
           where: { owner_id: invoice.owner_id },
           update: {
             plan_id: invoice.plan_id!,
@@ -1901,8 +1901,8 @@ export class PaymentService {
       await eventLog.log("SUBSCRIPTION_ACTIVATED", invoice.owner_id, {
         plan_id: invoice.plan_id,
         invoice_id: invoice.id,
-        start_date: (await prisma.ownerSubscription.findUnique({ where: { owner_id: invoice.owner_id } }))?.start_date,
-        end_date: (await prisma.ownerSubscription.findUnique({ where: { owner_id: invoice.owner_id } }))?.end_date,
+        start_date: (await prisma.owner_subscriptions.findUnique({ where: { owner_id: invoice.owner_id } }))?.start_date,
+        end_date: (await prisma.owner_subscriptions.findUnique({ where: { owner_id: invoice.owner_id } }))?.end_date,
         status: "ACTIVE"
       });
 
@@ -2026,7 +2026,7 @@ export class PaymentService {
     }
 
     // Use ONLY junction table - no fallback to raw_create_response
-    const obligationLinks = await prisma.paymentAttemptObligation.findMany({
+    const obligationLinks = await prisma.payment_attempt_obligations.findMany({
       where: { payment_attempt_id: attemptId }
     });
     const attemptHostelId = requireFinancialHostelId(attempt.hostel_id, "rent payment attempt finalization");
@@ -2497,10 +2497,10 @@ export class PaymentService {
   }
 
   async waiveObligation(obligationId: string, userId: string) {
-    const existingPayments = await prisma.payment.findMany({ where: { obligation_id: obligationId } });
+    const existingPayments = await prisma.payments.findMany({ where: { obligation_id: obligationId } });
     if (existingPayments.length > 0) throw new Error("BAD_REQUEST: Cannot waive an obligation with payments");
 
-    const obligation = await prisma.rentObligation.update({
+    const obligation = await prisma.rent_obligations.update({
       where: { id: obligationId },
       data: { status: "WAIVED" }
     });
@@ -2510,7 +2510,7 @@ export class PaymentService {
   }
 
   async getDuesReport(ownerId: string, hostelId: string, rentMonth?: Date, status?: string) {
-    const dues = await prisma.rentObligation.findMany({
+    const dues = await prisma.rent_obligations.findMany({
       where: {
         owner_id: ownerId,
         hostel_id: hostelId,
@@ -2561,7 +2561,7 @@ export class PaymentService {
       ? new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 1, 0, 0, 0, 0))
       : undefined;
 
-    const obligations = await prisma.rentObligation.findMany({
+    const obligations = await prisma.rent_obligations.findMany({
       where: {
         owner_id: ownerId,
         hostel_id: hostelId,
@@ -2655,7 +2655,7 @@ export class PaymentService {
       total_collected: Number(filteredEntries.reduce((sum, entry) => sum + Number(entry.row.paidAmount || 0), 0).toFixed(2)),
       pending_dues: Number((operationalDues.pending_total || 0).toFixed(2)),
       overdue_amount: Number((operationalDues.overdue_total || 0).toFixed(2)),
-      active_tenants: await prisma.tenant.count({ where: { owner_id: ownerId, hostel_id: hostelId, status: "ACTIVE" } }),
+      active_tenants: await prisma.tenants.count({ where: { owner_id: ownerId, hostel_id: hostelId, status: "ACTIVE" } }),
       pending_rows: pendingEntries.length,
       overdue_rows: overdueEntries.length,
     };
@@ -2687,7 +2687,7 @@ export class PaymentService {
   }
 
   private async getExistingPaidAmount(obligationId: string): Promise<number> {
-    const payments = await prisma.payment.findMany({
+    const payments = await prisma.payments.findMany({
       where: { obligation_id: obligationId },
       select: { amount_paid: true }
     });
@@ -2696,7 +2696,7 @@ export class PaymentService {
 
   private async getProviderForOwner(ownerId: string, hostelId: string) {
     const scopedHostelId = requireFinancialHostelId(hostelId, "payment provider resolution");
-    const hostel = await prisma.hostel.findUnique({
+    const hostel = await prisma.hostels.findUnique({
       where: { id: scopedHostelId },
       include: { owner: true },
     });
@@ -2742,7 +2742,7 @@ export class PaymentService {
   }
 
   async getTenantPaymentHistory(tenantId: string) {
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await prisma.tenants.findUnique({
       where: { id: tenantId },
       include: {
         allocations: {

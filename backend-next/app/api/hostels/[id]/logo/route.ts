@@ -12,7 +12,7 @@ const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024;
 
 async function assertOwnedHostel(hostelId: string, ownerId: string) {
-  const hostel = await prisma.hostel.findFirst({
+  const hostel = await prisma.hostels.findFirst({
     where: { id: hostelId, owner_id: ownerId, is_active: true },
     select: { id: true },
   });
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     });
     if (!uploadResponse?.url) throw new Error("Provider failed to return URL");
 
-    const updatedHostel = await prisma.hostel.update({
+    const updatedHostel = await prisma.hostels.update({
       where: { id: params.id },
       data: { logo_url: uploadResponse.url },
       select: { logo_url: true },
@@ -74,7 +74,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     const scope = resolveOwnerScope(session);
     await assertOwnedHostel(params.id, scope.owner_id);
 
-    await prisma.hostel.update({ where: { id: params.id }, data: { logo_url: null } });
+    await prisma.hostels.update({ where: { id: params.id }, data: { logo_url: null } });
     await eventLog.log("HOSTEL_POLICY_UPDATED", scope.owner_id, {
       hostel_id: params.id,
       changed_by: scope.actor_id,

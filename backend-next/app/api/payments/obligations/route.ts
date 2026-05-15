@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     if (isNaN(dueDateDate.getTime())) return apiError("due_date is not a valid date", "VALIDATION_ERROR", 400);
 
     // Verify tenant belongs to this owner
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await prisma.tenants.findUnique({
       where: { id: tenant_id },
       select: {
         owner_id: true,
@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
     // Create the obligation
     // Note: @@unique([allocation_id, rent_month, obligation_type]) prevents duplicate
     // maintenance charges for the same month+allocation. This is intentional.
-    const obligation = await prisma.rentObligation.create({
+    const obligation = await prisma.rent_obligations.create({
       data: {
         tenant_id,
         owner_id: ownerId,

@@ -106,8 +106,8 @@ export class ActivationAnalyticsService {
       rentGenCount,
       paymentCount,
     ] = await Promise.all([
-      prisma.hostel.count({ where: { is_active: true } }),
-      prisma.hostel.count({ where: { is_active: true, auto_rent_day: { gt: 0 } } }),
+      prisma.hostels.count({ where: { is_active: true } }),
+      prisma.hostels.count({ where: { is_active: true, auto_rent_day: { gt: 0 } } }),
       // Owners with at least 1 room
       prisma.$queryRaw<{count: bigint}[]>`
         SELECT COUNT(DISTINCT h.owner_id) AS count

@@ -199,11 +199,11 @@ export class AnalyticsService {
             AND hostel_id = ${hostelId}::uuid
           GROUP BY exit_reason ORDER BY count DESC LIMIT 5
         `,
-        prisma.tenant.count({
+        prisma.tenants.count({
           where: { owner_id: ownerId, hostel_id: hostelId, status: "LEFT", exit_date: { gte: start, lte: end } },
         }),
         // ─ was sequential after the block; now fully parallel ─
-        prisma.tenant.count({ where: { owner_id: ownerId, hostel_id: hostelId, status: "ACTIVE" } }),
+        prisma.tenants.count({ where: { owner_id: ownerId, hostel_id: hostelId, status: "ACTIVE" } }),
       ]);
 
     const dist = distRows[0];
@@ -397,11 +397,11 @@ export class AnalyticsService {
         JOIN tenants t ON t.id = ra.tenant_id
         WHERE t.owner_id = ${ownerId}::uuid AND ra.hostel_id = ${hostelId}::uuid
       `,
-      prisma.payment.aggregate({
+      prisma.payments.aggregate({
         where: { owner_id: ownerId, hostel_id: hostelId, payment_date: { gte: start, lte: end } },
         _sum: { amount_paid: true },
       }),
-      prisma.expense.aggregate({
+      prisma.expenses.aggregate({
         where: { owner_id: ownerId, hostel_id: hostelId, date: { gte: start, lte: end } },
         _sum: { amount: true },
       }),

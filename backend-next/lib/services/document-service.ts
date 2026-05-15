@@ -90,7 +90,7 @@ function buildSignedUrl(
 export class DocumentService {
   // ── Resolve tenant id from profile id ──────────────────────
   private async resolveTenantIdFromProfile(profileId: string) {
-    const t = await prisma.tenant.findUnique({
+    const t = await prisma.tenants.findUnique({
       where: { profile_id: profileId },
       select: { id: true },
     });
@@ -102,7 +102,7 @@ export class DocumentService {
     tenantId: string,
     requestingUser: { sub: string; role: string }
   ) {
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await prisma.tenants.findUnique({
       where: { id: tenantId },
       select: { profile_id: true, owner_id: true },
     });
@@ -158,7 +158,7 @@ export class DocumentService {
       select: { document_status: true },
     });
     const allApproved = kyc.length > 0 && kyc.every(d => d.document_status === "APPROVED");
-    await prisma.tenant.update({
+    await prisma.tenants.update({
       where: { id: tenantId },
       data:  { document_verified: allApproved },
     });
@@ -173,7 +173,7 @@ export class DocumentService {
     mimeType: string,
     requestingUser: { sub: string; role: string }
   ): Promise<{ photo_url: string }> {
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await prisma.tenants.findUnique({
       where: { id: tenantId },
       select: { owner_id: true, profile_id: true },
     });
@@ -198,7 +198,7 @@ export class DocumentService {
       tags:              ["PROFILE_PHOTO", tenantId],
     });
 
-    await prisma.tenant.update({
+    await prisma.tenants.update({
       where: { id: tenantId },
       data:  { photo_url: upload.url },
     });
@@ -223,7 +223,7 @@ export class DocumentService {
       );
     }
 
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await prisma.tenants.findUnique({
       where: { id: tenantId },
       select: { owner_id: true, profile_id: true },
     });
@@ -291,7 +291,7 @@ export class DocumentService {
     tenantId: string,
     requestingUser: { sub: string; role: string }
   ): Promise<{ docs: DocResponse[]; plan_gate: string | null }> {
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await prisma.tenants.findUnique({
       where: { id: tenantId },
       select: { profile_id: true, owner_id: true },
     });
@@ -322,7 +322,7 @@ export class DocumentService {
     let requireApproval = false;
     if (requestingUser.role === "TENANT" && tenant.owner_id) {
       // Phase 2: resolve from tenant's hostel if available
-      const tenantWithHostel = await prisma.tenant.findUnique({
+      const tenantWithHostel = await prisma.tenants.findUnique({
         where: { id: tenantId },
         select: { hostel_id: true },
       });
@@ -408,7 +408,7 @@ export class DocumentService {
       },
     });
 
-    await prisma.tenant.update({
+    await prisma.tenants.update({
       where: { id: doc.tenant_id }, data: { document_verified: false },
     });
 

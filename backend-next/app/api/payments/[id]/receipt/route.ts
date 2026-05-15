@@ -15,7 +15,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     }
 
     const { id: paymentId } = params;
-    const payment = await prisma.payment.findUnique({
+    const payment = await prisma.payments.findUnique({
       where: { id: paymentId },
       select: {
         id: true,
@@ -37,7 +37,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       if (payment.owner_id !== user.id && payment.tenant?.owner_id !== user.id) {
         return new NextResponse(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { 'Content-Type': 'application/json' } });
       }
-      const hostel = await prisma.hostel.findUnique({ where: { id: payment.hostel_id }, select: { owner_id: true } });
+      const hostel = await prisma.hostels.findUnique({ where: { id: payment.hostel_id }, select: { owner_id: true } });
       if (!hostel || hostel.owner_id !== user.id) {
         return new NextResponse(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { 'Content-Type': 'application/json' } });
       }

@@ -12,7 +12,7 @@ export interface LogEntry {
 export class ActivityService {
   async log(entry: LogEntry) {
     try {
-      await prisma.activityLog.create({
+      await prisma.activity_logs.create({
         data: {
           user_id: entry.userId,
           owner_id: entry.ownerId,

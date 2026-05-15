@@ -21,7 +21,7 @@ const rateLimitMap          = new Map<string, { count: number; windowStart: numb
 // ─── Automation plan access map ───────────────────────────────────────────────
 
 async function getEffectivePlan(ownerId: string) {
-  const sub = await prisma.ownerSubscription.findUnique({
+  const sub = await prisma.owner_subscriptions.findUnique({
     where: { owner_id: ownerId },
     include: {
       plan: {
@@ -221,7 +221,7 @@ export async function reconcileAddonCredits(ownerId: string): Promise<{
       where: { owner_id: ownerId },
       select: { reminders_remaining: true, reminders_used: true },
     }),
-    prisma.addonTransaction.aggregate({
+    prisma.addonTransactions.aggregate({
       where: { owner_id: ownerId },
       _sum: { credits_added: true },
     }),
@@ -271,7 +271,7 @@ const NEXT_PLAN_FOR_GATE: Record<string, string> = {
 
 export const planGate = {
   async assertTenantLimit(ownerId: string): Promise<void> {
-    const sub = await prisma.ownerSubscription.findUnique({
+    const sub = await prisma.owner_subscriptions.findUnique({
       where: { owner_id: ownerId },
       include: {
         plan: {
@@ -301,7 +301,7 @@ export const planGate = {
     // 0 = unlimited (BUSINESS / SCALE / custom)
     if (plan.tenant_limit === 0 || plan.is_custom) return;
 
-    const current = await prisma.tenant.count({
+    const current = await prisma.tenants.count({
       where: { owner_id: ownerId, status: { notIn: ["LEFT", "CANCELLED", "EXPIRED"] } },
     });
 
@@ -343,7 +343,7 @@ export const planGate = {
     if (!plan) throw new Error("PLAN_LIMIT: FORBIDDEN. No active subscription.");
     if (plan.hostel_limit === 0) return;
 
-    const current = await prisma.hostel.count({
+    const current = await prisma.hostels.count({
       where: { owner_id: ownerId, is_active: true },
     });
 
@@ -383,14 +383,14 @@ export const planGate = {
   },
 
   async updateUsage(ownerId: string): Promise<void> {
-    const tenants_count = await prisma.tenant.count({
+    const tenants_count = await prisma.tenants.count({
       where: { owner_id: ownerId, status: { notIn: ["LEFT", "CANCELLED", "EXPIRED"] } },
     });
-    const hostels_count = await prisma.hostel.count({
+    const hostels_count = await prisma.hostels.count({
       where: { owner_id: ownerId, is_active: true },
     });
 
-    await prisma.usageTracking.upsert({
+    await prisma.usage_tracking.upsert({
       where: { owner_id: ownerId },
       update: { tenants_count, hostels_count },
       create: { owner_id: ownerId, tenants_count, hostels_count },

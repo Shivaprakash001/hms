@@ -38,7 +38,7 @@ export interface PortfolioSummary {
 export class PortfolioService {
 
   async getPortfolioSummary(ownerId: string): Promise<PortfolioSummary> {
-    const hostels = await prisma.hostel.findMany({
+    const hostels = await prisma.hostels.findMany({
       where: { owner_id: ownerId, is_active: true },
       select: { id: true, name: true, city: true, is_active: true },
       orderBy: { name: "asc" },
@@ -102,7 +102,7 @@ export class PortfolioService {
    * Use this after bulk operations (e.g. mass rent generation) or from a cron.
    */
   async forceRefresh(ownerId: string): Promise<void> {
-    const hostels = await prisma.hostel.findMany({
+    const hostels = await prisma.hostels.findMany({
       where: { owner_id: ownerId, is_active: true },
       select: { id: true },
     });

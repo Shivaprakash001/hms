@@ -46,7 +46,7 @@ export class RateLimitService {
     const config = DEFAULT_CONFIGS[`${attemptType}_LOGIN`];
     const windowStart = new Date(Date.now() - config.windowMinutes * 60 * 1000);
 
-    const identifierAttempts = await prisma.loginAttempt.count({
+    const identifierAttempts = await prisma.login_attempts.count({
       where: {
         identifier,
         attempt_type: attemptType,
@@ -77,7 +77,7 @@ export class RateLimitService {
       const ipConfig = DEFAULT_CONFIGS.IP_ADDRESS;
       const ipWindowStart = new Date(Date.now() - ipConfig.windowMinutes * 60 * 1000);
       
-      const ipAttempts = await prisma.loginAttempt.count({
+      const ipAttempts = await prisma.login_attempts.count({
         where: {
           ip_address: ipAddress,
           created_at: { gte: ipWindowStart },
@@ -115,7 +115,7 @@ export class RateLimitService {
     failureReason?: string
   ): Promise<void> {
     try {
-      await prisma.loginAttempt.create({
+      await prisma.login_attempts.create({
         data: {
           identifier,
           attempt_type: attemptType,
@@ -148,7 +148,7 @@ export class RateLimitService {
     const cutoffDate = new Date(Date.now() - daysToKeep * 24 * 60 * 60 * 1000);
     
     try {
-      const result = await prisma.loginAttempt.deleteMany({
+      const result = await prisma.login_attempts.deleteMany({
         where: {
           created_at: { lt: cutoffDate },
         },
@@ -168,7 +168,7 @@ export class RateLimitService {
   ): Promise<number> {
     const windowStart = new Date(Date.now() - hoursBack * 60 * 60 * 1000);
     
-    return await prisma.loginAttempt.count({
+    return await prisma.login_attempts.count({
       where: {
         identifier,
         success: false,

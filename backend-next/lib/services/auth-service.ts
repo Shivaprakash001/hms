@@ -55,7 +55,7 @@ export class AuthService {
     let tenantProfileCompleted = null;
 
     if (profile.role === "TENANT") {
-      const tenant = await prisma.tenant.findUnique({
+      const tenant = await prisma.tenants.findUnique({
         where: { profile_id: profile.id },
         select: {
           id: true,
@@ -100,7 +100,7 @@ export class AuthService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30); // 30 days expiry
 
-    await prisma.refreshToken.create({
+    await prisma.refresh_tokens.create({
       data: {
         user_id: profile.id,
         token_hash: refreshTokenHash,
@@ -144,7 +144,7 @@ export class AuthService {
       throw new Error("PASSWORD_RESET_REQUIRED: You must reset your password on first login");
     }
 
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await prisma.tenants.findUnique({
       where: { profile_id: profile.id },
       select: {
         id: true,
@@ -178,7 +178,7 @@ export class AuthService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);
 
-    await prisma.refreshToken.create({
+    await prisma.refresh_tokens.create({
       data: {
         user_id: profile.id,
         token_hash: refreshTokenHash,
@@ -310,7 +310,7 @@ export class AuthService {
 
       // Every new owner gets a FREE subscription row immediately.
       // Without this, all plan enforcement throws "No subscription found".
-      await prisma.ownerSubscription.upsert({
+      await prisma.owner_subscriptions.upsert({
         where:  { owner_id: userId },
         update: {},
         create: {
@@ -358,7 +358,7 @@ export class AuthService {
   }
 
   async logout(token: string) {
-    await prisma.tokenBlacklist.create({
+    await prisma.token_blacklist.create({
       data: {
         token,
         expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000),
@@ -517,7 +517,7 @@ export class AuthService {
       });
 
       // Bootstrap FREE subscription for Google OAuth owners, same as email registration.
-      await prisma.ownerSubscription.upsert({
+      await prisma.owner_subscriptions.upsert({
         where: { owner_id: newProfileId },
         update: {},
         create: {
@@ -571,7 +571,7 @@ export class AuthService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);
 
-    await prisma.refreshToken.create({
+    await prisma.refresh_tokens.create({
       data: {
         user_id: profile.id,
         token_hash: refreshTokenHash,

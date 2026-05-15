@@ -29,13 +29,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (body.hostel_phone !== undefined) data.phone = body.hostel_phone;
     if (Object.keys(data).length === 0) throw new Error("VALIDATION: No valid hostel fields to update");
 
-    const updated = await prisma.hostel.updateMany({
+    const updated = await prisma.hostels.updateMany({
       where: { id: params.id, owner_id: scope.owner_id, is_active: true },
       data,
     });
     if (updated.count !== 1) throw new Error("FORBIDDEN: Hostel is not owned by the authenticated owner");
 
-    const hostel = await prisma.hostel.findFirst({
+    const hostel = await prisma.hostels.findFirst({
       where: { id: params.id, owner_id: scope.owner_id, is_active: true },
       select: {
         id: true,

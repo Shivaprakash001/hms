@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const hostels = await prisma.hostel.findMany({
+    const hostels = await prisma.hostels.findMany({
       where: { is_active: true },
       select: {
         id: true,
@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
       cutoffDate.setMonth(cutoffDate.getMonth() - retentionMonths);
 
       // Archive old activity logs
-      const deletedLogs = await prisma.activityLog.deleteMany({
+      const deletedLogs = await prisma.activity_logs.deleteMany({
         where: {
           owner_id: hostel.owner_id,
           timestamp: { lt: cutoffDate },
@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
       });
 
       // Archive old reminder logs (via obligations owned by this owner)
-      const oldObligations = await prisma.rentObligation.findMany({
+      const oldObligations = await prisma.rent_obligations.findMany({
         where: {
           owner_id: hostel.owner_id,
           rent_month: { lt: cutoffDate },
@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
       const oldObligationIds = oldObligations.map((o) => o.id);
       let deletedReminders = 0;
       if (oldObligationIds.length > 0) {
-        const result = await prisma.reminderLog.deleteMany({
+        const result = await prisma.reminder_logs.deleteMany({
           where: {
             obligation_id: { in: oldObligationIds },
           },

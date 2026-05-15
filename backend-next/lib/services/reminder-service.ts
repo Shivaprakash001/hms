@@ -50,7 +50,7 @@ export class ReminderService {
 
     // Canonical source: one hostel partition at a time. No background path may
     // sweep operational state without deterministic hostel scope.
-    const hostels = await prisma.hostel.findMany({
+    const hostels = await prisma.hostels.findMany({
       where: { is_active: true },
       select: { id: true, owner_id: true },
     });
@@ -62,7 +62,7 @@ export class ReminderService {
     const overdueOperational = overdueByHostel.flat();
     const obligationIds = overdueOperational.map((o) => o.obligation_id);
     const lastReminders = obligationIds.length > 0
-      ? await prisma.reminderLog.findMany({
+      ? await prisma.reminder_logs.findMany({
           where: { obligation_id: { in: obligationIds } },
           orderBy: { sent_at: "desc" },
           distinct: ["obligation_id"],
@@ -145,7 +145,7 @@ export class ReminderService {
 
           if (rules.length > 0 && effectiveOverdue > 0) {
             // Fetch all existing late fees for this allocation + month to calculate accumulated total
-            const existingLateFees = await prisma.rentObligation.findMany({
+            const existingLateFees = await prisma.rent_obligations.findMany({
               where: {
                 allocation_id: ob.allocation_id,
                 rent_month: ob.rent_month,
@@ -164,7 +164,7 @@ export class ReminderService {
 
               if (rule.type === 'per_day') {
                 // Per-day: create ONE obligation per day, idempotent via created_at date check
-                const existingDailyFee = await prisma.rentObligation.findFirst({
+                const existingDailyFee = await prisma.rent_obligations.findFirst({
                   where: {
                     allocation_id: ob.allocation_id,
                     rent_month: ob.rent_month,
@@ -186,7 +186,7 @@ export class ReminderService {
 
                   if (feeAmount > 0) {
                     try {
-                      await prisma.rentObligation.create({
+                      await prisma.rent_obligations.create({
                         data: {
                           tenant_id: ob.tenant_id,
                           allocation_id: ob.allocation_id,
@@ -235,7 +235,7 @@ export class ReminderService {
 
                   if (feeAmount > 0) {
                     try {
-                      await prisma.rentObligation.create({
+                      await prisma.rent_obligations.create({
                         data: {
                           tenant_id: ob.tenant_id,
                           allocation_id: ob.allocation_id,
@@ -321,7 +321,7 @@ export class ReminderService {
     tenant_name: string;
     channels?: NotificationDeliveryResult;
   }> {
-    const tenant = await prisma.tenant.findFirst({
+    const tenant = await prisma.tenants.findFirst({
       where: { id: tenantId, owner_id: ownerId, status: "ACTIVE" },
       select: { id: true, personal_email: true, owner_id: true, hostel_id: true, profile: { select: { name: true, phone: true } } },
     });
@@ -331,7 +331,7 @@ export class ReminderService {
       throw err;
     }
 
-    const obligation = await prisma.rentObligation.findFirst({
+    const obligation = await prisma.rent_obligations.findFirst({
       where: {
         tenant_id: tenantId,
         owner_id: ownerId,
@@ -407,7 +407,7 @@ export class ReminderService {
     // 1️⃣ In-App Notification (Always log an audit entry at minimum)
     if (canInApp) {
       result.in_app.attempted = true;
-      await prisma.reminderLog.create({
+      await prisma.reminder_logs.create({
         data: {
           obligation_id: obligation.id,
           tenant_id: obligation.tenant.id,

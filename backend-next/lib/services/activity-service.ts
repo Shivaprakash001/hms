@@ -21,7 +21,7 @@ export class ActivityService {
     if (end_date)   dateFilter.lte = new Date(end_date);
 
     const [payments, allocations] = await Promise.all([
-      prisma.payment.findMany({
+      prisma.payments.findMany({
         where: {
           owner_id: userId,
           hostel_id: hostelId,

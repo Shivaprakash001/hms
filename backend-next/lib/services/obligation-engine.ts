@@ -143,7 +143,7 @@ export class ObligationEngine {
     } = params;
 
     try {
-      const existing = await tx.rentObligation.findFirst({
+      const existing = await tx.rent_obligations.findFirst({
         where: {
           allocation_id: allocationId,
           rent_month: rentMonth,
@@ -157,7 +157,7 @@ export class ObligationEngine {
         return false;
       }
 
-      await tx.rentObligation.create({
+      await tx.rent_obligations.create({
         data: {
           tenant_id: tenantId,
           allocation_id: allocationId,

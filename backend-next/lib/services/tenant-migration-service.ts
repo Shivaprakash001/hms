@@ -39,7 +39,7 @@ export class TenantMigrationService {
       const normalizedPhone = data.phone;
       const normalizedEmail = data.email ? data.email.toLowerCase() : `tenant+${normalizedPhone}@system.local`;
 
-      const room = await prisma.room.findFirst({
+      const room = await prisma.rooms.findFirst({
         where: {
           hostel_id: hostelId,
           room_no: data.room_no,
@@ -126,7 +126,7 @@ export class TenantMigrationService {
           },
         });
 
-        const tenant = await tx.tenant.create({
+        const tenant = await tx.tenants.create({
           data: {
             id: crypto.randomUUID(),
             profile_id: profile.id,
@@ -254,7 +254,7 @@ export class TenantMigrationService {
       hostel_id: hostelId,
     });
 
-    await prisma.bulkImportBatch.update({
+    await prisma.bulk_import_batches.update({
       where: { id: batchId },
       data: {
         status: "IMPORTING",
@@ -283,7 +283,7 @@ export class TenantMigrationService {
       }
     }
 
-    await prisma.bulkImportBatch.update({
+    await prisma.bulk_import_batches.update({
       where: { id: batchId },
       data: {
         status: successCount > 0 ? "COMPLETED" : "FAILED",

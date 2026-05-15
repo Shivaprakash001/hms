@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const hostels = await prisma.hostel.findMany({
+    const hostels = await prisma.hostels.findMany({
       where: { is_active: true },
       select: { id: true, owner_id: true },
     });

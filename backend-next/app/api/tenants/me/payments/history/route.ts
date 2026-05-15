@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await prisma.tenants.findUnique({
       where: { profile_id: session.sub },
       select: { id: true }
     });

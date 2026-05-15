@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
 
     const profilePhotoFile = formData.get("profile_photo") as File | null;
 
-    const tenantOwner = await prisma.tenant.findUnique({
+    const tenantOwner = await prisma.tenants.findUnique({
       where: { profile_id: session.sub },
       select: { id: true, owner_id: true, hostel_id: true },
     });
@@ -137,7 +137,7 @@ export async function POST(req: NextRequest) {
       });
 
       // 2. Update Tenant Layer
-      const tenantUpdate = await tx.tenant.update({
+      const tenantUpdate = await tx.tenants.update({
         where: { profile_id: session.sub },
         data: {
           phone_1: normalizedPhone,

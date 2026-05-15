@@ -32,7 +32,7 @@ export class BillingService {
   }
 
   async getActivePlan(ownerId: string) {
-    const sub = await prisma.ownerSubscription.findUnique({
+    const sub = await prisma.owner_subscriptions.findUnique({
       where: { owner_id: ownerId },
       include: {
         plan: {
@@ -62,8 +62,8 @@ export class BillingService {
   async getOwnerUsage(ownerId: string) {
     const plan = await this.getActivePlan(ownerId);
     const [tenantsUsed, hostelsUsed] = await Promise.all([
-      prisma.tenant.count({ where: { owner_id: ownerId, status: { not: "LEFT" } } }),
-      prisma.hostel.count({ where: { owner_id: ownerId, is_active: true } }),
+      prisma.tenants.count({ where: { owner_id: ownerId, status: { not: "LEFT" } } }),
+      prisma.hostels.count({ where: { owner_id: ownerId, is_active: true } }),
     ]);
 
     return {
@@ -73,7 +73,7 @@ export class BillingService {
   }
 
   async getSubscriptionDetails(ownerId: string) {
-    const sub = await prisma.ownerSubscription.findUnique({
+    const sub = await prisma.owner_subscriptions.findUnique({
       where: { owner_id: ownerId },
       include: {
         plan: {

@@ -23,7 +23,7 @@ export async function POST(req: Request) {
     // Resolve tenant record (needed for both paths)
     let tenantId: string | undefined;
     if (user.role === "TENANT") {
-      const tenant = await prisma.tenant.findUnique({
+      const tenant = await prisma.tenants.findUnique({
         where: { profile_id: user.id },
         select: { id: true },
       });
@@ -40,7 +40,7 @@ export async function POST(req: Request) {
         return apiError("Only tenants can initiate advance payments", "FORBIDDEN", 403);
       }
       // Derive ownerId: tenant's owner
-      const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { owner_id: true } });
+      const tenant = await prisma.tenants.findUnique({ where: { id: tenantId }, select: { owner_id: true } });
       if (!tenant?.owner_id) return apiError("Tenant has no owner assigned", "NOT_FOUND", 404);
 
       logger.info("create_advance_intent_called", { userId: user.id, tenantId, amount });

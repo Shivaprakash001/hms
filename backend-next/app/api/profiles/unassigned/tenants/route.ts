@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const tenants = await prisma.tenant.findMany({
+    const tenants = await prisma.tenants.findMany({
       where: {
         owner_id: session.sub,
         status: { not: "LEFT" },

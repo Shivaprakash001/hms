@@ -36,7 +36,7 @@ async function resolveHostelForPayment(payment: any): Promise<{ hostel: any; pre
     throw new Error("HOSTEL_CONTEXT_MISMATCH: Payment hostel does not match obligation hostel");
   }
 
-  const hostel = await prisma.hostel.findUnique({
+  const hostel = await prisma.hostels.findUnique({
     where: { id: payment.hostel_id },
   });
 
@@ -57,7 +57,7 @@ const PLAN_UPGRADE_REQUIRED_ERROR = "PLAN_UPGRADE_REQUIRED";
 export class ReceiptService {
   private async canOwnerGenerateReceipts(ownerId: string): Promise<boolean> {
     if (!ownerId) return false;
-    const subscription = await prisma.ownerSubscription.findUnique({
+    const subscription = await prisma.owner_subscriptions.findUnique({
       where: { owner_id: ownerId },
       include: { plan: true },
     });
@@ -76,7 +76,7 @@ export class ReceiptService {
     const prefix = `${resolvedPrefs.receipt_prefix}-${year}-`;
     const yearStart = new Date(`${year}-01-01T00:00:00.000Z`);
     const yearEnd = new Date(`${year + 1}-01-01T00:00:00.000Z`);
-    const existingCount = await prisma.receipt.count({
+    const existingCount = await prisma.receipts.count({
       where: {
         owner_id: ownerId,
         hostel_id: hostelId,
@@ -93,12 +93,12 @@ export class ReceiptService {
    * IDEMPOTENT: will not duplicate if called multiple times for the same payment.
    */
   async createReceipt(paymentId: string): Promise<any> {
-    const existing = await prisma.receipt.findFirst({
+    const existing = await prisma.receipts.findFirst({
       where: { payment_id: paymentId },
     });
     if (existing) return existing;
 
-    const payment = await prisma.payment.findUnique({
+    const payment = await prisma.payments.findUnique({
       where: { id: paymentId },
       include: {
         tenant: { include: { profile: true } },
@@ -122,7 +122,7 @@ export class ReceiptService {
     for (let attempt = 0; attempt < RECEIPT_NUMBER_RETRY_LIMIT; attempt += 1) {
       const receiptNumber = await this.generateReceiptNumber(ownerId, paymentHostelId, attempt, prefs);
       try {
-        receipt = await prisma.receipt.create({
+        receipt = await prisma.receipts.create({
           data: {
             receipt_number: receiptNumber,
             payment_id: payment.id,
@@ -142,7 +142,7 @@ export class ReceiptService {
         if (error?.code === "P2002") {
           const target = Array.isArray(error?.meta?.target) ? error.meta.target.join(",") : String(error?.meta?.target || "");
           if (target.includes("payment_id")) {
-            const duplicate = await prisma.receipt.findFirst({ where: { payment_id: paymentId } });
+            const duplicate = await prisma.receipts.findFirst({ where: { payment_id: paymentId } });
             if (duplicate) {
               receipt = duplicate;
               break;
@@ -183,7 +183,7 @@ export class ReceiptService {
 
     // ── Single fetch path ──
     // Attempt to load existing receipt with all needed relations in one query.
-    let receipt = await prisma.receipt.findFirst({
+    let receipt = await prisma.receipts.findFirst({
       where: { payment_id: paymentId },
       include: {
         payment: { include: { obligation: true } },
@@ -194,7 +194,7 @@ export class ReceiptService {
     if (!receipt && autoCreate) {
       // Create record, then load with relations in a single subsequent fetch.
       await this.createReceipt(paymentId);
-      receipt = await prisma.receipt.findFirst({
+      receipt = await prisma.receipts.findFirst({
         where: { payment_id: paymentId },
         include: {
           payment: { include: { obligation: true } },
@@ -233,7 +233,7 @@ export class ReceiptService {
       // Wait up to 3 seconds to see if they finish and cache it.
       for (let i = 0; i < 6; i++) {
         await sleep(500);
-        const fresh = await prisma.receipt.findUnique({
+        const fresh = await prisma.receipts.findUnique({
           where: { id: receipt.id },
           select: { receipt_pdf_url: true, receipt_template_version: true },
         });
@@ -257,7 +257,7 @@ export class ReceiptService {
     if (receipt.payment?.hostel_id && receipt.payment.hostel_id !== receipt.hostel_id) {
       throw new Error("HOSTEL_CONTEXT_MISMATCH: Receipt hostel does not match payment hostel");
     }
-    hostel = await prisma.hostel.findUnique({ where: { id: receipt.hostel_id } });
+    hostel = await prisma.hostels.findUnique({ where: { id: receipt.hostel_id } });
     if (!hostel) throw new Error("HOSTEL_NOT_FOUND: Receipt hostel not found");
     prefs = resolvePreferences(hostel);
 
@@ -342,7 +342,7 @@ export class ReceiptService {
         { payment_id: paymentId, slow_ms: 5_000 }
       );
       if (uploadRes.url) {
-        await prisma.receipt.update({
+        await prisma.receipts.update({
           where: { id: receipt.id },
           data: {
             receipt_pdf_url:          uploadRes.url,

@@ -32,7 +32,7 @@ const scopeWhere = (scope: RentGenerationLedgerScope) => ({
 
 export class RentGenerationLedgerService {
   async hasCompleted(ownerId: string, hostelId: string, rentMonth: Date, obligationType: string) {
-    const ledger = await prisma.rentGenerationLedger.findUnique({
+    const ledger = await prisma.rent_generation_ledgers.findUnique({
       where: scopeWhere({ ownerId, hostelId, rentMonth, obligationType }),
       select: { status: true },
     });
@@ -54,14 +54,14 @@ export class RentGenerationLedgerService {
     };
 
     try {
-      return await prisma.rentGenerationLedger.create({ data });
+      return await prisma.rent_generation_ledgers.create({ data });
     } catch (err: any) {
       if (err?.code !== "P2002") throw err;
-      const existing = await prisma.rentGenerationLedger.findUnique({
+      const existing = await prisma.rent_generation_ledgers.findUnique({
         where: scopeWhere(input),
       });
       if (existing?.status === "COMPLETED") return existing;
-      return prisma.rentGenerationLedger.update({
+      return prisma.rent_generation_ledgers.update({
         where: scopeWhere(input),
         data,
       });
@@ -69,7 +69,7 @@ export class RentGenerationLedgerService {
   }
 
   async complete(input: FinishInput) {
-    return prisma.rentGenerationLedger.update({
+    return prisma.rent_generation_ledgers.update({
       where: scopeWhere(input),
       data: {
         status: "COMPLETED",
@@ -82,7 +82,7 @@ export class RentGenerationLedgerService {
   }
 
   async fail(input: FinishInput) {
-    return prisma.rentGenerationLedger.update({
+    return prisma.rent_generation_ledgers.update({
       where: scopeWhere(input),
       data: {
         status: "FAILED",
@@ -95,19 +95,19 @@ export class RentGenerationLedgerService {
   }
 
   async skip(input: FinishInput) {
-    const existing = await prisma.rentGenerationLedger.findUnique({
+    const existing = await prisma.rent_generation_ledgers.findUnique({
       where: scopeWhere(input),
       select: { status: true, skipped_count: true },
     });
 
     if (existing?.status === "COMPLETED") {
-      return prisma.rentGenerationLedger.update({
+      return prisma.rent_generation_ledgers.update({
         where: scopeWhere(input),
         data: { skipped_count: { increment: input.skippedCount ?? 1 } },
       });
     }
 
-    return prisma.rentGenerationLedger.upsert({
+    return prisma.rent_generation_ledgers.upsert({
       where: scopeWhere(input),
       create: {
         owner_id: input.ownerId,

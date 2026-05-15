@@ -69,7 +69,7 @@ export class TenantScoreService {
   private readonly scoreStaleMs = 12 * 60 * 60 * 1000;
 
   async getTenantScoreSummary(profileId: string) {
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await prisma.tenants.findUnique({
       where: { profile_id: profileId },
       select: {
         id: true,
@@ -92,7 +92,7 @@ export class TenantScoreService {
       await tenantAnalyticsService.calculateTenantScore(tenant.id);
     }
 
-    const refreshed = await prisma.tenantBehaviorScore.findUnique({
+    const refreshed = await prisma.tenant_behavior_scores.findUnique({
       where: { tenant_id: tenant.id },
       select: {
         score: true,
@@ -114,7 +114,7 @@ export class TenantScoreService {
     for (let i = 2; i >= 0; i--) {
       const { start, end } = monthRange(i);
       const [monthlyObligations, monthlyReminders] = await Promise.all([
-        prisma.rentObligation.findMany({
+        prisma.rent_obligations.findMany({
           where: {
             tenant_id: tenant.id,
             due_date: { gte: start, lte: end },
@@ -128,7 +128,7 @@ export class TenantScoreService {
             },
           },
         }),
-        prisma.reminderLog.count({
+        prisma.reminder_logs.count({
           where: { tenant_id: tenant.id, sent_at: { gte: start, lte: end } },
         }),
       ]);

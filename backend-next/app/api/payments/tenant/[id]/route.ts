@@ -14,12 +14,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const tenantId = params.id;
 
     if (session.role === "TENANT") {
-      const me = await prisma.tenant.findUnique({ where: { profile_id: session.sub }, select: { id: true } });
+      const me = await prisma.tenants.findUnique({ where: { profile_id: session.sub }, select: { id: true } });
       if (!me || me.id !== tenantId) return apiError("Forbidden", "FORBIDDEN", 403);
     }
 
     if (session.role === "OWNER") {
-      const target = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { owner_id: true } });
+      const target = await prisma.tenants.findUnique({ where: { id: tenantId }, select: { owner_id: true } });
       if (!target || target.owner_id !== session.sub) return apiError("Forbidden", "FORBIDDEN", 403);
     }
 

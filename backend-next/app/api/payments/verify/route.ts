@@ -20,7 +20,7 @@ export async function POST(req: Request) {
     // user.id is profile_id, but payment attempts store tenant_id (tenants table PK).
     let tenantId: string | undefined;
     if (user.role === "TENANT") {
-      const tenant = await prisma.tenant.findUnique({
+      const tenant = await prisma.tenants.findUnique({
         where: { profile_id: user.id },
         select: { id: true },
       });

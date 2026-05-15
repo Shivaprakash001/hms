@@ -20,7 +20,7 @@ export async function GET(
   if (!session) return apiError("Unauthorized", "UNAUTHORIZED", 401);
 
   try {
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await prisma.tenants.findUnique({
       where:  { id: params.id },
       select: { profile_id: true, owner_id: true },
     });

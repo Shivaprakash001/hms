@@ -62,7 +62,7 @@ export async function resolveTenantScope(session: AuthPayload | null): Promise<T
   if (!session) throw unauthorized("Authentication required");
   if (session.role !== "TENANT") throw forbidden("Tenant access required");
 
-  const tenant = await prisma.tenant.findUnique({
+  const tenant = await prisma.tenants.findUnique({
     where: { profile_id: session.sub },
     select: { id: true, owner_id: true, hostel_id: true },
   });

@@ -27,7 +27,7 @@ export async function GET(req: Request) {
 
     let tenantId: string | undefined;
     if (user.role === "TENANT") {
-      const tenant = await prisma.tenant.findUnique({
+      const tenant = await prisma.tenants.findUnique({
         where: { profile_id: user.id },
         select: { id: true },
       });
@@ -38,9 +38,9 @@ export async function GET(req: Request) {
     } else if (user.role === "OWNER") {
       const hostelId = searchParams.get("hostelId");
       if (!hostelId) return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
-      const hostel = await prisma.hostel.findUnique({ where: { id: hostelId }, select: { owner_id: true } });
+      const hostel = await prisma.hostels.findUnique({ where: { id: hostelId }, select: { owner_id: true } });
       if (!hostel || hostel.owner_id !== user.id) return apiError("Forbidden", "FORBIDDEN", 403);
-      const count = await prisma.rentObligation.count({
+      const count = await prisma.rent_obligations.count({
         where: { id: { in: obligationIds }, owner_id: user.id, hostel_id: hostelId },
       });
       if (count !== obligationIds.length) {

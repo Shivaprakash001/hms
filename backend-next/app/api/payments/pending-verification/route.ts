@@ -26,7 +26,7 @@ export async function GET(req: Request) {
     const hostelId = searchParams.get("hostelId");
     if (!hostelId) return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
     if (user.role === "OWNER") {
-      const hostel = await prisma.hostel.findUnique({ where: { id: hostelId }, select: { owner_id: true } });
+      const hostel = await prisma.hostels.findUnique({ where: { id: hostelId }, select: { owner_id: true } });
       if (!hostel || hostel.owner_id !== user.id) return apiError("Forbidden", "FORBIDDEN", 403);
     }
 

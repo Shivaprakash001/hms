@@ -63,7 +63,7 @@ export class TenantTransferService {
     // ── Pre-flight validation (outside transaction for fast-fail) ────────────
 
     // 1. Verify tenant exists and has an active allocation
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await prisma.tenants.findUnique({
       where: { id: tenantId },
       include: {
         allocations: {
@@ -86,7 +86,7 @@ export class TenantTransferService {
     const fromHostelId = currentAllocation.room.hostel_id;
 
     // 2. Verify target room exists and belongs to the same owner
-    const targetRoom = await prisma.room.findUnique({
+    const targetRoom = await prisma.rooms.findUnique({
       where: { id: targetRoomId },
       include: {
         hostel: { select: { id: true, owner_id: true, name: true, is_active: true } },
@@ -143,13 +143,13 @@ export class TenantTransferService {
       });
 
       // C. Update Tenant.hostel_id to new operational hostel (mutable field)
-      await tx.tenant.update({
+      await tx.tenants.update({
         where: { id: tenantId },
         data: { hostel_id: toHostelId },
       });
 
       // D. Create immutable audit trail
-      const transferLog = await tx.tenantTransferLog.create({
+      const transferLog = await tx.tenant_transfer_logs.create({
         data: {
           tenant_id: tenantId,
           from_hostel_id: fromHostelId,
@@ -212,7 +212,7 @@ export class TenantTransferService {
    * Used by tenant detail view to show hostel movement history.
    */
   async getTransferHistory(tenantId: string) {
-    return prisma.tenantTransferLog.findMany({
+    return prisma.tenant_transfer_logs.findMany({
       where: { tenant_id: tenantId },
       orderBy: { transferred_at: "desc" },
     });
@@ -235,7 +235,7 @@ export class TenantTransferService {
       ];
     }
 
-    return prisma.tenantTransferLog.findMany({
+    return prisma.tenant_transfer_logs.findMany({
       where,
       orderBy: { transferred_at: "desc" },
     });

@@ -59,7 +59,7 @@ export async function POST(req: Request) {
     // ─── Look up tenant ID ───
     let tenantId: string | undefined;
     if (user.role === "TENANT") {
-      const tenant = await prisma.tenant.findUnique({
+      const tenant = await prisma.tenants.findUnique({
         where: { profile_id: user.id },
         select: { id: true },
       });

@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 1. Validate plan exists and is active
-    const plan = await prisma.plan.findUnique({
+    const plan = await prisma.plans.findUnique({
       where: { id: plan_id },
         select: { id: true, name: true, price_inr: true }
       });
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
       }
 
       // 2. Check if owner already has this plan active
-      const currentSub = await prisma.ownerSubscription.findUnique({
+      const currentSub = await prisma.owner_subscriptions.findUnique({
         where: { owner_id: session.sub },
         include: { plan: { select: { id: true } } }
       });

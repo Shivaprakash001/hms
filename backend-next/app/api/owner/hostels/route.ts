@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const hostels = await prisma.hostel.findMany({
+    const hostels = await prisma.hostels.findMany({
       where: { owner_id: session.sub, is_active: true },
       orderBy: { created_at: "asc" },
       select: {
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
     const name = body.name || body.hostel_name || "New Hostel";
     const phone = body.phone || body.hostel_phone || "";
     
-    await prisma.hostel.create({
+    await prisma.hostels.create({
       data: {
         owner_id: session.sub,
         name,

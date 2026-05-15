@@ -52,7 +52,7 @@ export class RoomAllocationService {
         }
 
         // 2. Check room capacity
-        const room = await tx.room.findUnique({
+        const room = await tx.rooms.findUnique({
           where: { id: roomId },
           include: {
             allocations: {
@@ -79,7 +79,7 @@ export class RoomAllocationService {
         });
 
         // 4. Update Tenant.hostel_id to reflect current operational hostel
-        await tx.tenant.update({
+        await tx.tenants.update({
           where: { id: tenantId },
           data: { hostel_id: room.hostel_id },
         });
@@ -151,7 +151,7 @@ export class RoomAllocationService {
         });
 
         // 3. Check new room capacity
-        const room = await tx.room.findUnique({
+        const room = await tx.rooms.findUnique({
           where: { id: newRoomId },
           include: {
             allocations: {
@@ -178,7 +178,7 @@ export class RoomAllocationService {
         });
 
         // 5. Update Tenant.hostel_id to new operational hostel
-        await tx.tenant.update({
+        await tx.tenants.update({
           where: { id: tenantId },
           data: { hostel_id: room.hostel_id },
         });

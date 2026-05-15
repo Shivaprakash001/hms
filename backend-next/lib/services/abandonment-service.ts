@@ -121,7 +121,7 @@ export class AbandonmentService {
         if (!rule) { skipped++; continue; }
 
         // Deduplication: check if this nudge was already sent within TTL
-        const recentNudge = await prisma.notification.findFirst({
+        const recentNudge = await prisma.notifications.findFirst({
           where: {
             profile_id: ownerRow.owner_id,
             type:       rule.nudge_type,
@@ -133,7 +133,7 @@ export class AbandonmentService {
         if (recentNudge) { skipped++; continue; }
 
         // Write in-app notification
-        await prisma.notification.create({
+        await prisma.notifications.create({
           data: {
             profile_id: ownerRow.owner_id,
             title:      rule.title,
@@ -198,13 +198,13 @@ export class AbandonmentService {
     if (!milestone) return;
 
     // Idempotent: only send once per milestone type per owner
-    const already = await prisma.notification.findFirst({
+    const already = await prisma.notifications.findFirst({
       where: { profile_id: ownerId, type: milestone.type },
       select: { id: true },
     });
     if (already) return;
 
-    await prisma.notification.create({
+    await prisma.notifications.create({
       data: {
         profile_id: ownerId,
         title:      milestone.title,

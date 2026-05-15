@@ -419,7 +419,7 @@ export class BulkImportValidationService {
   }
 
   private async getHostelRooms(hostelId: string): Promise<Array<{ id: string; room_no: string; is_active: boolean; capacity: number; base_rent: number | null; _count: { allocations: number } }>> {
-    const hostelRooms = await prisma.room.findMany({
+    const hostelRooms = await prisma.rooms.findMany({
       where: { hostel_id: hostelId },
       select: {
         id: true,

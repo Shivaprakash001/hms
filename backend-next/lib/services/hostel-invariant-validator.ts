@@ -70,7 +70,7 @@ export class HostelInvariantValidator {
     // Persist all violations to the audit table
     const allViolations: InvariantViolation[] = checks.flatMap((c) => c.sample_violations);
     if (allViolations.length > 0) {
-      await prisma.hostelInvariantCheck.createMany({
+      await prisma.hostel_invariant_checks.createMany({
         data: allViolations.map((v) => ({
           check_type: v.check_type,
           entity_type: v.entity_type,
@@ -129,7 +129,7 @@ export class HostelInvariantValidator {
       LIMIT 100
     `;
 
-    const totalChecked = await prisma.payment.count();
+    const totalChecked = await prisma.payments.count();
 
     return {
       name: "payment.hostel_id === obligation.hostel_id",
@@ -165,7 +165,7 @@ export class HostelInvariantValidator {
       LIMIT 100
     `;
 
-    const totalChecked = await prisma.receipt.count();
+    const totalChecked = await prisma.receipts.count();
 
     return {
       name: "receipt.hostel_id === payment.hostel_id",
@@ -201,7 +201,7 @@ export class HostelInvariantValidator {
       LIMIT 100
     `;
 
-    const totalChecked = await prisma.reminderLog.count();
+    const totalChecked = await prisma.reminder_logs.count();
 
     return {
       name: "reminder.hostel_id === obligation.hostel_id",
@@ -273,7 +273,7 @@ export class HostelInvariantValidator {
       LIMIT 100
     `;
 
-    const totalChecked = await prisma.tenant.count({
+    const totalChecked = await prisma.tenants.count({
       where: { status: "ACTIVE" },
     });
 

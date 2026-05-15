@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
 
     if (refreshToken) {
       const tokenHash = hashToken(refreshToken);
-      await prisma.refreshToken.deleteMany({
+      await prisma.refresh_tokens.deleteMany({
         where: { token_hash: tokenHash }
       });
     }

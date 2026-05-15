@@ -655,7 +655,7 @@ function policyToStorage(policy: HostelPolicy, existingConfig: Record<string, an
 
 export class HostelPolicyService {
   async getHostelPolicy(hostelId: string, ownerId?: string): Promise<HostelPolicyResponse> {
-    const hostel = await prisma.hostel.findFirst({
+    const hostel = await prisma.hostels.findFirst({
       where: {
         id: hostelId,
         is_active: true,
@@ -705,7 +705,7 @@ export class HostelPolicyService {
   }
 
   async updateHostelPolicy(hostelId: string, ownerId: string, patch: Record<string, any>, changedBy: string): Promise<HostelPolicyResponse> {
-    const hostel = await prisma.hostel.findFirst({
+    const hostel = await prisma.hostels.findFirst({
       where: { id: hostelId, owner_id: ownerId, is_active: true },
       select: {
         id: true,
@@ -737,7 +737,7 @@ export class HostelPolicyService {
     const preferencesConfig = policyToStorage(next, existingConfig);
     const compatibility = toCompatibilityPreferences(next);
 
-    await prisma.hostel.update({
+    await prisma.hostels.update({
       where: { id: hostel.id },
       data: {
         currency: next.operations.currency,

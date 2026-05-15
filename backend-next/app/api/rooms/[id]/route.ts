@@ -24,7 +24,7 @@ export async function GET(
 
   try {
     const scope = resolveOwnerScope(session);
-    const room = await prisma.room.findFirst({
+    const room = await prisma.rooms.findFirst({
       where: { id: params.id, hostel: { owner_id: scope.owner_id } },
     });
 
@@ -93,7 +93,7 @@ export async function DELETE(
   try {
     const scope = resolveOwnerScope(session);
     // Verify ownership
-    const existing = await prisma.room.findFirst({
+    const existing = await prisma.rooms.findFirst({
       where: { id: params.id, hostel: { owner_id: scope.owner_id } },
     });
     if (!existing) return apiError("Room not found", "NOT_FOUND", 404);
@@ -106,7 +106,7 @@ export async function DELETE(
       return apiError("Cannot delete room with active tenants", "VALIDATION_ERROR", 400);
     }
 
-    await prisma.room.delete({ where: { id: params.id } });
+    await prisma.rooms.delete({ where: { id: params.id } });
     return new Response(null, { status: 204 });
   } catch (error: any) {
     return apiError(error.message || "Failed to delete room");

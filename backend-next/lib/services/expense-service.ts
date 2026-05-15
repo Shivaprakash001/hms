@@ -3,7 +3,7 @@ import { eventSystem } from "../events";
 
 export class ExpenseService {
   async getAllExpenses(ownerId: string, hostelId: string) {
-    return prisma.expense.findMany({
+    return prisma.expenses.findMany({
       where: {
         owner_id: ownerId,
         hostel_id: hostelId,
@@ -37,7 +37,7 @@ export class ExpenseService {
       throw new Error("VALIDATION: Invalid date provided");
     }
 
-    const expense = await prisma.expense.create({
+    const expense = await prisma.expenses.create({
       data: {
         owner_id: data.owner_id,
         title: data.title,
@@ -70,14 +70,14 @@ export class ExpenseService {
       if (!isNaN(d.getTime())) updateData.date = d;
     }
 
-    return prisma.expense.update({
+    return prisma.expenses.update({
       where: { id: expenseId, owner_id: ownerId },
       data: updateData
     });
   }
 
   async deleteExpense(expenseId: string, ownerId: string) {
-    return prisma.expense.delete({
+    return prisma.expenses.delete({
       where: { id: expenseId, owner_id: ownerId }
     });
   }

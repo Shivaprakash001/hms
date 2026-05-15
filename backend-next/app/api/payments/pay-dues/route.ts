@@ -46,7 +46,7 @@ export async function POST(req: Request) {
 
     // Tenants pay their own dues
     if (user.role === "TENANT") {
-      const tenant = await prisma.tenant.findUnique({
+      const tenant = await prisma.tenants.findUnique({
         where: { profile_id: user.id },
         select: { id: true, hostel_id: true },
       });
@@ -60,7 +60,7 @@ export async function POST(req: Request) {
       if (!tenantId) {
         return apiError("tenant_id is required", "VALIDATION_ERROR", 400);
       }
-      const tenant = await prisma.tenant.findUnique({
+      const tenant = await prisma.tenants.findUnique({
         where: { id: tenantId },
         select: { owner_id: true, hostel_id: true },
       });

@@ -92,20 +92,20 @@ export class PropertyService {
 
     const hostelId = data.hostel_id || data.hostelId;
     if (hostelId) {
-      const updated = await prisma.hostel.updateMany({
+      const updated = await prisma.hostels.updateMany({
         where: { id: hostelId, owner_id: userId, is_active: true },
         data: mapped,
       });
       if (updated.count !== 1) throw new Error("FORBIDDEN: Hostel is not owned by the authenticated owner");
     } else {
-      const existingCount = await prisma.hostel.count({ where: { owner_id: userId, is_active: true } });
+      const existingCount = await prisma.hostels.count({ where: { owner_id: userId, is_active: true } });
       if (existingCount > 0) {
         throw new Error("VALIDATION: hostel_id is required for existing hostel updates");
       }
       // Enforcement: creating a new hostel requires active subscription and available hostel slots
       await planEnforcementService.assertSubscriptionActive(userId);
       await planEnforcementService.assertHostelLimit(userId);
-      await prisma.hostel.create({
+      await prisma.hostels.create({
         data: {
           owner_id: userId,
           name: mapped.name || "My Hostel",
@@ -215,7 +215,7 @@ export class PropertyService {
   }
 
   async getFloorsWithRooms(ownerId: string, hostelId: string) {
-    const rooms = await prisma.room.findMany({
+    const rooms = await prisma.rooms.findMany({
       where: {
         hostel: { owner_id: ownerId },
         is_active: true,
@@ -282,7 +282,7 @@ export class PropertyService {
   }
 
   async getRoomOverview(roomId: string, ownerId: string) {
-    const room = await prisma.room.findFirst({
+    const room = await prisma.rooms.findFirst({
       where: { id: roomId, hostel: { owner_id: ownerId } },
       include: {
         allocations: {
@@ -370,7 +370,7 @@ export class PropertyService {
   }
   
   async updateRoom(roomId: string, data: any, ownerId: string) {
-    const room = await prisma.room.findFirst({
+    const room = await prisma.rooms.findFirst({
       where: {
         id: roomId,
         hostel: { owner_id: ownerId }
@@ -397,7 +397,7 @@ export class PropertyService {
     }
 
     if (data.room_no !== undefined && data.room_no !== room.room_no) {
-      const duplicate = await prisma.room.findFirst({
+      const duplicate = await prisma.rooms.findFirst({
         where: { hostel_id: room.hostel_id, room_no: data.room_no }
       });
       if (duplicate) throw new Error(`VALIDATION: Room ${data.room_no} already exists`);
@@ -416,12 +416,12 @@ export class PropertyService {
     const logEntry = `Fields updated: ${Object.keys(updateData).join(", ")}`;
 
     return await prisma.$transaction(async (tx) => {
-      const updated = await tx.room.update({
+      const updated = await tx.rooms.update({
         where: { id: roomId },
         data: updateData
       });
 
-      await tx.roomActivityLog.create({
+      await tx.room_activity_logs.create({
         data: {
           room_id: roomId,
           owner_id: ownerId,

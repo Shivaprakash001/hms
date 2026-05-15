@@ -24,7 +24,7 @@ export async function GET(
   try {
     const batchId = params.batch_id;
 
-    const batch = await prisma.bulkImportBatch.findFirst({
+    const batch = await prisma.bulk_import_batches.findFirst({
       where: {
         id: batchId,
         owner_id: session.sub,
@@ -105,7 +105,7 @@ export async function POST(
   try {
     const batchId = params.batch_id;
 
-    const batch = await prisma.bulkImportBatch.findFirst({
+    const batch = await prisma.bulk_import_batches.findFirst({
       where: {
         id: batchId,
         owner_id: session.sub,
@@ -126,14 +126,14 @@ export async function POST(
 
     await planEnforcementService.assertSubscriptionActive(session.sub);
 
-    const currentTenantCount = await prisma.tenant.count({
+    const currentTenantCount = await prisma.tenants.count({
       where: {
         owner_id: session.sub,
         status: "ACTIVE",
       },
     });
 
-    const subscription = await prisma.ownerSubscription.findUnique({
+    const subscription = await prisma.owner_subscriptions.findUnique({
       where: { owner_id: session.sub },
       include: { plan: true },
     });

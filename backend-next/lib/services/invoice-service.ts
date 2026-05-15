@@ -38,7 +38,7 @@ function drawRect(page: PDFPage, x: number, y: number, w: number, h: number, col
 export class InvoiceService {
   async generateInvoicePDF(paymentId: string) {
     // ── 1. DATA FETCH ──
-    let receipt = await prisma.receipt.findFirst({
+    let receipt = await prisma.receipts.findFirst({
       where: { payment_id: paymentId },
       include: {
         payment: true,
@@ -47,7 +47,7 @@ export class InvoiceService {
     });
 
     if (!receipt) {
-      const payment = await prisma.payment.findUnique({
+      const payment = await prisma.payments.findUnique({
         where: { id: paymentId },
         include: { obligation: true, tenant: { include: { profile: true } } }
       });
@@ -62,7 +62,7 @@ export class InvoiceService {
         throw new Error("HOSTEL_CONTEXT_MISMATCH: Payment hostel does not match obligation hostel");
       }
 
-      receipt = await prisma.receipt.create({
+      receipt = await prisma.receipts.create({
         data: {
           payment_id: payment.id,
           tenant_id: payment.tenant_id,
@@ -101,7 +101,7 @@ export class InvoiceService {
       // Another request is currently rendering this invoice.
       for (let i = 0; i < 6; i++) {
         await sleep(500);
-        const fresh = await prisma.receipt.findUnique({
+        const fresh = await prisma.receipts.findUnique({
           where: { id: receipt.id },
           select: { invoice_pdf_url: true, invoice_template_version: true },
         });
@@ -121,7 +121,7 @@ export class InvoiceService {
       if ((receipt as any).payment?.hostel_id && (receipt as any).payment.hostel_id !== hostelIdFromReceipt) {
         throw new Error("HOSTEL_CONTEXT_MISMATCH: Receipt hostel does not match payment hostel");
       }
-      const hostel = await prisma.hostel.findUnique({ where: { id: hostelIdFromReceipt } });
+      const hostel = await prisma.hostels.findUnique({ where: { id: hostelIdFromReceipt } });
       const prefs = resolvePreferences(hostel);
       if (!hostel) throw new Error("Hostel details not found");
 
@@ -351,7 +351,7 @@ export class InvoiceService {
 
     if (!uploadRes.url) throw new Error("Failed to upload PDF");
 
-    await prisma.receipt.update({
+    await prisma.receipts.update({
       where: { id: receipt.id },
       data: {
         invoice_pdf_url:          uploadRes.url,

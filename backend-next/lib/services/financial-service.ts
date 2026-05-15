@@ -491,7 +491,7 @@ export class FinancialService {
     late_fees_due: number;
     obligation_count: number;
   }> {
-    const obligations = await prisma.rentObligation.findMany({
+    const obligations = await prisma.rent_obligations.findMany({
       where: {
         tenant_id: tenantId,
         ...(ownerId ? { owner_id: ownerId } : {}),

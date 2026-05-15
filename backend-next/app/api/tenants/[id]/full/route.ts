@@ -11,7 +11,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
     const { id } = params;
 
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await prisma.tenants.findUnique({
       where: {
         id: id,
         owner_id: session.sub, // Enforce multi-tenant boundary!

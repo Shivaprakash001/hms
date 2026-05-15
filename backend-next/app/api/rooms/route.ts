@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Flat list
-    const rooms = await prisma.room.findMany({
+    const rooms = await prisma.rooms.findMany({
       where: scopedRoomWhere({ owner_id: scope.owner_id, hostel_id: hostelId }, { is_active: true }),
       orderBy: { room_no: "asc" },
     });
@@ -71,14 +71,14 @@ export async function POST(req: NextRequest) {
     }
 
     // Check for duplicate room number
-    const existing = await prisma.room.findFirst({
+    const existing = await prisma.rooms.findFirst({
       where: { hostel_id: hostel.id, room_no: validated.data.room_no, is_active: true },
     });
     if (existing) {
       return apiError(`Room ${validated.data.room_no} already exists`, "ALREADY_EXISTS", 409);
     }
 
-    const room = await prisma.room.create({
+    const room = await prisma.rooms.create({
       data: {
         hostel_id: hostel.id,
         room_no: validated.data.room_no,

@@ -48,7 +48,7 @@ export function scopedExpenseWhere(scope: OperationalScope, extra: Record<string
 
 export async function assertHostelBelongsToOwner(ownerId: string, hostelId?: string | null) {
   if (!hostelId) return null;
-  const hostel = await prisma.hostel.findFirst({
+  const hostel = await prisma.hostels.findFirst({
     where: { id: hostelId, owner_id: ownerId, is_active: true },
     select: { id: true, owner_id: true },
   });
@@ -71,7 +71,7 @@ export async function requireHostelBelongsToOwner(ownerId: string, hostelId?: st
 }
 
 export async function assertTenantBelongsToOwner(tenantId: string, ownerId: string) {
-  const tenant = await prisma.tenant.findFirst({
+  const tenant = await prisma.tenants.findFirst({
     where: { id: tenantId, owner_id: ownerId },
     select: { id: true, owner_id: true, hostel_id: true },
   });

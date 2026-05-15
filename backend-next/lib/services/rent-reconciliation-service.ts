@@ -142,7 +142,7 @@ export class RentReconciliationService {
     const allAllocationIds = activeAllocations.map((a) => a.id);
 
     // We need all obligation IDs for this month — including orphans from ended/inactive allocations
-    const allObligationsForMonth = await prisma.rentObligation.findMany({
+    const allObligationsForMonth = await prisma.rent_obligations.findMany({
       where: {
         owner_id: ownerId,
         rent_month: rentMonthUTC,
@@ -294,7 +294,7 @@ export class RentReconciliationService {
   ): Promise<ReconciliationSummary> {
     const startTime = Date.now();
 
-    const hostels = await prisma.hostel.findMany({
+    const hostels = await prisma.hostels.findMany({
       where: { owner_id: ownerId, is_active: true },
       select: { id: true },
     });
@@ -369,7 +369,7 @@ export class RentReconciliationService {
     });
 
     // Get all distinct owner IDs that have active hostels
-    const activeHostels = await prisma.hostel.findMany({
+    const activeHostels = await prisma.hostels.findMany({
       where: { is_active: true },
       select: { id: true, owner_id: true },
     });

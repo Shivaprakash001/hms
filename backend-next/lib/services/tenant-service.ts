@@ -13,7 +13,7 @@ const logger = getLogger("tenant-service");
 
 export class TenantService {
   async getTenantById(id: string, requestingUser: { sub: string; role: string }) {
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await prisma.tenants.findUnique({
       where: { id },
       select: {
         id: true,
@@ -73,7 +73,7 @@ export class TenantService {
   }
 
   async getTenantByProfile(profileId: string, requestingUser: { sub: string; role: string }) {
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await prisma.tenants.findUnique({
       where: { profile_id: profileId },
       select: {
         id: true,
@@ -157,7 +157,7 @@ export class TenantService {
     }
 
     const [tenants, total] = await Promise.all([
-      prisma.tenant.findMany({
+      prisma.tenants.findMany({
         where,
         include: {
           profile: true,
@@ -174,7 +174,7 @@ export class TenantService {
         skip: offset,
         orderBy: { joined_on: "desc" },
       }),
-      prisma.tenant.count({ where }),
+      prisma.tenants.count({ where }),
     ]);
 
     const mappedTenants = tenants.map((s: any) => {
@@ -189,7 +189,7 @@ export class TenantService {
   }
 
   async updateTenantSelfProfile(profileId: string, data: any, updatedBy: string) {
-    const tenantCheck = await prisma.tenant.findUnique({
+    const tenantCheck = await prisma.tenants.findUnique({
       where: { profile_id: profileId },
       select: { id: true, owner_id: true, hostel_id: true },
     });
@@ -268,7 +268,7 @@ export class TenantService {
 
       if (Object.keys(tenantUpdate).length > 0) {
         try {
-          await tx.tenant.update({
+          await tx.tenants.update({
             where: { profile_id: profileId },
             data: tenantUpdate,
           });
@@ -280,7 +280,7 @@ export class TenantService {
           }
           if (msg.includes("tenants.gender") && Object.prototype.hasOwnProperty.call(tenantUpdate, "gender")) {
             delete tenantUpdate.gender;
-            await tx.tenant.update({
+            await tx.tenants.update({
               where: { profile_id: profileId },
               data: tenantUpdate,
             });
@@ -290,7 +290,7 @@ export class TenantService {
         }
       }
 
-      const current = await tx.tenant.findUnique({
+      const current = await tx.tenants.findUnique({
         where: { profile_id: profileId },
         select: {
           id: true,
@@ -318,7 +318,7 @@ export class TenantService {
 
       const isComplete = this.checkProfileCompletion(current);
       if (isComplete) {
-        await tx.tenant.update({
+        await tx.tenants.update({
           where: { id: current.id },
           data: { profile_completed: true },
         });
@@ -344,7 +344,7 @@ export class TenantService {
   }
 
   async requestReactivation(profileId: string, requestedBy: string) {
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await prisma.tenants.findUnique({
       where: { profile_id: profileId },
       include: { profile: true },
     });
@@ -355,7 +355,7 @@ export class TenantService {
 
     // Check rate limit: 1 request per 24 hours
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const recent = await prisma.reactivationRequest.findFirst({
+    const recent = await prisma.reactivation_requests.findFirst({
       where: {
         tenant_id: tenant.id,
         created_at: { gte: cutoff },
@@ -367,7 +367,7 @@ export class TenantService {
       throw new Error(`BAD_REQUEST: Reactivation request already sent recently. Status: ${recent.status}`);
     }
 
-    const request = await prisma.reactivationRequest.create({
+    const request = await prisma.reactivation_requests.create({
       data: {
         tenant_id: tenant.id,
         owner_id: tenant.owner_id,
@@ -388,7 +388,7 @@ export class TenantService {
   }
 
   async listReactivationRequests(ownerId: string) {
-    const requests = await prisma.reactivationRequest.findMany({
+    const requests = await prisma.reactivation_requests.findMany({
       where: { owner_id: ownerId },
       orderBy: { created_at: "desc" },
       include: {
@@ -427,7 +427,7 @@ export class TenantService {
   }
 
   async processReactivationRequest(requestId: string, ownerId: string, action: string, notes?: string) {
-    const request = await prisma.reactivationRequest.findFirst({
+    const request = await prisma.reactivation_requests.findFirst({
       where: { id: requestId, owner_id: ownerId }
     });
 
@@ -440,14 +440,14 @@ export class TenantService {
     const newStatus = actionNorm === "approve" ? "APPROVED" : "REJECTED";
 
     if (actionNorm === "approve") {
-      await prisma.tenant.update({
+      await prisma.tenants.update({
         where: { id: request.tenant_id },
         data: { status: "ACTIVE" }
       });
       await eventSystem.trigger("tenant_reactivated", { tenantId: request.tenant_id, userId: ownerId });
     }
 
-    return await prisma.reactivationRequest.update({
+    return await prisma.reactivation_requests.update({
       where: { id: requestId },
       data: {
         status: newStatus,
@@ -458,7 +458,7 @@ export class TenantService {
     });
   }
   async getOwnerTenantOverview(tenantId: string, ownerId: string) {
-    const tenant = await prisma.tenant.findFirst({
+    const tenant = await prisma.tenants.findFirst({
       where: { id: tenantId, owner_id: ownerId },
       include: {
         profile: true,
@@ -479,14 +479,14 @@ export class TenantService {
 
     if (!tenant.hostel_id) throw new Error("HOSTEL_CONTEXT_REQUIRED: tenant hostel scope unavailable");
     const dues = await financialService.getTenantDues(tenantId, ownerId, tenant.hostel_id);
-    const paymentAgg = await prisma.payment.aggregate({
+    const paymentAgg = await prisma.payments.aggregate({
       where: { tenant_id: tenantId, owner_id: ownerId, hostel_id: tenant.hostel_id },
       _sum: { amount_paid: true },
     });
     const totalPaid = Number(paymentAgg._sum.amount_paid || 0);
     const totalDue = dues.total_due;
     const outstanding = dues.total_due;
-    const allPayments = await prisma.payment.findMany({
+    const allPayments = await prisma.payments.findMany({
       where: { tenant_id: tenantId, owner_id: ownerId, hostel_id: tenant.hostel_id },
       orderBy: { payment_date: "desc" },
       take: 25,
@@ -538,7 +538,7 @@ export class TenantService {
 
   async createTenant(data: any, ownerId: string) {
     // Note: Profile must be created first or linked.
-    return await prisma.tenant.create({
+    return await prisma.tenants.create({
       data: {
         ...data,
         owner_id: ownerId,
@@ -548,7 +548,7 @@ export class TenantService {
   }
 
   async cancelInvitation(tenantId: string, ownerId: string) {
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await prisma.tenants.findUnique({
       where: { id: tenantId },
       select: {
         id: true,
@@ -565,7 +565,7 @@ export class TenantService {
 
     const now = new Date();
     await prisma.$transaction(async (tx) => {
-      await tx.tenant.update({
+      await tx.tenants.update({
         where: { id: tenantId },
         data: { status: "CANCELLED" as any },
       });
@@ -577,7 +577,7 @@ export class TenantService {
       }
       // Waive all pending obligations — a cancelled invitation means
       // the tenant never moved in; no financial claims should remain.
-      await tx.rentObligation.updateMany({
+      await tx.rent_obligations.updateMany({
         where: { tenant_id: tenantId, status: { in: ["PENDING", "PARTIAL"] } },
         data: { status: "WAIVED" },
       });
@@ -604,7 +604,7 @@ export class TenantService {
   }
 
   async updateTenant(id: string, data: any, ownerId: string) {
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await prisma.tenants.findUnique({
       where: { id },
       select: { id: true, owner_id: true, status: true },
     });
@@ -627,7 +627,7 @@ export class TenantService {
       });
     }
 
-    const updated = await prisma.tenant.update({
+    const updated = await prisma.tenants.update({
       where: { id },
       data,
       include: { profile: true },
@@ -650,7 +650,7 @@ export class TenantService {
   }
 
   async deleteTenant(id: string, ownerId: string) {
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await prisma.tenants.findUnique({
       where: { id },
       select: { id: true, owner_id: true, status: true },
     });
@@ -669,7 +669,7 @@ export class TenantService {
       data: { is_active: false, end_date: new Date() },
     });
 
-    const updated = await prisma.tenant.update({
+    const updated = await prisma.tenants.update({
       where: { id },
       data: { status: "LEFT" },
       include: { profile: true },
@@ -689,7 +689,7 @@ export class TenantService {
   }
 
   async reactivateTenant(id: string, rent: number, joinedOn: Date, ownerId: string) {
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await prisma.tenants.findUnique({
       where: { id },
       select: { id: true, owner_id: true, status: true },
     });
@@ -697,7 +697,7 @@ export class TenantService {
     if (tenant.owner_id !== ownerId) throw new Error("FORBIDDEN: You can only reactivate your own tenants");
     if (tenant.status !== "LEFT") throw new Error("VALIDATION: Only tenants with LEFT status can be reactivated");
 
-    const updated = await prisma.tenant.update({
+    const updated = await prisma.tenants.update({
       where: { id },
       data: {
         status: "ACTIVE",

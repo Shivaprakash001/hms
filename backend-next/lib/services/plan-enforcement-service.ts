@@ -24,7 +24,7 @@ export class PlanEnforcementService {
    * Throws if missing — callers must have a subscription to proceed.
    */
   async _getOwnerSubscription(ownerId: string) {
-    const sub = await prisma.ownerSubscription.findUnique({
+    const sub = await prisma.owner_subscriptions.findUnique({
       where: { owner_id: ownerId },
       include: {
         plan: {
@@ -47,7 +47,7 @@ export class PlanEnforcementService {
     }
     // Treat ACTIVE subscriptions whose end_date has passed as EXPIRED
     if (sub.status === "ACTIVE" && sub.end_date && new Date() > sub.end_date) {
-      await prisma.ownerSubscription.update({
+      await prisma.owner_subscriptions.update({
         where: { owner_id: ownerId },
         data: { status: "EXPIRED" },
       }).catch(() => {}); // best-effort; cron reconciler is the authoritative expiry handler
@@ -58,7 +58,7 @@ export class PlanEnforcementService {
 
   async _resolvePlan(planId: string | null): Promise<PlanRecord> {
     if (!planId) {
-      const p = await prisma.plan.findUnique({
+      const p = await prisma.plans.findUnique({
         where: { id: "FREE" },
         select: {
           id: true,
@@ -75,7 +75,7 @@ export class PlanEnforcementService {
       if (!p) throw new Error("CONFIG_ERROR: Missing FREE plan in DB");
       return p as unknown as PlanRecord;
     }
-    const plan = await prisma.plan.findUnique({
+    const plan = await prisma.plans.findUnique({
       where: { id: planId },
       select: {
         id: true,
@@ -94,11 +94,11 @@ export class PlanEnforcementService {
   }
 
   async _countActiveTenants(ownerId: string) {
-    return prisma.tenant.count({ where: { owner_id: ownerId, status: { not: "LEFT" } } });
+    return prisma.tenants.count({ where: { owner_id: ownerId, status: { not: "LEFT" } } });
   }
 
   async _countHostels(ownerId: string) {
-    return prisma.hostel.count({ where: { owner_id: ownerId, is_active: true } });
+    return prisma.hostels.count({ where: { owner_id: ownerId, is_active: true } });
   }
 
 

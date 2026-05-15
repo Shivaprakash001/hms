@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Fetch all plans
-    const plans = await prisma.plan.findMany({
+    const plans = await prisma.plans.findMany({
       orderBy: { price_inr: "asc" },
       select: {
         id: true,
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
     });
 
     // Fetch owner's current subscription
-    const subscription = await prisma.ownerSubscription.findUnique({
+    const subscription = await prisma.owner_subscriptions.findUnique({
       where: { owner_id: user.sub },
       include: {
         plan: {

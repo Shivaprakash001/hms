@@ -22,7 +22,7 @@ export async function GET(
     // Look up the real tenant ID for TENANT role.
     let tenantId: string | undefined;
     if (user.role === "TENANT") {
-      const tenant = await prisma.tenant.findUnique({
+      const tenant = await prisma.tenants.findUnique({
         where: { profile_id: user.id },
         select: { id: true },
       });

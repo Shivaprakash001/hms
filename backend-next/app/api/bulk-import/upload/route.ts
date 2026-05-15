@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
       return apiError("Hostel ID is required", "VALIDATION_ERROR", 400);
     }
 
-    const hostel = await prisma.hostel.findFirst({
+    const hostel = await prisma.hostels.findFirst({
       where: {
         id: hostelId,
         owner_id: session.sub,
@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
       data: await secureImportRow(r.data),
     })));
 
-    await prisma.bulkImportBatch.create({
+    await prisma.bulk_import_batches.create({
       data: {
         id: batchId,
         owner_id: session.sub,

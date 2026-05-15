@@ -11,7 +11,7 @@ export class TenantAnalyticsService {
       const threeMonthsAgo = new Date();
       threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
 
-      const obligations = await prisma.rentObligation.findMany({
+      const obligations = await prisma.rent_obligations.findMany({
         where: {
           tenant_id: tenantId,
           due_date: { gte: threeMonthsAgo },
@@ -20,7 +20,7 @@ export class TenantAnalyticsService {
         include: { payments: true },
       });
 
-      const reminders = await prisma.reminderLog.count({
+      const reminders = await prisma.reminder_logs.count({
         where: { tenant_id: tenantId, sent_at: { gte: threeMonthsAgo } },
       });
 
@@ -69,7 +69,7 @@ export class TenantAnalyticsService {
       // Clamp between 0-100
       score = Math.max(0, Math.min(100, score));
 
-      await prisma.tenantBehaviorScore.upsert({
+      await prisma.tenant_behavior_scores.upsert({
         where: { tenant_id: tenantId },
         update: {
           score,
@@ -108,7 +108,7 @@ export class TenantAnalyticsService {
       });
 
       // Update tenant status & exit info
-      await tx.tenant.update({
+      await tx.tenants.update({
         where: { id: tenantId },
         data: {
           status: "LEFT",
@@ -129,7 +129,7 @@ export class TenantAnalyticsService {
   async markReminderConversion(obligationId: string, paymentDate: Date) {
     try {
       // Find latest reminder for this obligation
-      const latestReminder = await prisma.reminderLog.findFirst({
+      const latestReminder = await prisma.reminder_logs.findFirst({
         where: { obligation_id: obligationId },
         orderBy: { sent_at: "desc" },
       });
@@ -140,7 +140,7 @@ export class TenantAnalyticsService {
       const diffHours = (paymentDate.getTime() - latestReminder.sent_at.getTime()) / (1000 * 60 * 60);
 
       if (diffHours >= 0 && diffHours <= 48 && !latestReminder.converted_to_payment) {
-        await prisma.reminderLog.update({
+        await prisma.reminder_logs.update({
           where: { id: latestReminder.id },
           data: {
             converted_to_payment: true,
@@ -157,12 +157,12 @@ export class TenantAnalyticsService {
    * Analytics service for Reminder Conversions
    */
   async getReminderConversionStats(ownerId: string) {
-    const stats = await prisma.reminderLog.aggregate({
+    const stats = await prisma.reminder_logs.aggregate({
       where: { tenant: { owner_id: ownerId } },
       _count: { id: true },
     });
 
-    const conversions = await prisma.reminderLog.aggregate({
+    const conversions = await prisma.reminder_logs.aggregate({
       where: { tenant: { owner_id: ownerId }, converted_to_payment: true },
       _count: { id: true },
     });
@@ -181,7 +181,7 @@ export class TenantAnalyticsService {
    * 4. CRON: Recalculate all scores
    */
   async recalculateAllTenantScores(ownerId?: string) {
-    const tenants = await prisma.tenant.findMany({
+    const tenants = await prisma.tenants.findMany({
       where: ownerId ? { owner_id: ownerId, status: "ACTIVE" } : { status: "ACTIVE" },
       select: { id: true },
     });

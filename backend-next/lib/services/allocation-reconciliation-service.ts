@@ -101,7 +101,7 @@ export class AllocationReconciliationService {
         1
       ));
 
-      const dangling = await prisma.rentObligation.findMany({
+      const dangling = await prisma.rent_obligations.findMany({
         where: {
           allocation_id: allocationId,
           rent_month: { gt: endMonth },
@@ -114,7 +114,7 @@ export class AllocationReconciliationService {
 
       for (const ob of dangling) {
         if ((ob.payments || []).length > 0) continue;
-        await prisma.rentObligation.update({
+        await prisma.rent_obligations.update({
           where: { id: ob.id },
           data: { status: "WAIVED" },
         });
@@ -124,7 +124,7 @@ export class AllocationReconciliationService {
     checks.push("obligation_state_checked");
 
     // 4) Duplicate obligation detection (do not auto-delete financial rows)
-    const obligations = await prisma.rentObligation.findMany({
+    const obligations = await prisma.rent_obligations.findMany({
       where: { allocation_id: allocationId },
       select: { id: true, allocation_id: true, rent_month: true, obligation_type: true },
     });
@@ -195,7 +195,7 @@ export class AllocationReconciliationService {
    * A tenant who was never activated goes to EXPIRED, not LEFT.
    */
   async expireStaleInvitations(now: Date = new Date()) {
-    const stale = await prisma.tenant.findMany({
+    const stale = await prisma.tenants.findMany({
       where: {
         status: "INVITED",
         profile: {
@@ -217,7 +217,7 @@ export class AllocationReconciliationService {
     let expired = 0;
     for (const t of stale) {
       await prisma.$transaction(async (tx) => {
-        await tx.tenant.update({
+        await tx.tenants.update({
           where: { id: t.id },
           data: { status: "EXPIRED" as any },
         });
@@ -227,7 +227,7 @@ export class AllocationReconciliationService {
         });
         // Waive any future unpaid obligations — never activated tenants
         // should not accumulate financial obligations.
-        await tx.rentObligation.updateMany({
+        await tx.rent_obligations.updateMany({
           where: {
             tenant_id: t.id,
             status: { in: ["PENDING", "PARTIAL"] },

@@ -53,8 +53,8 @@ export class DashboardService {
 
     // ✅ Use count()+aggregate instead of findMany — avoids fetching full rows for JS-side counting
     const [totalTenants, activeTenants, roomStats, payments, costs] = await Promise.all([
-      prisma.tenant.count({ where: { owner_id: userId, hostel_id: hostelId } }),
-      prisma.tenant.count({ where: { owner_id: userId, status: "ACTIVE", hostel_id: hostelId } }),
+      prisma.tenants.count({ where: { owner_id: userId, hostel_id: hostelId } }),
+      prisma.tenants.count({ where: { owner_id: userId, status: "ACTIVE", hostel_id: hostelId } }),
       prisma.$queryRaw<{ total_rooms: number; total_capacity: number }[]>`
         SELECT COUNT(r.id)::int AS total_rooms, COALESCE(SUM(r.capacity), 0)::int AS total_capacity
         FROM rooms r JOIN hostels h ON h.id = r.hostel_id
@@ -63,7 +63,7 @@ export class DashboardService {
       `,
       // ✅ FIXED: Use payment_date (actual payment date, source of truth)
       // ✅ FIXED: Use nextMonthStart (day 1 of next month, exclusive upper bound)
-      prisma.payment.aggregate({
+      prisma.payments.aggregate({
         where: {
           owner_id: userId,
           payment_date: { gte: monthStart, lt: nextMonthStart },
@@ -71,7 +71,7 @@ export class DashboardService {
         },
         _sum: { amount_paid: true },
       }),
-      prisma.expense.aggregate({
+      prisma.expenses.aggregate({
         where: {
           owner_id: userId,
           date: { gte: monthStart, lt: nextMonthStart },
@@ -150,7 +150,7 @@ export class DashboardService {
   }
 
   async getTenantStats(profileId: string) {
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await prisma.tenants.findUnique({
       where: { profile_id: profileId },
       include: {
         allocations: { where: { is_active: true, end_date: null }, include: { room: true } },

@@ -106,7 +106,7 @@ export async function POST(req: Request) {
     }
 
     // ── 5. Ownership check ─────────────────────────────────────────────────────
-    const obligation = await prisma.rentObligation.findUnique({
+    const obligation = await prisma.rent_obligations.findUnique({
       where: { id: obligation_id },
       select: { owner_id: true, hostel_id: true, status: true },
     });

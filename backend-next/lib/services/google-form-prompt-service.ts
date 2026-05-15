@@ -94,7 +94,7 @@ export class GoogleFormPromptService {
     notes?: unknown;
     isAdmin?: boolean;
   }) {
-    const hostel = await prisma.hostel.findFirst({
+    const hostel = await prisma.hostels.findFirst({
       where: {
         id: input.hostelId,
         ...(input.isAdmin ? {} : { owner_id: input.ownerId }),

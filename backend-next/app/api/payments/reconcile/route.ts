@@ -28,7 +28,7 @@ export async function POST(req: Request) {
       if (!hostelId) {
         return apiError("hostelId is required for owner reconciliation", "BAD_REQUEST", 400);
       }
-      const hostel = await prisma.hostel.findUnique({
+      const hostel = await prisma.hostels.findUnique({
         where: { id: hostelId },
         select: { id: true, owner_id: true },
       });

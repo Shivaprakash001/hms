@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
     let tenantId: string | null = null;
 
     if (profile.role === "TENANT") {
-      const tenant = await prisma.tenant.findUnique({
+      const tenant = await prisma.tenants.findUnique({
         where: { profile_id: profile.id },
         include: {
           allocations: {

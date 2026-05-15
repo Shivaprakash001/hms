@@ -59,7 +59,7 @@ export class InvitationService {
     }
 
     // 2. Room and Owner check
-    const room = await prisma.room.findFirst({
+    const room = await prisma.rooms.findFirst({
       where: { id: room_id, hostel: { owner_id: ownerId, is_active: true } },
       include: {
         hostel: true,
@@ -130,7 +130,7 @@ export class InvitationService {
         },
       });
 
-      const tenant = await tx.tenant.create({
+      const tenant = await tx.tenants.create({
         data: {
           id: crypto.randomUUID(),
           profile_id: profile.id,
@@ -246,7 +246,7 @@ export class InvitationService {
       throw new Error("INVALID: Token expired or invalid");
     }
 
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await prisma.tenants.findUnique({
         where: { profile_id: profile.id }
     });
 
@@ -271,7 +271,7 @@ export class InvitationService {
       },
     });
 
-    await prisma.tenant.update({
+    await prisma.tenants.update({
       where: { id: tenant.id },
       data: { status: "ACTIVE" },
     });
@@ -363,14 +363,14 @@ export class InvitationService {
           }
 
           if (typeof overrides?.monthly_rent !== "undefined") {
-            await tx.tenant.update({
+            await tx.tenants.update({
               where: { id: tenantDetails.id },
               data: { monthly_rent: Number(overrides.monthly_rent) },
             });
           }
 
           if (roomIdOverride) {
-            const targetRoom = await tx.room.findUnique({
+            const targetRoom = await tx.rooms.findUnique({
               where: { id: roomIdOverride },
               include: {
                 hostel: true,
@@ -510,7 +510,7 @@ export class InvitationService {
     const joiningDate = data.joining_date ? new Date(data.joining_date) : new Date();
     joiningDate.setHours(0, 0, 0, 0);
 
-    const tenant = await prisma.tenant.findFirst({
+    const tenant = await prisma.tenants.findFirst({
       where: { id: tenantId, owner_id: ownerId },
       include: {
         profile: true,
@@ -531,7 +531,7 @@ export class InvitationService {
       throw new Error("VALIDATION: Invitation cannot be edited after payment activity exists");
     }
 
-    const targetRoom = await prisma.room.findFirst({
+    const targetRoom = await prisma.rooms.findFirst({
       where: { id: data.room_id, is_active: true, hostel: { owner_id: ownerId, is_active: true } },
       include: {
         hostel: true,
@@ -573,7 +573,7 @@ export class InvitationService {
         },
       });
 
-      await tx.tenant.update({
+      await tx.tenants.update({
         where: { id: tenant.id },
         data: {
           monthly_rent: Number(data.monthly_rent),
@@ -605,7 +605,7 @@ export class InvitationService {
         });
       }
 
-      await tx.rentObligation.updateMany({
+      await tx.rent_obligations.updateMany({
         where: {
           tenant_id: tenant.id,
           status: { in: ["PENDING", "PARTIAL"] },

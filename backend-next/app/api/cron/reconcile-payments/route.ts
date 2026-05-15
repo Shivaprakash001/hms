@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
       paymentDomain: PAYMENT_DOMAIN.PLATFORM_BILLING,
     });
 
-    const hostels = await prisma.hostel.findMany({
+    const hostels = await prisma.hostels.findMany({
       where: { is_active: true },
       select: { id: true, owner_id: true },
     });

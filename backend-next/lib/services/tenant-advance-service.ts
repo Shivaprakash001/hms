@@ -25,7 +25,7 @@ export class TenantAdvanceService {
    * Used by GET /api/tenants/me/advance.
    */
   async getBalanceForTenant(profileId: string) {
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await prisma.tenants.findUnique({
       where: { profile_id: profileId },
       select: { id: true, owner_id: true },
     });
@@ -34,7 +34,7 @@ export class TenantAdvanceService {
   }
 
   private async _buildBalanceResponse(tenantId: string) {
-    const entries = await prisma.tenantAdvanceLedger.findMany({
+    const entries = await prisma.tenant_advance_ledger.findMany({
       where: { tenant_id: tenantId },
       orderBy: { created_at: "asc" },
     });
@@ -71,14 +71,14 @@ export class TenantAdvanceService {
     await this._assertAdvanceEnabled(ownerId, tenantId);
 
     return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const tenant = await tx.tenant.findUniqueOrThrow({
+      const tenant = await tx.tenants.findUniqueOrThrow({
         where: { id: tenantId },
         select: { id: true, hostel_id: true },
       });
       await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${tenantId}::uuid FOR UPDATE`;
       const currentBalance = await this._computeBalance(tx, tenantId);
       const newBalance = Math.round((currentBalance + amount) * 100) / 100;
-      const entry = await tx.tenantAdvanceLedger.create({
+      const entry = await tx.tenant_advance_ledger.create({
         data: {
           tenant_id: tenantId,
           owner_id: ownerId,
@@ -121,7 +121,7 @@ export class TenantAdvanceService {
     const { tenantId, ownerId, createdBy, amount, referenceId, referenceType, notes } = params;
 
     // Idempotency: if a ledger entry already exists for this reference, return it.
-    const existing = await tx.tenantAdvanceLedger.findFirst({
+    const existing = await tx.tenant_advance_ledger.findFirst({
       where: {
         reference_id: referenceId,
         reference_type: referenceType,
@@ -133,7 +133,7 @@ export class TenantAdvanceService {
       return { alreadyCredited: true };
     }
 
-    const tenant = await tx.tenant.findUniqueOrThrow({
+    const tenant = await tx.tenants.findUniqueOrThrow({
       where: { id: tenantId },
       select: { id: true, hostel_id: true },
     });
@@ -141,7 +141,7 @@ export class TenantAdvanceService {
     const currentBalance = await this._computeBalance(tx, tenantId);
     const newBalance = Math.round((currentBalance + amount) * 100) / 100;
 
-    const entry = await tx.tenantAdvanceLedger.create({
+    const entry = await tx.tenant_advance_ledger.create({
       data: {
         tenant_id: tenantId,
         owner_id: ownerId,
@@ -198,7 +198,7 @@ export class TenantAdvanceService {
       reason === "REFUND" ? (refundStatus ?? "PENDING") : null;
 
     return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const tenant = await tx.tenant.findUniqueOrThrow({
+      const tenant = await tx.tenants.findUniqueOrThrow({
         where: { id: tenantId },
         select: { id: true, hostel_id: true },
       });
@@ -213,7 +213,7 @@ export class TenantAdvanceService {
 
       const newBalance = Math.max(0, Math.round((currentBalance - amount) * 100) / 100);
 
-      const entry = await tx.tenantAdvanceLedger.create({
+      const entry = await tx.tenant_advance_ledger.create({
         data: {
           tenant_id: tenantId,
           owner_id: ownerId,
@@ -240,7 +240,7 @@ export class TenantAdvanceService {
    * This must be called when the bank transfer actually completes or fails.
    */
   async updateRefundStatus(entryId: string, ownerId: string, status: RefundStatus) {
-    const entry = await prisma.tenantAdvanceLedger.findUnique({
+    const entry = await prisma.tenant_advance_ledger.findUnique({
       where: { id: entryId },
       select: { owner_id: true, reason: true },
     });
@@ -248,7 +248,7 @@ export class TenantAdvanceService {
     if (entry.owner_id !== ownerId) throw new Error("FORBIDDEN: Not your ledger entry");
     if ((entry as any).reason !== "REFUND") throw new Error("BAD_REQUEST: Can only update refund_status on REFUND entries");
 
-    return prisma.tenantAdvanceLedger.update({
+    return prisma.tenant_advance_ledger.update({
       where: { id: entryId },
       data: { refund_status: status },
     });
@@ -285,7 +285,7 @@ export class TenantAdvanceService {
       // Lock obligation row
       await tx.$queryRaw`SELECT id FROM rent_obligations WHERE id = ${obligationId}::uuid FOR UPDATE`;
 
-      const obligation = await tx.rentObligation.findUnique({
+      const obligation = await tx.rent_obligations.findUnique({
         where: { id: obligationId },
         include: { payments: { select: { amount_paid: true } } },
       });
@@ -317,7 +317,7 @@ export class TenantAdvanceService {
       }
 
       // Create payment record
-      const payment = await tx.payment.create({
+      const payment = await tx.payments.create({
         data: {
           obligation_id: obligationId,
           tenant_id: tenantId,
@@ -333,14 +333,14 @@ export class TenantAdvanceService {
       // Update obligation status
       const newPaidPaisa = paidPaisa + adjustPaisa;
       const newStatus = newPaidPaisa >= obligationPaisa ? "PAID" : "PARTIAL";
-      await tx.rentObligation.update({
+      await tx.rent_obligations.update({
         where: { id: obligationId },
         data: { status: newStatus },
       });
 
       // Ledger DEBIT
       const newBalance = Math.round((currentBalance - amount) * 100) / 100;
-      const entry = await tx.tenantAdvanceLedger.create({
+      const entry = await tx.tenant_advance_ledger.create({
         data: {
           tenant_id: tenantId,
           owner_id: ownerId,
@@ -373,7 +373,7 @@ export class TenantAdvanceService {
   // ── Private helpers ───────────────────────────────────────────────────────
 
   private async _assertOwnership(tenantId: string, ownerId: string) {
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await prisma.tenants.findUnique({
       where: { id: tenantId },
       select: { owner_id: true },
     });
@@ -386,7 +386,7 @@ export class TenantAdvanceService {
     if (!tenantId) {
       throw new Error("HOSTEL_CONTEXT_REQUIRED: tenantId is required to resolve advance preferences");
     }
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await prisma.tenants.findUnique({
       where: { id: tenantId },
       select: { hostel_id: true },
     });
@@ -403,11 +403,11 @@ export class TenantAdvanceService {
    */
   private async _computeBalance(tx: Prisma.TransactionClient, tenantId: string): Promise<number> {
     const [credits, debits] = await Promise.all([
-      tx.tenantAdvanceLedger.aggregate({
+      tx.tenant_advance_ledger.aggregate({
         where: { tenant_id: tenantId, type: "CREDIT" },
         _sum: { amount: true },
       }),
-      tx.tenantAdvanceLedger.aggregate({
+      tx.tenant_advance_ledger.aggregate({
         where: { tenant_id: tenantId, type: "DEBIT" },
         _sum: { amount: true },
       }),

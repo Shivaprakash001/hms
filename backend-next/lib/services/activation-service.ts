@@ -82,16 +82,16 @@ export class ActivationService {
     const [hostelRow, roomCount, activeTenantCount, rentLedger, paymentRow, reminderRow] =
       await Promise.all([
         // Hostel + billing config
-        prisma.hostel.findFirst({
+        prisma.hostels.findFirst({
           where:  { owner_id: ownerId, is_active: true },
           select: { id: true, name: true, auto_rent_day: true, upi_id: true, phonepe_merchant_id: true },
         }),
         // Room count
-        prisma.room.count({
+        prisma.rooms.count({
           where: { hostel: { owner_id: ownerId }, is_active: true },
         }),
         // Active tenant count
-        prisma.tenant.count({
+        prisma.tenants.count({
           where: { owner_id: ownerId, status: "ACTIVE" },
         }),
         // Any successful rent generation ledger entry
@@ -100,12 +100,12 @@ export class ActivationService {
           select: { id: true, created_count: true },
         }),
         // Any payment ever recorded
-        prisma.payment.findFirst({
+        prisma.payments.findFirst({
           where:  { owner_id: ownerId },
           select: { id: true },
         }),
         // Any reminder ever sent
-        prisma.reminderLog.findFirst({
+        prisma.reminder_logs.findFirst({
           where:  { tenant: { owner_id: ownerId } },
           select: { id: true },
         }),

@@ -37,7 +37,7 @@ export async function POST(
   try {
     const result = await tenantService.cancelInvitation(params.id, session.sub);
 
-    await prisma.ownerDashboardSnapshot.updateMany({
+    await prisma.owner_dashboard_snapshots.updateMany({
       where: { owner_id: session.sub },
       data: { is_stale: true },
     }).catch(() => {});

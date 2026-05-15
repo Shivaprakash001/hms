@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
 
     const tokenHash = hashToken(refreshToken);
 
-    const tokenRecord = await prisma.refreshToken.findUnique({
+    const tokenRecord = await prisma.refresh_tokens.findUnique({
       where: { token_hash: tokenHash },
       include: { profile: true },
     });
@@ -30,13 +30,13 @@ export async function POST(req: NextRequest) {
     // If someone tries to use a consumed token, we assume compromise.
     if (tokenRecord.expires_at.getTime() === 0) {
       console.warn(`[SECURITY] Refresh token reuse detected for user ${tokenRecord.profile.id}`);
-      await prisma.refreshToken.deleteMany({ where: { user_id: tokenRecord.profile.id } });
+      await prisma.refresh_tokens.deleteMany({ where: { user_id: tokenRecord.profile.id } });
       return apiError("Session compromised. Please log in again.", "FORBIDDEN", 403);
     }
 
     if (new Date() > tokenRecord.expires_at) {
       // Delete normally expired token
-      await prisma.refreshToken.delete({ where: { id: tokenRecord.id } });
+      await prisma.refresh_tokens.delete({ where: { id: tokenRecord.id } });
       return apiError("Refresh token expired", "UNAUTHORIZED", 401);
     }
 
@@ -74,11 +74,11 @@ export async function POST(req: NextRequest) {
 
     // Consume old token (set to epoch) and create new one
     await prisma.$transaction([
-      prisma.refreshToken.update({
+      prisma.refresh_tokens.update({
         where: { id: tokenRecord.id },
         data: { expires_at: new Date(0) }
       }),
-      prisma.refreshToken.create({
+      prisma.refresh_tokens.create({
         data: {
           user_id: tokenRecord.profile.id,
           token_hash: newRefreshTokenHash,

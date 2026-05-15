@@ -2,7 +2,7 @@ import { prisma } from "../db";
 
 export class NotificationService {
   async getUserNotifications(userId: string) {
-    return prisma.notification.findMany({
+    return prisma.notifications.findMany({
       where: { profile_id: userId },
       orderBy: { created_at: "desc" },
       take: 50
@@ -10,14 +10,14 @@ export class NotificationService {
   }
 
   async markAsRead(notificationId: string, userId: string) {
-    return prisma.notification.update({
+    return prisma.notifications.update({
       where: { id: notificationId, profile_id: userId },
       data: { is_read: true }
     });
   }
 
   async createNotification(userId: string, title: string, message: string, type: string) {
-    return prisma.notification.create({
+    return prisma.notifications.create({
       data: {
         profile_id: userId,
         title,

@@ -125,7 +125,7 @@ export class RentGenerationService {
       // Phase 2: preferences are scoped to the allocation's actual hostel.
       // This keeps multi-hostel owners from leaking one hostel's billing config into another.
       const hostelIds = Array.from(new Set(allocations.map(a => (a.room as any).hostel_id).filter(Boolean))) as string[];
-      const hostelPrefs: any[] = await prisma.hostel.findMany({
+      const hostelPrefs: any[] = await prisma.hostels.findMany({
         where: { id: { in: hostelIds }, is_active: true },
       });
       const prefsMap = new Map(hostelPrefs.map((p: any) => [p.id, p]));
@@ -138,7 +138,7 @@ export class RentGenerationService {
       // ── BATCH obligation generation (replaces N×2 per-allocation queries) ──
       // 1. One round-trip to fetch all existing obligations this rentMonth
       const allocationIds = allocations.map(a => a.id);
-      const existingObligations = await prisma.rentObligation.findMany({
+      const existingObligations = await prisma.rent_obligations.findMany({
         where: { allocation_id: { in: allocationIds }, rent_month: rentMonth },
         select: { allocation_id: true, obligation_type: true },
       });
@@ -403,11 +403,11 @@ export class RentGenerationService {
           let rentCount = 0;
           let maintCount = 0;
           if (rentRows.length > 0) {
-            const result = await tx.rentObligation.createMany({ data: rentRows, skipDuplicates: true });
+            const result = await tx.rent_obligations.createMany({ data: rentRows, skipDuplicates: true });
             rentCount = result.count;
           }
           if (maintRows.length > 0) {
-            const result = await tx.rentObligation.createMany({ data: maintRows, skipDuplicates: true });
+            const result = await tx.rent_obligations.createMany({ data: maintRows, skipDuplicates: true });
             maintCount = result.count;
           }
           return { rentCount, maintCount };
@@ -513,7 +513,7 @@ export class RentGenerationService {
       }
 
       // Write audit log
-      await prisma.rentGenerationLog.create({
+      await prisma.rent_generation_logs.create({
         data: {
           rent_month: rentMonth,
           trigger_type: triggerType,
@@ -619,7 +619,7 @@ export class RentGenerationService {
     });
 
     // Check which already have obligations for this month
-    const existingObligations = await prisma.rentObligation.findMany({
+    const existingObligations = await prisma.rent_obligations.findMany({
       where: {
         allocation_id: { in: allocations.map(a => a.id) },
         rent_month: rentMonth
