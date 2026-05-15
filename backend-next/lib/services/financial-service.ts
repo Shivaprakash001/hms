@@ -500,7 +500,7 @@ export class FinancialService {
       },
       include: {
         payments: { select: { amount_paid: true } },
-        allocation: { include: { room: { select: { room_no: true } } } },
+        room_allocations: { include: { room: { select: { room_no: true } } } },
       },
       orderBy: [{ due_date: "asc" }],
     });
@@ -517,7 +517,7 @@ export class FinancialService {
         paid,
         outstanding,
         status: ob.status,
-        room_no: ob.allocation?.room?.room_no ?? null,
+        room_no: (ob as any).room_allocations?.room?.room_no ?? null,
       };
     }).filter((i) => i.outstanding > 0);
 

@@ -179,16 +179,16 @@ export class PaymentService {
       where: { id: data.obligationId },
       include: {
         payments: { select: { amount_paid: true, hostel_id: true } },
-        tenant: { select: { id: true, hostel_id: true, owner_id: true } },
-        allocation: { select: { id: true, hostel_id: true } },
+        tenants: { select: { id: true, hostel_id: true, owner_id: true } },
+        room_allocations: { select: { id: true, hostel_id: true } },
       }
     });
 
     if (!obligation) throw new Error("NOT_FOUND: Obligation not found");
     assertScopedEntityHostel("rent obligation", obligation, hostelId);
-    assertSameFinancialHostel("tenant", obligation.tenant, "rent obligation", obligation);
-    if (obligation.allocation) {
-      assertSameFinancialHostel("room allocation", obligation.allocation, "rent obligation", obligation);
+    assertSameFinancialHostel("tenant", (obligation as any).tenants, "rent obligation", obligation);
+    if ((obligation as any).room_allocations) {
+      assertSameFinancialHostel("room allocation", (obligation as any).room_allocations, "rent obligation", obligation);
     }
     for (const payment of obligation.payments) {
       assertSameFinancialHostel("existing payment", payment, "rent obligation", obligation);
@@ -589,17 +589,17 @@ export class PaymentService {
         where: { id: { in: lockedRows.map(r => r.id) } },
         include: {
           payments: { select: { amount_paid: true, hostel_id: true } },
-          tenant: { select: { id: true, hostel_id: true, owner_id: true } },
-          allocation: { select: { id: true, hostel_id: true } },
+          tenants: { select: { id: true, hostel_id: true, owner_id: true } },
+          room_allocations: { select: { id: true, hostel_id: true } },
         },
         orderBy: { due_date: "asc" },
       });
 
       for (const ob of obligations) {
         assertScopedEntityHostel("rent obligation", ob, hostelId);
-        assertSameFinancialHostel("tenant", ob.tenant, "rent obligation", ob);
-        if (ob.allocation) {
-          assertSameFinancialHostel("room allocation", ob.allocation, "rent obligation", ob);
+        assertSameFinancialHostel("tenant", (ob as any).tenants, "rent obligation", ob);
+        if ((ob as any).room_allocations) {
+          assertSameFinancialHostel("room allocation", (ob as any).room_allocations, "rent obligation", ob);
         }
         for (const payment of ob.payments) {
           assertSameFinancialHostel("existing payment", payment, "rent obligation", ob);
@@ -2552,8 +2552,8 @@ export class PaymentService {
         ...(status ? { status: status as any } : {})
       },
       include: {
-        tenant: { include: { profiles: true } },
-        allocation: { include: { room: true } },
+        tenants: { include: { profiles: true } },
+        room_allocations: { include: { room: true } },
         payments: true
       },
       orderBy: { rent_month: "desc" }
@@ -2562,10 +2562,10 @@ export class PaymentService {
     return dues.map((d: any) => ({
       obligation_id: d.id,
       tenant_id: d.tenant_id,
-      tenant_name: d.tenant.profiles.name,
-      tenant_email: d.tenant.profiles.email,
-      tenant_phone: d.tenant.profiles.phone,
-      room_no: d.allocation?.room?.room_no || "N/A",
+      tenant_name: d.tenants.profiles.name,
+      tenant_email: d.tenants.profiles.email,
+      tenant_phone: d.tenants.profiles.phone,
+      room_no: d.room_allocations?.room?.room_no || "N/A",
       rent_month: d.rent_month,
       due_date: d.due_date,
       amount: Number(d.amount),
@@ -2603,8 +2603,8 @@ export class PaymentService {
         ...(monthStart && nextMonthStart ? { rent_month: { gte: monthStart, lt: nextMonthStart } } : {})
       },
       include: {
-        tenant: { include: { profiles: true } },
-        allocation: { include: { room: true } },
+        tenants: { include: { profiles: true } },
+        room_allocations: { include: { room: true } },
         payments: {
           where: {
             ...(filters?.method ? { payment_method: filters.method } : {})
@@ -2640,10 +2640,10 @@ export class PaymentService {
         id: ob.id,
         obligationId: ob.id,
         tenantId: ob.tenant_id,
-        tenantName: ob.tenant?.profiles?.name || "Unknown",
-        tenantPhone: ob.tenant?.profiles?.phone || null,
-        tenantEmail: ob.tenant?.profiles?.email || null,
-        room: ob.allocation?.room?.room_no || "N/A",
+        tenantName: ob.tenants?.profiles?.name || "Unknown",
+        tenantPhone: ob.tenants?.profiles?.phone || null,
+        tenantEmail: ob.tenants?.profiles?.email || null,
+        room: ob.room_allocations?.room?.room_no || "N/A",
         month: ob.rent_month,
         dueDate: ob.due_date,
         rentAmount,
