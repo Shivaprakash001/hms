@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
       return apiError("Invalid or expired verification token", "UNAUTHORIZED", 401);
     }
 
-    const tokenRecord = await prisma.identityToken.findUnique({
+    const tokenRecord = await prisma.identity_tokens.findUnique({
       where: { jti: otpPayload.jti },
     });
     if (!tokenRecord || tokenRecord.used) {
@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
 
     // Atomic onboarding transaction
     const updated = await prisma.$transaction(async (tx) => {
-      await tx.identityToken.update({
+      await tx.identity_tokens.update({
         where: { jti: otpPayload.jti },
         data: { used: true },
       });

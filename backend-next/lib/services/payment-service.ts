@@ -275,7 +275,7 @@ export class PaymentService {
   }) {
     return prisma.$transaction(async (tx: any) => {
       // ── Consume the identity token (atomic, single-use enforcement) ───────
-      const consumed = await tx.identityToken.updateMany({
+      const consumed = await tx.identity_tokens.updateMany({
         where: {
           jti,
           used: false,

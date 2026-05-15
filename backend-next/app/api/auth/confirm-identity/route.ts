@@ -77,7 +77,7 @@ export async function POST(req: Request) {
     const expiresAt = new Date(Date.now() + TOKEN_TTL_MS);
 
     // Persist the token record BEFORE signing — if DB write fails, no JWT is issued
-    await prisma.identityToken.create({
+    await prisma.identity_tokens.create({
       data: {
         jti,
         user_id: user.id,

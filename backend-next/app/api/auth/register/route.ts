@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if JTI was already used (single-use token)
-    const tokenRecord = await prisma.identityToken.findUnique({
+    const tokenRecord = await prisma.identity_tokens.findUnique({
       where: { jti: payload.jti }
     });
 
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Mark token as used
-    await prisma.identityToken.update({
+    await prisma.identity_tokens.update({
       where: { jti: payload.jti },
       data: { used: true }
     });

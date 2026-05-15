@@ -17,7 +17,7 @@ async function issueVerificationToken(phone: string, action: string) {
   const jti = randomUUID();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-  await prisma.identityToken.create({
+  await prisma.identity_tokens.create({
     data: {
       jti,
       user_id: "PENDING_PHONE_VERIFICATION",
