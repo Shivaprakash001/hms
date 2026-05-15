@@ -98,22 +98,34 @@ export class PropertyService {
       });
       if (updated.count !== 1) throw new Error("FORBIDDEN: Hostel is not owned by the authenticated owner");
     } else {
-      const existingCount = await prisma.hostels.count({ where: { owner_id: userId, is_active: true } });
-      if (existingCount > 0) {
-        throw new Error("VALIDATION: hostel_id is required for existing hostel updates");
-      }
-      // Enforcement: creating a new hostel requires active subscription and available hostel slots
-      await planEnforcementService.assertSubscriptionActive(userId);
-      await planEnforcementService.assertHostelLimit(userId);
-      await prisma.hostels.create({
-        data: {
-          owner_id: userId,
-          name: mapped.name || "My Hostel",
-          phone: mapped.phone || "",
-          address: mapped.address || "",
-          ...mapped,
-        },
+      const existingHostels = await prisma.hostels.findMany({
+        where: { owner_id: userId, is_active: true },
+        select: { id: true },
+        orderBy: { created_at: "asc" },
+        take: 2,
       });
+
+      if (existingHostels.length === 1) {
+        await prisma.hostels.update({
+          where: { id: existingHostels[0].id },
+          data: mapped,
+        });
+      } else if (existingHostels.length > 1) {
+        throw new Error("VALIDATION: hostel_id is required for existing hostel updates");
+      } else {
+        // Enforcement: creating a new hostel requires active subscription and available hostel slots
+        await planEnforcementService.assertSubscriptionActive(userId);
+        await planEnforcementService.assertHostelLimit(userId);
+        await prisma.hostels.create({
+          data: {
+            owner_id: userId,
+            name: mapped.name || "My Hostel",
+            phone: mapped.phone || "",
+            address: mapped.address || "",
+            ...mapped,
+          },
+        });
+      }
     }
 
     return this.getOwnerProfile(userId);
