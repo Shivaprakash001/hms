@@ -4,7 +4,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
     Menu, X, Home, Bed, Users, CreditCard, MessageSquare, Receipt,
     Search, Bell, ChevronLeft, ChevronRight, LogOut, Settings, User,
-    ShieldCheck, AlertCircle, CheckCircle2, Clock, ChevronDown, BarChart2
+    ShieldCheck, AlertCircle, CheckCircle2, Clock, ChevronDown, BarChart2, UserMinus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
@@ -336,6 +336,7 @@ const OwnerLayout = () => {
         { name: 'Tenants', icon: Users, path: buildHostelPath('tenants'), operational: true },
         { name: 'Payments', icon: CreditCard, path: buildHostelPath('payments'), operational: true },
         { name: 'Expenses', icon: Receipt, path: buildHostelPath('expenses'), operational: true },
+        { name: 'Move-Outs', icon: UserMinus, path: buildHostelPath('move-out'), operational: true },
         { name: 'Activity Log', icon: Clock, path: buildHostelPath('activities'), operational: true },
         { name: 'Portfolio', icon: BarChart2, path: '/owner/portfolio' },
         { name: 'Billing & Plans', icon: CreditCard, path: '/owner/billing' },
