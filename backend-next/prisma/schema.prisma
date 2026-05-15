@@ -258,6 +258,37 @@ model identity_tokens {
   @@schema("public")
 }
 
+model identificationDocument {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id        String    @db.Uuid
+  doc_type         String
+  doc_number       String?
+  file_url         String
+  file_path        String?
+  file_id          String?
+  mime_type        String
+  file_size        Int
+  document_status  String    @default("PENDING")
+  is_verified      Boolean   @default(false)
+  is_active        Boolean   @default(true)
+  uploaded_by      String?
+  created_at       DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime? @db.Timestamptz(6)
+  rejection_reason String?
+  approved_by      String?   @db.Uuid
+  approved_at      DateTime? @db.Timestamptz(6)
+  rejected_by      String?   @db.Uuid
+  rejected_at      DateTime? @db.Timestamptz(6)
+  reject_ip        String?
+  tenant           tenants   @relation(fields: [tenant_id], references: [id])
+
+  @@index([tenant_id])
+  @@index([tenant_id, is_active])
+  @@index([tenant_id, doc_type, is_active])
+  @@map("identification_documents")
+  @@schema("public")
+}
+
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model login_attempts {
   id             String   @id @db.Uuid
@@ -1178,6 +1209,7 @@ model tenants {
   exit_reason            String?
   hostel_id              String                  @db.Uuid
   mobile_verified        Boolean                 @default(false)
+  document_verified      Boolean                 @default(false)
   complaints             complaints[]
   payment_attempts       paymentAttempt[]
   payments               payments[]
@@ -1189,6 +1221,7 @@ model tenants {
   tenant_advance_ledger  tenant_advance_ledger[]
   tenant_behavior_scores tenant_behavior_scores?
   move_out_requests      move_out_requests[]
+  identification_documents identificationDocument[]
   hostels                hostels                 @relation(fields: [hostel_id], references: [id])
   profiles               profile                @relation(fields: [profile_id], references: [id])
 

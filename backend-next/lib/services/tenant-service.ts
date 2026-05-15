@@ -630,14 +630,15 @@ export class TenantService {
     }
 
     if (data.status === "LEFT") {
-      if (tenant.status !== "ACTIVE") {
-        throw new Error("VALIDATION: LEFT status is only for previously-ACTIVE tenants. Use cancel-invitation for INVITED tenants.");
-      }
-      // Auto-end active allocations if any exists
-      await prisma.roomAllocation.updateMany({
-        where: { tenant_id: id, is_active: true, end_date: null },
-        data: { is_active: false, end_date: new Date() },
-      });
+      // ── GUARD: Direct LEFT transitions are no longer allowed. ──
+      // The owner MUST use the move-out workflow which enforces:
+      //   inspection → settlement → payment → completion → LEFT
+      // This prevents tenants being marked LEFT without owner review.
+      throw new Error(
+        "VALIDATION: Cannot set status to LEFT directly. " +
+        "Please use the Move-Out workflow (POST /api/move-out/requests) " +
+        "which ensures proper inspection, settlement, and approval."
+      );
     }
 
     const updated = await prisma.tenants.update({
@@ -672,33 +673,21 @@ export class TenantService {
 
     // Lifecycle-correct soft delete:
     // INVITED => CANCELLED (never activated, treat as cancelled invitation)
-    // ACTIVE  => LEFT      (was active, departed)
     if (tenant.status === "INVITED") {
       return this.cancelInvitation(id, ownerId);
     }
 
-    await prisma.roomAllocation.updateMany({
-      where: { tenant_id: id, is_active: true, end_date: null },
-      data: { is_active: false, end_date: new Date() },
-    });
+    // ACTIVE / MOVE_OUT_REQUESTED => must use move-out workflow
+    if (tenant.status === "ACTIVE" || tenant.status === "MOVE_OUT_REQUESTED") {
+      throw new Error(
+        "VALIDATION: Cannot remove an active tenant directly. " +
+        "Please use the Move-Out workflow which ensures proper " +
+        "inspection, settlement calculation, and owner approval before marking as LEFT."
+      );
+    }
 
-    const updated = await prisma.tenants.update({
-      where: { id },
-      data: { status: "LEFT" },
-      include: { profiles: true },
-    });
-    await allocationReconciliationService.reconcileTenant(id).catch((err: any) => {
-      logger.error("reconcile_after_tenant_delete_failed", {
-        tenant_id: id,
-        error: String(err?.message || err),
-      });
-    });
-    await eventSystem.trigger("tenant_status_changed", {
-      owner_id: ownerId,
-      tenant_id: id,
-      status: "LEFT",
-    });
-    return this.withLegacyTenantRelations(updated);
+    // LEFT / CANCELLED — already terminal, no-op
+    throw new Error(`VALIDATION: Tenant is already in terminal status: ${tenant.status}`);
   }
 
   async reactivateTenant(id: string, rent: number, joinedOn: Date, ownerId: string) {
