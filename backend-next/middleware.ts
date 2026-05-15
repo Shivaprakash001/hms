@@ -7,6 +7,8 @@ const PUBLIC_ROUTES = [
   "/api/auth/register",
   "/api/auth/send-otp",
   "/api/auth/verify-otp",
+  "/api/auth/send-phone-otp",
+  "/api/auth/verify-phone-otp",
   "/api/auth/refresh",
   "/api/auth/google-callback",
   "/api/tenants/activate",

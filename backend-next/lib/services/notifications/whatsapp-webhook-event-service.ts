@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { prisma } from "@/lib/db";
 import { getLogger } from "@/lib/logger";
+import { incrementOtpDeliveryStatus } from "@/lib/metrics";
 
 const logger = getLogger("whatsapp.webhook-event");
 
@@ -218,6 +219,7 @@ export class WhatsAppWebhookEventService {
     let updatedLogs = 0;
     for (const statusEvent of statuses) {
       updatedLogs += await this.applyStatusEvent(statusEvent);
+      await this.applyOtpStatusEvent(statusEvent);
     }
 
     const result = {
@@ -301,6 +303,25 @@ export class WhatsAppWebhookEventService {
     }
 
     return Number(count || 0);
+  }
+
+  private async applyOtpStatusEvent(event: ExtractedStatusEvent) {
+    incrementOtpDeliveryStatus(event.status);
+
+    const count = await prisma.$executeRaw`
+      UPDATE phone_verification_otps
+      SET provider_status = ${event.status},
+          failure_reason = ${event.status === "FAILED" ? event.errorMessage : null}
+      WHERE meta_message_id = ${event.providerMessageId}
+    `;
+
+    if (Number(count || 0) > 0) {
+      logger.info("whatsapp.webhook.otp_status_updated", {
+        provider_message_id: event.providerMessageId,
+        status: event.status,
+        updated_otps: Number(count || 0),
+      });
+    }
   }
 }
 

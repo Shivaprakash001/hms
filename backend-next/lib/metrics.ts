@@ -60,6 +60,15 @@ const metrics = {
     refresh_failed: 0,
     token_reuse_detected: 0,
   },
+  otp: {
+    requests_total: 0,
+    verifications_total: 0,
+    verification_failures: 0,
+    rate_limit_hits: 0,
+    send_failures: 0,
+    expired_total: 0,
+    delivery_status_counts: {} as Record<string, number>,
+  },
   // ── PDF Cache observability ────────────────────────────────────────────────
   pdf_cache: {
     receipt_hits:    0,  // Puppeteer bypassed — served from ImageKit cache
@@ -118,6 +127,26 @@ export function incrementPayment(type: "created" | "success" | "failed" | "recon
 
 export function incrementAuth(type: "login_success" | "login_failed" | "refresh_success" | "refresh_failed" | "token_reuse_detected") {
   metrics.auth[type]++;
+}
+
+// ── OTP ─────────────────────────────────────────────────────────────────────
+
+export function incrementOtpMetric(
+  type:
+    | "requests_total"
+    | "verifications_total"
+    | "verification_failures"
+    | "rate_limit_hits"
+    | "send_failures"
+    | "expired_total",
+) {
+  metrics.otp[type]++;
+}
+
+export function incrementOtpDeliveryStatus(status: string) {
+  const normalized = String(status || "UNKNOWN").toUpperCase();
+  metrics.otp.delivery_status_counts[normalized] =
+    (metrics.otp.delivery_status_counts[normalized] || 0) + 1;
 }
 
 // ── PDF Cache ────────────────────────────────────────────────────────────────
@@ -207,6 +236,13 @@ export function resetMetrics() {
   metrics.auth.refresh_success = 0;
   metrics.auth.refresh_failed = 0;
   metrics.auth.token_reuse_detected = 0;
+  metrics.otp.requests_total = 0;
+  metrics.otp.verifications_total = 0;
+  metrics.otp.verification_failures = 0;
+  metrics.otp.rate_limit_hits = 0;
+  metrics.otp.send_failures = 0;
+  metrics.otp.expired_total = 0;
+  metrics.otp.delivery_status_counts = {};
   metrics.pdf_cache.receipt_hits = 0;
   metrics.pdf_cache.receipt_misses = 0;
   metrics.pdf_cache.invoice_hits = 0;
