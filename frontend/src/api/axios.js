@@ -59,8 +59,16 @@ api.interceptors.response.use(
     (response) => response,
     async (error) => {
         const originalRequest = error.config;
+        const requestUrl = originalRequest?.url || '';
+        const isPublicAuthFlow = [
+            '/auth/login',
+            '/auth/register',
+            '/auth/send-otp',
+            '/auth/verify-otp',
+            '/auth/refresh',
+        ].some((path) => requestUrl.includes(path));
 
-        if (error.response && error.response.status === 401 && !originalRequest._retry) {
+        if (error.response && error.response.status === 401 && !isPublicAuthFlow && !originalRequest._retry) {
             originalRequest._retry = true;
 
             try {
