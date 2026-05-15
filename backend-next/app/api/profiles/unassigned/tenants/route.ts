@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
       where: {
         owner_id: session.sub,
         status: { not: "LEFT" },
-        allocations: {
+        room_allocations: {
           none: {
             is_active: true,
             end_date: null,
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
         id: true,
         profile_id: true,
         status: true,
-        profile: {
+        profiles: {
           select: {
             name: true,
             email: true,
@@ -48,9 +48,9 @@ export async function GET(req: NextRequest) {
     const profiles = tenants.map((tenant) => ({
       id: tenant.profile_id,
       tenant_id: tenant.id,
-      name: tenant.profile.name,
-      email: tenant.profile.email,
-      phone: tenant.profile.phone,
+      name: (tenant as any).profiles.name,
+      email: (tenant as any).profiles.email,
+      phone: (tenant as any).profiles.phone,
       status: tenant.status,
     }));
 

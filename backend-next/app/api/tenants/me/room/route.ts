@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
       where: { profile_id: session.sub },
       select: {
         id: true,
-        allocations: {
+        room_allocations: {
           where: { is_active: true, end_date: null },
           include: { room: true }
         }
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
       return apiError("Tenant record not found", "NOT_FOUND", 404);
     }
 
-    const allocation = tenant.allocations[0];
+    const allocation = (tenant as any).room_allocations[0];
     if (!allocation) {
       return apiResponse({ room: null, roommates: [] });
     }
@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
       include: {
         tenant: {
           select: {
-            profile: {
+            profiles: {
               select: {
                 name: true
               }
@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
     });
 
     const roommates = occupants.map((occ: any) => ({
-      name: occ.tenant?.profile?.name || "Unknown"
+      name: occ.tenant?.profiles?.name || "Unknown"
     }));
 
     return apiResponse({

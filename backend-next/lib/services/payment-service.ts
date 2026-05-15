@@ -2552,7 +2552,7 @@ export class PaymentService {
         ...(status ? { status: status as any } : {})
       },
       include: {
-        tenant: { include: { profile: true } },
+        tenant: { include: { profiles: true } },
         allocation: { include: { room: true } },
         payments: true
       },
@@ -2562,9 +2562,9 @@ export class PaymentService {
     return dues.map((d: any) => ({
       obligation_id: d.id,
       tenant_id: d.tenant_id,
-      tenant_name: d.tenant.profile.name,
-      tenant_email: d.tenant.profile.email,
-      tenant_phone: d.tenant.profile.phone,
+      tenant_name: d.tenant.profiles.name,
+      tenant_email: d.tenant.profiles.email,
+      tenant_phone: d.tenant.profiles.phone,
       room_no: d.allocation?.room?.room_no || "N/A",
       rent_month: d.rent_month,
       due_date: d.due_date,
@@ -2603,7 +2603,7 @@ export class PaymentService {
         ...(monthStart && nextMonthStart ? { rent_month: { gte: monthStart, lt: nextMonthStart } } : {})
       },
       include: {
-        tenant: { include: { profile: true } },
+        tenant: { include: { profiles: true } },
         allocation: { include: { room: true } },
         payments: {
           where: {
@@ -2640,9 +2640,9 @@ export class PaymentService {
         id: ob.id,
         obligationId: ob.id,
         tenantId: ob.tenant_id,
-        tenantName: ob.tenant?.profile?.name || "Unknown",
-        tenantPhone: ob.tenant?.profile?.phone || null,
-        tenantEmail: ob.tenant?.profile?.email || null,
+        tenantName: ob.tenant?.profiles?.name || "Unknown",
+        tenantPhone: ob.tenant?.profiles?.phone || null,
+        tenantEmail: ob.tenant?.profiles?.email || null,
         room: ob.allocation?.room?.room_no || "N/A",
         month: ob.rent_month,
         dueDate: ob.due_date,
@@ -2779,12 +2779,12 @@ export class PaymentService {
     const tenant = await prisma.tenants.findUnique({
       where: { id: tenantId },
       include: {
-        allocations: {
+        room_allocations: {
           where: { is_active: true, end_date: null },
           include: { room: true },
           orderBy: { created_at: "desc" }
         },
-        obligations: {
+        rent_obligations: {
           orderBy: { due_date: "desc" },
           include: {
             payments: {
@@ -2804,7 +2804,7 @@ export class PaymentService {
     const allPayments: any[] = [];
     const latestUnpaidDueDate = dues.items[0]?.due_date || null;
 
-    const formattedObligations = tenant.obligations.map((o: any) => {
+    const formattedObligations = (tenant as any).rent_obligations.map((o: any) => {
       const obligationPaid = o.payments.reduce((sum: number, p: any) => sum + Number(p.amount_paid), 0);
       const remainingDue = Math.max(0, Number(o.amount) - obligationPaid);
 
@@ -2847,8 +2847,8 @@ export class PaymentService {
       : totalPaid > 0
         ? "PARTIAL"
         : "PENDING";
-    const allocationRent = Number(tenant.allocations?.[0]?.room?.base_rent || 0);
-    const fallbackObligationRent = Number(tenant.obligations?.[0]?.amount || 0);
+    const allocationRent = Number((tenant as any).room_allocations?.[0]?.room?.base_rent || 0);
+    const fallbackObligationRent = Number((tenant as any).rent_obligations?.[0]?.amount || 0);
     const tenantRent = Number(tenant.monthly_rent || 0);
     const monthlyRent =
       (allocationRent > 0 ? allocationRent : 0) ||

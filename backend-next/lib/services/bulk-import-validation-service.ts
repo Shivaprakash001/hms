@@ -257,7 +257,7 @@ export class BulkImportValidationService {
             });
           }
 
-          const currentOccupancy = room._count.allocations;
+          const currentOccupancy = room._count.room_allocations;
           const assignmentsInFile = roomAssignmentsSeen.get(room.id) || 0;
           if (currentOccupancy + assignmentsInFile + 1 > room.capacity) {
             errors.push({
@@ -418,7 +418,7 @@ export class BulkImportValidationService {
     return new Set(profiles.map((p) => p.email.toLowerCase()));
   }
 
-  private async getHostelRooms(hostelId: string): Promise<Array<{ id: string; room_no: string; is_active: boolean; capacity: number; base_rent: number | null; _count: { allocations: number } }>> {
+  private async getHostelRooms(hostelId: string): Promise<Array<{ id: string; room_no: string; is_active: boolean; capacity: number; base_rent: number | null; _count: { room_allocations: number } }>> {
     const hostelRooms = await prisma.rooms.findMany({
       where: { hostel_id: hostelId },
       select: {
@@ -429,7 +429,7 @@ export class BulkImportValidationService {
         base_rent: true,
         _count: {
           select: {
-            allocations: {
+            room_allocations: {
               where: { is_active: true }
             }
           }

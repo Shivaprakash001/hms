@@ -55,7 +55,7 @@ export class RoomAllocationService {
         const room = await tx.rooms.findUnique({
           where: { id: roomId },
           include: {
-            allocations: {
+            room_allocations: {
               where: { end_date: null }
             }
           }
@@ -64,7 +64,7 @@ export class RoomAllocationService {
         if (!room) {
           throw new Error("VALIDATION_ERROR: Room not found");
         }
-        if (room.allocations.length >= room.capacity) {
+        if (room.room_allocations.length >= room.capacity) {
           throw new Error("VALIDATION_ERROR: Room is at maximum capacity");
         }
 
@@ -154,7 +154,7 @@ export class RoomAllocationService {
         const room = await tx.rooms.findUnique({
           where: { id: newRoomId },
           include: {
-            allocations: {
+            room_allocations: {
               where: { end_date: null }
             }
           }
@@ -163,7 +163,7 @@ export class RoomAllocationService {
         if (!room) {
           throw new Error("VALIDATION_ERROR: Target room not found");
         }
-        if (room.allocations.length >= room.capacity) {
+        if (room.room_allocations.length >= room.capacity) {
           throw new Error("VALIDATION_ERROR: Target room is at maximum capacity");
         }
 

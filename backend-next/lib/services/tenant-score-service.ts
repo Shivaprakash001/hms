@@ -74,7 +74,7 @@ export class TenantScoreService {
       select: {
         id: true,
         status: true,
-        behavior_score: {
+        tenant_behavior_scores: {
           select: {
             score: true,
             last_calculated: true,
@@ -86,7 +86,7 @@ export class TenantScoreService {
 
     if (!tenant) throw new Error("NOT_FOUND: Tenant record not found");
 
-    const lastCalculated = tenant.behavior_score?.last_calculated;
+    const lastCalculated = tenant.tenant_behavior_scores?.last_calculated;
     const isStale = !lastCalculated || Date.now() - new Date(lastCalculated).getTime() > this.scoreStaleMs;
     if (isStale && tenant.status === "ACTIVE") {
       await tenantAnalyticsService.calculateTenantScore(tenant.id);
@@ -101,11 +101,11 @@ export class TenantScoreService {
       },
     });
 
-    const score = clampScore(Number(refreshed?.score ?? tenant.behavior_score?.score ?? 100));
+    const score = clampScore(Number(refreshed?.score ?? tenant.tenant_behavior_scores?.score ?? 100));
     const grade = scoreToGrade(score);
     const status = gradeToStatus(grade);
 
-    const metadata = (refreshed?.metadata || tenant.behavior_score?.metadata || {}) as any;
+    const metadata = (refreshed?.metadata || tenant.tenant_behavior_scores?.metadata || {}) as any;
     const latePayments = Number(metadata?.latePayments ?? 0);
     const reminders = Number(metadata?.reminders ?? 0);
     const avgDelayDays = Number(metadata?.avgDelay ?? 0);
@@ -191,7 +191,7 @@ export class TenantScoreService {
       status,
       insights,
       suggestions,
-      updated_at: refreshed?.last_calculated || tenant.behavior_score?.last_calculated || null,
+      updated_at: refreshed?.last_calculated || tenant.tenant_behavior_scores?.last_calculated || null,
     };
   }
 }

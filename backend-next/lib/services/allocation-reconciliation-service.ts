@@ -198,7 +198,7 @@ export class AllocationReconciliationService {
     const stale = await prisma.tenants.findMany({
       where: {
         status: "INVITED",
-        profile: {
+        profiles: {
           invitation_expires_at: { lt: now },
         },
       },
@@ -207,7 +207,7 @@ export class AllocationReconciliationService {
         owner_id: true,
         hostel_id: true,
         profile_id: true,
-        allocations: {
+        room_allocations: {
           where: { is_active: true, end_date: null },
           select: { id: true },
         },
@@ -240,7 +240,7 @@ export class AllocationReconciliationService {
       await eventLog.log("INVITATION_EXPIRED_AUTO_RELEASE", t.owner_id || null, {
         tenant_id: t.id,
         new_status: "EXPIRED",
-        released_allocations: t.allocations.length,
+        released_allocations: (t as any).room_allocations.length,
       }, t.id);
       if (t.hostel_id) invalidateHostelDashboardCache(t.hostel_id);
     }

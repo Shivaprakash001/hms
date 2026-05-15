@@ -63,15 +63,15 @@ export class InvitationService {
       where: { id: room_id, hostel: { owner_id: ownerId, is_active: true } },
       include: {
         hostel: true,
-        allocations: {
+        room_allocations: {
           where: { is_active: true },
-          include: { tenant: { include: { profile: { select: { name: true } } } } },
+          include: { tenant: { include: { profiles: { select: { name: true } } } } },
         },
       },
     });
     if (!room) throw new Error("NOT_FOUND: Target room not found");
     if (!room.hostel) throw new Error("NOT_FOUND: Associated hostel not found");
-    if (room.allocations.length >= room.capacity) {
+    if (room.room_allocations.length >= room.capacity) {
       throw new Error("CAPACITY_EXCEEDED: Room is already at full capacity");
     }
 
@@ -103,8 +103,8 @@ export class InvitationService {
     if (!owner) throw new Error("NOT_FOUND: Owner profile not found");
 
     // Roommate names for the invite email
-    const roommates = (room.allocations || [])
-      .map((a: any) => a.tenant?.profile?.name)
+    const roommates = (room.room_allocations || [])
+      .map((a: any) => a.tenant?.profiles?.name)
       .filter(Boolean) as string[];
 
     // 3. Generate Token (48h)
@@ -374,7 +374,7 @@ export class InvitationService {
               where: { id: roomIdOverride },
               include: {
                 hostel: true,
-                allocations: { where: { is_active: true } },
+                room_allocations: { where: { is_active: true } },
               },
             });
             if (!targetRoom || !targetRoom.hostel) {
@@ -389,7 +389,7 @@ export class InvitationService {
               where: { tenant_id: tenantDetails.id, is_active: true },
             });
             if (!activeAllocation || activeAllocation.room_id !== roomIdOverride) {
-              if (targetRoom.allocations.length >= targetRoom.capacity) {
+              if (targetRoom.room_allocations.length >= targetRoom.capacity) {
                 throw new Error("CAPACITY_EXCEEDED: Target room is already at full capacity");
               }
             }
@@ -513,8 +513,8 @@ export class InvitationService {
     const tenant = await prisma.tenants.findFirst({
       where: { id: tenantId, owner_id: ownerId },
       include: {
-        profile: true,
-        allocations: {
+        profiles: true,
+        room_allocations: {
           where: { is_active: true, end_date: null },
           orderBy: { start_date: "desc" },
           take: 1,
@@ -535,7 +535,7 @@ export class InvitationService {
       where: { id: data.room_id, is_active: true, hostel: { owner_id: ownerId, is_active: true } },
       include: {
         hostel: true,
-        allocations: {
+        room_allocations: {
           where: {
             is_active: true,
             end_date: null,
@@ -546,7 +546,7 @@ export class InvitationService {
       },
     });
     if (!targetRoom || !targetRoom.hostel) throw new Error("NOT_FOUND: Target room not found");
-    if (targetRoom.allocations.length >= targetRoom.capacity) {
+    if (targetRoom.room_allocations.length >= targetRoom.capacity) {
       throw new Error("CAPACITY_EXCEEDED: Target room is already at full capacity");
     }
 
@@ -583,7 +583,7 @@ export class InvitationService {
         },
       });
 
-      const activeAllocation = tenant.allocations[0];
+      const activeAllocation = (tenant as any).room_allocations[0];
       if (activeAllocation) {
         await tx.roomAllocation.update({
           where: { id: activeAllocation.id },

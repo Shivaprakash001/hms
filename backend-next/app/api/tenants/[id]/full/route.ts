@@ -17,9 +17,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         owner_id: session.sub, // Enforce multi-tenant boundary!
       },
       include: {
-        profile: true,
-        documents: true,
-        allocations: {
+        profiles: true,
+        room_allocations: {
           where: { is_active: true, end_date: null },
           orderBy: { start_date: "desc" },
           take: 1,
@@ -29,7 +28,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
           take: 5,
           orderBy: { created_at: "desc" },
         },
-        obligations: {
+        rent_obligations: {
           take: 5,
           orderBy: { due_date: "desc" },
         }

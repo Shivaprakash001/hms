@@ -49,10 +49,9 @@ export async function GET(req: NextRequest) {
         date_of_birth: true,
         permanent_address: true,
         temporary_address: true,
-        document_verified: true,
         created_at: true,
         updated_at: true,
-        profile: {
+        profiles: {
           select: {
             id: true,
             name: true,
@@ -61,7 +60,7 @@ export async function GET(req: NextRequest) {
             emergency_contact: true
           }
         },
-        allocations: {
+        room_allocations: {
           where: { is_active: true, end_date: null },
           orderBy: { start_date: "desc" },
           take: 1,
@@ -74,8 +73,8 @@ export async function GET(req: NextRequest) {
       return apiError("Tenant profile not found", "NOT_FOUND", 404);
     }
 
-    const allocation = tenant.allocations[0];
-    const profile = tenant.profile;
+    const allocation = (tenant as any).room_allocations?.[0];
+    const profile = (tenant as any).profiles;
 
     const verification_badge = await documentService.getVerificationBadge(tenant.id);
 

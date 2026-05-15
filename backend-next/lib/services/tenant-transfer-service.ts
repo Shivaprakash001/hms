@@ -66,7 +66,7 @@ export class TenantTransferService {
     const tenant = await prisma.tenants.findUnique({
       where: { id: tenantId },
       include: {
-        allocations: {
+        room_allocations: {
           where: { is_active: true, end_date: null },
           include: { room: { select: { id: true, hostel_id: true } } },
           orderBy: { start_date: "desc" },
@@ -78,11 +78,11 @@ export class TenantTransferService {
     if (!tenant) {
       throw new Error("NOT_FOUND: Tenant not found");
     }
-    if (!tenant.allocations[0]) {
+    if (!(tenant as any).room_allocations[0]) {
       throw new Error("VALIDATION_ERROR: Tenant has no active allocation. Use normal room allocation instead.");
     }
 
-    const currentAllocation = tenant.allocations[0];
+    const currentAllocation = (tenant as any).room_allocations[0];
     const fromHostelId = currentAllocation.room.hostel_id;
 
     // 2. Verify target room exists and belongs to the same owner
@@ -90,7 +90,7 @@ export class TenantTransferService {
       where: { id: targetRoomId },
       include: {
         hostel: { select: { id: true, owner_id: true, name: true, is_active: true } },
-        allocations: { where: { is_active: true, end_date: null } },
+        room_allocations: { where: { is_active: true, end_date: null } },
       },
     });
 
@@ -116,7 +116,7 @@ export class TenantTransferService {
     }
 
     // 5. Capacity check
-    if (targetRoom.allocations.length >= targetRoom.capacity) {
+    if (targetRoom.room_allocations.length >= targetRoom.capacity) {
       throw new Error("VALIDATION_ERROR: Target room is at maximum capacity");
     }
 

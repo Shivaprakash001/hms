@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
       const tenant = await prisma.tenants.findUnique({
         where: { profile_id: profile.id },
         include: {
-          allocations: {
+          room_allocations: {
             where: { is_active: true },
             orderBy: { created_at: "desc" },
             take: 1,
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
       extra.tenant_status = tenant.status;
       extra.is_profile_completed = tenant.profile_completed || profile.is_profile_completed;
 
-      const activeAlloc = tenant.allocations[0];
+      const activeAlloc = (tenant as any).room_allocations[0];
       if (activeAlloc) {
         extra.room_id = activeAlloc.room_id;
         extra.room_no = activeAlloc.room.room_no;

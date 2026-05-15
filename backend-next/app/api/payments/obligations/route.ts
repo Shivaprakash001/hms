@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
       select: {
         owner_id: true,
         hostel_id: true,
-        allocations: {
+        room_allocations: {
           where: { is_active: true },
           select: { id: true, hostel_id: true, room: { select: { hostel_id: true } } },
         },
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
     }
     await requireHostelBelongsToOwner(ownerId, tenant.hostel_id);
 
-    const activeAllocation = tenant.allocations[0] || null;
+    const activeAllocation = (tenant as any).room_allocations[0] || null;
     const activeAllocationId = activeAllocation?.id || null;
     if (activeAllocation && activeAllocation.hostel_id !== tenant.hostel_id) {
       return apiError("Active allocation hostel does not match tenant hostel", "HOSTEL_CONTEXT_MISMATCH", 409);

@@ -4,9 +4,9 @@ const prisma = new PrismaClient();
 
 async function cleanupOverallocatedRooms() {
   console.log("Checking for overallocated rooms...");
-  const rooms = await prisma.room.findMany({
+  const rooms = await prisma.rooms.findMany({
     include: {
-      allocations: {
+      room_allocations: {
         where: { is_active: true }
       }
     }
@@ -14,11 +14,11 @@ async function cleanupOverallocatedRooms() {
 
   let fixed = 0;
   for (const room of rooms) {
-    if (room.allocations.length > room.capacity) {
-      console.log(`Room ${room.room_no} (Capacity: ${room.capacity}) has ${room.allocations.length} active allocations.`);
+    if (room.room_allocations.length > room.capacity) {
+      console.log(`Room ${room.room_no} (Capacity: ${room.capacity}) has ${room.room_allocations.length} active allocations.`);
       
       // Sort allocations to keep the oldest ones up to capacity
-      const sortedAllocations = room.allocations.sort((a, b) => a.created_at.getTime() - b.created_at.getTime());
+      const sortedAllocations = room.room_allocations.sort((a: any, b: any) => a.created_at.getTime() - b.created_at.getTime());
       
       const toRemove = sortedAllocations.slice(room.capacity);
       

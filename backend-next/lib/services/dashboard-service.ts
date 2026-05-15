@@ -153,8 +153,8 @@ export class DashboardService {
     const tenant = await prisma.tenants.findUnique({
       where: { profile_id: profileId },
       include: {
-        allocations: { where: { is_active: true, end_date: null }, include: { room: true } },
-        obligations: { 
+        room_allocations: { where: { is_active: true, end_date: null }, include: { room: true } },
+        rent_obligations: { 
           where: { status: { in: ["PENDING", "PARTIAL"] } }, 
           orderBy: { due_date: "asc" },
           include: { payments: { select: { amount_paid: true } } }
@@ -173,7 +173,7 @@ export class DashboardService {
 
     return {
       tenant_id: tenant.id,
-      room_no: tenant.allocations[0]?.room.room_no || "Not Assigned",
+      room_no: (tenant as any).room_allocations[0]?.room.room_no || "Not Assigned",
       monthly_rent: Number(tenant.monthly_rent),
       pending_dues: pendingTotal,
       next_payment_date: nextPayment,
