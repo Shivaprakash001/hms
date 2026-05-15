@@ -279,6 +279,7 @@ export class ActivationService {
     options?: { skipped?: boolean; source?: string; version?: string }
   ): Promise<void> {
     const isCompleted = step === "COMPLETED";
+    const now = new Date();
     const existing = await (prisma as any).ownerOnboardingState.findUnique({
       where: { owner_id: ownerId },
       select: { skipped_steps: true },
@@ -294,19 +295,20 @@ export class ActivationService {
       create: {
         owner_id:                ownerId,
         onboarding_step:         step,
-        onboarding_last_seen_at: new Date(),
-        onboarding_completed_at: isCompleted ? new Date() : null,
+        onboarding_last_seen_at: now,
+        onboarding_completed_at: isCompleted ? now : null,
         skipped_steps:           newSkipped,
         onboarding_source:       options?.source ?? null,
         onboarding_version:      options?.version ?? "v2",
         activation_score:        0,
+        updated_at:              now,
       },
       update: {
         onboarding_step:         step,
-        onboarding_last_seen_at: new Date(),
-        ...(isCompleted ? { onboarding_completed_at: new Date() } : {}),
+        onboarding_last_seen_at: now,
+        ...(isCompleted ? { onboarding_completed_at: now } : {}),
         skipped_steps:           newSkipped,
-        updated_at:              new Date(),
+        updated_at:              now,
       },
     });
   }
@@ -317,20 +319,22 @@ export class ActivationService {
    */
   async refreshActivationScore(ownerId: string): Promise<number> {
     const activation = await this.deriveOperationalActivation(ownerId);
+    const now = new Date();
     await (prisma as any).ownerOnboardingState.upsert({
       where: { owner_id: ownerId },
       create: {
         owner_id:                ownerId,
         onboarding_step:         activation.operational_state === "FULLY_OPERATIONAL" ? "COMPLETED" : "ACCOUNT_CREATED",
         activation_score:        activation.activation_score,
-        onboarding_last_seen_at: new Date(),
+        onboarding_last_seen_at: now,
         skipped_steps:           [],
+        updated_at:              now,
       },
       update: {
         activation_score: activation.activation_score,
-        updated_at:       new Date(),
+        updated_at:       now,
         ...(activation.operational_state === "FULLY_OPERATIONAL"
-          ? { onboarding_step: "COMPLETED", onboarding_completed_at: new Date() }
+          ? { onboarding_step: "COMPLETED", onboarding_completed_at: now }
           : {}),
       },
     });
