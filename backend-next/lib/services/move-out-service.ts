@@ -5,6 +5,7 @@ import { getLogger } from "../logger";
 import { financialService } from "./financial-service";
 import { tenantAdvanceService } from "./tenant-advance-service";
 import { assertTransition, assertCapability, checkCapability, getTenantSteps } from "./move-out-state-machine";
+import { notifyMoveOutTransition } from "./move-out-notifications";
 
 // Re-export capability guards for use by other services
 export { assertCapability, checkCapability } from "./move-out-state-machine";
@@ -76,6 +77,7 @@ export class MoveOutService {
       return req;
     });
     logger.info("move_out.created", { id: request.id, tenant_id: tenantId, eviction: isEviction });
+    notifyMoveOutTransition(request.id, "REQUESTED");
     return { request, notice_period_violation: violation, notice_period_days: noticePeriodDays };
   }
 
@@ -90,6 +92,7 @@ export class MoveOutService {
         data: { status: "CANCELLED", cancelled_at: new Date(), cancelled_by: cancelledBy, cancellation_reason: reason || null, updated_at: new Date() },
       });
       await tx.tenants.update({ where: { id: req.tenant_id }, data: { status: "ACTIVE", updated_at: new Date() } });
+      notifyMoveOutTransition(requestId, "CANCELLED");
       return updated;
     });
   }
@@ -133,6 +136,7 @@ export class MoveOutService {
         });
       }
       await tx.move_out_requests.update({ where: { id: params.requestId }, data: { status: "INSPECTION_DONE", updated_at: new Date() } });
+      notifyMoveOutTransition(params.requestId, "INSPECTION_DONE");
       return inspection;
     });
   }
@@ -192,6 +196,7 @@ export class MoveOutService {
           ...(nextStatus === "COMPLETED" ? { financial_completion_date: new Date(), completed_at: new Date() } : {}),
         },
       });
+      notifyMoveOutTransition(requestId, nextStatus);
       return { ...preview, status: nextStatus };
     });
   }
@@ -224,6 +229,7 @@ export class MoveOutService {
         await tx.move_out_requests.update({ where: { id: params.requestId }, data: { room_release_date: physicalDate } });
         await tx.tenants.update({ where: { id: req.tenant_id }, data: { status: "LEFT", exit_date: physicalDate, exit_reason: req.reason, exit_notes: req.reason_text, updated_at: now } });
       }
+      notifyMoveOutTransition(params.requestId, "COMPLETED");
       return { success: true, request_id: params.requestId, physical_exit_date: physicalDate };
     });
   }
@@ -238,6 +244,7 @@ export class MoveOutService {
         data: { request_id: params.requestId, raised_by: params.raisedBy, raised_by_role: params.raisedByRole, dispute_type: params.disputeType, description: params.description, disputed_amount: params.disputedAmount || null, evidence_urls: params.evidenceUrls || [] },
       });
       await tx.move_out_requests.update({ where: { id: params.requestId }, data: { status: "DISPUTED", updated_at: new Date() } });
+      notifyMoveOutTransition(params.requestId, "DISPUTED");
       return dispute;
     });
   }
@@ -251,6 +258,7 @@ export class MoveOutService {
       const openCount = await tx.exit_disputes.count({ where: { request_id: dispute.request_id, status: "OPEN", id: { not: disputeId } } });
       if (openCount === 0) {
         await tx.move_out_requests.update({ where: { id: dispute.request_id }, data: { status: "PAYMENT_PENDING", updated_at: new Date() } });
+        notifyMoveOutTransition(dispute.request_id, "PAYMENT_PENDING");
       }
       return { resolved: true, remaining_disputes: openCount };
     });
