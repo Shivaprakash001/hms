@@ -41,21 +41,21 @@ export class InvoiceService {
     let receipt = await prisma.receipts.findFirst({
       where: { payment_id: paymentId },
       include: {
-        payment: true,
-        tenant: { include: { profile: true } }
+        payments: true,
+        tenants: { include: { profiles: true } }
       }
     });
 
     if (!receipt) {
       const payment = await prisma.payments.findUnique({
         where: { id: paymentId },
-        include: { obligation: true, tenant: { include: { profile: true } } }
+        include: { obligation: true, tenants: { include: { profiles: true } } }
       });
       if (!payment) throw new Error("Valid transaction payment not found");
       if (!payment.hostel_id) {
         throw new Error("HOSTEL_CONTEXT_REQUIRED: Payment is missing immutable hostel context");
       }
-      if (payment.tenant?.hostel_id && payment.tenant.hostel_id !== payment.hostel_id) {
+      if (payment.tenants?.hostel_id && payment.tenants.hostel_id !== payment.hostel_id) {
         throw new Error("HOSTEL_CONTEXT_MISMATCH: Payment hostel does not match tenant hostel");
       }
       if (payment.obligation?.hostel_id && payment.obligation.hostel_id !== payment.hostel_id) {
@@ -71,14 +71,14 @@ export class InvoiceService {
           transaction_id: payment.reference_number || undefined,
           receipt_number: `HMS-${new Date().getFullYear()}-${new Date().getTime().toString().slice(-5)}`,
           rent_month: payment.obligation?.rent_month || undefined,
-          tenant_name: payment.tenant?.profile?.name || '-',
+          tenant_name: payment.tenants?.profiles?.name || '-',
           owner_id: payment.owner_id,
           hostel_id: payment.hostel_id,
-          hostel_name: payment.tenant?.hostel_id ? undefined : null,
+          hostel_name: payment.tenants?.hostel_id ? undefined : null,
         },
         include: {
-          payment: true,
-          tenant: { include: { profile: true } }
+          payments: true,
+          tenants: { include: { profiles: true } }
         }
       });
     }
@@ -132,16 +132,16 @@ export class InvoiceService {
     });
 
     // ── 2. PREPARE DATA ──
-    const tenantName = receipt.tenant.profile?.name || receipt.tenant_name || "Unknown Tenant";
-    const tenantPhone = receipt.tenant.profile?.phone || "N/A";
-    const tenantEmail = receipt.tenant.profile?.email || "";
+    const tenantName = (receipt as any).tenants.profiles?.name || receipt.tenant_name || "Unknown Tenant";
+    const tenantPhone = (receipt as any).tenants.profiles?.phone || "N/A";
+    const tenantEmail = (receipt as any).tenants.profiles?.email || "";
     const roomNo = allocation?.room?.room_no || "N/A";
-    const tenantId = receipt.tenant.id.split('-')[0].toUpperCase();
+    const tenantId = (receipt as any).tenants.id.split('-')[0].toUpperCase();
     const curr = getCurrencySymbol(prefs);
     const amountVal = Number(receipt.amount).toFixed(2);
     const monthLabel = formatMonthYear(receipt.rent_month, prefs);
     const issueDate = formatShortDate(receipt.issued_at, prefs);
-    const paymentDate = formatShortDate(receipt.payment.payment_date, prefs);
+    const paymentDate = formatShortDate((receipt as any).payments.payment_date, prefs);
 
     // ── 3. CREATE PDF ──
     const pdfDoc = await PDFDocument.create();

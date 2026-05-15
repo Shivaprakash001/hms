@@ -22,13 +22,13 @@ import { incrementPdfCache } from "../metrics";
 import { acquireSystemLock, releaseSystemLock, sleep } from "../lock";
 
 async function resolveHostelForPayment(payment: any): Promise<{ hostel: any; prefs: any }> {
-  const ownerId = payment.tenant?.owner_id || payment.owner_id || "";
+  const ownerId = payment.tenants?.owner_id || payment.owner_id || "";
 
   if (!payment.hostel_id) {
     throw new Error("HOSTEL_CONTEXT_REQUIRED: Payment is missing immutable hostel context");
   }
 
-  if (payment.tenant?.hostel_id && payment.tenant.hostel_id !== payment.hostel_id) {
+  if (payment.tenants?.hostel_id && payment.tenants.hostel_id !== payment.hostel_id) {
     throw new Error("HOSTEL_CONTEXT_MISMATCH: Payment hostel does not match tenant hostel");
   }
 
@@ -101,14 +101,14 @@ export class ReceiptService {
     const payment = await prisma.payments.findUnique({
       where: { id: paymentId },
       include: {
-        tenant: { include: { profile: true } },
+        tenants: { include: { profiles: true } },
         obligation: true,
       },
     });
 
     if (!payment) throw new Error("NOT_FOUND: Payment not found");
 
-    const ownerId = payment.tenant.owner_id || payment.owner_id || "";
+    const ownerId = (payment as any).tenants.owner_id || payment.owner_id || "";
     // Receipt rows are financial audit artifacts and must exist for every settled payment.
     // Product/plan gating should apply to PDF/email delivery surfaces, not to ledger evidence.
     // Resolve hostel from the immutable payment scope.
@@ -132,7 +132,7 @@ export class ReceiptService {
             payment_method: payment.payment_method,
             transaction_id: payment.reference_number,
             hostel_name: hostel?.name || "HMS Hostel",
-            tenant_name: payment.tenant.profile.name,
+            tenant_name: (payment as any).tenants.profiles.name,
             rent_month: payment.obligation.rent_month,
             hostel_id: paymentHostelId,
           },
@@ -186,8 +186,8 @@ export class ReceiptService {
     let receipt = await prisma.receipts.findFirst({
       where: { payment_id: paymentId },
       include: {
-        payment: { include: { obligation: true } },
-        tenant: { include: { profile: true } },
+        payments: { include: { obligation: true } },
+        tenants: { include: { profiles: true } },
       },
     });
 
@@ -197,8 +197,8 @@ export class ReceiptService {
       receipt = await prisma.receipts.findFirst({
         where: { payment_id: paymentId },
         include: {
-          payment: { include: { obligation: true } },
-          tenant: { include: { profile: true } },
+          payments: { include: { obligation: true } },
+          tenants: { include: { profiles: true } },
         },
       });
     }
@@ -254,7 +254,7 @@ export class ReceiptService {
     if (!receipt.hostel_id) {
       throw new Error("HOSTEL_CONTEXT_REQUIRED: Receipt is missing immutable hostel context");
     }
-    if (receipt.payment?.hostel_id && receipt.payment.hostel_id !== receipt.hostel_id) {
+    if ((receipt as any).payments?.hostel_id && (receipt as any).payments.hostel_id !== receipt.hostel_id) {
       throw new Error("HOSTEL_CONTEXT_MISMATCH: Receipt hostel does not match payment hostel");
     }
     hostel = await prisma.hostels.findUnique({ where: { id: receipt.hostel_id } });
@@ -291,9 +291,9 @@ export class ReceiptService {
       issued_at: receipt.issued_at,
 
       // Tenant
-      tenant_name: receipt.tenant?.profile?.name || receipt.tenant_name || "Tenant",
-      tenant_phone: receipt.tenant?.profile?.phone || null,
-      tenant_email: receipt.tenant?.profile?.email || null,
+      tenant_name: (receipt as any).tenants?.profiles?.name || receipt.tenant_name || "Tenant",
+      tenant_phone: (receipt as any).tenants?.profiles?.phone || null,
+      tenant_email: (receipt as any).tenants?.profiles?.email || null,
       room_no: fallbackAllocation?.room?.room_no || null,
       room_floor: fallbackAllocation?.room?.floor != null
         ? String(fallbackAllocation.room.floor)
@@ -303,16 +303,16 @@ export class ReceiptService {
       amount: Number(receipt.amount),
       payment_method: receipt.payment_method,
       transaction_id: receipt.transaction_id || null,
-      reference_number: receipt.payment?.reference_number || null,
-      payment_date: receipt.payment?.payment_date || receipt.issued_at,
+      reference_number: (receipt as any).payments?.reference_number || null,
+      payment_date: (receipt as any).payments?.payment_date || receipt.issued_at,
 
       // Obligation
-      rent_month: receipt.rent_month || receipt.payment?.obligation?.rent_month || null,
-      due_date: receipt.payment?.obligation?.due_date || null,
-      obligation_amount: receipt.payment?.obligation
-        ? Number(receipt.payment.obligation.amount)
+      rent_month: receipt.rent_month || (receipt as any).payments?.obligation?.rent_month || null,
+      due_date: (receipt as any).payments?.obligation?.due_date || null,
+      obligation_amount: (receipt as any).payments?.obligation
+        ? Number((receipt as any).payments.obligation.amount)
         : null,
-      obligation_status: receipt.payment?.obligation?.status || null,
+      obligation_status: (receipt as any).payments?.obligation?.status || null,
 
       // Preferences
       prefs,
