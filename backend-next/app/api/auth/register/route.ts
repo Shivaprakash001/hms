@@ -5,13 +5,15 @@ import { NextRequest } from "next/server";
 import { apiResponse, apiError } from "@/lib/auth";
 import { authService } from "@/lib/services/auth-service";
 import { RegisterSchema } from "@/lib/validators";
-import { normalizeIndianPhone, verifyFirebasePhoneToken } from "@/lib/firebase-admin";
+import { normalizeIndianPhone } from "@/lib/utils/phone-utils";
+import { verifyIdentityToken } from "@/lib/auth-edge";
+import { prisma } from "@/lib/db";
 
+const OTP_PURPOSE = "PHONE_VERIFICATION";
+const OTP_ACTION  = "registration";
 
 /**
- * 📝 AUTH REGISTER — Owner Registration
- * Public endpoint. Only creates Owner/Admin accounts.
- * Tenants must be invited by an owner.
+ * 📝 AUTH REGISTER — Owner Registration (MSG91 Edition)
  */
 export async function POST(req: NextRequest) {
   try {
@@ -27,8 +29,33 @@ export async function POST(req: NextRequest) {
       return apiError("Valid Indian mobile number is required", "VALIDATION_ERROR", 400);
     }
 
-    await verifyFirebasePhoneToken(validated.data.firebase_phone_id_token, normalizedPhone);
+    // ── Verify MSG91 flow token ─────────────────────────────────────────────
+    const verificationToken = (body as any).verification_token;
+    if (!verificationToken) {
+      return apiError("Phone verification is required", "UNAUTHORIZED", 401);
+    }
 
+    const payload = await verifyIdentityToken(verificationToken, OTP_PURPOSE, OTP_ACTION);
+    if (!payload || payload.userId !== normalizedPhone) {
+      return apiError("Invalid or expired verification token", "UNAUTHORIZED", 401);
+    }
+
+    // Check if JTI was already used (single-use token)
+    const tokenRecord = await prisma.identityToken.findUnique({
+      where: { jti: payload.jti }
+    });
+
+    if (!tokenRecord || tokenRecord.used) {
+      return apiError("Verification token already used", "UNAUTHORIZED", 401);
+    }
+
+    // Mark token as used
+    await prisma.identityToken.update({
+      where: { jti: payload.jti },
+      data: { used: true }
+    });
+
+    // ── Create Account ──────────────────────────────────────────────────────
     const profile = await authService.registerOwner({
       ...validated.data,
       phone: normalizedPhone,
@@ -39,8 +66,6 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     if (error.message.startsWith("ALREADY_EXISTS"))
       return apiError(error.message.split(": ")[1], "ALREADY_EXISTS", 400);
-    if (error.message.startsWith("PHONE_VERIFICATION_FAILED"))
-      return apiError(error.message.split(": ")[1], "PHONE_VERIFICATION_FAILED", 403);
     if (error.message.startsWith("INTERNAL"))
       return apiError(error.message.split(": ")[1], "INTERNAL_ERROR", 500);
     return apiError(error.message || "Registration failed");

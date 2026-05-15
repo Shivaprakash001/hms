@@ -73,7 +73,7 @@ const Register = () => {
         if (!formData.name.trim())  return 'Enter your full name';
         if (!formData.email.trim()) return 'Enter your email';
         if (!formData.phone.trim() || formData.phone.length !== 10) return 'Enter a valid 10-digit phone number';
-        if (!phoneVerification?.idToken || phoneVerification.phone !== normalizeIndianPhone(formData.phone)) return 'Please verify your mobile number with OTP';
+        if (!phoneVerification?.verificationToken || phoneVerification.phone !== normalizeIndianPhone(formData.phone)) return 'Please verify your mobile number with OTP';
         for (const rule of PW_RULES) {
             if (!rule.test(formData.password)) return `Password: ${rule.label.toLowerCase()} needed`;
         }
@@ -97,7 +97,7 @@ const Register = () => {
             await authService.register({
                 ...formData,
                 phone: normalizeIndianPhone(formData.phone),
-                firebase_phone_id_token: phoneVerification.idToken,
+                verification_token: phoneVerification.verificationToken,
             });
             setSuccess(true);
             setStoredStep('ACCOUNT_CREATED');

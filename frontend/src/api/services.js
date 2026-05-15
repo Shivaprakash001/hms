@@ -15,6 +15,14 @@ export const authService = {
         const response = await api.post('/auth/register', data);
         return response.data;
     },
+    sendOtp: async (phone) => {
+        const response = await api.post('/auth/send-otp', { phone });
+        return response.data;
+    },
+    verifyOtp: async (phone, otp, action) => {
+        const response = await api.post('/auth/verify-otp', { phone, otp, action });
+        return response.data;
+    },
     changePassword: async (oldPassword, newPassword) => {
         const response = await api.post('/auth/change-password', {
             old_password: oldPassword,

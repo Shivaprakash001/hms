@@ -3,13 +3,16 @@ export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
-import { tenantService } from "@/lib/services/tenant-service";
 import { prisma } from "@/lib/db";
 import { TenantProfileUpdateSchema } from "@/lib/validators";
 import { getTenantOperationalContext } from "@/lib/hostel-context";
-import { imagekit, IMAGEKIT_URL_ENDPOINT } from "@/lib/imagekit";
-import { normalizeIndianPhone, verifyFirebasePhoneToken } from "@/lib/firebase-admin";
+import { imagekit } from "@/lib/imagekit";
+import { normalizeIndianPhone } from "@/lib/utils/phone-utils";
+import { verifyIdentityToken } from "@/lib/auth-edge";
 
+
+const OTP_PURPOSE = "PHONE_VERIFICATION";
+const OTP_ACTION  = "tenant_onboarding";
 
 /**
  * 👨‍🎓 COMPLETE TENANT PROFILE (Onboarding)
@@ -44,15 +47,28 @@ export async function POST(req: NextRequest) {
       return apiError(`Validation error at ${issuePath}: ${issueMessage}`, "VALIDATION_ERROR", 400);
     }
 
-    const payload = validated.data;
+    const payload = (validated.data as any);
     const normalizedPhone = normalizeIndianPhone(payload.phone);
     if (!normalizedPhone) {
       return apiError("Valid Indian mobile number is required", "VALIDATION_ERROR", 400);
     }
-    if (!payload.firebase_phone_id_token) {
+
+    // ── Verify MSG91 flow token ─────────────────────────────────────────────
+    if (!payload.verification_token) {
       return apiError("Mobile OTP verification is required", "PHONE_VERIFICATION_REQUIRED", 403);
     }
-    await verifyFirebasePhoneToken(payload.firebase_phone_id_token, normalizedPhone);
+
+    const otpPayload = await verifyIdentityToken(payload.verification_token, OTP_PURPOSE, OTP_ACTION);
+    if (!otpPayload || otpPayload.userId !== normalizedPhone) {
+      return apiError("Invalid or expired verification token", "UNAUTHORIZED", 401);
+    }
+
+    const tokenRecord = await prisma.identityToken.findUnique({
+      where: { jti: otpPayload.jti },
+    });
+    if (!tokenRecord || tokenRecord.used) {
+      return apiError("Verification token already used", "UNAUTHORIZED", 401);
+    }
     
     // Default mapped values
     let gender = payload.gender;
@@ -100,8 +116,13 @@ export async function POST(req: NextRequest) {
       photoUrl = upload.url;
     }
 
-    // Atomic onboarding transaction: either all profile completion writes commit, or none do.
+    // Atomic onboarding transaction
     const updated = await prisma.$transaction(async (tx) => {
+      await tx.identityToken.update({
+        where: { jti: otpPayload.jti },
+        data: { used: true },
+      });
+
       // 1. Update Profile Layer
       await tx.profile.update({
         where: { id: session.sub },
@@ -154,9 +175,6 @@ export async function POST(req: NextRequest) {
     const msg = String(error?.message || "");
     if (error?.code === "P2002" || msg.includes("aadhaar_number")) {
       return apiError("This Aadhaar number is already registered with another account.", "DUPLICATE", 409);
-    }
-    if (msg.startsWith("PHONE_VERIFICATION_FAILED")) {
-      return apiError(msg.split(": ")[1] || "Mobile verification failed", "PHONE_VERIFICATION_FAILED", 403);
     }
     return apiError(error?.message || "Failed to complete profile");
   }

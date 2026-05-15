@@ -30,7 +30,6 @@ const OnboardingTenant   = lazy(() => import('./pages/onboarding/OnboardingTenan
 const OnboardingPayments = lazy(() => import('./pages/onboarding/OnboardingPayments.jsx'));
 const OnboardingDone     = lazy(() => import('./pages/onboarding/OnboardingDone.jsx'));
 const OnboardingChecklist = lazy(() => import('./pages/onboarding/OnboardingChecklist.jsx'));
-const OtpDebug = lazy(() => import('./pages/debug/OtpDebug.jsx'));
 
 // ── Owner pages — code-split per route ───────────────────────────────────────
 const OwnerDashboard    = lazy(() => import('./pages/owner/OwnerDashboard.jsx'));
@@ -75,7 +74,6 @@ function App() {
             <Route path="/tenant/complete-profile" element={<Navigate to="/complete-profile" replace />} />
             <Route path="/callback" element={<GoogleCallback />} />
             <Route path="/payment-return" element={<TenantPaymentReturn />} />
-            <Route path="/debug/otp" element={<OtpDebug />} />
 
             {/* Onboarding Routes — new owner setup flow */}
             <Route path="/onboarding" element={<OnboardingShell />}>

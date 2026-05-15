@@ -136,7 +136,7 @@ const CompleteProfile = () => {
     const validateStep1 = () => {
         if (!formData.name.trim()) return 'Please enter your full name';
         if (!normalizeIndianPhone(formData.phone)) return 'Enter a valid Indian mobile number';
-        if (!phoneVerification?.idToken || phoneVerification.phone !== normalizeIndianPhone(formData.phone)) return 'Please verify your mobile number with OTP';
+        if (!phoneVerification?.verificationToken || phoneVerification.phone !== normalizeIndianPhone(formData.phone)) return 'Please verify your mobile number with OTP';
         if (!formData.emergency_contact.trim()) return 'Emergency contact is required for your safety';
         if (!formData.gender) return 'Please select your gender';
         if (!formData.permanent_address.trim()) return 'Permanent address is required';
@@ -190,7 +190,7 @@ const CompleteProfile = () => {
             const payload = {
                 name: formData.name.trim(),
                 phone: normalizeIndianPhone(formData.phone),
-                firebase_phone_id_token: phoneVerification.idToken,
+                verification_token: phoneVerification.verificationToken,
                 emergency_contact: formData.emergency_contact.trim(),
                 gender: formData.gender,
                 personal_email: formData.personal_email?.trim() || null,
