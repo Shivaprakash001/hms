@@ -44,6 +44,7 @@ const Portfolio         = lazy(() => import('./pages/owner/Portfolio.jsx'));
 const TenantProfilePage = lazy(() => import('./pages/owner/TenantProfilePage.jsx'));
 const BulkImport        = lazy(() => import('./pages/owner/BulkImport.jsx'));
 const BulkImportConfirm = lazy(() => import('./pages/owner/BulkImportConfirm.jsx'));
+const MoveOutManagement = lazy(() => import('./pages/owner/MoveOutManagement.jsx'));
 
 // ── Tenant pages — code-split per route ──────────────────────────────────────
 const TenantDashboard     = lazy(() => import('./pages/tenant/TenantDashboard.jsx'));
@@ -51,6 +52,7 @@ const TenantPayments      = lazy(() => import('./pages/tenant/TenantPayments.jsx
 const TenantPaymentReturn = lazy(() => import('./pages/tenant/TenantPaymentReturn.jsx'));
 const TenantProfile       = lazy(() => import('./pages/tenant/TenantProfile.jsx'));
 const TenantSettings      = lazy(() => import('./pages/tenant/TenantSettings.jsx'));
+const TenantMoveOut       = lazy(() => import('./pages/tenant/TenantMoveOut.jsx'));
 
 // Minimal inline fallback — no extra component needed
 const PageLoader = () => (
@@ -99,6 +101,7 @@ function App() {
                 <Route path="payment-return" element={<TenantPaymentReturn />} />
                 <Route path="profile" element={<TenantProfile />} />
                 <Route path="settings" element={<TenantSettings />} />
+                <Route path="move-out" element={<TenantMoveOut />} />
               </Route>
             </Route>
 
@@ -131,6 +134,7 @@ function App() {
                 <Route path="expenses"   element={<Expenses />} />
                 <Route path="activities" element={<ActivityHistory />} />
                 <Route path="activity"   element={<Navigate to="activities" replace />} />
+                <Route path="move-out"   element={<MoveOutManagement />} />
               </Route>
             </Route>
 

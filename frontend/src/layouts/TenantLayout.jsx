@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, CreditCard, User, LogOut, Menu, Bell, Settings, X } from 'lucide-react';
+import { LayoutDashboard, CreditCard, User, LogOut, Menu, Bell, Settings, X, DoorOpen } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { useAuth } from '../context/AuthContext';
@@ -44,6 +44,7 @@ const TenantLayout = () => {
     const menuItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/tenant/dashboard' },
         { icon: CreditCard, label: 'Payments', path: '/tenant/payments' },
+        { icon: DoorOpen, label: 'Move-Out', path: '/tenant/move-out' },
         { icon: User, label: 'Profile', path: '/tenant/profile' },
         { icon: Settings, label: 'Settings', path: '/tenant/settings' },
     ];

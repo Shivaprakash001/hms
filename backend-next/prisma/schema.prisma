@@ -239,6 +239,7 @@ model hostels {
   room_allocations    roomAllocation[]
   rooms               rooms[]
   tenants             tenants[]
+  move_out_requests   move_out_requests[]
 
   @@schema("public")
 }
@@ -717,6 +718,7 @@ model payments {
   payment_attempts    paymentAttempt? @relation(fields: [payment_attempt_id], references: [id])
   tenants             tenants           @relation(fields: [tenant_id], references: [id])
   receipts            receipts?
+  settlement_ledger_entries owner_settlement_ledger[]
 
   @@index([created_at])
   @@index([hostel_id])
@@ -1186,6 +1188,7 @@ model tenants {
   room_allocations       roomAllocation[]
   tenant_advance_ledger  tenant_advance_ledger[]
   tenant_behavior_scores tenant_behavior_scores?
+  move_out_requests      move_out_requests[]
   hostels                hostels                 @relation(fields: [hostel_id], references: [id])
   profiles               profile                @relation(fields: [profile_id], references: [id])
 
@@ -1319,9 +1322,400 @@ enum Role {
 enum TenantStatus {
   INVITED
   ACTIVE
+  MOVE_OUT_REQUESTED
   LEFT
   EXPIRED
   CANCELLED
 
+  @@schema("public")
+}
+
+enum MoveOutStatus {
+  REQUESTED
+  INSPECTION_PENDING
+  INSPECTION_DONE
+  SETTLEMENT_APPROVED
+  PAYMENT_PENDING
+  DISPUTED
+  COMPLETED
+  CANCELLED
+  REJECTED
+
+  @@schema("public")
+}
+
+enum MoveOutReason {
+  COURSE_COMPLETED
+  JOB_RELOCATION
+  TOO_EXPENSIVE
+  POOR_MAINTENANCE
+  FOOD_QUALITY
+  ROOMMATE_ISSUES
+  BETTER_HOSTEL
+  PERSONAL_REASONS
+  SAFETY_CONCERNS
+  RULES_TOO_STRICT
+  MOVING_CLOSER
+  OTHER
+
+  @@schema("public")
+}
+
+// ============================================================
+// Move-Out / Exit Management System (migration 060+061)
+// Workflow: REQUESTED → INSPECTION_PENDING → INSPECTION_DONE →
+//           SETTLEMENT_APPROVED → PAYMENT_PENDING → COMPLETED
+//           (branch: DISPUTED → PAYMENT_PENDING)
+// ============================================================
+
+model move_out_requests {
+  id                           String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id                    String                       @db.Uuid
+  hostel_id                    String                       @db.Uuid
+  owner_id                     String                       @db.Uuid
+  status                       MoveOutStatus                @default(REQUESTED)
+  reason                       MoveOutReason
+  reason_text                  String?
+  planned_exit_date            DateTime                     @db.Date
+  actual_exit_date             DateTime?                    @db.Date
+  financial_completion_date    DateTime?                    @db.Timestamptz(6)
+  physical_exit_date           DateTime?                    @db.Date
+  room_release_date            DateTime?                    @db.Date
+  notice_period_days           Int                          @default(0)
+  notice_period_violation      Boolean                      @default(false)
+  initiated_by                 String                       @db.Uuid
+  initiated_by_role            String                       @default("TENANT") @db.VarChar(20)
+  is_eviction                  Boolean                      @default(false)
+  eviction_reason              String?
+  reviewed_by                  String?                      @db.Uuid
+  reviewed_at                  DateTime?                    @db.Timestamptz(6)
+  review_notes                 String?
+  cancelled_at                 DateTime?                    @db.Timestamptz(6)
+  cancelled_by                 String?                      @db.Uuid
+  cancellation_reason          String?
+  completed_at                 DateTime?                    @db.Timestamptz(6)
+  // Freeze flags — what is locked during move-out
+  freeze_room_transfer         Boolean                      @default(true)
+  freeze_rent_generation       Boolean                      @default(true)
+  freeze_profile_edits         Boolean                      @default(false)
+  created_at                   DateTime                     @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime?                    @db.Timestamptz(6)
+
+  tenant                       tenants                      @relation(fields: [tenant_id], references: [id])
+  hostel                       hostels                      @relation(fields: [hostel_id], references: [id])
+  inspection                   move_out_inspections?
+  inspection_items             move_out_inspection_items[]
+  settlement                   exit_settlement_transactions?
+  feedback                     exit_feedbacks?
+  disputes                     exit_disputes[]
+
+  @@unique([tenant_id, status], map: "udx_mor_tenant_active")
+  @@index([hostel_id, status])
+  @@index([owner_id, status])
+  @@index([planned_exit_date])
+  @@index([status, created_at(sort: Desc)])
+  @@schema("public")
+}
+
+model move_out_inspections {
+  id                String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  request_id        String            @unique @db.Uuid
+  inspected_by      String            @db.Uuid
+  room_condition    String            @default("GOOD") @db.VarChar(20)
+  cleaning_status   String            @default("CLEAN") @db.VarChar(30)
+  damages_amount    Decimal           @default(0) @db.Decimal(10, 2)
+  cleaning_fee      Decimal           @default(0) @db.Decimal(10, 2)
+  missing_items_fee Decimal           @default(0) @db.Decimal(10, 2)
+  other_deductions  Decimal           @default(0) @db.Decimal(10, 2)
+  total_deductions  Decimal           @default(0) @db.Decimal(10, 2)
+  deduction_notes   String?
+  evidence_urls     String[]          @default([])
+  notes             String?
+  inspected_at      DateTime          @default(now()) @db.Timestamptz(6)
+  created_at        DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime?         @db.Timestamptz(6)
+
+  request           move_out_requests @relation(fields: [request_id], references: [id], onDelete: Cascade)
+
+  @@index([inspected_at])
+  @@schema("public")
+}
+
+/// Structured inspection checklist — one row per item inspected.
+/// This replaces free-text inventory checklists.
+model move_out_inspection_items {
+  id                String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  request_id        String            @db.Uuid
+  item_name         String            @db.VarChar(100)
+  item_category     String            @default("FURNITURE") @db.VarChar(30)
+  condition         String            @default("OK") @db.VarChar(20)
+  charge_amount     Decimal           @default(0) @db.Decimal(10, 2)
+  notes             String?
+  evidence_url      String?
+  created_at        DateTime          @default(now()) @db.Timestamptz(6)
+
+  request           move_out_requests @relation(fields: [request_id], references: [id], onDelete: Cascade)
+
+  @@index([request_id])
+  @@schema("public")
+}
+
+model exit_settlement_transactions {
+  id                      String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  request_id              String            @unique @db.Uuid
+  tenant_id               String            @db.Uuid
+  owner_id                String            @db.Uuid
+  hostel_id               String            @db.Uuid
+
+  // Deposit side — sourced from tenant_advance_ledger
+  security_deposit_amount Decimal           @default(0) @db.Decimal(10, 2)
+  advance_balance         Decimal           @default(0) @db.Decimal(10, 2)
+
+  // Dues side
+  pending_rent_dues       Decimal           @default(0) @db.Decimal(10, 2)
+  pending_late_fees       Decimal           @default(0) @db.Decimal(10, 2)
+  pending_utility_dues    Decimal           @default(0) @db.Decimal(10, 2)
+
+  // Deductions from structured inspection
+  damages_deduction       Decimal           @default(0) @db.Decimal(10, 2)
+  cleaning_deduction      Decimal           @default(0) @db.Decimal(10, 2)
+  missing_items_deduction Decimal           @default(0) @db.Decimal(10, 2)
+  other_deductions        Decimal           @default(0) @db.Decimal(10, 2)
+
+  // Computed totals
+  total_deductions        Decimal           @default(0) @db.Decimal(10, 2)
+  total_dues              Decimal           @default(0) @db.Decimal(10, 2)
+
+  // Final settlement: positive = owner owes tenant, negative = tenant owes owner
+  net_settlement_amount   Decimal           @default(0) @db.Decimal(10, 2)
+  settlement_direction    String            @default("NONE") @db.VarChar(20)
+
+  // Payment tracking
+  payment_status          String            @default("PENDING") @db.VarChar(20)
+  payment_method          String?           @db.VarChar(30)
+  payment_reference       String?
+  payment_notes           String?
+  settled_at              DateTime?         @db.Timestamptz(6)
+  settled_by              String?           @db.Uuid
+  confirmed_by_tenant     Boolean           @default(false)
+  confirmed_by_owner      Boolean           @default(false)
+
+  created_at              DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime?         @db.Timestamptz(6)
+
+  request                 move_out_requests @relation(fields: [request_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@index([owner_id, hostel_id])
+  @@index([payment_status])
+  @@schema("public")
+}
+
+/// Dispute layer — tracks disagreements on settlement amounts.
+/// Prevents disputes from going to WhatsApp.
+model exit_disputes {
+  id                String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  request_id        String            @db.Uuid
+  raised_by         String            @db.Uuid
+  raised_by_role    String            @db.VarChar(20)
+  dispute_type      String            @db.VarChar(40)
+  description       String
+  disputed_amount   Decimal?          @db.Decimal(10, 2)
+  evidence_urls     String[]          @default([])
+  status            String            @default("OPEN") @db.VarChar(20)
+  resolution_notes  String?
+  resolved_by       String?           @db.Uuid
+  resolved_at       DateTime?         @db.Timestamptz(6)
+  created_at        DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime?         @db.Timestamptz(6)
+
+  request           move_out_requests @relation(fields: [request_id], references: [id], onDelete: Cascade)
+
+  @@index([request_id, status])
+  @@schema("public")
+}
+
+model exit_feedbacks {
+  id                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  request_id          String            @unique @db.Uuid
+  tenant_id           String            @db.Uuid
+  hostel_id           String            @db.Uuid
+
+  // Ratings (1-5 scale) — actionable, specific dimensions
+  rating_cleanliness  Int?              @db.SmallInt
+  rating_food         Int?              @db.SmallInt
+  rating_wifi         Int?              @db.SmallInt
+  rating_management   Int?              @db.SmallInt
+  rating_maintenance  Int?              @db.SmallInt
+  rating_safety       Int?              @db.SmallInt
+  rating_value        Int?              @db.SmallInt
+  rating_noise        Int?              @db.SmallInt
+
+  overall_rating      Int?              @db.SmallInt
+  would_recommend     Boolean?
+  improvement_text    String?
+  experience_text     String?
+
+  created_at          DateTime          @default(now()) @db.Timestamptz(6)
+
+  request             move_out_requests @relation(fields: [request_id], references: [id], onDelete: Cascade)
+
+  @@index([hostel_id])
+  @@index([tenant_id])
+  @@schema("public")
+}
+
+// ============================================================
+// Internal Settlement & Financial Operations (migration 059)
+// Append-only by service contract — never UPDATE/DELETE rows in
+// owner_settlement_ledger or admin_financial_audit_log.
+// ============================================================
+
+model owner_settlement_ledger {
+  id                  String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  owner_id            String                  @db.Uuid
+  hostel_id           String                  @db.Uuid
+  payment_id          String?                 @db.Uuid
+  settlement_batch_id String?                 @db.Uuid
+  batch_item_id       String?                 @db.Uuid
+  entry_type          String                  @db.VarChar(40)
+  direction           String                  @db.Char(1)
+  amount              Decimal                 @db.Decimal(14, 2)
+  balance_after       Decimal                 @db.Decimal(14, 2)
+  currency            String                  @default("INR") @db.VarChar(3)
+  settlement_status   String                  @default("PENDING_SETTLEMENT") @db.VarChar(30)
+  settled_at          DateTime?               @db.Timestamptz(6)
+  idempotency_key     String
+  reference_type      String?                 @db.VarChar(40)
+  reference_id        String?
+  metadata            Json                    @default("{}")
+  created_by          String?                 @db.Uuid
+  created_at          DateTime                @default(now()) @db.Timestamptz(6)
+
+  payment             payments?               @relation(fields: [payment_id], references: [id])
+  batch               settlement_batches?     @relation(fields: [settlement_batch_id], references: [id])
+  batch_item          settlement_batch_items? @relation("BatchItemDebit", fields: [batch_item_id], references: [id])
+  debit_for_items     settlement_batch_items[] @relation("ItemDebitLedger")
+
+  @@unique([idempotency_key], map: "udx_osl_idempotency_key")
+  @@index([owner_id, hostel_id, created_at(sort: Desc)], map: "idx_osl_owner_hostel_created")
+  @@index([owner_id, settlement_status], map: "idx_osl_owner_status")
+  @@index([hostel_id, settlement_status], map: "idx_osl_hostel_status")
+  @@index([settlement_batch_id], map: "idx_osl_settlement_batch")
+  @@index([payment_id], map: "idx_osl_payment")
+  @@schema("public")
+}
+
+model settlement_batches {
+  id               String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  batch_number     String
+  status           String                  @default("DRAFT") @db.VarChar(30)
+  total_amount     Decimal                 @default(0) @db.Decimal(14, 2)
+  total_owners     Int                     @default(0)
+  total_hostels    Int                     @default(0)
+  total_items      Int                     @default(0)
+  success_count    Int                     @default(0)
+  failed_count     Int                     @default(0)
+  created_by       String                  @db.Uuid
+  approved_by      String?                 @db.Uuid
+  approved_at      DateTime?               @db.Timestamptz(6)
+  processed_at     DateTime?               @db.Timestamptz(6)
+  completed_at     DateTime?               @db.Timestamptz(6)
+  cancelled_by     String?                 @db.Uuid
+  cancelled_at     DateTime?               @db.Timestamptz(6)
+  reference_number String?
+  notes            String?
+  metadata         Json                    @default("{}")
+  created_at       DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime                @default(now()) @db.Timestamptz(6)
+
+  items            settlement_batch_items[]
+  ledger_entries   owner_settlement_ledger[]
+
+  @@unique([batch_number], map: "udx_sb_batch_number")
+  @@index([status, created_at(sort: Desc)], map: "idx_sb_status_created")
+  @@index([created_by, created_at(sort: Desc)], map: "idx_sb_created_by")
+  @@schema("public")
+}
+
+model settlement_batch_items {
+  id                 String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  batch_id           String                   @db.Uuid
+  owner_id           String                   @db.Uuid
+  hostel_id          String                   @db.Uuid
+  amount             Decimal                  @db.Decimal(14, 2)
+  payout_method      String                   @default("NEFT") @db.VarChar(20)
+  payout_reference   String?
+  payout_status      String                   @default("PENDING") @db.VarChar(20)
+  failure_reason     String?
+  covered_credit_ids String[]                 @default([]) @db.Uuid
+  ledger_debit_id    String?                  @db.Uuid
+  processed_by       String?                  @db.Uuid
+  processed_at       DateTime?                @db.Timestamptz(6)
+  idempotency_key    String
+  metadata           Json                     @default("{}")
+  created_at         DateTime                 @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime                 @default(now()) @db.Timestamptz(6)
+
+  batch              settlement_batches       @relation(fields: [batch_id], references: [id], onDelete: Cascade)
+  ledger_debit       owner_settlement_ledger? @relation("ItemDebitLedger", fields: [ledger_debit_id], references: [id])
+  ledger_debits      owner_settlement_ledger[] @relation("BatchItemDebit")
+
+  @@unique([batch_id, owner_id, hostel_id], map: "udx_sbi_batch_owner_hostel")
+  @@unique([idempotency_key], map: "udx_sbi_idempotency_key")
+  @@index([owner_id, payout_status], map: "idx_sbi_owner_status")
+  @@index([hostel_id, payout_status], map: "idx_sbi_hostel_status")
+  @@index([batch_id, payout_status], map: "idx_sbi_batch_status")
+  @@schema("public")
+}
+
+model financial_reconciliation_issues {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  issue_type       String    @db.VarChar(50)
+  severity         String    @db.VarChar(10)
+  status           String    @default("OPEN") @db.VarChar(20)
+  owner_id         String?   @db.Uuid
+  hostel_id        String?   @db.Uuid
+  payment_id       String?   @db.Uuid
+  ledger_entry_id  String?   @db.Uuid
+  batch_id         String?   @db.Uuid
+  batch_item_id    String?   @db.Uuid
+  fingerprint      String
+  description      String
+  metadata         Json      @default("{}")
+  detected_at      DateTime  @default(now()) @db.Timestamptz(6)
+  acknowledged_at  DateTime? @db.Timestamptz(6)
+  acknowledged_by  String?   @db.Uuid
+  resolved_at      DateTime? @db.Timestamptz(6)
+  resolved_by      String?   @db.Uuid
+  resolution_notes String?
+
+  @@index([status, severity, detected_at(sort: Desc)], map: "idx_fri_status_severity")
+  @@index([owner_id, detected_at(sort: Desc)], map: "idx_fri_owner")
+  @@index([hostel_id, detected_at(sort: Desc)], map: "idx_fri_hostel")
+  @@index([issue_type, status], map: "idx_fri_issue_type")
+  @@schema("public")
+}
+
+model admin_financial_audit_log {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  admin_id     String   @db.Uuid
+  action_type  String   @db.VarChar(50)
+  subject_type String   @db.VarChar(30)
+  subject_id   String   @db.Uuid
+  owner_id     String?  @db.Uuid
+  hostel_id    String?  @db.Uuid
+  before_state Json?
+  after_state  Json?
+  reason       String?
+  ip_address   String?
+  user_agent   String?
+  metadata     Json     @default("{}")
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([admin_id, created_at(sort: Desc)], map: "idx_afal_admin_created")
+  @@index([subject_type, subject_id, created_at(sort: Desc)], map: "idx_afal_subject")
+  @@index([action_type, created_at(sort: Desc)], map: "idx_afal_action_created")
+  @@index([owner_id, created_at(sort: Desc)], map: "idx_afal_owner_created")
   @@schema("public")
 }

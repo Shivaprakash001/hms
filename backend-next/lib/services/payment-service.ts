@@ -21,6 +21,7 @@ import { paymentStatusEventService } from "./payment-status-event-service";
 import { paymentOperationalAnomalyService } from "./payment-operational-anomaly-service";
 import { paymentWebhookEventService } from "./payment-webhook-event-service";
 import { paymentProviderVerificationSnapshotService } from "./payment-provider-verification-snapshot-service";
+import { settlementLedgerService } from "./settlement-ledger-service";
 
 const logger = getLogger("payment.service");
 type MaybeHostelId = string | null;
@@ -241,6 +242,39 @@ export class PaymentService {
     await tx.rent_obligations.update({
       where: { id: data.obligationId },
       data: { status: newStatus }
+    });
+
+    // ── Settlement ledger CREDIT (Phase 3) ─────────────────────────────
+    // This payment represents money tenant paid into HMS. From HMS's
+    // perspective this is an owner-payable liability, not HMS revenue.
+    // The CREDIT is written in the SAME transaction as the payment row so
+    // there can never be a payment without its ledger counterpart.
+    //
+    // Domain: this code path is RENT_COLLECTION only (rent obligations).
+    // PLATFORM_BILLING never reaches _applyPaymentInTx.
+    //
+    // Idempotency: keyed on payment.id. Webhook retries that re-enter the
+    // same transaction will hit the unique index on idempotency_key and
+    // return the already-existing ledger entry.
+    if (!obligation.owner_id) {
+      // Defensive: rent_obligations.owner_id is NOT NULL in schema, but
+      // payments.owner_id is nullable. The ledger requires owner_id.
+      throw new Error("LEDGER_PRECONDITION_FAILED: obligation has no owner_id");
+    }
+    await settlementLedgerService.creditCollectionInTx(tx, {
+      ownerId: obligation.owner_id,
+      hostelId: obligation.hostel_id,
+      paymentId: payment.id,
+      amount: paymentPaisa / 100,
+      idempotencyKey: `credit:payment:${payment.id}`,
+      referenceType: "PAYMENT",
+      referenceId: payment.id,
+      metadata: {
+        obligation_id: data.obligationId,
+        payment_method: data.paymentMethod,
+        payment_attempt_id: data.paymentAttemptId ?? null,
+      },
+      createdBy: data.offlineRecordedBy ?? data.ownerId ?? null,
     });
 
     return { payment, newStatus, tenantId: obligation.tenant_id, ownerId: obligation.owner_id, hostelId: obligation.hostel_id };
