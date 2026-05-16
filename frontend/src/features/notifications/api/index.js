@@ -31,3 +31,10 @@ export const reminderService = {
         return { sent, failed, total: results.length };
     },
 };
+
+export const sseService = {
+    getToken: async () => {
+        const response = await api.get('/events-token');
+        return response.data.token;
+    }
+};

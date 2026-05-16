@@ -5,6 +5,7 @@ We have successfully initiated the modularization of the monolithic `frontend/sr
 
 **Phase 2A Status:** Completed
 **Phase 2B Status:** Completed
+**Phase 2C Status:** Completed (Monolith fully decommissioned into an adapter)
 
 ## Core Extractions Completed
 The `api.js` client and interceptor logic has been safely duplicated to `@lib/api-client.js`. Future feature modules will use this new client to guarantee structural independence.
@@ -60,17 +61,41 @@ Migrated functions:
 Migrated functions:
 - `analyticsService` (`getCashflow`, `getTenants`, `getFunnel`, `getOperations`)
 
-## Remaining Monolith Services (`services.js` - ~274 lines left)
-The following services are still housed within the monolith and are prime candidates for the next extraction batch:
-- `profileService`
-- `ownerService`
-- `hostelService`
-- `webhookService`
-- `legalDocumentService`
-- `activityService`
-- `identityService`
-- `activationService`
-- `sseService`
+### 10. Profile Domain (`@features/profile/api`)
+Migrated functions:
+- `profileService` (`get`, `update`, `getUnassignedTenants`)
+
+### 11. Owners Domain (`@features/owners/api`)
+Migrated functions:
+- `ownerService` (`getProfile`, `updateOwner`, `updateProfileSection`, `updateHostel`, etc.)
+- `bulkImportService` (`generateGoogleFormPrompt`, `uploadTenantIdentityFile`, etc.)
+- `activationService` (`get`, `persistStep`)
+
+### 12. Billing Domain (`@features/billing/api`)
+Migrated functions:
+- `billingService` (`getSubscription`, `getPlans`, `getUsage`, `getOverflowStatus`)
+- `addonService` (`getUsage`, `purchasePack`, `getAutoTopup`, `verifyPayment`, etc.)
+
+### 13. Auth Domain Update (`@features/auth/api`)
+Migrated functions:
+- `identityService` (`confirmIdentity`)
+
+### 14. Notifications Domain Update (`@features/notifications/api`)
+Migrated functions:
+- `sseService` (`getToken`)
+
+### 15. Reports Domain Update (`@features/reports/api`)
+Migrated functions:
+- `activityService` (`getAll`)
+
+## Remaining Monolith Services (`services.js` - 0 lines left!)
+The monolith has been successfully fully extracted. `frontend/src/api/services.js` now acts solely as an adapter/re-export file to ensure UI components don't break during the transition.
+
+## Next Phase Target
+With the service logic decoupled, we are now safe to begin decomposing the massive UI components:
+- `ManageRooms.jsx`
+- `ManageTenants.jsx`
+- `OwnerDashboard.jsx`
 
 ## Repeated Logic Candidates for Centralization
 During the extraction, the following repeated logic patterns were identified:

@@ -30,3 +30,10 @@ export const analyticsService = {
         return response.data;
     },
 };
+
+export const activityService = {
+    getAll: async (hostelId, params = {}) => {
+        const response = await api.get('/activity', { params: { ...params, hostelId } });
+        return response.data;
+    }
+};
