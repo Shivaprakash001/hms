@@ -102,11 +102,8 @@ export class HostelDailySnapshotService {
   private async previewLive(hostelId: string, day: Date) {
     const [row] = await prisma.$queryRaw<any[]>`
       SELECT
-        COUNT(DISTINCT ra.tenant_id)::int AS active_tenants,
-        COALESCE(SUM(DISTINCT r.capacity), 0)::int AS capacity
-      FROM rooms r
-      LEFT JOIN room_allocations ra ON ra.room_id = r.id AND ra.is_active = true AND ra.end_date IS NULL
-      WHERE r.hostel_id = ${hostelId}::uuid
+        (SELECT COUNT(*)::int FROM room_allocations WHERE hostel_id = ${hostelId}::uuid AND is_active = true AND end_date IS NULL) AS active_tenants,
+        (SELECT COALESCE(SUM(capacity), 0)::int FROM rooms WHERE hostel_id = ${hostelId}::uuid AND is_active = true) AS capacity
     `;
 
     const capacity = Number(row?.capacity || 0);
@@ -115,7 +112,15 @@ export class HostelDailySnapshotService {
       hostel_id: hostelId,
       snapshot_date: day.toISOString().slice(0, 10),
       active_tenants: activeTenants,
+      capacity: capacity,
       occupancy_rate: capacity > 0 ? Math.round((activeTenants / capacity) * 10000) / 100 : 0,
+      expected_revenue: 0,
+      collected_revenue: 0,
+      pending_dues: 0,
+      overdue_count: 0,
+      collection_rate: 0,
+      expenses: 0,
+      profit: 0,
     };
   }
 }
