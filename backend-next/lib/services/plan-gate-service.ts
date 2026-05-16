@@ -24,7 +24,7 @@ async function getEffectivePlan(ownerId: string) {
   const sub = await prisma.owner_subscriptions.findUnique({
     where: { owner_id: ownerId },
     include: {
-      plan: {
+      plans: {
         select: {
           id: true,
           name: true,
@@ -54,7 +54,7 @@ async function getEffectivePlan(ownerId: string) {
     return null;
   }
 
-  return sub.plan;
+  return sub.plans;
 }
 
 // ─── Automation Guard ─────────────────────────────────────────────────────────
@@ -271,9 +271,9 @@ const NEXT_PLAN_FOR_GATE: Record<string, string> = {
 export const planGate = {
   async assertTenantLimit(ownerId: string): Promise<void> {
     const sub = await prisma.owner_subscriptions.findUnique({
-      where: { owner_id: ownerId },
-      include: {
-        plan: {
+    where: { owner_id: ownerId },
+    include: {
+        plans: {
           select: {
             id: true,
             tenant_limit: true,
@@ -295,7 +295,7 @@ export const planGate = {
       throw new Error("PLAN_LIMIT: FORBIDDEN. No active subscription.");
     }
 
-    const plan = sub.plan;
+    const plan = sub.plans;
 
     // 0 = unlimited (BUSINESS / SCALE / custom)
     if (plan.tenant_limit === 0 || plan.is_custom) return;

@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
     const subscription = await prisma.owner_subscriptions.findUnique({
       where: { owner_id: user.sub },
       include: {
-        plan: {
+        plans: {
           select: {
             id: true,
             name: true,

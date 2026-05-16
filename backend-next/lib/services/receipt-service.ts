@@ -59,9 +59,9 @@ export class ReceiptService {
     if (!ownerId) return false;
     const subscription = await prisma.owner_subscriptions.findUnique({
       where: { owner_id: ownerId },
-      include: { plan: true },
+      include: { plans: true },
     });
-    return Boolean(subscription?.plan?.can_generate_receipts);
+    return Boolean(subscription?.plans?.can_generate_receipts);
   }
 
   /**

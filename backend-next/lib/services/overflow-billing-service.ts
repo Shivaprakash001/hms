@@ -75,9 +75,9 @@ export class OverflowBillingService {
    */
   async calculateForOwner(ownerId: string, billingMonth?: string): Promise<OverflowCalcResult | null> {
     const sub = await prisma.owner_subscriptions.findUnique({
-      where: { owner_id: ownerId },
-      include: {
-        plan: {
+    where: { owner_id: ownerId },
+    include: {
+        plans: {
           select: {
             id: true,
             tenant_limit: true,
@@ -88,7 +88,7 @@ export class OverflowBillingService {
     });
     if (!sub || sub.status !== "ACTIVE") return null;
 
-    const plan = sub.plan;
+    const plan = sub.plans;
     const cfg = this.getOverflowConfig(plan);
     if (!cfg.enabled) return null;
     if (plan.tenant_limit <= 0) return null; // unlimited plan — no overflow
@@ -345,9 +345,9 @@ export class OverflowBillingService {
    */
   async getOverflowStatus(ownerId: string): Promise<OverflowStatus> {
     const sub = await prisma.owner_subscriptions.findUnique({
-      where: { owner_id: ownerId },
-      include: {
-        plan: {
+    where: { owner_id: ownerId },
+    include: {
+        plans: {
           select: {
             id: true,
             name: true,
@@ -376,7 +376,7 @@ export class OverflowBillingService {
 
     if (!sub) return disabled;
 
-    const plan = sub.plan;
+    const plan = sub.plans;
 
     const activeTenants = await prisma.tenants.count({
       where: { owner_id: ownerId, status: { notIn: ["LEFT", "CANCELLED", "EXPIRED"] } },

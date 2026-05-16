@@ -135,19 +135,19 @@ export async function POST(
 
     const subscription = await prisma.owner_subscriptions.findUnique({
       where: { owner_id: session.sub },
-      include: { plan: true },
+      include: { plans: true },
     });
 
     if (!subscription) {
       return apiError("No active subscription found", "FORBIDDEN", 403);
     }
 
-    const tenantLimit = subscription.plan.tenant_limit;
+    const tenantLimit = subscription.plans.tenant_limit;
     const projectedTotal = currentTenantCount + batch.valid_rows;
 
     if (tenantLimit > 0 && projectedTotal > tenantLimit) {
-      const overflowEnabled = subscription.plan.overflow_enabled;
-      const hardCap = subscription.plan.overflow_hard_cap;
+      const overflowEnabled = subscription.plans.overflow_enabled;
+      const hardCap = subscription.plans.overflow_hard_cap;
 
       if (!overflowEnabled || (hardCap > 0 && projectedTotal > hardCap)) {
         return apiError(

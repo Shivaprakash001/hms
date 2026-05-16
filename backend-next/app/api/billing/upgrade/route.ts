@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
       // 2. Check if owner already has this plan active
       const currentSub = await prisma.owner_subscriptions.findUnique({
         where: { owner_id: session.sub },
-        include: { plan: { select: { id: true } } }
+        include: { plans: { select: { id: true } } }
       });
 
       if (currentSub && currentSub.plan_id === plan_id && currentSub.status === "ACTIVE") {

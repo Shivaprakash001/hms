@@ -2718,7 +2718,7 @@ export class PaymentService {
     const scopedHostelId = requireFinancialHostelId(hostelId, "payment provider resolution");
     const hostel = await prisma.hostels.findUnique({
       where: { id: scopedHostelId },
-      include: { owner: true },
+      include: { profiles: true },
     });
 
     if (!hostel || hostel.owner_id !== ownerId) {
@@ -2734,7 +2734,7 @@ export class PaymentService {
       provider: "PHONEPE", // Provider class name kept for backward compat with existing attempts table
       config: {
         owner_upi_id: hostel.upi_id,
-        owner_name: hostel.name || hostel.owner?.name || "Hostel",
+        owner_name: hostel.name || (hostel as any).profiles?.name || "Hostel",
         hostel_id: hostel.id,
       }
     };
