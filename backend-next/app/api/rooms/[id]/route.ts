@@ -25,7 +25,7 @@ export async function GET(
   try {
     const scope = resolveOwnerScope(session);
     const room = await prisma.rooms.findFirst({
-      where: { id: params.id, hostel: { owner_id: scope.owner_id } },
+      where: { id: params.id, hostels: { owner_id: scope.owner_id } },
     });
 
     if (!room) return apiError("Room not found", "NOT_FOUND", 404);
@@ -94,7 +94,7 @@ export async function DELETE(
     const scope = resolveOwnerScope(session);
     // Verify ownership
     const existing = await prisma.rooms.findFirst({
-      where: { id: params.id, hostel: { owner_id: scope.owner_id } },
+      where: { id: params.id, hostels: { owner_id: scope.owner_id } },
     });
     if (!existing) return apiError("Room not found", "NOT_FOUND", 404);
 

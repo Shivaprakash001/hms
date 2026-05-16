@@ -39,10 +39,7 @@ export async function GET(req: NextRequest) {
 
     if (grouped) {
       const floors = await propertyService.getFloorsWithRooms(scope.owner_id, hostelId);
-      return apiResponse({
-        success: true,
-        data: floors
-      });
+      return Response.json(floors);
     }
 
     // Flat list
@@ -51,10 +48,7 @@ export async function GET(req: NextRequest) {
       orderBy: { room_no: "asc" },
     });
     
-    return apiResponse({
-      success: true,
-      data: rooms
-    });
+    return Response.json(rooms);
   } catch (error: any) {
     console.error("Detailed API Error [rooms.GET]:", error);
     return Response.json(
