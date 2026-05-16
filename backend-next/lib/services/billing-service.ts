@@ -35,7 +35,7 @@ export class BillingService {
     const sub = await prisma.owner_subscriptions.findUnique({
       where: { owner_id: ownerId },
       include: {
-        plan: {
+        plans: {
           select: {
             id: true,
             name: true,
@@ -53,7 +53,7 @@ export class BillingService {
     });
     if (!sub) return FREE_FALLBACK;
     return {
-      ...sub.plan,
+      ...sub.plans,
       subscription_status: sub.status,
       end_date: sub.end_date,
     };
@@ -76,7 +76,7 @@ export class BillingService {
     const sub = await prisma.owner_subscriptions.findUnique({
       where: { owner_id: ownerId },
       include: {
-        plan: {
+        plans: {
           select: {
             id: true,
             name: true,
@@ -93,7 +93,7 @@ export class BillingService {
       },
     });
 
-    const plan = sub?.plan ?? FREE_FALLBACK;
+    const plan = sub?.plans ?? FREE_FALLBACK;
 
     const [usage, overflowStatus, invoices] = await Promise.all([
       this.getOwnerUsage(ownerId),
