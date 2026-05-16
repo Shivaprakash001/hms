@@ -19,6 +19,25 @@ const getOrdinalDay = (day) => {
     return `${day}th`;
 };
 
+const asArray = (value) => {
+    if (Array.isArray(value)) return value;
+    if (Array.isArray(value?.items)) return value.items;
+    if (Array.isArray(value?.data)) return value.data;
+    if (Array.isArray(value?.notifications)) return value.notifications;
+    if (Array.isArray(value?.announcements)) return value.announcements;
+    return [];
+};
+
+const normalizeDues = (value) => {
+    const payload = value && typeof value === 'object' ? value : {};
+    return {
+        ...payload,
+        obligations: asArray(payload.obligations),
+        payments: asArray(payload.payments),
+        outstanding_balance: Number(payload.outstanding_balance || 0),
+    };
+};
+
 const TenantDashboard = () => {
     const { user } = useAuth();
     const { preferences } = useAppPreferences();
@@ -51,11 +70,11 @@ const TenantDashboard = () => {
                     tenantService.getMyProfile(),
                     tenantService.getMyScore()
                 ]);
-                if (payRes.status === 'fulfilled') setDues(payRes.value || { obligations: [], outstanding_balance: 0 });
+                if (payRes.status === 'fulfilled') setDues(normalizeDues(payRes.value));
                 if (roomRes.status === 'fulfilled') setRoomData(roomRes.value?.data || null);
 
                 if (notifRes.status === 'fulfilled') {
-                    setAnnouncements(notifRes.value || []);
+                    setAnnouncements(asArray(notifRes.value));
                     setAnnouncementsError('');
                 } else {
                     setAnnouncementsError('Could not load announcements.');
@@ -90,7 +109,10 @@ const TenantDashboard = () => {
     };
 
     // Calculate pending dues from obligations
-    const pendingDues = dues.outstanding_balance || (dues.obligations || []).filter(o => o.status === 'pending' || o.status === 'partial' || o.status === 'overdue').reduce((sum, o) => sum + (o.amount || 0), 0);
+    const dueObligations = asArray(dues.obligations);
+    const pendingDues = dues.outstanding_balance || dueObligations
+        .filter(o => ['pending', 'partial', 'overdue'].includes(String(o.status || '').toLowerCase()))
+        .reduce((sum, o) => sum + Number(o.remaining_due ?? o.outstanding ?? o.amount ?? 0), 0);
 
     // Prefer the backend next due date so this card follows auto rent generation settings.
     const getNextPaymentDate = () => {
@@ -198,7 +220,7 @@ const TenantDashboard = () => {
     const autoRentDay = dues?.auto_rent_day;
 
     // Roommate names from API
-    const roommates = roomData?.roommates || [];
+    const roommates = asArray(roomData?.roommates);
 
     // Room config from capacity
     const getRoomConfig = () => {
@@ -209,7 +231,8 @@ const TenantDashboard = () => {
 
     // Room occupied/vacant status
     const isOccupied = !!roomNo;
-    const unreadAnnouncements = announcements.filter(a => !a.is_read).length;
+    const safeAnnouncements = asArray(announcements);
+    const unreadAnnouncements = safeAnnouncements.filter(a => !a.is_read).length;
 
     if (isLoading) {
         return (
@@ -384,9 +407,9 @@ const TenantDashboard = () => {
                                     {roommates.map((r, idx) => (
                                         <p key={idx} className="text-slate-600 text-sm flex items-center gap-2">
                                             <span className="w-6 h-6 bg-indigo-100 text-indigo-600 rounded-full text-xs flex items-center justify-center font-bold">
-                                                {r.name.charAt(0).toUpperCase()}
+                                                {String(r.name || '?').charAt(0).toUpperCase()}
                                             </span>
-                                            {r.name}
+                                            {r.name || 'Roommate'}
                                         </p>
                                     ))}
                                 </div>
@@ -414,14 +437,14 @@ const TenantDashboard = () => {
                         <div className="p-5 text-sm text-slate-400">Loading announcements...</div>
                     ) : announcementsError ? (
                         <div className="p-5 text-sm text-rose-500">{announcementsError}</div>
-                    ) : announcements.length === 0 ? (
+                    ) : safeAnnouncements.length === 0 ? (
                         <div className="p-5 text-center text-slate-400">
                             <Bell size={32} className="mx-auto mb-2 opacity-30" />
                             <p className="text-sm">No announcements yet</p>
                         </div>
                     ) : (
                         <div className="p-3 divide-y divide-slate-100">
-                            {announcements.slice(0, 5).map((item) => (
+                            {safeAnnouncements.slice(0, 5).map((item) => (
                                 <div key={item.id} className="py-3 px-2">
                                     <div className="flex items-start justify-between gap-3">
                                         <div>
