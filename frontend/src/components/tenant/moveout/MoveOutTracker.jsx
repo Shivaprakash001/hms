@@ -14,8 +14,8 @@ const STATUS_COPY = {
   REQUESTED: {
     label: 'Request Submitted',
     color: 'bg-indigo-100 text-indigo-700',
-    hint: 'The hostel team will review your request and schedule a room inspection.',
-    reassurance: 'No action needed from you right now. We\'ll notify you when the inspection is scheduled.',
+    hint: 'Request was successfully sent to the owner and is waiting for approval.',
+    reassurance: 'To get things done faster, contact the hostel owner and make sure your payments are all set.',
   },
   INSPECTION_PENDING: {
     label: 'Inspection Scheduled',

@@ -124,10 +124,12 @@ export default function ManageTenants() {
     const handleToggleStatus = async (tenant, e) => {
         e.stopPropagation();
         const isActive = tenant.status === 'ACTIVE';
-        const nextStatus = isActive ? 'LEFT' : 'ACTIVE';
-        const confirmMsg = isActive
-            ? `Mark "${tenant.name}" as LEFT?\n\nThis will end their room allocation immediately.`
-            : `Reactivate "${tenant.name}" as ACTIVE?\n\nThis will allow them to be assigned to a room again.`;
+        if (isActive) {
+            alert("Directly marking a tenant as LEFT is not allowed. Please use the Move-Outs tab to process their departure and ensure all security deposits and rent settlements are handled securely.");
+            return;
+        }
+        
+        const confirmMsg = `Reactivate "${tenant.name}" as ACTIVE?\n\nThis will allow them to be assigned to a room again.`;
         if (!window.confirm(confirmMsg)) return;
         try {
             if (!isActive) {
@@ -137,8 +139,8 @@ export default function ManageTenants() {
                     joined_on: new Date().toISOString().split('T')[0]
                 });
             } else {
-                // ACTIVE → LEFT: use the update endpoint
-                await tenantService.update(tenant.id, { status: 'LEFT' });
+                // ACTIVE → LEFT is blocked above, but keep else branch for safety
+                alert("Please use the Move-Out workflow.");
             }
             fetchTenants();
         } catch (err) {
@@ -241,6 +243,7 @@ export default function ManageTenants() {
         const cfg = {
             ACTIVE:    { cls: 'bg-emerald-50 text-emerald-700 border-emerald-100', label: 'Active' },
             INVITED:   { cls: 'bg-indigo-50 text-indigo-700 border-indigo-100', label: 'Invited' },
+            MOVE_OUT_REQUESTED: { cls: 'bg-orange-50 text-orange-700 border-orange-100', label: 'Move-Out Req' },
             LEFT:      { cls: 'bg-slate-100 text-slate-500 border-slate-200', label: 'Left' },
             EXPIRED:   { cls: 'bg-amber-50 text-amber-700 border-amber-100', label: 'Expired' },
             CANCELLED: { cls: 'bg-rose-50 text-rose-600 border-rose-100', label: 'Cancelled' },
@@ -491,7 +494,7 @@ export default function ManageTenants() {
                                                             <XCircle size={14} /> Cancel
                                                         </button>
                                                     </>)}
-                                                    {(tenant.status === 'ACTIVE' || tenant.status === 'LEFT') && (
+                                                    {(tenant.status === 'LEFT') && (
                                                         <button
                                                             onClick={(e) => handleToggleStatus(tenant, e)}
                                                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${tenant.status === 'ACTIVE'
@@ -590,7 +593,7 @@ export default function ManageTenants() {
                                                     </button>
                                                 </>
                                             )}
-                                            {(tenant.status === 'ACTIVE' || tenant.status === 'LEFT') && (
+                                            {(tenant.status === 'LEFT') && (
                                                 <button
                                                     onClick={(e) => handleToggleStatus(tenant, e)}
                                                     className={`px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all active:scale-95 ${
