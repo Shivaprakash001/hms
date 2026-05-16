@@ -2,8 +2,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
-import { getSession, apiResponse, apiError } from "@/lib/auth";
-import { prisma } from "@/lib/db";
+import { getSession, apiResponse, apiError } from "@lib/auth";
+import { prisma } from "@lib/db";
 
 
 export async function GET(req: NextRequest) {

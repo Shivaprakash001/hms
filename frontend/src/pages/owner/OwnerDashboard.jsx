@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import SmartDashboardGuidance from '../../components/SmartDashboardGuidance';
-import FirstSuccessMoment from '../../components/FirstSuccessMoment';
+import SmartDashboardGuidance from '@components/SmartDashboardGuidance';
+import FirstSuccessMoment from '@components/FirstSuccessMoment';
 import { useNavigate } from 'react-router-dom';
 import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
 import {
@@ -10,11 +10,11 @@ import {
     CheckCircle2, Clock, LayoutDashboard, Sparkles, ArrowRight,
     CreditCard, Loader2, Search
 } from 'lucide-react';
-import { paymentService, reminderService, tenantService } from '../../api/services';
-import { useAppPreferences } from '../../context/AppPreferencesContext';
-import { formatCurrency } from '../../utils/format';
-import { useCashflow, useTenantAnalytics, useFunnelAnalytics, useOperationsAnalytics, useAddonUsage } from '../../hooks/useAnalytics';
-import { useHostelContext } from '../../context/HostelContext';
+import { paymentService, reminderService, tenantService } from '@/api/services';
+import { useAppPreferences } from '@/context/AppPreferencesContext';
+import { formatCurrency } from '@utils/format';
+import { useCashflow, useTenantAnalytics, useFunnelAnalytics, useOperationsAnalytics, useAddonUsage } from '@hooks/useAnalytics';
+import { useHostelContext } from '@/context/HostelContext';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
