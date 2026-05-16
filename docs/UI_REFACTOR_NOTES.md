@@ -21,11 +21,18 @@ The following data transformation logic was extracted into `@features/rooms/util
 - `findRoomById` - Array lookup utility.
 - `calculateRoomStats` - Encapsulates all the complex `.reduce()` math to derive `totalRooms`, `totalCapacity`, `totalOccupants`, and `occupancyRate` safely.
 
+### Extracted Hooks (Batch 3 - Async Orchestration)
+The following transactional flows and API interactions were extracted into `@features/rooms/hooks/useRoomActions.js`:
+- Simple interaction handlers (`handleCallTenant`, `openRoomDetails`, `openTenantProfile`).
+- The generic `fetchData` wrapper.
+- All complex mutations (`handleAddRoom`, `handleAddFloor`, `handleAddTenant`, `handleRemoveTenant`, `handleDeleteRoom`, `handleShiftTenant`).
+- Action-specific loading states (e.g., `deletingRoomId`, `tenantProfileLoading`).
+
 ### Remaining Responsibilities in Parent (`ManageRooms.jsx`)
-- State management (`selectedRoom`, `showAddRoomModal`, `filterStatus`, etc.).
-- Custom hooks usage (`useRooms`, `useAppPreferences`).
-- Data fetching logic and error handling (`fetchData`, `handleDeleteRoom`, `handleAddTenant`, `handleShiftTenant`, etc.).
-- Main layout orchestration.
+- Modals, popups, and sidebars layout structure.
+- Local UI toggles (`showAddRoomModal`, `showAddTenantModal`, `filterStatus`, etc.).
+- Active selection state (`selectedRoom`, `selectedTenantForShift`, etc.).
+- Custom hooks usage (`useRooms`, `useAppPreferences`, `useRoomActions`).
 
 ### Repeated Patterns Discovered
 - **Derived Stats Math**: `floors.reduce(...)` is calculated manually on render. This should be moved to a custom hook like `useRoomStats(floors)`.
@@ -33,8 +40,8 @@ The following data transformation logic was extracted into `@features/rooms/util
 - **Date/Currency formatting**: Consistent use of `formatDate` and `formatCurrency` is good, but `TenantProfileModal` repeats identical layout structures for `InfoTile` and `SummaryTile`.
 
 ### Future Optimization Opportunities
-- Extract all API handlers (`handleCallTenant`, `handleAddRoom`, `handleAddTenant`, `handleShiftTenant`) into a `useRoomActions` custom hook to massively shrink the parent component.
-- The `TenantProfileModal` is technically a "Tenant" feature, and could eventually be moved to `@features/tenants/components` once the tenant UI decomposition begins.
+- The `TenantProfileModal` and its related handlers (`openTenantProfile`, `handleAddTenant`, `handleRemoveTenant`, `handleShiftTenant`) technically overlap with a "Tenant" feature domain. They could eventually be moved to `@features/tenants/hooks/useTenantRoomActions.js` once the global tenant decomposition begins to avoid a massive `useRoomActions` hook.
+- Implement React Query directly inside `useRooms` and `useRoomActions` to simplify the `refetchRooms` orchestration and gain better caching/optimistic updates.
 
 ### Risky Coupling Areas
 - `handleAddTenant` contains mixed responsibilities: it handles both tenant creation/reactivation AND room allocation within the same try-catch block. This is a complex transactional flow that should live in a backend service or a robust frontend hook, not directly inside the UI component.
