@@ -15,6 +15,8 @@ import { StatCard } from '../../features/rooms/components/StatCard';
 import { RoomCard } from '../../features/rooms/components/RoomCard';
 import { RoomDetailSidebar } from '../../features/rooms/components/RoomDetailSidebar';
 import { TenantProfileModal } from '../../features/rooms/components/TenantProfileModal';
+import { normalizeFloors, findRoomById, calculateRoomStats } from '../../features/rooms/utils/roomHelpers';
+
 const ManageRooms = () => {
     const { preferences } = useAppPreferences();
     const { hostelId } = useHostelContext();
@@ -53,24 +55,7 @@ const ManageRooms = () => {
         }
     };
 
-    const normalizeFloors = (floorsData) => (
-        (floorsData || []).map(floor => ({
-            ...floor,
-            rooms: (floor.rooms || []).map(room => ({
-                ...room,
-                room_no: room.room_no ?? room.number,
-                number: room.number ?? room.room_no,
-                tenants: room.tenants || [],
-                status: room.status || ((room.tenants?.length ?? 0) === 0
-                    ? 'Vacant'
-                    : (room.tenants?.length >= room.capacity ? 'Full' : 'Occupied'))
-            }))
-        }))
-    );
 
-    const findRoomById = (floorsList, roomId) => (
-        floorsList.flatMap((floor) => floor.rooms).find((room) => room.id === roomId) || null
-    );
 
     const { data: floorsData, isLoading: loading, error: fetchError, refetch: refetchRooms } = useRooms(hostelId, { grouped: true });
     
@@ -283,10 +268,7 @@ const ManageRooms = () => {
     // --- Render ---
 
     // Derived state for stats
-    const totalRooms = floors.reduce((acc, f) => acc + f.rooms.length, 0);
-    const totalCapacity = floors.reduce((acc, f) => acc + f.rooms.reduce((rAcc, r) => rAcc + r.capacity, 0), 0);
-    const totalOccupants = floors.reduce((acc, f) => acc + f.rooms.reduce((rAcc, r) => rAcc + r.tenants.length, 0), 0);
-    const occupancyRate = totalCapacity > 0 ? Math.round((totalOccupants / totalCapacity) * 100) : 0;
+    const { totalRooms, totalCapacity, totalOccupants, occupancyRate } = useMemo(() => calculateRoomStats(floors), [floors]);
 
     if (loading) return (
         <div className="flex justify-center items-center h-64">

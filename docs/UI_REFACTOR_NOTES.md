@@ -15,11 +15,16 @@ The following pure presentational components were extracted from `ManageRooms.js
 - `TenantProfileModal.jsx` - A complex modal showing the tenant's full profile, contact info, financials, and recent payments. Contains internal reusable components (`SummaryTile`, `InfoTile`).
 - Re-located Modal Components - Moved existing modals (`AddRoomModal`, `AddFloorModal`, `AddTenantModal`, `ShiftTenantModal`, `EditRoomModal`) from legacy `components/owner/rooms` into the `@features/rooms/components` boundary.
 
+### Extracted Helpers (Batch 2 - Pure Functions)
+The following data transformation logic was extracted into `@features/rooms/utils/roomHelpers.js`:
+- `normalizeFloors` - Pure function to structure floor/room responses and apply statuses.
+- `findRoomById` - Array lookup utility.
+- `calculateRoomStats` - Encapsulates all the complex `.reduce()` math to derive `totalRooms`, `totalCapacity`, `totalOccupants`, and `occupancyRate` safely.
+
 ### Remaining Responsibilities in Parent (`ManageRooms.jsx`)
 - State management (`selectedRoom`, `showAddRoomModal`, `filterStatus`, etc.).
 - Custom hooks usage (`useRooms`, `useAppPreferences`).
 - Data fetching logic and error handling (`fetchData`, `handleDeleteRoom`, `handleAddTenant`, `handleShiftTenant`, etc.).
-- Complex derived state calculations (`totalRooms`, `occupancyRate`).
 - Main layout orchestration.
 
 ### Repeated Patterns Discovered
@@ -28,7 +33,6 @@ The following pure presentational components were extracted from `ManageRooms.js
 - **Date/Currency formatting**: Consistent use of `formatDate` and `formatCurrency` is good, but `TenantProfileModal` repeats identical layout structures for `InfoTile` and `SummaryTile`.
 
 ### Future Optimization Opportunities
-- Move complex data manipulation (`normalizeFloors`, `findRoomById`) into `@features/rooms/utils/roomHelpers.js`.
 - Extract all API handlers (`handleCallTenant`, `handleAddRoom`, `handleAddTenant`, `handleShiftTenant`) into a `useRoomActions` custom hook to massively shrink the parent component.
 - The `TenantProfileModal` is technically a "Tenant" feature, and could eventually be moved to `@features/tenants/components` once the tenant UI decomposition begins.
 
