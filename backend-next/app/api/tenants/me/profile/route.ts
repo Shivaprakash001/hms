@@ -6,7 +6,7 @@ import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { tenantService } from "@/lib/services/tenant-service";
 import { TenantProfileUpdateSchema } from "@/lib/validators";
-import { documentService } from "@/lib/services/document-service";
+
 
 
 /**
@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
     const allocation = (tenant as any).room_allocations?.[0];
     const profile = (tenant as any).profiles;
 
-    const verification_badge = await documentService.getVerificationBadge(tenant.id);
+    const verification_badge = null;
 
     return apiResponse({
       ...tenant,

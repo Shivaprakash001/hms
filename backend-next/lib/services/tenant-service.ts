@@ -2,7 +2,7 @@ import { prisma } from "../db";
 import { eventSystem } from "../events";
 import { z } from "zod";
 import { getTenantOperationalContext } from "../hostel-context";
-import { documentService } from "./document-service";
+
 import { allocationReconciliationService } from "./allocation-reconciliation-service";
 import { financialService } from "./financial-service";
 import { getLogger } from "../logger";
@@ -77,8 +77,8 @@ export class TenantService {
       throw new Error("FORBIDDEN: You can only view your own tenants");
     }
 
-    const verification_badge = await documentService.getVerificationBadge(id);
-    return { ...this.withLegacyTenantRelations(tenant), verification_badge };
+
+    return { ...this.withLegacyTenantRelations(tenant), verification_badge: null };
   }
 
   async getTenantByProfile(profileId: string, requestingUser: { sub: string; role: string }) {
@@ -136,8 +136,8 @@ export class TenantService {
       throw new Error("FORBIDDEN: You can only view your own tenants");
     }
 
-    const verification_badge = await documentService.getVerificationBadge(tenant.id);
-    return { ...this.withLegacyTenantRelations(tenant), verification_badge };
+
+    return { ...this.withLegacyTenantRelations(tenant), verification_badge: null };
   }
 
   async getAllTenants(params: {
