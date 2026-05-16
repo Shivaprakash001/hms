@@ -46,9 +46,15 @@ export class PaymentStatusEventService {
       WHERE payment_attempt_id = ${input.attemptId}::uuid
     `;
     const nextSequence = Number(rows?.[0]?.next_sequence || 1);
+    
+    // Ensure we ALWAYS get a valid UUID string even if crypto.randomUUID() is stripped/undefined in edge
+    const generatedId = (typeof crypto.randomUUID === 'function') 
+      ? crypto.randomUUID() 
+      : crypto.randomBytes(16).toString("hex").replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5");
+
     return tx.paymentAttemptStatusEvent.create({
       data: {
-        id: crypto.randomUUID(),
+        id: generatedId,
         payment_attempt_id: input.attemptId,
         transition_sequence: nextSequence,
         from_status: input.fromStatus || null,
