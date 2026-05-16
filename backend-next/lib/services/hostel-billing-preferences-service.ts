@@ -155,14 +155,14 @@ export class HostelBillingPreferencesService {
       where: {
         id: roomId,
         is_active: true,
-        ...(ownerId ? { hostel: { owner_id: ownerId, is_active: true } } : {}),
+        ...(ownerId ? { hostels: { owner_id: ownerId, is_active: true } } : {}),
       },
       select: {
         id: true,
         room_no: true,
         base_rent: true,
         hostel_id: true,
-        hostel: {
+        hostels: {
           select: {
             id: true,
             owner_id: true,
@@ -173,9 +173,9 @@ export class HostelBillingPreferencesService {
     });
 
     if (!room) throw new Error(ownerId ? "FORBIDDEN: Room is not owned by the authenticated owner" : "NOT_FOUND: Room not found");
-    if (!room.hostel) throw new Error("NOT_FOUND: Associated hostel not found");
+    if (!room.hostels) throw new Error("NOT_FOUND: Associated hostel not found");
 
-    const billingDefaults = normalizeBillingDefaults(room.hostel.preferences_config);
+    const billingDefaults = normalizeBillingDefaults(room.hostels.preferences_config);
     const maintenanceCharge = billingDefaults.maintenance_type === "NONE"
       ? 0
       : billingDefaults.maintenance_charge;
@@ -196,7 +196,7 @@ export class HostelBillingPreferencesService {
       },
     };
 
-    await eventLog.log("BILLING_DEFAULTS_RESOLVED", room.hostel.owner_id, {
+    await eventLog.log("BILLING_DEFAULTS_RESOLVED", room.hostels.owner_id, {
       hostel_id: room.hostel_id,
       room_id: room.id,
       resolved_values: result.resolved_values,
