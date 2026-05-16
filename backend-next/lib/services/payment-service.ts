@@ -337,13 +337,13 @@ export class PaymentService {
           const pdfBuffer = await receiptService.renderReceiptPdf(receipt, renderContext);
           const tenant = await prisma.tenants.findUnique({
             where: { id: res.payment.tenant_id },
-            include: { profile: true },
+            include: { profiles: true },
           });
-          if (tenant?.profile?.email) {
+          if (tenant?.profiles?.email) {
             const rentMonth = formatMonthYear(receipt.rent_month, prefs);
             await EmailService.sendReceipt({
-              toEmail: tenant.profile.email,
-              name: tenant.profile.name,
+              toEmail: tenant.profiles.email,
+              name: tenant.profiles.name,
               amount: data.amountPaid,
               rentMonth,
               reference: receipt.receipt_number,
@@ -431,13 +431,13 @@ export class PaymentService {
           const pdfBuffer = await receiptService.renderReceiptPdf(receipt, renderContext);
           const tenant = await prisma.tenants.findUnique({
             where: { id: res.payment.tenant_id },
-            include: { profile: true },
+            include: { profiles: true },
           });
-          if (tenant?.profile?.email) {
+          if (tenant?.profiles?.email) {
             const rentMonth = formatMonthYear(receipt.rent_month, prefs);
             await EmailService.sendReceipt({
-              toEmail: tenant.profile.email,
-              name: tenant.profile.name,
+              toEmail: tenant.profiles.email,
+              name: tenant.profiles.name,
               amount: data.amountPaid,
               rentMonth,
               reference: receipt.receipt_number,
@@ -1078,14 +1078,14 @@ export class PaymentService {
       const existingLinks = await tx.payment_attempt_obligations.findMany({
         where: {
           obligation_id: { in: paymentBreakdown.map(p => p.obligationId) },
-          payment_attempt: { hostel_id: hostelId, status: { in: ["CREATED", "PENDING"] } },
+          payment_attempts: { hostel_id: hostelId, status: { in: ["CREATED", "PENDING"] } },
         },
-        include: { payment_attempt: true },
+        include: { payment_attempts: true },
         orderBy: { created_at: "desc" },
       });
 
       if (existingLinks.length > 0) {
-        const existingAttempt = existingLinks[0].payment_attempt;
+        const existingAttempt = existingLinks[0].payment_attempts;
         const checkoutUrl = existingAttempt.checkout_url || "";
         const twoMinAgo = new Date(Date.now() - 2 * 60 * 1000);
 
@@ -1259,7 +1259,7 @@ export class PaymentService {
     // Resolve prefs from the tenant's explicit hostel context.
     const tenant = await prisma.tenants.findUnique({
       where: { id: tenantId },
-      include: { profile: true },
+      include: { profiles: true },
     });
     if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
     if (tenant.owner_id !== ownerId) throw new Error("FORBIDDEN: Tenant does not belong to this owner");
@@ -1325,6 +1325,7 @@ export class PaymentService {
       const merchantTxnId = `hms_adv_${crypto.randomBytes(6).toString("hex")}`;
       const newAttempt = await tx.paymentAttempt.create({
         data: {
+          id: crypto.randomUUID(),
           tenant_id: tenantId,
           owner_id: ownerId,
           provider,
@@ -1362,9 +1363,9 @@ export class PaymentService {
       const result = await instance.createIntent({
         amount,
         merchant_txn_id: attempt.merchant_txn_id,
-        tenant_name: tenant.profile.name,
-        tenant_email: tenant.profile.email,
-        tenant_phone: tenant.profile.phone || "",
+        tenant_name: tenant.profiles.name,
+        tenant_email: tenant.profiles.email,
+        tenant_phone: tenant.profiles.phone || "",
         metadata: { tenant_id: tenantId, attempt_id: attempt.id, payment_type: "ADVANCE" },
       });
       return await this.updateAttemptStatusOutsideTx({

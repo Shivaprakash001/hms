@@ -103,7 +103,7 @@ const DEFAULTS: HostelPreferences = {
   late_fee_rules: [],
 
   allow_partial_payments: false,
-  min_payment_amount: 500,
+  min_payment_amount: 0,
 
   advance_enabled: false,
   advance_amount_default: 0,

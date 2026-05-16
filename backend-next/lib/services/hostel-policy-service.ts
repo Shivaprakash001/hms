@@ -298,7 +298,7 @@ export function normalizeHostelPolicy(hostel: any): HostelPolicy {
       },
       partial_payments: {
         enabled: bool(partialPayments.enabled ?? config.allow_partial_payments, false),
-        minimum_amount: nonNegative(partialPayments.minimum_amount ?? config.min_payment_amount, 500, "Minimum payment amount", 1000000),
+        minimum_amount: nonNegative(partialPayments.minimum_amount ?? config.min_payment_amount, 0, "Minimum payment amount", 1000000),
       },
       advance_adjustments: {
         enabled: bool(asObject(billing.advance_adjustments).enabled, false),
@@ -607,7 +607,7 @@ export function validateHostelPolicyForWrite(policy: HostelPolicy) {
   nonNegative(policy.billing.late_fee.max_amount, 500, "Maximum late fee", 50000);
   nonNegative(policy.billing.deposit.default_amount, 0, "Default advance deposit", 1000000);
   nonNegative(policy.billing.maintenance.amount, 0, "Maintenance amount", 50000);
-  nonNegative(policy.billing.partial_payments.minimum_amount, 500, "Minimum payment amount", 1000000);
+  nonNegative(policy.billing.partial_payments.minimum_amount, 0, "Minimum payment amount", 1000000);
   boundedNumber(policy.tenant_rules.invite_expiry_hours, 48, 1, 720, "Invite expiry hours");
   boundedNumber(policy.automation.auto_deactivate_days, 0, 0, 365, "Auto deactivate days");
   boundedNumber(policy.dashboard.occupancy_warning_threshold, 80, 0, 100, "Occupancy warning threshold");

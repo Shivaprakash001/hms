@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
+import { randomUUID } from "crypto";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
@@ -93,6 +94,7 @@ export async function POST(req: NextRequest) {
     // maintenance charges for the same month+allocation. This is intentional.
     const obligation = await prisma.rent_obligations.create({
       data: {
+        id: randomUUID(),
         tenant_id,
         owner_id: ownerId,
         hostel_id: tenant.hostel_id,

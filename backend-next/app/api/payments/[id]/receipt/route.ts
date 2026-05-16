@@ -22,7 +22,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
         owner_id: true,
         tenant_id: true,
         hostel_id: true,
-        tenant: { select: { profile_id: true, owner_id: true } },
+        tenants: { select: { profile_id: true, owner_id: true } },
       },
     });
     if (!payment) {
@@ -30,11 +30,11 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     }
 
     if (user.role === "TENANT") {
-      if (payment.tenant?.profile_id !== user.id) {
+      if (payment.tenants?.profile_id !== user.id) {
         return new NextResponse(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { 'Content-Type': 'application/json' } });
       }
     } else if (user.role === "OWNER") {
-      if (payment.owner_id !== user.id && payment.tenant?.owner_id !== user.id) {
+      if (payment.owner_id !== user.id && payment.tenants?.owner_id !== user.id) {
         return new NextResponse(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { 'Content-Type': 'application/json' } });
       }
       const hostel = await prisma.hostels.findUnique({ where: { id: payment.hostel_id }, select: { owner_id: true } });
