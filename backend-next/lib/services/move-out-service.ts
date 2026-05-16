@@ -196,6 +196,10 @@ export class MoveOutService {
           ...(nextStatus === "COMPLETED" ? { financial_completion_date: new Date(), completed_at: new Date() } : {}),
         },
       });
+
+      if (nextStatus === "COMPLETED") {
+        await this._executeCompletionSideEffects(tx, req.tenant_id, requestId, req.planned_exit_date, req.reason, req.reason_text, new Date());
+      }
       notifyMoveOutTransition(requestId, nextStatus);
       return { ...preview, status: nextStatus };
     });
@@ -223,12 +227,8 @@ export class MoveOutService {
         where: { id: params.requestId },
         data: { status: "COMPLETED", financial_completion_date: now, physical_exit_date: physicalDate, completed_at: now, updated_at: now },
       });
-      // Room release only on physical exit date (if today or past)
-      if (physicalDate <= now) {
-        await tx.roomAllocation.updateMany({ where: { tenant_id: req.tenant_id, is_active: true, end_date: null }, data: { is_active: false, end_date: physicalDate } });
-        await tx.move_out_requests.update({ where: { id: params.requestId }, data: { room_release_date: physicalDate } });
-        await tx.tenants.update({ where: { id: req.tenant_id }, data: { status: "LEFT", exit_date: physicalDate, exit_reason: req.reason, exit_notes: req.reason_text, updated_at: now } });
-      }
+      // Room release and tenant update
+      await this._executeCompletionSideEffects(tx, req.tenant_id, params.requestId, physicalDate, req.reason, req.reason_text, now);
       notifyMoveOutTransition(params.requestId, "COMPLETED");
       return { success: true, request_id: params.requestId, physical_exit_date: physicalDate };
     });
@@ -247,6 +247,30 @@ export class MoveOutService {
       notifyMoveOutTransition(params.requestId, "DISPUTED");
       return dispute;
     });
+  }
+
+  private async _executeCompletionSideEffects(tx: Tx, tenantId: string, requestId: string, exitDate: Date, reason: string, reasonText: string | null, now: Date) {
+    if (exitDate <= now) {
+      await tx.roomAllocation.updateMany({ where: { tenant_id: tenantId, is_active: true, end_date: null }, data: { is_active: false, end_date: exitDate } });
+      await tx.move_out_requests.update({ where: { id: requestId }, data: { room_release_date: exitDate } });
+      // Reset payment summary so they don't show pending dues in the LEFT state
+      const tenant = await tx.tenants.findUnique({ where: { id: tenantId }, select: { payment_summary: true } });
+      let paymentSummary = typeof tenant?.payment_summary === 'object' ? tenant.payment_summary : {};
+      paymentSummary = { ...paymentSummary, pending_amount: 0, payment_status: 'PAID' };
+      
+      await tx.tenants.update({
+        where: { id: tenantId },
+        data: {
+          status: "LEFT", exit_date: exitDate, exit_reason: reason, exit_notes: reasonText,
+          payment_summary: paymentSummary, updated_at: now
+        }
+      });
+      // Optionally waive all pending obligations so they don't appear in historical debt unless explicitly wanted
+      await tx.rent_obligations.updateMany({
+        where: { tenant_id: tenantId, status: { in: ["PENDING", "PARTIAL"] } },
+        data: { status: "WAIVED", updated_at: now }
+      });
+    }
   }
 
   // ── Resolve Dispute ──────────────────────────────────────────
@@ -318,7 +342,7 @@ export class MoveOutService {
     const tenant = await prisma.tenants.findUnique({ where: { profile_id: profileId }, select: { id: true } });
     if (!tenant) throw new Error("NOT_FOUND");
     return prisma.move_out_requests.findFirst({
-      where: { tenant_id: tenant.id, status: { notIn: ["COMPLETED", "CANCELLED", "REJECTED"] } },
+      where: { tenant_id: tenant.id, status: { notIn: ["CANCELLED", "REJECTED"] } },
       include: { inspection: true, settlement: true, feedback: true, disputes: true },
       orderBy: { created_at: "desc" },
     });
