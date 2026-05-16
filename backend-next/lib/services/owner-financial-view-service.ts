@@ -55,7 +55,7 @@ export type OwnerSettlementStatus =
  * Translate the internal item.payout_status into the owner-facing label.
  * Defaults to PENDING_SETTLEMENT when the credit has no covering item.
  */
-function mapOwnerSettlementStatus(payoutStatus: string | null | undefined): OwnerSettlementStatus {
+export function mapOwnerSettlementStatus(payoutStatus: string | null | undefined): OwnerSettlementStatus {
   switch (payoutStatus) {
     case "SUCCESS":     return OWNER_SETTLEMENT_STATUS.SETTLED;
     case "PROCESSING":  return OWNER_SETTLEMENT_STATUS.TRANSFER_IN_PROGRESS;
