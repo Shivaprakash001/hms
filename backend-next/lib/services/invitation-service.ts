@@ -24,7 +24,7 @@ export class InvitationService {
     const { email, name, phone, room_id } = data;
 
     // ── Resolve financial defaults from hostel preferences ────────
-    // Phase 2: prefs resolved from room.hostel after room fetch (below)
+    // Phase 2: prefs resolved from room.hostels after room fetch (below)
 
     // ── Resolve joining date + billing start ─────────────────────
     const today = new Date();
@@ -142,7 +142,7 @@ export class InvitationService {
           advance_deposit:    advance_amount,
           maintenance_charge: maintenance_amount,
           maintenance_type,
-          hostel_id: room.hostel.id, // Phase 2: write-through hostel_id
+          hostel_id: room.hostels.id, // Phase 2: write-through hostel_id
         } as any,
       });
 
@@ -152,7 +152,7 @@ export class InvitationService {
           room_id,
           start_date: joiningDate,
           is_active: true,
-          hostel_id: room.hostel.id, // Phase 2: write-through hostel_id
+          hostel_id: room.hostels.id, // Phase 2: write-through hostel_id
         },
       });
 
@@ -161,7 +161,7 @@ export class InvitationService {
         tenantId: tenant.id,
         allocationId: allocation.id,
         ownerId,
-        hostelId: room.hostel.id,
+        hostelId: room.hostels.id,
         joiningDate,
         advanceDeposit: advance_amount,
         maintenanceCharge: maintenance_amount,
@@ -205,7 +205,7 @@ export class InvitationService {
       toEmail: normalizedEmail,
       tenantName: name,
       ownerName: owner.name || "The Owner",
-      hostelName: room.hostel.name,
+      hostelName: room.hostels.name,
       roomNumber: room.room_no,
       roomRent: monthlyRent,
       activationLink,
@@ -373,14 +373,14 @@ export class InvitationService {
             const targetRoom = await tx.rooms.findUnique({
               where: { id: roomIdOverride },
               include: {
-                hostel: true,
+                hostels: true,
                 room_allocations: { where: { is_active: true } },
               },
             });
-            if (!targetRoom || !targetRoom.hostel) {
+            if (!targetRoom || !targetRoom.hostels) {
               throw new Error("NOT_FOUND: Target room not found");
             }
-            if (profile.owner_id && targetRoom.hostel.owner_id !== profile.owner_id) {
+            if (profile.owner_id && targetRoom.hostels.owner_id !== profile.owner_id) {
               throw new Error("FORBIDDEN: Cannot assign room from another owner");
             }
             
@@ -397,14 +397,14 @@ export class InvitationService {
             if (activeAllocation) {
               await tx.roomAllocation.update({
                 where: { id: activeAllocation.id },
-                data: { room_id: roomIdOverride, hostel_id: targetRoom.hostel.id, start_date: new Date() },
+                data: { room_id: roomIdOverride, hostel_id: targetRoom.hostels.id, start_date: new Date() },
               });
             } else {
               await tx.roomAllocation.create({
                 data: {
                   tenant_id: tenantDetails.id,
                   room_id: roomIdOverride,
-                  hostel_id: targetRoom.hostel.id,
+                  hostel_id: targetRoom.hostels.id,
                   start_date: new Date(),
                   is_active: true,
                 },
@@ -429,10 +429,10 @@ export class InvitationService {
     // Additional details needed for email
     const allocation = await prisma.roomAllocation.findFirst({
       where: { tenant_id: tenantDetails.id, is_active: true },
-      include: { room: { include: { hostel: true } } },
+      include: { room: { include: { hostels: true } } },
     });
 
-    if (!allocation || !allocation.room || !allocation.room.hostel) {
+    if (!allocation || !allocation.room || !allocation.room.hostels) {
       logger.error(`Could not find active allocation/room/hostel for resend to ${normalizedEmail}`);
       throw new Error("INTERNAL_ERROR: Cannot resend, missing allocation details.");
     }
@@ -466,7 +466,7 @@ export class InvitationService {
       toEmail: profile.email,
       tenantName: profile.name,
       ownerName: owner.name,
-      hostelName: allocation.room.hostel.name,
+      hostelName: allocation.room.hostels.name,
       roomNumber: allocation.room.room_no,
       roomRent: Number(tenantDetails.monthly_rent),
       activationLink,
@@ -532,9 +532,9 @@ export class InvitationService {
     }
 
     const targetRoom = await prisma.rooms.findFirst({
-      where: { id: data.room_id, is_active: true, hostel: { owner_id: ownerId, is_active: true } },
+      where: { id: data.room_id, is_active: true, hostels: { owner_id: ownerId, is_active: true } },
       include: {
-        hostel: true,
+        hostels: true,
         room_allocations: {
           where: {
             is_active: true,
@@ -545,7 +545,7 @@ export class InvitationService {
         },
       },
     });
-    if (!targetRoom || !targetRoom.hostel) throw new Error("NOT_FOUND: Target room not found");
+    if (!targetRoom || !targetRoom.hostels) throw new Error("NOT_FOUND: Target room not found");
     if (targetRoom.room_allocations.length >= targetRoom.capacity) {
       throw new Error("CAPACITY_EXCEEDED: Target room is already at full capacity");
     }
@@ -642,7 +642,7 @@ export class InvitationService {
       toEmail: normalizedEmail,
       tenantName: data.name,
       ownerName: owner.name,
-      hostelName: targetRoom.hostel.name,
+      hostelName: targetRoom.hostels.name,
       roomNumber: targetRoom.room_no,
       roomRent: Number(data.monthly_rent),
       activationLink,
