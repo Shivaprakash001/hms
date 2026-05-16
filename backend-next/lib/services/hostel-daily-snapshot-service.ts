@@ -27,7 +27,7 @@ export class HostelDailySnapshotService {
         SELECT
           COALESCE(SUM(amount), 0)::float AS expected_revenue,
           COALESCE(SUM(CASE WHEN status IN ('PENDING','PARTIAL') THEN amount ELSE 0 END), 0)::float AS pending_dues,
-          COUNT(CASE WHEN status IN ('PENDING','PARTIAL') AND due_date < $2::date THEN 1 END)::int AS overdue_count
+          COUNT(CASE WHEN status IN ('PENDING','PARTIAL') AND due_date < ${day}::date THEN 1 END)::int AS overdue_count
         FROM rent_obligations
         WHERE hostel_id = ${hostelId}::uuid AND rent_month <= ${day}::date
       ), collections AS (
@@ -69,7 +69,7 @@ export class HostelDailySnapshotService {
       profit: Math.round((collectedRevenue - expenses) * 100) / 100,
     };
 
-    await (prisma as any).hostelDailySnapshot.create({
+    await (prisma as any).hostel_daily_snapshots.create({
       data: {
         ...payload,
         snapshot_date: day,
@@ -82,7 +82,7 @@ export class HostelDailySnapshotService {
 
   async getSnapshotOrLive(hostelId: string, snapshotDate = new Date(), staleAfterHours = 30) {
     const day = dateOnly(snapshotDate);
-    const snapshot = await (prisma as any).hostelDailySnapshot.findUnique({
+    const snapshot = await (prisma as any).hostel_daily_snapshots.findUnique({
       where: { hostel_id_snapshot_date: { hostel_id: hostelId, snapshot_date: day } },
     });
 
