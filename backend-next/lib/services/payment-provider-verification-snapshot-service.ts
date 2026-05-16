@@ -37,6 +37,7 @@ export class PaymentProviderVerificationSnapshotService {
     try {
       return await (prisma as any).paymentProviderVerificationSnapshot.create({
         data: {
+          id: crypto.randomUUID(),
           provider: input.provider.toUpperCase(),
           payment_domain: attempt?.payment_domain || null,
           flow_type: attempt?.flow_type || null,

@@ -1,4 +1,5 @@
 import { PDFDocument, StandardFonts, rgb, PDFPage, PDFFont } from "pdf-lib";
+import crypto from "crypto";
 import { prisma } from "../db";
 import { imagekit } from "../imagekit";
 import { resolvePreferences } from "../preferences";
@@ -64,6 +65,7 @@ export class InvoiceService {
 
       receipt = await prisma.receipts.create({
         data: {
+          id: crypto.randomUUID(),
           payment_id: payment.id,
           tenant_id: payment.tenant_id,
           amount: payment.amount_paid,

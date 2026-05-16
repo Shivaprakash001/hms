@@ -2878,6 +2878,7 @@ export class PaymentService {
       : {};
     const run = await (prisma as any).paymentReconciliationRun.create({
       data: {
+        id: crypto.randomUUID(),
         payment_domain: options?.paymentDomain || (options?.hostelId ? PAYMENT_DOMAIN.RENT_COLLECTION : PAYMENT_DOMAIN.PLATFORM_BILLING),
         scope_type: options?.hostelId ? PAYMENT_SCOPE.HOSTEL : PAYMENT_SCOPE.PLATFORM,
         operational_owner_id: options?.ownerId || null,
@@ -2890,6 +2891,7 @@ export class PaymentService {
     const createItem = async (data: any) => {
       await (prisma as any).paymentReconciliationItem.create({
         data: {
+          id: crypto.randomUUID(),
           reconciliation_run_id: run.id,
           ...data,
           operational_owner_id: options?.ownerId || data.operational_owner_id || null,

@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { prisma } from "../db";
 
 type MaybeHostelId = string | null;
@@ -47,6 +48,7 @@ export class PaymentStatusEventService {
     const nextSequence = Number(rows?.[0]?.next_sequence || 1);
     return tx.paymentAttemptStatusEvent.create({
       data: {
+        id: crypto.randomUUID(),
         payment_attempt_id: input.attemptId,
         transition_sequence: nextSequence,
         from_status: input.fromStatus || null,

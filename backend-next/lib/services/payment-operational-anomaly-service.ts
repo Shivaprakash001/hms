@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { prisma } from "../db";
 import { getLogger } from "../logger";
 
@@ -22,6 +23,7 @@ export class PaymentOperationalAnomalyService {
     try {
       return await (prisma as any).paymentOperationalAnomaly.create({
         data: {
+          id: crypto.randomUUID(),
           anomaly_type: input.anomalyType,
           severity: input.severity,
           payment_domain: input.paymentDomain || null,

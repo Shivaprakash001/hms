@@ -83,6 +83,7 @@ export class PaymentWebhookEventService {
 
       const event = await (prisma as any).paymentWebhookEvent.create({
         data: {
+          id: crypto.randomUUID(),
           provider,
           payment_domain: (attempt as any)?.payment_domain || null,
           flow_type: (attempt as any)?.flow_type || null,

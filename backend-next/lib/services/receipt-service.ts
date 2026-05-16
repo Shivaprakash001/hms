@@ -124,6 +124,7 @@ export class ReceiptService {
       try {
         receipt = await prisma.receipts.create({
           data: {
+            id: crypto.randomUUID(),
             receipt_number: receiptNumber,
             payment_id: payment.id,
             tenant_id: payment.tenant_id,
