@@ -207,7 +207,7 @@ model hostel_invariant_checks {
 }
 
 model hostels {
-  id                  String                @id @db.Uuid
+  id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   owner_id            String                @db.Uuid
   name                String
   phone               String
@@ -468,7 +468,7 @@ model owner_onboarding_states {
 }
 
 model owner_subscriptions {
-  id             String           @id @db.Uuid
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   owner_id       String           @unique @db.Uuid
   plan_id        String
   status         String           @default("FREE")
@@ -727,7 +727,7 @@ model payment_webhook_events {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model payments {
-  id                  String            @id @db.Uuid
+  id                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   obligation_id       String            @db.Uuid
   tenant_id           String            @db.Uuid
   owner_id            String?           @db.Uuid
@@ -984,7 +984,7 @@ model rent_generation_logs {
 }
 
 model rent_obligations {
-  id                          String                        @id @db.Uuid
+  id                          String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenant_id                   String                        @db.Uuid
   allocation_id               String?                       @db.Uuid
   owner_id                    String?                       @db.Uuid
@@ -1054,7 +1054,7 @@ model roomAllocation {
 }
 
 model rooms {
-  id                 String               @id @db.Uuid
+  id                 String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   hostel_id          String               @db.Uuid
   room_no            String
   floor              Int?
@@ -1074,7 +1074,7 @@ model rooms {
 }
 
 model subscriptions {
-  id               String             @id @db.Uuid
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   owner_id         String             @unique @db.Uuid
   plan_id          String
   status           String             @default("TRIAL")
@@ -1172,7 +1172,7 @@ model tenant_transfer_logs {
 }
 
 model tenants {
-  id                     String                  @id @db.Uuid
+  id                     String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   profile_id             String                  @unique @db.Uuid
   profile_type           String                  @default("STUDENT")
   monthly_rent           Decimal?                @db.Decimal(10, 2)

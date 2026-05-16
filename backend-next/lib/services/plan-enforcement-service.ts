@@ -26,7 +26,7 @@ export class PlanEnforcementService {
     const sub = await prisma.owner_subscriptions.findUnique({
       where: { owner_id: ownerId },
       include: {
-        plan: {
+        plans: {
           select: {
             id: true,
             tenant_limit: true,
