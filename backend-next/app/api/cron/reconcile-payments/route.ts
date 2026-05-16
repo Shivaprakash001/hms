@@ -2,9 +2,9 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import { paymentService } from "@/lib/services/payment-service";
+import { paymentService } from "@/src/services/payments/payment-service";
 import { prisma } from "@/lib/db";
-import { PAYMENT_DOMAIN } from "@/lib/services/payments/financial-domain";
+import { PAYMENT_DOMAIN } from "@/src/services/payments/financial-domain";
 
 export async function GET(req: NextRequest) {
   try {

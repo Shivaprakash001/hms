@@ -1,14 +1,21 @@
 import api from '@lib/api-client';
 import axios from 'axios';
 
+const unwrap = (response) => {
+    if (response.data && response.data.success === true && response.data.data !== undefined) {
+        return response.data.data;
+    }
+    return response.data;
+};
+
 export const paymentService = {
     getAll: async (hostelId, params = {}) => {
         const response = await api.get('/payments', { params: { ...params, hostelId } });
-        return response.data;
+        return unwrap(response);
     },
     getAllDues: async (hostelId, params = {}) => {
         const response = await api.get('/payments/dues', { params: { ...params, hostelId } });
-        return response.data;
+        return unwrap(response);
     },
     getTenantHistory: async (tenantId, hostelId) => {
         try {
@@ -18,7 +25,7 @@ export const paymentService = {
 
             if (isTenantSession) {
                 const meResponse = await api.get('/tenants/me/payments/history');
-                return meResponse.data;
+                return unwrap(meResponse);
             }
 
             if (tenantId) {
@@ -70,11 +77,11 @@ export const paymentService = {
             }
 
             const fallbackMe = await api.get('/tenants/me/payments/history');
-            return fallbackMe.data;
+            return unwrap(fallbackMe);
         } catch (error) {
             if (error?.response?.status === 404) {
                 const fallback = await api.get('/tenants/me/payments/history');
-                return fallback.data;
+                return unwrap(fallback);
             }
             throw error;
         }
@@ -82,11 +89,11 @@ export const paymentService = {
     recordPayment: async (data) => {
         try {
             const response = await axios.post('/api/payments/record-offline', data, { withCredentials: true });
-            return response.data;
+            return unwrap(response);
         } catch (error) {
             if (error?.response?.status === 404) {
                 const fallback = await axios.post('/api/payments/record-offline', data, { withCredentials: true });
-                return fallback.data;
+                return unwrap(fallback);
             }
             throw error;
         }
@@ -102,26 +109,26 @@ export const paymentService = {
             note,
             hostelId,
         }, { withCredentials: true });
-        return response.data;
+        return unwrap(response);
     },
     initiatePayment: async (data) => {
         const response = await api.post('/payments/initiate', data);
-        return response.data;
+        return unwrap(response);
     },
     verifyPayment: async (data) => {
         const response = await api.post('/payments/verify', data);
-        return response.data;
+        return unwrap(response);
     },
     reconcilePayments: async (paymentIds, hostelId, paymentDomain) => {
         const body = paymentIds ? { payment_ids: paymentIds } : {};
         if (hostelId) body.hostelId = hostelId;
         if (paymentDomain) body.paymentDomain = paymentDomain;
         const response = await api.post('/payments/reconcile', body);
-        return response.data;
+        return unwrap(response);
     },
     createIntent: async (data) => {
         const response = await api.post('/payments/create-intent', data);
-        return response.data;
+        return unwrap(response);
     },
     createTestIntent: async (data) => {
         const response = await api.post('/payments/test-intent', data);
@@ -129,39 +136,39 @@ export const paymentService = {
     },
     getAttempt: async (attemptId) => {
         const response = await api.get(`/payments/attempts/${attemptId}`);
-        return response.data;
+        return unwrap(response);
     },
     submitUpiReference: async (data) => {
         const response = await api.post('/payments/submit-reference', data);
-        return response.data;
+        return unwrap(response);
     },
     confirmPayment: async (attemptId) => {
         const response = await api.post('/payments/confirm', { attempt_id: attemptId, action: 'confirm' });
-        return response.data;
+        return unwrap(response);
     },
     rejectPayment: async (attemptId) => {
         const response = await api.post('/payments/confirm', { attempt_id: attemptId, action: 'reject' });
-        return response.data;
+        return unwrap(response);
     },
     getPendingVerifications: async (hostelId) => {
         const response = await api.get('/payments/pending-verification', { params: { hostelId } });
-        return response.data;
+        return unwrap(response);
     },
     manualConfirmPayment: async (attemptId) => {
         const response = await api.post('/payments/manual-confirm', { attempt_id: attemptId });
-        return response.data;
+        return unwrap(response);
     },
     generateRent: async (hostelId, month) => {
         const response = await api.post('/rent/generate', { month, hostelId });
-        return response.data;
+        return unwrap(response);
     },
     previewGenerateRent: async (hostelId, month) => {
         const response = await api.get('/rent/generate', { params: { month, hostelId } });
-        return response.data;
+        return unwrap(response);
     },
     waive: async (obligationId, reason) => {
         const response = await api.post(`/payments/obligations/${obligationId}/waive`, { reason });
-        return response.data;
+        return unwrap(response);
     },
     downloadReceipt: async (paymentId) => {
         const response = await api.get(`/payments/${paymentId}/receipt`, {
@@ -174,7 +181,7 @@ export const paymentService = {
             let detail = 'Unknown error';
             try {
                 const parsed = JSON.parse(text);
-                detail = parsed?.detail || parsed?.error || text;
+                detail = parsed?.error?.message || parsed?.detail || parsed?.error || text;
             } catch {
                 detail = text;
             }
@@ -187,7 +194,11 @@ export const paymentService = {
     },
     downloadInvoice: async (paymentId) => {
         const response = await api.get(`/invoices/${paymentId}`);
-        if (response.data && response.data.url) {
+        if (response.data && response.data.success === true) {
+            if (response.data.data && response.data.data.url) {
+                window.open(response.data.data.url, '_blank');
+            }
+        } else if (response.data && response.data.url) {
             window.open(response.data.url, '_blank');
         }
         return true;
@@ -204,13 +215,13 @@ export const paymentService = {
     },
     bulkGenerate: async (data) => {
         const response = await api.post('/payments/bulk-generate', data);
-        return response.data;
+        return unwrap(response);
     },
     previewPayment: async (obligationIds, hostelId) => {
         const response = await api.get('/payments/preview', { 
             params: { ids: obligationIds.join(','), ...(hostelId ? { hostelId } : {}) }
         });
-        return response.data;
+        return unwrap(response);
     }
 };
 
@@ -218,10 +229,10 @@ export const rentService = {
     preview: async (hostelId, month) => {
         const params = { ...(month ? { month } : {}), hostelId };
         const response = await api.get('/rent/generate', { params });
-        return response.data;
+        return unwrap(response);
     },
     generate: async (hostelId, month) => {
         const response = await api.post('/rent/generate', { ...(month ? { month } : {}), hostelId });
-        return response.data;
+        return unwrap(response);
     }
 };

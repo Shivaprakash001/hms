@@ -2,8 +2,8 @@ import { prisma } from "../db";
 import { Prisma, MoveOutStatus, MoveOutReason } from "@prisma/client";
 type Tx = Prisma.TransactionClient;
 import { getLogger } from "../logger";
-import { financialService } from "./financial-service";
-import { tenantAdvanceService } from "./tenant-advance-service";
+import { financialService } from "../../src/services/payments/financial-service";
+import { tenantAdvanceService } from "../../src/services/payments/tenant-advance-service";
 import { assertTransition, assertCapability, checkCapability, getTenantSteps } from "./move-out-state-machine";
 import { notifyMoveOutTransition } from "./move-out-notifications";
 

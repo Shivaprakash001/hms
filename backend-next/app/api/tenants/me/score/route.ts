@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
 import { getSession, apiError, apiResponse } from "@/lib/auth";
-import { tenantScoreService } from "@/lib/services/tenant-score-service";
+import { tenantScoreService } from "@/src/services/tenants/tenant-score-service";
 
 export async function GET(req: NextRequest) {
   const session = await getSession(req);

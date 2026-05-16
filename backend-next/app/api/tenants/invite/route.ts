@@ -2,8 +2,10 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSession, apiResponse, apiError } from "@/lib/auth";
-import { invitationService } from "@/lib/services/invitation-service";
+import { getSession } from "@/lib/auth";
+import { ApiResponse } from "@/src/lib/api-response";
+import { ApiError } from "@/src/lib/api-error";
+import { invitationService } from "@/src/services/tenants/invitation-service";
 import { InvitationSchema } from "@/lib/validators";
 import { planGate, TenantHardCapError } from "@/lib/services/plan-gate-service";
 
@@ -16,21 +18,21 @@ import { planGate, TenantHardCapError } from "@/lib/services/plan-gate-service";
 export async function POST(req: NextRequest) {
   const session = await getSession(req);
   if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
-    return apiError("Only owners/admins can invite tenants", "FORBIDDEN", 403);
+    return ApiResponse.error(ApiError.forbidden("Only owners/admins can invite tenants"));
   }
 
   try {
     const body = await req.json();
     const validatedData = InvitationSchema.safeParse(body);
     if (!validatedData.success) {
-      return apiError("Validation failed", "VALIDATION_ERROR", 400);
+      return ApiResponse.error(ApiError.validationError("Validation failed"));
     }
 
     await planGate.assertTenantLimit(session.sub);
 
     const result = await invitationService.inviteTenant(validatedData.data, session.sub);
     
-    return apiResponse(result, 201);
+    return ApiResponse.success(result, 201);
   } catch (error: any) {
     if (error instanceof TenantHardCapError) {
       return NextResponse.json({
@@ -61,6 +63,6 @@ export async function POST(req: NextRequest) {
     };
 
     const status = statusMap[normalizedCode] || 500;
-    return apiError(normalizedMessage, normalizedCode || "INVITATION_ERROR", status);
+    return ApiResponse.error(new ApiError(status, normalizedCode || "INVITATION_ERROR", normalizedMessage));
   }
 }

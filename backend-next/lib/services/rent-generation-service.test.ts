@@ -336,7 +336,7 @@ function applyLedgerUpdate(row: Ledger, data: any) {
   return true;
 };
 
-import { RentGenerationService } from "./rent-generation-service";
+import { RentGenerationService } from "../../src/services/payments/rent-generation-service";
 
 const rawService = new RentGenerationService();
 const service = {

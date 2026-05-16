@@ -4,11 +4,11 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth-edge";
 import { prisma } from "@/lib/db";
-import { PaymentProviderFactory } from "@/lib/services/payments/provider-factory";
-import { paymentService } from "@/lib/services/payment-service";
+import { PaymentProviderFactory } from "@/src/services/payments/provider-factory";
+import { paymentService } from "@/src/services/payments/payment-service";
 import { getLogger } from "@/lib/logger";
-import { getProviderContext } from "@/lib/services/payments/merchant-context";
-import { PAYMENT_DOMAIN, PAYMENT_FLOW, PAYMENT_SCOPE } from "@/lib/services/payments/financial-domain";
+import { getProviderContext } from "@/src/services/payments/merchant-context";
+import { PAYMENT_DOMAIN, PAYMENT_FLOW, PAYMENT_SCOPE } from "@/src/services/payments/financial-domain";
 
 const logger = getLogger("addons.verify");
 

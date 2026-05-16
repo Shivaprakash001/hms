@@ -1,13 +1,12 @@
 generator client {
   provider        = "prisma-client-js"
-  previewFeatures = ["multiSchema"]
+  previewFeatures = []
 }
 
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
-  schemas   = ["public"]
 }
 
 model actionLog {
@@ -18,7 +17,6 @@ model actionLog {
 
   @@index([owner_id, action, created_at(sort: Desc)])
   @@map("action_logs")
-  @@schema("public")
 }
 
 model activity_logs {
@@ -31,7 +29,6 @@ model activity_logs {
   metadata    Json?
   timestamp   DateTime @default(now()) @db.Timestamptz(6)
 
-  @@schema("public")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -46,7 +43,6 @@ model addonTransactions {
 
   @@index([owner_id])
   @@map("addon_transactions")
-  @@schema("public")
 }
 
 model addonUsage {
@@ -56,7 +52,6 @@ model addonUsage {
   auto_topup          Boolean @default(false)
 
   @@map("addon_usage")
-  @@schema("public")
 }
 
 model autopay_attempts {
@@ -67,7 +62,6 @@ model autopay_attempts {
   provider_response String?
   subscriptions     subscriptions @relation(fields: [subscription_id], references: [id], onDelete: Cascade)
 
-  @@schema("public")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -99,7 +93,6 @@ model bulk_import_batches {
   @@index([hostel_id, created_at(sort: Desc)])
   @@index([owner_id, created_at(sort: Desc)])
   @@index([status, created_at(sort: Desc)])
-  @@schema("public")
 }
 
 model complaints {
@@ -120,7 +113,6 @@ model complaints {
   tenants     tenants   @relation(fields: [tenant_id], references: [id])
 
   @@index([hostel_id])
-  @@schema("public")
 }
 
 model expenses {
@@ -141,7 +133,6 @@ model expenses {
   @@index([hostel_id])
   @@index([owner_id, date])
   @@index([owner_id])
-  @@schema("public")
 }
 
 model financial_invariant_failures {
@@ -165,7 +156,6 @@ model financial_invariant_failures {
   @@index([invariant_type])
   @@index([severity])
   @@index([status])
-  @@schema("public")
 }
 
 model hostel_daily_snapshots {
@@ -186,7 +176,6 @@ model hostel_daily_snapshots {
 
   @@unique([hostel_id, snapshot_date])
   @@index([snapshot_date])
-  @@schema("public")
 }
 
 model hostel_invariant_checks {
@@ -203,7 +192,6 @@ model hostel_invariant_checks {
   @@index([check_type])
   @@index([checked_at])
   @@index([is_valid])
-  @@schema("public")
 }
 
 model hostels {
@@ -241,7 +229,6 @@ model hostels {
   tenants             tenants[]
   move_out_requests   move_out_requests[]
 
-  @@schema("public")
 }
 
 model identity_tokens {
@@ -255,7 +242,6 @@ model identity_tokens {
   created_at DateTime  @default(now()) @db.Timestamptz(6)
 
   @@index([user_id, used, expires_at])
-  @@schema("public")
 }
 
 model identificationDocument {
@@ -286,7 +272,6 @@ model identificationDocument {
   @@index([tenant_id, is_active])
   @@index([tenant_id, doc_type, is_active])
   @@map("identification_documents")
-  @@schema("public")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -304,7 +289,6 @@ model login_attempts {
   @@index([identifier, created_at(sort: Desc)])
   @@index([identifier, ip_address, created_at(sort: Desc)])
   @@index([ip_address, created_at(sort: Desc)])
-  @@schema("public")
 }
 
 model message_logs {
@@ -321,7 +305,6 @@ model message_logs {
   deduction         Int      @default(0)
   provider_response String?
 
-  @@schema("public")
 }
 
 model message_packs {
@@ -333,7 +316,6 @@ model message_packs {
   price_inr          Int
   notes              String?
 
-  @@schema("public")
 }
 
 model migration_audit_runs {
@@ -350,7 +332,6 @@ model migration_audit_runs {
   created_at                  DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([audit_date])
-  @@schema("public")
 }
 
 model notifications {
@@ -363,7 +344,6 @@ model notifications {
   created_at DateTime @default(now()) @db.Timestamptz(6)
   profiles   profile @relation(fields: [profile_id], references: [id])
 
-  @@schema("public")
 }
 
 model overflow_ledger {
@@ -390,7 +370,6 @@ model overflow_ledger {
   @@index([billing_month])
   @@index([owner_id])
   @@index([status])
-  @@schema("public")
 }
 
 model owner_dashboard_snapshots {
@@ -419,7 +398,6 @@ model owner_dashboard_snapshots {
   @@index([is_stale])
   @@index([monthly_computed_at])
   @@index([stats_computed_at])
-  @@schema("public")
 }
 
 model ownerInvoice {
@@ -445,7 +423,6 @@ model ownerInvoice {
   @@index([owner_id, created_at(sort: Desc)])
   @@index([status])
   @@map("owner_invoices")
-  @@schema("public")
 }
 
 model owner_onboarding_states {
@@ -464,7 +441,6 @@ model owner_onboarding_states {
   @@index([onboarding_completed_at])
   @@index([onboarding_last_seen_at])
   @@index([onboarding_step])
-  @@schema("public")
 }
 
 model owner_subscriptions {
@@ -483,7 +459,6 @@ model owner_subscriptions {
 
   @@index([owner_id])
   @@index([status])
-  @@schema("public")
 }
 
 model owner_usage_snapshots {
@@ -504,7 +479,6 @@ model owner_usage_snapshots {
   @@index([owner_id], map: "idx_ous_owner_id")
   @@index([billing_month])
   @@index([owner_id])
-  @@schema("public")
 }
 
 model payment_attempt_obligations {
@@ -517,7 +491,6 @@ model payment_attempt_obligations {
   payment_attempts   paymentAttempt @relation(fields: [payment_attempt_id], references: [id], onDelete: Cascade)
 
   @@unique([payment_attempt_id, obligation_id])
-  @@schema("public")
 }
 
 model payment_attempt_status_events {
@@ -538,7 +511,6 @@ model payment_attempt_status_events {
   @@unique([payment_attempt_id, transition_sequence])
   @@index([hostel_id, created_at])
   @@index([payment_attempt_id, created_at])
-  @@schema("public")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -593,7 +565,6 @@ model paymentAttempt {
   @@index([provider, provider_transaction_id])
   @@index([settlement_status])
   @@map("payment_attempts")
-  @@schema("public")
 }
 
 model payment_operational_anomalies {
@@ -618,7 +589,6 @@ model payment_operational_anomalies {
   @@index([hostel_id, detected_at])
   @@index([operational_owner_id, detected_at])
   @@index([payment_attempt_id])
-  @@schema("public")
 }
 
 model payment_provider_verification_snapshots {
@@ -648,7 +618,6 @@ model payment_provider_verification_snapshots {
   @@index([payment_attempt_id, verified_at])
   @@index([provider, verified_at])
   @@index([raw_response_hash])
-  @@schema("public")
 }
 
 model payment_reconciliation_items {
@@ -669,7 +638,6 @@ model payment_reconciliation_items {
   @@index([hostel_id, created_at])
   @@index([payment_attempt_id])
   @@index([reconciliation_run_id])
-  @@schema("public")
 }
 
 model payment_reconciliation_runs {
@@ -687,7 +655,6 @@ model payment_reconciliation_runs {
 
   @@index([hostel_id, started_at])
   @@index([payment_domain, started_at])
-  @@schema("public")
 }
 
 model payment_webhook_events {
@@ -722,7 +689,6 @@ model payment_webhook_events {
   @@index([payment_attempt_id])
   @@index([processing_status])
   @@index([provider, received_at])
-  @@schema("public")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -759,7 +725,6 @@ model payments {
   @@index([tenant_id, amount_paid])
   @@index([tenant_id])
   @@index([tenant_id, payment_date])
-  @@schema("public")
 }
 
 model plans {
@@ -783,7 +748,6 @@ model plans {
   owner_subscriptions             owner_subscriptions[]
   subscriptions                   subscriptions[]
 
-  @@schema("public")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -832,7 +796,6 @@ model profile {
   @@index([password_reset_required, is_active])
   @@index([phone])
   @@map("profiles")
-  @@schema("public")
 }
 
 model PhoneVerificationOtp {
@@ -857,7 +820,6 @@ model PhoneVerificationOtp {
   @@index([meta_message_id])
   @@index([request_ip, created_at])
   @@map("phone_verification_otps")
-  @@schema("public")
 }
 
 model reactivation_requests {
@@ -873,7 +835,6 @@ model reactivation_requests {
   created_at              DateTime  @default(now()) @db.Timestamptz(6)
   tenants                 tenants   @relation(fields: [tenant_id], references: [id])
 
-  @@schema("public")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -903,7 +864,6 @@ model receipts {
   @@unique([hostel_id, receipt_number], map: "receipts_hostel_receipt_number_unique")
   @@index([hostel_id])
   @@index([hostel_id, issued_at])
-  @@schema("public")
 }
 
 model refresh_tokens {
@@ -916,7 +876,6 @@ model refresh_tokens {
 
   @@index([expires_at])
   @@index([user_id])
-  @@schema("public")
 }
 
 model reminder_logs {
@@ -937,7 +896,6 @@ model reminder_logs {
   @@index([hostel_id])
   @@index([obligation_id])
   @@index([tenant_id])
-  @@schema("public")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -962,7 +920,6 @@ model rent_generation_ledgers {
   @@index([hostel_id, rent_month])
   @@index([owner_id, rent_month])
   @@index([rent_month, status])
-  @@schema("public")
 }
 
 model rent_generation_logs {
@@ -980,7 +937,6 @@ model rent_generation_logs {
 
   @@index([rent_month])
   @@index([triggered_by])
-  @@schema("public")
 }
 
 model rent_obligations {
@@ -1012,7 +968,6 @@ model rent_obligations {
   @@index([hostel_id, status])
   @@index([owner_id])
   @@index([tenant_id, rent_month])
-  @@schema("public")
 }
 
 model room_activity_logs {
@@ -1027,7 +982,6 @@ model room_activity_logs {
 
   @@index([owner_id])
   @@index([room_id])
-  @@schema("public")
 }
 
 model roomAllocation {
@@ -1050,7 +1004,6 @@ model roomAllocation {
   @@index([room_id, is_active])
   @@index([tenant_id, is_active, end_date])
   @@map("room_allocations")
-  @@schema("public")
 }
 
 model rooms {
@@ -1070,7 +1023,6 @@ model rooms {
 
   @@unique([hostel_id, room_no])
   @@index([hostel_id])
-  @@schema("public")
 }
 
 model subscriptions {
@@ -1089,7 +1041,6 @@ model subscriptions {
   autopay_attempts autopay_attempts[]
   plans            plans              @relation(fields: [plan_id], references: [id])
 
-  @@schema("public")
 }
 
 model systemEventLog {
@@ -1104,7 +1055,6 @@ model systemEventLog {
   @@index([event_type])
   @@index([owner_id])
   @@map("system_event_logs")
-  @@schema("public")
 }
 
 model system_locks {
@@ -1112,7 +1062,6 @@ model system_locks {
   locked_at  DateTime @default(now()) @db.Timestamptz(6)
   expires_at DateTime @db.Timestamptz(6)
 
-  @@schema("public")
 }
 
 model tenant_advance_ledger {
@@ -1137,7 +1086,6 @@ model tenant_advance_ledger {
   @@index([tenant_id, created_at])
   @@index([tenant_id, hostel_id])
   @@index([tenant_id])
-  @@schema("public")
 }
 
 model tenant_behavior_scores {
@@ -1148,7 +1096,6 @@ model tenant_behavior_scores {
   tenants         tenants  @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
 
   @@index([tenant_id, last_calculated])
-  @@schema("public")
 }
 
 model tenant_transfer_logs {
@@ -1168,7 +1115,6 @@ model tenant_transfer_logs {
   @@index([tenant_id])
   @@index([to_hostel_id])
   @@index([transferred_at])
-  @@schema("public")
 }
 
 model tenants {
@@ -1227,7 +1173,6 @@ model tenants {
 
   @@index([hostel_id])
   @@index([owner_id])
-  @@schema("public")
 }
 
 model token_blacklist {
@@ -1236,7 +1181,6 @@ model token_blacklist {
   expires_at DateTime @db.Timestamptz(6)
   created_at DateTime @default(now()) @db.Timestamptz(6)
 
-  @@schema("public")
 }
 
 model usage_tracking {
@@ -1244,7 +1188,6 @@ model usage_tracking {
   tenants_count Int    @default(0)
   hostels_count Int    @default(0)
 
-  @@schema("public")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -1276,7 +1219,6 @@ model whatsapp_logs {
   @@index([owner_id, created_at])
   @@index([provider_message_id])
   @@index([tenant_id, created_at])
-  @@schema("public")
 }
 
 model whatsapp_webhook_events {
@@ -1299,7 +1241,6 @@ model whatsapp_webhook_events {
   @@index([processing_status])
   @@index([provider_message_id])
   @@index([provider, received_at])
-  @@schema("public")
 }
 
 enum AdvanceLedgerReason {
@@ -1310,14 +1251,12 @@ enum AdvanceLedgerReason {
   REFUND
   CORRECTION
 
-  @@schema("public")
 }
 
 enum AdvanceLedgerType {
   CREDIT
   DEBIT
 
-  @@schema("public")
 }
 
 enum AttemptStatus {
@@ -1331,7 +1270,6 @@ enum AttemptStatus {
   CANCELLED
   PENDING_MANUAL_CONFIRMATION
 
-  @@schema("public")
 }
 
 enum PaymentStatus {
@@ -1340,7 +1278,6 @@ enum PaymentStatus {
   PAID
   WAIVED
 
-  @@schema("public")
 }
 
 enum Role {
@@ -1349,7 +1286,6 @@ enum Role {
   WARDEN
   TENANT
 
-  @@schema("public")
 }
 
 enum TenantStatus {
@@ -1360,7 +1296,6 @@ enum TenantStatus {
   EXPIRED
   CANCELLED
 
-  @@schema("public")
 }
 
 enum MoveOutStatus {
@@ -1374,7 +1309,6 @@ enum MoveOutStatus {
   CANCELLED
   REJECTED
 
-  @@schema("public")
 }
 
 enum MoveOutReason {
@@ -1391,7 +1325,6 @@ enum MoveOutReason {
   MOVING_CLOSER
   OTHER
 
-  @@schema("public")
 }
 
 // ============================================================
@@ -1447,7 +1380,6 @@ model move_out_requests {
   @@index([owner_id, status])
   @@index([planned_exit_date])
   @@index([status, created_at(sort: Desc)])
-  @@schema("public")
 }
 
 model move_out_inspections {
@@ -1471,7 +1403,6 @@ model move_out_inspections {
   request           move_out_requests @relation(fields: [request_id], references: [id], onDelete: Cascade)
 
   @@index([inspected_at])
-  @@schema("public")
 }
 
 /// Structured inspection checklist — one row per item inspected.
@@ -1490,7 +1421,6 @@ model move_out_inspection_items {
   request           move_out_requests @relation(fields: [request_id], references: [id], onDelete: Cascade)
 
   @@index([request_id])
-  @@schema("public")
 }
 
 model exit_settlement_transactions {
@@ -1541,7 +1471,6 @@ model exit_settlement_transactions {
   @@index([tenant_id])
   @@index([owner_id, hostel_id])
   @@index([payment_status])
-  @@schema("public")
 }
 
 /// Dispute layer — tracks disagreements on settlement amounts.
@@ -1565,7 +1494,6 @@ model exit_disputes {
   request           move_out_requests @relation(fields: [request_id], references: [id], onDelete: Cascade)
 
   @@index([request_id, status])
-  @@schema("public")
 }
 
 model exit_feedbacks {
@@ -1595,7 +1523,6 @@ model exit_feedbacks {
 
   @@index([hostel_id])
   @@index([tenant_id])
-  @@schema("public")
 }
 
 // ============================================================
@@ -1636,7 +1563,6 @@ model owner_settlement_ledger {
   @@index([hostel_id, settlement_status], map: "idx_osl_hostel_status")
   @@index([settlement_batch_id], map: "idx_osl_settlement_batch")
   @@index([payment_id], map: "idx_osl_payment")
-  @@schema("public")
 }
 
 model settlement_batches {
@@ -1668,7 +1594,6 @@ model settlement_batches {
   @@unique([batch_number], map: "udx_sb_batch_number")
   @@index([status, created_at(sort: Desc)], map: "idx_sb_status_created")
   @@index([created_by, created_at(sort: Desc)], map: "idx_sb_created_by")
-  @@schema("public")
 }
 
 model settlement_batch_items {
@@ -1699,7 +1624,6 @@ model settlement_batch_items {
   @@index([owner_id, payout_status], map: "idx_sbi_owner_status")
   @@index([hostel_id, payout_status], map: "idx_sbi_hostel_status")
   @@index([batch_id, payout_status], map: "idx_sbi_batch_status")
-  @@schema("public")
 }
 
 model financial_reconciliation_issues {
@@ -1727,7 +1651,6 @@ model financial_reconciliation_issues {
   @@index([owner_id, detected_at(sort: Desc)], map: "idx_fri_owner")
   @@index([hostel_id, detected_at(sort: Desc)], map: "idx_fri_hostel")
   @@index([issue_type, status], map: "idx_fri_issue_type")
-  @@schema("public")
 }
 
 model admin_financial_audit_log {
@@ -1750,5 +1673,4 @@ model admin_financial_audit_log {
   @@index([subject_type, subject_id, created_at(sort: Desc)], map: "idx_afal_subject")
   @@index([action_type, created_at(sort: Desc)], map: "idx_afal_action_created")
   @@index([owner_id, created_at(sort: Desc)], map: "idx_afal_owner_created")
-  @@schema("public")
 }

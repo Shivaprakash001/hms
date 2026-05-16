@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
-import { roomAllocationService } from "@/lib/services/room-allocation-service";
+import { roomAllocationService } from "@/src/services/rooms/room-allocation-service";
 import { prisma } from "@/lib/db";
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {

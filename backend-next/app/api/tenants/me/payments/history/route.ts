@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
-import { paymentService } from "@/lib/services/payment-service";
+import { paymentService } from "@/src/services/payments/payment-service";
 import { prisma } from "@/lib/db";
 
 

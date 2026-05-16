@@ -2,16 +2,19 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 30; // Puppeteer needs more time than default
 
-import { NextResponse } from "next/server";
-import { receiptService } from "@/lib/services/receipt-service";
+import { NextResponse, NextRequest } from "next/server";
+import { getSession } from "@/lib/auth";
+import { ApiResponse } from "@/src/lib/api-response";
+import { ApiError } from "@/src/lib/api-error";
+import { receiptService } from "@/src/services/payments/receipt-service";
 import { authService } from "@/lib/services/auth-service";
 import { prisma } from "@/lib/db";
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const user = await authService.getCurrentUser(req);
-    if (!user) {
-      return new NextResponse(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+    const session = await getSession(req);
+    if (!session) {
+      return ApiResponse.error(ApiError.unauthorized("Unauthorized"));
     }
 
     const { id: paymentId } = params;
@@ -26,28 +29,28 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       },
     });
     if (!payment) {
-      return new NextResponse(JSON.stringify({ error: "Payment not found" }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+      return ApiResponse.error(ApiError.notFound("Payment not found"));
     }
 
-    if (user.role === "TENANT") {
-      if (payment.tenants?.profile_id !== user.id) {
-        return new NextResponse(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+    if (session.role === "TENANT") {
+      if (payment.tenants?.profile_id !== session.id) {
+        return ApiResponse.error(ApiError.forbidden("Forbidden"));
       }
-    } else if (user.role === "OWNER") {
-      if (payment.owner_id !== user.id && payment.tenants?.owner_id !== user.id) {
-        return new NextResponse(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+    } else if (session.role === "OWNER") {
+      if (payment.owner_id !== session.id && payment.tenants?.owner_id !== session.id) {
+        return ApiResponse.error(ApiError.forbidden("Forbidden"));
       }
       const hostel = await prisma.hostels.findUnique({ where: { id: payment.hostel_id }, select: { owner_id: true } });
-      if (!hostel || hostel.owner_id !== user.id) {
-        return new NextResponse(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+      if (!hostel || hostel.owner_id !== session.id) {
+        return ApiResponse.error(ApiError.forbidden("Forbidden"));
       }
-    } else if (user.role !== "ADMIN") {
-      return new NextResponse(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+    } else if (session.role !== "ADMIN") {
+      return ApiResponse.error(ApiError.forbidden("Forbidden"));
     }
 
     // Owners/admins may auto-generate new receipts (plan-gated in service).
     // Tenants can only fetch already-created receipts.
-    const canAutoCreateReceipt = ["OWNER", "ADMIN"].includes(user.role);
+    const canAutoCreateReceipt = ["OWNER", "ADMIN"].includes(session.role);
     const pdfBuffer = await receiptService.generatePdfBuffer(paymentId, {
       autoCreate: canAutoCreateReceipt,
     });
@@ -63,11 +66,12 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   } catch (error: any) {
     console.error("Error downloading receipt:", error);
     const message = error?.message || "Unknown error";
-    const status = message.includes("NOT_FOUND")
-      ? 404
-      : message.includes("PLAN_UPGRADE_REQUIRED")
-        ? 403
-        : 500;
-    return new NextResponse(JSON.stringify({ error: message }), { status, headers: { 'Content-Type': 'application/json' } });
+    if (message.includes("NOT_FOUND")) {
+      return ApiResponse.error(ApiError.notFound(message));
+    }
+    if (message.includes("PLAN_UPGRADE_REQUIRED")) {
+      return ApiResponse.error(ApiError.forbidden(message));
+    }
+    return ApiResponse.error(ApiError.internal(message));
   }
 }

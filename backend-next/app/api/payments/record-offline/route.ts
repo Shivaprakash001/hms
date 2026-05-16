@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { paymentService } from "@/lib/services/payment-service";
+import { paymentService } from "@/src/services/payments/payment-service";
 import { authService } from "@/lib/services/auth-service";
 import { verifyIdentityToken } from "@/lib/auth-edge";
 import { apiError } from "@/lib/utils/api-utils";

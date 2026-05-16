@@ -3,7 +3,7 @@ import api from '@lib/api-client';
 export const roomService = {
     getAll: async (hostelId, params = {}) => {
         const response = await api.get('/rooms', { params: { ...params, hostelId } });
-        return response.data;
+        return response.data.success ? response.data.data : response.data;
     },
     getById: async (id) => {
         const response = await api.get(`/rooms/${id}`);
@@ -19,7 +19,7 @@ export const roomService = {
     },
     create: async (hostelId, data) => {
         const response = await api.post('/rooms', { ...data, hostelId });
-        return response.data;
+        return response.data.success ? response.data.data : response.data;
     },
     update: async (id, data) => {
         const response = await api.patch(`/rooms/${id}`, data);

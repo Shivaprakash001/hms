@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
-import { rentGenerationService } from "@/lib/services/rent-generation-service";
+import { rentGenerationService } from "@/src/services/payments/rent-generation-service";
 import { requireAutomation } from "@/lib/services/plan-gate-service";
 import { invalidateHostelDashboardCache } from "@/lib/cache/dashboard-cache";
 import { timed } from "@/lib/perf";

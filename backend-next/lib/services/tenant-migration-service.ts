@@ -93,7 +93,7 @@ export class TenantMigrationService {
       const onboardingExpiresAt = new Date();
       onboardingExpiresAt.setDate(onboardingExpiresAt.getDate() + 30);
 
-      const { obligationEngine } = await import("./obligation-engine");
+      const { obligationEngine } = await import("../../src/services/payments/obligation-engine");
 
       const result = await prisma.$transaction(async (tx) => {
         await tx.$executeRaw`SELECT id FROM rooms WHERE id = ${room.id}::uuid FOR UPDATE`;

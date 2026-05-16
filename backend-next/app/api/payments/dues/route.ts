@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
-import { paymentService } from "@/lib/services/payment-service";
+import { ApiResponse } from "@/src/lib/api-response";
+import { ApiError } from "@/src/lib/api-error";
+import { paymentService } from "@/src/services/payments/payment-service";
 import { authService } from "@/lib/services/auth-service";
-import { apiError } from "@/lib/utils/api-utils";
 import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ export async function GET(req: Request) {
     const user = await authService.getCurrentUser(req);
     if (!user || user.role !== "OWNER") {
       console.warn(`[payments.dues.GET] Forbidden access attempt by ${user?.role} ${user?.id}`);
-      return apiError("Unauthorized", "UNAUTHORIZED", 401);
+      return ApiResponse.error(ApiError.unauthorized("Unauthorized"));
     }
 
     const { searchParams } = new URL(req.url);
@@ -21,13 +21,10 @@ export async function GET(req: Request) {
     const status = searchParams.get("status");
     const hostelId = searchParams.get("hostelId") || undefined;
     
-    console.log(`[payments.dues.GET] Fetching dues for owner ${user.id}, hostel ${hostelId}, month ${rentMonth}`);
-    
-    await requireHostelBelongsToOwner(user.id, hostelId);
     if (!hostelId) {
-      console.warn("[payments.dues.GET] Missing hostelId context");
-      return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
+      return ApiResponse.error(new ApiError("hostelId is required", 400, "HOSTEL_CONTEXT_REQUIRED"));
     }
+    await requireHostelBelongsToOwner(user.id, hostelId);
 
     const result = await paymentService.getDuesReport(
       user.id,
@@ -36,18 +33,9 @@ export async function GET(req: Request) {
       status || undefined
     );
 
-    return apiResponse({
-      success: true,
-      data: result
-    });
+    return ApiResponse.success(result);
   } catch (error: any) {
     console.error("Detailed API Error [payments.dues.GET]:", error);
-    return Response.json(
-      {
-        success: false,
-        error: "Internal Server Error"
-      },
-      { status: 500 }
-    );
+    return ApiResponse.error(new ApiError("Internal Server Error", 500));
   }
 }

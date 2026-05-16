@@ -8,27 +8,7 @@ import {
 import { portfolioService } from '../../api/services';
 import { queryKeys } from '../../lib/query/queryKeys';
 import { toHostelPath } from '../../context/HostelContext';
-
-function StatCard({ icon: Icon, label, value, sub, accent = 'indigo' }) {
-  const colors = {
-    indigo: 'bg-indigo-50 text-indigo-600',
-    emerald: 'bg-emerald-50 text-emerald-600',
-    amber: 'bg-amber-50 text-amber-600',
-    rose: 'bg-rose-50 text-rose-600',
-  };
-  return (
-    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 flex items-start gap-4">
-      <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${colors[accent]}`}>
-        <Icon size={20} />
-      </div>
-      <div>
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-0.5">{label}</p>
-        <p className="text-2xl font-bold text-slate-900 leading-tight">{value}</p>
-        {sub && <p className="text-xs text-slate-500 mt-0.5">{sub}</p>}
-      </div>
-    </div>
-  );
-}
+import { StatCard } from '../../components/ui/StatCard';
 
 function HostelCard({ hostel }) {
   const navigate = useNavigate();
@@ -153,31 +133,31 @@ export default function Portfolio() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <StatCard
             icon={Users}
-            label="Active Tenants"
+            title="Active Tenants"
             value={agg.active_tenants}
-            sub={`${agg.vacant_beds} vacant beds`}
-            accent="indigo"
+            subtitle={`${agg.vacant_beds} vacant beds`}
+            color="indigo"
           />
           <StatCard
             icon={Percent}
-            label="Occupancy"
+            title="Occupancy"
             value={`${agg.occupancy_rate.toFixed(1)}%`}
-            sub={`${agg.total_capacity} total capacity`}
-            accent="emerald"
+            subtitle={`${agg.total_capacity} total capacity`}
+            color="emerald"
           />
           <StatCard
             icon={IndianRupee}
-            label="Collected"
+            title="Collected"
             value={`₹${(agg.rent_collected_this_month / 1000).toFixed(1)}K`}
-            sub={`${agg.collection_rate.toFixed(1)}% rate`}
-            accent="emerald"
+            subtitle={`${agg.collection_rate.toFixed(1)}% rate`}
+            color="emerald"
           />
           <StatCard
             icon={TrendingUp}
-            label="Pending Dues"
+            title="Pending Dues"
             value={`₹${(agg.pending_dues / 1000).toFixed(1)}K`}
-            sub={`${agg.overdue_count} overdue obligations`}
-            accent={agg.overdue_count > 0 ? 'rose' : 'amber'}
+            subtitle={`${agg.overdue_count} overdue obligations`}
+            color={agg.overdue_count > 0 ? 'rose' : 'amber'}
           />
         </div>
       )}

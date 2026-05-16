@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
-import { paymentService } from "@/lib/services/payment-service";
+import { NextRequest } from "next/server";
+import { ApiResponse, ApiError } from "@/src/lib/api-response";
+import { paymentService } from "@/src/services/payments/payment-service";
 import { authService } from "@/lib/services/auth-service";
-import { apiError } from "@/lib/utils/api-utils";
 import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -9,13 +9,13 @@ export const runtime = "nodejs";
 
 
 export async function GET(
-  req: Request,
+  req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
     const user = await authService.getCurrentUser(req);
     if (!user) {
-      return apiError("Unauthorized", "UNAUTHORIZED", 401);
+      return ApiError.unauthorized("Unauthorized");
     }
 
     // user.id is profile_id, but payment attempts store tenant_id (tenants table PK).
@@ -36,12 +36,12 @@ export async function GET(
       tenantId
     );
 
-    return NextResponse.json(result);
+    return ApiResponse.success(result);
   } catch (error: any) {
     console.error("Error fetching attempt:", error);
     const message = String(error?.message ?? error);
-    if (message.includes("FORBIDDEN")) return apiError(message, "FORBIDDEN", 403);
-    if (message.includes("NOT_FOUND")) return apiError(message, "NOT_FOUND", 404);
-    return apiError(message, "INTERNAL_ERROR", 500);
+    if (message.includes("FORBIDDEN")) return ApiError.forbidden(message.split(": ")[1] ?? message);
+    if (message.includes("NOT_FOUND")) return ApiError.notFound(message.split(": ")[1] ?? message);
+    return ApiError.internal(message);
   }
 }

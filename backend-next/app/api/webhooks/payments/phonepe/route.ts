@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
-import { paymentService } from "@/lib/services/payment-service";
+import { paymentService } from "@/src/services/payments/payment-service";
 import { getLogger } from "@/lib/logger";
 import { incrementWebhook } from "@/lib/metrics";
 import { randomUUID } from "crypto";

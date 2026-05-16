@@ -63,3 +63,33 @@ features/rooms/
 
 ### Risky Coupling Areas
 - `handleAddTenant` contains mixed responsibilities: it handles both tenant creation/reactivation AND room allocation within the same try-catch block. This is a complex transactional flow that should live in a backend service or a robust frontend hook, not directly inside the UI component.
+
+## ManageTenants.jsx (Phase 3B)
+
+### Overview
+`ManageTenants.jsx` was an oversized monolithic component (~850 lines) managing list rendering, multiple action handlers, complex derivations, inline mobile-friendly cards, and several modal definitions. It has been successfully decomposed into the feature-module pattern.
+
+### Extracted Components (Batch 1 - Presentational)
+- `TenantStatCard.jsx` - Reusable top-level metrics.
+- `TenantFormModal.jsx` - Form definition for creating/updating a tenant (was `AddTenantModal`).
+- `StatusBadge.jsx` & `PaymentBadge.jsx` - Pure functional elements rendering UI badges.
+- `TenantList.jsx` - Complex responsive component combining the `<table>` view for desktop and card layout for mobile devices.
+
+### Extracted Helpers (Batch 2 - Pure Functions)
+- logic for mappings relocated to `@features/tenants/utils/tenantHelpers.js`.
+- Included `normalizeTenants`, `calculateTenantStats`, `calculateYearDistribution`, and `getInitials`.
+
+### Extracted Hooks (Batch 3 & 4 - Orchestration)
+- `useTenantActions.js` - Contains complex CRUD flows (`handleSaveTenant`, `handleToggleStatus`, `handleResendInvitation`).
+- `useTenants.js` - Data hook connecting React Query fetching, sorting, filtering logic, and calculated memoizations in one boundary.
+
+### Current Architecture (`@features/tenants/`)
+```txt
+features/tenants/
+├── components/           # UI presentational tier (TenantList, TenantFormModal, etc)
+├── hooks/
+│   ├── useTenants.js       # Data retrieval and list derivations
+│   └── useTenantActions.js # API mutations and business workflows
+├── utils/
+│   └── tenantHelpers.js    # Data formatting and statistical logic
+```

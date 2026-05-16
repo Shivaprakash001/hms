@@ -8,9 +8,23 @@ const globalForPrisma = global as unknown as { prisma: PrismaClient };
 // application code still contains friendly delegate/relation names in places.
 // Keep the central client permissive so deployment type checks do not fail one
 // generated delegate at a time while the schema/client naming is normalized.
+let dbUrl = process.env.DATABASE_URL;
+
+if (process.env.NODE_ENV === "test") {
+  if (!process.env.DATABASE_URL_TEST) {
+    throw new Error("CRITICAL: DATABASE_URL_TEST must be defined when running tests to prevent accidental production mutations.");
+  }
+  dbUrl = process.env.DATABASE_URL_TEST;
+}
+
+if (process.env.NODE_ENV === "test" && dbUrl && !dbUrl.includes("test")) {
+  throw new Error(`CRITICAL: Test database URL does not appear to be a test database. URL: ${dbUrl}`);
+}
+
 export const prisma: any =
   globalForPrisma.prisma ||
   new PrismaClient({
+    datasourceUrl: dbUrl,
     log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
   });
 

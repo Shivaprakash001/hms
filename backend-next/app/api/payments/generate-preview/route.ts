@@ -1,10 +1,10 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-import { NextRequest, NextResponse } from "next/server";
-import { rentGenerationService } from "@/lib/services/rent-generation-service";
+import { NextRequest } from "next/server";
+import { ApiResponse, ApiError } from "@/src/lib/api-response";
+import { rentGenerationService } from "@/src/services/payments/rent-generation-service";
 import { authService } from "@/lib/services/auth-service";
-import { apiError } from "@/lib/utils/api-utils";
 import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
 
 /**
@@ -15,13 +15,13 @@ export async function GET(req: NextRequest) {
   try {
     const user = await authService.getCurrentUser(req);
     if (!user || (user.role !== "OWNER" && user.role !== "ADMIN")) {
-      return apiError("Unauthorized", "UNAUTHORIZED", 401);
+      return ApiError.unauthorized("Unauthorized");
     }
 
     const rentMonth = req.nextUrl.searchParams.get("rent_month");
     const hostelId = req.nextUrl.searchParams.get("hostelId") || undefined;
     if (!hostelId) {
-      return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
+      return ApiError.badRequest("hostelId is required", "HOSTEL_CONTEXT_REQUIRED");
     }
     await requireHostelBelongsToOwner(user.id, hostelId);
 
@@ -36,10 +36,9 @@ export async function GET(req: NextRequest) {
       hostelId
     );
 
-    return NextResponse.json(result);
+    return ApiResponse.success(result);
   } catch (error: any) {
     console.error("Error previewing rent generation:", error);
-    const message = String(error?.message ?? error);
-    return apiError(message, "INTERNAL_ERROR", 500);
+    return ApiError.internal(String(error?.message ?? error));
   }
 }

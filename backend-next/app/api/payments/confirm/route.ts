@@ -2,12 +2,12 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
-import { paymentService } from "@/lib/services/payment-service";
+import { paymentService } from "@/src/services/payments/payment-service";
 import { authService } from "@/lib/services/auth-service";
 import { apiError } from "@/lib/utils/api-utils";
 import { prisma } from "@/lib/db";
 import { paymentStatusEventService } from "@/lib/services/payment-status-event-service";
-import { SETTLEMENT_STATUS } from "@/lib/services/payments/financial-domain";
+import { SETTLEMENT_STATUS } from "@/src/services/payments/financial-domain";
 
 /**
  * POST /api/payments/confirm

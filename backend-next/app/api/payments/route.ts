@@ -1,17 +1,18 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-import { NextResponse } from "next/server";
-import { paymentService } from "@/lib/services/payment-service";
-import { authService } from "@/lib/services/auth-service";
-import { apiError } from "@/lib/utils/api-utils";
+import { NextRequest } from "next/server";
+import { paymentService } from "@/src/services/payments/payment-service";
+import { getSession } from "@/lib/auth";
+import { ApiResponse } from "@/src/lib/api-response";
+import { ApiError } from "@/src/lib/api-error";
 import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   try {
-    const user = await authService.getCurrentUser(req);
-    if (!user || user.role !== "OWNER") {
-      return apiError("Unauthorized", "UNAUTHORIZED", 401);
+    const session = await getSession(req);
+    if (!session || session.role !== "OWNER") {
+      return ApiResponse.error(ApiError.forbidden("Unauthorized"));
     }
 
     const { searchParams } = new URL(req.url);
@@ -22,8 +23,8 @@ export async function GET(req: Request) {
     const method = searchParams.get("method") || undefined;
     const month = searchParams.get("month") || undefined;
     const hostelId = searchParams.get("hostelId") || undefined;
-    await requireHostelBelongsToOwner(user.id, hostelId);
-    if (!hostelId) return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
+    await requireHostelBelongsToOwner(session.id, hostelId);
+    if (!hostelId) return ApiResponse.error(ApiError.badRequest("hostelId is required"));
 
     const filters = {
       tenantId,
@@ -33,37 +34,36 @@ export async function GET(req: Request) {
     };
 
     const result = await paymentService.getAllPayments(
-      user.id,
+      session.id,
       hostelId,
       isNaN(limit) ? 50 : limit,
       isNaN(offset) ? 0 : offset,
       filters
     );
 
-    return NextResponse.json(result);
+    return ApiResponse.success(result);
   } catch (error: any) {
     console.error("Error fetching payments:", error);
-    const message = String(error?.message ?? error);
-    return apiError(message, "INTERNAL_ERROR", 500);
+    return ApiResponse.error(ApiError.internal("Failed to fetch payments", error));
   }
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const user = await authService.getCurrentUser(req);
-    if (!user) {
-      return apiError("Unauthorized", "UNAUTHORIZED", 401);
+    const session = await getSession(req);
+    if (!session) {
+      return ApiResponse.error(ApiError.unauthorized("Unauthorized"));
     }
 
     const data = await req.json();
     const hostelId = data.hostelId || data.hostel_id;
     if (!hostelId) {
-      return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
+      return ApiResponse.error(ApiError.badRequest("hostelId is required"));
     }
 
     // Authorization check for manual recording: only OWNER/ADMIN
-    if (user.role !== "OWNER" && user.role !== "ADMIN") {
-      return apiError("Only owners can record manual payments", "FORBIDDEN", 403);
+    if (session.role !== "OWNER" && session.role !== "ADMIN") {
+      return ApiResponse.error(ApiError.forbidden("Only owners can record manual payments"));
     }
 
     const result = await paymentService.recordPayment({
@@ -73,14 +73,13 @@ export async function POST(req: Request) {
       paymentMethod: data.payment_method,
       referenceNumber: data.reference_number,
       paymentDate: data.payment_date ? new Date(data.payment_date) : undefined,
-      userId: user.id,
-      ownerId: user.id,
+      userId: session.id,
+      ownerId: session.id,
     });
 
-    return NextResponse.json(result);
+    return ApiResponse.success(result);
   } catch (error: any) {
     console.error("Error recording payment:", error);
-    const message = String(error?.message ?? error);
-    return apiError(message, "INTERNAL_ERROR", 500);
+    return ApiResponse.error(ApiError.internal("Failed to record payment", error));
   }
 }

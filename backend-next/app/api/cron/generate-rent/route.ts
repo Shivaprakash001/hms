@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import { rentGenerationService } from "@/lib/services/rent-generation-service";
+import { rentGenerationService } from "@/src/services/payments/rent-generation-service";
 import { prisma } from "@/lib/db";
 
 

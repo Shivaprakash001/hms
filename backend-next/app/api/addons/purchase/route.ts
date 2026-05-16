@@ -4,12 +4,12 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth-edge";
 import { prisma } from "@/lib/db";
-import { PaymentProviderFactory } from "@/lib/services/payments/provider-factory";
+import { PaymentProviderFactory } from "@/src/services/payments/provider-factory";
 import { getLogger } from "@/lib/logger";
 import { eventLog } from "@/lib/services/event-log-service";
 import { paymentStatusEventService } from "@/lib/services/payment-status-event-service";
-import { getProviderContext } from "@/lib/services/payments/merchant-context";
-import { PAYMENT_DOMAIN, PAYMENT_FLOW, PAYMENT_SCOPE, MERCHANT_CONTEXT, SETTLEMENT_STATUS } from "@/lib/services/payments/financial-domain";
+import { getProviderContext } from "@/src/services/payments/merchant-context";
+import { PAYMENT_DOMAIN, PAYMENT_FLOW, PAYMENT_SCOPE, MERCHANT_CONTEXT, SETTLEMENT_STATUS } from "@/src/services/payments/financial-domain";
 import crypto from "crypto";
 
 const logger = getLogger("addons.purchase");

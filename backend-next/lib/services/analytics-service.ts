@@ -1,6 +1,6 @@
 import { prisma } from "../db";
 import { Prisma } from "@prisma/client";
-import { financialService } from "./financial-service";
+import { financialService } from "../../src/services/payments/financial-service";
 import { operationalPendingInvariantHolds } from "./financial-invariants";
 
 // ─── Decision Engine ──────────────────────────────────────────────────────────

@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import { reminderService } from "@/lib/services/reminder-service";
+import { reminderService } from "@/src/services/payments/reminder-service";
 
 /**
  * 🕐 CRON — Daily Reminder & Late Fee Engine

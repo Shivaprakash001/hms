@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import { receiptService } from "../lib/services/receipt-service";
+import { receiptService } from "../src/services/payments/receipt-service";
 
 const prisma = new PrismaClient();
 const apply = process.argv.includes("--apply");

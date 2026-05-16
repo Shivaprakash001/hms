@@ -5,11 +5,11 @@ import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getLogger } from "@/lib/logger";
-import { PaymentProviderFactory } from "@/lib/services/payments/provider-factory";
+import { PaymentProviderFactory } from "@/src/services/payments/provider-factory";
 import { eventLog } from "@/lib/services/event-log-service";
 import { paymentStatusEventService } from "@/lib/services/payment-status-event-service";
-import { PAYMENT_DOMAIN, PAYMENT_FLOW, PAYMENT_SCOPE, MERCHANT_CONTEXT, SETTLEMENT_STATUS } from "@/lib/services/payments/financial-domain";
-import { getProviderContext } from "@/lib/services/payments/merchant-context";
+import { PAYMENT_DOMAIN, PAYMENT_FLOW, PAYMENT_SCOPE, MERCHANT_CONTEXT, SETTLEMENT_STATUS } from "@/src/services/payments/financial-domain";
+import { getProviderContext } from "@/src/services/payments/merchant-context";
 import crypto from "crypto";
 
 const logger = getLogger("billing.upgrade");

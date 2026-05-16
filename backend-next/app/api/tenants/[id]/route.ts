@@ -2,10 +2,12 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
-import { getSession, apiResponse, apiError } from "@/lib/auth";
-import { tenantService } from "@/lib/services/tenant-service";
+import { getSession } from "@/lib/auth";
+import { ApiResponse } from "@/src/lib/api-response";
+import { ApiError } from "@/src/lib/api-error";
+import { tenantService } from "@/src/services/tenants/tenant-service";
 import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
-import { invitationService } from "@/lib/services/invitation-service";
+import { invitationService } from "@/src/services/tenants/invitation-service";
 import { InvitationUpdateSchema } from "@/lib/validators";
 
 
@@ -22,30 +24,21 @@ export async function GET(
   const session = await getSession(req);
   if (!session) {
     console.warn("[tenants.id.GET] Unauthorized access attempt");
-    return apiError("Unauthorized", "UNAUTHORIZED", 401);
+    return ApiResponse.error(ApiError.unauthorized("Unauthorized"));
   }
 
   try {
     console.log(`[tenants.id.GET] Fetching tenant ${params.id} for user ${session.sub}`);
     const tenant = await tenantService.getTenantById(params.id, { sub: session.sub, role: session.role });
     
-    return apiResponse({
-      success: true,
-      data: tenant
-    });
+    return ApiResponse.success(tenant);
   } catch (error: any) {
     console.error(`Detailed API Error [tenants.id.GET] (${params.id}):`, error);
     const msg = typeof error?.message === "string" ? error.message : String(error);
-    if (msg.startsWith("NOT_FOUND")) return apiError(msg.split(": ")[1] ?? msg, "NOT_FOUND", 404);
-    if (msg.startsWith("FORBIDDEN")) return apiError(msg.split(": ")[1] ?? msg, "FORBIDDEN", 403);
+    if (msg.startsWith("NOT_FOUND")) return ApiResponse.error(ApiError.notFound(msg.split(": ")[1] ?? msg));
+    if (msg.startsWith("FORBIDDEN")) return ApiResponse.error(ApiError.forbidden(msg.split(": ")[1] ?? msg));
     
-    return Response.json(
-      {
-        success: false,
-        error: "Internal Server Error"
-      },
-      { status: 500 }
-    );
+    return ApiResponse.error(ApiError.internal("Internal Server Error"));
   }
 }
 
@@ -56,7 +49,7 @@ export async function PUT(
   const session = await getSession(req);
   if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
     console.warn(`[tenants.id.PUT] Forbidden access attempt by ${session?.role} ${session?.sub}`);
-    return apiError("Forbidden", "FORBIDDEN", 403);
+    return ApiResponse.error(ApiError.forbidden("Forbidden"));
   }
 
   try {
@@ -69,41 +62,29 @@ export async function PUT(
       const validated = InvitationUpdateSchema.safeParse(body);
       if (!validated.success) {
         console.warn(`[tenants.id.PUT] Invitation validation failed for tenant ${params.id}`);
-        return apiError("Validation failed", "VALIDATION_ERROR", 400);
+        return ApiResponse.error(ApiError.validationError("Validation failed"));
       }
       
       const result = await invitationService.updateInvitation(params.id, scope.owner_id, validated.data);
       
-      return apiResponse({
-        success: true,
-        data: result
-      }, result?.email_sent === false ? 202 : 200);
+      return ApiResponse.success(result, result?.email_sent === false ? 202 : 200);
     }
 
     const updated = await tenantService.updateTenant(params.id, body, scope.owner_id);
     
     console.log(`[tenants.id.PUT] Tenant ${params.id} updated successfully`);
-    return apiResponse({
-      success: true,
-      data: updated
-    });
+    return ApiResponse.success(updated);
   } catch (error: any) {
     console.error(`Detailed API Error [tenants.id.PUT] (${params.id}):`, error);
     const msg = typeof error?.message === "string" ? error.message : String(error);
     
-    if (msg.startsWith("NOT_FOUND")) return apiError(msg.split(": ")[1] ?? msg, "NOT_FOUND", 404);
-    if (msg.startsWith("FORBIDDEN")) return apiError(msg.split(": ")[1] ?? msg, "FORBIDDEN", 403);
-    if (msg.startsWith("VALIDATION")) return apiError(msg.split(": ")[1] ?? msg, "VALIDATION_ERROR", 400);
-    if (msg.startsWith("ALREADY_EXISTS")) return apiError(msg.split(": ")[1] ?? msg, "ALREADY_EXISTS", 409);
-    if (msg.startsWith("CAPACITY_EXCEEDED")) return apiError(msg.split(": ")[1] ?? msg, "CAPACITY_EXCEEDED", 409);
+    if (msg.startsWith("NOT_FOUND")) return ApiResponse.error(ApiError.notFound(msg.split(": ")[1] ?? msg));
+    if (msg.startsWith("FORBIDDEN")) return ApiResponse.error(ApiError.forbidden(msg.split(": ")[1] ?? msg));
+    if (msg.startsWith("VALIDATION")) return ApiResponse.error(ApiError.validationError(msg.split(": ")[1] ?? msg));
+    if (msg.startsWith("ALREADY_EXISTS")) return ApiResponse.error(new ApiError(409, "ALREADY_EXISTS", msg.split(": ")[1] ?? msg));
+    if (msg.startsWith("CAPACITY_EXCEEDED")) return ApiResponse.error(new ApiError(409, "CAPACITY_EXCEEDED", msg.split(": ")[1] ?? msg));
     
-    return Response.json(
-      {
-        success: false,
-        error: "Internal Server Error"
-      },
-      { status: 500 }
-    );
+    return ApiResponse.error(ApiError.internal("Internal Server Error"));
   }
 }
 
@@ -114,7 +95,7 @@ export async function DELETE(
   const session = await getSession(req);
   if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
     console.warn(`[tenants.id.DELETE] Forbidden access attempt by ${session?.role} ${session?.sub}`);
-    return apiError("Forbidden", "FORBIDDEN", 403);
+    return ApiResponse.error(ApiError.forbidden("Forbidden"));
   }
 
   try {
@@ -124,23 +105,14 @@ export async function DELETE(
     const result = await tenantService.deleteTenant(params.id, scope.owner_id);
     
     console.log(`[tenants.id.DELETE] Tenant ${params.id} deleted successfully`);
-    return apiResponse({
-      success: true,
-      data: result
-    });
+    return ApiResponse.success(result);
   } catch (error: any) {
     console.error(`Detailed API Error [tenants.id.DELETE] (${params.id}):`, error);
     const msg = typeof error?.message === "string" ? error.message : String(error);
     
-    if (msg.startsWith("NOT_FOUND")) return apiError(msg.split(": ")[1] ?? msg, "NOT_FOUND", 404);
-    if (msg.startsWith("FORBIDDEN")) return apiError(msg.split(": ")[1] ?? msg, "FORBIDDEN", 403);
+    if (msg.startsWith("NOT_FOUND")) return ApiResponse.error(ApiError.notFound(msg.split(": ")[1] ?? msg));
+    if (msg.startsWith("FORBIDDEN")) return ApiResponse.error(ApiError.forbidden(msg.split(": ")[1] ?? msg));
     
-    return Response.json(
-      {
-        success: false,
-        error: "Internal Server Error"
-      },
-      { status: 500 }
-    );
+    return ApiResponse.error(ApiError.internal("Internal Server Error"));
   }
 }

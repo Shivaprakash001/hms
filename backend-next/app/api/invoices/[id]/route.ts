@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, apiError } from "@/lib/auth";
-import { invoiceService } from "@/lib/services/invoice-service";
+import { invoiceService } from "@/src/services/payments/invoice-service";
 import { prisma } from "@/lib/db";
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {

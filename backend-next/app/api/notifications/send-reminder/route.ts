@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
-import { reminderService } from "@/lib/services/reminder-service";
+import { reminderService } from "@/src/services/payments/reminder-service";
 import { eventLog } from "@/lib/services/event-log-service";
 import { getLogger } from "@/lib/logger";
 

@@ -10,7 +10,7 @@ import { roomService, allocationService, tenantService } from '../../api/service
 import { useAppPreferences } from '../../context/AppPreferencesContext';
 import { useHostelContext } from '../../context/HostelContext';
 import { formatCurrency, formatDate } from '../../utils/format';
-import { StatCard } from '../../features/rooms/components/StatCard';
+import { StatCard } from '../../components/ui/StatCard';
 import { RoomCard } from '../../features/rooms/components/RoomCard';
 import { RoomDetailSidebar } from '../../features/rooms/components/RoomDetailSidebar';
 import { TenantProfileModal } from '../../features/rooms/components/TenantProfileModal';
@@ -107,10 +107,10 @@ const ManageRooms = () => {
             {/* Header Stats */}
             {/* Header Stats */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard icon={<DoorOpen />} label="Total Rooms" value={totalRooms} color="blue" />
-                <StatCard icon={<Users />} label="Total Occupants" value={totalOccupants} color="purple" />
-                <StatCard icon={<BedDouble />} label="Total Capacity" value={totalCapacity} color="indigo" />
-                <StatCard icon={<LayoutGrid />} label="Occupancy Rate" value={`${occupancyRate}%`} color="emerald" />
+                <StatCard icon={DoorOpen} title="Total Rooms" value={totalRooms} color="blue" />
+                <StatCard icon={Users} title="Total Occupants" value={totalOccupants} color="purple" />
+                <StatCard icon={BedDouble} title="Total Capacity" value={totalCapacity} color="indigo" />
+                <StatCard icon={LayoutGrid} title="Occupancy Rate" value={`${occupancyRate}%`} color="emerald" />
             </div>
 
             {/* Controls */}

@@ -1,0 +1,245 @@
+/**
+ * 🔄 Tenant Transfer Service — Phase 3: Hostel Transfer Engine
+ *
+ * Supports operationally safe tenant hostel transfers with:
+ * - Atomic allocation close + create in a single transaction
+ * - Immutable financial record preservation (all old obligations/payments stay on old hostel)
+ * - Mutable Tenant.hostel_id update to new operational hostel
+ * - Full audit trail via TenantTransferLog
+ *
+ * TRANSFER RULES:
+ * 1. Old allocation is closed (end_date set, is_active = false)
+ * 2. New allocation is created with denormalized hostel_id from target room
+ * 3. Tenant.hostel_id is updated to new hostel (mutable, current context)
+ * 4. All historical financial records remain attached to old hostel FOREVER
+ * 5. Only FUTURE obligations use the new hostel
+ *
+ * BLOCKERS:
+ * - Target room must have capacity
+ * - Both hostels must belong to the same owner
+ * - Tenant must have an active allocation (otherwise use normal allocateRoom)
+ * - No corrupted allocation state
+ */
+
+import { prisma } from "../../../lib/db";
+import { eventSystem } from "../../../lib/events";
+import { eventLog } from "../../../lib/services/event-log-service";
+import { getLogger } from "../../../lib/logger";
+
+const logger = getLogger("tenant-transfer-service");
+
+export interface TransferRequest {
+  tenantId: string;
+  targetRoomId: string;
+  transferredBy: string; // owner/admin who authorized the transfer
+  reason?: string;
+  notes?: string;
+  transferDate?: Date;
+}
+
+export interface TransferResult {
+  success: boolean;
+  transfer_id: string;
+  tenant_id: string;
+  from_hostel_id: string;
+  to_hostel_id: string;
+  old_allocation_id: string;
+  new_allocation_id: string;
+}
+
+export class TenantTransferService {
+
+  /**
+   * Execute a tenant hostel transfer atomically.
+   *
+   * This is the ONLY sanctioned way to move a tenant between hostels.
+   * Direct allocation manipulation will not update Tenant.hostel_id
+   * or create the audit trail.
+   */
+  async transferTenant(request: TransferRequest): Promise<TransferResult> {
+    const { tenantId, targetRoomId, transferredBy, reason, notes } = request;
+    const transferDate = request.transferDate || new Date();
+
+    // ── Pre-flight validation (outside transaction for fast-fail) ────────────
+
+    // 1. Verify tenant exists and has an active allocation
+    const tenant = await prisma.tenants.findUnique({
+      where: { id: tenantId },
+      include: {
+        room_allocations: {
+          where: { is_active: true, end_date: null },
+          include: { room: { select: { id: true, hostel_id: true } } },
+          orderBy: { start_date: "desc" },
+          take: 1,
+        },
+      },
+    });
+
+    if (!tenant) {
+      throw new Error("NOT_FOUND: Tenant not found");
+    }
+    if (!(tenant as any).room_allocations[0]) {
+      throw new Error("VALIDATION_ERROR: Tenant has no active allocation. Use normal room allocation instead.");
+    }
+
+    const currentAllocation = (tenant as any).room_allocations[0];
+    const fromHostelId = currentAllocation.room.hostel_id;
+
+    // 2. Verify target room exists and belongs to the same owner
+    const targetRoom = await prisma.rooms.findUnique({
+      where: { id: targetRoomId },
+      include: {
+        hostel: { select: { id: true, owner_id: true, name: true, is_active: true } },
+        room_allocations: { where: { is_active: true, end_date: null } },
+      },
+    });
+
+    if (!targetRoom) {
+      throw new Error("NOT_FOUND: Target room not found");
+    }
+    if (!targetRoom.hostel.is_active) {
+      throw new Error("VALIDATION_ERROR: Target hostel is not active");
+    }
+
+    const toHostelId = targetRoom.hostel_id;
+
+    // 3. Ownership validation — both hostels must belong to the same owner
+    if (targetRoom.hostel.owner_id !== tenant.owner_id) {
+      throw new Error("FORBIDDEN: Target room belongs to a different owner");
+    }
+
+    // 4. Same-hostel check — this is a room shift, not a transfer
+    if (fromHostelId === toHostelId) {
+      throw new Error(
+        "VALIDATION_ERROR: Source and target are in the same hostel. Use room shift instead of hostel transfer."
+      );
+    }
+
+    // 5. Capacity check
+    if (targetRoom.room_allocations.length >= targetRoom.capacity) {
+      throw new Error("VALIDATION_ERROR: Target room is at maximum capacity");
+    }
+
+    // ── Atomic transfer transaction ─────────────────────────────────────────
+
+    const result = await prisma.$transaction(async (tx) => {
+      // A. Close old allocation
+      await tx.roomAllocation.update({
+        where: { id: currentAllocation.id },
+        data: {
+          end_date: transferDate,
+          is_active: false,
+        },
+      });
+
+      // B. Create new allocation with denormalized hostel_id
+      const newAllocation = await tx.roomAllocation.create({
+        data: {
+          tenant_id: tenantId,
+          room_id: targetRoomId,
+          start_date: transferDate,
+          hostel_id: toHostelId, // Phase 2: immutable hostel snapshot
+        },
+      });
+
+      // C. Update Tenant.hostel_id to new operational hostel (mutable field)
+      await tx.tenants.update({
+        where: { id: tenantId },
+        data: { hostel_id: toHostelId },
+      });
+
+      // D. Create immutable audit trail
+      const transferLog = await tx.tenant_transfer_logs.create({
+        data: {
+          tenant_id: tenantId,
+          from_hostel_id: fromHostelId,
+          to_hostel_id: toHostelId,
+          old_allocation_id: currentAllocation.id,
+          new_allocation_id: newAllocation.id,
+          transferred_by: transferredBy,
+          transferred_at: transferDate,
+          reason: reason || null,
+          notes: notes || null,
+        },
+      });
+
+      return {
+        transfer_id: transferLog.id,
+        new_allocation_id: newAllocation.id,
+      };
+    });
+
+    // ── Post-transaction side effects (non-blocking) ────────────────────────
+
+    // Structured audit event
+    await eventLog.log("TENANT_TRANSFERRED", transferredBy, {
+      tenant_id: tenantId,
+      from_hostel_id: fromHostelId,
+      to_hostel_id: toHostelId,
+      old_allocation_id: currentAllocation.id,
+      new_allocation_id: result.new_allocation_id,
+      reason,
+    }).catch((e: any) => logger.error("transfer_audit_failed", { err: e.message }));
+
+    // SSE event for dashboard refresh
+    await eventSystem.trigger("tenant_transferred", {
+      tenant_id: tenantId,
+      from_hostel_id: fromHostelId,
+      to_hostel_id: toHostelId,
+      owner_id: tenant.owner_id,
+    }).catch((e: any) => logger.error("transfer_event_failed", { err: e.message }));
+
+    logger.info("tenant_transfer_complete", {
+      transfer_id: result.transfer_id,
+      tenant_id: tenantId,
+      from: fromHostelId,
+      to: toHostelId,
+    });
+
+    return {
+      success: true,
+      transfer_id: result.transfer_id,
+      tenant_id: tenantId,
+      from_hostel_id: fromHostelId,
+      to_hostel_id: toHostelId,
+      old_allocation_id: currentAllocation.id,
+      new_allocation_id: result.new_allocation_id,
+    };
+  }
+
+  /**
+   * Get transfer history for a tenant.
+   * Used by tenant detail view to show hostel movement history.
+   */
+  async getTransferHistory(tenantId: string) {
+    return prisma.tenant_transfer_logs.findMany({
+      where: { tenant_id: tenantId },
+      orderBy: { transferred_at: "desc" },
+    });
+  }
+
+  /**
+   * Get all transfers for a hostel (incoming and outgoing).
+   * Used by hostel analytics to understand tenant churn patterns.
+   */
+  async getHostelTransfers(hostelId: string, direction: "in" | "out" | "all" = "all") {
+    const where: any = {};
+    if (direction === "in") {
+      where.to_hostel_id = hostelId;
+    } else if (direction === "out") {
+      where.from_hostel_id = hostelId;
+    } else {
+      where.OR = [
+        { from_hostel_id: hostelId },
+        { to_hostel_id: hostelId },
+      ];
+    }
+
+    return prisma.tenant_transfer_logs.findMany({
+      where,
+      orderBy: { transferred_at: "desc" },
+    });
+  }
+}
+
+export const tenantTransferService = new TenantTransferService();

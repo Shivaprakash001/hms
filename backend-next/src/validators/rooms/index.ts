@@ -1,0 +1,15 @@
+import { z } from "zod";
+
+export const RoomCreateSchema = z.object({
+  room_no: z.string().min(1),
+  capacity: z.coerce.number().int().positive(),
+  floor: z.coerce.number().int().optional(),
+  room_type: z.string().optional(),
+  base_rent: z.coerce.number().nonnegative().optional(),
+});
+
+export const AllocationSchema = z.object({
+  tenant_id: z.string().uuid(),
+  room_id: z.string().uuid(),
+  start_date: z.string().transform((val) => new Date(val)),
+});

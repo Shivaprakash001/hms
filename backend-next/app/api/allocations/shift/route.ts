@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
-import { roomAllocationService } from "@/lib/services/room-allocation-service";
+import { roomAllocationService } from "@/src/services/rooms/room-allocation-service";
 import { z } from "zod";
 
 const ShiftSchema = z.object({

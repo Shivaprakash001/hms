@@ -2,8 +2,10 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSession, apiResponse, apiError } from "@/lib/auth";
-import { tenantService } from "@/lib/services/tenant-service";
+import { getSession } from "@/lib/auth";
+import { ApiResponse } from "@/src/lib/api-response";
+import { ApiError } from "@/src/lib/api-error";
+import { tenantService } from "@/src/services/tenants/tenant-service";
 import { planGate, TenantHardCapError } from "@/lib/services/plan-gate-service";
 import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
 import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
@@ -18,7 +20,7 @@ export async function GET(req: NextRequest) {
   const session = await getSession(req);
   if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
     console.warn(`[tenants.GET] Forbidden access attempt by user ${session?.sub}`);
-    return apiError("Forbidden", "FORBIDDEN", 403);
+    return ApiResponse.error(ApiError.forbidden("Forbidden"));
   }
 
   try {
@@ -38,7 +40,7 @@ export async function GET(req: NextRequest) {
     await requireHostelBelongsToOwner(scope.owner_id, hostelId);
     if (!hostelId) {
       console.warn("[tenants.GET] Missing hostelId context");
-      return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
+      return ApiResponse.error(ApiError.validationError("hostelId is required", { code: "HOSTEL_CONTEXT_REQUIRED" }));
     }
 
     const result = await tenantService.getAllTenants({
@@ -46,19 +48,10 @@ export async function GET(req: NextRequest) {
       hostelId,
     });
 
-    return apiResponse({
-      success: true,
-      ...result
-    });
+    return ApiResponse.success({ ...result });
   } catch (error: any) {
     console.error("Detailed API Error [tenants.GET]:", error);
-    return Response.json(
-      {
-        success: false,
-        error: error.message || "Internal Server Error"
-      },
-      { status: 500 }
-    );
+    return ApiResponse.error(ApiError.internal(error.message || "Internal Server Error"));
   }
 }
 
@@ -66,7 +59,7 @@ export async function POST(req: NextRequest) {
   const session = await getSession(req);
   if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
     console.warn(`[tenants.POST] Forbidden access attempt by user ${session?.sub}`);
-    return apiError("Forbidden", "FORBIDDEN", 403);
+    return ApiResponse.error(ApiError.forbidden("Forbidden"));
   }
 
   try {
@@ -76,10 +69,10 @@ export async function POST(req: NextRequest) {
     console.log(`[tenants.POST] Creating tenant for owner ${scope.owner_id}`, body);
 
     if (!body.profile_id) {
-      return apiError("profile_id is required", "VALIDATION_ERROR", 400);
+      return ApiResponse.error(ApiError.validationError("profile_id is required"));
     }
     if (!body.monthly_rent || body.monthly_rent <= 0) {
-      return apiError("monthly_rent must be > 0", "VALIDATION_ERROR", 400);
+      return ApiResponse.error(ApiError.validationError("monthly_rent must be > 0"));
     }
 
     await planGate.assertTenantLimit(scope.owner_id);
@@ -88,10 +81,7 @@ export async function POST(req: NextRequest) {
     
     console.log(`[tenants.POST] Tenant created: ${tenant.id}`);
     
-    return apiResponse({
-      success: true,
-      data: tenant
-    }, 201);
+    return ApiResponse.success(tenant, 201);
   } catch (error: any) {
     console.error("Detailed API Error [tenants.POST]:", error);
     
@@ -111,15 +101,9 @@ export async function POST(req: NextRequest) {
     
     if (error.message?.startsWith("PLAN_LIMIT:")) {
       const code = error.message.replace("PLAN_LIMIT:", "").trim();
-      return apiError(code, code, 402);
+      return ApiResponse.error(new ApiError(402, code, code));
     }
     
-    return Response.json(
-      {
-        success: false,
-        error: error.message || "Internal Server Error"
-      },
-      { status: 500 }
-    );
+    return ApiResponse.error(ApiError.internal(error.message || "Internal Server Error"));
   }
 }

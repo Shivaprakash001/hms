@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
-import { tenantTransferService } from "@/lib/services/tenant-transfer-service";
+import { tenantTransferService } from "@/src/services/tenants/tenant-transfer-service";
 
 /**
  * 🔄 POST /api/tenants/transfer

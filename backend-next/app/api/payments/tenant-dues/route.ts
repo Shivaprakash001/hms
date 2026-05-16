@@ -2,9 +2,9 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
-import { paymentService } from "@/lib/services/payment-service";
+import { ApiResponse, ApiError } from "@/src/lib/api-response";
+import { paymentService } from "@/src/services/payments/payment-service";
 import { authService } from "@/lib/services/auth-service";
-import { apiError } from "@/lib/utils/api-utils";
 import { prisma } from "@/lib/db";
 
 /**
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
   try {
     const user = await authService.getCurrentUser(req);
     if (!user) {
-      return apiError("Unauthorized", "UNAUTHORIZED", 401);
+      return ApiError.unauthorized("Unauthorized");
     }
 
     const { searchParams } = new URL(req.url);
@@ -41,12 +41,12 @@ export async function GET(req: NextRequest) {
         where: { profile_id: user.id },
         select: { id: true },
       });
-      if (!tenant) return apiError("Tenant not found", "NOT_FOUND", 404);
+      if (!tenant) return ApiError.notFound("Tenant not found");
       tenantId = tenant.id;
     }
 
     if (!tenantId) {
-      return apiError("tenant_id is required", "VALIDATION_ERROR", 400);
+      return ApiError.badRequest("tenant_id is required", "VALIDATION_ERROR");
     }
 
     // Owners can only view their own tenants
@@ -56,15 +56,14 @@ export async function GET(req: NextRequest) {
         select: { owner_id: true },
       });
       if (!tenant || tenant.owner_id !== user.id) {
-        return apiError("Forbidden", "FORBIDDEN", 403);
+        return ApiError.forbidden("Forbidden");
       }
     }
 
     const result = await paymentService.getTenantTotalDues(tenantId);
-    return Response.json(result);
+    return ApiResponse.success(result);
   } catch (error: any) {
     console.error("Error fetching tenant dues:", error);
-    const message = String(error?.message ?? error);
-    return apiError(message, "INTERNAL_ERROR", 500);
+    return ApiError.internal(String(error?.message ?? error));
   }
 }
