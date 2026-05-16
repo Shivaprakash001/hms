@@ -17,17 +17,33 @@ export async function GET(
 ) {
   const session = await getSession(req);
   if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
+    console.warn(`[rooms.id.overview.GET] Forbidden access attempt by ${session?.role} ${session?.sub}`);
     return apiError("Forbidden", "FORBIDDEN", 403);
   }
 
   try {
     const scope = resolveOwnerScope(session);
+    console.log(`[rooms.id.overview.GET] Fetching overview for room ${params.id} for owner ${scope.owner_id}`);
+    
     const overview = await propertyService.getRoomOverview(params.id, scope.owner_id);
-    return apiResponse(overview);
+    
+    return apiResponse({
+      success: true,
+      data: overview
+    });
   } catch (error: any) {
+    console.error(`Detailed API Error [rooms.id.overview.GET] (${params.id}):`, error);
     const msg = typeof error === 'string' ? error : error?.message ?? String(error);
+    
     if (msg.startsWith("NOT_FOUND"))
       return apiError(msg.split(": ")[1] ?? msg, "NOT_FOUND", 404);
-    return apiError(msg || "Failed to fetch room overview");
+    
+    return Response.json(
+      {
+        success: false,
+        error: "Internal Server Error"
+      },
+      { status: 500 }
+    );
   }
 }

@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
       : { prefs: null as any };
 
     return apiResponse({
-      require_profile_photo_onboarding: Boolean(prefs?.require_profile_photo_onboarding),
+      require_profile_photo_onboarding: false,
     });
   } catch (error: any) {
     return apiError(error?.message || "Failed to fetch onboarding settings");

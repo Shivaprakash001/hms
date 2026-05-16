@@ -78,8 +78,6 @@ export interface HostelPreferences {
   receipt_footer: string;
 
   // Security
-  require_doc_approval: boolean;
-  require_aadhaar: boolean;
   allow_tenant_edits: boolean;
   require_profile_photo_onboarding: boolean;
   data_retention_months: number;
@@ -134,8 +132,6 @@ const DEFAULTS: HostelPreferences = {
   auto_email_receipt: false,
   receipt_footer: "",
 
-  require_doc_approval: false,
-  require_aadhaar: false,
   allow_tenant_edits: true,
   require_profile_photo_onboarding: false,
   data_retention_months: 0,

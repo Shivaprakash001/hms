@@ -86,23 +86,4 @@ eventSystem.on("expense_created", async (data) => {
   });
 });
 
-eventSystem.on("document_uploaded", async (data) => {
-  await activityService.log({
-    userId: data.tenant_id,
-    ownerId: data.owner_id,
-    actionType: "UPLOAD",
-    entityType: "DOCUMENT",
-    entityId: data.doc_id,
-    metadata: { type: data.doc_type }
-  });
-});
-eventSystem.on("document_verified", async (data) => {
-  await activityService.log({
-    userId: data.owner_id,
-    ownerId: data.owner_id,
-    actionType: data.is_verified ? "VERIFY" : "UNVERIFY",
-    entityType: "DOCUMENT",
-    entityId: data.doc_id,
-    metadata: { tenant_id: data.tenant_id }
-  });
-});
+

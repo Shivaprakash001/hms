@@ -128,9 +128,15 @@ export async function verifyIdentityToken(
 }
 
 export function apiResponse(data: any, status = 200) {
-  return NextResponse.json(data, { status });
+  return NextResponse.json({
+    success: true,
+    ...(typeof data === 'object' && !Array.isArray(data) ? data : { data })
+  }, { status });
 }
 
 export function apiError(message: string, code = "ERROR", status = 500) {
-  return NextResponse.json({ error: { message, code } }, { status });
+  return NextResponse.json({ 
+    success: false,
+    error: { message, code } 
+  }, { status });
 }

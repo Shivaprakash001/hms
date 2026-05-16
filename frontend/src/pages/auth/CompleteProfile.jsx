@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, MapPin, Phone, GraduationCap, Loader2, CheckCircle2, Upload, Briefcase, ChevronRight, ChevronLeft, Camera } from 'lucide-react';
+import { User, MapPin, Phone, GraduationCap, Loader2, CheckCircle2, Briefcase, ChevronRight, ChevronLeft, Camera } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { tenantService } from '../../api/services';
 
@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/Card";
-import PhoneOtpVerification from '@/components/auth/PhoneOtpVerification';
 import { indianPhoneDigits, normalizeIndianPhone } from '@/lib/phone';
 
 const SlideVariant = {
@@ -56,19 +55,14 @@ const CompleteProfile = () => {
         office_name: '',
         office_location: '',
         job_role: '',
-
-        aadhaar_number: ''
     });
 
-    const [aadhaarFile, setAadhaarFile] = useState(null);
-    const [previewUrl, setPreviewUrl] = useState('');
     const [profilePhotoFile, setProfilePhotoFile] = useState(null);
     const [profilePhotoPreview, setProfilePhotoPreview] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [isSuccess, setIsSuccess] = useState(false);
-    const [isProfilePhotoRequired, setIsProfilePhotoRequired] = useState(false);
-    const [phoneVerification, setPhoneVerification] = useState(null);
+
 
     useEffect(() => {
         setFormData(prev => ({
@@ -78,45 +72,17 @@ const CompleteProfile = () => {
         }));
     }, [user]);
 
-    useEffect(() => {
-        const loadOnboardingSettings = async () => {
-            try {
-                const settings = await tenantService.getMyOnboardingSettings();
-                setIsProfilePhotoRequired(Boolean(settings?.require_profile_photo_onboarding));
-            } catch {
-                setIsProfilePhotoRequired(false);
-            }
-        };
-        if (!loading && user) loadOnboardingSettings();
-    }, [loading, user]);
+
 
     if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-600">Loading...</div>;
 
     const handleChange = (e) => {
         const { name, value } = e.target;
         if (name === 'phone') {
-            setPhoneVerification(null);
             setFormData(prev => ({ ...prev, phone: indianPhoneDigits(value) }));
             return;
         }
         setFormData(prev => ({ ...prev, [name]: value }));
-    };
-
-    const handleFileChange = (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        if (file.size > 5 * 1024 * 1024) return setError('File size must be < 5MB');
-        if (!['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.type)) return setError('Only JPG, PNG, or PDF allowed');
-
-        setAadhaarFile(file);
-        setError('');
-        if (file.type.startsWith('image/')) {
-            const reader = new FileReader();
-            reader.onloadend = () => setPreviewUrl(reader.result);
-            reader.readAsDataURL(file);
-        } else {
-            setPreviewUrl('');
-        }
     };
 
     const handleProfilePhotoChange = (e) => {
@@ -136,7 +102,6 @@ const CompleteProfile = () => {
     const validateStep1 = () => {
         if (!formData.name.trim()) return 'Please enter your full name';
         if (!normalizeIndianPhone(formData.phone)) return 'Enter a valid Indian mobile number';
-        if (!phoneVerification?.verificationToken || phoneVerification.phone !== normalizeIndianPhone(formData.phone)) return 'Please verify your mobile number with OTP';
         if (!formData.emergency_contact.trim()) return 'Emergency contact is required for your safety';
         if (!formData.gender) return 'Please select your gender';
         if (!formData.permanent_address.trim()) return 'Permanent address is required';
@@ -155,9 +120,6 @@ const CompleteProfile = () => {
     };
 
     const validateStep3 = () => {
-        if (!formData.aadhaar_number.trim() || formData.aadhaar_number.length !== 12) return 'A valid 12-digit Aadhaar is required';
-        if (!aadhaarFile) return 'Please upload a photo of your ID';
-        if (isProfilePhotoRequired && !profilePhotoFile) return 'Profile photo is required by your hostel owner';
         return null;
     };
 
@@ -190,7 +152,6 @@ const CompleteProfile = () => {
             const payload = {
                 name: formData.name.trim(),
                 phone: normalizeIndianPhone(formData.phone),
-                verification_token: phoneVerification.verificationToken,
                 emergency_contact: formData.emergency_contact.trim(),
                 gender: formData.gender,
                 personal_email: formData.personal_email?.trim() || null,
@@ -212,11 +173,9 @@ const CompleteProfile = () => {
                 office_name: formData.office_name.trim() || undefined,
                 office_location: formData.office_location.trim() || undefined,
                 job_role: formData.job_role.trim() || undefined,
-
-                aadhaar_number: formData.aadhaar_number.trim(),
             };
 
-            await tenantService.completeMyProfile(payload, aadhaarFile, profilePhotoFile);
+            await tenantService.completeMyProfile(payload, null, profilePhotoFile);
             setIsSuccess(true);
             setTimeout(() => window.location.href = '/tenant/dashboard', 1500);
         } catch (err) {
@@ -224,43 +183,6 @@ const CompleteProfile = () => {
         } finally {
             setIsLoading(false);
         }
-    };
-
-    // Upload state UX resolver
-    const getUploadContent = () => {
-        if (isLoading) {
-            return (
-                <div className="flex flex-col items-center justify-center py-6 gap-3">
-                    <Loader2 className="w-10 h-10 text-indigo-500 animate-spin" />
-                    <span className="font-bold text-indigo-700 animate-pulse">Uploading Document...</span>
-                </div>
-            );
-        }
-        if (previewUrl) {
-            return (
-                <div className="relative group p-2">
-                    <div className="flex flex-col items-center justify-center gap-3">
-                        <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center shadow-sm">
-                            <CheckCircle2 size={24} />
-                        </div>
-                        <span className="font-bold text-green-700">Document Uploaded Successfully</span>
-                        <span className="text-xs text-slate-500">{aadhaarFile?.name}</span>
-                    </div>
-                    <div className="absolute inset-0 bg-white/80 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-indigo-600 font-bold backdrop-blur-sm rounded-xl">Click to replace</div>
-                </div>
-            );
-        }
-        return (
-            <>
-                <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center shadow-sm border border-slate-100 text-indigo-500">
-                    <Upload size={24} />
-                </div>
-                <div>
-                    <span className="block font-bold text-indigo-700 text-sm mb-1">Click to browse your device</span>
-                    <span className="block text-xs text-slate-400 font-medium">JPEG, PNG, PDF (Max 5MB)</span>
-                </div>
-            </>
-        );
     };
 
     return (
@@ -332,7 +254,7 @@ const CompleteProfile = () => {
                                             <div className="space-y-5">
                                                 <div>
                                                     <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 block">
-                                                        Profile Photo {isProfilePhotoRequired ? '*' : '(Optional)'}
+                                                        Profile Photo (Optional)
                                                     </Label>
                                                     <label className="flex items-center gap-4 p-3 rounded-xl border border-slate-200 bg-slate-50/50 cursor-pointer hover:bg-slate-50 transition-colors">
                                                         <div className="w-14 h-14 rounded-full overflow-hidden bg-white border border-slate-200 flex items-center justify-center">
@@ -349,11 +271,7 @@ const CompleteProfile = () => {
                                                         <Input type="file" className="hidden" accept="image/jpeg,image/png,image/webp" onChange={handleProfilePhotoChange} />
                                                         <span className="text-xs font-semibold text-indigo-600">Choose</span>
                                                     </label>
-                                                    {isProfilePhotoRequired && (
-                                                        <p className="text-[11px] text-amber-700 mt-1.5 font-medium">
-                                                            Your hostel owner requires a profile photo to complete onboarding.
-                                                        </p>
-                                                    )}
+
                                                 </div>
 
                                                 <div>
@@ -381,11 +299,6 @@ const CompleteProfile = () => {
                                                     <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 block">Emergency Contact (Parent)</Label>
                                                     <Input name="emergency_contact" value={formData.emergency_contact} onChange={handleChange} className="h-12 bg-slate-50/50" placeholder="Parent's Mobile" />
                                                 </div>
-                                                <PhoneOtpVerification
-                                                    phone={formData.phone}
-                                                    onVerified={setPhoneVerification}
-                                                    disabled={isLoading}
-                                                />
                                                 <div>
                                                     <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 block">Date of Birth</Label>
                                                     <Input name="date_of_birth" type="date" value={formData.date_of_birth} onChange={handleChange} className="h-12 bg-slate-50/50" />
@@ -469,29 +382,18 @@ const CompleteProfile = () => {
                                         </div>
                                     )}
 
-                                    {/* -------------------- STAGE 3: DOCUMENTS -------------------- */}
+                                    {/* -------------------- STAGE 3: FINISH -------------------- */}
                                     {currentStep === 3 && (
                                         <div className="space-y-6">
                                             <div className="mb-4">
                                                 <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                                                    <span className="text-2xl">🔐</span> Verification
+                                                    <span className="text-2xl">✅</span> Finish Setup
                                                 </h3>
-                                                <p className="text-slate-500 text-sm mt-1">Upload an ID proof to verify your booking.</p>
+                                                <p className="text-slate-500 text-sm mt-1">Review your details and complete your onboarding.</p>
                                             </div>
 
-                                            <div className="space-y-6">
-                                                <div>
-                                                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 block">Aadhaar Number *</Label>
-                                                    <Input name="aadhaar_number" value={formData.aadhaar_number} onChange={handleChange} className="h-12 bg-slate-50/50 font-mono tracking-widest text-lg" placeholder="0000 0000 0000" maxLength={12} />
-                                                </div>
-
-                                                <div>
-                                                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 block">Upload ID Document *</Label>
-                                                    <label className={`block w-full cursor-pointer bg-indigo-50/30 border-2 border-dashed ${previewUrl ? 'border-green-400 bg-green-50/20' : 'border-indigo-200'} hover:border-indigo-400 hover:bg-indigo-50/50 rounded-[16px] p-8 transition-all text-center`}>
-                                                        <input type="file" className="hidden" accept="image/*,.pdf" onChange={handleFileChange} />
-                                                        {getUploadContent()}
-                                                    </label>
-                                                </div>
+                                            <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-5 text-sm text-slate-600">
+                                                Your profile is ready to submit. No additional verification is required.
                                             </div>
                                         </div>
                                     )}

@@ -2534,8 +2534,9 @@ export class PaymentService {
     const existingPayments = await prisma.payments.findMany({ where: { obligation_id: obligationId } });
     if (existingPayments.length > 0) throw new Error("BAD_REQUEST: Cannot waive an obligation with payments");
 
+    // CRITICAL: Scoping the update to the authenticated owner_id
     const obligation = await prisma.rent_obligations.update({
-      where: { id: obligationId },
+      where: { id: obligationId, owner_id: userId },
       data: { status: "WAIVED" }
     });
 

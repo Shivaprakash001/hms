@@ -14,34 +14,63 @@ import { propertyService } from "@/lib/services/property-service";
 export async function GET(req: NextRequest) {
   const session = await getSession(req);
   if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
+    console.warn(`[owner.profile.GET] Forbidden access attempt by ${session?.role} ${session?.sub}`);
     return apiError("Forbidden", "FORBIDDEN", 403);
   }
 
   try {
+    console.log(`[owner.profile.GET] Fetching profile for owner ${session.sub}`);
     const profile = await propertyService.getOwnerProfile(session.sub);
-    return apiResponse(profile);
+    return apiResponse({
+      success: true,
+      data: profile
+    });
   } catch (error: any) {
+    console.error("Detailed API Error [owner.profile.GET]:", error);
     const msg = String(error?.message || "");
     if (msg.startsWith("NOT_FOUND"))
       return apiError(msg.split(": ")[1] ?? msg, "NOT_FOUND", 404);
-    return apiError(msg || "Failed to fetch owner profile");
+    
+    return Response.json(
+      {
+        success: false,
+        error: "Internal Server Error"
+      },
+      { status: 500 }
+    );
   }
 }
 
 export async function PATCH(req: NextRequest) {
   const session = await getSession(req);
   if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
+    console.warn(`[owner.profile.PATCH] Forbidden access attempt by ${session?.role} ${session?.sub}`);
     return apiError("Forbidden", "FORBIDDEN", 403);
   }
 
   try {
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
+    console.log(`[owner.profile.PATCH] Updating profile for owner ${session.sub}`, body);
+    
     const result = await propertyService.updateOwnerProfile(session.sub, body);
-    return apiResponse(result);
+    
+    console.log(`[owner.profile.PATCH] Profile updated for owner ${session.sub}`);
+    return apiResponse({
+      success: true,
+      data: result
+    });
   } catch (error: any) {
+    console.error("Detailed API Error [owner.profile.PATCH]:", error);
     const msg = String(error?.message || "");
     if (msg.startsWith("VALIDATION"))
       return apiError(msg.split(": ")[1] ?? msg, "VALIDATION_ERROR", 400);
-    return apiError(msg || "Failed to update owner profile");
+    
+    return Response.json(
+      {
+        success: false,
+        error: "Internal Server Error"
+      },
+      { status: 500 }
+    );
   }
 }

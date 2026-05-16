@@ -103,6 +103,7 @@ export async function POST(req: Request) {
 
     merchantOrderId = body.payload.merchantOrderId;
 
+    console.log(`[webhook.phonepe] Processing event ${body.event} for order ${merchantOrderId}`);
     logger.info("webhook.phonepe.event_received", {
       request_id: requestId,
       event: body.event,
@@ -112,6 +113,7 @@ export async function POST(req: Request) {
 
     const result = await paymentService.handlePaymentWebhook("PHONEPE", headers, body, { requestId, webhookEventId: webhookEventId || undefined });
 
+    console.log(`[webhook.phonepe] Event processed successfully for order ${merchantOrderId}`);
     logger.metrics("webhook_processed", {
       request_id: requestId,
       merchant_order_id: merchantOrderId,
@@ -123,6 +125,7 @@ export async function POST(req: Request) {
   } catch (error: any) {
     statusCode = error.message?.includes("Invalid webhook payload") ? 200 : 500;
     
+    console.error(`[webhook.phonepe] ERROR processing order ${merchantOrderId}:`, error);
     logger.error("webhook.phonepe.processing_failed", {
       request_id: requestId,
       merchant_order_id: merchantOrderId,
@@ -147,7 +150,7 @@ export async function POST(req: Request) {
        return NextResponse.json({ success: true, status: "validation_ping_ignored" }, { status: 200 });
     }
 
-    return NextResponse.json(
+    return Response.json(
       { success: false, error: "Internal Server Error" },
       { status: 500 }
     );

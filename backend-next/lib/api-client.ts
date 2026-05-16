@@ -46,8 +46,9 @@ apiClient.interceptors.response.use(
       }
     }
     
-    const message = error.response?.data?.error?.message || error.message || "An unexpected error occurred";
-    const code = error.response?.data?.error?.code || "INTERNAL_ERROR";
+    const errorData = error.response?.data;
+    const message = errorData?.error?.message || (typeof errorData?.error === 'string' ? errorData.error : null) || error.message || "An unexpected error occurred";
+    const code = errorData?.error?.code || "INTERNAL_ERROR";
     
     return Promise.reject({ message, code, status: error.response?.status });
   }

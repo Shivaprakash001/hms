@@ -13,15 +13,25 @@ import { propertyService } from "@/lib/services/property-service";
 export async function PATCH(req: NextRequest) {
   const session = await getSession(req);
   if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
+    console.warn(`[owner.hostel.PATCH] Forbidden access attempt by ${session?.role} ${session?.sub}`);
     return apiError("Forbidden", "FORBIDDEN", 403);
   }
 
   try {
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
+    console.log(`[owner.hostel.PATCH] Updating hostel for owner ${session.sub}`, body);
+    
     const result = await propertyService.updateHostel(session.sub, body);
-    return apiResponse(result);
+    
+    console.log(`[owner.hostel.PATCH] Hostel updated for owner ${session.sub}`);
+    return apiResponse({
+      success: true,
+      data: result
+    });
   } catch (error: any) {
+    console.error("Detailed API Error [owner.hostel.PATCH]:", error);
     const msg = typeof error === "string" ? error : (error && typeof error.message === "string" ? error.message : String(error));
+    
     if (msg.startsWith("PLAN_LIMIT:")) {
       const code = msg.replace("PLAN_LIMIT:", "").trim();
       return apiError(code, code, 402);
@@ -32,6 +42,13 @@ export async function PATCH(req: NextRequest) {
       return apiError(msg.split(": ")[1] ?? msg, "FORBIDDEN", 403);
     if (msg.startsWith("VALIDATION"))
       return apiError(msg.split(": ")[1] ?? msg, "VALIDATION_ERROR", 400);
-    return apiError(msg || "Failed to update hostel details");
+    
+    return Response.json(
+      {
+        success: false,
+        error: "Internal Server Error"
+      },
+      { status: 500 }
+    );
   }
 }

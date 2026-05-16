@@ -35,13 +35,20 @@ const RATE_LIMIT_MAX       = 5;       // max confirms per window
 export async function POST(req: Request) {
   try {
     const user = await authService.getCurrentUser(req);
-    if (!user) return apiError("Unauthorized", "UNAUTHORIZED", 401);
+    if (!user) {
+      console.warn("[payments.manual-confirm] Unauthorized access attempt");
+      return apiError("Unauthorized", "UNAUTHORIZED", 401);
+    }
+    
     if (user.role !== "OWNER" && user.role !== "ADMIN") {
+      console.warn(`[payments.manual-confirm] Forbidden access attempt by ${user.role} ${user.id}`);
       return apiError("Only owners can confirm payments", "FORBIDDEN", 403);
     }
 
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const { attempt_id } = body;
+    
+    console.log(`[payments.manual-confirm] Confirming attempt ${attempt_id} for owner ${user.id}`, body);
 
     if (!attempt_id || typeof attempt_id !== "string") {
       return apiError("attempt_id is required", "VALIDATION_ERROR", 400);
@@ -52,6 +59,7 @@ export async function POST(req: Request) {
     const recent = await prisma.actionLog.count({
       where: { owner_id: user.id, action: "MANUAL_CONFIRM", created_at: { gte: windowStart } },
     });
+    
     if (recent >= RATE_LIMIT_MAX) {
       logger.warn("payments.manual_confirm.rate_limited", { owner_id: user.id });
       return apiError("Too many confirmation requests. Please wait a moment.", "RATE_LIMIT", 429);
@@ -78,7 +86,11 @@ export async function POST(req: Request) {
 
     // Idempotent: already finalized
     if (attempt.status === "SUCCESS") {
-      return NextResponse.json({ success: true, message: "Payment already confirmed", attempt });
+      return apiResponse({ 
+        success: true, 
+        message: "Payment already confirmed", 
+        attempt 
+      });
     }
 
     // 🔒 Status gate — only park-status attempts qualify
@@ -104,9 +116,6 @@ export async function POST(req: Request) {
       ip: clientIp,
     });
 
-    // source="MANUAL_CONFIRM" is the server-authoritative signal — derived inside
-    // finalizePaymentAttempt as `context.source === "MANUAL_CONFIRM"`.
-    // It is never read from user-supplied body, making spoofing structurally impossible.
     const finalized = await paymentService.finalizePaymentAttempt(
       attempt_id,
       "SUCCESS",
@@ -132,18 +141,28 @@ export async function POST(req: Request) {
       final_status: finalized?.status,
     });
 
-    return NextResponse.json({
+    console.log(`[payments.manual-confirm] Payment confirmed successfully for attempt ${attempt_id}`);
+    return apiResponse({
       success: true,
       message: "Payment confirmed. Rent obligation marked as paid.",
       attempt: finalized,
     });
   } catch (error: any) {
+    console.error("Detailed API Error [payments.manual-confirm]:", error);
     logger.error("payments.manual_confirm.failed", { error: error.message });
     const msg = String(error?.message ?? error);
+    
     if (msg.includes("FORBIDDEN"))   return apiError(msg, "FORBIDDEN", 403);
     if (msg.includes("NOT_FOUND"))   return apiError(msg, "NOT_FOUND", 404);
     if (msg.includes("BAD_REQUEST")) return apiError(msg, "BAD_REQUEST", 400);
     if (msg.includes("RATE_LIMIT"))  return apiError(msg, "RATE_LIMIT", 429);
-    return apiError(msg, "INTERNAL_ERROR", 500);
+    
+    return Response.json(
+      {
+        success: false,
+        error: "Internal Server Error"
+      },
+      { status: 500 }
+    );
   }
 }

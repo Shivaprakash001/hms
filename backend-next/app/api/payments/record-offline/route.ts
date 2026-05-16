@@ -39,20 +39,30 @@ export async function POST(req: Request) {
   try {
     // ── 1. Session auth ────────────────────────────────────────────────────────
     const user = await authService.getCurrentUser(req);
-    if (!user) return apiError("Unauthorized", "UNAUTHORIZED", 401);
+    if (!user) {
+      console.warn("[payments.record-offline] Unauthorized access attempt");
+      return apiError("Unauthorized", "UNAUTHORIZED", 401);
+    }
+    
     if (user.role !== "OWNER" && user.role !== "ADMIN") {
+      console.warn(`[payments.record-offline] Forbidden access attempt by ${user.role} ${user.id}`);
       return apiError("Only owners can record offline payments", "FORBIDDEN", 403);
     }
 
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const { identity_token, obligation_id, amount_paid, payment_method, reference_number, payment_date, note } = body;
     const hostelId = body.hostelId || body.hostel_id;
+    
+    console.log(`[payments.record-offline] Recording payment for owner ${user.id}, hostel ${hostelId}`, body);
+
     if (!hostelId) {
+      console.warn("[payments.record-offline] Missing hostelId context");
       return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
     }
 
     // ── 2 + 3. Identity token verification ────────────────────────────────────
     if (!identity_token || typeof identity_token !== "string") {
+      console.warn(`[payments.record-offline] Identity token missing for owner ${user.id}`);
       return apiError(
         "Identity verification required. Please confirm your password first.",
         "IDENTITY_REQUIRED",
@@ -62,6 +72,7 @@ export async function POST(req: Request) {
 
     const identity = await verifyIdentityToken(identity_token, IDENTITY_PURPOSE, IDENTITY_ACTION);
     if (!identity) {
+      console.warn(`[payments.record-offline] Identity token invalid/expired for owner ${user.id}`);
       return apiError(
         "Identity token is invalid or expired. Please re-confirm your password.",
         "IDENTITY_EXPIRED",
@@ -83,6 +94,7 @@ export async function POST(req: Request) {
     const recent = await prisma.actionLog.count({
       where: { owner_id: user.id, action: "OFFLINE_PAYMENT", created_at: { gte: windowStart } },
     });
+    
     if (recent >= RATE_LIMIT_MAX) {
       logger.warn("payments.record_offline.rate_limited", { owner_id: user.id });
       return apiError("Too many payment recordings. Please wait a moment.", "RATE_LIMIT", 429);
@@ -110,6 +122,7 @@ export async function POST(req: Request) {
       where: { id: obligation_id },
       select: { owner_id: true, hostel_id: true, status: true },
     });
+    
     if (!obligation) return apiError("Obligation not found", "NOT_FOUND", 404);
     if (obligation.owner_id !== user.owner_id && obligation.owner_id !== user.id) {
       logger.warn("payments.record_offline.cross_owner", {
@@ -125,7 +138,7 @@ export async function POST(req: Request) {
 
     // ── 6. Idempotency — already fully paid ───────────────────────────────────
     if (obligation.status === "PAID") {
-      return NextResponse.json({
+      return apiResponse({
         success: true,
         message: "Obligation is already fully paid.",
         idempotent: true,
@@ -152,6 +165,7 @@ export async function POST(req: Request) {
     const todayCount = await prisma.actionLog.count({
       where: { owner_id: user.id, action: "OFFLINE_PAYMENT", created_at: { gte: dayStart } },
     });
+    
     if (todayCount >= ANOMALY_DAILY_LIMIT) {
       logger.warn("payments.record_offline.anomaly", {
         owner_id: user.id,
@@ -163,13 +177,6 @@ export async function POST(req: Request) {
     }
 
     // ── 7 + 8. Atomic: consume identity token + write payment in ONE transaction ─
-    // recordOfflinePaymentWithToken:
-    //   1. UPDATE identity_tokens SET used=true WHERE jti AND used=false AND not expired
-    //   2. FOR UPDATE lock on obligation row
-    //   3. Validate remaining balance (over-payment → throws BAD_REQUEST)
-    //   4. INSERT payment with audit fields
-    //   5. UPDATE obligation status
-    // All-or-nothing — token stays unused if payment fails.
     const parsedDate = payment_date ? new Date(payment_date) : undefined;
 
     const result = await paymentService.recordOfflinePaymentWithToken(identity.jti, {
@@ -195,19 +202,29 @@ export async function POST(req: Request) {
       new_status: result.newStatus,
     });
 
-    return NextResponse.json({
+    console.log(`[payments.record-offline] Payment recorded successfully for obligation ${obligation_id}`);
+    return apiResponse({
       success: true,
       message: "Payment recorded successfully.",
       payment: result.payment,
       obligation_status: result.newStatus,
     });
   } catch (error: any) {
+    console.error("Detailed API Error [payments.record-offline]:", error);
     logger.error("payments.record_offline.failed", { error: error.message });
     const msg = String(error?.message ?? error);
+    
     if (msg.includes("NOT_FOUND"))      return apiError(msg, "NOT_FOUND", 404);
     if (msg.includes("BAD_REQUEST"))    return apiError(msg, "BAD_REQUEST", 400);
     if (msg.includes("FORBIDDEN"))      return apiError(msg, "FORBIDDEN", 403);
     if (msg.includes("UNAUTHORIZED"))   return apiError(msg, "UNAUTHORIZED", 401);
-    return apiError(msg, "INTERNAL_ERROR", 500);
+    
+    return Response.json(
+      {
+        success: false,
+        error: "Internal Server Error"
+      },
+      { status: 500 }
+    );
   }
 }

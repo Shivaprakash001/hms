@@ -9,9 +9,19 @@ const AuthContext = createContext(null);
 const normalizeRole = (role) => (role || '').toString().toLowerCase();
 const LOGIN_ERROR_MAP = {
     401: 'Incorrect email or password',
+    403: 'You do not have access to this account.',
     404: 'Account not found',
     429: 'Too many login attempts. Try again later.',
     500: 'Something went wrong. Please try again.',
+};
+
+const getApiErrorMessage = (error) => {
+    const data = error?.response?.data;
+    if (data?.error?.message) return data.error.message;
+    if (data?.message) return data.message;
+    if (typeof data?.detail === 'string') return data.detail;
+    if (data?.detail?.message) return data.detail.message;
+    return null;
 };
 
 const clearSessionScopedStorage = () => {
@@ -128,9 +138,8 @@ export const AuthProvider = ({ children }) => {
                 throw new Error('Unable to connect. Check your internet.');
             }
             const status = error.response?.status;
-            const detail = error.response?.data?.detail;
-            const fallback = typeof detail === 'object' ? detail.message : detail;
-            throw new Error(LOGIN_ERROR_MAP[status] || fallback || 'Something went wrong. Please try again.');
+            const serverMessage = getApiErrorMessage(error);
+            throw new Error(serverMessage || LOGIN_ERROR_MAP[status] || 'Something went wrong. Please try again.');
         }
     };
 
@@ -156,7 +165,7 @@ export const AuthProvider = ({ children }) => {
             return userData;
         } catch (error) {
             console.error("Google login failed:", error);
-            throw new Error(error.response?.data?.error?.message || error.response?.data?.detail || 'Google authentication failed');
+            throw new Error(getApiErrorMessage(error) || 'Google authentication failed');
         }
     };
 

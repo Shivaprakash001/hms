@@ -13,13 +13,19 @@ import { ChangePasswordSchema } from "@/lib/validators";
  */
 export async function POST(req: NextRequest) {
   const session = await getSession(req);
-  if (!session) return apiError("Unauthorized", "UNAUTHORIZED", 401);
+  if (!session) {
+    console.warn("[auth.change-password] Unauthorized access attempt");
+    return apiError("Unauthorized", "UNAUTHORIZED", 401);
+  }
 
   try {
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
+    console.log(`[auth.change-password] Attempting password change for user ${session.sub}`);
+    
     const validated = ChangePasswordSchema.safeParse(body);
 
     if (!validated.success) {
+      console.warn(`[auth.change-password] Validation failed for user ${session.sub}`);
       return apiError("Validation error", "VALIDATION_ERROR", 400);
     }
 
@@ -29,13 +35,26 @@ export async function POST(req: NextRequest) {
       validated.data.new_password
     );
 
-    return apiResponse(result);
+    console.log(`[auth.change-password] Password changed successfully for user ${session.sub}`);
+    return apiResponse({
+      success: true,
+      ...result
+    });
   } catch (error: any) {
+    console.error("Detailed API Error [auth.change-password]:", error);
     const msg = String(error?.message ?? error ?? "Password change failed");
+    
     if (msg.startsWith("UNAUTHORIZED"))
       return apiError(msg.split(": ")[1] ?? msg, "UNAUTHORIZED", 401);
     if (msg.startsWith("NOT_FOUND"))
       return apiError(msg.split(": ")[1] ?? msg, "NOT_FOUND", 404);
-    return apiError(msg || "Password change failed");
+    
+    return Response.json(
+      {
+        success: false,
+        error: "Internal Server Error"
+      },
+      { status: 500 }
+    );
   }
 }

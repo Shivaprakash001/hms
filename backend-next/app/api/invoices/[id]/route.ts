@@ -15,6 +15,17 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   try {
     const { id: paymentId } = params;
     
+    // Verify ownership before generation
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+      select: { owner_id: true }
+    });
+
+    if (!payment || payment.owner_id !== session.sub) {
+      console.warn(`[invoices.id.GET] Access denied for payment ${paymentId} to owner ${session.sub}`);
+      return apiError("Invoice not found or access denied", "NOT_FOUND", 404);
+    }
+
     // Generates or fetches cached PDF URL
     const result = await invoiceService.generateInvoicePDF(paymentId);
     

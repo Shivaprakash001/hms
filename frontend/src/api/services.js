@@ -15,14 +15,6 @@ export const authService = {
         const response = await api.post('/auth/register', data);
         return response.data;
     },
-    sendOtp: async (phone) => {
-        const response = await api.post('/auth/send-otp', { phone });
-        return response.data;
-    },
-    verifyOtp: async (phone, otp, action) => {
-        const response = await api.post('/auth/verify-otp', { phone, otp, action });
-        return response.data;
-    },
     changePassword: async (oldPassword, newPassword) => {
         const response = await api.post('/auth/change-password', {
             old_password: oldPassword,
@@ -279,10 +271,9 @@ export const tenantService = {
         const response = await api.patch('/tenants/me/profile', data);
         return response.data;
     },
-    completeMyProfile: async (data, aadhaarFile, profilePhotoFile = null) => {
+    completeMyProfile: async (data, profilePhotoFile = null) => {
         const formData = new FormData();
         formData.append('profile_data', JSON.stringify(data));
-        formData.append('aadhaar_file', aadhaarFile);
         if (profilePhotoFile) formData.append('profile_photo', profilePhotoFile);
         try {
             const response = await api.post('/tenants/me/complete-profile', formData, {
@@ -777,14 +768,6 @@ export const tenantDocumentService = {
         const response = await api.delete(`/tenants/${tenantId}/documents/${docId}`);
         return response.data;
     },
-    verify: async (tenantId, docId) => {
-        const response = await api.patch(`/tenants/${tenantId}/documents/${docId}/verify`);
-        return response.data;
-    },
-    reject: async (tenantId, docId, reason) => {
-        const response = await api.patch(`/tenants/${tenantId}/documents/${docId}/reject`, { reason });
-        return response.data;
-    }
 };
 
 // --- SSE Token Service ---

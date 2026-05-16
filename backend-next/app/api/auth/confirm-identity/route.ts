@@ -39,8 +39,13 @@ const FAIL_MAX       = 5;
 export async function POST(req: Request) {
   try {
     const user = await authService.getCurrentUser(req);
-    if (!user) return apiError("Unauthorized", "UNAUTHORIZED", 401);
+    if (!user) {
+      console.warn("[confirm-identity] Unauthorized access attempt");
+      return apiError("Unauthorized", "UNAUTHORIZED", 401);
+    }
+    
     if (user.role !== "OWNER" && user.role !== "ADMIN") {
+      console.warn(`[confirm-identity] Forbidden access attempt by ${user.role} ${user.id}`);
       return apiError("Only owners can perform this action", "FORBIDDEN", 403);
     }
 
@@ -49,6 +54,7 @@ export async function POST(req: Request) {
     const recentFails = await prisma.actionLog.count({
       where: { owner_id: user.id, action: "IDENTITY_FAIL", created_at: { gte: failWindowStart } },
     });
+    
     if (recentFails >= FAIL_MAX) {
       logger.warn("auth.confirm_identity.rate_limited", { user_id: user.id, recent_fails: recentFails });
       return apiError("Too many failed attempts. Please wait a minute before trying again.", "RATE_LIMIT", 429);
@@ -95,12 +101,21 @@ export async function POST(req: Request) {
     logger.info("auth.confirm_identity.issued", { user_id: user.id, jti });
 
     return NextResponse.json({
+      success: true,
       identity_token: identityToken,
       expires_in: 120,
       purpose: IDENTITY_PURPOSE,
     });
   } catch (error: any) {
+    console.error("Detailed API Error [confirm-identity]:", error);
     logger.error("auth.confirm_identity.error", { error: error.message });
-    return apiError("Identity confirmation failed", "INTERNAL_ERROR", 500);
+    
+    return Response.json(
+      {
+        success: false,
+        error: "Internal Server Error"
+      },
+      { status: 500 }
+    );
   }
 }

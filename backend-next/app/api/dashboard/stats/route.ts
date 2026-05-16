@@ -15,17 +15,35 @@ import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
 export async function GET(req: NextRequest) {
   const session = await getSession(req);
   if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
+    console.warn(`[dashboard.stats] Forbidden access attempt by user ${session?.sub}`);
     return apiError("Forbidden", "FORBIDDEN", 403);
   }
 
   try {
     const scope = resolveOwnerScope(session);
     const hostelId = req.nextUrl.searchParams.get("hostelId") || undefined;
+    
+    console.log(`[dashboard.stats] Fetching stats for owner ${scope.owner_id}, hostel ${hostelId}`);
+    
     await requireHostelBelongsToOwner(scope.owner_id, hostelId);
-    if (!hostelId) return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
+    if (!hostelId) {
+      console.warn("[dashboard.stats] Missing hostelId context");
+      return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
+    }
+    
     const stats = await dashboardService.getOwnerStats(scope.owner_id, hostelId);
-    return apiResponse(stats);
+    return apiResponse({
+      success: true,
+      data: stats
+    });
   } catch (error: any) {
-    return apiError(error.message || "Failed to fetch dashboard stats");
+    console.error("Detailed API Error [dashboard.stats]:", error);
+    return Response.json(
+      {
+        success: false,
+        error: error.message || "Internal Server Error"
+      },
+      { status: 500 }
+    );
   }
 }

@@ -90,14 +90,9 @@ export type HostelPolicy = {
     emergency_contact_required: boolean;
     required_profile_fields: string[];
     invite_expiry_hours: number;
-    verification_workflow: string;
     tenant_segment: string;
   };
-  documents: {
-    approval_required: boolean;
-    aadhaar_required: boolean;
-    required_types: string[];
-  };
+
   room_rules: {
     capacity_enforcement: string;
     allow_overbooking: boolean;
@@ -167,7 +162,7 @@ const VALID_DOMAINS = new Set([
   "receipts",
   "branding",
   "tenant_rules",
-  "documents",
+
   "room_rules",
   "automation",
   "dashboard",
@@ -259,7 +254,7 @@ export function normalizeHostelPolicy(hostel: any): HostelPolicy {
   const receipts = asObject(config.receipts);
   const branding = asObject(config.branding);
   const tenantRules = asObject(config.tenant_rules);
-  const documents = asObject(config.documents);
+
   const roomRules = asObject(config.room_rules);
   const automation = asObject(config.automation);
   const dashboard = asObject(config.dashboard);
@@ -361,14 +356,10 @@ export function normalizeHostelPolicy(hostel: any): HostelPolicy {
       emergency_contact_required: bool(tenantRules.emergency_contact_required, false),
       required_profile_fields: stringArray(tenantRules.required_profile_fields),
       invite_expiry_hours: boundedNumber(tenantRules.invite_expiry_hours, 48, 1, 720, "Invite expiry hours"),
-      verification_workflow: String(tenantRules.verification_workflow || "OWNER_REVIEW"),
+
       tenant_segment: String(tenantRules.tenant_segment || "MIXED"),
     },
-    documents: {
-      approval_required: bool(documents.approval_required ?? config.require_doc_approval, false),
-      aadhaar_required: bool(documents.aadhaar_required ?? config.require_aadhaar, false),
-      required_types: stringArray(documents.required_types),
-    },
+
     room_rules: {
       capacity_enforcement: String(roomRules.capacity_enforcement || "STRICT"),
       allow_overbooking: bool(roomRules.allow_overbooking, false),
@@ -468,8 +459,7 @@ export function toCompatibilityPreferences(policy: HostelPolicy): Record<string,
     receipt_format: policy.receipts.format,
     auto_email_receipt: policy.receipts.auto_email,
     receipt_footer: policy.receipts.footer,
-    require_doc_approval: policy.documents.approval_required,
-    require_aadhaar: policy.documents.aadhaar_required,
+
     allow_tenant_edits: policy.tenant_rules.allow_profile_edits,
     require_profile_photo_onboarding: policy.tenant_rules.profile_photo_required,
   };
@@ -549,10 +539,7 @@ export function compatibilityPreferencesToPolicyPatch(data: Record<string, any>)
       ...(data.auto_email_receipt !== undefined && { auto_email: data.auto_email_receipt }),
       ...(data.receipt_footer !== undefined && { footer: data.receipt_footer }),
     },
-    documents: {
-      ...(data.require_doc_approval !== undefined && { approval_required: data.require_doc_approval }),
-      ...(data.require_aadhaar !== undefined && { aadhaar_required: data.require_aadhaar }),
-    },
+
     tenant_rules: {
       ...(data.allow_tenant_edits !== undefined && { allow_profile_edits: data.allow_tenant_edits }),
       ...(data.require_profile_photo_onboarding !== undefined && { profile_photo_required: data.require_profile_photo_onboarding }),
@@ -598,7 +585,7 @@ function mergePolicy(current: HostelPolicy, patch: Record<string, any>): HostelP
     receipts: deepMerge(current.receipts, asObject(patch.receipts)),
     branding: deepMerge(current.branding, asObject(patch.branding)),
     tenant_rules: deepMerge(current.tenant_rules, asObject(patch.tenant_rules)),
-    documents: deepMerge(current.documents, asObject(patch.documents)),
+
     room_rules: deepMerge(current.room_rules, asObject(patch.room_rules)),
     automation: deepMerge(current.automation, asObject(patch.automation)),
     dashboard: deepMerge(current.dashboard, asObject(patch.dashboard)),
@@ -644,7 +631,7 @@ function policyToStorage(policy: HostelPolicy, existingConfig: Record<string, an
     receipts: policy.receipts,
     branding: policy.branding,
     tenant_rules: policy.tenant_rules,
-    documents: policy.documents,
+
     room_rules: policy.room_rules,
     automation: policy.automation,
     dashboard: policy.dashboard,

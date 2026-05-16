@@ -9,31 +9,40 @@ import { eventLog } from "@/lib/services/event-log-service";
 
 const HOSTEL_FIELDS = ["name", "phone", "address", "city", "state", "pincode", "upi_id", "gst_number"];
 
-function toApiError(error: any) {
-  const msg = String(error?.message || "Failed to update hostel");
-  if (msg.startsWith("FORBIDDEN")) return apiError(msg.split(":")[1]?.trim() || msg, "FORBIDDEN", 403);
-  if (msg.startsWith("VALIDATION")) return apiError(msg.split(":")[1]?.trim() || msg, "VALIDATION_ERROR", 400);
-  return apiError(msg, "ERROR", 500);
-}
-
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession(req);
+  if (!session) {
+    console.warn("[hostels.id.PATCH] Unauthorized access attempt");
+    return apiError("Unauthorized", "UNAUTHORIZED", 401);
+  }
+
   try {
     const scope = resolveOwnerScope(session);
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
+    
+    console.log(`[hostels.id.PATCH] Updating hostel ${params.id} for owner ${scope.owner_id}`, body);
+    
     const data: Record<string, any> = {};
     for (const key of HOSTEL_FIELDS) {
       if (body[key] !== undefined) data[key] = body[key];
     }
     if (body.hostel_name !== undefined) data.name = body.hostel_name;
     if (body.hostel_phone !== undefined) data.phone = body.hostel_phone;
-    if (Object.keys(data).length === 0) throw new Error("VALIDATION: No valid hostel fields to update");
+    
+    if (Object.keys(data).length === 0) {
+      console.warn("[hostels.id.PATCH] No valid fields to update", body);
+      return apiError("No valid hostel fields to update", "VALIDATION_ERROR", 400);
+    }
 
     const updated = await prisma.hostels.updateMany({
       where: { id: params.id, owner_id: scope.owner_id, is_active: true },
       data,
     });
-    if (updated.count !== 1) throw new Error("FORBIDDEN: Hostel is not owned by the authenticated owner");
+    
+    if (updated.count !== 1) {
+      console.warn(`[hostels.id.PATCH] Hostel ${params.id} not found or not owned by ${scope.owner_id}`);
+      return apiError("Hostel is not owned by the authenticated owner", "FORBIDDEN", 403);
+    }
 
     const hostel = await prisma.hostels.findFirst({
       where: { id: params.id, owner_id: scope.owner_id, is_active: true },
@@ -56,8 +65,24 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       changed_fields: Object.keys(data),
     });
 
-    return apiResponse({ hostel });
+    console.log(`[hostels.id.PATCH] Hostel ${params.id} updated successfully`);
+    return apiResponse({
+      success: true,
+      hostel
+    });
   } catch (error: any) {
-    return toApiError(error);
+    console.error(`Detailed API Error [hostels.id.PATCH] (${params.id}):`, error);
+    const msg = String(error?.message || "Failed to update hostel");
+    
+    if (msg.startsWith("FORBIDDEN")) return apiError(msg.split(":")[1]?.trim() || msg, "FORBIDDEN", 403);
+    if (msg.startsWith("VALIDATION")) return apiError(msg.split(":")[1]?.trim() || msg, "VALIDATION_ERROR", 400);
+    
+    return Response.json(
+      {
+        success: false,
+        error: "Internal Server Error"
+      },
+      { status: 500 }
+    );
   }
 }

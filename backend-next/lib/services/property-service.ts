@@ -205,10 +205,7 @@ export class PropertyService {
         ...(data.auto_email_receipt !== undefined && { auto_email: data.auto_email_receipt }),
         ...(data.receipt_footer !== undefined && { footer: data.receipt_footer }),
       };
-      policyPatch.documents = {
-        ...(data.require_doc_approval !== undefined && { approval_required: data.require_doc_approval }),
-        ...(data.require_aadhaar !== undefined && { aadhaar_required: data.require_aadhaar }),
-      };
+
       policyPatch.tenant_rules = {
         ...(data.allow_tenant_edits !== undefined && { allow_profile_edits: data.allow_tenant_edits }),
         ...(data.require_profile_photo_onboarding !== undefined && { profile_photo_required: data.require_profile_photo_onboarding }),

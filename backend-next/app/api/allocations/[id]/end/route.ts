@@ -29,7 +29,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return apiError("Forbidden", "FORBIDDEN", 403);
     }
 
-    const updated = await roomAllocationService.endAllocation(allocationId, endDate);
+    const updated = await roomAllocationService.endAllocation(allocationId, endDate, session.sub);
     
     return apiResponse(updated);
   } catch (error: any) {

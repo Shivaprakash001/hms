@@ -35,7 +35,6 @@ async function getEffectivePlan(ownerId: string) {
           multi_hostel: true,
           analytics: true,
           profile_photo: true,
-          document_verification: true,
           is_custom: true,
           can_generate_receipts: true,
           features: true,

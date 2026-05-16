@@ -18,6 +18,7 @@ import { assertHostelBelongsToOwner, requireHostelBelongsToOwner, scopedRoomWher
 export async function GET(req: NextRequest) {
   const session = await getSession(req);
   if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
+    console.warn(`[rooms.GET] Forbidden access attempt by ${session?.role} ${session?.sub}`);
     return apiError("Forbidden", "FORBIDDEN", 403);
   }
 
@@ -26,12 +27,21 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const grouped = searchParams.get("grouped") !== "false";
     const hostelId = searchParams.get("hostelId") || undefined;
+    
+    console.log(`[rooms.GET] Fetching rooms for owner ${scope.owner_id}, hostel ${hostelId}, grouped=${grouped}`);
+    
     await requireHostelBelongsToOwner(scope.owner_id, hostelId);
-    if (!hostelId) return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
+    if (!hostelId) {
+      console.warn("[rooms.GET] Missing hostelId context");
+      return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
+    }
 
     if (grouped) {
       const floors = await propertyService.getFloorsWithRooms(scope.owner_id, hostelId);
-      return apiResponse(floors);
+      return apiResponse({
+        success: true,
+        data: floors
+      });
     }
 
     // Flat list
@@ -39,23 +49,38 @@ export async function GET(req: NextRequest) {
       where: scopedRoomWhere({ owner_id: scope.owner_id, hostel_id: hostelId }, { is_active: true }),
       orderBy: { room_no: "asc" },
     });
-    return apiResponse(rooms);
+    
+    return apiResponse({
+      success: true,
+      data: rooms
+    });
   } catch (error: any) {
-    return apiError(error.message || "Failed to fetch rooms");
+    console.error("Detailed API Error [rooms.GET]:", error);
+    return Response.json(
+      {
+        success: false,
+        error: "Internal Server Error"
+      },
+      { status: 500 }
+    );
   }
 }
 
 export async function POST(req: NextRequest) {
   const session = await getSession(req);
   if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
+    console.warn(`[rooms.POST] Forbidden access attempt by ${session?.role} ${session?.sub}`);
     return apiError("Forbidden", "FORBIDDEN", 403);
   }
 
   try {
     const scope = resolveOwnerScope(session);
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
+    console.log(`[rooms.POST] Creating room for owner ${scope.owner_id}`, body);
+    
     const validated = RoomCreateSchema.safeParse(body);
     if (!validated.success) {
+      console.warn(`[rooms.POST] Validation failed for owner ${scope.owner_id}`);
       return apiError("Validation error", "VALIDATION_ERROR", 400);
     }
 
@@ -66,7 +91,9 @@ export async function POST(req: NextRequest) {
     } else {
       await requireHostelBelongsToOwner(scope.owner_id, hostelId);
     }
+    
     if (!hostel) {
+      console.warn(`[rooms.POST] Hostel context missing for owner ${scope.owner_id}`);
       return apiError("No hostel found. Please complete hostel setup first.", "NOT_FOUND", 404);
     }
 
@@ -74,7 +101,9 @@ export async function POST(req: NextRequest) {
     const existing = await prisma.rooms.findFirst({
       where: { hostel_id: hostel.id, room_no: validated.data.room_no, is_active: true },
     });
+    
     if (existing) {
+      console.warn(`[rooms.POST] Room ${validated.data.room_no} already exists in hostel ${hostel.id}`);
       return apiError(`Room ${validated.data.room_no} already exists`, "ALREADY_EXISTS", 409);
     }
 
@@ -89,8 +118,19 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return apiResponse(room, 201);
+    console.log(`[rooms.POST] Room created: ${room.id}`);
+    return apiResponse({
+      success: true,
+      data: room
+    }, 201);
   } catch (error: any) {
-    return apiError(error.message || "Failed to create room");
+    console.error("Detailed API Error [rooms.POST]:", error);
+    return Response.json(
+      {
+        success: false,
+        error: "Internal Server Error"
+      },
+      { status: 500 }
+    );
   }
 }

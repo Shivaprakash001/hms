@@ -14,7 +14,7 @@ const features = [
   },
   {
     title: "Tenant Management",
-    description: "Digital KYC and documents",
+    description: "Seamless tenant enrollment",
     icon: <Users className="w-6 h-6 text-blue-600" />,
     color: "bg-blue-50"
   },

@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../../context/AuthContext';
 import { tenantService } from '../../api/services';
-import DocumentUploadWidget from '../../components/TenantManagement/DocumentUploadWidget';
+
 import TenantScoreCard from '../../components/tenant/TenantScoreCard';
 
 const TenantProfile = () => {
@@ -113,13 +113,12 @@ const TenantProfile = () => {
         const hasType = formData.profile_type === 'work' 
             ? isFilled(formData.office_name) 
             : (isFilled(formData.college_name) || isFilled(formData.course) || isFilled(formData.roll_number));
-        const hasVerification = tenantInfo?.document_verified || (tenantInfo?.documents?.length > 0);
+
         const hasRoom = tenantInfo?.current_room;
 
         const stages = [
             { label: 'Basic Info', done: hasBasic },
             { label: 'Profile Type', done: hasType },
-            { label: 'Verification', done: hasVerification },
             { label: 'Room Assigned', done: hasRoom }
         ];
 
@@ -402,20 +401,7 @@ const TenantProfile = () => {
                     </button>
                 </section>
 
-                <section className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
-                    <div className="flex items-center gap-2 mb-3">
-                        <FileText size={16} className="text-indigo-500" />
-                        <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide">Documents</h3>
-                    </div>
-                    {tenantInfo?.id ? (
-                        <DocumentUploadWidget
-                            tenantId={tenantInfo.id}
-                            isOwner={false}
-                        />
-                    ) : (
-                        <p className="text-sm text-slate-400">No tenant record found.</p>
-                    )}
-                </section>
+
             </div>
         </div>
     );

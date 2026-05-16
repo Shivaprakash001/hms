@@ -14,7 +14,6 @@ type PlanRecord = {
   multi_hostel: boolean;
   analytics: boolean;
   profile_photo: boolean;
-  document_verification: boolean;
   is_custom: boolean;
 };
 
@@ -36,7 +35,6 @@ export class PlanEnforcementService {
             multi_hostel: true,
             analytics: true,
             profile_photo: true,
-            document_verification: true,
             is_custom: true,
           },
         },
@@ -68,7 +66,6 @@ export class PlanEnforcementService {
           multi_hostel: true,
           analytics: true,
           profile_photo: true,
-          document_verification: true,
           is_custom: true,
         },
       });
@@ -85,7 +82,6 @@ export class PlanEnforcementService {
         multi_hostel: true,
         analytics: true,
         profile_photo: true,
-        document_verification: true,
         is_custom: true,
       },
     });
@@ -142,41 +138,7 @@ export class PlanEnforcementService {
     return true;
   }
 
-  /**
-   * Returns true only when the owner's active plan has the given feature enabled.
-   * Returns false for FREE plan, expired subscriptions, or any DB error.
-   * Does NOT throw — use for conditional branching, not enforcement.
-   */
-  /**
-   * Gate document uploads by plan tier.
-   *   FREE    → nothing allowed
-   *   STARTER → PROFILE_PHOTO only
-   *   GROWTH+ → all KYC doc types
-   */
-  async assertDocumentUpload(ownerId: string, docType: string) {
-    let sub: any;
-    try {
-      sub = await this._getOwnerSubscription(ownerId);
-    } catch {
-      throw new Error("PLAN_LIMIT: DOCUMENT_UPLOAD_NOT_ALLOWED: Upgrade your plan to upload documents");
-    }
-    if (BLOCKED_STATUSES.includes(sub.status)) {
-      throw new Error(`FORBIDDEN: Account in ${sub.status} mode. Upgrade required`);
-    }
-    const plan = await this._resolvePlan(sub.plan_id);
 
-    if (docType === "PROFILE_PHOTO") {
-      if (!plan.profile_photo) {
-        throw new Error("PLAN_LIMIT: PROFILE_PHOTO_NOT_ALLOWED: Upgrade to Starter or higher to upload a profile photo");
-      }
-      return true;
-    }
-
-    if (!plan.document_verification) {
-      throw new Error("PLAN_LIMIT: DOCUMENT_VERIFICATION_NOT_ALLOWED: Upgrade to Growth or higher to upload KYC documents");
-    }
-    return true;
-  }
 
   async hasFeature(ownerId: string, feature: "automation" | "multi_hostel" | "analytics"): Promise<boolean> {
     try {
@@ -194,7 +156,7 @@ export class PlanEnforcementService {
     return this.hasFeature(ownerId, "automation");
   }
 
-  async assertFeature(ownerId: string, feature: "automation" | "multi_hostel" | "analytics" | "profile_photo" | "document_verification") {
+  async assertFeature(ownerId: string, feature: "automation" | "multi_hostel" | "analytics" | "profile_photo") {
     const sub = await this._getOwnerSubscription(ownerId);
     if (BLOCKED_STATUSES.includes(sub.status)) {
       throw new Error(`FORBIDDEN: Account in ${sub.status} mode. Upgrade required`);

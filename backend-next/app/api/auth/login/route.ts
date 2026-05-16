@@ -13,10 +13,13 @@ import { LoginSchema } from "@/lib/validators";
  */
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
+    console.log(`[auth.login] Attempting login for email: ${body?.email}`);
+    
     const validated = LoginSchema.safeParse(body);
     
     if (!validated.success) {
+      console.warn(`[auth.login] Validation failed for ${body?.email}`);
       return apiError("Validation error", "VALIDATION_ERROR", 400);
     }
 
@@ -26,7 +29,10 @@ export async function POST(req: NextRequest) {
     // We don't want to return the raw refresh token in the JSON response
     const { refresh_token, ...jsonResponse } = loginResult;
 
-    const response = NextResponse.json(jsonResponse, { status: 200 });
+    const response = NextResponse.json({
+      success: true,
+      ...jsonResponse
+    }, { status: 200 });
 
     const isProd = process.env.NODE_ENV === "production";
 
@@ -47,13 +53,17 @@ export async function POST(req: NextRequest) {
       path: "/",
     });
 
+    console.log(`[auth.login] Login successful for ${email}`);
     return response;
   } catch (error: any) {
+    console.error("Detailed API Error [auth.login]:", error);
+    const message = error?.message || "Login failed";
+
     if (
-      error?.message?.includes("DATABASE_URL") ||
-      error?.message?.includes("Error validating datasource") ||
-      error?.message?.includes("Authentication failed against database server") ||
-      error?.message?.includes("provided database credentials")
+      message.includes("DATABASE_URL") ||
+      message.includes("Error validating datasource") ||
+      message.includes("Authentication failed against database server") ||
+      message.includes("provided database credentials")
     ) {
       return apiError(
         "Server configuration error: the Vercel backend database connection is missing, invalid, or using incorrect credentials.",
@@ -61,8 +71,37 @@ export async function POST(req: NextRequest) {
         500
       );
     }
-    if (error.message.startsWith("UNAUTHORIZED")) return apiError(error.message.split(": ")[1], "UNAUTHORIZED", 401);
-    if (error.message.startsWith("FORBIDDEN")) return apiError(error.message.split(": ")[1], "FORBIDDEN", 403);
-    return apiError(error.message || "Login failed");
+    
+    if (message.startsWith("UNAUTHORIZED")) {
+      return apiError(message.split(": ")[1] || "Invalid credentials", "UNAUTHORIZED", 401);
+    }
+    if (message.startsWith("FORBIDDEN")) {
+      return apiError(message.split(": ")[1] || "Access denied", "FORBIDDEN", 403);
+    }
+    if (message.startsWith("PASSWORD_RESET_REQUIRED")) {
+      return apiError(
+        message.split(": ")[1] || "Password reset required",
+        "PASSWORD_RESET_REQUIRED",
+        403
+      );
+    }
+    if (message.startsWith("ONBOARDING_EXPIRED")) {
+      return apiError(
+        message.split(": ")[1] || "Onboarding credentials expired",
+        "ONBOARDING_EXPIRED",
+        403
+      );
+    }
+    if (message.startsWith("VALIDATION_ERROR")) {
+      return apiError(message.split(": ")[1] || "Validation failed", "VALIDATION_ERROR", 400);
+    }
+    
+    return Response.json(
+      {
+        success: false,
+        error: "Internal Server Error"
+      },
+      { status: 500 }
+    );
   }
 }

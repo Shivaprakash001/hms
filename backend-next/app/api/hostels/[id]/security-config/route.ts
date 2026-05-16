@@ -17,7 +17,6 @@ function toApiError(error: any) {
 function buildPolicyPatch(body: any) {
   return {
     tenant_rules: { allow_profile_edits: body.allow_tenant_edits },
-    documents: { approval_required: body.require_doc_approval },
     operations: { data_retention_months: body.data_retention_months },
   };
 }

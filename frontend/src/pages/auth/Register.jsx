@@ -8,7 +8,6 @@ import { setStoredStep } from '../../hooks/useOnboardingState';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import PhoneOtpVerification from '@/components/auth/PhoneOtpVerification';
 import { indianPhoneDigits, normalizeIndianPhone } from '@/lib/phone';
 
 const PW_RULES = [
@@ -25,7 +24,6 @@ const Register = () => {
     const navigate = useNavigate();
     const { loginWithGoogle } = useAuth();
     const [showPw, setShowPw] = useState(false);
-    const [phoneVerification, setPhoneVerification] = useState(null);
 
     const [formData, setFormData] = useState({
         name:            '',
@@ -63,7 +61,6 @@ const Register = () => {
         if (name === 'phone') {
             const cleaned = value.replace(/\D/g, '').slice(0, 10);
             setFormData(p => ({ ...p, [name]: cleaned }));
-            setPhoneVerification(null);
         } else {
             setFormData(p => ({ ...p, [name]: value }));
         }
@@ -73,7 +70,6 @@ const Register = () => {
         if (!formData.name.trim())  return 'Enter your full name';
         if (!formData.email.trim()) return 'Enter your email';
         if (!formData.phone.trim() || formData.phone.length !== 10) return 'Enter a valid 10-digit phone number';
-        if (!phoneVerification?.verificationToken || phoneVerification.phone !== normalizeIndianPhone(formData.phone)) return 'Please verify your mobile number with OTP';
         for (const rule of PW_RULES) {
             if (!rule.test(formData.password)) return `Password: ${rule.label.toLowerCase()} needed`;
         }
@@ -97,7 +93,6 @@ const Register = () => {
             await authService.register({
                 ...formData,
                 phone: normalizeIndianPhone(formData.phone),
-                verification_token: phoneVerification.verificationToken,
             });
             setSuccess(true);
             setStoredStep('ACCOUNT_CREATED');
@@ -207,12 +202,6 @@ const Register = () => {
                                 </div>
                             </div>
                         </div>
-
-                        <PhoneOtpVerification
-                            phone={formData.phone}
-                            onVerified={setPhoneVerification}
-                            disabled={isLoading}
-                        />
 
                         <div className="space-y-1.5">
                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Email Address</label>

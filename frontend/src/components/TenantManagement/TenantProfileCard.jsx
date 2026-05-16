@@ -6,7 +6,7 @@ import {
     Camera
 } from 'lucide-react';
 import { tenantService, tenantDocumentService } from '../../api/services';
-import DocumentUploadWidget from './DocumentUploadWidget';
+
 import { useAppPreferences } from '../../context/AppPreferencesContext';
 import { formatCurrency } from '../../utils/format';
 
@@ -15,7 +15,7 @@ const TABS = [
     { key: 'contact', label: 'Contact', icon: Phone },
     { key: 'education', label: 'Education/Work', icon: GraduationCap },
     { key: 'address', label: 'Address', icon: MapPin },
-    { key: 'documents', label: 'Documents', icon: FileText },
+
 ];
 
 export default function TenantProfileCard({ tenantId, onEdit, isOwner = true }) {
@@ -62,8 +62,7 @@ export default function TenantProfileCard({ tenantId, onEdit, isOwner = true }) 
     if (!tenant) return null;
 
     const profile = tenant.profile || tenant.profiles || {};
-    const docCount = documents.length;
-    const verifiedCount = documents.filter(d => d.verified).length;
+
 
     return (
         <div className="bg-white rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100 overflow-hidden">
@@ -101,15 +100,7 @@ export default function TenantProfileCard({ tenantId, onEdit, isOwner = true }) 
                                     <div className={`w-1.5 h-1.5 rounded-full ${tenant.status === 'ACTIVE' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
                                     {tenant.status}
                                 </span>
-                                {tenant.document_verified ? (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-bold border border-emerald-100">
-                                        <Shield size={9} /> Verified
-                                    </span>
-                                ) : docCount > 0 ? (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 text-[10px] font-bold border border-amber-100">
-                                        <AlertCircle size={9} /> {verifiedCount}/{docCount} Docs
-                                    </span>
-                                ) : null}
+
                             </div>
                         </div>
                     </div>
@@ -203,9 +194,7 @@ export default function TenantProfileCard({ tenantId, onEdit, isOwner = true }) 
                     </div>
                 )}
 
-                {activeTab === 'documents' && (
-                    <DocumentUploadWidget tenantId={tenantId} isOwner={isOwner} />
-                )}
+
             </div>
         </div>
     );

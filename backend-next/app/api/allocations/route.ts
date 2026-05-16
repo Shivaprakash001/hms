@@ -9,25 +9,44 @@ import { AllocationSchema } from "@/lib/validators";
 
 export async function GET(req: NextRequest) {
   const session = await getSession(req);
-  if (!session || session.role === "TENANT") return apiError("Forbidden", "FORBIDDEN", 403);
+  if (!session || session.role === "TENANT") {
+    console.warn(`[allocations.GET] Forbidden access attempt by ${session?.role} ${session?.sub}`);
+    return apiError("Forbidden", "FORBIDDEN", 403);
+  }
 
   try {
+    console.log(`[allocations.GET] Fetching active allocations for owner ${session.sub}`);
     const allocations = await roomAllocationService.getActiveAllocations(session.sub);
-    return apiResponse(allocations);
-  } catch (error) {
-    return apiError("Failed to fetch allocations");
+    return apiResponse({
+      success: true,
+      data: allocations
+    });
+  } catch (error: any) {
+    console.error("Detailed API Error [allocations.GET]:", error);
+    return Response.json(
+      {
+        success: false,
+        error: "Internal Server Error"
+      },
+      { status: 500 }
+    );
   }
 }
 
 export async function POST(req: NextRequest) {
   const session = await getSession(req);
-  if (!session || session.role === "TENANT") return apiError("Forbidden", "FORBIDDEN", 403);
+  if (!session || session.role === "TENANT") {
+    console.warn(`[allocations.POST] Forbidden access attempt by ${session?.role} ${session?.sub}`);
+    return apiError("Forbidden", "FORBIDDEN", 403);
+  }
 
   try {
-    const body = await req.json();
-    const validated = AllocationSchema.safeParse(body);
+    const body = await req.json().catch(() => ({}));
+    console.log(`[allocations.POST] Creating allocation for owner ${session.sub}`, body);
     
+    const validated = AllocationSchema.safeParse(body);
     if (!validated.success) {
+      console.warn(`[allocations.POST] Validation failed for owner ${session.sub}`);
       return apiError("Validation error", "VALIDATION_ERROR", 400);
     }
 
@@ -40,10 +59,23 @@ export async function POST(req: NextRequest) {
       ownerId: session.sub
     });
 
-    return apiResponse(allocation, 201);
+    console.log(`[allocations.POST] Allocation created: ${allocation.id}`);
+    return apiResponse({
+      success: true,
+      data: allocation
+    }, 201);
   } catch (error: any) {
+    console.error("Detailed API Error [allocations.POST]:", error);
+    
     if (error.message.startsWith("VALIDATION_ERROR")) return apiError(error.message.split(": ")[1], "VALIDATION_ERROR", 400);
     if (error.message.startsWith("RPC_ERROR")) return apiError(error.message.split(": ")[1], "RPC_ERROR", 500);
-    return apiError(error.message || "Allocation failed");
+    
+    return Response.json(
+      {
+        success: false,
+        error: "Internal Server Error"
+      },
+      { status: 500 }
+    );
   }
 }
