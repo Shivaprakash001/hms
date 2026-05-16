@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/db";
 import { authService } from "@/lib/services/auth-service";
-import { paymentService } from "@/lib/services/payment-service";
+import { paymentService } from "@/src/services/payments/payment-service";
 import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
 import { apiError } from "@/lib/utils/api-utils";
 

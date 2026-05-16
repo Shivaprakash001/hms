@@ -2,7 +2,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
-import { ApiResponse, ApiError } from "@/src/lib/api-response";
+import { ApiResponse } from "@/src/lib/api-response";
+import { ApiError } from "@/src/lib/api-error";
 import { rentGenerationService } from "@/src/services/payments/rent-generation-service";
 import { authService } from "@/lib/services/auth-service";
 import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
