@@ -338,7 +338,7 @@ const HostelWorkspaceLayout = () => {
         { name: 'Financials', icon: CreditCard, path: buildHostelPath('financials'), operational: true },
         { name: 'Expenses', icon: Receipt, path: buildHostelPath('expenses'), operational: true },
         { name: 'Move-Outs', icon: UserMinus, path: buildHostelPath('move-outs'), operational: true },
-        { name: 'Activity Log', icon: Clock, path: buildHostelPath('activity-log'), operational: true },
+        { name: 'Activity Log', icon: Clock, path: buildHostelPath('activities'), operational: true },
         { name: 'Settings', icon: Settings, path: buildHostelPath('settings'), operational: true },
     ];
 
