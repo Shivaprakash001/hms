@@ -218,6 +218,7 @@ export default function MoveOutManagement() {
                       <div className="flex justify-between"><span>Security Deposit</span><span className="font-medium">₹{detail.settlement.security_deposit_amount || 0}</span></div>
                       {Number(detail.settlement.advance_balance || 0) > 0 && <div className="flex justify-between"><span>Advance Balance</span><span className="font-medium">₹{detail.settlement.advance_balance}</span></div>}
                       <div className="flex justify-between text-red-600"><span>Pending Rent Dues</span><span className="font-medium">- ₹{detail.settlement.pending_rent_dues || 0}</span></div>
+                      {Number(detail.settlement.pending_late_fees || 0) > 0 && <div className="flex justify-between text-red-600"><span>Pending Late Fees</span><span className="font-medium">- ₹{detail.settlement.pending_late_fees}</span></div>}
                       {Number(detail.settlement.total_deductions || 0) > 0 && <div className="flex justify-between text-red-600"><span>Deductions</span><span className="font-medium">- ₹{detail.settlement.total_deductions}</span></div>}
                       <div className="pt-3 mt-3 border-t border-slate-200 flex justify-between font-bold text-slate-800">
                         <span>Net Settlement Amount</span>
