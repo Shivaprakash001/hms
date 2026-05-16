@@ -154,10 +154,10 @@ const checks: Check[] = [
   {
     id: "RENT_COLLECTION_NEVER_USES_HMS_PLATFORM_MERCHANT",
     severity: "CRITICAL",
-    description: "RentCollection attempts must never resolve to the HMS platform merchant context.",
+    description: "RentCollection attempts must never resolve to the HMS platform billing merchant context.",
     sql: `
       SELECT pa.id, pa.owner_id, pa.hostel_id,
-             'OWNER_HOSTEL merchant context' AS expected,
+             'HMS_TREASURY or OWNER_HOSTEL merchant context with hostel scope' AS expected,
              COALESCE(pa.merchant_context_type, 'null') AS actual,
              jsonb_build_object('status', pa.status, 'flow_type', pa.flow_type, 'merchant_context_id', pa.merchant_context_id, 'merchant_transaction_id', COALESCE(pa.merchant_transaction_id, pa.merchant_txn_id)) AS metadata
       FROM payment_attempts pa
@@ -172,23 +172,24 @@ const checks: Check[] = [
     `,
   },
   {
-    id: "PHONEPE_RENT_COLLECTION_QUARANTINED_UNTIL_OWNER_MERCHANTS",
+    id: "PHONEPE_RENT_COLLECTION_TREASURY_MODE_SCOPED",
     severity: "HIGH",
-    description: "PhonePe RentCollection checkout attempts are quarantined until direct owner merchant credentials/onboarding exist.",
+    description: "PhonePe RentCollection checkout attempts must use HMS treasury mode with explicit owner and hostel scope.",
     sql: `
       SELECT pa.id, pa.owner_id, pa.hostel_id,
-             'no active PhonePe RentCollection hosted checkout' AS expected,
-             CONCAT(pa.status, ', checkout=', CASE WHEN pa.checkout_url IS NULL THEN 'none' ELSE 'present' END) AS actual,
-             jsonb_build_object('flow_type', pa.flow_type, 'merchant_context_type', pa.merchant_context_type, 'provider_order_id', pa.provider_order_id, 'merchant_transaction_id', COALESCE(pa.merchant_transaction_id, pa.merchant_txn_id)) AS metadata
+             'HMS_TREASURY merchant context, HOSTEL scope, non-null owner_id and hostel_id' AS expected,
+             CONCAT('context=', COALESCE(pa.merchant_context_type, 'null'), ', scope=', COALESCE(pa.scope_type, 'null')) AS actual,
+             jsonb_build_object('flow_type', pa.flow_type, 'provider_order_id', pa.provider_order_id, 'merchant_transaction_id', COALESCE(pa.merchant_transaction_id, pa.merchant_txn_id), 'checkout_present', pa.checkout_url IS NOT NULL) AS metadata
       FROM payment_attempts pa
       WHERE COALESCE(pa.payment_domain, 'RENT_COLLECTION') = 'RENT_COLLECTION'
         AND COALESCE(pa.flow_type, CASE WHEN pa.payment_type = 'ADVANCE' THEN 'ADVANCE' ELSE 'RENT' END) IN ('RENT', 'ADVANCE')
         AND pa.provider = 'PHONEPE'
         AND pa.status IN ('CREATED', 'PENDING', 'PENDING_VERIFICATION', 'PROCESSING', 'SUCCESS')
         AND (
-          pa.checkout_url IS NOT NULL
-          OR pa.provider_order_id IS NOT NULL
-          OR pa.gateway_txn_id IS NOT NULL
+          pa.merchant_context_type IS DISTINCT FROM 'HMS_TREASURY'
+          OR pa.scope_type IS DISTINCT FROM 'HOSTEL'
+          OR pa.owner_id IS NULL
+          OR pa.hostel_id IS NULL
         )
       LIMIT 1000
     `,

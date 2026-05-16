@@ -1,6 +1,5 @@
 import { prisma } from "../../db";
 import { PAYMENT_DOMAIN, PAYMENT_FLOW, PAYMENT_SCOPE, MERCHANT_CONTEXT } from "./financial-domain";
-import { paymentOperationalAnomalyService } from "../payment-operational-anomaly-service";
 
 type MaybeHostelId = string | null;
 
@@ -71,30 +70,38 @@ export async function getProviderContext(params: {
     throw new Error(`UNSUPPORTED_RENT_COLLECTION_FLOW: ${flowType}`);
   }
 
-  if (!hostel.upi_id) {
-    throw new Error("CONFIG_ERROR: Owner UPI ID is not configured. Please set your UPI ID in hostel settings.");
+  if ([PAYMENT_FLOW.RENT, PAYMENT_FLOW.ADVANCE].includes(flowType as any)) {
+    if (!process.env.PHONEPE_CLIENT_ID || !process.env.PHONEPE_CLIENT_SECRET) {
+      throw new Error("CONFIG_ERROR: HMS treasury PhonePe credentials are not configured");
+    }
+    return {
+      provider: "PHONEPE",
+      payment_domain: PAYMENT_DOMAIN.RENT_COLLECTION,
+      flow_type: flowType,
+      scope_type: PAYMENT_SCOPE.HOSTEL,
+      merchant_context_type: MERCHANT_CONTEXT.HMS_TREASURY,
+      merchant_context_id: MERCHANT_CONTEXT.HMS_TREASURY,
+      operational_owner_id: operationalOwnerId,
+      financial_owner_id: financialOwnerId || operationalOwnerId,
+      hostel_id: hostel.id,
+      config: {
+        clientId: process.env.PHONEPE_CLIENT_ID || "",
+        clientSecret: process.env.PHONEPE_CLIENT_SECRET || "",
+        clientVersion: process.env.PHONEPE_CLIENT_VERSION || "1",
+        merchantId: process.env.PHONEPE_MERCHANT_ID || "",
+        saltKey: process.env.PHONEPE_SALT_KEY || "",
+        saltIndex: process.env.PHONEPE_SALT_INDEX || "",
+        environment: process.env.PHONEPE_ENV || "SANDBOX",
+        callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL || ""}/api/webhooks/payments/phonepe`,
+        treasuryMode: true,
+        hostelId: hostel.id,
+        operationalOwnerId,
+      },
+    };
   }
 
-  if ([PAYMENT_FLOW.RENT, PAYMENT_FLOW.ADVANCE].includes(flowType as any)) {
-    await paymentOperationalAnomalyService.create({
-      anomalyType: "RENT_COLLECTION_PLATFORM_MERCHANT_BLOCKED",
-      severity: "CRITICAL",
-      paymentDomain: PAYMENT_DOMAIN.RENT_COLLECTION,
-      flowType,
-      operationalOwnerId,
-      financialOwnerId: financialOwnerId || operationalOwnerId,
-      hostelId: hostel.id,
-      metadata: {
-        reason: "RentCollection PhonePe checkout is disabled because owner merchant credentials/onboarding are not implemented. HMS platform merchant must never collect tenant rent.",
-        merchant_context_type: MERCHANT_CONTEXT.OWNER_HOSTEL,
-        merchant_context_id: hostel.id,
-        hostel_phonepe_merchant_id_present: Boolean((hostel as any).phonepe_merchant_id),
-        owner_upi_id_present: Boolean(hostel.upi_id),
-      },
-    });
-    throw new Error(
-      "CONFIG_ERROR: Online PhonePe rent collection is disabled until owner merchant onboarding is implemented. Use manual UPI/reference collection for tenant rent."
-    );
+  if (!hostel.upi_id) {
+    throw new Error("CONFIG_ERROR: Owner UPI ID is not configured. Please set your UPI ID in hostel settings.");
   }
 
   return {

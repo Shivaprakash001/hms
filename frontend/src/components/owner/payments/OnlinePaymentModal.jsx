@@ -134,10 +134,10 @@ const OnlinePaymentModal = ({ isOpen, onClose, obligation, onSettled }) => {
 
                             {!attempt ? (
                                 <div className="space-y-4">
-                                    <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                                        <AlertCircle size={18} className="mt-0.5 shrink-0" />
+                                    <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                                        <Smartphone size={18} className="mt-0.5 shrink-0" />
                                         <span>
-                                            PhonePe rent checkout is paused until owner merchant onboarding is available. Record rent through offline/manual collection for now.
+                                            This opens HMS treasury checkout. Once paid, the owner settlement ledger is credited for this hostel.
                                         </span>
                                     </div>
 
@@ -150,11 +150,12 @@ const OnlinePaymentModal = ({ isOpen, onClose, obligation, onSettled }) => {
 
                                     <button
                                         type="button"
-                                        disabled
-                                        className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-2xl bg-slate-300 px-4 py-4 font-bold text-white"
+                                        onClick={handleCreateIntent}
+                                        disabled={loading}
+                                        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-4 py-4 font-bold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                                     >
-                                        <Smartphone size={18} />
-                                        PhonePe rent checkout paused
+                                        {loading ? <Loader2 size={18} className="animate-spin" /> : <Smartphone size={18} />}
+                                        {loading ? 'Starting checkout...' : 'Start PhonePe Checkout'}
                                     </button>
                                 </div>
                             ) : (
