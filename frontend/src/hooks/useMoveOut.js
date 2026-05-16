@@ -10,8 +10,8 @@ export function useMoveOutTimeline() {
     try {
       setLoading(true);
       setError(null);
-      const res = await api.get('/move-out/timeline');
-      setData(res.data?.data || null);
+      const res = await api.get('/move-out/timeline', { params: { _t: Date.now() } });
+      setData(res.data?.data || res.data || null);
     } catch (e) {
       setError(e.response?.data?.error?.message || 'Failed to load');
     } finally {
