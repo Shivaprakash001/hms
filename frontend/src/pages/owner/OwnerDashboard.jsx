@@ -7,9 +7,10 @@ import {
     AlertTriangle, X, Bell, Users, BedDouble, ArrowUpRight,
     Home, BarChart2, Zap, RefreshCw, ShieldAlert, TrendingUp,
     TrendingDown, ChevronRight, Target, Activity, Wallet,
-    CheckCircle2, Clock, LayoutDashboard, Sparkles, ArrowRight
+    CheckCircle2, Clock, LayoutDashboard, Sparkles, ArrowRight,
+    CreditCard, Loader2, Search
 } from 'lucide-react';
-import { reminderService } from '../../api/services';
+import { paymentService, reminderService, tenantService } from '../../api/services';
 import { useAppPreferences } from '../../context/AppPreferencesContext';
 import { formatCurrency } from '../../utils/format';
 import { useCashflow, useTenantAnalytics, useFunnelAnalytics, useOperationsAnalytics, useAddonUsage } from '../../hooks/useAnalytics';
@@ -43,6 +44,7 @@ const OwnerDashboard = () => {
     const { preferences } = useAppPreferences();
     const [tab, setTab]           = useState('cashflow');
     const [dismissed, setDismissed] = useState(false);
+    const [showTestPayment, setShowTestPayment] = useState(false);
 
     // ── Milestone notifications (for FirstSuccessMoment) ─────────────────────
     const [milestoneNotifs, setMilestoneNotifs] = useState([]);
@@ -112,13 +114,19 @@ const OwnerDashboard = () => {
             
             <div className="px-4 pt-4 sm:pt-6 space-y-6">
                 <AnimatePresence mode="wait">
-                    {tab === 'cashflow'    && <motion.div key="cf" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}><S1_Cashflow   cfStats={cfStats} cfSeverity={cf?.severity} cfInsights={cf?.insights ?? []} preferences={preferences} navigate={navigate} opPath={opPath} /></motion.div>}
+                    {tab === 'cashflow'    && <motion.div key="cf" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}><S1_Cashflow   cfStats={cfStats} cfSeverity={cf?.severity} cfInsights={cf?.insights ?? []} preferences={preferences} navigate={navigate} opPath={opPath} onOpenTestPayment={() => setShowTestPayment(true)} /></motion.div>}
                     {tab === 'tenants'     && <motion.div key="ti" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}><S2_Tenants    data={ti?.data}   severity={ti?.severity}   insights={ti?.insights ?? []}  loading={tiLoading} preferences={preferences} navigate={navigate} opPath={opPath} /></motion.div>}
                     {tab === 'funnel'      && <motion.div key="fn" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}><S3_Funnel     data={fn?.data}   severity={fn?.severity}   insights={fn?.insights ?? []}  loading={fnLoading} preferences={preferences} navigate={navigate} opPath={opPath} /></motion.div>}
                     {tab === 'operations'  && <motion.div key="op" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}><S4_Operations data={op?.data}   severity={op?.severity}   insights={op?.insights ?? []}  loading={opLoading} preferences={preferences} navigate={navigate} opPath={opPath} /></motion.div>}
                 </AnimatePresence>
             </div>
             <TabBar active={tab} onChange={setTab} badge={cfStats.overdueCount} />
+            <TestPaymentModal
+                isOpen={showTestPayment}
+                onClose={() => setShowTestPayment(false)}
+                hostelId={hostelId}
+                preferences={preferences}
+            />
         </div>
     );
 };
@@ -201,6 +209,214 @@ const TabSkeleton = () => (
     </div>
 );
 
+const TestPaymentModal = ({ isOpen, onClose, hostelId, preferences }) => {
+    const [tenants, setTenants] = useState([]);
+    const [loadingTenants, setLoadingTenants] = useState(false);
+    const [query, setQuery] = useState('');
+    const [selectedTenantId, setSelectedTenantId] = useState('');
+    const [amount, setAmount] = useState('1');
+    const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        if (!isOpen || !hostelId) return;
+        let active = true;
+        setLoadingTenants(true);
+        setError('');
+        tenantService.getAll(hostelId, { limit: 200 })
+            .then((response) => {
+                if (!active) return;
+                const rows = Array.isArray(response) ? response : (response?.tenants || response?.data?.tenants || []);
+                setTenants(rows);
+                const firstActive = rows.find((tenant) => !['LEFT', 'CANCELLED', 'EXPIRED'].includes(tenant.status));
+                setSelectedTenantId(firstActive?.id || rows[0]?.id || '');
+            })
+            .catch((tenantError) => {
+                if (!active) return;
+                setError(tenantError?.response?.data?.detail?.message || tenantError?.response?.data?.detail || 'Could not load tenants for this hostel.');
+            })
+            .finally(() => active && setLoadingTenants(false));
+        return () => { active = false; };
+    }, [hostelId, isOpen]);
+
+    useEffect(() => {
+        if (!isOpen) {
+            setQuery('');
+            setAmount('1');
+            setError('');
+            setSubmitting(false);
+        }
+    }, [isOpen]);
+
+    const tenantLabel = (tenant) => {
+        const name = tenant.profile?.name || tenant.profiles?.name || tenant.name || 'Tenant';
+        const email = tenant.profile?.email || tenant.profiles?.email || tenant.email || '';
+        const room = tenant.allocations?.[0]?.room?.room_no || tenant.room_allocations?.[0]?.room?.room_no || 'N/A';
+        return { name, email, room };
+    };
+
+    const filteredTenants = useMemo(() => {
+        const term = query.trim().toLowerCase();
+        if (!term) return tenants;
+        return tenants.filter((tenant) => {
+            const label = tenantLabel(tenant);
+            return `${label.name} ${label.email} ${label.room}`.toLowerCase().includes(term);
+        });
+    }, [query, tenants]);
+
+    const selectedTenant = tenants.find((tenant) => tenant.id === selectedTenantId);
+    const selectedLabel = selectedTenant ? tenantLabel(selectedTenant) : null;
+    const numericAmount = Number(amount);
+
+    const startTestPayment = async () => {
+        if (!selectedTenantId) {
+            setError('Select a tenant first.');
+            return;
+        }
+        if (!Number.isFinite(numericAmount) || numericAmount < 1 || numericAmount > 100) {
+            setError('Use a test amount between ₹1 and ₹100.');
+            return;
+        }
+
+        setSubmitting(true);
+        setError('');
+        try {
+            const result = await paymentService.createTestIntent({
+                tenant_id: selectedTenantId,
+                hostelId,
+                amount: numericAmount,
+            });
+            const attempt = result?.attempt || result;
+            if (attempt?.checkout_url) {
+                localStorage.setItem('lastPaymentAttemptId', attempt.id);
+                localStorage.setItem('lastPaymentMerchantTxnId', attempt.merchant_txn_id || attempt.merchant_transaction_id || '');
+                sessionStorage.setItem('lastPaymentAttemptId', attempt.id);
+                window.location.href = attempt.checkout_url;
+                return;
+            }
+            setError('The test due was created, but the provider did not return a checkout URL.');
+        } catch (intentError) {
+            setError(
+                intentError?.response?.data?.detail?.message
+                || intentError?.response?.data?.detail
+                || intentError?.response?.data?.error?.message
+                || 'Could not start the test payment.'
+            );
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[80]">
+            <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={onClose} />
+            <div className="absolute inset-0 flex items-end justify-center p-3 sm:items-center sm:p-6">
+                <div className="w-full max-w-2xl rounded-[2rem] bg-white shadow-2xl">
+                    <div className="flex items-start justify-between border-b border-slate-100 px-5 py-5 sm:px-6">
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-600">Treasury test checkout</p>
+                            <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950">Test a tenant payment</h2>
+                            <p className="mt-1 text-sm text-slate-500">Create a small test due for any tenant and open the real PhonePe checkout.</p>
+                        </div>
+                        <button onClick={onClose} className="rounded-2xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+                            <X size={18} />
+                        </button>
+                    </div>
+
+                    <div className="space-y-4 p-5 sm:p-6">
+                        <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+                            This is owner-only and creates a scoped test charge. Payment still goes through HMS treasury, webhook verification, receipt, and settlement ledger.
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-[1fr_140px]">
+                            <label className="block">
+                                <span className="mb-2 block text-xs font-black uppercase tracking-widest text-slate-400">Search tenant</span>
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
+                                    <input
+                                        value={query}
+                                        onChange={(event) => setQuery(event.target.value)}
+                                        placeholder="Name, email, room"
+                                        className="w-full rounded-2xl border border-slate-200 py-3 pl-10 pr-4 text-sm font-semibold outline-none focus:border-emerald-400"
+                                    />
+                                </div>
+                            </label>
+                            <label className="block">
+                                <span className="mb-2 block text-xs font-black uppercase tracking-widest text-slate-400">Amount</span>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    max="100"
+                                    step="1"
+                                    value={amount}
+                                    onChange={(event) => setAmount(event.target.value)}
+                                    className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-black outline-none focus:border-emerald-400"
+                                />
+                            </label>
+                        </div>
+
+                        <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+                            {loadingTenants ? (
+                                <div className="flex items-center justify-center gap-2 rounded-2xl border border-slate-100 bg-slate-50 py-8 text-sm font-bold text-slate-500">
+                                    <Loader2 size={17} className="animate-spin" />
+                                    Loading tenants
+                                </div>
+                            ) : filteredTenants.length === 0 ? (
+                                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5 text-sm font-semibold text-slate-500">No tenant matches this search.</div>
+                            ) : filteredTenants.map((tenant) => {
+                                const label = tenantLabel(tenant);
+                                const active = tenant.id === selectedTenantId;
+                                return (
+                                    <button
+                                        key={tenant.id}
+                                        type="button"
+                                        onClick={() => setSelectedTenantId(tenant.id)}
+                                        className={`flex w-full items-center justify-between gap-3 rounded-2xl border p-4 text-left transition-all ${active ? 'border-emerald-300 bg-emerald-50' : 'border-slate-100 bg-white hover:bg-slate-50'}`}
+                                    >
+                                        <div className="min-w-0">
+                                            <p className="truncate text-sm font-black text-slate-950">{label.name}</p>
+                                            <p className="truncate text-xs font-semibold text-slate-500">{label.email || 'No email'} · Room {label.room}</p>
+                                        </div>
+                                        <span className={`shrink-0 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${active ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                                            {active ? 'Selected' : tenant.status}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        {selectedLabel && (
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                                <p className="text-xs font-black uppercase tracking-widest text-slate-400">Checkout will be created for</p>
+                                <p className="mt-1 text-sm font-black text-slate-950">{selectedLabel.name} · Room {selectedLabel.room}</p>
+                                <p className="text-sm text-slate-500">{formatCurrency(numericAmount || 0, preferences)} test charge</p>
+                            </div>
+                        )}
+
+                        {error && (
+                            <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">
+                                {error}
+                            </div>
+                        )}
+
+                        <button
+                            type="button"
+                            onClick={startTestPayment}
+                            disabled={submitting || loadingTenants || !selectedTenantId}
+                            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-4 text-sm font-black text-white transition-all hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                        >
+                            {submitting ? <Loader2 size={18} className="animate-spin" /> : <CreditCard size={18} />}
+                            {submitting ? 'Starting checkout...' : 'Create test due and open checkout'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const InsightStrip = ({ insights, severity }) => {
     if (!insights?.length) return null;
     const theme = severity === 'HIGH' ? 'bg-rose-50 border-rose-100 text-rose-700'
@@ -225,7 +441,7 @@ const InsightStrip = ({ insights, severity }) => {
 };
 
 // ─── screen 1: cashflow ───────────────────────────────────────────────────────
-const S1_Cashflow = ({ cfStats, cfSeverity, cfInsights, preferences, navigate, opPath }) => {
+const S1_Cashflow = ({ cfStats, cfSeverity, cfInsights, preferences, navigate, opPath, onOpenTestPayment }) => {
     const isNewOwner = cfStats.expected === 0 && cfStats.topDefaulters.length === 0;
     if (isNewOwner) return <SmartDashboardGuidance />;
 
@@ -244,6 +460,10 @@ const S1_Cashflow = ({ cfStats, cfSeverity, cfInsights, preferences, navigate, o
                     <h1 className="text-4xl font-black text-slate-900 tracking-tighter">Overview</h1>
                 </div>
                 <div className="flex gap-2">
+                    <button onClick={onOpenTestPayment} className="inline-flex items-center gap-2 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-xs font-black uppercase tracking-widest text-emerald-700 shadow-sm transition-all hover:bg-emerald-100 active:scale-95">
+                        <CreditCard size={16} />
+                        Test Payment
+                    </button>
                     <button onClick={() => navigate(opPath('payments'))} className="p-3 bg-white rounded-2xl border border-slate-100 text-slate-400 hover:text-slate-900 shadow-sm transition-all active:scale-95">
                         <ArrowUpRight size={20} />
                     </button>

@@ -554,6 +554,10 @@ export const paymentService = {
         const response = await api.post('/payments/create-intent', data);
         return response.data;
     },
+    createTestIntent: async (data) => {
+        const response = await api.post('/payments/test-intent', data);
+        return response.data;
+    },
     getAttempt: async (attemptId) => {
         const response = await api.get(`/payments/attempts/${attemptId}`);
         return response.data;

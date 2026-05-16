@@ -745,12 +745,12 @@ export class PaymentService {
   async createPaymentIntent(obligationId: string, amount: number | null, userId: string, tenantId?: string) {
     const obligation = await prisma.rent_obligations.findUnique({
       where: { id: obligationId },
-      include: { tenant: { include: { profile: true } } }
+      include: { tenants: { include: { profiles: true } } }
     });
 
     if (!obligation) throw new Error("NOT_FOUND: Obligation not found");
     const hostelId = requireFinancialHostelId(obligation.hostel_id, "payment intent");
-    assertSameFinancialHostel("tenant", obligation.tenant, "rent obligation", obligation);
+    assertSameFinancialHostel("tenant", (obligation as any).tenants, "rent obligation", obligation);
     if (tenantId && obligation.tenant_id !== tenantId) {
       throw new Error("FORBIDDEN: You can only pay your own obligations");
     }
@@ -844,6 +844,7 @@ export class PaymentService {
 
     const attempt = await prisma.paymentAttempt.create({
       data: {
+        id: crypto.randomUUID(),
         obligation_id: obligationId,
         tenant_id: obligation.tenant_id,
         owner_id: obligation.owner_id || "",
@@ -876,9 +877,9 @@ export class PaymentService {
       const result = await instance.createIntent({
         amount: validationAmount,
         merchant_txn_id: merchantTxnId,
-        tenant_name: obligation.tenant.profile.name,
-        tenant_email: obligation.tenant.profile.email,
-        tenant_phone: obligation.tenant.profile.phone || "",
+        tenant_name: (obligation as any).tenants?.profiles?.name || "Tenant",
+        tenant_email: (obligation as any).tenants?.profiles?.email || "",
+        tenant_phone: (obligation as any).tenants?.profiles?.phone || "",
         metadata: {
           obligation_id: obligationId,
           tenant_id: obligation.tenant_id,
@@ -927,11 +928,16 @@ export class PaymentService {
     }
   }
 
-  async createMultiObligationPaymentIntent(obligationIds: string[], userId: string, tenantId?: string) {
+  async createMultiObligationPaymentIntent(
+    obligationIds: string[],
+    userId: string,
+    tenantId?: string,
+    options: { bypassCollectionPolicy?: boolean; source?: string } = {}
+  ) {
     // ── 1. INITIAL VALIDATION (outside tx — fast-path rejects, no locks needed) ──
     const obligations = await prisma.rent_obligations.findMany({
       where: { id: { in: obligationIds } },
-      include: { tenant: { include: { profile: true } } }
+      include: { tenants: { include: { profiles: true } } }
     });
 
     if (obligations.length === 0) {
@@ -965,7 +971,7 @@ export class PaymentService {
     const hostelId = requireFinancialHostelId(hostelIds[0], "multi-obligation payment intent");
     for (const obligation of obligations) {
       assertScopedEntityHostel("rent obligation", obligation, hostelId);
-      assertSameFinancialHostel("tenant", obligation.tenant, "rent obligation", obligation);
+      assertSameFinancialHostel("tenant", (obligation as any).tenants, "rent obligation", obligation);
     }
 
     const ownerId = obligations[0].owner_id || "";
@@ -985,7 +991,7 @@ export class PaymentService {
     // ── 2. PAYMENT RULES — partial payment enforcement ──
     // Rule: if partial payments are disabled, tenant must cover ALL outstanding obligations,
     // not just a selected subset. Compare against the live DB count, not the selection.
-    if (!prefs.allow_partial_payments) {
+    if (!options.bypassCollectionPolicy && !prefs.allow_partial_payments) {
       const tenantTotalOutstanding = await prisma.rent_obligations.count({
         where: {
           tenant_id: singleTenantId,
@@ -1064,7 +1070,7 @@ export class PaymentService {
 
       const totalAmount = totalAmountPaisa / 100;
       const minAmountPaisa = Math.round(prefs.min_payment_amount * 100);
-      if (totalAmountPaisa < minAmountPaisa) {
+      if (!options.bypassCollectionPolicy && totalAmountPaisa < minAmountPaisa) {
         throw new Error(`BAD_REQUEST: Minimum payment amount allowed is ${formatCurrency(prefs.min_payment_amount)}`);
       }
 
@@ -1131,6 +1137,7 @@ export class PaymentService {
 
       const newAttempt = await tx.paymentAttempt.create({
         data: {
+          id: crypto.randomUUID(),
           tenant_id: singleTenantId,
           owner_id: ownerId,
           provider,
@@ -1145,6 +1152,7 @@ export class PaymentService {
           merchant_context_type: providerContext.merchant_context_type,
           merchant_context_id: providerContext.merchant_context_id,
           settlement_status: SETTLEMENT_STATUS.NOT_SETTLED,
+          raw_create_response: options.source ? { source: options.source, bypass_collection_policy: Boolean(options.bypassCollectionPolicy) } : undefined,
         }
       });
       await paymentStatusEventService.append(tx, {
@@ -1160,6 +1168,7 @@ export class PaymentService {
 
       await tx.payment_attempt_obligations.createMany({
         data: paymentBreakdown.map(item => ({
+          id: crypto.randomUUID(),
           payment_attempt_id: newAttempt.id,
           obligation_id: item.obligationId,
           amount: item.amount,
@@ -1178,9 +1187,9 @@ export class PaymentService {
       const result = await instance.createIntent({
         amount: totalAmount,
         merchant_txn_id: attempt.merchant_txn_id,
-        tenant_name: obligations[0].tenant.profile.name,
-        tenant_email: obligations[0].tenant.profile.email,
-        tenant_phone: obligations[0].tenant.profile.phone || "",
+        tenant_name: (obligations[0] as any).tenants?.profiles?.name || "Tenant",
+        tenant_email: (obligations[0] as any).tenants?.profiles?.email || "",
+        tenant_phone: (obligations[0] as any).tenants?.profiles?.phone || "",
         metadata: {
           obligation_ids: obligationIds,
           tenant_id: singleTenantId,
