@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Plus, Home, CheckCircle2, AlertCircle, History, Upload, RefreshCw } from 'lucide-react';
+import { Search, Plus, Home, CheckCircle2, AlertCircle, History, Upload, RefreshCw, User } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
