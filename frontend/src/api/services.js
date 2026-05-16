@@ -228,64 +228,7 @@ export const addonService = {
 export { tenantService } from '@features/tenants/api';
 
 // --- Room Services ---
-export const roomService = {
-    getAll: async (hostelId, params = {}) => {
-        const response = await api.get('/rooms', { params: { ...params, hostelId } });
-        return response.data;
-    },
-    getById: async (id) => {
-        const response = await api.get(`/rooms/${id}`);
-        return response.data;
-    },
-    getOverview: async (id) => {
-        const response = await api.get(`/rooms/${id}/overview`);
-        return response.data;
-    },
-    getInviteDefaults: async (id) => {
-        const response = await api.get(`/rooms/${id}/invite-defaults`);
-        return response.data;
-    },
-    create: async (hostelId, data) => {
-        const response = await api.post('/rooms', { ...data, hostelId });
-        return response.data;
-    },
-    update: async (id, data) => {
-        const response = await api.patch(`/rooms/${id}`, data);
-        return response.data;
-    },
-    delete: async (id) => {
-        const response = await api.delete(`/rooms/${id}`);
-        return response.data;
-    }
-};
-
-// --- Allocation Services ---
-export const allocationService = {
-    allocate: async (hostelId, data) => {
-        const response = await api.post('/allocations', { ...data, hostelId });
-        return response.data;
-    },
-    end: async (allocationId, data) => {
-        const response = await api.patch(`/allocations/${allocationId}/end`, data);
-        return response.data;
-    },
-    shift: async (hostelId, data) => {
-        const response = await api.post('/allocations/shift', { ...data, hostelId });
-        return response.data;
-    },
-    getTenantHistory: async (tenantId, hostelId) => {
-        const response = await api.get(`/allocations/tenant/${tenantId}`);
-        return response.data;
-    },
-    getAllActive: async (hostelId) => {
-        const response = await api.get('/allocations', { params: { hostelId } });
-        return response.data;
-    },
-    getHistory: async () => {
-        const response = await api.get('/allocations/owner-history');
-        return response.data;
-    }
-};
+export { roomService, allocationService } from '@features/rooms/api';
 
 
 // --- Secure Identity Confirmation ---
@@ -297,285 +240,18 @@ export const identityService = {
 };
 
 // --- Payment Services ---
-export const paymentService = {
-    getAll: async (hostelId, params = {}) => {
-        const response = await api.get('/payments', { params: { ...params, hostelId } });
-        return response.data;
-    },
-    getAllDues: async (hostelId, params = {}) => {
-        const response = await api.get('/payments/dues', { params: { ...params, hostelId } });
-        return response.data;
-    },
-    getTenantHistory: async (tenantId, hostelId) => {
-        try {
-            const storedTenant = localStorage.getItem('tenantUser');
-            const storedOwner = localStorage.getItem('ownerUser');
-            const isTenantSession = Boolean(storedTenant && !storedOwner);
-
-            if (isTenantSession) {
-                const meResponse = await api.get('/tenants/me/payments/history');
-                return meResponse.data;
-            }
-
-            if (tenantId) {
-                // Owner fetches a tenant-scoped ledger from payments service
-                const [dues, paymentsResult] = await Promise.all([
-                    api.get('/payments/dues', { params: { tenant_id: tenantId, hostelId } }),
-                    api.get('/payments', { params: { tenant_id: tenantId, limit: 500, hostelId } })
-                ]);
-
-                const obligations = (dues.data || []).filter((o) => o.tenant_id === tenantId);
-                const payments = (paymentsResult.data?.payments || []).map((p) => ({
-                    id: p.id,
-                    obligation_id: p.obligation_id,
-                    amount_paid: Number(p.amount_paid || 0),
-                    payment_date: p.payment_date,
-                    payment_method: p.payment_method,
-                    reference_number: p.reference_number,
-                    transaction_id: p.reference_number || p.id,
-                    rent_month: p.rent_month
-                }));
-
-                const totalDue = obligations.reduce((sum, o) => sum + Number(o.amount || 0), 0);
-                const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount_paid || 0), 0);
-
-                return {
-                    tenant_id: tenantId,
-                    obligations: obligations.map((o) => ({
-                        id: o.obligation_id || o.id,
-                        rent_month: o.rent_month,
-                        due_date: o.due_date,
-                        amount: Number(o.amount || 0),
-                        status: o.status,
-                        remaining_due: Number(o.outstanding || 0),
-                        payments: payments
-                            .filter((p) => p.obligation_id === (o.obligation_id || o.id))
-                            .map((p) => ({
-                                id: p.id,
-                                amount_paid: Number(p.amount_paid || 0),
-                                payment_date: p.payment_date,
-                                method: p.payment_method,
-                                transaction_id: p.transaction_id
-                            }))
-                    })),
-                    payments: payments.sort((a, b) => new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime()),
-                    total_due: totalDue,
-                    total_paid: totalPaid,
-                    outstanding_balance: Math.max(totalDue - totalPaid, 0)
-                };
-            }
-
-            const fallbackMe = await api.get('/tenants/me/payments/history');
-            return fallbackMe.data;
-        } catch (error) {
-            if (error?.response?.status === 404) {
-                const fallback = await api.get('/tenants/me/payments/history');
-                return fallback.data;
-            }
-            throw error;
-        }
-    },
-    recordPayment: async (data) => {
-        try {
-            const response = await axios.post('/api/payments/record-offline', data, { withCredentials: true });
-            return response.data;
-        } catch (error) {
-            // Keep original fallback behavior just in case
-            if (error?.response?.status === 404) {
-                const fallback = await axios.post('/api/payments/record-offline', data, { withCredentials: true });
-                return fallback.data;
-            }
-            throw error;
-        }
-    },
-    recordOfflinePayment: async ({ identityToken, obligationId, amountPaid, paymentMethod, referenceNumber, paymentDate, note, hostelId }) => {
-        const response = await axios.post('/api/payments/record-offline', {
-            identity_token: identityToken,
-            obligation_id: obligationId,
-            amount_paid: amountPaid,
-            payment_method: paymentMethod,
-            reference_number: referenceNumber,
-            payment_date: paymentDate,
-            note,
-            hostelId,
-        }, { withCredentials: true });
-        return response.data;
-    },
-    initiatePayment: async (data) => {
-        const response = await api.post('/payments/initiate', data);
-        return response.data;
-    },
-    /**
-     * Verify a PhonePe payment server-side after the checkout callback fires.
-     * @param {Object} data - Provider verification payload plus obligation context when present.
-     */
-    verifyPayment: async (data) => {
-        const response = await api.post('/payments/verify', data);
-        return response.data;
-    },
-    /**
-     * Reconcile pending payments with the configured provider (admin/owner).
-     * @param {string[]} [paymentIds] - Optional list of payment IDs; omit to reconcile all pending.
-     */
-    reconcilePayments: async (paymentIds, hostelId, paymentDomain) => {
-        const body = paymentIds ? { payment_ids: paymentIds } : {};
-        if (hostelId) body.hostelId = hostelId;
-        if (paymentDomain) body.paymentDomain = paymentDomain;
-        const response = await api.post('/payments/reconcile', body);
-        return response.data;
-    },
-    createIntent: async (data) => {
-        const response = await api.post('/payments/create-intent', data);
-        return response.data;
-    },
-    createTestIntent: async (data) => {
-        const response = await api.post('/payments/test-intent', data);
-        return response.data;
-    },
-    getAttempt: async (attemptId) => {
-        const response = await api.get(`/payments/attempts/${attemptId}`);
-        return response.data;
-    },
-    submitUpiReference: async (data) => {
-        const response = await api.post('/payments/submit-reference', data);
-        return response.data;
-    },
-    confirmPayment: async (attemptId) => {
-        const response = await api.post('/payments/confirm', { attempt_id: attemptId, action: 'confirm' });
-        return response.data;
-    },
-    rejectPayment: async (attemptId) => {
-        const response = await api.post('/payments/confirm', { attempt_id: attemptId, action: 'reject' });
-        return response.data;
-    },
-    getPendingVerifications: async (hostelId) => {
-        const response = await api.get('/payments/pending-verification', { params: { hostelId } });
-        return response.data;
-    },
-    manualConfirmPayment: async (attemptId) => {
-        const response = await api.post('/payments/manual-confirm', { attempt_id: attemptId });
-        return response.data;
-    },
-    generateRent: async (hostelId, month) => {
-        const response = await api.post('/rent/generate', { month, hostelId });
-        return response.data;
-    },
-    previewGenerateRent: async (hostelId, month) => {
-        const response = await api.get('/rent/generate', { params: { month, hostelId } });
-        return response.data;
-    },
-    waive: async (obligationId, reason) => {
-        const response = await api.post(`/payments/obligations/${obligationId}/waive`, { reason });
-        return response.data;
-    },
-    downloadReceipt: async (paymentId) => {
-        const response = await api.get(`/payments/${paymentId}/receipt`, {
-            responseType: 'blob'
-        });
-
-        // Validate that we got a PDF, not a JSON error wrapped in a blob
-        const blob = response.data;
-        if (blob.type && blob.type.includes('application/json')) {
-            const text = await blob.text();
-            let detail = 'Unknown error';
-            try {
-                const parsed = JSON.parse(text);
-                detail = parsed?.detail || parsed?.error || text;
-            } catch {
-                detail = text;
-            }
-            const err = new Error(detail);
-            err.response = { status: response.status, data: { detail } };
-            throw err;
-        }
-
-        return blob;
-    },
-
-    downloadInvoice: async (paymentId) => {
-        const response = await api.get(`/invoices/${paymentId}`);
-        if (response.data && response.data.url) {
-            window.open(response.data.url, '_blank');
-        }
-        return true;
-    },
-    exportReport: async (params = {}) => {
-        const response = await api.get('/payments/export', {
-            params,
-            responseType: 'blob'
-        });
-        return {
-            blob: response.data,
-            contentDisposition: response.headers?.['content-disposition'] || ''
-        };
-    },
-    bulkGenerate: async (data) => {
-        const response = await api.post('/payments/bulk-generate', data);
-        return response.data;
-    },
-    previewPayment: async (obligationIds, hostelId) => {
-        const response = await api.get('/payments/preview', { 
-            params: { ids: obligationIds.join(','), ...(hostelId ? { hostelId } : {}) }
-        });
-        return response.data;
-    }
-};
+export { paymentService } from '@features/payments/api';
 
 // --- Expense Service ---
-export const expenseService = {
-    getAll: async (hostelId) => {
-        const response = await api.get('/expenses', { params: { hostelId } });
-        return response.data;
-    },
-    create: async (hostelId, data) => {
-        const response = await api.post('/expenses', { ...data, hostelId });
-        return response.data;
-    },
-    update: async (id, data) => {
-        const response = await api.put(`/expenses/${id}`, data);
-        return response.data;
-    },
-    delete: async (id) => {
-        const response = await api.delete(`/expenses/${id}`);
-        return response.data;
-    }
-};
+export { expenseService } from '@features/expenses/api';
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-const requestWithRetry = async (fn, { retries = 2, delayMs = 1500 } = {}) => {
-    let lastError;
-    for (let attempt = 0; attempt <= retries; attempt++) {
-        try {
-            return await fn();
-        } catch (error) {
-            lastError = error;
-            const status = error?.response?.status;
-            const shouldRetry = !status || [502, 503, 504].includes(status);
-            if (!shouldRetry || attempt === retries) {
-                throw error;
-            }
-            await sleep(delayMs * (attempt + 1));
-        }
-    }
-    throw lastError;
-};
+// requestWithRetry moved to api-client.js
 
 // --- Dashboard Service ---
 export { dashboardService } from '@features/dashboard/api';
 
 // --- Rent Generation Service ---
-export const rentService = {
-    preview: async (hostelId, month) => {
-        const params = { ...(month ? { month } : {}), hostelId };
-        const response = await api.get('/rent/generate', { params });
-        return response.data;
-    },
-    generate: async (hostelId, month) => {
-        const response = await api.post('/rent/generate', { ...(month ? { month } : {}), hostelId });
-        return response.data;
-    }
-};
+export { rentService } from '@features/payments/api';
 
 export { portfolioService } from '@features/dashboard/api';
 
@@ -588,42 +264,10 @@ export const activityService = {
 };
 
 // --- Notification Service ---
-export const notificationService = {
-    getAll: async () => {
-        const response = await api.get('/notifications');
-        return response.data;
-    },
-    markAsRead: async (id) => {
-        const response = await api.post(`/notifications/${id}/read`);
-        return response.data;
-    }
-};
+export { notificationService } from '@features/notifications/api';
 
 // --- Tenant Document Service ---
-export const tenantDocumentService = {
-    upload: async (tenantId, docType, documentNumber, file) => {
-        const formData = new FormData();
-        formData.append('docType', docType);
-        if (documentNumber) formData.append('docNumber', documentNumber);
-        formData.append('file', file);
-        const response = await api.post(`/tenants/${tenantId}/documents`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
-        });
-        return response.data;
-    },
-    getAll: async (tenantId) => {
-        if (!tenantId) {
-            const response = await api.get('/tenants/me/documents');
-            return response.data?.documents || response.data || [];
-        }
-        const response = await api.get(`/tenants/${tenantId}/documents`);
-        return response.data?.documents || response.data || [];
-    },
-    delete: async (tenantId, docId) => {
-        const response = await api.delete(`/tenants/${tenantId}/documents/${docId}`);
-        return response.data;
-    },
-};
+export { tenantDocumentService } from '@features/uploads/api';
 
 // --- SSE Token Service ---
 export const sseService = {
@@ -634,58 +278,10 @@ export const sseService = {
 };
 
 // --- Analytics Dashboard Service (dedicated endpoints, backend-next) ---
-export const analyticsService = {
-    getCashflow: async (hostelId, from, to) => {
-        const params = { hostelId };
-        if (from) params.from = from;
-        if (to)   params.to   = to;
-        const response = await api.get('/dashboard/cashflow', { params });
-        return response.data;
-    },
-    getTenants: async (hostelId, from, to) => {
-        const params = { hostelId };
-        if (from) params.from = from;
-        if (to)   params.to   = to;
-        const response = await api.get('/dashboard/tenants', { params });
-        return response.data;
-    },
-    getFunnel: async (hostelId, from, to) => {
-        const params = { hostelId };
-        if (from) params.from = from;
-        if (to)   params.to   = to;
-        const response = await api.get('/dashboard/funnel', { params });
-        return response.data;
-    },
-    getOperations: async (hostelId, from, to) => {
-        const params = { hostelId };
-        if (from) params.from = from;
-        if (to)   params.to   = to;
-        const response = await api.get('/dashboard/operations', { params });
-        return response.data;
-    },
-};
+export { analyticsService } from '@features/reports/api';
 
 // --- Reminder Service ---
-export const reminderService = {
-    sendToTenant: async (tenantId) => {
-        const response = await api.post('/notifications/send-reminder', { tenant_id: tenantId });
-        return response.data;
-    },
-    sendBulk: async (tenants) => {
-        const results = await Promise.allSettled(
-            tenants.map(id => api.post('/notifications/send-reminder', { tenant_id: id }).then(r => r.data))
-        );
-        const sent = results.filter(r => r.status === 'fulfilled' && r.value?.success).length;
-        const noCredits = results.some(r => r.status === 'rejected' && (r.reason?.response?.data?.error?.code || r.reason?.response?.data?.code) === 'NO_REMINDERS_LEFT');
-        if (noCredits) {
-            const err = new Error('No reminder credits left');
-            err.response = { data: { error: { code: 'NO_REMINDERS_LEFT' } } };
-            throw err;
-        }
-        const failed = results.length - sent;
-        return { sent, failed, total: results.length };
-    },
-};
+export { reminderService } from '@features/notifications/api';
 
 // --- Activation / Onboarding Intelligence Service ---
 export const activationService = {

@@ -1,0 +1,227 @@
+import api from '@lib/api-client';
+import axios from 'axios';
+
+export const paymentService = {
+    getAll: async (hostelId, params = {}) => {
+        const response = await api.get('/payments', { params: { ...params, hostelId } });
+        return response.data;
+    },
+    getAllDues: async (hostelId, params = {}) => {
+        const response = await api.get('/payments/dues', { params: { ...params, hostelId } });
+        return response.data;
+    },
+    getTenantHistory: async (tenantId, hostelId) => {
+        try {
+            const storedTenant = localStorage.getItem('tenantUser');
+            const storedOwner = localStorage.getItem('ownerUser');
+            const isTenantSession = Boolean(storedTenant && !storedOwner);
+
+            if (isTenantSession) {
+                const meResponse = await api.get('/tenants/me/payments/history');
+                return meResponse.data;
+            }
+
+            if (tenantId) {
+                // Owner fetches a tenant-scoped ledger from payments service
+                const [dues, paymentsResult] = await Promise.all([
+                    api.get('/payments/dues', { params: { tenant_id: tenantId, hostelId } }),
+                    api.get('/payments', { params: { tenant_id: tenantId, limit: 500, hostelId } })
+                ]);
+
+                const obligations = (dues.data || []).filter((o) => o.tenant_id === tenantId);
+                const payments = (paymentsResult.data?.payments || []).map((p) => ({
+                    id: p.id,
+                    obligation_id: p.obligation_id,
+                    amount_paid: Number(p.amount_paid || 0),
+                    payment_date: p.payment_date,
+                    payment_method: p.payment_method,
+                    reference_number: p.reference_number,
+                    transaction_id: p.reference_number || p.id,
+                    rent_month: p.rent_month
+                }));
+
+                const totalDue = obligations.reduce((sum, o) => sum + Number(o.amount || 0), 0);
+                const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount_paid || 0), 0);
+
+                return {
+                    tenant_id: tenantId,
+                    obligations: obligations.map((o) => ({
+                        id: o.obligation_id || o.id,
+                        rent_month: o.rent_month,
+                        due_date: o.due_date,
+                        amount: Number(o.amount || 0),
+                        status: o.status,
+                        remaining_due: Number(o.outstanding || 0),
+                        payments: payments
+                            .filter((p) => p.obligation_id === (o.obligation_id || o.id))
+                            .map((p) => ({
+                                id: p.id,
+                                amount_paid: Number(p.amount_paid || 0),
+                                payment_date: p.payment_date,
+                                method: p.payment_method,
+                                transaction_id: p.transaction_id
+                            }))
+                    })),
+                    payments: payments.sort((a, b) => new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime()),
+                    total_due: totalDue,
+                    total_paid: totalPaid,
+                    outstanding_balance: Math.max(totalDue - totalPaid, 0)
+                };
+            }
+
+            const fallbackMe = await api.get('/tenants/me/payments/history');
+            return fallbackMe.data;
+        } catch (error) {
+            if (error?.response?.status === 404) {
+                const fallback = await api.get('/tenants/me/payments/history');
+                return fallback.data;
+            }
+            throw error;
+        }
+    },
+    recordPayment: async (data) => {
+        try {
+            const response = await axios.post('/api/payments/record-offline', data, { withCredentials: true });
+            return response.data;
+        } catch (error) {
+            if (error?.response?.status === 404) {
+                const fallback = await axios.post('/api/payments/record-offline', data, { withCredentials: true });
+                return fallback.data;
+            }
+            throw error;
+        }
+    },
+    recordOfflinePayment: async ({ identityToken, obligationId, amountPaid, paymentMethod, referenceNumber, paymentDate, note, hostelId }) => {
+        const response = await axios.post('/api/payments/record-offline', {
+            identity_token: identityToken,
+            obligation_id: obligationId,
+            amount_paid: amountPaid,
+            payment_method: paymentMethod,
+            reference_number: referenceNumber,
+            payment_date: paymentDate,
+            note,
+            hostelId,
+        }, { withCredentials: true });
+        return response.data;
+    },
+    initiatePayment: async (data) => {
+        const response = await api.post('/payments/initiate', data);
+        return response.data;
+    },
+    verifyPayment: async (data) => {
+        const response = await api.post('/payments/verify', data);
+        return response.data;
+    },
+    reconcilePayments: async (paymentIds, hostelId, paymentDomain) => {
+        const body = paymentIds ? { payment_ids: paymentIds } : {};
+        if (hostelId) body.hostelId = hostelId;
+        if (paymentDomain) body.paymentDomain = paymentDomain;
+        const response = await api.post('/payments/reconcile', body);
+        return response.data;
+    },
+    createIntent: async (data) => {
+        const response = await api.post('/payments/create-intent', data);
+        return response.data;
+    },
+    createTestIntent: async (data) => {
+        const response = await api.post('/payments/test-intent', data);
+        return response.data;
+    },
+    getAttempt: async (attemptId) => {
+        const response = await api.get(`/payments/attempts/${attemptId}`);
+        return response.data;
+    },
+    submitUpiReference: async (data) => {
+        const response = await api.post('/payments/submit-reference', data);
+        return response.data;
+    },
+    confirmPayment: async (attemptId) => {
+        const response = await api.post('/payments/confirm', { attempt_id: attemptId, action: 'confirm' });
+        return response.data;
+    },
+    rejectPayment: async (attemptId) => {
+        const response = await api.post('/payments/confirm', { attempt_id: attemptId, action: 'reject' });
+        return response.data;
+    },
+    getPendingVerifications: async (hostelId) => {
+        const response = await api.get('/payments/pending-verification', { params: { hostelId } });
+        return response.data;
+    },
+    manualConfirmPayment: async (attemptId) => {
+        const response = await api.post('/payments/manual-confirm', { attempt_id: attemptId });
+        return response.data;
+    },
+    generateRent: async (hostelId, month) => {
+        const response = await api.post('/rent/generate', { month, hostelId });
+        return response.data;
+    },
+    previewGenerateRent: async (hostelId, month) => {
+        const response = await api.get('/rent/generate', { params: { month, hostelId } });
+        return response.data;
+    },
+    waive: async (obligationId, reason) => {
+        const response = await api.post(`/payments/obligations/${obligationId}/waive`, { reason });
+        return response.data;
+    },
+    downloadReceipt: async (paymentId) => {
+        const response = await api.get(`/payments/${paymentId}/receipt`, {
+            responseType: 'blob'
+        });
+
+        const blob = response.data;
+        if (blob.type && blob.type.includes('application/json')) {
+            const text = await blob.text();
+            let detail = 'Unknown error';
+            try {
+                const parsed = JSON.parse(text);
+                detail = parsed?.detail || parsed?.error || text;
+            } catch {
+                detail = text;
+            }
+            const err = new Error(detail);
+            err.response = { status: response.status, data: { detail } };
+            throw err;
+        }
+
+        return blob;
+    },
+    downloadInvoice: async (paymentId) => {
+        const response = await api.get(`/invoices/${paymentId}`);
+        if (response.data && response.data.url) {
+            window.open(response.data.url, '_blank');
+        }
+        return true;
+    },
+    exportReport: async (params = {}) => {
+        const response = await api.get('/payments/export', {
+            params,
+            responseType: 'blob'
+        });
+        return {
+            blob: response.data,
+            contentDisposition: response.headers?.['content-disposition'] || ''
+        };
+    },
+    bulkGenerate: async (data) => {
+        const response = await api.post('/payments/bulk-generate', data);
+        return response.data;
+    },
+    previewPayment: async (obligationIds, hostelId) => {
+        const response = await api.get('/payments/preview', { 
+            params: { ids: obligationIds.join(','), ...(hostelId ? { hostelId } : {}) }
+        });
+        return response.data;
+    }
+};
+
+export const rentService = {
+    preview: async (hostelId, month) => {
+        const params = { ...(month ? { month } : {}), hostelId };
+        const response = await api.get('/rent/generate', { params });
+        return response.data;
+    },
+    generate: async (hostelId, month) => {
+        const response = await api.post('/rent/generate', { ...(month ? { month } : {}), hostelId });
+        return response.data;
+    }
+};
