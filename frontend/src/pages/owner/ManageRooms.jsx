@@ -7,8 +7,6 @@ import AddTenantModal from '../../features/rooms/components/AddTenantModal';
 import ShiftTenantModal from '../../features/rooms/components/ShiftTenantModal';
 import EditRoomModal from '../../features/rooms/components/EditRoomModal';
 import { roomService, allocationService, tenantService } from '../../api/services';
-import { useRooms } from '../../hooks/useRooms';
-import { useRoomActions } from '../../features/rooms/hooks/useRoomActions';
 import { useAppPreferences } from '../../context/AppPreferencesContext';
 import { useHostelContext } from '../../context/HostelContext';
 import { formatCurrency, formatDate } from '../../utils/format';
@@ -16,7 +14,8 @@ import { StatCard } from '../../features/rooms/components/StatCard';
 import { RoomCard } from '../../features/rooms/components/RoomCard';
 import { RoomDetailSidebar } from '../../features/rooms/components/RoomDetailSidebar';
 import { TenantProfileModal } from '../../features/rooms/components/TenantProfileModal';
-import { normalizeFloors, findRoomById, calculateRoomStats } from '../../features/rooms/utils/roomHelpers';
+import { useRooms } from '../../features/rooms/hooks/useRooms';
+import { useRoomActions } from '../../features/rooms/hooks/useRoomActions';
 
 const ManageRooms = () => {
     const { preferences } = useAppPreferences();
@@ -38,19 +37,19 @@ const ManageRooms = () => {
 
 
 
-    const { data: floorsData, isLoading: loading, error: fetchError, refetch: refetchRooms } = useRooms(hostelId, { grouped: true });
-    
-    const floors = useMemo(() => normalizeFloors(floorsData), [floorsData]);
-    const error = fetchError ? "Failed to load room data. Please try again." : null;
-
-    useEffect(() => {
-        if (selectedRoom && floors.length > 0) {
-            const updatedRoom = findRoomById(floors, selectedRoom.id);
-            if (updatedRoom && JSON.stringify(updatedRoom) !== JSON.stringify(selectedRoom)) {
-                setSelectedRoom(updatedRoom);
-            }
-        }
-    }, [floors, selectedRoom?.id]);
+    const {
+        floors,
+        filteredFloors,
+        stats: { totalRooms, totalCapacity, totalOccupants, occupancyRate },
+        loading,
+        error,
+        refetchRooms,
+    } = useRooms({
+        hostelId,
+        filterStatus,
+        selectedRoom,
+        setSelectedRoom,
+    });
 
 
 
@@ -87,9 +86,6 @@ const ManageRooms = () => {
 
 
     // --- Render ---
-
-    // Derived state for stats
-    const { totalRooms, totalCapacity, totalOccupants, occupancyRate } = useMemo(() => calculateRoomStats(floors), [floors]);
 
     if (loading) return (
         <div className="flex justify-center items-center h-64">
@@ -157,7 +153,7 @@ const ManageRooms = () => {
 
             {/* Floors and Rooms */}
             <div className="space-y-8">
-                {floors.map((floor) => (
+                {filteredFloors.map((floor) => (
                     <div key={floor.id} className="bg-white rounded-[28px] border border-slate-100 shadow-sm overflow-hidden">
                         <div className="px-7 py-5 border-b border-slate-50 bg-slate-50/30 flex justify-between items-center">
                             <div className="flex items-center gap-4">
@@ -173,9 +169,7 @@ const ManageRooms = () => {
 
                         <div className="p-8">
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                                {floor.rooms
-                                    .filter(room => filterStatus === 'All' || room.status === filterStatus)
-                                    .map(room => (
+                                {floor.rooms.map(room => (
                                         <RoomCard
                                             key={room.id}
                                             room={room}

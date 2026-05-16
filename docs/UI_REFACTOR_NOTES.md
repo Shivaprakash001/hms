@@ -28,14 +28,32 @@ The following transactional flows and API interactions were extracted into `@fea
 - All complex mutations (`handleAddRoom`, `handleAddFloor`, `handleAddTenant`, `handleRemoveTenant`, `handleDeleteRoom`, `handleShiftTenant`).
 - Action-specific loading states (e.g., `deletingRoomId`, `tenantProfileLoading`).
 
+### Extracted Hooks (Batch 4 - Feature Level Orchestration)
+The following derived state and fetching orchestration logic was extracted into `@features/rooms/hooks/useRooms.js`:
+- Generic React Query fetching orchestration (`useRoomsQuery` alias).
+- Memoized normalizations (`normalizeFloors`, `calculateRoomStats`).
+- Derived UI state (e.g., `filteredFloors` mapping based on `filterStatus`).
+- Selection synchronization (re-syncing `selectedRoom` with fresh fetched data).
+
 ### Remaining Responsibilities in Parent (`ManageRooms.jsx`)
 - Modals, popups, and sidebars layout structure.
 - Local UI toggles (`showAddRoomModal`, `showAddTenantModal`, `filterStatus`, etc.).
 - Active selection state (`selectedRoom`, `selectedTenantForShift`, etc.).
-- Custom hooks usage (`useRooms`, `useAppPreferences`, `useRoomActions`).
+- Wiring up feature hooks to the rendering tree.
+
+### Current Architecture (`@features/rooms/`)
+```txt
+features/rooms/
+├── components/           # Pure presentational UI
+├── hooks/
+│   ├── useRooms.js       # Data fetching, derived stats, list filtering
+│   └── useRoomActions.js # API mutations, CRUD actions, orchestration
+├── utils/
+│   └── roomHelpers.js    # Pure calculation functions
+```
 
 ### Repeated Patterns Discovered
-- **Derived Stats Math**: `floors.reduce(...)` is calculated manually on render. This should be moved to a custom hook like `useRoomStats(floors)`.
+- **Derived Stats Math**: *Fixed* - Handled via `calculateRoomStats` in Batch 2 and `useRooms` in Batch 4.
 - **Status Styles**: `getStatusStyle()` is repeated or similar across different components. Needs a shared constant/utility `roomConstants.js`.
 - **Date/Currency formatting**: Consistent use of `formatDate` and `formatCurrency` is good, but `TenantProfileModal` repeats identical layout structures for `InfoTile` and `SummaryTile`.
 
