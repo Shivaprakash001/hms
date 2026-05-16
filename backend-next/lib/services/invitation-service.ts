@@ -60,9 +60,9 @@ export class InvitationService {
 
     // 2. Room and Owner check
     const room = await prisma.rooms.findFirst({
-      where: { id: room_id, hostel: { owner_id: ownerId, is_active: true } },
+      where: { id: room_id, hostels: { owner_id: ownerId, is_active: true } },
       include: {
-        hostel: true,
+        hostels: true,
         room_allocations: {
           where: { is_active: true },
           include: { tenant: { include: { profiles: { select: { name: true } } } } },
@@ -70,7 +70,7 @@ export class InvitationService {
       },
     });
     if (!room) throw new Error("NOT_FOUND: Target room not found");
-    if (!room.hostel) throw new Error("NOT_FOUND: Associated hostel not found");
+    if (!room.hostels) throw new Error("NOT_FOUND: Associated hostel not found");
     if (room.room_allocations.length >= room.capacity) {
       throw new Error("CAPACITY_EXCEEDED: Room is already at full capacity");
     }
