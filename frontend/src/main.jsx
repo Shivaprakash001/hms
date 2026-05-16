@@ -3,7 +3,8 @@ import { createRoot } from 'react-dom/client'
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import './index.css'
 import App from './App.jsx'
-
+import { SpeedInsights } from "@vercel/speed-insights/react";
+import { Analytics } from "@vercel/analytics/react";
 // REPLACE WITH YOUR ACTUAL GOOGLE CLIENT ID
 // Use Vite environment variable `VITE_GOOGLE_CLIENT_ID`.
 // Set this in a `.env` file at the project root (see .env template added).
@@ -23,6 +24,8 @@ createRoot(document.getElementById('root')).render(
         <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
           <BrowserRouter>
             <App />
+            <Analytics />
+            <SpeedInsights />
             <Toaster 
               position="top-right" 
               toastOptions={{
