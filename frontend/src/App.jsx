@@ -135,9 +135,10 @@ function App() {
                 <Route path="financials" element={<Payments />} />
                 <Route path="expenses"   element={<Expenses />} />
                 <Route path="activities" element={<ActivityHistory />} />
-                <Route path="activity-log" element={<Navigate to="../activities" replace />} />
+                <Route path="activity-log/*" element={<Navigate to="../activities" replace />} />
                 <Route path="move-outs"  element={<MoveOutManagement />} />
                 <Route path="settings"   element={<OwnerProfile />} />
+                <Route path="*"          element={<Navigate to="overview" replace />} />
               </Route>
             </Route>
 
