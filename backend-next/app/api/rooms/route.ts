@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
+import crypto from "crypto";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { RoomCreateSchema } from "@/lib/validators";
@@ -109,6 +110,7 @@ export async function POST(req: NextRequest) {
 
     const room = await prisma.rooms.create({
       data: {
+        id: crypto.randomUUID(),
         hostel_id: hostel.id,
         room_no: validated.data.room_no,
         capacity: validated.data.capacity,
