@@ -16,7 +16,7 @@ export function scopedTenantWhere(scope: OperationalScope, extra: Record<string,
 
 export function scopedRoomWhere(scope: OperationalScope, extra: Record<string, any> = {}) {
   return {
-    hostel: { owner_id: scope.owner_id },
+    hostels: { owner_id: scope.owner_id },
     ...(scope.hostel_id ? { hostel_id: scope.hostel_id } : {}),
     ...extra,
   };
