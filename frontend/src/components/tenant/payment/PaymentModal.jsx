@@ -15,12 +15,12 @@ import {
 import { paymentService } from '../../../api/services';
 import QrCodeImage from '../../shared/QrCodeImage';
 import { useAppPreferences } from '../../../context/AppPreferencesContext';
-import { formatCurrency } from '../../../utils/format';
+import { formatCurrency, formatMonthYear } from '../../../utils/format';
 
 const POLL_INTERVAL_MS = 4000;
 const TERMINAL_STATUSES = ['SUCCESS', 'FAILED', 'EXPIRED', 'CANCELLED', 'PENDING_VERIFICATION'];
 
-const PaymentModal = ({ isOpen, onClose, amount, obligationId, obligationIds = [], onSuccess }) => {
+const PaymentModal = ({ isOpen, onClose, amount, obligationId, obligationIds = [], paymentContext = [], onSuccess }) => {
     const { preferences } = useAppPreferences();
     const [loading, setLoading] = useState(false);
     const [attempt, setAttempt] = useState(null);
@@ -78,7 +78,7 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, obligationIds = [
         ]);
         const ids = [...idSet];
         if (ids.length === 0) {
-            setError('No pending rent is available for payment right now.');
+            setError('No pending dues are available for payment right now.');
             return;
         }
 
@@ -182,9 +182,9 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, obligationIds = [
                         {/* Header */}
                         <div className="flex items-start justify-between border-b border-slate-100 bg-slate-50 px-6 py-5">
                             <div>
-                                <h2 className="text-xl font-black text-slate-900">Pay Rent</h2>
+                                <h2 className="text-xl font-black text-slate-900">Pay Financial Due</h2>
                                 <p className="text-sm font-medium text-slate-500">
-                                    {step === 'init' && 'Continue to secure PhonePe checkout'}
+                                    {step === 'init' && 'Review what this payment covers'}
                                     {step === 'pay' && 'Complete payment and submit the reference'}
                                     {step === 'reference' && 'Submit your transaction ID'}
                                     {step === 'done' && 'Payment confirmed!'}
@@ -203,9 +203,33 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, obligationIds = [
                         <div className="space-y-5 p-6">
                             {/* Amount Display */}
                             <div className="rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3">
-                                <p className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-500">Amount</p>
+                                <p className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-500">Total Due</p>
                                 <p className="mt-2 text-3xl font-black text-slate-900">{formatCurrency(Number(amount || 0), preferences)}</p>
                             </div>
+
+                            {paymentContext.length > 0 && (
+                                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                                    <p className="text-sm font-black text-slate-900">You are paying for</p>
+                                    <div className="mt-3 space-y-3">
+                                        {paymentContext.map((item) => (
+                                            <div key={item.id} className="rounded-xl bg-slate-50 px-3 py-2">
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div>
+                                                        <p className="text-sm font-bold text-slate-900">
+                                                            Monthly Stay ({formatMonthYear(item.cycle || item.rent_month || item.due_date, preferences, 'Current cycle')})
+                                                        </p>
+                                                        <p className="text-xs text-slate-500">Includes late fee adjustment</p>
+                                                    </div>
+                                                    <p className="text-sm font-black text-slate-900">{formatCurrency(item.amount, preferences)}</p>
+                                                </div>
+                                                {Number(item.maintenance || 0) > 0 && (
+                                                    <p className="mt-2 text-xs font-semibold text-slate-500">Also includes maintenance charges</p>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Step 1: Initial — Create Intent */}
                             {step === 'init' && (
@@ -216,8 +240,8 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, obligationIds = [
                                                 <Smartphone size={20} />
                                             </div>
                                             <div>
-                                                <p className="font-bold text-slate-900">Online rent checkout paused</p>
-                                                <p className="text-sm text-amber-800">Rent payments must be collected directly by the hostel owner until owner merchant onboarding is enabled.</p>
+                                                <p className="font-bold text-slate-900">Online checkout paused</p>
+                                                <p className="text-sm text-amber-800">Pay this single due directly to the hostel owner until merchant onboarding is enabled.</p>
                                             </div>
                                         </div>
                                     </div>

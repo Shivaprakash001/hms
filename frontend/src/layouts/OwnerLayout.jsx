@@ -334,7 +334,7 @@ const OwnerLayout = () => {
         { name: 'Dashboard', icon: Home, path: buildHostelPath('dashboard'), operational: true },
         { name: 'Rooms', icon: Bed, path: buildHostelPath('rooms'), operational: true },
         { name: 'Tenants', icon: Users, path: buildHostelPath('tenants'), operational: true },
-        { name: 'Payments', icon: CreditCard, path: buildHostelPath('payments'), operational: true },
+        { name: 'Financials', icon: CreditCard, path: buildHostelPath('payments'), operational: true },
         { name: 'Expenses', icon: Receipt, path: buildHostelPath('expenses'), operational: true },
         { name: 'Move-Outs', icon: UserMinus, path: buildHostelPath('move-out'), operational: true },
         { name: 'Activity Log', icon: Clock, path: buildHostelPath('activities'), operational: true },

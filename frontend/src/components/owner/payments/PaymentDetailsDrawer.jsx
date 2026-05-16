@@ -62,7 +62,7 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
 
     useEffect(() => {
         if (payment) {
-            setPayAmount(payment.amount || '');
+            setPayAmount(payment.outstanding || payment.balance || payment.amount || '');
             setShowForm(false);
             setPayMethod('CASH');
             setPayRef('');
@@ -144,17 +144,19 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
         const app = labelPreferredApp(payment.preferred_app);
         return app ? `${base} (${app})` : base;
     })();
+    const dueAmount = Number(payment.outstanding ?? payment.balance ?? payment.amount ?? 0);
+    const monthlyStayAmount = Number(payment.monthlyStay ?? payment.rentAmount ?? payment.amount ?? 0);
 
     const createdDate = payment.createdAt || payment.date;
     const paidDate = payment.paymentDate || payment.date;
     const timeline = [
         {
-            label: 'Payment Created',
+            label: 'Monthly Stay Created',
             value: formatDate(createdDate, preferences, 'Not available'),
             complete: Boolean(createdDate)
         },
         {
-            label: payment.method === 'UPI' ? 'PhonePe Checkout' : 'Payment Captured',
+            label: payment.method === 'UPI' ? 'PhonePe Checkout' : 'Collection Captured',
             value: payment.status === 'paid' ? formatDate(paidDate, preferences, 'Not available') : 'Awaiting payment',
             complete: payment.status === 'paid'
         },
@@ -201,7 +203,7 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
                             {/* Header */}
                             <div className="flex items-center justify-between p-6 border-b border-slate-100 bg-slate-50/70">
                                 <div>
-                                    <h2 className="text-xl font-bold text-slate-900">Payment Details</h2>
+                                    <h2 className="text-xl font-bold text-slate-900">Financial Breakdown</h2>
                                     <p className="text-sm text-slate-500">Transaction ID: {payment.transactionId || payment.reference_number || payment.id}</p>
                                 </div>
                                 <button
@@ -218,9 +220,9 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
                                     <div className="absolute right-0 top-0 p-4 opacity-10">
                                         <DollarSign size={84} />
                                     </div>
-                                    <p className="text-sm font-medium text-slate-400">Amount Paid</p>
-                                    <div className="mt-2 text-4xl font-bold tracking-tight">{formatCurrency(payment.amount, preferences)}</div>
-                                    <p className="mt-2 text-sm text-slate-400">Rent for {formatMonthYear(payment.month || payment.date, preferences, 'Not available')}</p>
+                                    <p className="text-sm font-medium text-slate-400">Amount To Collect</p>
+                                    <div className="mt-2 text-4xl font-bold tracking-tight">{formatCurrency(dueAmount, preferences)}</div>
+                                    <p className="mt-2 text-sm text-slate-400">Monthly Stay for {formatMonthYear(payment.month || payment.cycle || payment.date, preferences, 'Not available')}</p>
                                     <div className="mt-5 flex flex-wrap items-center gap-2">
                                         <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold ${payment.status === 'paid' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
                                             }`}>
@@ -235,19 +237,21 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
                                     </div>
                                 </div>
 
-                                <SectionCard title="Payment Summary">
-                                    <DetailRow label="Amount Paid" value={formatCurrency(payment.amount, preferences)} icon={DollarSign} />
+                                <SectionCard title="Collection Summary">
+                                    <DetailRow label="Amount To Collect" value={formatCurrency(dueAmount, preferences)} icon={DollarSign} />
                                     <DetailRow label="Status" value={payment.status?.toUpperCase() || 'PENDING'} icon={CheckCircle} valueClassName={payment.status === 'paid' ? 'text-emerald-700' : 'text-amber-700'} />
                                     <DetailRow label="Payment Method" value={paymentMethodLabel} icon={CreditCard} />
                                     <DetailRow label="Transaction ID" value={payment.transactionId || payment.reference_number || payment.id} icon={Receipt} />
                                     <DetailRow label="Payment Date" value={formatDate(payment.paymentDate || payment.date, preferences, 'Not available')} icon={Calendar} />
                                 </SectionCard>
 
-                                <SectionCard title="Rent Details">
-                                    <DetailRow label="Rent Month" value={formatMonthYear(payment.month || payment.date, preferences, 'Not available')} icon={Calendar} />
+                                <SectionCard title="Monthly Stay Details">
+                                    <DetailRow label="Monthly Stay" value={formatCurrency(monthlyStayAmount, preferences)} icon={DollarSign} />
+                                    <DetailRow label="Included Late Fee" value="Included in Monthly Stay" icon={FileClock} />
+                                    <DetailRow label="Billing Cycle" value={formatMonthYear(payment.month || payment.cycle || payment.date, preferences, 'Not available')} icon={Calendar} />
                                     <DetailRow label="Room" value={payment.room || 'Not assigned'} icon={Home} />
                                     <DetailRow label="Due Date" value={formatDate(payment.dueDate, preferences, 'Not available')} icon={FileClock} />
-                                    <DetailRow label="Rent Entry ID" value={payment.obligationId || payment.id} icon={Landmark} />
+                                    <DetailRow label="Obligation ID" value={payment.obligationId || payment.id} icon={Landmark} />
                                 </SectionCard>
 
                                 <SectionCard title="Tenant Information">
@@ -259,7 +263,7 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
                                 {payment.recentPayments?.length > 0 ? (
                                     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                                         <div className="flex items-center justify-between gap-3">
-                                            <h3 className="text-sm font-bold uppercase tracking-[0.18em] text-slate-500">Recent Payments By Tenant</h3>
+                                            <h3 className="text-sm font-bold uppercase tracking-[0.18em] text-slate-500">Recent Collections By Tenant</h3>
                                             {onViewHistory ? (
                                                 <button
                                                     onClick={() => onViewHistory({ tenantId: payment.tenantId, tenantName: payment.tenantName })}
@@ -287,7 +291,7 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
                                 ) : null}
 
                                 <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                                    <h3 className="text-sm font-bold uppercase tracking-[0.18em] text-slate-500">Payment Timeline</h3>
+                                    <h3 className="text-sm font-bold uppercase tracking-[0.18em] text-slate-500">Financial Activity Timeline</h3>
                                     <div className="mt-4 space-y-3">
                                         {timeline.map((event, index) => (
                                             <div key={event.label} className="flex gap-3">
@@ -324,7 +328,7 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
                                         Download Receipt
                                     </button>
                                 </div>
-                                {payment.status !== 'paid' && Number(payment.balance || 0) > 0 && payment.status !== 'waived' && (
+                                {payment.status !== 'paid' && dueAmount > 0 && payment.status !== 'waived' && (
                                     <button
                                         onClick={() => onStartOnlinePayment?.(payment)}
                                         className="mb-4 w-full py-3.5 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-xl font-bold hover:bg-indigo-100 transition-all flex items-center justify-center gap-2"
@@ -350,7 +354,7 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
                                                     <h3 className="text-base font-bold text-slate-900">Confirm Your Identity</h3>
                                                 </div>
                                                 <p className="text-xs text-slate-500 mb-5 pl-11">
-                                                    To prevent misuse, please confirm your password before recording this payment.
+                                                    To prevent misuse, please confirm your password before recording this collection.
                                                 </p>
                                                 <form onSubmit={handleConfirmIdentity} className="space-y-4">
                                                     <div className="relative">
@@ -406,7 +410,7 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
                                                 <ShieldCheck size={13} /> Identity verified — token valid for 2 minutes
                                             </div>
                                             <div>
-                                                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Amount Paid (₹)</label>
+                                                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Amount Collected (₹)</label>
                                                 <input
                                                     type="number"
                                                     value={payAmount}
@@ -415,7 +419,7 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Payment Method</label>
+                                                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Collection Method</label>
                                                 <select
                                                     value={payMethod}
                                                     onChange={e => setPayMethod(e.target.value)}
@@ -466,7 +470,7 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
                                                     className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                                                 >
                                                     {submitLoading ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={16} />}
-                                                    {submitLoading ? 'Recording…' : 'Record Payment'}
+                                                    {submitLoading ? 'Recording...' : 'Record Collection'}
                                                 </button>
                                             </div>
                                         </div>
@@ -476,13 +480,13 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
                                             className="w-full py-3.5 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-2"
                                         >
                                             <ShieldCheck size={18} />
-                                            Record Offline Payment
+                                            Record Offline Collection
                                         </button>
                                     )
                                 ) : (
                                     <div className="text-center p-3 bg-emerald-50 text-emerald-600 rounded-xl font-medium border border-emerald-100 flex items-center justify-center gap-2">
                                         <CheckCircle size={18} />
-                                        Payment Completed
+                                        Collection Completed
                                     </div>
                                 )}
                             </div>

@@ -43,7 +43,7 @@ const TenantLayout = () => {
 
     const menuItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/tenant/dashboard' },
-        { icon: CreditCard, label: 'Payments', path: '/tenant/payments' },
+        { icon: CreditCard, label: 'Financials', path: '/tenant/payments' },
         { icon: DoorOpen, label: 'Move-Out', path: '/tenant/move-out' },
         { icon: User, label: 'Profile', path: '/tenant/profile' },
         { icon: Settings, label: 'Settings', path: '/tenant/settings' },

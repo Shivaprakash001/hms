@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { CreditCard, Calendar, Download, CheckCircle2, Clock, Smartphone, ChevronRight, ChevronDown, Loader2 } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { AlertCircle, Calendar, CheckCircle2, ChevronDown, Clock, CreditCard, Download, FileText, Loader2, ShieldCheck, Smartphone, WalletCards } from 'lucide-react';
 
 import { useAuth } from '../../context/AuthContext';
 import { useAppPreferences } from '../../context/AppPreferencesContext';
@@ -8,440 +8,261 @@ import PaymentModal from '../../components/tenant/payment/PaymentModal';
 import { formatCurrency, formatDate, formatDateTime, formatMonthYear } from '../../utils/format';
 import TenantScoreCard from '../../components/tenant/TenantScoreCard';
 
-const TenantPayments = () => {
-    const { user } = useAuth();
-    const { preferences } = useAppPreferences();
-    const [showPaymentModal, setShowPaymentModal] = useState(false);
-    const [expandedRows, setExpandedRows] = useState({});
-    const [downloadingId, setDownloadingId] = useState(null);
-    const [downloadedId, setDownloadedId] = useState(null);
+const normalizeObligation = (obligation) => {
+  const amount = Number(obligation.remaining_due ?? obligation.outstanding ?? obligation.amount ?? 0);
+  return {
+    ...obligation,
+    id: obligation.id || obligation.obligation_id,
+    cycle: obligation.rent_month || obligation.due_date,
+    monthlyStay: Number(obligation.rent_amount ?? obligation.amount ?? amount),
+    maintenance: Number(obligation.maintenance_amount ?? obligation.maintenanceAmount ?? 0),
+    credits: Number(obligation.credit_amount ?? obligation.creditAmount ?? 0),
+    adjustments: Number(obligation.adjustment_amount ?? obligation.adjustmentAmount ?? 0),
+    amount,
+    status: String(obligation.status || 'pending').toLowerCase(),
+  };
+};
 
-    const [history, setHistory] = useState({ payments: [], obligations: [] });
-    const [selectedObligations, setSelectedObligations] = useState([]);
-    const [tenantScore, setTenantScore] = useState(null);
+function EmptyState({ title, text }) {
+  return (
+    <div className="rounded-3xl border border-dashed border-slate-200 bg-white px-6 py-12 text-center">
+      <CheckCircle2 className="mx-auto text-emerald-600" size={34} />
+      <h3 className="mt-4 text-base font-black text-slate-950">{title}</h3>
+      <p className="mx-auto mt-1 max-w-sm text-sm text-slate-500">{text}</p>
+    </div>
+  );
+}
 
-    // Fetch data
-    const loadHistory = useCallback(async () => {
-        try {
-            const data = await paymentService.getTenantHistory(user.tenant_id);
-            setHistory(data);
-        } catch (error) {
-            console.error("Failed to load payment history:", error);
-        }
-    }, [user?.tenant_id]);
+function AmountLine({ label, amount, helper, strong = false }) {
+  return (
+    <div className="flex items-start justify-between gap-4 py-2.5">
+      <div>
+        <p className={`${strong ? 'font-black text-slate-950' : 'font-semibold text-slate-700'} text-sm`}>{label}</p>
+        {helper ? <p className="mt-0.5 text-xs text-slate-500">{helper}</p> : null}
+      </div>
+      <p className={`${strong ? 'text-lg font-black text-slate-950' : 'text-sm font-bold text-slate-800'} shrink-0`}>{amount}</p>
+    </div>
+  );
+}
 
-    useEffect(() => {
-        if (user?.tenant_id) {
-            loadHistory();
-            tenantService.getMyScore().then(setTenantScore).catch(() => setTenantScore(null));
-        }
-    }, [user?.tenant_id, loadHistory]);
-
-    const localPayments = useMemo(() => {
-        const obs = (history.obligations || [])
-            .filter(o => String(o.status).toUpperCase() !== 'PAID')
-            .map(o => ({
-                id: o.id,
-                date: o.due_date || o.rent_month,
-                amount: o.remaining_due ?? o.amount,
-                status: 'pending',
-                month_paid: o.rent_month,
-                type: 'Rent Due',
-                method: '---',
-                transaction_id: '---'
-            }));
-
-        const pays = (history.payments || []).map(p => ({
-            id: p.id,
-            date: p.payment_date,
-            amount: p.amount_paid,
-            status: 'paid',
-            type: 'Payment',
-            method: p.payment_method,
-            transaction_id: p.transaction_id || p.reference_number || p.id,
-            month_paid: p.rent_month,
-            payment_time: p.payment_date
-        }));
-
-        return [...obs, ...pays].sort((a, b) => new Date(b.date) - new Date(a.date));
-    }, [history]);
-
-    const pendingAmount = history.outstanding_balance || 0;
-    const payableObligation = useMemo(
-        () => history.obligations?.find(o => o.status === 'PENDING' || o.status === 'PARTIAL' || o.status === 'pending' || o.status === 'partial'),
-        [history.obligations]
-    );
-
-    const obligationsMap = useMemo(() => {
-        const map = {};
-        (history.obligations || []).forEach((o) => {
-            map[o.id] = o;
-        });
-        return map;
-    }, [history.obligations]);
-
-    const selectedTotal = useMemo(() => {
-        return selectedObligations.reduce((sum, id) => {
-            const o = obligationsMap[id];
-            const balance = Number(o?.remaining_due ?? o?.amount ?? 0);
-            return sum + balance;
-        }, 0);
-    }, [selectedObligations, obligationsMap]);
-
-    const selectableObligations = useMemo(() => {
-        return (history.obligations || [])
-            .filter((o) => {
-                const status = String(o.status || '').toUpperCase();
-                return status !== 'PAID' && status !== 'WAIVED';
-            })
-            .sort((a, b) => new Date(a.rent_month || a.due_date || 0) - new Date(b.rent_month || b.due_date || 0));
-    }, [history.obligations]);
-
-    const nextDueDate = history.next_due_date ? formatDate(history.next_due_date, preferences) : 'No dues';
-    const monthlyRent = Number(history.monthly_rent || user?.monthly_rent || 0);
-
-    const handlePaymentSuccess = async () => {
-        try {
-            await loadHistory();
-        } catch (error) {
-            console.error("Payment failed", error);
-        } finally {
-            setShowPaymentModal(false);
-            setSelectedObligations([]);
-        }
-    };
-
-    const handleDownloadReceipt = async (txn) => {
-        if (!txn?.id) return;
-        try {
-            setDownloadingId(txn.id);
-            setDownloadedId(null);
-            const blob = await paymentService.downloadReceipt(txn.id);
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `Receipt_${txn.id.substring(0, 8)}.pdf`;
-            a.click();
-            window.URL.revokeObjectURL(url);
-            setDownloadedId(txn.id);
-            setTimeout(() => setDownloadedId((prev) => (prev === txn.id ? null : prev)), 3000);
-        } catch (error) {
-            console.error("Download failed:", error);
-            alert("Failed to download receipt.");
-        } finally {
-            setDownloadingId((prev) => (prev === txn.id ? null : prev));
-        }
-    };
-
-    return (
-        <div className="space-y-8 animate-fade-in-up">
-            <TenantScoreCard scoreData={tenantScore} compact />
-            <div className="flex justify-between items-center">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Payments & Dues</h1>
-                    <p className="text-slate-500 text-sm">Manage your rent and payment history</p>
-                </div>
+function PayableCard({ item, preferences, selected, onToggle }) {
+  return (
+    <label className={`block rounded-3xl border p-5 shadow-sm transition ${selected ? 'border-slate-950 bg-slate-50' : 'border-slate-200 bg-white'}`}>
+      <div className="flex items-start gap-3">
+        <input type="checkbox" className="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900" checked={selected} onChange={(event) => onToggle(item.id, event.target.checked)} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-black text-slate-950">Monthly Stay</h3>
+              <p className="text-sm font-semibold text-slate-500">{formatMonthYear(item.cycle, preferences, 'Current cycle')}</p>
             </div>
-
-            {/* 1. Payment Summary Section */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Rent Card */}
-                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                        <CreditCard size={100} />
-                    </div>
-                    <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Monthly Rent</p>
-                    <h3 className="text-3xl font-black text-slate-900">{formatCurrency(monthlyRent, preferences)}</h3>
-                    <div className="mt-4 flex items-center gap-2 text-sm text-slate-500 font-medium">
-                        <Calendar size={16} className="text-indigo-500" />
-                        <span>Due on {user?.due_day ? `${user.due_day}th` : '---'} of every month</span>
-                    </div>
-                </div>
-
-                {/* Due Amount Card - Dynamic Styling */}
-                <div className={`p-6 rounded-2xl border shadow-sm relative overflow-hidden transition-all ${pendingAmount > 0
-                    ? 'bg-rose-50 border-rose-100'
-                    : 'bg-emerald-50 border-emerald-100'
-                    }`}>
-                    <p className={`text-xs font-bold uppercase tracking-wider mb-2 ${pendingAmount > 0 ? 'text-rose-600' : 'text-emerald-600'
-                        }`}>
-                        {pendingAmount > 0 ? 'Pending Dues' : 'Payment Status'}
-                    </p>
-                    <h3 className={`text-3xl font-black ${pendingAmount > 0 ? 'text-rose-900' : 'text-emerald-900'
-                        }`}>
-                        {pendingAmount > 0 ? formatCurrency(pendingAmount, preferences) : 'All Clear'}
-                    </h3>
-
-                    {pendingAmount > 0 ? (
-                        <div className="mt-4 flex items-center gap-2 text-sm text-rose-700 font-bold bg-rose-100/50 px-3 py-1.5 rounded-lg w-fit">
-                            <Clock size={16} />
-                            <span>Payment pending</span>
-                        </div>
-                    ) : (
-                        <div className="mt-4 flex items-center gap-2 text-sm text-emerald-700 font-bold bg-emerald-100/50 px-3 py-1.5 rounded-lg w-fit">
-                            <CheckCircle2 size={16} />
-                            <span>Paid Successfully</span>
-                        </div>
-                    )}
-                </div>
-
-                {/* Pay Action Card */}
-                <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-xl shadow-slate-900/10 flex flex-col justify-between relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/20 rounded-full blur-3xl -mr-10 -mt-10" />
-
-                    <div>
-                        <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Next Due Date</p>
-                        <h3 className="text-2xl font-bold">{nextDueDate}</h3>
-                    </div>
-
-                    <button
-                        onClick={() => setShowPaymentModal(true)}
-                        disabled={selectedTotal <= 0}
-                        className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95 ${selectedTotal > 0
-                            ? 'bg-indigo-500 hover:bg-indigo-400 text-white shadow-indigo-500/30'
-                            : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                            }`}
-                    >
-                        {selectedTotal > 0 ? (
-                            <>
-                                <span>Pay Selected</span>
-                                <ChevronRight size={16} />
-                            </>
-                        ) : (
-                            <>
-                                <CheckCircle2 size={16} />
-                                <span>No Dues</span>
-                            </>
-                        )}
-                    </button>
-                </div>
-            </div>
-
-            {/* 2. Select Obligations */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                        <h3 className="font-bold text-slate-900 text-lg">Select Dues to Pay</h3>
-                        <p className="text-sm text-slate-500">Choose the rent entries you want to settle now.</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                        <button
-                            onClick={() => setSelectedObligations(selectableObligations.map((o) => o.id))}
-                            className="text-sm font-semibold text-indigo-600 hover:text-indigo-700"
-                            disabled={selectableObligations.length === 0}
-                        >
-                            Select All
-                        </button>
-                        <button
-                            onClick={() => setSelectedObligations([])}
-                            className="text-sm font-semibold text-slate-500 hover:text-slate-700"
-                            disabled={selectedObligations.length === 0}
-                        >
-                            Clear
-                        </button>
-                    </div>
-                </div>
-                {selectableObligations.length === 0 ? (
-                    <div className="px-6 py-10 text-center text-slate-400">No pending dues available.</div>
-                ) : (
-                    <div className="divide-y divide-slate-100">
-                        {selectableObligations.map((o) => {
-                            const balance = Number(o.remaining_due ?? o.amount ?? 0);
-                            const isChecked = selectedObligations.includes(o.id);
-                            return (
-                                <label key={o.id} className="flex items-center justify-between gap-4 px-6 py-4">
-                                    <div className="flex items-center gap-3">
-                                        <input
-                                            type="checkbox"
-                                            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                                            checked={isChecked}
-                                            onChange={(e) => {
-                                                const checked = e.target.checked;
-                                                setSelectedObligations((prev) =>
-                                                    checked ? [...prev, o.id] : prev.filter((id) => id !== o.id)
-                                                );
-                                            }}
-                                        />
-                                        <div>
-                                            <p className="text-sm font-semibold text-slate-900">{formatMonthYear(o.rent_month || o.due_date, preferences)}</p>
-                                            <p className="text-xs text-slate-500">Due {o.due_date ? formatDate(o.due_date, preferences) : '---'}</p>
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-sm font-black text-slate-900">{formatCurrency(balance, preferences)}</p>
-                                        <p className="text-xs text-slate-500">Balance</p>
-                                    </div>
-                                </label>
-                            );
-                        })}
-                    </div>
-                )}
-                <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between text-sm">
-                    <span className="text-slate-500">Selected: {selectedObligations.length}</span>
-                    <span className="font-bold text-slate-900">Total: {formatCurrency(selectedTotal, preferences)}</span>
-                </div>
-            </div>
-
-            {/* 3. Payment History Table */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-slate-100 flex justify-between items-center">
-                    <h3 className="font-bold text-slate-900 text-lg">Payment History</h3>
-                </div>
-
-                <div className="hidden md:block overflow-x-auto">
-                    <table className="w-full text-left">
-                        <thead>
-                            <tr className="bg-slate-50 border-b border-slate-100">
-                                {['Date', 'Txn ID', 'Amount', 'Method', 'Status', 'Receipt'].map(h => (
-                                    <th key={h} className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">
-                                        {h}
-                                    </th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-50">
-                            {localPayments.length === 0 ? (
-                                <tr>
-                                    <td colSpan="6" className="px-6 py-12 text-center text-slate-400">
-                                        Start your first payment to see history here.
-                                    </td>
-                                </tr>
-                            ) : (
-                                localPayments.map((txn, i) => (
-                                    <tr
-                                        key={txn.id || i}
-                                        className="hover:bg-slate-50/80 transition-colors"
-                                    >
-                                        <td className="px-6 py-4 text-sm font-medium text-slate-700">
-                                            {txn.date ? formatDate(txn.date, preferences) : 'Pending'}
-                                        </td>
-                                        <td className="px-6 py-4 text-xs font-mono text-slate-500 bg-slate-100 w-fit rounded px-2 py-1">
-                                            {txn.transaction_id || '---'}
-                                        </td>
-                                        <td className="px-6 py-4 text-sm font-black text-slate-900">
-                                            {formatCurrency(txn.amount, preferences)}
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-slate-600">
-                                            <div className="flex items-center gap-2">
-                                                {txn.method === 'UPI' ? <Smartphone size={14} className="text-indigo-500" /> : <CreditCard size={14} className="text-emerald-500" />}
-                                                {txn.method || '---'}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${txn.status === 'paid' || txn.status === 'success' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                                                txn.status === 'overdue' ? 'bg-rose-50 text-rose-600 border-rose-100' :
-                                                    'bg-amber-50 text-amber-600 border-amber-100'
-                                                }`}>
-                                                {txn.status === 'paid' || txn.status === 'success' ? <CheckCircle2 size={12} /> : <Clock size={12} />}
-                                                {txn.status}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            {(txn.status === 'paid' || txn.status === 'success') && (
-                                                <button 
-                                                    onClick={() => handleDownloadReceipt(txn)}
-                                                    disabled={downloadingId === txn.id}
-                                                    className="text-slate-400 hover:text-indigo-600 transition-colors p-2 hover:bg-indigo-50 rounded-lg"
-                                                    title="Download PDF Receipt"
-                                                >
-                                                    {downloadingId === txn.id ? (
-                                                        <Loader2 size={18} className="animate-spin" />
-                                                    ) : downloadedId === txn.id ? (
-                                                        <CheckCircle2 size={18} className="text-emerald-600" />
-                                                    ) : (
-                                                        <Download size={18} />
-                                                    )}
-                                                </button>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-
-                <div className="md:hidden divide-y divide-slate-100">
-                    {localPayments.length === 0 ? (
-                        <div className="px-4 py-10 text-center text-slate-400 text-sm">
-                            Start your first payment to see history here.
-                        </div>
-                    ) : (
-                        localPayments.map((txn, i) => {
-                            const rowKey = txn.id || `${txn.type}-${i}`;
-                            const isExpanded = Boolean(expandedRows[rowKey]);
-                            return (
-                                <div key={rowKey} className="px-4 py-3">
-                                    <button
-                                        onClick={() => setExpandedRows((prev) => ({ ...prev, [rowKey]: !prev[rowKey] }))}
-                                        className="w-full text-left"
-                                    >
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div>
-                                                <p className="text-sm font-semibold text-slate-800">
-                                                    {txn.date ? formatDate(txn.date, preferences) : 'Pending'}
-                                                </p>
-                                                <p className="text-xs mt-1 text-slate-500">
-                                                    Status: {txn.status === 'paid' ? 'Paid' : 'Pending'}
-                                                </p>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="text-sm font-black text-slate-900">{formatCurrency(Number(txn.amount || 0), preferences)}</p>
-                                                <ChevronDown size={16} className={`ml-auto mt-1 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                                            </div>
-                                        </div>
-                                    </button>
-
-                                    {isExpanded && (
-                                        <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-3 space-y-2 text-xs">
-                                            <p><span className="text-slate-400">Transaction ID:</span> <span className="font-mono text-slate-700">{txn.transaction_id || '---'}</span></p>
-                                            <p><span className="text-slate-400">Payment Method:</span> <span className="font-semibold text-slate-700">{txn.method || '---'}</span></p>
-                                            <p><span className="text-slate-400">Payment Time:</span> <span className="font-semibold text-slate-700">{txn.payment_time ? formatDateTime(txn.payment_time, preferences) : '---'}</span></p>
-                                            <p><span className="text-slate-400">Month Paid:</span> <span className="font-semibold text-slate-700">{txn.month_paid ? formatMonthYear(txn.month_paid, preferences) : '---'}</span></p>
-                                            {(txn.status === 'paid' || txn.status === 'success') && (
-                                                <button
-                                                    onClick={() => handleDownloadReceipt(txn)}
-                                                    disabled={downloadingId === txn.id}
-                                                    className="w-full mt-1 inline-flex items-center justify-center gap-2 rounded-lg bg-white border border-slate-200 px-3 py-2 text-slate-700 font-semibold"
-                                                >
-                                                    {downloadingId === txn.id ? (
-                                                        <>
-                                                            <Loader2 size={14} className="animate-spin" />
-                                                            Downloading...
-                                                        </>
-                                                    ) : downloadedId === txn.id ? (
-                                                        <>
-                                                            <CheckCircle2 size={14} className="text-emerald-600" />
-                                                            Downloaded
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <Download size={14} />
-                                                            Download Receipt
-                                                        </>
-                                                    )}
-                                                </button>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })
-                    )}
-                </div>
-            </div>
-
-            {/* Payment Modal */}
-            <PaymentModal
-                isOpen={showPaymentModal}
-                onClose={() => setShowPaymentModal(false)}
-                amount={selectedTotal > 0 ? selectedTotal : 0}
-                obligationId={selectedObligations.length === 1 ? selectedObligations[0] : null}
-                obligationIds={selectedObligations}
-                onSuccess={handlePaymentSuccess}
-            />
+            <p className="text-lg font-black text-slate-950">{formatCurrency(item.amount, preferences)}</p>
+          </div>
+          <div className="mt-4 rounded-2xl bg-white px-4 py-2 ring-1 ring-slate-100">
+            <AmountLine label="Monthly Stay" helper="Includes late fee adjustment" amount={formatCurrency(item.monthlyStay, preferences)} />
+            {item.maintenance > 0 ? <AmountLine label="Maintenance Charges" helper="Operational utilities and services" amount={formatCurrency(item.maintenance, preferences)} /> : null}
+            {item.adjustments > 0 ? <AmountLine label="Previous Adjustments" amount={formatCurrency(item.adjustments, preferences)} /> : null}
+            {item.credits > 0 ? <AmountLine label="Credits Applied" amount={`-${formatCurrency(item.credits, preferences)}`} /> : null}
+          </div>
+          <p className="mt-3 text-sm text-slate-500">Due {item.due_date ? formatDate(item.due_date, preferences) : 'this cycle'}. Deposits and refunds are shown separately.</p>
         </div>
-    );
+      </div>
+    </label>
+  );
+}
+
+function Timeline({ obligations, payments, preferences }) {
+  const events = useMemo(() => {
+    const obligationEvents = obligations.map((item) => ({
+      id: `o-${item.id}`,
+      date: item.due_date || item.cycle,
+      title: 'Monthly stay generated',
+      text: `${formatMonthYear(item.cycle, preferences, 'Cycle')} payable amount created. Late fee, if any, is included inside Monthly Stay.`,
+      tone: item.status === 'overdue' ? 'rose' : 'slate',
+    }));
+    const paymentEvents = payments.map((payment) => ({
+      id: `p-${payment.id}`,
+      date: payment.payment_date,
+      title: 'Payment received',
+      text: `${formatCurrency(payment.amount_paid, preferences)} via ${payment.payment_method || 'recorded method'}`,
+      tone: 'green',
+      payment,
+    }));
+    return [...obligationEvents, ...paymentEvents]
+      .filter((event) => event.date)
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .slice(0, 8);
+  }, [obligations, payments, preferences]);
+
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="text-lg font-black text-slate-950">Financial Activity Timeline</h2>
+      <div className="mt-5 space-y-5">
+        {events.length === 0 ? <p className="text-sm text-slate-500">Your financial activity will appear here after the first bill or payment.</p> : events.map((event) => (
+          <div key={event.id} className="flex gap-3">
+            <span className={`mt-1 h-3 w-3 rounded-full ${event.tone === 'green' ? 'bg-emerald-500' : event.tone === 'rose' ? 'bg-rose-500' : 'bg-slate-900'}`} />
+            <div>
+              <p className="text-sm font-black text-slate-900">{event.title}</p>
+              <p className="text-sm text-slate-500">{event.text}</p>
+              <p className="mt-1 text-xs font-semibold text-slate-400">{formatDateTime(event.date, preferences, formatDate(event.date, preferences))}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ReceiptCard({ txn, preferences, onDownload, loading, downloaded }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-black text-slate-900">{formatCurrency(txn.amount_paid, preferences)}</p>
+          <p className="text-sm text-slate-500">{txn.rent_month ? formatMonthYear(txn.rent_month, preferences) : formatDate(txn.payment_date, preferences)}</p>
+        </div>
+        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">Paid</span>
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-3 text-xs text-slate-500">
+        <span>{txn.payment_method || 'Payment'}</span>
+        <span className="font-mono">{txn.transaction_id || txn.reference_number || String(txn.id).slice(0, 8)}</span>
+      </div>
+      <button onClick={() => onDownload(txn)} disabled={loading} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-black text-slate-700 disabled:opacity-60">
+        {loading ? <Loader2 className="animate-spin" size={16} /> : downloaded ? <CheckCircle2 className="text-emerald-600" size={16} /> : <Download size={16} />}
+        {downloaded ? 'Downloaded' : 'Download Receipt'}
+      </button>
+    </div>
+  );
+}
+
+const TenantPayments = () => {
+  const { user } = useAuth();
+  const { preferences } = useAppPreferences();
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [expandedSummary, setExpandedSummary] = useState(true);
+  const [downloadingId, setDownloadingId] = useState(null);
+  const [downloadedId, setDownloadedId] = useState(null);
+  const [history, setHistory] = useState({ payments: [], obligations: [] });
+  const [selectedObligations, setSelectedObligations] = useState([]);
+  const [tenantScore, setTenantScore] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const loadHistory = useCallback(async () => {
+    if (!user?.tenant_id) return;
+    setLoading(true);
+    setError('');
+    try {
+      const data = await paymentService.getTenantHistory(user.tenant_id);
+      setHistory(data || { payments: [], obligations: [] });
+      tenantService.getMyScore().then(setTenantScore).catch(() => setTenantScore(null));
+    } catch {
+      setError('We could not load your financials right now. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.tenant_id]);
+
+  useEffect(() => { loadHistory(); }, [loadHistory]);
+
+  const payableItems = useMemo(() => (history.obligations || [])
+    .map(normalizeObligation)
+    .filter((item) => !['paid', 'waived'].includes(item.status) && item.amount > 0)
+    .sort((a, b) => new Date(a.cycle || a.due_date || 0) - new Date(b.cycle || b.due_date || 0)), [history.obligations]);
+
+  useEffect(() => {
+    setSelectedObligations((current) => current.filter((id) => payableItems.some((item) => item.id === id)));
+  }, [payableItems]);
+
+  const selectedItems = useMemo(() => payableItems.filter((item) => selectedObligations.includes(item.id)), [payableItems, selectedObligations]);
+  const selectedTotal = useMemo(() => selectedItems.reduce((sum, item) => sum + item.amount, 0), [selectedItems]);
+  const outstanding = Number(history.outstanding_balance || payableItems.reduce((sum, item) => sum + item.amount, 0));
+  const nextDueDate = history.next_due_date ? formatDate(history.next_due_date, preferences) : payableItems[0]?.due_date ? formatDate(payableItems[0].due_date, preferences) : 'No dues';
+
+  const toggleSelection = (id, checked) => setSelectedObligations((current) => checked ? [...new Set([...current, id])] : current.filter((item) => item !== id));
+
+  const handlePaymentSuccess = async () => {
+    setShowPaymentModal(false);
+    setSelectedObligations([]);
+    await loadHistory();
+  };
+
+  const handleDownloadReceipt = async (txn) => {
+    if (!txn?.id) return;
+    try {
+      setDownloadingId(txn.id);
+      setDownloadedId(null);
+      const blob = await paymentService.downloadReceipt(txn.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Receipt_${String(txn.id).slice(0, 8)}.pdf`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      setDownloadedId(txn.id);
+      setTimeout(() => setDownloadedId((prev) => (prev === txn.id ? null : prev)), 3000);
+    } catch {
+      alert('Failed to download receipt.');
+    } finally {
+      setDownloadingId((prev) => (prev === txn.id ? null : prev));
+    }
+  };
+
+  if (loading) {
+    return <div className="space-y-5 animate-fade-in-up"><div className="h-28 animate-pulse rounded-3xl bg-slate-100" /><div className="grid gap-4 md:grid-cols-2">{[1, 2, 3, 4].map((i) => <div key={i} className="h-48 animate-pulse rounded-3xl bg-slate-100" />)}</div></div>;
+  }
+
+  return (
+    <div className="space-y-7 animate-fade-in-up">
+      <TenantScoreCard scoreData={tenantScore} compact />
+      <header>
+        <p className="text-xs font-black uppercase tracking-[0.24em] text-slate-400">Your hostel financials</p>
+        <h1 className="mt-1 text-3xl font-black tracking-tight text-slate-950">Financials</h1>
+        <p className="mt-1 text-sm text-slate-500">See what you owe, what it covers, and what happens next.</p>
+      </header>
+
+      {error ? <div className="rounded-3xl border border-rose-100 bg-rose-50 p-4 text-sm font-semibold text-rose-700"><AlertCircle size={18} className="mb-2" />{error}</div> : null}
+
+      <section className="grid gap-4 lg:grid-cols-[1fr_0.7fr]">
+        <div className="rounded-3xl bg-slate-950 p-6 text-white shadow-sm">
+          <p className="text-sm font-bold text-slate-300">Total Due</p>
+          <p className="mt-2 text-4xl font-black tracking-tight">{outstanding > 0 ? formatCurrency(outstanding, preferences) : 'All Clear'}</p>
+          <p className="mt-3 text-sm text-slate-300">{outstanding > 0 ? 'This includes pending monthly stay and approved adjustments. Deposits are handled separately.' : 'No pending dues right now.'}</p>
+          <div className="mt-6 flex flex-col gap-2 sm:flex-row">
+            <button onClick={() => setSelectedObligations(payableItems.map((item) => item.id))} disabled={payableItems.length === 0} className="rounded-2xl bg-white px-4 py-3 text-sm font-black text-slate-950 disabled:opacity-40">Select Payable Dues</button>
+            <button onClick={() => setShowPaymentModal(true)} disabled={selectedTotal <= 0} className="rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-black text-white disabled:bg-slate-700 disabled:text-slate-400">Pay Now</button>
+          </div>
+        </div>
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <p className="text-sm font-bold text-slate-500">Next Due Date</p>
+          <p className="mt-2 text-2xl font-black text-slate-950">{nextDueDate}</p>
+          <div className="mt-5 flex items-center gap-2 rounded-2xl bg-blue-50 p-3 text-sm font-semibold text-blue-800"><ShieldCheck size={18} />Refundable deposit records stay separate from payments.</div>
+        </div>
+      </section>
+
+      <section className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <button onClick={() => setExpandedSummary((value) => !value)} className="flex w-full items-center justify-between gap-3 p-5 text-left">
+          <div><h2 className="text-lg font-black text-slate-950">You are paying for</h2><p className="text-sm text-slate-500">Monthly Stay is one payable amount and includes late fee adjustment.</p></div>
+          <ChevronDown className={`text-slate-400 transition ${expandedSummary ? 'rotate-180' : ''}`} size={20} />
+        </button>
+        {expandedSummary ? <div className="space-y-3 border-t border-slate-100 p-5">
+          {payableItems.length === 0 ? <EmptyState title="No pending dues right now." text="All tenant collections are up to date. Receipts remain available below." /> : payableItems.map((item) => <PayableCard key={item.id} item={item} preferences={preferences} selected={selectedObligations.includes(item.id)} onToggle={toggleSelection} />)}
+          {payableItems.length > 0 ? <div className="sticky bottom-3 rounded-3xl border border-slate-200 bg-white/95 p-4 shadow-xl backdrop-blur"><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-bold text-slate-500">Selected Total</p><p className="text-2xl font-black text-slate-950">{formatCurrency(selectedTotal, preferences)}</p></div><button onClick={() => setShowPaymentModal(true)} disabled={selectedTotal <= 0} className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white disabled:opacity-40"><CreditCard className="mr-2 inline" size={16} />Pay Now</button></div></div> : null}
+        </div> : null}
+      </section>
+
+      <Timeline obligations={payableItems} payments={history.payments || []} preferences={preferences} />
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center justify-between gap-3"><div><h2 className="text-lg font-black text-slate-950">Receipts</h2><p className="text-sm text-slate-500">Download payment confirmations when available.</p></div><FileText className="text-slate-400" size={22} /></div>
+        <div className="mt-5 grid gap-3 md:grid-cols-2">
+          {(history.payments || []).length === 0 ? <div className="md:col-span-2"><EmptyState title="No receipts yet." text="Your receipts will appear here after the owner records or confirms a payment." /></div> : (history.payments || []).map((txn) => <ReceiptCard key={txn.id} txn={txn} preferences={preferences} onDownload={handleDownloadReceipt} loading={downloadingId === txn.id} downloaded={downloadedId === txn.id} />)}
+        </div>
+      </section>
+
+      <PaymentModal isOpen={showPaymentModal} onClose={() => setShowPaymentModal(false)} amount={selectedTotal} obligationId={selectedObligations.length === 1 ? selectedObligations[0] : null} obligationIds={selectedObligations} paymentContext={selectedItems} onSuccess={handlePaymentSuccess} />
+    </div>
+  );
 };
 
 export default TenantPayments;
