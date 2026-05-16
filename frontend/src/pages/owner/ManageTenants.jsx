@@ -433,7 +433,7 @@ export default function ManageTenants() {
                                             initial={{ opacity: 0 }}
                                             animate={{ opacity: 1 }}
                                             key={tenant.id}
-                                            onClick={() => navigate(`/owner/tenants/${tenant.id}`)}
+                                            onClick={() => navigate(`/dashboard/${hostelId}/tenants/${tenant.id}`)}
                                             className="hover:bg-slate-50/80 transition-colors cursor-pointer group"
                                         >
                                             <td className="px-8 py-5 whitespace-nowrap">
@@ -525,7 +525,7 @@ export default function ManageTenants() {
                             {filteredTenants.map(tenant => (
                                 <div 
                                     key={tenant.id} 
-                                    onClick={() => navigate(`/owner/tenants/${tenant.id}`)}
+                                    onClick={() => navigate(`/dashboard/${hostelId}/tenants/${tenant.id}`)}
                                     className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm cursor-pointer hover:bg-slate-50/80 transition-all active:scale-[0.98]"
                                 >
                                     <div className="flex justify-between items-center">

@@ -19,7 +19,7 @@ export const GoogleCallback = () => {
           const role = (user?.role || '').toLowerCase();
 
           if (role === 'owner' || role === 'admin') {
-            navigate('/owner/dashboard');
+            navigate('/dashboard');
           } else if (role === 'tenant') {
             if (!user.is_profile_completed) {
               navigate('/complete-profile', { replace: true });

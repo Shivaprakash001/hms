@@ -19,10 +19,10 @@ function firstActiveHostel(response) {
 
 export function toHostelPath(hostelId, pathname) {
   const parts = pathname.split('/').filter(Boolean);
-  const current = parts[0] === 'hostels' ? parts[2] : parts[1];
-  const section = operationalSegments.has(current) ? (current === 'activity' ? 'activities' : current) : 'dashboard';
-  const rest = parts[0] === 'hostels' ? parts.slice(3) : parts.slice(2);
-  return `/hostels/${hostelId}/${[section, ...rest].filter(Boolean).join('/')}`;
+  const current = parts[0] === 'dashboard' && parts.length > 2 ? parts[2] : parts[1];
+  const section = operationalSegments.has(current) ? (current === 'activity' ? 'activities' : current) : 'overview';
+  const rest = parts[0] === 'dashboard' && parts.length > 2 ? parts.slice(3) : parts.slice(2);
+  return `/dashboard/${hostelId}/${[section, ...rest].filter(Boolean).join('/')}`;
 }
 
 export function LegacyOwnerOperationalRedirect() {
@@ -62,7 +62,7 @@ export function HostelContextProvider({ children }) {
 
   if (!hostelId) return <LegacyOwnerOperationalRedirect />;
   if (isLoading) return null;
-  if (!activeHostel) return <Navigate to="/owner/profile" replace />;
+  if (!activeHostel) return <Navigate to="/dashboard" replace />;
 
   return <HostelContext.Provider value={value}>{children}</HostelContext.Provider>;
 }

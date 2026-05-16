@@ -449,7 +449,7 @@ const Payments = () => {
 
           {!canGenerateReceipts && (
             <section className="rounded-3xl border border-blue-100 bg-blue-50 p-5 text-sm text-blue-900">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><p><span className="font-black">Receipts are limited on {planName}.</span> Collections still work; upgrade when you want generated PDF receipts for every payment.</p><button onClick={() => navigate('/owner/billing')} className="rounded-2xl bg-blue-700 px-4 py-2.5 text-sm font-black text-white">View plans</button></div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><p><span className="font-black">Receipts are limited on {planName}.</span> Collections still work; upgrade when you want generated PDF receipts for every payment.</p><button onClick={() => navigate('/dashboard/billing')} className="rounded-2xl bg-blue-700 px-4 py-2.5 text-sm font-black text-white">View plans</button></div>
             </section>
           )}
 

@@ -197,7 +197,7 @@ export default function BillingPlans() {
                 refetchSub(); refetchPlans();
             })
             .catch(() => setReturnStatus('Verification failed.'))
-            .finally(() => navigate('/owner/billing', { replace: true }));
+            .finally(() => navigate('/dashboard/billing', { replace: true }));
     }, [navigate, refetchPlans, refetchSub, searchParams]);
 
     const handleUpgrade = async (planId) => {

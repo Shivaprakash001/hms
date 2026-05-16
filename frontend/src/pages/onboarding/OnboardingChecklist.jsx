@@ -135,7 +135,7 @@ export default function OnboardingChecklist() {
 
   const openDashboard = () => {
     setStoredStep('COMPLETED');
-    navigate(hostelId ? `/hostels/${hostelId}/dashboard` : '/owner/portfolio', { replace: true });
+    navigate(hostelId ? `/dashboard/${hostelId}/overview` : '/dashboard', { replace: true });
   };
 
   if (loading) {

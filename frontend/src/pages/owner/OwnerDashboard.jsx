@@ -39,7 +39,7 @@ const apiErrorCode = err => err?.response?.data?.error?.code ?? err?.response?.d
 const OwnerDashboard = () => {
     const navigate = useNavigate();
     const { hostelId } = useHostelContext();
-    const opPath = (section) => `/hostels/${hostelId}/${section}`;
+    const opPath = (section) => `/dashboard/${hostelId}/${section}`;
     const { preferences } = useAppPreferences();
     const [tab, setTab]           = useState('cashflow');
     const [dismissed, setDismissed] = useState(false);
@@ -105,7 +105,7 @@ const OwnerDashboard = () => {
                     cronStopped={cronStopped} creditsLow={creditsLow}
                     cfStats={cfStats} preferences={preferences}
                     onDismiss={() => setDismissed(true)}
-                    onBuyCredits={() => navigate('/owner/billing')}
+                    onBuyCredits={() => navigate('/dashboard/billing')}
                     onView={() => setTab('tenants')}
                 />
             )}
@@ -297,7 +297,7 @@ const S1_Cashflow = ({ cfStats, cfSeverity, cfInsights, preferences, navigate, o
                                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{dDays(d)} Days Overdue</span>
                                         </div>
                                     </div>
-                                    <ReminderButton tenantId={dId(d)} tenantName={dName(d)} onNoCredits={() => navigate('/owner/billing')} />
+                                    <ReminderButton tenantId={dId(d)} tenantName={dName(d)} onNoCredits={() => navigate('/dashboard/billing')} />
                                 </div>
                             );
                         })}
@@ -433,7 +433,7 @@ const S2_Tenants = ({ data, severity, insights, loading, preferences, navigate, 
                                     </div>
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Score: {t.score} · {formatCurrency(t.pending_amount, preferences)} due</p>
                                 </div>
-                                <ReminderButton tenantId={t.tenant_id} tenantName={t.name} onNoCredits={() => navigate('/owner/billing')} />
+                                <ReminderButton tenantId={t.tenant_id} tenantName={t.name} onNoCredits={() => navigate('/dashboard/billing')} />
                             </div>
                         ))}
                     </div>

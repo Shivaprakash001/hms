@@ -53,7 +53,7 @@ export function AddHostelModal({ isOpen, onClose, onSubmit, plan, hostelsCount }
                             Your current <strong>{plan.name}</strong> plan only supports up to {plan.hostel_limit} {plan.hostel_limit === 1 ? 'hostel' : 'hostels'}. Upgrade your plan to unlock multiple hostels and manage your entire portfolio from one account.
                         </p>
                         <div className="flex flex-col gap-3">
-                            <Link to="/owner/billing" className="inline-flex min-h-11 items-center justify-center rounded-md bg-brand-500 px-4 text-base font-medium text-white transition hover:bg-brand-600" onClick={onClose}>
+                            <Link to="/dashboard/billing" className="inline-flex min-h-11 items-center justify-center rounded-md bg-brand-500 px-4 text-base font-medium text-white transition hover:bg-brand-600" onClick={onClose}>
                                 View upgrade options
                             </Link>
                             <Button variant="ghost" onClick={onClose}>Cancel</Button>

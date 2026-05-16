@@ -49,7 +49,7 @@ function HostelCard({ hostel }) {
           </div>
         </div>
         <button
-          onClick={() => navigate(toHostelPath(hostel.hostel_id, '/owner/dashboard'))}
+          onClick={() => navigate(`/dashboard/${hostel.hostel_id}/overview`)}
           className="flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors"
         >
           Manage <ArrowRight size={12} />

@@ -78,7 +78,7 @@ export default function OnboardingDone() {
           className="space-y-6"
         >
           <Button 
-            onClick={() => navigate('/owner/dashboard')}
+            onClick={() => navigate('/dashboard')}
             className="w-full h-18 bg-slate-900 text-white rounded-[1.5rem] font-black text-2xl shadow-2xl hover:bg-slate-800 transition-all flex items-center justify-center gap-4 group active:scale-95"
           >
             <LayoutDashboard className="w-7 h-7" />

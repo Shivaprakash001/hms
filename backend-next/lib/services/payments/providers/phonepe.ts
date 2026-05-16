@@ -123,7 +123,7 @@ export class PhonePeProvider extends PaymentProvider {
     const frontendUrl = process.env.NEXT_PUBLIC_FRONTEND_URL || "https://trishul.solutions";
     const returnBase =
       data.metadata?.flow_type === "SUBSCRIPTION" || data.metadata?.invoice_id
-        ? `${frontendUrl}/owner/billing`
+        ? `${frontendUrl}/dashboard/billing`
         : process.env.PHONEPE_REDIRECT_URL || `${frontendUrl}/payment-return`;
     const sep = returnBase.includes("?") ? "&" : "?";
     // For ADDON payments, embed attempt_id so the frontend can run the verify fallback
@@ -225,7 +225,7 @@ export class PhonePeProvider extends PaymentProvider {
     // Guard: if checkoutUrl points back to our own site it means PhonePe echoed our
     // return URL instead of giving a checkout page — this breaks the entire flow.
     const frontendOrigin = frontendUrl;
-    if (!checkoutUrl || checkoutUrl.startsWith(frontendOrigin) || checkoutUrl.includes("/payment-return") || checkoutUrl.includes("/owner/billing")) {
+    if (!checkoutUrl || checkoutUrl.startsWith(frontendOrigin) || checkoutUrl.includes("/payment-return") || checkoutUrl.includes("/dashboard/billing")) {
       console.error("[PhonePe] Bad checkoutUrl from response:", { checkoutUrl, orderId, responseData });
       throw new Error(
         `PhonePe did not return a valid checkout URL. Got: ${checkoutUrl ?? "null"}. ` +

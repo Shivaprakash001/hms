@@ -41,7 +41,7 @@ const LogoImage = ({ src }) => {
 };
 
 
-const OwnerLayout = () => {
+const HostelWorkspaceLayout = () => {
     const { user, logout } = useAuth();
     const hostelContext = useOptionalHostelContext();
     const hostelId = hostelContext?.hostelId || null;
@@ -329,17 +329,17 @@ const OwnerLayout = () => {
     };
 
     const hostels = hostelContext?.hostels || [];
-    const buildHostelPath = (section) => hostelId ? `/hostels/${hostelId}/${section}` : `/owner/${section}`;
+    const buildHostelPath = (section) => `/dashboard/${hostelId}/${section}`;
     const menuItems = [
-        { name: 'Dashboard', icon: Home, path: buildHostelPath('dashboard'), operational: true },
+        { name: '← Portfolio', icon: ChevronLeft, path: '/dashboard' },
+        { name: 'Overview', icon: Home, path: buildHostelPath('overview'), operational: true },
         { name: 'Rooms', icon: Bed, path: buildHostelPath('rooms'), operational: true },
         { name: 'Tenants', icon: Users, path: buildHostelPath('tenants'), operational: true },
-        { name: 'Financials', icon: CreditCard, path: buildHostelPath('payments'), operational: true },
+        { name: 'Financials', icon: CreditCard, path: buildHostelPath('financials'), operational: true },
         { name: 'Expenses', icon: Receipt, path: buildHostelPath('expenses'), operational: true },
-        { name: 'Move-Outs', icon: UserMinus, path: buildHostelPath('move-out'), operational: true },
-        { name: 'Activity Log', icon: Clock, path: buildHostelPath('activities'), operational: true },
-        { name: 'Portfolio', icon: BarChart2, path: '/owner/portfolio' },
-        { name: 'Billing & Plans', icon: CreditCard, path: '/owner/billing' },
+        { name: 'Move-Outs', icon: UserMinus, path: buildHostelPath('move-outs'), operational: true },
+        { name: 'Activity Log', icon: Clock, path: buildHostelPath('activity-log'), operational: true },
+        { name: 'Settings', icon: Settings, path: buildHostelPath('settings'), operational: true },
     ];
 
     const unreadCount = notifications.filter(n => !n.is_read).length;
@@ -374,7 +374,7 @@ const OwnerLayout = () => {
                 {/* Logo Section */}
                 <div
                     className="h-16 flex items-center px-6 border-b border-slate-800 cursor-pointer hover:bg-slate-800/50 transition-colors"
-                    onClick={() => navigate(hostelId ? `/hostels/${hostelId}/dashboard` : '/owner/portfolio')}
+                    onClick={() => navigate(hostelId ? `/dashboard/${hostelId}/overview` : '/dashboard')}
                 >
                     <div className="flex items-center gap-3 overflow-hidden">
                         <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shrink-0 shadow-sm border border-slate-800/50 overflow-hidden group-hover:border-indigo-500/30 transition-colors">
@@ -392,7 +392,7 @@ const OwnerLayout = () => {
                 <div className="flex-1 py-6 flex flex-col gap-1.5 px-3 overflow-y-auto">
                     {menuItems.map((item) => {
                         const Icon = item.icon;
-                        const isActive = location.pathname === item.path || (item.path === '/owner/portfolio' && location.pathname === '/owner');
+                        const isActive = location.pathname.includes(item.path) && item.path !== '/dashboard';
 
                         return (
                             <button
@@ -661,15 +661,15 @@ const OwnerLayout = () => {
                             onToggle={() => setProfileMenuOpen(!profileMenuOpen)}
                             onProfileSettings={() => {
                                 setProfileMenuOpen(false);
-                                navigate('/owner/profile?tab=owner');
+                                navigate('/dashboard/profile?tab=owner');
                             }}
                             onBilling={() => {
                                 setProfileMenuOpen(false);
-                                navigate('/owner/billing');
+                                navigate('/dashboard/billing');
                             }}
                             onPreferences={() => {
                                 setProfileMenuOpen(false);
-                                navigate('/owner/profile?tab=preferences');
+                                navigate('/dashboard/profile?tab=preferences');
                             }}
                             onSignOut={handleLogout}
                             menuRef={profileRef}
@@ -688,4 +688,4 @@ const OwnerLayout = () => {
     );
 };
 
-export default OwnerLayout;
+export default HostelWorkspaceLayout;

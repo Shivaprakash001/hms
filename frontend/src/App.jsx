@@ -8,9 +8,10 @@ import ProtectedOwnerRoute from './components/ProtectedOwnerRoute';
 // ── Critical path — loaded eagerly (auth shell, layouts) ─────────────────────
 import Login from './pages/auth/Login.jsx';
 import Legal from './pages/Legal.jsx';
-import OwnerLayout from './layouts/OwnerLayout.jsx';
+import PortfolioLayout from './layouts/PortfolioLayout.jsx';
+import HostelWorkspaceLayout from './layouts/HostelWorkspaceLayout.jsx';
 import TenantLayout from './layouts/TenantLayout.jsx';
-import { HostelContextProvider, LegacyOwnerOperationalRedirect } from './context/HostelContext.jsx';
+import { HostelContextProvider } from './context/HostelContext.jsx';
 
 // ── Auth pages — small, low priority ─────────────────────────────────────────
 const Register        = lazy(() => import('./pages/auth/Register.jsx'));
@@ -107,39 +108,33 @@ function App() {
 
             {/* Owner Routes */}
             <Route element={<ProtectedOwnerRoute />}>
-              <Route path="/owner" element={<OwnerLayout />}>
-                <Route index element={<Navigate to="portfolio" replace />} />
-                <Route path="dashboard"  element={<LegacyOwnerOperationalRedirect />} />
-                <Route path="tenants"    element={<LegacyOwnerOperationalRedirect />} />
-                <Route path="tenants/:id" element={<LegacyOwnerOperationalRedirect />} />
-                <Route path="rooms"      element={<LegacyOwnerOperationalRedirect />} />
-                <Route path="payments"   element={<LegacyOwnerOperationalRedirect />} />
-                <Route path="expenses"   element={<LegacyOwnerOperationalRedirect />} />
-                <Route path="activities" element={<LegacyOwnerOperationalRedirect />} />
-                <Route path="activity"   element={<LegacyOwnerOperationalRedirect />} />
-                <Route path="billing"    element={<BillingPlans />} />
-                <Route path="profile"    element={<OwnerProfile />} />
-                <Route path="portfolio"  element={<Portfolio />} />
+              {/* Portfolio Dashboard Mode */}
+              <Route path="/dashboard" element={<PortfolioLayout />}>
+                <Route index element={<Portfolio />} />
+                <Route path="billing" element={<BillingPlans />} />
+                <Route path="profile" element={<OwnerProfile />} />
               </Route>
 
-              <Route path="/hostels/:hostelId" element={<HostelContextProvider><OwnerLayout /></HostelContextProvider>}>
-                <Route index element={<Navigate to="dashboard" replace />} />
-                <Route path="dashboard"  element={<OwnerDashboard />} />
+              {/* Hostel Workspace Mode */}
+              <Route path="/dashboard/:hostelId" element={<HostelContextProvider><HostelWorkspaceLayout /></HostelContextProvider>}>
+                <Route index element={<Navigate to="overview" replace />} />
+                <Route path="overview"   element={<OwnerDashboard />} />
                 <Route path="tenants"    element={<ManageTenants />} />
                 <Route path="tenants/:id" element={<TenantProfilePage />} />
                 <Route path="bulk-import" element={<BulkImport />} />
                 <Route path="bulk-import/:batchId/confirm" element={<BulkImportConfirm />} />
                 <Route path="rooms"      element={<ManageRooms />} />
-                <Route path="payments"   element={<Payments />} />
+                <Route path="financials" element={<Payments />} />
                 <Route path="expenses"   element={<Expenses />} />
                 <Route path="activities" element={<ActivityHistory />} />
-                <Route path="activity"   element={<Navigate to="activities" replace />} />
-                <Route path="move-out"   element={<MoveOutManagement />} />
+                <Route path="activity-log" element={<Navigate to="activities" replace />} />
+                <Route path="move-outs"  element={<MoveOutManagement />} />
+                <Route path="settings"   element={<OwnerProfile />} />
               </Route>
             </Route>
 
             {/* Global Redirects */}
-            <Route path="/dashboard" element={<Navigate to="/owner/dashboard" replace />} />
+            <Route path="/owner/*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </Suspense>
       </AppPreferencesProvider>

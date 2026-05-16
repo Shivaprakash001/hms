@@ -54,8 +54,8 @@ export const AuthProvider = ({ children }) => {
         if (user && publicPaths.includes(location.pathname) && !isPaymentReturnPath) {
             const role = user.role?.toLowerCase();
             if (role === 'owner' || role === 'admin') {
-                if (!location.pathname.startsWith('/owner')) {
-                    navigate('/owner/dashboard', { replace: true });
+                if (!location.pathname.startsWith('/dashboard')) {
+                    navigate('/dashboard', { replace: true });
                 }
             } else if (role === 'tenant') {
                 if (!location.pathname.startsWith('/tenant')) {
