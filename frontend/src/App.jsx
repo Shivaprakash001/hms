@@ -4,6 +4,7 @@ import { AuthProvider } from './context/AuthContext';
 import { AppPreferencesProvider } from './context/AppPreferencesContext';
 import ProtectedTenantRoute from './components/ProtectedTenantRoute';
 import ProtectedOwnerRoute from './components/ProtectedOwnerRoute';
+import ProtectedAdminRoute from './components/ProtectedAdminRoute';
 
 // ── Critical path — loaded eagerly (auth shell, layouts) ─────────────────────
 import Login from './pages/auth/Login.jsx';
@@ -46,6 +47,11 @@ const TenantProfilePage = lazy(() => import('./pages/owner/TenantProfilePage.jsx
 const BulkImport        = lazy(() => import('./pages/owner/BulkImport.jsx'));
 const BulkImportConfirm = lazy(() => import('./pages/owner/BulkImportConfirm.jsx'));
 const MoveOutManagement = lazy(() => import('./pages/owner/MoveOutManagement.jsx'));
+const OwnerFinance          = lazy(() => import('./pages/owner/OwnerFinance.jsx'));
+const OwnerFinanceTransfers = lazy(() => import('./pages/owner/OwnerFinanceTransfers.jsx'));
+
+// ── Admin pages ──────────────────────────────────────────────────────────────
+const AdminReconciliation   = lazy(() => import('./pages/admin/AdminReconciliation.jsx'));
 
 // ── Tenant pages — code-split per route ──────────────────────────────────────
 const TenantDashboard     = lazy(() => import('./pages/tenant/TenantDashboard.jsx'));
@@ -113,6 +119,8 @@ function App() {
                 <Route index element={<Portfolio />} />
                 <Route path="billing" element={<BillingPlans />} />
                 <Route path="profile" element={<OwnerProfile />} />
+                <Route path="finance" element={<OwnerFinance />} />
+                <Route path="finance/transfers" element={<OwnerFinanceTransfers />} />
               </Route>
 
               {/* Hostel Workspace Mode */}
@@ -131,6 +139,11 @@ function App() {
                 <Route path="move-outs"  element={<MoveOutManagement />} />
                 <Route path="settings"   element={<OwnerProfile />} />
               </Route>
+            </Route>
+
+            {/* Admin Routes */}
+            <Route element={<ProtectedAdminRoute />}>
+              <Route path="/admin/reconciliation" element={<AdminReconciliation />} />
             </Route>
 
             {/* Global Redirects */}

@@ -4,7 +4,8 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
     Menu, X, Home, Bed, Users, CreditCard, MessageSquare, Receipt,
     Search, Bell, ChevronLeft, ChevronRight, LogOut, Settings, User,
-    ShieldCheck, AlertCircle, CheckCircle2, Clock, ChevronDown, BarChart2, UserMinus
+    ShieldCheck, AlertCircle, CheckCircle2, Clock, ChevronDown, BarChart2, UserMinus,
+    Wallet, ShieldAlert
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
@@ -330,10 +331,13 @@ const PortfolioLayout = () => {
 
     const hostels = [];
     const buildHostelPath = (section) => `/dashboard/${section}`;
+    const isAdmin = (user?.role || '').toLowerCase() === 'admin';
     const menuItems = [
         { name: 'Portfolio', icon: BarChart2, path: '/dashboard' },
         { name: 'Create Hostel', icon: Home, path: '/onboarding/hostel' },
+        { name: 'Finance', icon: Wallet, path: '/dashboard/finance' },
         { name: 'Billing & Plans', icon: CreditCard, path: '/dashboard/billing' },
+        ...(isAdmin ? [{ name: 'Reconciliation', icon: ShieldAlert, path: '/admin/reconciliation' }] : []),
     ];
 
     const unreadCount = notifications.filter(n => !n.is_read).length;
