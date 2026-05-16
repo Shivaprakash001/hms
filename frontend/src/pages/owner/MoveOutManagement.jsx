@@ -210,6 +210,27 @@ export default function MoveOutManagement() {
                   </button>
                 )}
 
+                {/* Settlement Breakdown */}
+                {detail.settlement && (
+                  <div className="rounded-xl bg-slate-50 border border-slate-200 p-5">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-3">Settlement Breakdown</h3>
+                    <div className="space-y-2 text-sm text-slate-600">
+                      <div className="flex justify-between"><span>Security Deposit</span><span className="font-medium">₹{detail.settlement.security_deposit_amount || 0}</span></div>
+                      {Number(detail.settlement.advance_balance || 0) > 0 && <div className="flex justify-between"><span>Advance Balance</span><span className="font-medium">₹{detail.settlement.advance_balance}</span></div>}
+                      <div className="flex justify-between text-red-600"><span>Pending Rent Dues</span><span className="font-medium">- ₹{detail.settlement.pending_rent_dues || 0}</span></div>
+                      {Number(detail.settlement.total_deductions || 0) > 0 && <div className="flex justify-between text-red-600"><span>Deductions</span><span className="font-medium">- ₹{detail.settlement.total_deductions}</span></div>}
+                      <div className="pt-3 mt-3 border-t border-slate-200 flex justify-between font-bold text-slate-800">
+                        <span>Net Settlement Amount</span>
+                        <span className={detail.settlement.settlement_direction === 'OWNER_OWES_TENANT' ? 'text-red-600' : detail.settlement.settlement_direction === 'TENANT_OWES_OWNER' ? 'text-emerald-600' : 'text-slate-500'}>
+                          {detail.settlement.settlement_direction === 'OWNER_OWES_TENANT' ? `Refund ₹${Math.abs(detail.settlement.net_settlement_amount)} to Tenant` : 
+                           detail.settlement.settlement_direction === 'TENANT_OWES_OWNER' ? `Collect ₹${Math.abs(detail.settlement.net_settlement_amount)} from Tenant` : 
+                           'Settled (₹0)'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Complete Payment */}
                 {['PAYMENT_PENDING', 'DISPUTED'].includes(detail.status) && (
                   <div className="rounded-xl bg-white border border-slate-200 p-5">
