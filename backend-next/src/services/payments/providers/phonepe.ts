@@ -1,5 +1,14 @@
 import { PaymentProvider, CreateIntentResult, WebhookVerificationResult, FetchStatusResult } from "../provider-base";
 import crypto from "crypto";
+import { resolvePhonePeEnvironment } from "../phonepe-env";
+
+// ── Startup validation ────────────────────────────────────────────────────────
+// In production deployments: resolve (and validate) PHONEPE_ENV at module load
+// time so a misconfigured deployment fails immediately on cold start rather than
+// silently routing traffic to sandbox endpoints.
+if (process.env.NODE_ENV === "production") {
+  resolvePhonePeEnvironment();
+}
 
 /**
  * PhonePe Payment Gateway — Checkout v2 (OAuth-based)
@@ -16,11 +25,11 @@ export class PhonePeProvider extends PaymentProvider {
 
   // ─── Environment helpers ───────────────────────────────────────
   private get environment() {
-    return String(this.config?.environment || process.env.PHONEPE_ENV || "").trim().toLowerCase();
+    return resolvePhonePeEnvironment();
   }
 
   private get isProduction() {
-    return ["production", "prod", "live"].includes(this.environment);
+    return this.environment === "production";
   }
 
   private get baseUrl() {
@@ -58,8 +67,7 @@ export class PhonePeProvider extends PaymentProvider {
     }
     // ── DIAGNOSTIC: log resolved auth config (no secrets) ────────────────────
     console.info("[PhonePe] assertCredentials resolved", {
-      environment_raw:   this.config?.environment ?? process.env.PHONEPE_ENV ?? "(not set)",
-      environment_lower: this.environment,
+      environment:       this.environment,
       is_production:     this.isProduction,
       auth_mode:         this.isProduction ? "PRODUCTION OAuth" : "SANDBOX OAuth",
       oauth_url:         `${this.authBaseUrl}/v1/oauth/token`,

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { PAYMENT_DOMAIN, PAYMENT_FLOW, PAYMENT_SCOPE, MERCHANT_CONTEXT } from "./financial-domain";
+import { resolvePhonePeEnvironment } from "./phonepe-env";
 
 
 type MaybeHostelId = string | null;
@@ -42,7 +43,7 @@ export async function getProviderContext(params: {
         merchantId: process.env.PHONEPE_MERCHANT_ID || "",
         saltKey: process.env.PHONEPE_SALT_KEY || "",
         saltIndex: process.env.PHONEPE_SALT_INDEX || "",
-        environment: process.env.PHONEPE_ENV || "SANDBOX",
+        environment: resolvePhonePeEnvironment(),
         callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL || ""}/api/webhooks/payments/phonepe`,
       },
     };
@@ -76,31 +77,26 @@ export async function getProviderContext(params: {
       throw new Error("CONFIG_ERROR: HMS treasury PhonePe credentials are not configured");
     }
 
-    // ── DIAGNOSTIC: Verify resolved env before calling PhonePe ─────────────
-    const _envRaw = process.env.PHONEPE_ENV;
-    const _envResolved = (_envRaw || "SANDBOX").trim().toLowerCase();
-    const _isProduction = ["production", "prod", "live"].includes(_envResolved);
+    const resolvedEnv = resolvePhonePeEnvironment();
+    const isProduction = resolvedEnv === "production";
     console.info("[merchant-context] HMS_TREASURY context resolved", {
       payment_domain:           PAYMENT_DOMAIN.RENT_COLLECTION,
       merchant_context_type:    MERCHANT_CONTEXT.HMS_TREASURY,
       flow_type:                flowType,
       hostel_id:                hostelId,
       operational_owner_id:     operationalOwnerId,
-      // Env resolution
-      PHONEPE_ENV_raw:          _envRaw ?? "(not set — will default to SANDBOX)",
-      PHONEPE_ENV_resolved:     _envResolved,
-      is_production_mode:       _isProduction,
+      environment:              resolvedEnv,
+      is_production_mode:       isProduction,
       // Credentials presence (never log values)
       PHONEPE_CLIENT_ID_set:    Boolean(process.env.PHONEPE_CLIENT_ID),
       PHONEPE_CLIENT_ID_suffix: process.env.PHONEPE_CLIENT_ID?.slice(-4) ?? null,
       PHONEPE_CLIENT_VERSION:   process.env.PHONEPE_CLIENT_VERSION ?? "(not set — will default to 1)",
       PHONEPE_MERCHANT_ID_set:  Boolean(process.env.PHONEPE_MERCHANT_ID),
-      // URL context
       NEXT_PUBLIC_APP_URL:      process.env.NEXT_PUBLIC_APP_URL ?? "(not set — callbackUrl will be relative)",
-      oauth_url_will_be:        _isProduction
+      oauth_url_will_be:        isProduction
         ? "https://api.phonepe.com/apis/identity-manager/v1/oauth/token"
         : "https://api-preprod.phonepe.com/apis/pg-sandbox/v1/oauth/token",
-      checkout_url_will_be:     _isProduction
+      checkout_url_will_be:     isProduction
         ? "https://api.phonepe.com/apis/pg/checkout/v2/pay"
         : "https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/pay",
     });
@@ -122,7 +118,7 @@ export async function getProviderContext(params: {
         merchantId: process.env.PHONEPE_MERCHANT_ID || "",
         saltKey: process.env.PHONEPE_SALT_KEY || "",
         saltIndex: process.env.PHONEPE_SALT_INDEX || "",
-        environment: process.env.PHONEPE_ENV || "SANDBOX",
+        environment: resolvedEnv,
         callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL || ""}/api/webhooks/payments/phonepe`,
         treasuryMode: true,
         hostelId: hostel.id,
