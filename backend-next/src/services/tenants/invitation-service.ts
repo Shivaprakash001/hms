@@ -4,7 +4,6 @@ import crypto from "crypto";
 import { eventSystem } from "../../../lib/events";
 import { EmailService } from "../../../lib/services/email-service";
 import { getLogger } from "../../../lib/logger";
-import { planEnforcementService } from "../../../lib/services/plan-enforcement-service";
 import { allocationReconciliationService } from "../../../lib/services/allocation-reconciliation-service";
 import { hostelBillingPreferencesService, type MaintenanceType } from "../../../lib/services/hostel-billing-preferences-service";
 import { eventLog } from "../../../lib/services/event-log-service";

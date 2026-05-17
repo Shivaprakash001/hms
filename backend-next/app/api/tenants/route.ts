@@ -3,7 +3,9 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
-import { tenantService } from "@/lib/services/tenant-service";
+import { ApiResponse } from "@/src/lib/api-response";
+import { ApiError } from "@/src/lib/api-error";
+import { tenantService } from "@/src/services/tenants/tenant-service";
 import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
 import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
 
@@ -48,7 +50,7 @@ export async function GET(req: NextRequest) {
     return ApiResponse.success({ ...result });
   } catch (error: any) {
     console.error("Detailed API Error [tenants.GET]:", error);
-    return ApiResponse.error(ApiError.internal(error.message || "Internal Server Error"));
+    return ApiResponse.error(new ApiError(error.message || "Internal Server Error"));
   }
 }
 
@@ -76,7 +78,7 @@ export async function POST(req: NextRequest) {
     
     console.log(`[tenants.POST] Tenant created: ${tenant.id}`);
     
-    return ApiResponse.success(tenant, 201);
+    return ApiResponse.success(tenant, undefined, { status: 201 });
   } catch (error: any) {
     console.error("Detailed API Error [tenants.POST]:", error);
     
