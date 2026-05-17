@@ -75,6 +75,36 @@ export async function getProviderContext(params: {
     if (!process.env.PHONEPE_CLIENT_ID || !process.env.PHONEPE_CLIENT_SECRET) {
       throw new Error("CONFIG_ERROR: HMS treasury PhonePe credentials are not configured");
     }
+
+    // ── DIAGNOSTIC: Verify resolved env before calling PhonePe ─────────────
+    const _envRaw = process.env.PHONEPE_ENV;
+    const _envResolved = (_envRaw || "SANDBOX").trim().toLowerCase();
+    const _isProduction = ["production", "prod", "live"].includes(_envResolved);
+    console.info("[merchant-context] HMS_TREASURY context resolved", {
+      payment_domain:           PAYMENT_DOMAIN.RENT_COLLECTION,
+      merchant_context_type:    MERCHANT_CONTEXT.HMS_TREASURY,
+      flow_type:                flowType,
+      hostel_id:                hostelId,
+      operational_owner_id:     operationalOwnerId,
+      // Env resolution
+      PHONEPE_ENV_raw:          _envRaw ?? "(not set — will default to SANDBOX)",
+      PHONEPE_ENV_resolved:     _envResolved,
+      is_production_mode:       _isProduction,
+      // Credentials presence (never log values)
+      PHONEPE_CLIENT_ID_set:    Boolean(process.env.PHONEPE_CLIENT_ID),
+      PHONEPE_CLIENT_ID_suffix: process.env.PHONEPE_CLIENT_ID?.slice(-4) ?? null,
+      PHONEPE_CLIENT_VERSION:   process.env.PHONEPE_CLIENT_VERSION ?? "(not set — will default to 1)",
+      PHONEPE_MERCHANT_ID_set:  Boolean(process.env.PHONEPE_MERCHANT_ID),
+      // URL context
+      NEXT_PUBLIC_APP_URL:      process.env.NEXT_PUBLIC_APP_URL ?? "(not set — callbackUrl will be relative)",
+      oauth_url_will_be:        _isProduction
+        ? "https://api.phonepe.com/apis/identity-manager/v1/oauth/token"
+        : "https://api-preprod.phonepe.com/apis/pg-sandbox/v1/oauth/token",
+      checkout_url_will_be:     _isProduction
+        ? "https://api.phonepe.com/apis/pg/checkout/v2/pay"
+        : "https://api-preprod.phonepe.com/apis/pg-sandbox/checkout/v2/pay",
+    });
+
     return {
       provider: "PHONEPE",
       payment_domain: PAYMENT_DOMAIN.RENT_COLLECTION,
@@ -104,6 +134,12 @@ export async function getProviderContext(params: {
   if (!hostel.upi_id) {
     throw new Error("CONFIG_ERROR: Owner UPI ID is not configured. Please set your UPI ID in hostel settings.");
   }
+
+  console.info("[merchant-context] OWNER_HOSTEL (UPI direct) context resolved", {
+    flow_type:             flowType,
+    hostel_id:             hostelId,
+    upi_id_set:            Boolean(hostel.upi_id),
+  });
 
   return {
     provider: "PHONEPE",

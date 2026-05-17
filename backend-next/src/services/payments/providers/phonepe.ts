@@ -56,6 +56,19 @@ export class PhonePeProvider extends PaymentProvider {
         "in your Vercel environment variables."
       );
     }
+    // ── DIAGNOSTIC: log resolved auth config (no secrets) ────────────────────
+    console.info("[PhonePe] assertCredentials resolved", {
+      environment_raw:   this.config?.environment ?? process.env.PHONEPE_ENV ?? "(not set)",
+      environment_lower: this.environment,
+      is_production:     this.isProduction,
+      auth_mode:         this.isProduction ? "PRODUCTION OAuth" : "SANDBOX OAuth",
+      oauth_url:         `${this.authBaseUrl}/v1/oauth/token`,
+      checkout_url:      `${this.baseUrl}/checkout/v2/pay`,
+      status_url_base:   `${this.baseUrl}/checkout/v2/order`,
+      client_id_set:     Boolean(this.clientId),
+      client_id_suffix:  this.clientId ? this.clientId.slice(-4) : null,
+      client_version:    this.clientVersion,
+    });
     if (!this.isProduction) {
       console.warn(
         `[PhonePe] ⚠️  PHONEPE_ENV is '${this.environment || "unset"}', not 'production'. ` +
@@ -71,10 +84,21 @@ export class PhonePeProvider extends PaymentProvider {
   private async getAccessToken(): Promise<string> {
     // Return cached token if still valid (with 60s buffer)
     if (this.cachedToken && this.cachedToken.expiresAt > Date.now() + 60_000) {
+      console.info("[PhonePe] OAuth token cache hit", {
+        expires_in_ms: this.cachedToken.expiresAt - Date.now(),
+        environment:   this.isProduction ? "PRODUCTION" : "SANDBOX",
+      });
       return this.cachedToken.token;
     }
 
     const url = `${this.authBaseUrl}/v1/oauth/token`;
+    console.info("[PhonePe] Fetching OAuth token", {
+      url,
+      environment:    this.isProduction ? "PRODUCTION" : "SANDBOX",
+      client_version: this.clientVersion,
+      client_id_set:  Boolean(this.clientId),
+      client_id_suffix: this.clientId ? this.clientId.slice(-4) : null,
+    });
 
     const response = await fetch(url, {
       method: "POST",
@@ -91,15 +115,23 @@ export class PhonePeProvider extends PaymentProvider {
     const data = await response.json();
 
     if (!response.ok || !data.access_token) {
-      console.error("[PhonePe] OAuth token error:", {
-        status: response.status,
-        environment: this.isProduction ? "PRODUCTION" : "SANDBOX",
-        clientVersion: this.clientVersion,
-        clientIdSuffix: this.clientId ? this.clientId.slice(-6) : null,
-        response: data,
+      console.error("[PhonePe] OAuth token error", {
+        http_status:    response.status,
+        environment:    this.isProduction ? "PRODUCTION" : "SANDBOX",
+        oauth_url:      url,
+        client_version: this.clientVersion,
+        client_id_suffix: this.clientId ? this.clientId.slice(-4) : null,
+        error_code:     data?.code ?? null,
+        error_message:  data?.message ?? null,
+        error_type:     data?.data?.type ?? null,
+        full_response:  data,
       });
-      throw new Error(`PhonePe OAuth failed: ${data.message || response.statusText}`);
+      throw new Error(`PhonePe OAuth failed (HTTP ${response.status}): ${data.message || response.statusText}`);
     }
+    console.info("[PhonePe] OAuth token acquired", {
+      environment:      this.isProduction ? "PRODUCTION" : "SANDBOX",
+      expires_in:       data.expires_in ?? "(not provided — defaulting to 20 min)",
+    });
 
     // Cache the token (default 20 min expiry if not provided)
     this.cachedToken = {
@@ -152,7 +184,18 @@ export class PhonePeProvider extends PaymentProvider {
       data.metadata?.invoice_id ||
       "unknown-user";
 
-    console.info("[PhonePe] Environment:", this.isProduction ? "PRODUCTION" : "SANDBOX", "|", this.baseUrl);
+    const frontendOriginForLog = (process.env.NEXT_PUBLIC_FRONTEND_URL || "https://trishul.solutions");
+    console.info("[PhonePe] createIntent", {
+      environment:          this.isProduction ? "PRODUCTION" : "SANDBOX",
+      checkout_endpoint:    `${this.baseUrl}/checkout/v2/pay`,
+      merchant_order_id:    data.merchant_txn_id,
+      amount:               data.amount,
+      flow_type:            data.metadata?.flow_type ?? null,
+      is_subscription:      Boolean(data.metadata?.flow_type === "SUBSCRIPTION" || data.metadata?.invoice_id),
+      redirect_base:        process.env.PHONEPE_REDIRECT_URL ?? `${frontendOriginForLog}/payment-return`,
+      NEXT_PUBLIC_FRONTEND_URL_set: Boolean(process.env.NEXT_PUBLIC_FRONTEND_URL),
+      PHONEPE_REDIRECT_URL_set:     Boolean(process.env.PHONEPE_REDIRECT_URL),
+    });
 
     const payload: any = {
       merchantOrderId: data.merchant_txn_id,
