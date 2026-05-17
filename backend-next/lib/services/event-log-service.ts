@@ -1,4 +1,5 @@
 import { prisma } from "../db";
+import crypto from "crypto";
 
 /**
  * 📝 System Event Logger
@@ -21,6 +22,7 @@ class EventLogService {
     try {
       await (prisma as any).systemEventLog.create({
         data: {
+          id: crypto.randomUUID(),
           event_type: eventType,
           owner_id: ownerId || null,
           tenant_id: tenantId || null,

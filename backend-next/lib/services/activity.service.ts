@@ -1,4 +1,5 @@
 import { prisma } from "../db";
+import crypto from "crypto";
 
 export interface LogEntry {
   userId: string;
@@ -14,6 +15,7 @@ export class ActivityService {
     try {
       await prisma.activity_logs.create({
         data: {
+          id: crypto.randomUUID(),
           user_id: entry.userId,
           owner_id: entry.ownerId,
           action_type: entry.actionType,
