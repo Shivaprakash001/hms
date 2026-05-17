@@ -12,18 +12,18 @@ export async function GET(req: Request) {
   try {
     const user = await authService.getCurrentUser(req);
     if (!user) {
-      return ApiError.unauthorized("Unauthorized");
+      return ApiResponse.error(ApiError.unauthorized("Unauthorized"));
     }
 
     const { searchParams } = new URL(req.url || "");
     const idsParam = searchParams.get("ids");
     if (!idsParam) {
-      return ApiError.badRequest("ids query parameter is required", "VALIDATION_ERROR");
+      return ApiResponse.error(ApiError.badRequest("ids query parameter is required"));
     }
 
     const obligationIds = idsParam.split(",").map(id => id.trim()).filter(Boolean);
     if (obligationIds.length === 0) {
-      return ApiError.badRequest("ids must be a non-empty comma-separated list", "VALIDATION_ERROR");
+      return ApiResponse.error(ApiError.badRequest("ids must be a non-empty comma-separated list"));
     }
 
     let tenantId: string | undefined;
@@ -33,22 +33,22 @@ export async function GET(req: Request) {
         select: { id: true },
       });
       if (!tenant) {
-        return ApiError.notFound("Tenant enrollment not found");
+        return ApiResponse.error(ApiError.notFound("Tenant enrollment not found"));
       }
       tenantId = tenant.id;
     } else if (user.role === "OWNER") {
       const hostelId = searchParams.get("hostelId");
-      if (!hostelId) return ApiError.badRequest("hostelId is required", "HOSTEL_CONTEXT_REQUIRED");
+      if (!hostelId) return ApiResponse.error(ApiError.badRequest("hostelId is required"));
       const hostel = await prisma.hostels.findUnique({ where: { id: hostelId }, select: { owner_id: true } });
-      if (!hostel || hostel.owner_id !== user.id) return ApiError.forbidden("Forbidden");
+      if (!hostel || hostel.owner_id !== user.id) return ApiResponse.error(ApiError.forbidden("Forbidden"));
       const count = await prisma.rent_obligations.count({
         where: { id: { in: obligationIds }, owner_id: user.id, hostel_id: hostelId },
       });
       if (count !== obligationIds.length) {
-        return ApiError.forbidden("All obligations must belong to the requested hostel");
+        return ApiResponse.error(ApiError.forbidden("All obligations must belong to the requested hostel"));
       }
     } else if (user.role !== "ADMIN") {
-      return ApiError.forbidden("Forbidden");
+      return ApiResponse.error(ApiError.forbidden("Forbidden"));
     }
 
     const preview = await paymentService.previewPaymentAmount(obligationIds, user.id, tenantId);
@@ -72,9 +72,9 @@ export async function GET(req: Request) {
   } catch (error: any) {
     console.error("Error previewing payment:", error);
     const message = String(error?.message ?? error);
-    if (message.includes("FORBIDDEN")) return ApiError.forbidden(message.split(": ")[1] ?? message);
-    if (message.includes("NOT_FOUND")) return ApiError.notFound(message.split(": ")[1] ?? message);
-    if (message.includes("BAD_REQUEST")) return ApiError.badRequest(message.split(": ")[1] ?? message);
-    return ApiError.internal(message);
+    if (message.includes("FORBIDDEN")) return ApiResponse.error(ApiError.forbidden(message.split(": ")[1] ?? message));
+    if (message.includes("NOT_FOUND")) return ApiResponse.error(ApiError.notFound(message.split(": ")[1] ?? message));
+    if (message.includes("BAD_REQUEST")) return ApiResponse.error(ApiError.badRequest(message.split(": ")[1] ?? message));
+    return ApiResponse.error(ApiError.internal(message));
   }
 }

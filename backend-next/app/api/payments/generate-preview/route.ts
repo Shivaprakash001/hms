@@ -16,13 +16,13 @@ export async function GET(req: NextRequest) {
   try {
     const user = await authService.getCurrentUser(req);
     if (!user || (user.role !== "OWNER" && user.role !== "ADMIN")) {
-      return ApiError.unauthorized("Unauthorized");
+      return ApiResponse.error(ApiError.unauthorized("Unauthorized"));
     }
 
     const rentMonth = req.nextUrl.searchParams.get("rent_month");
     const hostelId = req.nextUrl.searchParams.get("hostelId") || undefined;
     if (!hostelId) {
-      return ApiError.badRequest("hostelId is required", "HOSTEL_CONTEXT_REQUIRED");
+      return ApiResponse.error(ApiError.badRequest("hostelId is required"));
     }
     await requireHostelBelongsToOwner(user.id, hostelId);
 
@@ -40,6 +40,6 @@ export async function GET(req: NextRequest) {
     return ApiResponse.success(result);
   } catch (error: any) {
     console.error("Error previewing rent generation:", error);
-    return ApiError.internal(String(error?.message ?? error));
+    return ApiResponse.error(ApiError.internal(String(error?.message ?? error)));
   }
 }

@@ -67,7 +67,7 @@ export async function PUT(
       
       const result = await invitationService.updateInvitation(params.id, scope.owner_id, validated.data);
       
-      return ApiResponse.success(result, result?.email_sent === false ? 202 : 200);
+      return ApiResponse.success(result, undefined, result?.email_sent === false ? { status: 202 } : undefined);
     }
 
     const updated = await tenantService.updateTenant(params.id, body, scope.owner_id);
@@ -81,8 +81,8 @@ export async function PUT(
     if (msg.startsWith("NOT_FOUND")) return ApiResponse.error(ApiError.notFound(msg.split(": ")[1] ?? msg));
     if (msg.startsWith("FORBIDDEN")) return ApiResponse.error(ApiError.forbidden(msg.split(": ")[1] ?? msg));
     if (msg.startsWith("VALIDATION")) return ApiResponse.error(ApiError.validationError(msg.split(": ")[1] ?? msg));
-    if (msg.startsWith("ALREADY_EXISTS")) return ApiResponse.error(new ApiError(409, "ALREADY_EXISTS", msg.split(": ")[1] ?? msg));
-    if (msg.startsWith("CAPACITY_EXCEEDED")) return ApiResponse.error(new ApiError(409, "CAPACITY_EXCEEDED", msg.split(": ")[1] ?? msg));
+    if (msg.startsWith("ALREADY_EXISTS")) return ApiResponse.error(new ApiError(msg.split(": ")[1] ?? msg, 409, "ALREADY_EXISTS"));
+    if (msg.startsWith("CAPACITY_EXCEEDED")) return ApiResponse.error(new ApiError(msg.split(": ")[1] ?? msg, 409, "CAPACITY_EXCEEDED"));
     
     return ApiResponse.error(ApiError.internal("Internal Server Error"));
   }

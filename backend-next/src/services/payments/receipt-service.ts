@@ -52,18 +52,8 @@ async function resolveHostelForPayment(payment: any): Promise<{ hostel: any; pre
 const RECEIPT_TEMPLATE_VERSION = 2;
 
 const RECEIPT_NUMBER_RETRY_LIMIT = 10;
-const PLAN_UPGRADE_REQUIRED_ERROR = "PLAN_UPGRADE_REQUIRED";
 
 export class ReceiptService {
-  private async canOwnerGenerateReceipts(ownerId: string): Promise<boolean> {
-    if (!ownerId) return false;
-    const subscription = await prisma.owner_subscriptions.findUnique({
-      where: { owner_id: ownerId },
-      include: { plans: true },
-    });
-    return Boolean(subscription?.plans?.can_generate_receipts);
-  }
-
   /**
    * Generate a sequential, race-safe receipt number scoped per hostel + year.
    * Format: PREFIX-YEAR-SEQUENCE (e.g., HMS-2026-00001)

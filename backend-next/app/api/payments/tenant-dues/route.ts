@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
   try {
     const user = await authService.getCurrentUser(req);
     if (!user) {
-      return ApiError.unauthorized("Unauthorized");
+      return ApiResponse.error(ApiError.unauthorized("Unauthorized"));
     }
 
     const { searchParams } = new URL(req.url);
@@ -42,12 +42,12 @@ export async function GET(req: NextRequest) {
         where: { profile_id: user.id },
         select: { id: true },
       });
-      if (!tenant) return ApiError.notFound("Tenant not found");
+      if (!tenant) return ApiResponse.error(ApiError.notFound("Tenant not found"));
       tenantId = tenant.id;
     }
 
     if (!tenantId) {
-      return ApiError.badRequest("tenant_id is required", "VALIDATION_ERROR");
+      return ApiResponse.error(ApiError.badRequest("tenant_id is required"));
     }
 
     // Owners can only view their own tenants
@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
         select: { owner_id: true },
       });
       if (!tenant || tenant.owner_id !== user.id) {
-        return ApiError.forbidden("Forbidden");
+        return ApiResponse.error(ApiError.forbidden("Forbidden"));
       }
     }
 
@@ -65,6 +65,6 @@ export async function GET(req: NextRequest) {
     return ApiResponse.success(result);
   } catch (error: any) {
     console.error("Error fetching tenant dues:", error);
-    return ApiError.internal(String(error?.message ?? error));
+    return ApiResponse.error(ApiError.internal(String(error?.message ?? error)));
   }
 }

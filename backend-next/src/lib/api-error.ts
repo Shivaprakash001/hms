@@ -49,4 +49,8 @@ export class ApiError extends Error {
   static validationError(message: string, metadata?: Record<string, any>) {
     return new ApiError(message, 422, 'VALIDATION_ERROR', metadata);
   }
+
+  static internal(message: string = 'Internal Server Error', metadata?: Record<string, any>) {
+    return new ApiError(message, 500, 'INTERNAL_SERVER_ERROR', metadata);
+  }
 }

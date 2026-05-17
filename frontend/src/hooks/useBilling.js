@@ -1,11 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { billingService } from '../api/services';
 import { keepPreviousData } from '@tanstack/react-query';
-import { queryKeys } from '../lib/query/queryKeys';
 
 export const useSubscription = () => {
     return useQuery({
-        queryKey: queryKeys.subscription.current(),
+        queryKey: ['owner', 'subscription', 'current'],
         queryFn: () => billingService.getSubscription(),
         staleTime: 5 * 60 * 1000,
         gcTime: 10 * 60 * 1000,
@@ -15,7 +14,7 @@ export const useSubscription = () => {
 
 export const usePlans = () => {
     return useQuery({
-        queryKey: queryKeys.subscription.plans(),
+        queryKey: ['owner', 'subscription', 'plans'],
         queryFn: async () => {
             const data = await billingService.getPlans();
             const fetchedPlans = Array.isArray(data) ? data : (data?.data || []);

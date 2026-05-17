@@ -16,7 +16,7 @@ export async function GET(
   try {
     const user = await authService.getCurrentUser(req);
     if (!user) {
-      return ApiError.unauthorized("Unauthorized");
+      return ApiResponse.error(ApiError.unauthorized("Unauthorized"));
     }
 
     // user.id is profile_id, but payment attempts store tenant_id (tenants table PK).
@@ -41,8 +41,8 @@ export async function GET(
   } catch (error: any) {
     console.error("Error fetching attempt:", error);
     const message = String(error?.message ?? error);
-    if (message.includes("FORBIDDEN")) return ApiError.forbidden(message.split(": ")[1] ?? message);
-    if (message.includes("NOT_FOUND")) return ApiError.notFound(message.split(": ")[1] ?? message);
-    return ApiError.internal(message);
+    if (message.includes("FORBIDDEN")) return ApiResponse.error(ApiError.forbidden(message.split(": ")[1] ?? message));
+    if (message.includes("NOT_FOUND")) return ApiResponse.error(ApiError.notFound(message.split(": ")[1] ?? message));
+    return ApiResponse.error(ApiError.internal(message));
   }
 }

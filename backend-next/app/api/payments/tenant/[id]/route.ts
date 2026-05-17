@@ -10,26 +10,26 @@ import { prisma } from "@/lib/db";
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession(req);
-  if (!session) return ApiError.unauthorized("Unauthorized");
+  if (!session) return ApiResponse.error(ApiError.unauthorized("Unauthorized"));
 
   try {
     const tenantId = params.id;
 
     if (session.role === "TENANT") {
       const me = await prisma.tenants.findUnique({ where: { profile_id: session.sub }, select: { id: true } });
-      if (!me || me.id !== tenantId) return ApiError.forbidden("Forbidden");
+      if (!me || me.id !== tenantId) return ApiResponse.error(ApiError.forbidden("Forbidden"));
     }
 
     if (session.role === "OWNER") {
       const target = await prisma.tenants.findUnique({ where: { id: tenantId }, select: { owner_id: true } });
-      if (!target || target.owner_id !== session.sub) return ApiError.forbidden("Forbidden");
+      if (!target || target.owner_id !== session.sub) return ApiResponse.error(ApiError.forbidden("Forbidden"));
     }
 
     const history = await paymentService.getTenantPaymentHistory(tenantId);
     return ApiResponse.success(history);
   } catch (error: any) {
     const msg = typeof error?.message === "string" ? error.message : String(error);
-    if (msg.startsWith("NOT_FOUND")) return ApiError.notFound(msg.split(": ")[1] ?? msg);
-    return ApiError.internal(msg || "Failed to fetch payment history");
+    if (msg.startsWith("NOT_FOUND")) return ApiResponse.error(ApiError.notFound(msg.split(": ")[1] ?? msg));
+    return ApiResponse.error(ApiError.internal(msg || "Failed to fetch payment history"));
   }
 }
