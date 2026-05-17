@@ -1457,7 +1457,7 @@ export class PaymentService {
     if (lockResult.count === 0) {
       const fresh = await prisma.paymentAttempt.findUnique({
         where: { id: attemptId },
-        include: { payments: true, invoice: true },
+        include: { payments: true },
       });
       if (!fresh) throw new Error("NOT_FOUND: Attempt not found");
       if (["SUCCESS", "FAILED", "EXPIRED", "CANCELLED"].includes(fresh.status)) {
@@ -1484,7 +1484,7 @@ export class PaymentService {
     // ── Step 2: Read current state (status = PROCESSING — we own the lock) ─────
     const attempt = await prisma.paymentAttempt.findUnique({
       where: { id: attemptId },
-      include: { payments: true, invoice: true }
+      include: { payments: true }
     });
     if (!attempt) throw new Error("NOT_FOUND: Attempt not found");
 
