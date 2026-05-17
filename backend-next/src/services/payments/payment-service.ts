@@ -750,8 +750,16 @@ export class PaymentService {
     if (existingAttempt) {
       // If the attempt has a valid checkout_url, reuse it
       const checkoutUrl = existingAttempt.checkout_url || "";
-      if (checkoutUrl && !checkoutUrl.includes("/payment-return")) {
+      const isSandboxCheckout = ["mercury-t2", "api-preprod", "pg-sandbox"].some(m => checkoutUrl.includes(m));
+      if (checkoutUrl && !checkoutUrl.includes("/payment-return") && !isSandboxCheckout) {
         return existingAttempt;
+      }
+      if (isSandboxCheckout) {
+        logger.warn("payments.create_intent.expire_sandbox_attempt", {
+          attemptId: existingAttempt.id,
+          checkoutUrl,
+          reason: "sandbox checkout URL rejected in production — expiring",
+        });
       }
       // Otherwise expire the stale attempt so we create a fresh one with checkout_url
       await this.updateAttemptStatusOutsideTx({
@@ -1044,8 +1052,16 @@ export class PaymentService {
           existingAttempt.created_at > twoMinAgo;
 
         // A live PENDING attempt already has a usable checkout URL.
+        const isSandboxCheckout = ["mercury-t2", "api-preprod", "pg-sandbox"].some(m => checkoutUrl.includes(m));
+        if (isSandboxCheckout) {
+          logger.warn("payments.create_multi_intent.expire_sandbox_attempt", {
+            attemptId: existingAttempt.id,
+            checkoutUrl,
+            reason: "sandbox checkout URL rejected in production — expiring",
+          });
+        }
         const hasValidCheckout =
-          checkoutUrl.length > 0 && !checkoutUrl.includes("/payment-return");
+          checkoutUrl.length > 0 && !checkoutUrl.includes("/payment-return") && !isSandboxCheckout;
 
         if (isInFlight || hasValidCheckout) {
           logger.info("payments.create_multi_intent.reuse_existing", {
