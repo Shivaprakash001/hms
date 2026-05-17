@@ -11,24 +11,7 @@
  *    still works (e.g., invalidate all ['payments', 'dues'] regardless of filter).
  */
 
-const readStoredSession = () => {
-  if (typeof window === 'undefined') return null;
-  try {
-    const owner = window.localStorage.getItem('ownerUser');
-    const tenant = window.localStorage.getItem('tenantUser');
-    return owner ? JSON.parse(owner) : (tenant ? JSON.parse(tenant) : null);
-  } catch {
-    return null;
-  }
-};
-
-const ownerScope = () => {
-  const user = readStoredSession();
-  const ownerId = user?.owner_id || (user?.role === 'owner' ? user?.id : null) || 'anonymous';
-  return ['owner', ownerId];
-};
-
-const ownerKey = (...parts) => [...ownerScope(), ...parts];
+const ownerKey = (...parts) => ['owner', ...parts];
 const hostelKey = (hostelId, ...parts) => {
   if (!hostelId) throw new Error('hostelId is required for operational query keys');
   return ['hostel', hostelId, ...parts];
@@ -97,19 +80,6 @@ export const queryKeys = {
   expenses: {
     all:  (hostelId) => hostelKey(hostelId, 'expenses'),
     list: (hostelId) => hostelKey(hostelId, 'expenses', 'list'),
-  },
-
-  // ── Addon / usage ────────────────────────────────────────────────────────────
-  addon: {
-    all:   () => ownerKey('addon'),
-    usage: () => ownerKey('addon', 'usage'),
-  },
-
-  // ── Subscription ─────────────────────────────────────────────────────────────
-  subscription: {
-    all:     () => ownerKey('subscription'),
-    current: () => ownerKey('subscription', 'current'),
-    plans:   () => ownerKey('subscription', 'plans'),
   },
 
   // ── Activity ─────────────────────────────────────────────────────────────────

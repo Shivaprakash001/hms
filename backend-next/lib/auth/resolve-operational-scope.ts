@@ -4,8 +4,7 @@ import type { AuthPayload } from "../auth-edge";
 export type OwnerScope = {
   actor_id: string;
   owner_id: string;
-  role: "OWNER" | "ADMIN";
-  is_admin: boolean;
+  role: "OWNER";
 };
 
 export type TenantScope = {
@@ -40,18 +39,13 @@ function unauthorized(message: string) {
  * not use `session.owner_id || session.sub`, because that silently converts a
  * malformed token into a global data boundary failure.
  */
-export function resolveOwnerScope(session: AuthPayload | null, options: { allowAdmin?: boolean; ownerId?: string } = {}): OwnerScope {
+export function resolveOwnerScope(session: AuthPayload | null): OwnerScope {
   if (!session) throw unauthorized("Authentication required");
 
   if (session.role === "OWNER") {
     if (!session.owner_id) throw unauthorized("OWNER token missing owner_id");
     if (session.owner_id !== session.sub) throw unauthorized("OWNER token owner_id mismatch");
-    return { actor_id: session.sub, owner_id: session.owner_id, role: "OWNER", is_admin: false };
-  }
-
-  if (session.role === "ADMIN" && options.allowAdmin) {
-    if (!options.ownerId) throw forbidden("Admin owner scope requires explicit ownerId");
-    return { actor_id: session.sub, owner_id: options.ownerId, role: "ADMIN", is_admin: true };
+    return { actor_id: session.sub, owner_id: session.owner_id, role: "OWNER" };
   }
 
   throw forbidden("Owner access required");

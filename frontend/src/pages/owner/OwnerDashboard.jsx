@@ -13,7 +13,7 @@ import {
 import { paymentService, reminderService, tenantService } from '@/api/services';
 import { useAppPreferences } from '@/context/AppPreferencesContext';
 import { formatCurrency } from '@utils/format';
-import { useCashflow, useTenantAnalytics, useFunnelAnalytics, useOperationsAnalytics, useAddonUsage } from '@hooks/useAnalytics';
+import { useCashflow, useTenantAnalytics, useFunnelAnalytics, useOperationsAnalytics } from '@hooks/useAnalytics';
 import { useHostelContext } from '@/context/HostelContext';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -65,7 +65,6 @@ const OwnerDashboard = () => {
     };
 
     const { data: cf, isLoading } = useCashflow(hostelId);
-    const { data: addonData }     = useAddonUsage();
     const { data: ti, isLoading: tiLoading } = useTenantAnalytics(hostelId, undefined, tab === 'tenants');
     const { data: fn, isLoading: fnLoading } = useFunnelAnalytics(hostelId, undefined, tab === 'funnel');
     const { data: op, isLoading: opLoading } = useOperationsAnalytics(hostelId, undefined, tab === 'operations');
@@ -82,9 +81,7 @@ const OwnerDashboard = () => {
         daily:         Array.isArray(cfd.daily_collection) ? cfd.daily_collection.map(r => ({ label: r.date?.slice(5), v: Number(r.amount) })) : [],
     }), [cfd]);
 
-    const cronStopped = !dismissed && addonData?.cron_stopped === true;
-    const creditsLow  = !dismissed && Number(addonData?.credits_remaining ?? addonData?.remaining ?? 999) < 5;
-    const showBanner  = cronStopped || creditsLow || (!dismissed && cfStats.overdueCount > 0);
+    const showBanner = !dismissed && cfStats.overdueCount > 0;
 
     if (isLoading) return (
         <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4">
@@ -104,10 +101,8 @@ const OwnerDashboard = () => {
 
             {showBanner && (
                 <AlertBanner
-                    cronStopped={cronStopped} creditsLow={creditsLow}
                     cfStats={cfStats} preferences={preferences}
                     onDismiss={() => setDismissed(true)}
-                    onBuyCredits={() => navigate('/dashboard/billing')}
                     onView={() => setTab('tenants')}
                 />
             )}
@@ -132,14 +127,14 @@ const OwnerDashboard = () => {
 };
 
 // ─── alert banner ───────────────────────────────────────────────────────────
-const AlertBanner = ({ cronStopped, creditsLow, cfStats, preferences, onDismiss, onBuyCredits, onView }) => {
-    const crit = cronStopped || cfStats.overdueCount > 5;
+const AlertBanner = ({ cfStats, preferences, onDismiss, onView }) => {
+    const crit = cfStats.overdueCount > 5;
     const theme = crit 
-        ? { wrap: 'bg-rose-50/80 backdrop-blur-md border-rose-100', icon: 'text-rose-500', title: 'text-rose-900', sub: 'text-rose-700/80', button: 'bg-rose-500 text-white', secondary: 'bg-rose-100 text-rose-700' }
-        : { wrap: 'bg-amber-50/80 backdrop-blur-md border-amber-100', icon: 'text-amber-500', title: 'text-amber-900', sub: 'text-amber-700/80', button: 'bg-amber-500 text-white', secondary: 'bg-amber-100 text-amber-700' };
+        ? { wrap: 'bg-rose-50/80 backdrop-blur-md border-rose-100', icon: 'text-rose-500', title: 'text-rose-900', sub: 'text-rose-700/80', secondary: 'bg-rose-100 text-rose-700' }
+        : { wrap: 'bg-amber-50/80 backdrop-blur-md border-amber-100', icon: 'text-amber-500', title: 'text-amber-900', sub: 'text-amber-700/80', secondary: 'bg-amber-100 text-amber-700' };
     
-    const title = cronStopped ? 'Reminders Paused' : creditsLow ? 'Credits Low' : 'Action Required';
-    const sub   = cronStopped ? 'Credits exhausted. Tenants may miss deadlines.' : creditsLow ? 'Auto-reminders will stop soon.' : `${cfStats.overdueCount} tenants unpaid this month.`;
+    const title = 'Action Required';
+    const sub   = `${cfStats.overdueCount} tenants unpaid this month.`;
 
     return (
         <motion.div 
@@ -158,9 +153,6 @@ const AlertBanner = ({ cronStopped, creditsLow, cfStats, preferences, onDismiss,
                 <button onClick={onDismiss} className="p-2 text-slate-400 hover:text-slate-600 transition-colors"><X size={18} /></button>
             </div>
             <div className="flex gap-3 mt-5">
-                {(cronStopped || creditsLow) && (
-                    <button onClick={onBuyCredits} className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl active:scale-95 transition-all shadow-lg ${theme.button}`}>Recharge Now</button>
-                )}
                 {cfStats.overdueCount > 0 && (
                     <button onClick={onView} className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl active:scale-95 transition-all ${theme.secondary}`}>View Defaulters</button>
                 )}

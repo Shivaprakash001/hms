@@ -1,5 +1,5 @@
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import { analyticsService, addonService } from '../api/services';
+import { analyticsService } from '../api/services';
 import { queryKeys } from '../lib/query/queryKeys';
 
 /**
@@ -51,18 +51,5 @@ export const useOperationsAnalytics = (hostelId, range, enabled = true) => {
     staleTime: 5 * 60 * 1000,
     gcTime:    10 * 60 * 1000,
     placeholderData: keepPreviousData,
-  });
-};
-
-/**
- * Addon/credit usage — feeds the cron-stopped and low-credits banners.
- * Shorter staleTime because credits can deplete within a single session.
- */
-export const useAddonUsage = () => {
-  return useQuery({
-    queryKey: queryKeys.addon.usage(),
-    queryFn:  () => addonService.getUsage(),
-    staleTime: 2 * 60 * 1000,
-    gcTime:    5 * 60 * 1000,
   });
 };

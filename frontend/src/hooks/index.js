@@ -1,7 +1,7 @@
 export { useAuth } from './useAuth';
 export { useCurrentUser } from './useProfile';
 export { useNotifications, useMarkNotificationRead } from './useNotifications';
-export { useCashflow, useTenantAnalytics, useFunnelAnalytics, useOperationsAnalytics, useAddonUsage } from './useAnalytics';
+export { useCashflow, useTenantAnalytics, useFunnelAnalytics, useOperationsAnalytics } from './useAnalytics';
 export { useTenants, useTenant, useCreateTenant, useUpdateTenant, useDeleteTenant } from './useTenants';
 export { useTenantPaymentHistory, useDuesReport, usePendingVerifications, useRecordPayment, useOfflinePayment, useGenerateMonthlyRent, useInitiatePayment } from './usePayments';
 export { useExpenses, useCreateExpense, useUpdateExpense, useDeleteExpense } from './useExpenses';

@@ -1,69 +1,13 @@
 import api from '@lib/api-client';
-import { profileService } from '@features/profile/api';
 
 export const ownerService = {
     getProfile: async () => {
-        try {
-            const response = await api.get('/owner/me/profile');
-            return response.data;
-        } catch (error) {
-            if (error?.response?.status === 404) {
-                const stored = localStorage.getItem('ownerUser');
-                const parsed = stored ? JSON.parse(stored) : null;
-                const profileId = parsed?.id;
-
-                if (profileId) {
-                    const owner = await profileService.get(profileId);
-                    return {
-                        owner,
-                        hostel: {
-                            name: '', phone: '', address: '', city: '', state: '', pincode: '', upi_id: '', gst_number: '', logo_url: ''
-                        },
-                        preferences: {
-                            currency: 'INR',
-                            rent_cycle: 'MONTHLY',
-                            receipt_prefix: 'HMS',
-                            timezone: 'Asia/Kolkata',
-                            time_format: '12h',
-                            auto_rent_day: 1,
-                            phonepe_merchant_id: ''
-                        }
-                    };
-                }
-            }
-            throw error;
-        }
+        const response = await api.get('/owner/me/profile');
+        return response.data;
     },
     updateOwner: async (data) => {
-        try {
-            const response = await api.patch('/owner/me/profile', data);
-            return response.data;
-        } catch (error) {
-            if (error?.response?.status === 404) {
-                const stored = localStorage.getItem('ownerUser');
-                const parsed = stored ? JSON.parse(stored) : null;
-                const profileId = parsed?.id;
-                if (profileId) {
-                    const owner = await profileService.update(profileId, data);
-                    return {
-                        owner,
-                        hostel: {
-                            name: '', phone: '', address: '', city: '', state: '', pincode: '', upi_id: '', gst_number: '', logo_url: ''
-                        },
-                        preferences: {
-                            currency: 'INR',
-                            rent_cycle: 'MONTHLY',
-                            receipt_prefix: 'HMS',
-                            timezone: 'Asia/Kolkata',
-                            time_format: '12h',
-                            auto_rent_day: 1,
-                            phonepe_merchant_id: ''
-                        }
-                    };
-                }
-            }
-            throw error;
-        }
+        const response = await api.patch('/owner/me/profile', data);
+        return response.data;
     },
     updateProfileSection: async (data) => {
         const response = await api.patch('/profile', data);
