@@ -1,5 +1,5 @@
 import { prisma } from "../db";
-import { financialService } from "./financial-service";
+import { financialService } from "@/src/services/payments/financial-service";
 
 
 export class PropertyService {

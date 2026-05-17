@@ -4,13 +4,12 @@ import { invalidateOwnerDashboardCache, invalidateHostelDashboardCache } from "@
 import { eventLog } from "@/lib/services/event-log-service";
 import { resolvePreferences } from "@/lib/preferences";
 import { getCurrentDateInTimezone, getDayInTimezone } from "@/lib/timezone";
-import { planEnforcementService } from "@/lib/services/plan-enforcement-service";
 import { rentGenerationLedgerService } from "@/lib/services/rent-generation-ledger-service";
 import {
   validateBillingPreferences,
   computeDueDate,
   type BillingValidationError,
-} from "./billing-validation";
+} from "@/lib/services/billing-validation";
 
 /**
  * 🏦 Rent Generation Service — Phases 1-7
