@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
 
     const tokenRecord = await prisma.refresh_tokens.findUnique({
       where: { token_hash: tokenHash },
-      include: { profile: true },
+      include: { profiles: true },
     });
 
     if (!tokenRecord) {
@@ -30,8 +30,8 @@ export async function POST(req: NextRequest) {
     // We mark consumed tokens by setting their expires_at to 1970-01-01T00:00:00.000Z.
     // If someone tries to use a consumed token, we assume compromise.
     if (tokenRecord.expires_at.getTime() === 0) {
-      console.warn(`[SECURITY] Refresh token reuse detected for user ${tokenRecord.profile.id}`);
-      await prisma.refresh_tokens.deleteMany({ where: { user_id: tokenRecord.profile.id } });
+      console.warn(`[SECURITY] Refresh token reuse detected for user ${tokenRecord.profiles.id}`);
+      await prisma.refresh_tokens.deleteMany({ where: { user_id: tokenRecord.profiles.id } });
       return apiError("Session compromised. Please log in again.", "FORBIDDEN", 403);
     }
 
@@ -41,30 +41,30 @@ export async function POST(req: NextRequest) {
       return apiError("Refresh token expired", "UNAUTHORIZED", 401);
     }
 
-    if (!tokenRecord.profile.is_active) {
+    if (!tokenRecord.profiles.is_active) {
       return apiError("Account is disabled", "FORBIDDEN", 403);
     }
 
-    let effectiveOwnerId = tokenRecord.profile.owner_id;
-    if (tokenRecord.profile.role === "OWNER" && (!effectiveOwnerId || effectiveOwnerId.trim() === "")) {
-      console.warn("[auth.refresh] repairing missing owner_id for OWNER", { user_id: tokenRecord.profile.id });
+    let effectiveOwnerId = tokenRecord.profiles.owner_id;
+    if (tokenRecord.profiles.role === "OWNER" && (!effectiveOwnerId || effectiveOwnerId.trim() === "")) {
+      console.warn("[auth.refresh] repairing missing owner_id for OWNER", { user_id: tokenRecord.profiles.id });
       const updated = await prisma.profile.update({
-        where: { id: tokenRecord.profile.id },
-        data: { owner_id: tokenRecord.profile.id },
+        where: { id: tokenRecord.profiles.id },
+        data: { owner_id: tokenRecord.profiles.id },
         select: { owner_id: true },
       });
       effectiveOwnerId = updated.owner_id;
     }
 
-    if (tokenRecord.profile.role === "OWNER" && !effectiveOwnerId) {
+    if (tokenRecord.profiles.role === "OWNER" && !effectiveOwnerId) {
       return apiError("Invalid OWNER: missing owner_id", "UNAUTHORIZED", 401);
     }
 
     // Generate new tokens (Rotation)
     const newAccessToken = await generateToken({
-      sub: tokenRecord.profile.id,
-      role: tokenRecord.profile.role,
-      email: tokenRecord.profile.email,
+      sub: tokenRecord.profiles.id,
+      role: tokenRecord.profiles.role,
+      email: tokenRecord.profiles.email,
       owner_id: effectiveOwnerId || null,
     });
 
@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
       prisma.refresh_tokens.create({
         data: {
           id: randomUUID(),
-          user_id: tokenRecord.profile.id,
+          user_id: tokenRecord.profiles.id,
           token_hash: newRefreshTokenHash,
           expires_at: expiresAt,
         },
