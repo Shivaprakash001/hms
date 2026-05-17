@@ -1446,7 +1446,7 @@ export class PaymentService {
     // or already terminal (SUCCESS/FAILED/etc.). Re-read and return — no work.
     const preLockAttempt = await prisma.paymentAttempt.findUnique({
       where: { id: attemptId },
-      select: { status: true, owner_id: true, hostel_id: true, payment_domain: true, flow_type: true, invoice_id: true },
+      select: { status: true, owner_id: true, hostel_id: true, payment_domain: true, flow_type: true },
     });
 
     const lockResult = await prisma.paymentAttempt.updateMany({
@@ -2941,7 +2941,6 @@ export class PaymentService {
         status: "SUCCESS",
         OR: [{ payment_domain: PAYMENT_DOMAIN.RENT_COLLECTION }, { payment_domain: null }],
         flow_type: { notIn: [PAYMENT_FLOW.ADDON, PAYMENT_FLOW.SUBSCRIPTION, PAYMENT_FLOW.ADVANCE] },
-        invoice_id: null,
         ...ownerFilter,
         ...hostelFilter,
         ...domainFilter,
