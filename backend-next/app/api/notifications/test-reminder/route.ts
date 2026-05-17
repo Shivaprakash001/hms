@@ -6,7 +6,6 @@ import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { EmailService } from "@/lib/services/email-service";
 import { prisma } from "@/lib/db";
 import { eventLog } from "@/lib/services/event-log-service";
-import { consumeReminder } from "@/lib/services/plan-gate-service";
 import { formatMonthYear } from "@/lib/format";
 import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
 import { hostelPolicyService } from "@/lib/services/hostel-policy-service";
@@ -41,20 +40,6 @@ export async function POST(req: NextRequest) {
         "VALIDATION_ERROR",
         400
       );
-    }
-
-    // 🔒 Enforce addon credits — NOT plan-gated
-    try {
-      await consumeReminder(scope.owner_id);
-    } catch (creditErr: any) {
-      if (creditErr?.code === "NO_REMINDERS_LEFT") {
-        return apiError(
-          "No reminder credits left. Buy a pack to continue sending reminders.",
-          "NO_REMINDERS_LEFT",
-          402
-        );
-      }
-      throw creditErr;
     }
 
     // Fetch owner profile

@@ -13,7 +13,7 @@ import { readJson } from "@/lib/api/admin-error";
  *
  * Body: { limit?: number, persist?: boolean }
  *
- * Runs all 12 reconciliation detectors and returns the structured issue
+ * Runs all 7 operational reconciliation detectors and returns the structured issue
  * report. By default the scan is read-only — `persist:true` opts into
  * writing the deduped issues into `financial_reconciliation_issues`
  * (the partial unique index on fingerprint handles dedupe).

@@ -1,30 +1,11 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-import type { NextRequest } from "next/server";
-import { apiResponse, apiError } from "@/lib/auth";
-import { requireAdmin } from "@/lib/auth/admin-ctx";
-import { settlementBatchService } from "@/lib/services/settlement-batch-service";
-import { mapServiceError, readJson } from "@/lib/api/admin-error";
+import { NextRequest, NextResponse } from "next/server";
 
-/**
- * POST /api/admin/settlements/batches/:batchId/items/:itemId/mark-failed
- * Body: { reason: string }
- *
- * Marks a payout FAILED. NO debit is written (no money moved). The
- * covered credits become eligible for the next batch automatically.
- */
-export async function POST(req: NextRequest, { params }: { params: Promise<{ itemId: string }> }) {
-  const ctx = await requireAdmin(req);
-  if (!ctx) return apiError("Admin access required", "FORBIDDEN", 403);
-  const { itemId } = await params;
-  const body = await readJson<{ reason?: string }>(req);
-  if (!body.reason) return apiError("reason is required", "BAD_REQUEST", 400);
+const GONE = { ok: false, message: "Decommissioned: SaaS billing/settlement route removed in single-business migration" };
 
-  try {
-    const result = await settlementBatchService.markItemFailed(ctx, { itemId, reason: body.reason });
-    return apiResponse(result);
-  } catch (err: any) {
-    return mapServiceError(err);
-  }
-}
+export async function GET(_req: NextRequest) { return NextResponse.json(GONE, { status: 410 }); }
+export async function POST(_req: NextRequest) { return NextResponse.json(GONE, { status: 410 }); }
+export async function PATCH(_req: NextRequest) { return NextResponse.json(GONE, { status: 410 }); }
+export async function DELETE(_req: NextRequest) { return NextResponse.json(GONE, { status: 410 }); }

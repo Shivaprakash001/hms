@@ -30,8 +30,6 @@ export async function GET(req: NextRequest) {
       latestReconciliationRuns,
       staleLocks,
       orphanSuccess,
-      platformInvoicesByStatus,
-      failedPlatformUpgrades,
     ] = await Promise.all([
       prisma.paymentAttempt.groupBy({
         by: ["status"],
@@ -79,19 +77,6 @@ export async function GET(req: NextRequest) {
           payments: { none: {} },
         },
       }),
-      prisma.ownerInvoice.groupBy({
-        by: ["status"],
-        where: { created_at: { gte: from } },
-        _count: { _all: true },
-      }),
-      prisma.paymentAttempt.count({
-        where: {
-          payment_domain: "PLATFORM_BILLING",
-          flow_type: "SUBSCRIPTION",
-          status: { in: ["FAILED", "EXPIRED", "CANCELLED"] },
-          created_at: { gte: from },
-        },
-      }),
     ]);
 
     return apiResponse({
@@ -105,8 +90,6 @@ export async function GET(req: NextRequest) {
       latest_reconciliation_runs: latestReconciliationRuns,
       stuck_payment_locks: staleLocks,
       orphan_success_attempts: orphanSuccess,
-      platform_invoices_by_status: platformInvoicesByStatus,
-      failed_platform_upgrades: failedPlatformUpgrades,
     });
   } catch (error: any) {
     console.error("[FINANCE_OPS_SUMMARY]", error);

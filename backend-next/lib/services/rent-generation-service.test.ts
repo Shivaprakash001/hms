@@ -16,7 +16,6 @@
 import { prisma } from "../db";
 import { eventSystem } from "../events";
 import { eventLog } from "./event-log-service";
-import { planEnforcementService } from "./plan-enforcement-service";
 import { getDayInTimezone } from "../timezone";
 
 let passed = 0;
@@ -103,7 +102,6 @@ const state = {
   failMaintCreateMany: false,
   txRollbackAfterRent: false,
   failRentGenerationLog: false,
-  freeOwners: new Set<string>(),
 };
 
 function resetState() {
@@ -118,7 +116,6 @@ function resetState() {
   state.failMaintCreateMany = false;
   state.txRollbackAfterRent = false;
   state.failRentGenerationLog = false;
-  state.freeOwners = new Set();
 }
 
 function sameDate(a: Date, b: Date) {
@@ -331,12 +328,7 @@ function applyLedgerUpdate(row: Ledger, data: any) {
 (eventLog as any).log = async (eventType: string, ownerId: any, metadata: any) => {
   state.eventLogs.push({ eventType, ownerId, metadata });
 };
-(planEnforcementService as any).assertFeature = async (ownerId: string) => {
-  if (state.freeOwners.has(ownerId)) throw new Error("PLAN_LIMIT: FEATURE_NOT_AVAILABLE");
-  return true;
-};
-
-import { RentGenerationService } from "../../src/services/payments/rent-generation-service";
+import { RentGenerationService } from "./rent-generation-service";
 
 const rawService = new RentGenerationService();
 const service = {
@@ -483,19 +475,6 @@ async function testAutoGenerateOffSkips() {
   assertEq(summary.created, 0, "created zero");
   assertEq(ledger("OFF")?.status, "SKIPPED", "ledger skipped");
   assertEq(ledger("OFF")?.failure_reason, "AUTO_GENERATE_DISABLED", "skip reason");
-}
-
-async function testFreePlanSkipsNoCompletion() {
-  console.log("\nfree plan skips and does not complete");
-  resetState();
-  seedOwner({ ownerId: "FREE", autoRentDay: 1 });
-  state.freeOwners.add("FREE");
-
-  const summary: any = await service.generateMonthlyRent(new Date("2026-05-02T06:00:00Z"), undefined, "cron");
-
-  assertEq(summary.created, 0, "created zero");
-  assertEq(ledger("FREE")?.status, "SKIPPED", "ledger not completed");
-  assert(ledger("FREE")?.status !== "COMPLETED", "free plan never marked completed");
 }
 
 async function testExistingObligationWithoutLedgerCompletes() {
@@ -862,7 +841,6 @@ async function main() {
   await testCompletedLedgerSkips();
   await testBeforeGenerationDaySkips();
   await testAutoGenerateOffSkips();
-  await testFreePlanSkipsNoCompletion();
   await testExistingObligationWithoutLedgerCompletes();
   await testMaintenanceLedgerIndependent();
   await testMultiHostelIndependentGenerationDays();

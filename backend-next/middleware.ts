@@ -4,7 +4,6 @@ import { verifyToken } from "./lib/auth-edge";
 const PUBLIC_ROUTES = [
   "/api/health",
   "/api/auth/login",
-  "/api/auth/register",
   "/api/auth/send-otp",
   "/api/auth/verify-otp",
   "/api/auth/send-phone-otp",
@@ -79,13 +78,6 @@ export async function middleware(req: NextRequest) {
   if (!payload) {
     return NextResponse.json(
       { error: { message: "Invalid session", code: "UNAUTHORIZED" } },
-      { status: 401, headers: corsHeaders }
-    );
-  }
-
-  if (payload.role === "OWNER" && !payload.owner_id) {
-    return NextResponse.json(
-      { error: { message: "Invalid OWNER: missing owner_id", code: "UNAUTHORIZED" } },
       { status: 401, headers: corsHeaders }
     );
   }

@@ -1,10 +1,9 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { rentGenerationService } from "@/src/services/payments/rent-generation-service";
-import { requireAutomation } from "@/lib/services/plan-gate-service";
 import { invalidateHostelDashboardCache } from "@/lib/cache/dashboard-cache";
 import { timed } from "@/lib/perf";
 import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
@@ -49,22 +48,6 @@ export async function POST(req: NextRequest) {
   const session = await getSession(req);
   if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
     return apiError("Forbidden", "FORBIDDEN", 403);
-  }
-
-  // 🔒 Automation gate — Starter plan required
-  try {
-    await requireAutomation(session.sub);
-  } catch (gateErr: any) {
-    if (gateErr?.code === "FEATURE_NOT_AVAILABLE") {
-      return NextResponse.json({
-        error: "FEATURE_NOT_AVAILABLE",
-        feature: "automation",
-        message: "Upgrade to Starter to enable automation",
-        upgrade_required: true,
-        recommended_plan: "starter",
-      }, { status: 402 });
-    }
-    throw gateErr;
   }
 
   try {

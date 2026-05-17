@@ -2,11 +2,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
-import { ApiResponse } from "@/src/lib/api-response";
-import { ApiError } from "@/src/lib/api-error";
-import { tenantService } from "@/src/services/tenants/tenant-service";
-import { planGate, TenantHardCapError } from "@/lib/services/plan-gate-service";
+import { getSession, apiResponse, apiError } from "@/lib/auth";
+import { tenantService } from "@/lib/services/tenant-service";
 import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
 import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
 
@@ -75,8 +72,6 @@ export async function POST(req: NextRequest) {
       return ApiResponse.error(ApiError.validationError("monthly_rent must be > 0"));
     }
 
-    await planGate.assertTenantLimit(scope.owner_id);
-
     const tenant = await tenantService.createTenant(body, scope.owner_id);
     
     console.log(`[tenants.POST] Tenant created: ${tenant.id}`);
@@ -85,25 +80,12 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     console.error("Detailed API Error [tenants.POST]:", error);
     
-    if (error instanceof TenantHardCapError) {
-      return NextResponse.json({
+    return Response.json(
+      {
         success: false,
-        error: {
-          code: "TENANT_HARD_CAP_EXCEEDED",
-          message: `Tenant hard cap reached (${error.current}/${error.hard_cap}). Upgrade to ${error.recommended_plan} to add more tenants.`,
-          upgrade_required: true,
-          recommended_plan: error.recommended_plan,
-          current_count: error.current,
-          hard_cap: error.hard_cap,
-        }
-      }, { status: 402 });
-    }
-    
-    if (error.message?.startsWith("PLAN_LIMIT:")) {
-      const code = error.message.replace("PLAN_LIMIT:", "").trim();
-      return ApiResponse.error(new ApiError(402, code, code));
-    }
-    
-    return ApiResponse.error(ApiError.internal(error.message || "Internal Server Error"));
+        error: error.message || "Internal Server Error"
+      },
+      { status: 500 }
+    );
   }
 }

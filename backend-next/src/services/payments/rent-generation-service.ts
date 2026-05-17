@@ -10,8 +10,7 @@ import {
   validateBillingPreferences,
   computeDueDate,
   type BillingValidationError,
-} from "@/lib/services/billing-validation";
-import { abandonmentService } from "@/lib/services/abandonment-service";
+} from "./billing-validation";
 
 /**
  * 🏦 Rent Generation Service — Phases 1-7
@@ -208,24 +207,6 @@ export class RentGenerationService {
             obligation_type: "RENT", created: 0, skipped: 1,
             reason: "ACTIVE_HOSTEL_NOT_FOUND", trigger_type: triggerType
           });
-          continue;
-        }
-
-        // Enforcement: Check plan allows automation feature
-        try {
-          await planEnforcementService.assertFeature(ownerId, "automation");
-        } catch (err: any) {
-          console.warn(`[RENT] Skipping owner ${ownerId} — automation not available: ${err?.message}`);
-          await rentGenerationLedgerService.skip({
-            ownerId, hostelId, rentMonth, obligationType: "RENT",
-            skippedCount: 1, reason: "PLAN_AUTOMATION_UNAVAILABLE"
-          }).catch((ledgerErr: any) => console.error("[RENT] Failed to write ledger skip:", ledgerErr));
-          logGenerationDecision({
-            owner_id: ownerId, hostel_id: hostelId, rent_month: rentMonth.toISOString(),
-            obligation_type: "RENT", created: 0, skipped: 1,
-            reason: "PLAN_AUTOMATION_UNAVAILABLE", trigger_type: triggerType
-          });
-          skipped++;
           continue;
         }
 
@@ -560,14 +541,6 @@ export class RentGenerationService {
         trigger_type: triggerType,
         created, skipped, failed, duration_ms: durationMs
       });
-
-      // 🎉 First-rent milestone: fire once when the owner's very first rent cycle succeeds.
-      // Non-blocking — never lets a notification failure affect the generation result.
-      if (created > 0 && ownerId) {
-        abandonmentService
-          .sendFirstSuccessNotification(ownerId, "FIRST_RENT")
-          .catch((e: any) => console.warn("[RENT] First-rent milestone notification failed:", e?.message));
-      }
 
       console.log(`[RENT] Generation complete: ${created} created, ${skipped} skipped, ${failed} failed (${durationMs}ms)`);
       return summary;

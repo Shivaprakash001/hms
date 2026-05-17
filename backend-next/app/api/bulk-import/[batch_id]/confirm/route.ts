@@ -6,7 +6,6 @@ import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { tenantMigrationService } from "@/lib/services/tenant-migration-service";
 import { prisma } from "@/lib/db";
-import { planEnforcementService } from "@/lib/services/plan-enforcement-service";
 import type { TenantImportRow } from "@/lib/services/bulk-import-validation-service";
 
 /**
@@ -122,42 +121,6 @@ export async function POST(
         "NOT_FOUND",
         404
       );
-    }
-
-    await planEnforcementService.assertSubscriptionActive(session.sub);
-
-    const currentTenantCount = await prisma.tenants.count({
-      where: {
-        owner_id: session.sub,
-        status: "ACTIVE",
-      },
-    });
-
-    const subscription = await prisma.owner_subscriptions.findUnique({
-      where: { owner_id: session.sub },
-      include: { plans: true },
-    });
-
-    if (!subscription) {
-      return apiError("No active subscription found", "FORBIDDEN", 403);
-    }
-
-    const tenantLimit = subscription.plans.tenant_limit;
-    const projectedTotal = currentTenantCount + batch.valid_rows;
-
-    if (tenantLimit > 0 && projectedTotal > tenantLimit) {
-      const overflowEnabled = subscription.plans.overflow_enabled;
-      const hardCap = subscription.plans.overflow_hard_cap;
-
-      if (!overflowEnabled || (hardCap > 0 && projectedTotal > hardCap)) {
-        return apiError(
-          `Cannot import ${batch.valid_rows} tenants. Current: ${currentTenantCount}, Limit: ${tenantLimit}${
-            overflowEnabled ? `, Hard cap: ${hardCap}` : ""
-          }`,
-          "TENANT_LIMIT_EXCEEDED",
-          402
-        );
-      }
     }
 
     const validRowsWithData = getValidationPayload(batch.validation_errors).valid_rows;

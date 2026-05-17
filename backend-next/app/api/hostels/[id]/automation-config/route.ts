@@ -5,9 +5,6 @@ import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
 import { hostelPolicyService } from "@/lib/services/hostel-policy-service";
-import { planGate } from "@/lib/services/plan-gate-service";
-import { NextResponse } from "next/server";
-
 function toApiError(error: any) {
   const msg = String(error?.message || "Failed to update hostel policy");
   if (msg.startsWith("FORBIDDEN")) return apiError(msg.split(":")[1]?.trim() || msg, "FORBIDDEN", 403);
@@ -31,18 +28,6 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   try {
     const scope = resolveOwnerScope(session);
     const body = await req.json();
-    if (body.auto_generate_rent === true || body.auto_apply_late_fees === true || body.auto_send_reminders === true) {
-      const hasAutomation = await planGate.hasFeature(scope.owner_id, "automation");
-      if (!hasAutomation) {
-        return NextResponse.json({
-          error: "FEATURE_NOT_AVAILABLE",
-          feature: "automation",
-          message: "Upgrade to Starter to enable automation",
-          upgrade_required: true,
-          recommended_plan: "starter",
-        }, { status: 402 });
-      }
-    }
     const result = await hostelPolicyService.updateHostelPolicy(params.id, scope.owner_id, buildPolicyPatch(body), scope.actor_id);
     return apiResponse(result);
   } catch (error: any) {

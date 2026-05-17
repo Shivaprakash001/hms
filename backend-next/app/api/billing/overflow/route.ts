@@ -1,26 +1,11 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-import { NextRequest } from "next/server";
-import { getSession, apiResponse, apiError } from "@/lib/auth";
-import { overflowBillingService } from "@/lib/services/overflow-billing-service";
+import { NextRequest, NextResponse } from "next/server";
 
-/**
- * GET /api/billing/overflow
- * Returns current overflow status for the authenticated owner.
- * Used by the billing dashboard to show usage meters, projected charges,
- * and upgrade nudges.
- */
-export async function GET(req: NextRequest) {
-  const session = await getSession(req);
-  if (!session || session.role !== "OWNER") {
-    return apiError("Forbidden", "FORBIDDEN", 403);
-  }
+const GONE = { ok: false, message: "Decommissioned: SaaS billing/settlement route removed in single-business migration" };
 
-  try {
-    const status = await overflowBillingService.getOverflowStatus(session.sub);
-    return apiResponse(status);
-  } catch (error: any) {
-    return apiError(error.message || "Failed to fetch overflow status");
-  }
-}
+export async function GET(_req: NextRequest) { return NextResponse.json(GONE, { status: 410 }); }
+export async function POST(_req: NextRequest) { return NextResponse.json(GONE, { status: 410 }); }
+export async function PATCH(_req: NextRequest) { return NextResponse.json(GONE, { status: 410 }); }
+export async function DELETE(_req: NextRequest) { return NextResponse.json(GONE, { status: 410 }); }

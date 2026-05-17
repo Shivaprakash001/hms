@@ -6,7 +6,6 @@ import { resolveRules, calculateSingleRuleFee } from "@/lib/billing/engine";
 import { resolvePreferences } from "@/lib/preferences";
 import { batchGetHostelContexts, getTenantOperationalContext } from "@/lib/hostel-context";
 import { formatMonthYear, formatDate } from "@/lib/format";
-import { requireAutomation, consumeReminder } from "@/lib/services/plan-gate-service";
 import { financialService } from "./financial-service";
 import { selectReminderForOverdueDay } from "@/lib/services/collection-strategy-service";
 import { whatsappReminderDeliveryService } from "@/lib/services/notifications/whatsapp-reminder-delivery";
@@ -91,16 +90,7 @@ export class ReminderService {
       // Fallback: if hostel context is missing (inactive/deleted hostel), use empty defaults
       const config = hostelCtx ? hostelCtx.prefs : resolvePreferences(null);
 
-      // 🔒 Plan Gate: Automation features require Starter+ plan
-      // If owner is on FREE plan, skip ALL automation (reminders & late fees)
-      try {
-        await requireAutomation(ownerId);
-      } catch {
-        // Owner does not have automation — skip this obligation entirely
-        continue;
-      }
-
-      // Automation Guards (preference-level — only checked if plan allows)
+      // Automation Guards (preference-level)
       const autoReminders = config.auto_send_reminders ?? true;
       const autoLateFees = config.auto_apply_late_fees ?? true;
 
@@ -383,23 +373,7 @@ export class ReminderService {
       whatsapp: emptyChannel(),
     };
 
-    if (ownerId) {
-      // 🔒 Deduct one reminder credit (addon-based). Skip notification if exhausted.
-      try {
-        await consumeReminder(ownerId);
-        result.credited = true;
-      } catch (creditErr: any) {
-        if (creditErr?.code === "NO_REMINDERS_LEFT") {
-          logger.warn("reminder.notification.skipped", {
-            tenant_id: tenant.id,
-            owner_id: ownerId,
-            reason: "NO_REMINDERS_LEFT",
-          });
-          throw creditErr;
-        }
-        throw creditErr;
-      }
-    }
+    result.credited = true;
 
     const canEmail = config.reminder_email ?? true;
     const canInApp = config.reminder_in_app ?? true;

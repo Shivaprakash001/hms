@@ -22,7 +22,6 @@ import { paymentRepository } from "@/src/repositories/paymentRepository";
 import { paymentOperationalAnomalyService } from "@/lib/services/payment-operational-anomaly-service";
 import { paymentWebhookEventService } from "@/lib/services/payment-webhook-event-service";
 import { paymentProviderVerificationSnapshotService } from "@/lib/services/payment-provider-verification-snapshot-service";
-import { settlementLedgerService } from "@/lib/services/settlement-ledger-service";
 
 const logger = getLogger("payment.service");
 type MaybeHostelId = string | null;
@@ -220,39 +219,6 @@ export class PaymentService {
     await tx.rent_obligations.update({
       where: { id: data.obligationId },
       data: { status: newStatus }
-    });
-
-    // ── Settlement ledger CREDIT (Phase 3) ─────────────────────────────
-    // This payment represents money tenant paid into HMS. From HMS's
-    // perspective this is an owner-payable liability, not HMS revenue.
-    // The CREDIT is written in the SAME transaction as the payment row so
-    // there can never be a payment without its ledger counterpart.
-    //
-    // Domain: this code path is RENT_COLLECTION only (rent obligations).
-    // PLATFORM_BILLING never reaches _applyPaymentInTx.
-    //
-    // Idempotency: keyed on payment.id. Webhook retries that re-enter the
-    // same transaction will hit the unique index on idempotency_key and
-    // return the already-existing ledger entry.
-    if (!obligation.owner_id) {
-      // Defensive: rent_obligations.owner_id is NOT NULL in schema, but
-      // payments.owner_id is nullable. The ledger requires owner_id.
-      throw new Error("LEDGER_PRECONDITION_FAILED: obligation has no owner_id");
-    }
-    await settlementLedgerService.creditCollectionInTx(tx, {
-      ownerId: obligation.owner_id,
-      hostelId: obligation.hostel_id,
-      paymentId: payment.id,
-      amount: paymentPaisa / 100,
-      idempotencyKey: `credit:payment:${payment.id}`,
-      referenceType: "PAYMENT",
-      referenceId: payment.id,
-      metadata: {
-        obligation_id: data.obligationId,
-        payment_method: data.paymentMethod,
-        payment_attempt_id: data.paymentAttemptId ?? null,
-      },
-      createdBy: data.offlineRecordedBy ?? data.ownerId ?? null,
     });
 
     return { payment, newStatus, tenantId: obligation.tenant_id, ownerId: obligation.owner_id, hostelId: obligation.hostel_id };
@@ -458,13 +424,6 @@ export class PaymentService {
         amount: data.amountPaid,
         method: data.paymentMethod,
       });
-
-      // 🎉 First-payment milestone: fires once for the owner's very first collection.
-      if (res.payment?.owner_id) {
-        abandonmentService
-          .sendFirstSuccessNotification(res.payment.owner_id, "FIRST_PAYMENT")
-          .catch((e: any) => console.warn("[PAYMENT] First-payment milestone failed:", e?.message));
-      }
 
       return res;
     });
@@ -710,18 +669,6 @@ export class PaymentService {
       method: data.paymentMethod,
       idempotency_key: data.idempotencyKey || null,
     });
-
-    // 🎉 First-payment milestone: fires once for the owner's very first tenant payment.
-    const ownerIdForMilestone = txResult.allocations[0] ? await prisma.rent_obligations.findUnique({
-      where: { id: txResult.allocations[0].obligation_id },
-      select: { owner_id: true },
-    }).then(ob => ob?.owner_id ?? null).catch(() => null) : null;
-
-    if (ownerIdForMilestone) {
-      abandonmentService
-        .sendFirstSuccessNotification(ownerIdForMilestone, "FIRST_PAYMENT")
-        .catch((e: any) => console.warn("[PAYMENT] First-payment milestone (tenant path) failed:", e?.message));
-    }
 
     return txResult;
   }
@@ -1954,39 +1901,8 @@ export class PaymentService {
       });
     }
 
-    // 🔒 PLAN GATE — Revenue protection enforcement
-    // Automatic settlement (webhook / verify) is a STARTER+ feature.
-    // FREE plan: park the attempt in PENDING_MANUAL_CONFIRMATION so the owner
-    // reviews and clicks "Confirm" before the obligation is marked PAID.
-    // isManualConfirm is derived ONLY from the server-controlled context.source —
-    // never from user-supplied input, making it impossible to spoof.
+
     const isManualConfirm = context?.source === "MANUAL_CONFIRM";
-    if (!isManualConfirm) {
-      const autoEnabled = await planEnforcementService.hasFeature(attempt.owner_id, "automation");
-      if (!autoEnabled) {
-        logger.info("payments.finalize.plan_gate.manual_confirmation_required", {
-          ...requestMeta,
-          attempt_id: attemptId,
-          owner_id: attempt.owner_id,
-        });
-        // We hold the PROCESSING lock — update by id is safe.
-        return await this.updateAttemptStatusOutsideTx({
-          attemptId,
-          fromStatus: "PROCESSING",
-          toStatus: "PENDING_MANUAL_CONFIRMATION",
-          source: "WEBHOOK",
-          reason: "plan gate requires owner manual confirmation",
-          operationalOwnerId: attempt.owner_id,
-          financialOwnerId: attempt.owner_id,
-          hostelId: attempt.hostel_id,
-          data: {
-            status: "PENDING_MANUAL_CONFIRMATION",
-            gateway_txn_id: gatewayTxnId ?? null,
-            raw_webhook_payload: rawPayload ?? null,
-          },
-        });
-      }
-    }
 
     // ──────────────────────────────────────────────────────────────
     // 💎 ADVANCE PATH: Gateway-driven deposit, no obligation linkage

@@ -1,6 +1,5 @@
 import { prisma } from "../db";
-import { planEnforcementService } from "./plan-enforcement-service";
-import { financialService } from "../../src/services/payments/financial-service";
+import { financialService } from "./financial-service";
 
 
 export class PropertyService {
@@ -113,9 +112,6 @@ export class PropertyService {
       } else if (existingHostels.length > 1) {
         throw new Error("VALIDATION: hostel_id is required for existing hostel updates");
       } else {
-        // Enforcement: creating a new hostel requires active subscription and available hostel slots
-        await planEnforcementService.assertSubscriptionActive(userId);
-        await planEnforcementService.assertHostelLimit(userId);
         await prisma.hostels.create({
           data: {
             owner_id: userId,

@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
-import { apiResponse, apiError } from "@/lib/auth";
+import { apiResponse, apiError, getSession } from "@/lib/auth";
 import { authService } from "@/lib/services/auth-service";
 import { RegisterSchema } from "@/lib/validators";
 import { normalizeIndianPhone } from "@/lib/utils/phone-utils";
@@ -16,6 +16,11 @@ const OTP_ACTION  = "registration";
  * 📝 AUTH REGISTER — Owner Registration (MSG91 Edition)
  */
 export async function POST(req: NextRequest) {
+  const session = await getSession(req);
+  if (!session || session.role !== "ADMIN") {
+    return apiError("Owner self-registration is disabled. Contact your administrator.", "FORBIDDEN", 403);
+  }
+
   try {
     const body = await req.json();
     const validated = RegisterSchema.safeParse(body);

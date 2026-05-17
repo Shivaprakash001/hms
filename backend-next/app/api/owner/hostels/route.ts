@@ -97,14 +97,6 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { propertyService } = await import("@/lib/services/property-service");
     
-    // We will bypass the existingCount check by adding a dedicated create method
-    // or by temporarily mocking hostelId and doing it manually. 
-    // It's cleaner to just do it directly here using the enforcement service.
-    const { planEnforcementService } = await import("@/lib/services/plan-enforcement-service");
-    
-    await planEnforcementService.assertSubscriptionActive(session.sub);
-    await planEnforcementService.assertHostelLimit(session.sub);
-
     const name = body.name || body.hostel_name || "New Hostel";
     const phone = body.phone || body.hostel_phone || "";
     

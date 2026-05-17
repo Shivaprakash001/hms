@@ -35,9 +35,6 @@ export class InvitationService {
     const normalizedEmail = String(email || "").trim().toLowerCase();
     logger.info(`Starting invitation process for email: ${normalizedEmail} by owner: ${ownerId}`);
     
-    // Enforcement: subscription must allow writes and tenant slots
-    await planEnforcementService.assertSubscriptionActive(ownerId);
-    await planEnforcementService.assertTenantLimit(ownerId);
     // 1. Duplicate check
     const existingProfile = await prisma.profile.findUnique({
       where: { email: normalizedEmail },

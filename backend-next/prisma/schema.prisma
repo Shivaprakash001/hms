@@ -33,36 +33,8 @@ model activity_logs {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model addonTransactions {
-  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  owner_id           String   @db.Uuid
-  payment_attempt_id String?  @db.Uuid
-  pack               String
-  credits_added      Int
-  created_at         DateTime @default(now()) @db.Timestamptz(6)
 
-  @@index([owner_id])
-  @@map("addon_transactions")
-}
 
-model addonUsage {
-  owner_id            String  @id @db.Uuid
-  reminders_remaining Int     @default(0)
-  reminders_used      Int     @default(0)
-  auto_topup          Boolean @default(false)
-
-  @@map("addon_usage")
-}
-
-model autopay_attempts {
-  id                String        @id @db.Uuid
-  subscription_id   String        @db.Uuid
-  attempt_at        DateTime      @default(now()) @db.Timestamptz(6)
-  result            String
-  provider_response String?
-  subscriptions     subscriptions @relation(fields: [subscription_id], references: [id], onDelete: Cascade)
-
-}
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model bulk_import_batches {
@@ -346,31 +318,6 @@ model notifications {
 
 }
 
-model overflow_ledger {
-  id                              String          @id @db.Uuid
-  owner_id                        String          @db.Uuid
-  billing_month                   DateTime        @db.Date
-  plan_id                         String
-  active_tenant_count             Int
-  included_limit                  Int
-  overflow_count                  Int             @default(0)
-  overflow_price_per_tenant_paise Int             @default(0)
-  overflow_amount_paise           Int             @default(0)
-  invoice_id                      String?         @db.Uuid
-  status                          String          @default("PENDING")
-  idempotency_key                 String          @unique
-  created_at                      DateTime        @default(now()) @db.Timestamptz(6)
-  processed_at                    DateTime?       @db.Timestamptz(6)
-  owner_invoices                  ownerInvoice? @relation(fields: [invoice_id], references: [id])
-
-  @@unique([owner_id, billing_month])
-  @@index([billing_month], map: "idx_ol_billing_month")
-  @@index([owner_id], map: "idx_ol_owner_id")
-  @@index([status], map: "idx_ol_status")
-  @@index([billing_month])
-  @@index([owner_id])
-  @@index([status])
-}
 
 model owner_dashboard_snapshots {
   owner_id             String    @id @db.Uuid
@@ -400,86 +347,9 @@ model owner_dashboard_snapshots {
   @@index([stats_computed_at])
 }
 
-model ownerInvoice {
-  id                  String               @id @db.Uuid
-  owner_id            String               @db.Uuid
-  subscription_id     String?              @db.Uuid
-  plan_id             String?
-  invoice_number      String?              @unique
-  amount_paise        Int
-  status              String               @default("PENDING")
-  billing_month       DateTime?            @db.Date
-  due_date            DateTime             @db.Date
-  expires_at          DateTime?            @db.Timestamptz(6)
-  paid_at             DateTime?            @db.Timestamptz(6)
-  created_at          DateTime             @default(now()) @db.Timestamptz(6)
-  line_items          Json?
-  overflow_ledger     overflow_ledger[]
-  profiles            profile             @relation(fields: [owner_id], references: [id], onDelete: Cascade)
-  plans               plans?               @relation(fields: [plan_id], references: [id])
-  owner_subscriptions owner_subscriptions? @relation(fields: [subscription_id], references: [id])
-  attempts            paymentAttempt[]
 
-  @@index([owner_id, created_at(sort: Desc)])
-  @@index([status])
-  @@map("owner_invoices")
-}
 
-model owner_onboarding_states {
-  owner_id                String    @id @db.Uuid
-  onboarding_step         String    @default("ACCOUNT_CREATED")
-  onboarding_completed_at DateTime? @db.Timestamptz(6)
-  onboarding_last_seen_at DateTime  @default(now()) @db.Timestamptz(6)
-  skipped_steps           Json      @default("[]")
-  onboarding_source       String?
-  onboarding_version      String    @default("v2")
-  activation_score        Int       @default(0)
-  created_at              DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at              DateTime  @db.Timestamptz(6)
 
-  @@index([activation_score])
-  @@index([onboarding_completed_at])
-  @@index([onboarding_last_seen_at])
-  @@index([onboarding_step])
-}
-
-model owner_subscriptions {
-  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  owner_id       String           @unique @db.Uuid
-  plan_id        String
-  status         String           @default("FREE")
-  start_date     DateTime         @db.Date
-  end_date       DateTime?        @db.Date
-  auto_renew     Boolean          @default(true)
-  created_at     DateTime         @default(now()) @db.Timestamptz(6)
-  updated_at     DateTime?        @db.Timestamptz(6)
-  owner_invoices ownerInvoice[]
-  profiles       profile         @relation(fields: [owner_id], references: [id], onDelete: Cascade)
-  plans          plans            @relation(fields: [plan_id], references: [id])
-
-  @@index([owner_id])
-  @@index([status])
-}
-
-model owner_usage_snapshots {
-  id                    String   @id @db.Uuid
-  owner_id              String   @db.Uuid
-  billing_month         DateTime @db.Date
-  plan_id               String
-  active_tenant_count   Int      @default(0)
-  included_limit        Int      @default(0)
-  overflow_tenant_count Int      @default(0)
-  overflow_amount_paise Int      @default(0)
-  peak_tenant_count     Int      @default(0)
-  snapshot_taken_at     DateTime @default(now()) @db.Timestamptz(6)
-  created_at            DateTime @default(now()) @db.Timestamptz(6)
-
-  @@unique([owner_id, billing_month])
-  @@index([billing_month], map: "idx_ous_billing_month")
-  @@index([owner_id], map: "idx_ous_owner_id")
-  @@index([billing_month])
-  @@index([owner_id])
-}
 
 model payment_attempt_obligations {
   id                 String           @id @db.Uuid
@@ -517,7 +387,6 @@ model payment_attempt_status_events {
 model paymentAttempt {
   id                          String                        @id @db.Uuid
   obligation_id               String?                       @db.Uuid
-  invoice_id                  String?                       @db.Uuid
   tenant_id                   String?                       @db.Uuid
   owner_id                    String                        @db.Uuid
   provider                    String
@@ -552,7 +421,6 @@ model paymentAttempt {
   provider_order_id           String?
   provider_reference_id       String?
   obligations                 payment_attempt_obligations[]
-  invoice                     ownerInvoice?               @relation(fields: [invoice_id], references: [id])
   rent_obligations            rent_obligations?             @relation(fields: [obligation_id], references: [id])
   tenants                     tenants?                      @relation(fields: [tenant_id], references: [id])
   payments                    payments[]
@@ -715,7 +583,6 @@ model payments {
   payment_attempts    paymentAttempt? @relation(fields: [payment_attempt_id], references: [id])
   tenants             tenants           @relation(fields: [tenant_id], references: [id])
   receipts            receipts?
-  settlement_ledger_entries owner_settlement_ledger[]
 
   @@index([created_at])
   @@index([hostel_id])
@@ -727,28 +594,6 @@ model payments {
   @@index([tenant_id, payment_date])
 }
 
-model plans {
-  id                              String                @id
-  name                            String
-  price_inr                       Int                   @default(0)
-  tenant_limit                    Int                   @default(0)
-  hostel_limit                    Int                   @default(0)
-  automation                      Boolean               @default(false)
-  multi_hostel                    Boolean               @default(false)
-  analytics                       Boolean               @default(false)
-  is_custom                       Boolean               @default(false)
-  created_at                      DateTime              @default(now()) @db.Timestamptz(6)
-  features                        Json?
-  can_generate_receipts           Boolean               @default(false)
-  profile_photo                   Boolean               @default(false)
-  overflow_enabled                Boolean               @default(false)
-  overflow_hard_cap               Int                   @default(0)
-  overflow_price_per_tenant_paise Int                   @default(0)
-  owner_invoices                  ownerInvoice[]
-  owner_subscriptions             owner_subscriptions[]
-  subscriptions                   subscriptions[]
-
-}
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model profile {
@@ -781,8 +626,6 @@ model profile {
   expenses                                                          expenses[]
   hostels                                                           hostels[]
   notifications                                                     notifications[]
-  owner_invoices                                                    ownerInvoice[]
-  owner_subscriptions                                               owner_subscriptions?
   bulk_import_batches_profiles_import_batch_idTobulk_import_batches bulk_import_batches?  @relation("profiles_import_batch_idTobulk_import_batches", fields: [import_batch_id], references: [id])
   profiles                                                          profile?              @relation("profilesToprofiles", fields: [owner_id], references: [id])
   other_profiles                                                    profile[]             @relation("profilesToprofiles")
@@ -1025,23 +868,6 @@ model rooms {
   @@index([hostel_id])
 }
 
-model subscriptions {
-  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  owner_id         String             @unique @db.Uuid
-  plan_id          String
-  status           String             @default("TRIAL")
-  trial_ends_at    DateTime?          @db.Timestamptz(6)
-  start_date       DateTime           @default(now()) @db.Timestamptz(6)
-  next_billing_at  DateTime?          @db.Timestamptz(6)
-  autopay_enabled  Boolean            @default(true)
-  grace_started_at DateTime?          @db.Timestamptz(6)
-  grace_ends_at    DateTime?          @db.Timestamptz(6)
-  created_at       DateTime           @default(now()) @db.Timestamptz(6)
-  updated_at       DateTime           @default(now()) @db.Timestamptz(6)
-  autopay_attempts autopay_attempts[]
-  plans            plans              @relation(fields: [plan_id], references: [id])
-
-}
 
 model systemEventLog {
   id         String   @id @db.Uuid
@@ -1525,106 +1351,9 @@ model exit_feedbacks {
   @@index([tenant_id])
 }
 
-// ============================================================
-// Internal Settlement & Financial Operations (migration 059)
-// Append-only by service contract — never UPDATE/DELETE rows in
-// owner_settlement_ledger or admin_financial_audit_log.
-// ============================================================
 
-model owner_settlement_ledger {
-  id                  String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  owner_id            String                  @db.Uuid
-  hostel_id           String                  @db.Uuid
-  payment_id          String?                 @db.Uuid
-  settlement_batch_id String?                 @db.Uuid
-  batch_item_id       String?                 @db.Uuid
-  entry_type          String                  @db.VarChar(40)
-  direction           String                  @db.Char(1)
-  amount              Decimal                 @db.Decimal(14, 2)
-  balance_after       Decimal                 @db.Decimal(14, 2)
-  currency            String                  @default("INR") @db.VarChar(3)
-  settlement_status   String                  @default("PENDING_SETTLEMENT") @db.VarChar(30)
-  settled_at          DateTime?               @db.Timestamptz(6)
-  idempotency_key     String
-  reference_type      String?                 @db.VarChar(40)
-  reference_id        String?
-  metadata            Json                    @default("{}")
-  created_by          String?                 @db.Uuid
-  created_at          DateTime                @default(now()) @db.Timestamptz(6)
 
-  payment             payments?               @relation(fields: [payment_id], references: [id])
-  batch               settlement_batches?     @relation(fields: [settlement_batch_id], references: [id])
-  batch_item          settlement_batch_items? @relation("BatchItemDebit", fields: [batch_item_id], references: [id])
-  debit_for_items     settlement_batch_items[] @relation("ItemDebitLedger")
 
-  @@unique([idempotency_key], map: "udx_osl_idempotency_key")
-  @@index([owner_id, hostel_id, created_at(sort: Desc)], map: "idx_osl_owner_hostel_created")
-  @@index([owner_id, settlement_status], map: "idx_osl_owner_status")
-  @@index([hostel_id, settlement_status], map: "idx_osl_hostel_status")
-  @@index([settlement_batch_id], map: "idx_osl_settlement_batch")
-  @@index([payment_id], map: "idx_osl_payment")
-}
-
-model settlement_batches {
-  id               String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  batch_number     String
-  status           String                  @default("DRAFT") @db.VarChar(30)
-  total_amount     Decimal                 @default(0) @db.Decimal(14, 2)
-  total_owners     Int                     @default(0)
-  total_hostels    Int                     @default(0)
-  total_items      Int                     @default(0)
-  success_count    Int                     @default(0)
-  failed_count     Int                     @default(0)
-  created_by       String                  @db.Uuid
-  approved_by      String?                 @db.Uuid
-  approved_at      DateTime?               @db.Timestamptz(6)
-  processed_at     DateTime?               @db.Timestamptz(6)
-  completed_at     DateTime?               @db.Timestamptz(6)
-  cancelled_by     String?                 @db.Uuid
-  cancelled_at     DateTime?               @db.Timestamptz(6)
-  reference_number String?
-  notes            String?
-  metadata         Json                    @default("{}")
-  created_at       DateTime                @default(now()) @db.Timestamptz(6)
-  updated_at       DateTime                @default(now()) @db.Timestamptz(6)
-
-  items            settlement_batch_items[]
-  ledger_entries   owner_settlement_ledger[]
-
-  @@unique([batch_number], map: "udx_sb_batch_number")
-  @@index([status, created_at(sort: Desc)], map: "idx_sb_status_created")
-  @@index([created_by, created_at(sort: Desc)], map: "idx_sb_created_by")
-}
-
-model settlement_batch_items {
-  id                 String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  batch_id           String                   @db.Uuid
-  owner_id           String                   @db.Uuid
-  hostel_id          String                   @db.Uuid
-  amount             Decimal                  @db.Decimal(14, 2)
-  payout_method      String                   @default("NEFT") @db.VarChar(20)
-  payout_reference   String?
-  payout_status      String                   @default("PENDING") @db.VarChar(20)
-  failure_reason     String?
-  covered_credit_ids String[]                 @default([]) @db.Uuid
-  ledger_debit_id    String?                  @db.Uuid
-  processed_by       String?                  @db.Uuid
-  processed_at       DateTime?                @db.Timestamptz(6)
-  idempotency_key    String
-  metadata           Json                     @default("{}")
-  created_at         DateTime                 @default(now()) @db.Timestamptz(6)
-  updated_at         DateTime                 @default(now()) @db.Timestamptz(6)
-
-  batch              settlement_batches       @relation(fields: [batch_id], references: [id], onDelete: Cascade)
-  ledger_debit       owner_settlement_ledger? @relation("ItemDebitLedger", fields: [ledger_debit_id], references: [id])
-  ledger_debits      owner_settlement_ledger[] @relation("BatchItemDebit")
-
-  @@unique([batch_id, owner_id, hostel_id], map: "udx_sbi_batch_owner_hostel")
-  @@unique([idempotency_key], map: "udx_sbi_idempotency_key")
-  @@index([owner_id, payout_status], map: "idx_sbi_owner_status")
-  @@index([hostel_id, payout_status], map: "idx_sbi_hostel_status")
-  @@index([batch_id, payout_status], map: "idx_sbi_batch_status")
-}
 
 model financial_reconciliation_issues {
   id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
