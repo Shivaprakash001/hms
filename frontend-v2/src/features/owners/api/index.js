@@ -77,6 +77,10 @@ export const ownerService = {
     updateSectionConfig: async (hostelId, section, data) => {
         const response = await api.patch(`/hostels/${hostelId}/${section}`, data);
         return response.data;
+    },
+    updateHostelPolicy: async (hostelId, policyPatch) => {
+        const response = await api.patch(`/hostels/${hostelId}/preferences`, { policy: policyPatch });
+        return response.data;
     }
 };
 
