@@ -1,15 +1,19 @@
 import { useState } from 'react';
-import { X, Upload, User, Phone, Building2, GraduationCap, MapPin, Users as UsersIcon } from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { X, Upload, User, Building2, GraduationCap, Users as UsersIcon, Loader2 } from 'lucide-react';
+import { tenantService } from '@features/tenants/api';
+import { queryKeys } from '@lib/queryKeys';
 
 interface AddTenantModalProps {
   onClose: () => void;
-  onSubmit: (data: any) => void;
+  hostelId: string;
 }
 
-export function AddTenantModal({ onClose, onSubmit }: AddTenantModalProps) {
+export function AddTenantModal({ onClose, hostelId }: AddTenantModalProps) {
+  const queryClient = useQueryClient();
   const [formData, setFormData] = useState({
     fullName: '',
-    aadhaar: '',
     phone: '',
     college: '',
     rollNumber: '',
@@ -20,10 +24,43 @@ export function AddTenantModal({ onClose, onSubmit }: AddTenantModalProps) {
     roomNumber: '',
     joiningDate: '',
   });
+  const [apiError, setApiError] = useState<string | null>(null);
+
+  const mutation = useMutation({
+    mutationFn: (payload: Record<string, unknown>) => tenantService.create(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.tenants.all(hostelId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.stats(hostelId) });
+      toast.success('Tenant added successfully');
+      onClose();
+    },
+    onError: (error: unknown) => {
+      const msg =
+        (error as { response?: { data?: { message?: string; error?: { message?: string } } } })?.response?.data?.message ||
+        (error as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ||
+        (error as { message?: string })?.message ||
+        'Failed to add tenant';
+      setApiError(msg);
+      toast.error(msg);
+    },
+  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(formData);
+    setApiError(null);
+    mutation.mutate({
+      name: formData.fullName,
+      phone: formData.phone,
+      college: formData.college,
+      roll_number: formData.rollNumber,
+      year_of_study: formData.yearOfStudy,
+      hometown: formData.hometown,
+      guardian_name: formData.guardianName,
+      guardian_phone: formData.guardianPhone,
+      room_number: formData.roomNumber,
+      joining_date: formData.joiningDate || undefined,
+      hostel_id: hostelId,
+    });
   };
 
   const handleChange = (field: string, value: string) => {
@@ -68,19 +105,6 @@ export function AddTenantModal({ onClose, onSubmit }: AddTenantModalProps) {
                 onChange={(e) => handleChange('fullName', e.target.value)}
                 className="w-full px-4 py-3 bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
                 placeholder="Enter full name"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1.5">Aadhaar Number *</label>
-              <input
-                type="text"
-                required
-                maxLength={12}
-                value={formData.aadhaar}
-                onChange={(e) => handleChange('aadhaar', e.target.value)}
-                className="w-full px-4 py-3 bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
-                placeholder="1234 5678 9012"
               />
             </div>
 
@@ -220,12 +244,18 @@ export function AddTenantModal({ onClose, onSubmit }: AddTenantModalProps) {
             </div>
           </div>
 
-          {/* Submit Button */}
+          {apiError && (
+            <div className="bg-destructive/10 text-destructive text-sm px-4 py-3 rounded-lg">{apiError}</div>
+          )}
+
           <button
             type="submit"
-            className="w-full bg-accent text-accent-foreground py-4 rounded-xl font-medium active:scale-95 transition-transform"
+            disabled={mutation.isPending}
+            className="w-full bg-accent text-accent-foreground py-4 rounded-xl font-medium active:scale-95 transition-transform disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            Add Tenant
+            {mutation.isPending ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Adding...</>
+            ) : 'Add Tenant'}
           </button>
         </form>
       </div>

@@ -1,95 +1,81 @@
 import { useState } from 'react';
-import { X, DollarSign, Calendar, Lock } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { X, IndianRupee, Calendar, Loader2 } from 'lucide-react';
+import { paymentService } from '@features/payments/api';
+import { queryKeys } from '@lib/queryKeys';
 
 interface RecordPaymentModalProps {
   onClose: () => void;
-  onSubmit: (data: any) => void;
+  hostelId: string;
 }
 
-export function RecordPaymentModal({ onClose, onSubmit }: RecordPaymentModalProps) {
-  const [formData, setFormData] = useState({
-    tenantName: '',
-    roomNumber: '',
-    amount: '',
-    paymentMode: 'cash',
-    paymentDate: new Date().toISOString().split('T')[0],
-    remarks: '',
-    password: '',
+export function RecordPaymentModal({ onClose, hostelId }: RecordPaymentModalProps) {
+  const queryClient = useQueryClient();
+  const [selectedDueId, setSelectedDueId] = useState('');
+  const [amount, setAmount] = useState('');
+  const [paymentMode, setPaymentMode] = useState('cash');
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [referenceNumber, setReferenceNumber] = useState('');
+  const [note, setNote] = useState('');
+  const [apiError, setApiError] = useState<string | null>(null);
+
+  const { data: duesData, isLoading: duesLoading } = useQuery({
+    queryKey: queryKeys.payments.dues(hostelId),
+    queryFn: () => paymentService.getAllDues(hostelId),
+    staleTime: 60 * 1000,
   });
 
-  const [showPasswordVerification, setShowPasswordVerification] = useState(false);
+  const dues: Record<string, unknown>[] = Array.isArray(duesData)
+    ? duesData
+    : Array.isArray((duesData as Record<string, unknown>)?.dues)
+    ? ((duesData as Record<string, unknown>).dues as Record<string, unknown>[])
+    : [];
+
+  const selectedDue = dues.find((d) => String(d.obligation_id ?? d.id) === selectedDueId);
+
+  const mutation = useMutation({
+    mutationFn: (payload: Parameters<typeof paymentService.recordOfflinePayment>[0]) =>
+      paymentService.recordOfflinePayment(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.payments.all(hostelId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.payments.dues(hostelId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.stats(hostelId) });
+      toast.success('Payment recorded successfully');
+      onClose();
+    },
+    onError: (error: unknown) => {
+      const msg =
+        (error as { response?: { data?: { message?: string; error?: { message?: string } } } })?.response?.data?.message ||
+        (error as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ||
+        (error as { message?: string })?.message ||
+        'Failed to record payment';
+      setApiError(msg);
+      toast.error(msg);
+    },
+  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (formData.paymentMode === 'cash' || formData.paymentMode === 'upi') {
-      setShowPasswordVerification(true);
-    } else {
-      onSubmit(formData);
-    }
+    if (!selectedDue) return;
+    setApiError(null);
+    mutation.mutate({
+      obligationId: String(selectedDue.obligation_id ?? selectedDue.id),
+      identityToken: String(selectedDue.identity_token ?? selectedDue.tenant_identity_token ?? ''),
+      amountPaid: Number(amount),
+      paymentMethod: paymentMode.toUpperCase(),
+      referenceNumber: referenceNumber || undefined,
+      paymentDate,
+      note: note || undefined,
+      hostelId,
+    });
   };
 
-  const handlePasswordSubmit = () => {
-    if (formData.password) {
-      onSubmit(formData);
-    }
-  };
-
-  const handleChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
-
-  if (showPasswordVerification) {
-    return (
-      <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center">
-        <div className="bg-background w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-6">
-          <div className="text-center mb-6">
-            <div className="w-16 h-16 bg-accent/10 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Lock className="w-8 h-8 text-accent" />
-            </div>
-            <h2 className="text-xl font-semibold text-foreground mb-2">Verify Your Identity</h2>
-            <p className="text-sm text-muted-foreground">
-              Enter your password to confirm this offline payment
-            </p>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1.5">Password</label>
-              <input
-                type="password"
-                value={formData.password}
-                onChange={(e) => handleChange('password', e.target.value)}
-                className="w-full px-4 py-3 bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
-                placeholder="Enter your password"
-                autoFocus
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => setShowPasswordVerification(false)}
-                className="py-3 px-4 border border-border text-foreground rounded-lg font-medium active:scale-95 transition-transform"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handlePasswordSubmit}
-                className="py-3 px-4 bg-accent text-accent-foreground rounded-lg font-medium active:scale-95 transition-transform"
-              >
-                Confirm
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const outstandingForSelected = selectedDue ? Number(selectedDue.outstanding ?? selectedDue.amount ?? 0) : 0;
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center">
       <div className="bg-background w-full max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl sm:max-w-lg">
-        {/* Header */}
         <div className="sticky top-0 bg-background border-b border-border px-4 py-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-foreground">Record Payment</h2>
           <button onClick={onClose} className="p-2 hover:bg-secondary rounded-lg transition-colors">
@@ -97,36 +83,58 @@ export function RecordPaymentModal({ onClose, onSubmit }: RecordPaymentModalProp
           </button>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-4 space-y-6">
-          {/* Tenant Selection */}
+        <form onSubmit={handleSubmit} className="p-4 space-y-5">
+          {/* Tenant / Obligation */}
           <div>
-            <label className="block text-xs text-muted-foreground mb-1.5">Select Tenant *</label>
-            <select
-              required
-              value={formData.tenantName}
-              onChange={(e) => handleChange('tenantName', e.target.value)}
-              className="w-full px-4 py-3 bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
-            >
-              <option value="">Choose tenant</option>
-              <option value="Rajesh Kumar - Room 204">Rajesh Kumar - Room 204</option>
-              <option value="Priya Sharma - Room 312">Priya Sharma - Room 312</option>
-              <option value="Amit Patel - Room 108">Amit Patel - Room 108</option>
-              <option value="Sneha Reddy - Room 205">Sneha Reddy - Room 205</option>
-            </select>
+            <label className="block text-xs text-muted-foreground mb-1.5">Select Tenant Due *</label>
+            {duesLoading ? (
+              <div className="flex items-center gap-2 py-3 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" /> Loading dues...
+              </div>
+            ) : dues.length === 0 ? (
+              <div className="py-3 text-sm text-muted-foreground">No pending dues found for this hostel</div>
+            ) : (
+              <select
+                required
+                value={selectedDueId}
+                onChange={(e) => {
+                  setSelectedDueId(e.target.value);
+                  const due = dues.find((d) => String(d.obligation_id ?? d.id) === e.target.value);
+                  if (due) setAmount(String(due.outstanding ?? due.amount ?? ''));
+                }}
+                className="w-full px-4 py-3 bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
+              >
+                <option value="">Choose tenant</option>
+                {dues.map((d) => {
+                  const id = String(d.obligation_id ?? d.id);
+                  const name = String(d.tenant_name ?? d.name ?? 'Tenant');
+                  const room = d.room_no ?? d.room_number ? ` - Room ${d.room_no ?? d.room_number}` : '';
+                  const outstanding = Number(d.outstanding ?? d.amount ?? 0);
+                  return (
+                    <option key={id} value={id}>
+                      {name}{room} — ₹{outstanding.toLocaleString('en-IN')}
+                    </option>
+                  );
+                })}
+              </select>
+            )}
+            {selectedDue && outstandingForSelected > 0 && (
+              <p className="text-xs text-[#F59E0B] mt-1.5">Outstanding: ₹{outstandingForSelected.toLocaleString('en-IN')}</p>
+            )}
           </div>
 
           {/* Amount */}
           <div>
-            <label className="block text-xs text-muted-foreground mb-1.5">Payment Amount *</label>
+            <label className="block text-xs text-muted-foreground mb-1.5">Amount *</label>
             <div className="relative">
-              <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+              <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <input
                 type="number"
                 required
-                value={formData.amount}
-                onChange={(e) => handleChange('amount', e.target.value)}
-                className="w-full pl-11 pr-4 py-3 bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
+                min="1"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
                 placeholder="0"
               />
             </div>
@@ -136,62 +144,76 @@ export function RecordPaymentModal({ onClose, onSubmit }: RecordPaymentModalProp
           <div>
             <label className="block text-xs text-muted-foreground mb-2">Payment Mode *</label>
             <div className="grid grid-cols-3 gap-2">
-              {['cash', 'upi', 'online'].map((mode) => (
+              {['cash', 'upi', 'bank'].map((mode) => (
                 <button
                   key={mode}
                   type="button"
-                  onClick={() => handleChange('paymentMode', mode)}
-                  className={`py-3 px-4 rounded-lg font-medium capitalize transition-colors ${
-                    formData.paymentMode === mode
+                  onClick={() => setPaymentMode(mode)}
+                  className={`py-2.5 px-4 rounded-lg text-sm font-medium capitalize transition-colors ${
+                    paymentMode === mode
                       ? 'bg-accent text-accent-foreground'
                       : 'bg-card border border-border text-foreground'
                   }`}
                 >
-                  {mode}
+                  {mode.toUpperCase()}
                 </button>
               ))}
             </div>
-            {(formData.paymentMode === 'cash' || formData.paymentMode === 'upi') && (
-              <p className="text-xs text-[#F59E0B] mt-2 flex items-center gap-1">
-                <Lock className="w-3 h-3" />
-                Password verification required for offline payments
-              </p>
-            )}
           </div>
 
-          {/* Payment Date */}
+          {/* Reference Number */}
+          {(paymentMode === 'upi' || paymentMode === 'bank') && (
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1.5">Reference / UTR Number</label>
+              <input
+                type="text"
+                value={referenceNumber}
+                onChange={(e) => setReferenceNumber(e.target.value)}
+                className="w-full px-4 py-3 bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
+                placeholder="Transaction reference"
+              />
+            </div>
+          )}
+
+          {/* Date */}
           <div>
             <label className="block text-xs text-muted-foreground mb-1.5">Payment Date *</label>
             <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <input
                 type="date"
                 required
-                value={formData.paymentDate}
-                onChange={(e) => handleChange('paymentDate', e.target.value)}
-                className="w-full pl-11 pr-4 py-3 bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
+                value={paymentDate}
+                onChange={(e) => setPaymentDate(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
               />
             </div>
           </div>
 
-          {/* Remarks */}
+          {/* Note */}
           <div>
-            <label className="block text-xs text-muted-foreground mb-1.5">Remarks (Optional)</label>
+            <label className="block text-xs text-muted-foreground mb-1.5">Note (Optional)</label>
             <textarea
-              value={formData.remarks}
-              onChange={(e) => handleChange('remarks', e.target.value)}
-              rows={3}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={2}
               className="w-full px-4 py-3 bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent resize-none"
-              placeholder="Add any notes about this payment..."
+              placeholder="Any notes about this payment..."
             />
           </div>
 
-          {/* Submit Button */}
+          {apiError && (
+            <div className="bg-destructive/10 text-destructive text-sm px-4 py-3 rounded-lg">{apiError}</div>
+          )}
+
           <button
             type="submit"
-            className="w-full bg-accent text-accent-foreground py-4 rounded-xl font-medium active:scale-95 transition-transform"
+            disabled={mutation.isPending || !selectedDueId || duesLoading}
+            className="w-full bg-accent text-accent-foreground py-4 rounded-xl font-medium active:scale-95 transition-transform disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            Record Payment
+            {mutation.isPending ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Recording...</>
+            ) : 'Record Payment'}
           </button>
         </form>
       </div>

@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronLeft, MapPin, Users, DollarSign, TrendingUp, BedDouble, Receipt, Loader2, AlertCircle } from 'lucide-react';
+import { ChevronLeft, MapPin, Users, DollarSign, BedDouble, Receipt, Loader2, AlertCircle, Plus } from 'lucide-react';
 import { ownerService } from '@features/owners/api';
 import { dashboardService } from '@features/dashboard/api';
 import { queryKeys } from '@lib/queryKeys';
+import { AddTenantModal } from './modals/AddTenantModal';
+import { RecordPaymentModal } from './modals/RecordPaymentModal';
 
 type Tab = 'overview' | 'rooms' | 'tenants' | 'financials' | 'expenses' | 'moveouts';
 
@@ -236,6 +238,7 @@ function RoomsTab({ hostelId }: { hostelId: string }) {
 }
 
 function TenantsTab({ hostelId }: { hostelId: string }) {
+  const [showAdd, setShowAdd] = useState(false);
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.tenants.list(hostelId),
     queryFn: () => import('@features/tenants/api').then((m) => m.tenantService.getAll(hostelId, { status: 'ACTIVE' })),
@@ -251,16 +254,25 @@ function TenantsTab({ hostelId }: { hostelId: string }) {
     ? ((data as Record<string, unknown>).tenants as Record<string, unknown>[])
     : [];
 
-  if (tenants.length === 0) {
-    return <div className="text-center py-12 text-sm text-muted-foreground">No active tenants</div>;
-  }
-
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium text-foreground">Active Tenants</h3>
-        <span className="text-xs text-muted-foreground">{tenants.length} tenants</span>
+        <button
+          onClick={() => setShowAdd(true)}
+          className="flex items-center gap-1.5 text-xs font-medium text-accent active:scale-95 transition-transform"
+        >
+          <Plus className="w-3.5 h-3.5" /> Add Tenant
+        </button>
       </div>
+
+      {tenants.length === 0 && (
+        <div className="text-center py-12">
+          <Users className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+          <p className="text-sm text-muted-foreground">No active tenants</p>
+          <button onClick={() => setShowAdd(true)} className="mt-2 text-sm text-accent font-medium">Add first tenant</button>
+        </div>
+      )}
       {tenants.map((tenant) => {
         const paymentStatus = String(tenant.payment_status ?? 'unknown').toLowerCase();
         return (
@@ -286,11 +298,14 @@ function TenantsTab({ hostelId }: { hostelId: string }) {
           </div>
         );
       })}
+
+      {showAdd && <AddTenantModal hostelId={hostelId} onClose={() => setShowAdd(false)} />}
     </div>
   );
 }
 
 function FinancialsTab({ hostelId }: { hostelId: string }) {
+  const [showRecordPayment, setShowRecordPayment] = useState(false);
   const { data: payments, isLoading: pLoading, isError: pError, refetch: pRefetch } = useQuery({
     queryKey: queryKeys.payments.ledger(hostelId, { limit: 20 }),
     queryFn: () => import('@features/payments/api').then((m) => m.paymentService.getAll(hostelId, { limit: 20 })),
@@ -317,6 +332,16 @@ function FinancialsTab({ hostelId }: { hostelId: string }) {
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-medium text-foreground">Financials</h3>
+        <button
+          onClick={() => setShowRecordPayment(true)}
+          className="flex items-center gap-1.5 text-xs font-medium text-accent active:scale-95 transition-transform"
+        >
+          <Plus className="w-3.5 h-3.5" /> Record Payment
+        </button>
+      </div>
+
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-card border border-border rounded-xl p-4">
           <div className="text-xs text-muted-foreground mb-1">Collected</div>
@@ -329,6 +354,10 @@ function FinancialsTab({ hostelId }: { hostelId: string }) {
           <div className="text-[10px] text-muted-foreground mt-1">{duesList.length} obligations</div>
         </div>
       </div>
+
+      {showRecordPayment && (
+        <RecordPaymentModal hostelId={hostelId} onClose={() => setShowRecordPayment(false)} />
+      )}
 
       {paymentList.length > 0 && (
         <div>

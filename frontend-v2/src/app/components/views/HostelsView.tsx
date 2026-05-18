@@ -140,10 +140,6 @@ export function HostelsView() {
       {showAddHostel && (
         <AddHostelModal
           onClose={() => setShowAddHostel(false)}
-          onSubmit={(data) => {
-            console.log('Create hostel:', data);
-            setShowAddHostel(false);
-          }}
         />
       )}
       {showFilter && (

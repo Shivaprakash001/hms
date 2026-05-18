@@ -1,12 +1,18 @@
 import { useState } from 'react';
-import { X, Building2, MapPin, Hash, Upload } from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
+import { X, Building2, MapPin, Hash, Loader2, Upload } from 'lucide-react';
+import { ownerService } from '@features/owners/api';
+import { queryKeys } from '@lib/queryKeys';
 
 interface AddHostelModalProps {
   onClose: () => void;
-  onSubmit: (data: any) => void;
 }
 
-export function AddHostelModal({ onClose, onSubmit }: AddHostelModalProps) {
+export function AddHostelModal({ onClose }: AddHostelModalProps) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [formData, setFormData] = useState({
     hostelName: '',
     address: '',
@@ -15,13 +21,44 @@ export function AddHostelModal({ onClose, onSubmit }: AddHostelModalProps) {
     pincode: '',
     totalFloors: '',
     totalRooms: '',
-    ownerName: '',
     contactNumber: '',
+  });
+  const [apiError, setApiError] = useState<string | null>(null);
+
+  const mutation = useMutation({
+    mutationFn: (payload: Record<string, unknown>) => ownerService.createHostel(payload),
+    onSuccess: (data: Record<string, unknown>) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.owner.hostels() });
+      toast.success('Hostel created successfully');
+      onClose();
+      const anyData = data as Record<string, unknown>;
+      const newId = anyData?.id ?? (anyData?.hostel as Record<string, unknown>)?.id;
+      if (newId) navigate(`/hostels/${newId}`);
+    },
+    onError: (error: unknown) => {
+      const msg =
+        (error as { response?: { data?: { message?: string; error?: { message?: string } } } })?.response?.data?.message ||
+        (error as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ||
+        (error as { message?: string })?.message ||
+        'Failed to create hostel';
+      setApiError(msg);
+      toast.error(msg);
+    },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(formData);
+    setApiError(null);
+    mutation.mutate({
+      name: formData.hostelName,
+      address: formData.address,
+      city: formData.city,
+      state: formData.state,
+      pincode: formData.pincode,
+      total_floors: formData.totalFloors ? Number(formData.totalFloors) : undefined,
+      total_rooms: formData.totalRooms ? Number(formData.totalRooms) : undefined,
+      phone: formData.contactNumber,
+    });
   };
 
   const handleChange = (field: string, value: string) => {
@@ -163,18 +200,6 @@ export function AddHostelModal({ onClose, onSubmit }: AddHostelModalProps) {
             </h3>
 
             <div>
-              <label className="block text-xs text-muted-foreground mb-1.5">Owner Name *</label>
-              <input
-                type="text"
-                required
-                value={formData.ownerName}
-                onChange={(e) => handleChange('ownerName', e.target.value)}
-                className="w-full px-4 py-3 bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
-                placeholder="Owner/Manager name"
-              />
-            </div>
-
-            <div>
               <label className="block text-xs text-muted-foreground mb-1.5">Contact Number *</label>
               <input
                 type="tel"
@@ -187,12 +212,18 @@ export function AddHostelModal({ onClose, onSubmit }: AddHostelModalProps) {
             </div>
           </div>
 
-          {/* Submit Button */}
+          {apiError && (
+            <div className="bg-destructive/10 text-destructive text-sm px-4 py-3 rounded-lg">{apiError}</div>
+          )}
+
           <button
             type="submit"
-            className="w-full bg-accent text-accent-foreground py-4 rounded-xl font-medium active:scale-95 transition-transform"
+            disabled={mutation.isPending}
+            className="w-full bg-accent text-accent-foreground py-4 rounded-xl font-medium active:scale-95 transition-transform disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            Create Hostel
+            {mutation.isPending ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Creating...</>
+            ) : 'Create Hostel'}
           </button>
         </form>
       </div>
