@@ -1,6 +1,6 @@
 const ownerKey = (...parts: unknown[]) => ['owner', ...parts];
-const hostelKey = (hostelId: string, ...parts: unknown[]) => {
-  if (!hostelId) throw new Error('hostelId is required for operational query keys');
+const hostelKey = (hostelId: string | null | undefined, ...parts: unknown[]) => {
+  if (!hostelId) return ['__noop__', ...parts];
   return ['hostel', hostelId, ...parts];
 };
 
