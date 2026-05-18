@@ -7,9 +7,9 @@ export const RoomCreateSchema = z.object({
   floor_id:     z.string().uuid().optional(),
   room_type:    z.string().optional(),
   base_rent:    z.coerce.number().nonnegative().optional(),
-  wifi_name:    z.string().optional(),
-  wifi_password: z.string().optional(),
-  notes:        z.string().optional(),
+  wifi_name:    z.string().nullable().optional(),
+  wifi_password: z.string().nullable().optional(),
+  notes:        z.string().nullable().optional(),
 });
 
 export const AllocationSchema = z.object({
