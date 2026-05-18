@@ -1,5 +1,6 @@
 import { prisma } from "../db";
 import { financialService } from "@/src/services/payments/financial-service";
+import crypto from "crypto";
 
 
 export class PropertyService {
@@ -506,6 +507,7 @@ export class PropertyService {
 
       await tx.room_activity_logs.create({
         data: {
+          id: crypto.randomUUID(),
           room_id: roomId,
           owner_id: ownerId,
           action: "ROOM_EDITED",
