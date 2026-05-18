@@ -46,37 +46,37 @@ export function HostelDetailView() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="sticky top-0 bg-card border-b border-border z-10">
-        <div className="px-4 py-4">
-          <div className="flex items-center gap-3 mb-4">
+        <div className="px-4 pt-4 pb-0">
+          <div className="flex items-center gap-2 mb-3">
             <button
               onClick={() => navigate('/hostels')}
-              className="p-2 -ml-2 active:scale-95 transition-transform"
+              className="p-2 -ml-2 shrink-0 active:scale-95 transition-transform touch-manipulation"
             >
               <ChevronLeft className="w-5 h-5 text-foreground" />
             </button>
-            <div className="flex-1">
-              <h1 className="font-semibold text-foreground">
+            <div className="flex-1 min-w-0">
+              <h1 className="font-semibold text-foreground truncate">
                 {hostel ? (hostel as { name: string }).name : 'Hostel'}
               </h1>
               {hostel && (
                 <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
-                  <MapPin className="w-3 h-3" />
-                  <span>{(hostel as { address?: string; city?: string }).address || (hostel as { city?: string }).city || ''}</span>
+                  <MapPin className="w-3 h-3 shrink-0" />
+                  <span className="truncate">{(hostel as { address?: string; city?: string }).address || (hostel as { city?: string }).city || ''}</span>
                 </div>
               )}
             </div>
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-1 overflow-x-auto pb-1 -mb-px scrollbar-hide">
+          <div className="flex gap-1 overflow-x-auto scrollbar-hide -mx-4 px-4">
             {tabs.map((t) => (
               <button
                 key={t.id}
                 onClick={() => setActiveTab(t.id)}
-                className={`px-4 py-2 text-xs font-medium whitespace-nowrap rounded-lg transition-colors ${
+                className={`shrink-0 px-3 py-2.5 text-xs font-medium whitespace-nowrap rounded-lg transition-colors touch-manipulation ${
                   activeTab === t.id
                     ? 'bg-accent text-accent-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
+                    : 'text-muted-foreground active:text-foreground'
                 }`}
               >
                 {t.label}
@@ -87,7 +87,7 @@ export function HostelDetailView() {
       </div>
 
       {/* Content */}
-      <div className="px-4 py-6">
+      <div className="px-4 py-5 min-w-0">
         {activeTab === 'overview' && <OverviewTab hostelId={hostelId} stats={stats} loading={statsLoading} />}
         {activeTab === 'rooms' && <RoomsTab hostelId={hostelId} />}
         {activeTab === 'tenants' && <TenantsTab hostelId={hostelId} />}
@@ -139,43 +139,23 @@ function OverviewTab({ hostelId, stats, loading }: { hostelId: string; stats: Re
   const pendingDues = Number(stats?.pending_dues ?? stats?.pendingDues ?? stats?.overdue_count ?? 0);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3">
-        <div className="bg-card border border-border rounded-xl p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-muted-foreground">Occupancy</span>
-            <BedDouble className="w-4 h-4 text-muted-foreground" />
+        {[
+          { label: 'Occupancy', icon: <BedDouble className="w-4 h-4 text-muted-foreground shrink-0" />, value: `${occupancy.toFixed(0)}%`, sub: `${occupiedRooms}/${totalRooms} rooms` },
+          { label: 'Revenue', icon: <DollarSign className="w-4 h-4 text-muted-foreground shrink-0" />, value: fmt(revenue), sub: 'This month' },
+          { label: 'Active Tenants', icon: <Users className="w-4 h-4 text-muted-foreground shrink-0" />, value: String(activeTenants), sub: 'Currently staying' },
+          { label: 'Pending Dues', icon: <Receipt className="w-4 h-4 text-muted-foreground shrink-0" />, value: String(pendingDues), sub: 'Requires attention', accent: true },
+        ].map(({ label, icon, value, sub, accent }) => (
+          <div key={label} className="bg-card border border-border rounded-xl p-3 min-w-0">
+            <div className="flex items-center justify-between mb-2 gap-1">
+              <span className="text-xs text-muted-foreground truncate">{label}</span>
+              {icon}
+            </div>
+            <div className="text-lg font-semibold text-foreground truncate">{value}</div>
+            <div className={`text-[10px] mt-1 truncate ${accent ? 'text-[#F59E0B]' : 'text-muted-foreground'}`}>{sub}</div>
           </div>
-          <div className="text-xl font-semibold text-foreground">{occupancy.toFixed(0)}%</div>
-          <div className="text-[10px] text-muted-foreground mt-1">{occupiedRooms}/{totalRooms} rooms</div>
-        </div>
-
-        <div className="bg-card border border-border rounded-xl p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-muted-foreground">Revenue</span>
-            <DollarSign className="w-4 h-4 text-muted-foreground" />
-          </div>
-          <div className="text-xl font-semibold text-foreground">{fmt(revenue)}</div>
-          <div className="text-[10px] text-muted-foreground mt-1">This month</div>
-        </div>
-
-        <div className="bg-card border border-border rounded-xl p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-muted-foreground">Active Tenants</span>
-            <Users className="w-4 h-4 text-muted-foreground" />
-          </div>
-          <div className="text-xl font-semibold text-foreground">{activeTenants}</div>
-          <div className="text-[10px] text-muted-foreground mt-1">Currently staying</div>
-        </div>
-
-        <div className="bg-card border border-border rounded-xl p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-muted-foreground">Pending Dues</span>
-            <Receipt className="w-4 h-4 text-muted-foreground" />
-          </div>
-          <div className="text-xl font-semibold text-foreground">{pendingDues}</div>
-          <div className="text-[10px] text-[#F59E0B] mt-1">Requires attention</div>
-        </div>
+        ))}
       </div>
 
       {!stats && (

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Search, Plus, SlidersHorizontal, Loader2, Building2 } from 'lucide-react';
 import { AddHostelModal } from '../modals/AddHostelModal';
 import { FilterModal, FilterOptions } from '../modals/FilterModal';
@@ -9,7 +9,6 @@ import { queryKeys } from '@lib/queryKeys';
 
 export function HostelsView() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddHostel, setShowAddHostel] = useState(false);
   const [showFilter, setShowFilter] = useState(false);
@@ -97,24 +96,24 @@ export function HostelsView() {
               <div
                 key={String(hostel.id)}
                 onClick={() => navigate(`/hostels/${hostel.id}`)}
-                className="bg-card border border-border rounded-xl p-4 space-y-3 cursor-pointer active:scale-[0.98] transition-transform"
+                className="bg-card border border-border rounded-xl p-4 space-y-3 cursor-pointer active:scale-[0.98] transition-transform touch-manipulation min-w-0"
               >
-                <div className="space-y-1">
-                  <h3 className="font-semibold text-foreground">{String(hostel.name ?? '')}</h3>
-                  <p className="text-xs text-muted-foreground">{String(hostel.city ?? hostel.address ?? '')}</p>
+                <div className="space-y-0.5 min-w-0">
+                  <h3 className="font-semibold text-foreground truncate">{String(hostel.name ?? '')}</h3>
+                  <p className="text-xs text-muted-foreground truncate">{String(hostel.city ?? hostel.address ?? '')}</p>
                 </div>
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <div className="text-xs text-muted-foreground">Occupancy</div>
-                    <div className="text-base font-semibold text-foreground mt-0.5">{occupancy.toFixed(0)}%</div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="min-w-0">
+                    <div className="text-[10px] text-muted-foreground">Occupancy</div>
+                    <div className="text-sm font-semibold text-foreground mt-0.5 truncate">{occupancy > 0 ? `${occupancy.toFixed(0)}%` : '—'}</div>
                   </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground">Rooms</div>
-                    <div className="text-base font-semibold text-foreground mt-0.5">{occupiedRooms}/{totalRooms}</div>
+                  <div className="min-w-0">
+                    <div className="text-[10px] text-muted-foreground">Rooms</div>
+                    <div className="text-sm font-semibold text-foreground mt-0.5 truncate">{totalRooms > 0 ? `${occupiedRooms}/${totalRooms}` : '—'}</div>
                   </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground">Tenants</div>
-                    <div className="text-base font-semibold text-foreground mt-0.5">{String(hostel.active_tenants ?? hostel.tenant_count ?? '—')}</div>
+                  <div className="min-w-0">
+                    <div className="text-[10px] text-muted-foreground">Tenants</div>
+                    <div className="text-sm font-semibold text-foreground mt-0.5 truncate">{String(hostel.active_tenants ?? hostel.tenant_count ?? '—')}</div>
                   </div>
                 </div>
               </div>

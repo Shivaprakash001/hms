@@ -26,7 +26,7 @@ export function AlertsView() {
 
   const firstHostelId = hostels.length > 0 ? String(hostels[0].id ?? '') : null;
 
-  const { data: duesData, isLoading } = useQuery({
+  const { data: duesData, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.payments.dues(firstHostelId ?? 'none'),
     queryFn: () => paymentService.getAllDues(firstHostelId!),
     enabled: !!firstHostelId,
@@ -79,6 +79,16 @@ export function AlertsView() {
         </div>
       )}
 
+      {isError && (
+        <div className="flex flex-col items-center justify-center py-10 gap-3">
+          <AlertCircle className="w-8 h-8 text-destructive" />
+          <p className="text-sm text-muted-foreground">Failed to load alerts</p>
+          <button onClick={() => refetch()} className="text-xs text-accent font-medium active:scale-95 transition-transform">
+            Retry
+          </button>
+        </div>
+      )}
+
       {!isLoading && dues.length === 0 && (
         <div className="flex flex-col items-center justify-center py-12 gap-2">
           <CheckCircle className="w-8 h-8 text-[#10B981]" />
@@ -108,26 +118,30 @@ export function AlertsView() {
                       {isOverdue ? <AlertCircle className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h4 className="font-semibold text-foreground">{String(due.tenant_name ?? due.name ?? 'Tenant')}</h4>
+                      <h4 className="font-semibold text-foreground truncate">{String(due.tenant_name ?? due.name ?? 'Tenant')}</h4>
                       <p className="text-sm text-muted-foreground mt-0.5">
                         {fmt(amount)} {isOverdue ? 'overdue' : 'pending'}
                       </p>
                       {dueDate && (
                         <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                          <Clock className="w-3 h-3" />
-                          <span>Due: {dueDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                          <Clock className="w-3 h-3 shrink-0" />
+                          <span className="truncate">Due: {dueDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                         </div>
                       )}
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button className="bg-accent text-accent-foreground py-2.5 rounded-lg text-sm font-medium active:scale-95 transition-transform flex items-center justify-center gap-2">
-                      <Phone className="w-4 h-4" />
-                      Call
-                    </button>
-                    <button className="bg-card border border-border text-foreground py-2.5 rounded-lg text-sm font-medium active:scale-95 transition-transform flex items-center justify-center gap-2">
-                      <Bell className="w-4 h-4" />
-                      Notify
+                  <div className="flex gap-2">
+                    <a
+                      href={due.phone ? `tel:${String(due.phone)}` : undefined}
+                      onClick={(e) => { if (!due.phone) e.preventDefault(); }}
+                      className="flex-1 bg-accent text-accent-foreground py-2.5 rounded-lg text-sm font-medium active:scale-95 transition-transform flex items-center justify-center gap-1.5 touch-manipulation"
+                    >
+                      <Phone className="w-3.5 h-3.5 shrink-0" />
+                      <span>Call</span>
+                    </a>
+                    <button className="flex-1 bg-card border border-border text-foreground py-2.5 rounded-lg text-sm font-medium active:scale-95 transition-transform flex items-center justify-center gap-1.5 touch-manipulation">
+                      <Bell className="w-3.5 h-3.5 shrink-0" />
+                      <span>Notify</span>
                     </button>
                   </div>
                 </div>

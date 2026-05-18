@@ -58,13 +58,13 @@ export function SettingsView() {
         <p className="text-sm text-muted-foreground mt-1">Manage your account and preferences</p>
       </div>
 
-      <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-4">
-        <div className="w-16 h-16 bg-accent rounded-full flex items-center justify-center">
-          <span className="text-xl font-semibold text-accent-foreground">{initials}</span>
+      <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-4 min-w-0">
+        <div className="w-14 h-14 bg-accent rounded-full flex items-center justify-center shrink-0">
+          <span className="text-lg font-semibold text-accent-foreground">{initials}</span>
         </div>
-        <div className="flex-1">
-          <div className="font-semibold text-foreground">{name || 'Owner'}</div>
-          {email && <div className="text-sm text-muted-foreground mt-0.5">{email}</div>}
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-foreground truncate">{name || 'Owner'}</div>
+          {email && <div className="text-sm text-muted-foreground mt-0.5 truncate">{email}</div>}
         </div>
       </div>
 
@@ -112,10 +112,7 @@ export function SettingsView() {
       {showPricingRates && (
         <PricingRatesModal
           onClose={() => setShowPricingRates(false)}
-          onSave={(data) => {
-            console.log('Save pricing:', data);
-            setShowPricingRates(false);
-          }}
+          onSave={() => setShowPricingRates(false)}
         />
       )}
     </div>

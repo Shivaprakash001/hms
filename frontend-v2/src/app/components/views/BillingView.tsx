@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { IndianRupee, Calendar, Loader2 } from 'lucide-react';
+import { IndianRupee, Calendar, Loader2, AlertCircle } from 'lucide-react';
 import { ownerService } from '@features/owners/api';
 import { paymentService } from '@features/payments/api';
 import { queryKeys } from '@lib/queryKeys';
@@ -26,7 +26,7 @@ export function BillingView() {
 
   const firstHostelId = hostels.length > 0 ? String(hostels[0].id ?? '') : null;
 
-  const { data: paymentsData, isLoading } = useQuery({
+  const { data: paymentsData, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.payments.ledger(firstHostelId ?? 'none', { limit: 20 }),
     queryFn: () => paymentService.getAll(firstHostelId!, { limit: 20 }),
     enabled: !!firstHostelId,
@@ -75,6 +75,16 @@ export function BillingView() {
         </div>
       )}
 
+      {isError && (
+        <div className="flex flex-col items-center justify-center py-10 gap-3">
+          <AlertCircle className="w-8 h-8 text-destructive" />
+          <p className="text-sm text-muted-foreground">Failed to load payments</p>
+          <button onClick={() => refetch()} className="text-xs text-accent font-medium active:scale-95 transition-transform">
+            Retry
+          </button>
+        </div>
+      )}
+
       {!isLoading && payments.length > 0 && (
         <div>
           <h3 className="text-sm font-medium text-foreground mb-3">Recent Payments</h3>
@@ -83,11 +93,11 @@ export function BillingView() {
               const status = String(p.status ?? 'paid').toLowerCase();
               const payDate = p.payment_date ?? p.created_at ?? p.paid_at;
               return (
-                <div key={String(p.id ?? i)} className="bg-card border border-border rounded-xl p-4">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <div className="font-medium text-foreground">{String(p.tenant_name ?? p.name ?? 'Tenant')}</div>
-                      <div className="text-xs text-muted-foreground mt-0.5">{String(p.hostel_name ?? p.hostel ?? '')}</div>
+                <div key={String(p.id ?? i)} className="bg-card border border-border rounded-xl p-4 min-w-0">
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium text-foreground truncate">{String(p.tenant_name ?? p.name ?? 'Tenant')}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5 truncate">{String(p.hostel_name ?? p.hostel ?? '')}</div>
                     </div>
                     <span className={`text-[10px] font-medium px-2 py-1 rounded-full ${
                       status === 'paid' || status === 'completed' ? 'bg-[#10B981]/10 text-[#10B981]' :

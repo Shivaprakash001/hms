@@ -64,43 +64,21 @@ export function PortfolioView() {
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3">
-            <div className="bg-card border border-border rounded-xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs text-muted-foreground">Revenue</span>
-                <IndianRupee className="w-4 h-4 text-muted-foreground" />
+            {[
+              { label: 'Revenue', icon: <IndianRupee className="w-4 h-4 text-muted-foreground shrink-0" />, value: fmt(totalRevenue), sub: 'This month', accent: false },
+              { label: 'Active Tenants', icon: <Users className="w-4 h-4 text-muted-foreground shrink-0" />, value: String(activeTenants), sub: 'Currently staying', accent: false },
+              { label: 'Occupancy', icon: <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />, value: `${occupancyRate.toFixed(0)}%`, sub: `${totalRooms} rooms`, accent: false },
+              { label: 'Pending Dues', icon: <AlertTriangle className="w-4 h-4 text-muted-foreground shrink-0" />, value: fmt(pendingDues), sub: overdueCount > 0 ? `${overdueCount} overdue` : 'All clear', accent: overdueCount > 0 },
+            ].map(({ label, icon, value, sub, accent }) => (
+              <div key={label} className="bg-card border border-border rounded-xl p-3 min-w-0">
+                <div className="flex items-center justify-between mb-2 gap-1">
+                  <span className="text-xs text-muted-foreground truncate">{label}</span>
+                  {icon}
+                </div>
+                <div className="text-lg font-semibold text-foreground truncate">{value}</div>
+                <div className={`text-[10px] mt-1 truncate ${accent ? 'text-[#F59E0B]' : 'text-muted-foreground'}`}>{sub}</div>
               </div>
-              <div className="text-xl font-semibold text-foreground">{fmt(totalRevenue)}</div>
-              <div className="text-[10px] text-muted-foreground mt-1">This month</div>
-            </div>
-
-            <div className="bg-card border border-border rounded-xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs text-muted-foreground">Active Tenants</span>
-                <Users className="w-4 h-4 text-muted-foreground" />
-              </div>
-              <div className="text-xl font-semibold text-foreground">{activeTenants}</div>
-              <div className="text-[10px] text-muted-foreground mt-1">Currently staying</div>
-            </div>
-
-            <div className="bg-card border border-border rounded-xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs text-muted-foreground">Occupancy</span>
-                <Building2 className="w-4 h-4 text-muted-foreground" />
-              </div>
-              <div className="text-xl font-semibold text-foreground">{occupancyRate.toFixed(0)}%</div>
-              <div className="text-[10px] text-muted-foreground mt-1">{totalRooms} rooms total</div>
-            </div>
-
-            <div className="bg-card border border-border rounded-xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs text-muted-foreground">Pending Dues</span>
-                <AlertTriangle className="w-4 h-4 text-muted-foreground" />
-              </div>
-              <div className="text-xl font-semibold text-foreground">{fmt(pendingDues)}</div>
-              <div className={`text-[10px] mt-1 ${overdueCount > 0 ? 'text-[#F59E0B]' : 'text-muted-foreground'}`}>
-                {overdueCount > 0 ? `${overdueCount} require attention` : 'All clear'}
-              </div>
-            </div>
+            ))}
           </div>
 
           {hostels.length > 0 && (
@@ -113,13 +91,13 @@ export function PortfolioView() {
                   <button
                     key={String(h.id)}
                     onClick={() => navigate(`/hostels/${h.id}`)}
-                    className="w-full bg-card border border-border rounded-xl p-4 flex items-center justify-between active:scale-[0.98] transition-transform"
+                    className="w-full bg-card border border-border rounded-xl p-4 flex items-center justify-between gap-3 active:scale-[0.98] transition-transform touch-manipulation"
                   >
-                    <div className="text-left">
-                      <div className="text-sm font-medium text-foreground">{String(h.name ?? '')}</div>
-                      <div className="text-xs text-muted-foreground mt-0.5">{String(h.city ?? h.address ?? '')}</div>
+                    <div className="text-left min-w-0 flex-1">
+                      <div className="text-sm font-medium text-foreground truncate">{String(h.name ?? '')}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5 truncate">{String(h.city ?? h.address ?? '')}</div>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                    <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
                   </button>
                 ))}
               </div>
