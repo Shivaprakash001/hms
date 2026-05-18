@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, MapPin, Users, DollarSign, BedDouble, Receipt, AlertCircle, Plus, CreditCard, Phone, Wifi, FileText, Eye, EyeOff, Copy, Check, Pencil, Layers, ChevronDown, ChevronRight, X } from 'lucide-react';
+import { ChevronLeft, MapPin, Users, DollarSign, BedDouble, Receipt, AlertCircle, Plus, CreditCard, Phone, Wifi, FileText, Eye, EyeOff, Copy, Check, Pencil, Layers, ChevronDown, ChevronRight, X, Trash2, MoreVertical } from 'lucide-react';
 import { ownerService } from '@features/owners/api';
 import { dashboardService } from '@features/dashboard/api';
 import { queryKeys } from '@lib/queryKeys';
@@ -201,30 +201,38 @@ function WifiCell({ wifiName, wifiPassword }: { wifiName: string | null; wifiPas
   );
 }
 
-// ─── Edit Room Modal ──────────────────────────────────────────────────────────
-function EditRoomModal({
+// ─── Room Form Modal (create + edit + delete) ────────────────────────────────
+function RoomFormModal({
   room,
+  defaultFloorId = '',
   floors,
   onClose,
   onSave,
+  onDelete,
   saving,
+  deleting = false,
 }: {
-  room: Record<string, unknown>;
+  room: Record<string, unknown> | null;
+  defaultFloorId?: string;
   floors: Record<string, unknown>[];
   onClose: () => void;
   onSave: (data: Record<string, unknown>) => void;
+  onDelete?: () => void;
   saving: boolean;
+  deleting?: boolean;
 }) {
+  const isEdit = room !== null;
   const [form, setForm] = useState({
-    room_no:       String(room.room_no ?? ''),
-    capacity:      String(room.capacity ?? '1'),
-    base_rent:     String(room.base_rent ?? room.monthly_rent ?? ''),
-    floor_id:      String(room.floor_id ?? ''),
-    wifi_name:     String(room.wifi_name ?? ''),
-    wifi_password: String(room.wifi_password ?? ''),
-    notes:         String(room.notes ?? ''),
+    room_no:       isEdit ? String(room!.room_no ?? '') : '',
+    capacity:      isEdit ? String(room!.capacity ?? '1') : '1',
+    base_rent:     isEdit ? String(room!.base_rent ?? room!.monthly_rent ?? '') : '',
+    floor_id:      isEdit ? String(room!.floor_id ?? '') : defaultFloorId,
+    wifi_name:     isEdit ? String(room!.wifi_name ?? '') : '',
+    wifi_password: isEdit ? String(room!.wifi_password ?? '') : '',
+    notes:         isEdit ? String(room!.notes ?? '') : '',
   });
   const [showWifi, setShowWifi] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -249,7 +257,7 @@ function EditRoomModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-border sticky top-0 bg-card">
-          <h2 className="font-semibold text-foreground text-sm">Edit Room</h2>
+          <h2 className="font-semibold text-foreground text-sm">{isEdit ? 'Edit Room' : 'Add Room'}</h2>
           <button onClick={onClose} className="p-1.5 text-muted-foreground active:scale-90">
             <X className="w-4 h-4" />
           </button>
@@ -258,7 +266,7 @@ function EditRoomModal({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">Room Name</label>
-              <input value={form.room_no} onChange={set('room_no')} required
+              <input value={form.room_no} onChange={set('room_no')} required placeholder="e.g. 101, A1"
                 className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-accent" />
             </div>
             <div>
@@ -271,7 +279,7 @@ function EditRoomModal({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">Monthly Rent (₹)</label>
-              <input type="number" min={0} value={form.base_rent} onChange={set('base_rent')}
+              <input type="number" min={0} value={form.base_rent} onChange={set('base_rent')} placeholder="0"
                 className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-accent" />
             </div>
             <div>
@@ -318,26 +326,56 @@ function EditRoomModal({
 
           <button type="submit" disabled={saving}
             className="w-full py-3 bg-accent text-accent-foreground rounded-xl text-sm font-semibold active:scale-[0.98] transition-transform disabled:opacity-50">
-            {saving ? 'Saving…' : 'Save changes'}
+            {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Add Room'}
           </button>
+
+          {isEdit && onDelete && (
+            !confirmDelete ? (
+              <button type="button" onClick={() => setConfirmDelete(true)}
+                className="w-full py-2.5 flex items-center justify-center gap-2 text-xs text-destructive font-medium rounded-xl border border-destructive/20 active:bg-destructive/5">
+                <Trash2 className="w-3.5 h-3.5" /> Delete Room
+              </button>
+            ) : (
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setConfirmDelete(false)}
+                  className="flex-1 py-2.5 text-xs font-medium rounded-xl border border-border text-muted-foreground">
+                  Cancel
+                </button>
+                <button type="button" onClick={onDelete} disabled={deleting}
+                  className="flex-1 py-2.5 text-xs font-semibold rounded-xl bg-destructive text-destructive-foreground disabled:opacity-50">
+                  {deleting ? 'Deleting…' : 'Confirm Delete'}
+                </button>
+              </div>
+            )
+          )}
         </form>
       </div>
     </div>
   );
 }
 
-// ─── Add Floor Modal ──────────────────────────────────────────────────────────
-function AddFloorModal({
+// ─── Floor Name Modal (add or rename) ───────────────────────────────────────
+function FloorNameModal({
+  title,
+  initialName = '',
+  submitLabel,
   onClose,
-  onAdd,
-  adding,
-}: { onClose: () => void; onAdd: (name: string) => void; adding: boolean }) {
-  const [name, setName] = useState('');
+  onSubmit,
+  busy,
+}: {
+  title: string;
+  initialName?: string;
+  submitLabel: string;
+  onClose: () => void;
+  onSubmit: (name: string) => void;
+  busy: boolean;
+}) {
+  const [name, setName] = useState(initialName);
   return (
     <div className="fixed inset-0 z-50 flex items-end" onClick={onClose}>
       <div className="w-full bg-card rounded-t-2xl border-t border-border p-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-semibold text-foreground text-sm">Add Floor</h2>
+          <h2 className="font-semibold text-foreground text-sm">{title}</h2>
           <button onClick={onClose} className="p-1.5 text-muted-foreground"><X className="w-4 h-4" /></button>
         </div>
         <input
@@ -346,14 +384,65 @@ function AddFloorModal({
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. Ground Floor, Boys Wing A…"
           className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-accent mb-3"
-          onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) { e.preventDefault(); onAdd(name.trim()); } }}
+          onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) { e.preventDefault(); onSubmit(name.trim()); } }}
         />
         <button
-          disabled={!name.trim() || adding}
-          onClick={() => onAdd(name.trim())}
+          disabled={!name.trim() || busy}
+          onClick={() => onSubmit(name.trim())}
           className="w-full py-3 bg-accent text-accent-foreground rounded-xl text-sm font-semibold disabled:opacity-40">
-          {adding ? 'Adding…' : 'Add Floor'}
+          {busy ? 'Saving…' : submitLabel}
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Floor Actions Sheet (kebab menu) ────────────────────────────────────────
+function FloorActionsSheet({
+  floor,
+  onClose,
+  onRename,
+  onDelete,
+  deleting,
+}: {
+  floor: { id: string; name: string };
+  onClose: () => void;
+  onRename: () => void;
+  onDelete: () => void;
+  deleting: boolean;
+}) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  return (
+    <div className="fixed inset-0 z-50 flex items-end" onClick={onClose}>
+      <div className="w-full bg-card rounded-t-2xl border-t border-border p-4 space-y-2" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-sm font-semibold text-foreground">{floor.name}</p>
+          <button onClick={onClose} className="p-1.5 text-muted-foreground"><X className="w-4 h-4" /></button>
+        </div>
+        <button onClick={() => { onClose(); onRename(); }}
+          className="w-full flex items-center gap-3 py-3 px-1 text-sm text-foreground active:bg-secondary rounded-lg">
+          <Pencil className="w-4 h-4 text-muted-foreground" /> Rename Floor
+        </button>
+        {!confirmDelete ? (
+          <button onClick={() => setConfirmDelete(true)}
+            className="w-full flex items-center gap-3 py-3 px-1 text-sm text-destructive active:bg-destructive/5 rounded-lg">
+            <Trash2 className="w-4 h-4" /> Delete Floor
+          </button>
+        ) : (
+          <div className="space-y-2 pt-1">
+            <p className="text-xs text-muted-foreground px-1">Only empty floors can be deleted. This cannot be undone.</p>
+            <div className="flex gap-2">
+              <button onClick={() => setConfirmDelete(false)}
+                className="flex-1 py-2.5 text-xs font-medium rounded-xl border border-border text-muted-foreground">
+                Cancel
+              </button>
+              <button onClick={onDelete} disabled={deleting}
+                className="flex-1 py-2.5 text-xs font-semibold rounded-xl bg-destructive text-destructive-foreground disabled:opacity-50">
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -362,10 +451,18 @@ function AddFloorModal({
 // ─── Rooms Tab ────────────────────────────────────────────────────────────────
 function RoomsTab({ hostelId }: { hostelId: string }) {
   const qc = useQueryClient();
-  const [showAddTenant, setShowAddTenant] = useState(false);
-  const [editRoom, setEditRoom] = useState<Record<string, unknown> | null>(null);
-  const [showAddFloor, setShowAddFloor] = useState(false);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [showAddTenant, setShowAddTenant]     = useState(false);
+  const [roomForm, setRoomForm]               = useState<{ room: Record<string, unknown> | null; floorId?: string } | null>(null);
+  const [showAddFloor, setShowAddFloor]       = useState(false);
+  const [floorMenu, setFloorMenu]             = useState<{ id: string; name: string } | null>(null);
+  const [renameFloor, setRenameFloor]         = useState<{ id: string; name: string } | null>(null);
+  const [collapsed, setCollapsed]             = useState<Set<string>>(new Set());
+  const [roomError, setRoomError]             = useState<string | null>(null);
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: queryKeys.rooms.list(hostelId) });
+    qc.invalidateQueries({ queryKey: ['floors', hostelId] });
+  };
 
   const { data: roomsData, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.rooms.list(hostelId),
@@ -379,23 +476,46 @@ function RoomsTab({ hostelId }: { hostelId: string }) {
     staleTime: 2 * 60 * 1000,
   });
 
-  const updateMutation = useMutation({
+  const createRoomMutation = useMutation({
+    mutationFn: async (data: Record<string, unknown>) =>
+      import('@features/rooms/api').then((m) => m.roomService.create(hostelId, data)),
+    onSuccess: () => { invalidate(); setRoomForm(null); },
+    onError: (e: any) => setRoomError(e?.response?.data?.error?.message ?? 'Failed to create room'),
+  });
+
+  const updateRoomMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Record<string, unknown> }) =>
       import('@features/rooms/api').then((m) => m.roomService.update(id, data)),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.rooms.list(hostelId) });
-      qc.invalidateQueries({ queryKey: ['floors', hostelId] });
-      setEditRoom(null);
-    },
+    onSuccess: () => { invalidate(); setRoomForm(null); },
+    onError: (e: any) => setRoomError(e?.response?.data?.error?.message ?? 'Failed to update room'),
+  });
+
+  const deleteRoomMutation = useMutation({
+    mutationFn: async (id: string) =>
+      import('@features/rooms/api').then((m) => m.roomService.delete(id)),
+    onSuccess: () => { invalidate(); setRoomForm(null); },
+    onError: (e: any) => setRoomError(e?.response?.data?.error?.message ?? 'Cannot delete room with active tenants'),
   });
 
   const addFloorMutation = useMutation({
     mutationFn: async (name: string) =>
       import('@features/rooms/api').then((m) => m.floorService.create(hostelId, { name })),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['floors', hostelId] });
-      qc.invalidateQueries({ queryKey: queryKeys.rooms.list(hostelId) });
-      setShowAddFloor(false);
+    onSuccess: () => { invalidate(); setShowAddFloor(false); },
+  });
+
+  const renameFloorMutation = useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) =>
+      import('@features/rooms/api').then((m) => m.floorService.update(id, { name })),
+    onSuccess: () => { invalidate(); setRenameFloor(null); },
+  });
+
+  const deleteFloorMutation = useMutation({
+    mutationFn: async (id: string) =>
+      import('@features/rooms/api').then((m) => m.floorService.delete(id)),
+    onSuccess: () => { invalidate(); setFloorMenu(null); },
+    onError: (e: any) => {
+      setFloorMenu(null);
+      setRoomError(e?.response?.data?.error?.message ?? 'Cannot delete floor with rooms');
     },
   });
 
@@ -405,9 +525,7 @@ function RoomsTab({ hostelId }: { hostelId: string }) {
   const rooms: Record<string, unknown>[] = Array.isArray(roomsData) ? roomsData : [];
   const floors: Record<string, unknown>[] = Array.isArray(floorsData) ? floorsData : [];
 
-  // Group rooms by floor; rooms now carry floor_name + floor_sort_order from the backend
   const floorGroups: Map<string, { id: string; name: string; sort: number; rooms: Record<string, unknown>[] }> = new Map();
-
   rooms.forEach((room) => {
     const fid   = String(room.floor_id ?? '__none');
     const fname = String(room.floor_name ?? (room.floor_id ? 'Floor' : 'Unassigned'));
@@ -415,26 +533,33 @@ function RoomsTab({ hostelId }: { hostelId: string }) {
     if (!floorGroups.has(fid)) floorGroups.set(fid, { id: fid, name: fname, sort: fsort, rooms: [] });
     floorGroups.get(fid)!.rooms.push(room);
   });
-
-  // If no rooms yet, add floor placeholders from floorsData
   floors.forEach((f) => {
     const fid = String(f.id);
-    if (!floorGroups.has(fid)) {
+    if (!floorGroups.has(fid))
       floorGroups.set(fid, { id: fid, name: String(f.name), sort: Number(f.sort_order ?? 0), rooms: [] });
-    }
   });
 
-  const groups = Array.from(floorGroups.values()).sort((a, b) => a.sort - b.sort);
-  const totalRooms    = rooms.length;
+  const groups     = Array.from(floorGroups.values()).sort((a, b) => a.sort - b.sort);
+  const totalBeds  = rooms.reduce((s, r) => s + Number(r.capacity ?? 0), 0);
   const totalOccupied = rooms.reduce((s, r) => s + Number(r.occupied_count ?? 0), 0);
-  const totalBeds     = rooms.reduce((s, r) => s + Number(r.capacity ?? 0), 0);
   const totalVacant   = rooms.filter((r) => String(r.status) === 'vacant').length;
 
   const toggleCollapse = (id: string) =>
     setCollapsed((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
+  const roomSaving   = createRoomMutation.isPending || updateRoomMutation.isPending;
+  const roomDeleting = deleteRoomMutation.isPending;
+
   return (
     <div className="space-y-4">
+      {/* Error toast */}
+      {roomError && (
+        <div className="flex items-center justify-between gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-xl">
+          <span className="text-xs text-destructive">{roomError}</span>
+          <button onClick={() => setRoomError(null)} className="text-destructive shrink-0"><X className="w-3.5 h-3.5" /></button>
+        </div>
+      )}
+
       {/* Summary strip */}
       <div className="grid grid-cols-3 gap-2">
         <div className="bg-[#10B981]/8 border border-[#10B981]/20 rounded-xl p-3">
@@ -452,42 +577,49 @@ function RoomsTab({ hostelId }: { hostelId: string }) {
       </div>
 
       {/* Floor groups */}
-      {groups.length === 0 && totalRooms === 0 ? (
+      {groups.length === 0 && rooms.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 gap-3">
           <div className="w-12 h-12 bg-secondary rounded-xl flex items-center justify-center">
             <BedDouble className="w-6 h-6 text-muted-foreground" />
           </div>
           <div className="text-center">
             <p className="font-medium text-foreground">No rooms yet</p>
-            <p className="text-sm text-muted-foreground mt-1">Add a floor then assign rooms to it</p>
+            <p className="text-sm text-muted-foreground mt-1">Add a floor then add rooms to it</p>
           </div>
         </div>
       ) : groups.map((group) => {
         const isCollapsed = collapsed.has(group.id);
         const groupVacant = group.rooms.filter((r) => String(r.status) === 'vacant').length;
+        const isReal      = group.id !== '__none';
         return (
           <div key={group.id}>
-            {/* Floor header */}
-            <button
-              onClick={() => toggleCollapse(group.id)}
-              className="w-full flex items-center justify-between py-2 touch-manipulation"
-            >
-              <div className="flex items-center gap-2">
-                <Layers className="w-3.5 h-3.5 text-muted-foreground" />
-                <span className="text-sm font-semibold text-foreground">{group.name}</span>
-                <span className="text-[10px] text-muted-foreground">{group.rooms.length} rooms</span>
+            {/* Floor header row */}
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => toggleCollapse(group.id)}
+                className="flex-1 flex items-center gap-2 py-2 touch-manipulation min-w-0"
+              >
+                <Layers className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                <span className="text-sm font-semibold text-foreground truncate">{group.name}</span>
+                <span className="text-[10px] text-muted-foreground shrink-0">{group.rooms.length} rooms</span>
                 {groupVacant > 0 && (
-                  <span className="text-[10px] bg-[#3B82F6]/10 text-[#3B82F6] px-1.5 py-0.5 rounded-full font-medium">{groupVacant} vacant</span>
+                  <span className="text-[10px] bg-[#3B82F6]/10 text-[#3B82F6] px-1.5 py-0.5 rounded-full font-medium shrink-0">{groupVacant} vacant</span>
                 )}
-              </div>
-              {isCollapsed ? <ChevronRight className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-            </button>
+                {isCollapsed ? <ChevronRight className="w-4 h-4 text-muted-foreground ml-auto shrink-0" /> : <ChevronDown className="w-4 h-4 text-muted-foreground ml-auto shrink-0" />}
+              </button>
+              {isReal && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setFloorMenu({ id: group.id, name: group.name }); }}
+                  className="p-1.5 text-muted-foreground active:scale-90 shrink-0"
+                >
+                  <MoreVertical className="w-4 h-4" />
+                </button>
+              )}
+            </div>
 
             {!isCollapsed && (
-              <div className="space-y-2 pl-0">
-                {group.rooms.length === 0 ? (
-                  <div className="text-xs text-muted-foreground py-3 pl-5">No rooms on this floor yet</div>
-                ) : group.rooms.map((room) => {
+              <div className="space-y-2">
+                {group.rooms.map((room) => {
                   const isOccupied = String(room.status) === 'occupied';
                   const occupied   = Number(room.occupied_count ?? 0);
                   const capacity   = Number(room.capacity ?? 0);
@@ -500,14 +632,11 @@ function RoomsTab({ hostelId }: { hostelId: string }) {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-semibold text-foreground">{String(room.room_no)}</span>
-                            {/* Capacity chip */}
                             <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
-                              occupied === 0   ? 'bg-[#3B82F6]/10 text-[#3B82F6]'
+                              occupied === 0        ? 'bg-[#3B82F6]/10 text-[#3B82F6]'
                               : occupied < capacity ? 'bg-[#F59E0B]/10 text-[#F59E0B]'
                               : 'bg-[#10B981]/10 text-[#10B981]'
-                            }`}>
-                              {occupied}/{capacity} beds
-                            </span>
+                            }`}>{occupied}/{capacity} beds</span>
                           </div>
                           {isOccupied && room.tenant_name && (
                             <div className="text-xs text-muted-foreground mt-0.5 truncate">{String(room.tenant_name)}</div>
@@ -525,7 +654,7 @@ function RoomsTab({ hostelId }: { hostelId: string }) {
                           />
                         </div>
                         <button
-                          onClick={() => setEditRoom(room)}
+                          onClick={() => setRoomForm({ room })}
                           className="p-1.5 text-muted-foreground active:scale-90 shrink-0 mt-0.5"
                         >
                           <Pencil className="w-3.5 h-3.5" />
@@ -542,6 +671,14 @@ function RoomsTab({ hostelId }: { hostelId: string }) {
                     </div>
                   );
                 })}
+
+                {/* Add Room to this floor */}
+                <button
+                  onClick={() => setRoomForm({ room: null, floorId: isReal ? group.id : '' })}
+                  className="w-full flex items-center justify-center gap-1.5 py-2 border border-dashed border-border rounded-xl text-xs font-medium text-muted-foreground active:text-foreground transition-colors touch-manipulation"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add Room
+                </button>
               </div>
             )}
           </div>
@@ -556,21 +693,57 @@ function RoomsTab({ hostelId }: { hostelId: string }) {
         <Plus className="w-3.5 h-3.5" /> Add Floor
       </button>
 
+      {/* Modals */}
       {showAddTenant && <AddTenantModal hostelId={hostelId} onClose={() => setShowAddTenant(false)} />}
+
       {showAddFloor && (
-        <AddFloorModal
+        <FloorNameModal
+          title="Add Floor"
+          submitLabel="Add Floor"
           onClose={() => setShowAddFloor(false)}
-          onAdd={(name) => addFloorMutation.mutate(name)}
-          adding={addFloorMutation.isPending}
+          onSubmit={(name) => addFloorMutation.mutate(name)}
+          busy={addFloorMutation.isPending}
         />
       )}
-      {editRoom && (
-        <EditRoomModal
-          room={editRoom}
+
+      {renameFloor && (
+        <FloorNameModal
+          title="Rename Floor"
+          initialName={renameFloor.name}
+          submitLabel="Save"
+          onClose={() => setRenameFloor(null)}
+          onSubmit={(name) => renameFloorMutation.mutate({ id: renameFloor.id, name })}
+          busy={renameFloorMutation.isPending}
+        />
+      )}
+
+      {floorMenu && (
+        <FloorActionsSheet
+          floor={floorMenu}
+          onClose={() => setFloorMenu(null)}
+          onRename={() => setRenameFloor(floorMenu)}
+          onDelete={() => deleteFloorMutation.mutate(floorMenu.id)}
+          deleting={deleteFloorMutation.isPending}
+        />
+      )}
+
+      {roomForm !== null && (
+        <RoomFormModal
+          room={roomForm.room}
+          defaultFloorId={roomForm.floorId}
           floors={floors}
-          onClose={() => setEditRoom(null)}
-          onSave={(data) => updateMutation.mutate({ id: String(editRoom.id), data })}
-          saving={updateMutation.isPending}
+          onClose={() => { setRoomForm(null); setRoomError(null); }}
+          onSave={(data) => {
+            setRoomError(null);
+            if (roomForm.room) {
+              updateRoomMutation.mutate({ id: String(roomForm.room.id), data });
+            } else {
+              createRoomMutation.mutate(data);
+            }
+          }}
+          onDelete={roomForm.room ? () => deleteRoomMutation.mutate(String(roomForm.room!.id)) : undefined}
+          saving={roomSaving}
+          deleting={roomDeleting}
         />
       )}
     </div>
