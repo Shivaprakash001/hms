@@ -1,19 +1,28 @@
-import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Loader2, Wallet, DoorOpen } from 'lucide-react';
-import { tenantService } from '@features/tenants/api';
+import { Loader2 } from 'lucide-react';
+import { useTenantDashboard } from '@features/tenant-portal/hooks/useTenantDashboard';
+import { TenantPriorityStrip } from '@/portal/components/TenantPriorityStrip';
+import { TenantScorePanel } from '@/portal/components/TenantScorePanel';
+import { TenantActionCenter } from '@/portal/components/TenantActionCenter';
+import { TenantAnnouncements } from '@/portal/components/TenantAnnouncements';
+import { TenantDocumentStatus } from '@/portal/components/TenantDocumentStatus';
 import { TenantStatusBadge } from '@features/tenants/components/badges/TenantStatusBadge';
+import { tenantService } from '@features/tenants/api';
+
+const fmt = (n: number) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
 
 export function TenantDashboardPage() {
-  const { data: profile, isLoading } = useQuery({
-    queryKey: ['tenant', 'me', 'profile'],
-    queryFn: () => tenantService.getMyProfile(),
-  });
-
-  const { data: room } = useQuery({
-    queryKey: ['tenant', 'me', 'room'],
-    queryFn: () => tenantService.getMyRoom(),
-  });
+  const {
+    profile,
+    dues,
+    payments,
+    score,
+    advance,
+    moveOut,
+    notifications,
+    documents,
+    isLoading,
+  } = useTenantDashboard();
 
   if (isLoading) {
     return (
@@ -23,45 +32,85 @@ export function TenantDashboardPage() {
     );
   }
 
-  const tenant = (profile?.tenant ?? profile) as Record<string, unknown>;
   const prof = (profile?.profile ?? profile?.profiles) as Record<string, unknown> | undefined;
-  const status = String(tenant?.status ?? 'ACTIVE');
-  const name = String(prof?.name ?? 'Tenant');
+  const name = String(prof?.name ?? prof?.full_name ?? 'Tenant');
+  const status = String(profile?.status ?? 'ACTIVE');
+  const allocation = (profile as Record<string, unknown>)?.room_allocations as
+    | { room?: { room_no?: string } }[]
+    | undefined;
+  const roomNo =
+    profile?.room_no ??
+    allocation?.[0]?.room?.room_no ??
+    profile?.current_room?.room_no;
+
+  const advanceBalance = Number(advance?.balance ?? 0);
+  const depositCredits = (advance?.entries ?? []).filter(
+    (e: { type?: string; reason?: string }) =>
+      e.type === 'CREDIT' && ['DEPOSIT', 'TOPUP'].includes(String(e.reason))
+  );
+  const depositTotal = depositCredits.reduce(
+    (s: number, e: { amount?: number }) => s + Number(e.amount ?? 0),
+    0
+  );
+  const adjustments = depositTotal > 0 ? depositTotal - advanceBalance : 0;
 
   return (
     <div className="space-y-5">
-      <div>
+      <header>
+        <p className="text-sm text-muted-foreground">Welcome back</p>
         <h1 className="text-xl font-bold text-foreground">Hi, {name.split(' ')[0]}</h1>
-        <div className="mt-2">
+        <div className="mt-2 flex items-center gap-2 flex-wrap">
           <TenantStatusBadge status={status} size="md" />
+          {roomNo ? (
+            <span className="text-xs text-muted-foreground">Room {String(roomNo)}</span>
+          ) : (
+            <span className="text-xs text-amber-600 font-medium">
+              Room assignment pending from hostel
+            </span>
+          )}
         </div>
-      </div>
+      </header>
 
-      {room && (
-        <div className="p-4 rounded-xl border border-border bg-card">
-          <p className="text-xs text-muted-foreground uppercase">Your room</p>
-          <p className="text-lg font-semibold mt-1">
-            Room {String((room as Record<string, unknown>).room_no ?? (room as Record<string, unknown>).room?.room_no ?? '—')}
-          </p>
-        </div>
+      <TenantPriorityStrip dues={dues} payments={payments} moveOut={moveOut} />
+
+      <TenantScorePanel score={score} />
+
+      {advance && (
+        <Link
+          to="/tenant/financials"
+          className="block rounded-xl border border-border bg-card p-4 hover:border-accent/40 transition-colors"
+        >
+          <p className="text-xs text-muted-foreground uppercase font-semibold">Security deposit</p>
+          <div className="mt-2 grid grid-cols-3 gap-2 text-center text-sm">
+            <div>
+              <p className="text-muted-foreground text-[10px]">Deposited</p>
+              <p className="font-bold">{fmt(depositTotal || advanceBalance)}</p>
+            </div>
+            {adjustments > 0 && (
+              <div>
+                <p className="text-muted-foreground text-[10px]">Adjustments</p>
+                <p className="font-bold">{fmt(adjustments)}</p>
+              </div>
+            )}
+            <div>
+              <p className="text-muted-foreground text-[10px]">Refundable</p>
+              <p className="font-bold text-accent">{fmt(advanceBalance)}</p>
+            </div>
+          </div>
+        </Link>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
-        <Link
-          to="/tenant/payments"
-          className="p-4 rounded-xl border border-border bg-card flex flex-col gap-2"
-        >
-          <Wallet className="w-5 h-5 text-accent" />
-          <span className="font-medium text-sm">Payments</span>
-        </Link>
-        <Link
-          to="/tenant/move-out"
-          className="p-4 rounded-xl border border-border bg-card flex flex-col gap-2"
-        >
-          <DoorOpen className="w-5 h-5 text-accent" />
-          <span className="font-medium text-sm">Move-out</span>
-        </Link>
-      </div>
+      <TenantDocumentStatus documents={documents as never[]} />
+
+      <TenantAnnouncements
+        items={
+          Array.isArray(notifications)
+            ? notifications
+            : (notifications as { notifications?: unknown[] })?.notifications
+        }
+      />
+
+      <TenantActionCenter />
 
       {status === 'LEFT' && (
         <button

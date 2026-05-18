@@ -68,7 +68,11 @@ export async function GET(req: NextRequest) {
       room: {
         room_no: room.room_no,
         capacity: room.capacity,
-        floor_id: room.floor
+        floor: room.floor,
+        floor_id: room.floor,
+        wifi_name: room.wifi_name ?? null,
+        wifi_password: room.wifi_password ?? null,
+        notes: room.notes ?? null,
       },
       roommates
     });
