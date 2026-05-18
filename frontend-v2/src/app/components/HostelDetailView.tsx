@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronLeft, MapPin, Users, DollarSign, BedDouble, Receipt, Loader2, AlertCircle, Plus } from 'lucide-react';
+import { ChevronLeft, MapPin, Users, DollarSign, BedDouble, Receipt, Loader2, AlertCircle, Plus, CreditCard, Phone } from 'lucide-react';
 import { ownerService } from '@features/owners/api';
 import { dashboardService } from '@features/dashboard/api';
 import { queryKeys } from '@lib/queryKeys';
@@ -166,6 +166,7 @@ function OverviewTab({ hostelId, stats, loading }: { hostelId: string; stats: Re
 }
 
 function RoomsTab({ hostelId }: { hostelId: string }) {
+  const [showAddTenant, setShowAddTenant] = useState(false);
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.rooms.list(hostelId),
     queryFn: () => import('@features/rooms/api').then((m) => m.roomService.getAll(hostelId)),
@@ -176,49 +177,120 @@ function RoomsTab({ hostelId }: { hostelId: string }) {
   if (isError) return <TabError onRetry={refetch} />;
 
   const rooms: Record<string, unknown>[] = Array.isArray(data) ? data : [];
+  const vacantRooms = rooms.filter((r) => {
+    const s = String(r.status || '').toLowerCase();
+    return s === 'vacant' || s === 'available' || s === '';
+  });
+  const occupiedRooms = rooms.filter((r) => String(r.status || '').toLowerCase() === 'occupied');
+  const maintenanceRooms = rooms.filter((r) => {
+    const s = String(r.status || '').toLowerCase();
+    return s === 'maintenance' || s === 'under_maintenance';
+  });
 
   if (rooms.length === 0) {
-    return <div className="text-center py-12 text-sm text-muted-foreground">No rooms found</div>;
+    return (
+      <div className="flex flex-col items-center justify-center py-16 gap-3">
+        <div className="w-12 h-12 bg-secondary rounded-xl flex items-center justify-center">
+          <BedDouble className="w-6 h-6 text-muted-foreground" />
+        </div>
+        <div className="text-center">
+          <p className="font-medium text-foreground">No rooms added</p>
+          <p className="text-sm text-muted-foreground mt-1">Add rooms to start managing occupancy</p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-foreground">Room List</h3>
-        <span className="text-xs text-muted-foreground">{rooms.length} rooms</span>
+    <div className="space-y-4">
+      {/* Vacancy headline */}
+      <div className="grid grid-cols-3 gap-2">
+        <div className="bg-[#10B981]/8 border border-[#10B981]/20 rounded-xl p-3 min-w-0">
+          <div className="text-lg font-semibold text-[#10B981]">{occupiedRooms.length}</div>
+          <div className="text-[10px] text-muted-foreground mt-0.5">Occupied</div>
+        </div>
+        <div className={`rounded-xl p-3 min-w-0 ${
+          vacantRooms.length > 0 ? 'bg-[#3B82F6]/8 border border-[#3B82F6]/20' : 'bg-card border border-border'
+        }`}>
+          <div className={`text-lg font-semibold ${
+            vacantRooms.length > 0 ? 'text-[#3B82F6]' : 'text-foreground'
+          }`}>{vacantRooms.length}</div>
+          <div className="text-[10px] text-muted-foreground mt-0.5">Vacant</div>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-3 min-w-0">
+          <div className="text-lg font-semibold text-foreground">{maintenanceRooms.length}</div>
+          <div className="text-[10px] text-muted-foreground mt-0.5">Maint.</div>
+        </div>
       </div>
-      {rooms.map((room) => {
-        const status = String(room.status || 'vacant').toLowerCase();
-        const isOccupied = status === 'occupied';
-        const isMaintenance = status === 'maintenance' || status === 'under_maintenance';
-        return (
-          <div key={String(room.id)} className="bg-card border border-border rounded-xl p-4">
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <div className="font-semibold text-foreground">Room {String(room.room_number ?? room.number ?? room.room_no ?? '')}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">{String(room.room_type ?? room.type ?? '')}</div>
+
+      {vacantRooms.length > 0 && (
+        <button
+          onClick={() => setShowAddTenant(true)}
+          className="w-full flex items-center justify-center gap-2 py-3 bg-accent/10 border border-accent/20 text-accent rounded-xl text-sm font-semibold active:scale-[0.98] transition-transform touch-manipulation"
+        >
+          <Plus className="w-4 h-4" />
+          Fill {vacantRooms.length} vacant room{vacantRooms.length > 1 ? 's' : ''}
+        </button>
+      )}
+
+      <div className="space-y-2">
+        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{rooms.length} rooms</h3>
+        {rooms.map((room) => {
+          const status = String(room.status || 'vacant').toLowerCase();
+          const isOccupied = status === 'occupied';
+          const isMaintenance = status === 'maintenance' || status === 'under_maintenance';
+          const isVacant = !isOccupied && !isMaintenance;
+          return (
+            <div key={String(room.id)} className={`bg-card border rounded-xl p-4 min-w-0 ${
+              isVacant ? 'border-[#3B82F6]/15' : 'border-border'
+            }`}>
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <div className="min-w-0 flex-1">
+                  <div className="font-semibold text-foreground">Room {String(room.room_number ?? room.number ?? room.room_no ?? '')}</div>
+                  {room.room_type || room.type ? (
+                    <div className="text-xs text-muted-foreground mt-0.5">{String(room.room_type ?? room.type ?? '')}</div>
+                  ) : null}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className={`text-[10px] font-semibold px-2 py-1 rounded-full ${
+                    isOccupied ? 'bg-[#10B981]/10 text-[#10B981]' :
+                    isMaintenance ? 'bg-[#F59E0B]/10 text-[#F59E0B]' :
+                    'bg-[#3B82F6]/10 text-[#3B82F6]'
+                  }`}>
+                    {isOccupied ? 'Occupied' : isMaintenance ? 'Maintenance' : 'Vacant'}
+                  </span>
+                </div>
               </div>
-              <span className={`text-[10px] font-medium px-2 py-1 rounded-full ${
-                isOccupied ? 'bg-[#10B981]/10 text-[#10B981]' :
-                isMaintenance ? 'bg-[#F59E0B]/10 text-[#F59E0B]' :
-                'bg-[#6B7280]/10 text-[#6B7280]'
-              }`}>
-                {status.charAt(0).toUpperCase() + status.slice(1)}
-              </span>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground text-xs">
+                  {isOccupied
+                    ? (room.tenant_name ? String(room.tenant_name) : 'Tenant assigned')
+                    : isMaintenance ? 'Under maintenance'
+                    : 'Ready to assign'}
+                </span>
+                <span className="font-medium text-foreground text-xs">{fmt(room.monthly_rent ?? room.rent ?? 0)}/mo</span>
+              </div>
+              {isVacant && (
+                <button
+                  onClick={() => setShowAddTenant(true)}
+                  className="mt-2.5 w-full flex items-center justify-center gap-1.5 py-2 bg-card border border-border rounded-lg text-xs font-medium text-accent active:scale-95 transition-transform touch-manipulation"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Assign Tenant
+                </button>
+              )}
             </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">{isOccupied ? 'Occupied' : 'Available'}</span>
-              <span className="font-medium text-foreground">{fmt(room.monthly_rent ?? room.rent ?? 0)}/mo</span>
-            </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
+
+      {showAddTenant && <AddTenantModal hostelId={hostelId} onClose={() => setShowAddTenant(false)} />}
     </div>
   );
 }
 
 function TenantsTab({ hostelId }: { hostelId: string }) {
   const [showAdd, setShowAdd] = useState(false);
+  const [showPayment, setShowPayment] = useState<string>('');
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.tenants.list(hostelId),
     queryFn: () => import('@features/tenants/api').then((m) => m.tenantService.getAll(hostelId, { status: 'ACTIVE' })),
@@ -240,46 +312,110 @@ function TenantsTab({ hostelId }: { hostelId: string }) {
         <h3 className="text-sm font-medium text-foreground">Active Tenants</h3>
         <button
           onClick={() => setShowAdd(true)}
-          className="flex items-center gap-1.5 text-xs font-medium text-accent active:scale-95 transition-transform"
+          className="flex items-center gap-1.5 text-xs font-medium text-accent active:scale-95 transition-transform touch-manipulation"
         >
           <Plus className="w-3.5 h-3.5" /> Add Tenant
         </button>
       </div>
 
       {tenants.length === 0 && (
-        <div className="text-center py-12">
-          <Users className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-          <p className="text-sm text-muted-foreground">No active tenants</p>
-          <button onClick={() => setShowAdd(true)} className="mt-2 text-sm text-accent font-medium">Add first tenant</button>
+        <div className="flex flex-col items-center justify-center py-16 gap-3">
+          <div className="w-12 h-12 bg-secondary rounded-xl flex items-center justify-center">
+            <Users className="w-6 h-6 text-muted-foreground" />
+          </div>
+          <div className="text-center">
+            <p className="font-medium text-foreground">No active tenants</p>
+            <p className="text-sm text-muted-foreground mt-1">Add your first tenant to get started</p>
+          </div>
+          <button
+            onClick={() => setShowAdd(true)}
+            className="px-4 py-2 bg-accent text-accent-foreground rounded-xl text-sm font-semibold active:scale-95 transition-transform touch-manipulation"
+          >
+            Add Tenant
+          </button>
         </div>
       )}
       {tenants.map((tenant) => {
         const paymentStatus = String(tenant.payment_status ?? 'unknown').toLowerCase();
+        const isPaid = paymentStatus === 'paid';
+        const isOverdue = paymentStatus === 'overdue';
+        const dueAmt = Number(tenant.outstanding_amount ?? tenant.due_amount ?? tenant.dues ?? 0);
+        const room = tenant.room_no ?? tenant.room_number ?? tenant.room;
+        const dueDate = tenant.due_date ? new Date(String(tenant.due_date)) : null;
+        const now = Date.now();
+        const overdueDays = dueDate && dueDate.getTime() < now
+          ? Math.floor((now - dueDate.getTime()) / 86400000)
+          : 0;
+        const tenantId = String(tenant.obligation_id ?? tenant.id ?? '');
         return (
-          <div key={String(tenant.id)} className="bg-card border border-border rounded-xl p-4 space-y-2">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <div className="font-semibold text-foreground">{String(tenant.name ?? '')}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">Room {String(tenant.room_no ?? tenant.room_number ?? '')}</div>
-                {tenant.phone && <div className="text-xs text-muted-foreground mt-0.5">{String(tenant.phone)}</div>}
-              </div>
-              <span className={`text-[10px] font-medium px-2 py-1 rounded-full ${
-                paymentStatus === 'paid' ? 'bg-[#10B981]/10 text-[#10B981]' :
-                paymentStatus === 'overdue' ? 'bg-[#EF4444]/10 text-[#EF4444]' :
-                'bg-[#F59E0B]/10 text-[#F59E0B]'
+          <div key={String(tenant.id)} className={`bg-card border rounded-xl p-4 min-w-0 ${
+            isOverdue ? 'border-[#EF4444]/20' : 'border-border'
+          }`}>
+            <div className="flex items-start gap-3">
+              <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-xs font-bold ${
+                isOverdue ? 'bg-[#EF4444]/10 text-[#EF4444]'
+                : isPaid ? 'bg-[#10B981]/10 text-[#10B981]'
+                : 'bg-accent/10 text-accent'
               }`}>
-                {paymentStatus.charAt(0).toUpperCase() + paymentStatus.slice(1)}
-              </span>
+                {String(tenant.name ?? 'T').charAt(0).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-semibold text-foreground truncate">{String(tenant.name ?? '')}</span>
+                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${
+                    isPaid ? 'bg-[#10B981]/10 text-[#10B981]'
+                    : isOverdue ? 'bg-[#EF4444]/10 text-[#EF4444]'
+                    : 'bg-[#F59E0B]/10 text-[#F59E0B]'
+                  }`}>
+                    {isPaid ? 'Paid' : isOverdue ? (overdueDays > 0 ? `${overdueDays}d overdue` : 'Overdue') : 'Pending'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                  {room && <span className="text-xs text-muted-foreground">Room {String(room)}</span>}
+                  {room && <span className="text-muted-foreground text-xs">·</span>}
+                  <span className="text-xs text-muted-foreground">{fmt(tenant.monthly_rent ?? tenant.rent ?? 0)}/mo</span>
+                </div>
+                {!isPaid && dueAmt > 0 && (
+                  <div className={`text-xs font-medium mt-1 ${
+                    isOverdue ? 'text-[#EF4444]' : 'text-[#F59E0B]'
+                  }`}>
+                    {fmt(dueAmt)} outstanding
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-col items-end gap-1.5 shrink-0">
+                {tenant.phone && (
+                  <a
+                    href={`tel:${String(tenant.phone)}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="p-1.5 text-muted-foreground active:scale-95 transition-transform"
+                  >
+                    <Phone className="w-3.5 h-3.5" />
+                  </a>
+                )}
+              </div>
             </div>
-            <div className="flex items-center justify-between text-sm pt-2 border-t border-border">
-              <span className="text-muted-foreground">{String(tenant.email ?? '')}</span>
-              <span className="font-medium text-foreground">{fmt(tenant.monthly_rent ?? tenant.rent ?? 0)}/mo</span>
-            </div>
+            {!isPaid && (
+              <button
+                onClick={() => setShowPayment(tenantId)}
+                className="mt-3 w-full flex items-center justify-center gap-1.5 py-2.5 bg-accent text-accent-foreground rounded-lg text-xs font-semibold active:scale-[0.98] transition-transform touch-manipulation"
+              >
+                <CreditCard className="w-3.5 h-3.5 shrink-0" />
+                Record Payment
+              </button>
+            )}
           </div>
         );
       })}
 
       {showAdd && <AddTenantModal hostelId={hostelId} onClose={() => setShowAdd(false)} />}
+      {showPayment && (
+        <RecordPaymentModal
+          hostelId={hostelId}
+          initialDueId={showPayment}
+          onClose={() => setShowPayment('')}
+        />
+      )}
     </div>
   );
 }

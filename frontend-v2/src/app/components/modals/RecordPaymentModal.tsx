@@ -8,12 +8,14 @@ import { queryKeys } from '@lib/queryKeys';
 interface RecordPaymentModalProps {
   onClose: () => void;
   hostelId: string;
+  initialDueId?: string;
+  initialAmount?: string;
 }
 
-export function RecordPaymentModal({ onClose, hostelId }: RecordPaymentModalProps) {
+export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initialAmount = '' }: RecordPaymentModalProps) {
   const queryClient = useQueryClient();
-  const [selectedDueId, setSelectedDueId] = useState('');
-  const [amount, setAmount] = useState('');
+  const [selectedDueId, setSelectedDueId] = useState(initialDueId);
+  const [amount, setAmount] = useState(initialAmount);
   const [paymentMode, setPaymentMode] = useState('cash');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [referenceNumber, setReferenceNumber] = useState('');

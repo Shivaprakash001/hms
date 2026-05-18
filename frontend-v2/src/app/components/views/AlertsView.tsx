@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertCircle, AlertTriangle, Clock, Phone, Bell, Loader2, CheckCircle } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Phone, CheckCircle, Building2, CreditCard, ChevronDown } from 'lucide-react';
 import { ownerService } from '@features/owners/api';
 import { paymentService } from '@features/payments/api';
 import { queryKeys } from '@lib/queryKeys';
+import { RecordPaymentModal } from '../modals/RecordPaymentModal';
 
 function fmt(n: unknown): string {
   const v = Number(n || 0);
@@ -11,7 +13,23 @@ function fmt(n: unknown): string {
   return `₹${v.toLocaleString('en-IN')}`;
 }
 
+function daysOverdue(dueDateStr: unknown): number {
+  if (!dueDateStr) return 0;
+  const diff = Date.now() - new Date(String(dueDateStr)).getTime();
+  return Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
+}
+
+function daysUntilDue(dueDateStr: unknown): number {
+  if (!dueDateStr) return 0;
+  const diff = new Date(String(dueDateStr)).getTime() - Date.now();
+  return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+}
+
 export function AlertsView() {
+  const [selectedHostelId, setSelectedHostelId] = useState<string | null>(null);
+  const [showHostelPicker, setShowHostelPicker] = useState(false);
+  const [recordPayment, setRecordPayment] = useState<{ hostelId: string; dueId?: string; amount?: string } | null>(null);
+
   const { data: hostelsData } = useQuery({
     queryKey: queryKeys.owner.hostels(),
     queryFn: ownerService.getHostels,
@@ -24,13 +42,15 @@ export function AlertsView() {
     ? ((hostelsData as Record<string, unknown>).hostels as Record<string, unknown>[])
     : [];
 
-  const firstHostelId = hostels.length > 0 ? String(hostels[0].id ?? '') : null;
+  const activeHostelId = selectedHostelId ?? (hostels.length > 0 ? String(hostels[0].id ?? '') : null);
+  const activeHostel = hostels.find((h) => String(h.id) === activeHostelId);
 
   const { data: duesData, isLoading, isError, refetch } = useQuery({
-    queryKey: queryKeys.payments.dues(firstHostelId ?? 'none'),
-    queryFn: () => paymentService.getAllDues(firstHostelId!),
-    enabled: !!firstHostelId,
-    staleTime: 2 * 60 * 1000,
+    queryKey: queryKeys.payments.dues(activeHostelId ?? 'none'),
+    queryFn: () => paymentService.getAllDues(activeHostelId!),
+    enabled: !!activeHostelId,
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: true,
   });
 
   const dues: Record<string, unknown>[] = Array.isArray(duesData)
@@ -40,117 +60,262 @@ export function AlertsView() {
     : [];
 
   const now = Date.now();
-  const overdueAlerts = dues.filter((d) => {
-    const dueDate = d.due_date ? new Date(String(d.due_date)).getTime() : 0;
-    return dueDate < now;
+
+  const sortedDues = [...dues].sort((a, b) => {
+    const aDate = a.due_date ? new Date(String(a.due_date)).getTime() : 0;
+    const bDate = b.due_date ? new Date(String(b.due_date)).getTime() : 0;
+    const aOverdue = aDate < now;
+    const bOverdue = bDate < now;
+    if (aOverdue && !bOverdue) return -1;
+    if (!aOverdue && bOverdue) return 1;
+    const aAmt = Number(a.amount ?? a.outstanding ?? 0);
+    const bAmt = Number(b.amount ?? b.outstanding ?? 0);
+    return bAmt - aAmt;
   });
-  const pendingAlerts = dues.filter((d) => {
-    const dueDate = d.due_date ? new Date(String(d.due_date)).getTime() : 0;
-    return dueDate >= now;
-  });
+
+  const overdueList = sortedDues.filter((d) => d.due_date && new Date(String(d.due_date)).getTime() < now);
+  const pendingList = sortedDues.filter((d) => !d.due_date || new Date(String(d.due_date)).getTime() >= now);
+  const totalOutstanding = sortedDues.reduce((sum, d) => sum + Number(d.amount ?? d.outstanding ?? 0), 0);
 
   return (
-    <div className="px-4 py-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground">Alerts</h1>
-        <p className="text-sm text-muted-foreground mt-1">Stay on top of important updates</p>
+    <div className="px-4 py-5 space-y-5 min-w-0">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold text-foreground">Collections</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {isLoading ? 'Loading…' : dues.length > 0
+              ? `${fmt(totalOutstanding)} outstanding · ${overdueList.length} overdue`
+              : 'All dues cleared'}
+          </p>
+        </div>
+        {hostels.length > 1 && (
+          <div className="relative shrink-0">
+            <button
+              onClick={() => setShowHostelPicker((v) => !v)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-card border border-border rounded-lg text-xs font-medium text-foreground touch-manipulation"
+            >
+              <Building2 className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate max-w-[100px]">{activeHostel ? String(activeHostel.name ?? '') : 'Hostel'}</span>
+              <ChevronDown className="w-3.5 h-3.5 shrink-0" />
+            </button>
+            {showHostelPicker && (
+              <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-xl shadow-lg z-20 min-w-[160px] overflow-hidden">
+                {hostels.map((h) => (
+                  <button
+                    key={String(h.id)}
+                    onClick={() => { setSelectedHostelId(String(h.id)); setShowHostelPicker(false); }}
+                    className={`w-full text-left px-4 py-3 text-sm transition-colors ${
+                      String(h.id) === activeHostelId ? 'bg-accent/10 text-accent font-medium' : 'text-foreground hover:bg-secondary'
+                    }`}
+                  >
+                    {String(h.name ?? '')}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="bg-card border border-[#EF4444]/20 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <AlertCircle className="w-4 h-4 text-[#EF4444]" />
-            <span className="text-xs text-muted-foreground">Overdue</span>
+      {/* Summary bar */}
+      {!isLoading && dues.length > 0 && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className={`rounded-xl p-3 min-w-0 ${
+            overdueList.length > 0 ? 'bg-[#EF4444]/8 border border-[#EF4444]/25' : 'bg-card border border-border'
+          }`}>
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <AlertCircle className={`w-3.5 h-3.5 shrink-0 ${overdueList.length > 0 ? 'text-[#EF4444]' : 'text-muted-foreground'}`} />
+              <span className="text-xs text-muted-foreground">Overdue</span>
+            </div>
+            <div className={`text-xl font-semibold ${overdueList.length > 0 ? 'text-[#EF4444]' : 'text-foreground'}`}>{overdueList.length}</div>
+            <div className="text-[10px] text-muted-foreground mt-0.5 truncate">{fmt(overdueList.reduce((s, d) => s + Number(d.amount ?? d.outstanding ?? 0), 0))}</div>
           </div>
-          <div className="text-xl font-semibold text-foreground">{overdueAlerts.length}</div>
-        </div>
-        <div className="bg-card border border-[#F59E0B]/20 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <AlertTriangle className="w-4 h-4 text-[#F59E0B]" />
-            <span className="text-xs text-muted-foreground">Pending</span>
+          <div className="bg-card border border-[#F59E0B]/20 rounded-xl p-3 min-w-0">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-[#F59E0B]" />
+              <span className="text-xs text-muted-foreground">Upcoming</span>
+            </div>
+            <div className="text-xl font-semibold text-foreground">{pendingList.length}</div>
+            <div className="text-[10px] text-muted-foreground mt-0.5 truncate">{fmt(pendingList.reduce((s, d) => s + Number(d.amount ?? d.outstanding ?? 0), 0))}</div>
           </div>
-          <div className="text-xl font-semibold text-foreground">{pendingAlerts.length}</div>
-        </div>
-      </div>
-
-      {isLoading && (
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
         </div>
       )}
 
+      {/* Loading */}
+      {isLoading && (
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="bg-card border border-border rounded-xl p-4 h-28 animate-pulse" />
+          ))}
+        </div>
+      )}
+
+      {/* Error */}
       {isError && (
         <div className="flex flex-col items-center justify-center py-10 gap-3">
           <AlertCircle className="w-8 h-8 text-destructive" />
-          <p className="text-sm text-muted-foreground">Failed to load alerts</p>
-          <button onClick={() => refetch()} className="text-xs text-accent font-medium active:scale-95 transition-transform">
-            Retry
-          </button>
+          <p className="text-sm text-muted-foreground">Failed to load dues</p>
+          <button onClick={() => refetch()} className="text-xs text-accent font-medium active:scale-95 transition-transform">Retry</button>
         </div>
       )}
 
-      {!isLoading && dues.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-12 gap-2">
-          <CheckCircle className="w-8 h-8 text-[#10B981]" />
-          <p className="text-sm text-muted-foreground">No pending dues</p>
-        </div>
-      )}
-
-      {!isLoading && dues.length > 0 && (
-        <div>
-          <h3 className="text-sm font-medium text-foreground mb-3">Pending Dues ({dues.length})</h3>
-          <div className="space-y-3">
-            {dues.map((due, i) => {
-              const dueDate = due.due_date ? new Date(String(due.due_date)) : null;
-              const isOverdue = dueDate ? dueDate.getTime() < now : false;
-              const amount = Number(due.amount ?? due.outstanding ?? 0);
-              return (
-                <div
-                  key={String(due.id ?? i)}
-                  className={`bg-card border rounded-xl p-4 space-y-3 ${
-                    isOverdue ? 'border-[#EF4444]/20' : 'border-[#F59E0B]/20'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={`p-2 rounded-lg ${
-                      isOverdue ? 'bg-[#EF4444]/10 text-[#EF4444]' : 'bg-[#F59E0B]/10 text-[#F59E0B]'
-                    }`}>
-                      {isOverdue ? <AlertCircle className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-semibold text-foreground truncate">{String(due.tenant_name ?? due.name ?? 'Tenant')}</h4>
-                      <p className="text-sm text-muted-foreground mt-0.5">
-                        {fmt(amount)} {isOverdue ? 'overdue' : 'pending'}
-                      </p>
-                      {dueDate && (
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                          <Clock className="w-3 h-3 shrink-0" />
-                          <span className="truncate">Due: {dueDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <a
-                      href={due.phone ? `tel:${String(due.phone)}` : undefined}
-                      onClick={(e) => { if (!due.phone) e.preventDefault(); }}
-                      className="flex-1 bg-accent text-accent-foreground py-2.5 rounded-lg text-sm font-medium active:scale-95 transition-transform flex items-center justify-center gap-1.5 touch-manipulation"
-                    >
-                      <Phone className="w-3.5 h-3.5 shrink-0" />
-                      <span>Call</span>
-                    </a>
-                    <button className="flex-1 bg-card border border-border text-foreground py-2.5 rounded-lg text-sm font-medium active:scale-95 transition-transform flex items-center justify-center gap-1.5 touch-manipulation">
-                      <Bell className="w-3.5 h-3.5 shrink-0" />
-                      <span>Notify</span>
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+      {/* Empty — all clear */}
+      {!isLoading && !isError && dues.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 gap-3">
+          <div className="w-14 h-14 bg-[#10B981]/10 rounded-full flex items-center justify-center">
+            <CheckCircle className="w-7 h-7 text-[#10B981]" />
+          </div>
+          <div className="text-center">
+            <p className="font-medium text-foreground">All dues cleared</p>
+            <p className="text-sm text-muted-foreground mt-1">No outstanding payments for this hostel</p>
           </div>
         </div>
+      )}
+
+      {/* Overdue section — highest urgency */}
+      {!isLoading && overdueList.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-[#EF4444] uppercase tracking-wider">Overdue</span>
+            <span className="text-xs bg-[#EF4444]/10 text-[#EF4444] px-2 py-0.5 rounded-full font-medium">{overdueList.length}</span>
+          </div>
+          {overdueList.map((due, i) => {
+            const days = daysOverdue(due.due_date);
+            const amount = Number(due.amount ?? due.outstanding ?? 0);
+            const dueId = String(due.obligation_id ?? due.id ?? i);
+            return (
+              <DueCard
+                key={dueId}
+                due={due}
+                isOverdue
+                urgencyLabel={days > 0 ? `${days}d overdue` : 'Overdue'}
+                urgencyColor="text-[#EF4444]"
+                cardBorder="border-[#EF4444]/20"
+                onRecordPayment={() =>
+                  activeHostelId && setRecordPayment({
+                    hostelId: activeHostelId,
+                    dueId,
+                    amount: String(amount),
+                  })
+                }
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {/* Upcoming section */}
+      {!isLoading && pendingList.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-[#F59E0B] uppercase tracking-wider">Upcoming</span>
+            <span className="text-xs bg-[#F59E0B]/10 text-[#F59E0B] px-2 py-0.5 rounded-full font-medium">{pendingList.length}</span>
+          </div>
+          {pendingList.map((due, i) => {
+            const days = daysUntilDue(due.due_date);
+            const amount = Number(due.amount ?? due.outstanding ?? 0);
+            const dueId = String(due.obligation_id ?? due.id ?? i);
+            return (
+              <DueCard
+                key={dueId}
+                due={due}
+                isOverdue={false}
+                urgencyLabel={days > 0 ? `due in ${days}d` : 'Due today'}
+                urgencyColor="text-[#F59E0B]"
+                cardBorder="border-[#F59E0B]/15"
+                onRecordPayment={() =>
+                  activeHostelId && setRecordPayment({
+                    hostelId: activeHostelId,
+                    dueId,
+                    amount: String(amount),
+                  })
+                }
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {/* Record Payment Modal */}
+      {recordPayment && (
+        <RecordPaymentModal
+          hostelId={recordPayment.hostelId}
+          initialDueId={recordPayment.dueId}
+          initialAmount={recordPayment.amount}
+          onClose={() => setRecordPayment(null)}
+        />
       )}
     </div>
   );
 }
 
+interface DueCardProps {
+  due: Record<string, unknown>;
+  isOverdue: boolean;
+  urgencyLabel: string;
+  urgencyColor: string;
+  cardBorder: string;
+  onRecordPayment: () => void;
+}
+
+function DueCard({ due, isOverdue, urgencyLabel, urgencyColor, cardBorder, onRecordPayment }: DueCardProps) {
+  const amount = Number(due.amount ?? due.outstanding ?? 0);
+  const tenantName = String(due.tenant_name ?? due.name ?? 'Tenant');
+  const room = due.room_no ?? due.room_number;
+  const phone = due.phone ? String(due.phone) : null;
+  const dueDate = due.due_date ? new Date(String(due.due_date)) : null;
+
+  return (
+    <div className={`bg-card border ${cardBorder} rounded-xl p-4 space-y-3 min-w-0`}>
+      <div className="flex items-start gap-3">
+        <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
+          isOverdue ? 'bg-[#EF4444]/10' : 'bg-[#F59E0B]/10'
+        }`}>
+          <span className={`text-xs font-bold ${
+            isOverdue ? 'text-[#EF4444]' : 'text-[#F59E0B]'
+          }`}>{tenantName.charAt(0).toUpperCase()}</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h4 className="font-semibold text-foreground truncate">{tenantName}</h4>
+            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${
+              isOverdue ? 'bg-[#EF4444]/10 text-[#EF4444]' : 'bg-[#F59E0B]/10 text-[#F59E0B]'
+            }`}>{urgencyLabel}</span>
+          </div>
+          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+            {room && <span className="text-xs text-muted-foreground">Room {String(room)}</span>}
+            {room && dueDate && <span className="text-muted-foreground text-xs">·</span>}
+            {dueDate && (
+              <span className="text-xs text-muted-foreground">
+                {dueDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="text-right shrink-0">
+          <div className="font-semibold text-foreground text-sm">{fmt(amount)}</div>
+          <div className={`text-[10px] mt-0.5 ${urgencyColor}`}>outstanding</div>
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          onClick={onRecordPayment}
+          className="flex-1 bg-accent text-accent-foreground py-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 active:scale-95 transition-transform touch-manipulation"
+        >
+          <CreditCard className="w-3.5 h-3.5 shrink-0" />
+          Record Payment
+        </button>
+        {phone && (
+          <a
+            href={`tel:${phone}`}
+            className="px-3 bg-card border border-border text-foreground py-2.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1 active:scale-95 transition-transform touch-manipulation"
+          >
+            <Phone className="w-3.5 h-3.5" />
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
