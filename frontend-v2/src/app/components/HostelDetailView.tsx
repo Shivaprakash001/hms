@@ -49,7 +49,7 @@ export function HostelDetailView() {
         <div className="px-4 pt-4 pb-0">
           <div className="flex items-center gap-2 mb-3">
             <button
-              onClick={() => navigate('/hostels')}
+              onClick={() => navigate('/dashboard')}
               className="p-2 -ml-2 shrink-0 active:scale-95 transition-transform touch-manipulation"
             >
               <ChevronLeft className="w-5 h-5 text-foreground" />

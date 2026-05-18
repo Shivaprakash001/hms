@@ -4,7 +4,6 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { ProtectedTenantRoute } from './components/ProtectedTenantRoute';
 import { LoginPage } from './pages/LoginPage';
 import { PortfolioView } from './components/views/PortfolioView';
-import { HostelsView } from './components/views/HostelsView';
 import { AlertsView } from './components/views/AlertsView';
 import { BillingView } from './components/views/BillingView';
 import { SettingsView } from './components/views/SettingsView';
@@ -36,7 +35,7 @@ export function AppRouter() {
       >
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<PortfolioView />} />
-        <Route path="/hostels" element={<HostelsView />} />
+        <Route path="/hostels" element={<Navigate to="/dashboard" replace />} />
         <Route path="/hostels/:hostelId" element={<HostelDetailView />} />
         <Route path="/hostels/:hostelId/:tab" element={<HostelDetailView />} />
         <Route path="/tenants" element={<TenantsPortfolioView />} />
