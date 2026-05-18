@@ -96,7 +96,7 @@ const TenantSettings = () => {
                 <div className="lg:col-span-2 space-y-6">
                     <div className="bg-white rounded-2xl p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100">
                         <div className="flex items-center gap-3 mb-6 border-b border-slate-50 pb-4">
-                            <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600">
+                            <div className="p-2 rounded-lg bg-ops-accent/10 text-ops-accent">
                                 <Shield size={18} />
                             </div>
                             <div>
@@ -138,7 +138,7 @@ const TenantSettings = () => {
                                 <button
                                     type="submit"
                                     disabled={loading}
-                                    className="px-6 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-500/20 flex items-center gap-2 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
+                                    className="px-6 py-2.5 rounded-xl text-sm font-bold text-white bg-ops-accent hover:bg-ops-accent/700 shadow-lg shadow-teal-500/20 flex items-center gap-2 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
                                 >
                                     {loading ? 'Updating...' : 'Update Password'}
                                     {!loading && <Save size={16} />}
@@ -163,14 +163,14 @@ const TenantSettings = () => {
                                 <span className="text-sm font-medium text-slate-700">Email Alerts</span>
                                 <label className="relative inline-flex items-center cursor-pointer">
                                     <input type="checkbox" checked={notifications.email} onChange={() => setNotifications(prev => ({ ...prev, email: !prev.email }))} className="sr-only peer" />
-                                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-ops-accent"></div>
                                 </label>
                             </div>
                             <div className="flex items-center justify-between">
                                 <span className="text-sm font-medium text-slate-700">Push Notifications</span>
                                 <label className="relative inline-flex items-center cursor-pointer">
                                     <input type="checkbox" checked={notifications.push} onChange={() => setNotifications(prev => ({ ...prev, push: !prev.push }))} className="sr-only peer" />
-                                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-ops-accent"></div>
                                 </label>
                             </div>
                         </div>
@@ -194,7 +194,7 @@ const PasswordInput = ({ label, name, value, show, onToggle, onChange }) => (
                 name={name}
                 value={value}
                 onChange={onChange}
-                className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-medium text-sm text-slate-800 placeholder:text-slate-400"
+                className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-ops-accent/500/10 focus:border-ops-accent/500 outline-none transition-all font-medium text-sm text-slate-800 placeholder:text-slate-400"
                 placeholder="••••••••"
             />
             <button

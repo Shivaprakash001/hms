@@ -162,7 +162,7 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
 
     if (!isOpen) return null;
 
-    const inputCls = "block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all font-medium";
+    const inputCls = "block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-ops-accent/100 focus:border-ops-accent/500 outline-none transition-all font-medium";
     const labelCls = "text-xs font-bold text-slate-500 ml-1 uppercase tracking-wider";
 
     return (
@@ -198,7 +198,7 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                 {successData.activation_link ? (
                                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-left mb-8">
                                         <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Activation Link (For Testing)</p>
-                                        <p className="text-xs font-mono break-all text-indigo-600 bg-white p-2 rounded border border-slate-100">{successData.activation_link}</p>
+                                        <p className="text-xs font-mono break-all text-ops-accent bg-white p-2 rounded border border-slate-100">{successData.activation_link}</p>
                                     </div>
                                 ) : (
                                     <div className="bg-green-50 p-4 rounded-xl border border-green-200 text-left mb-8">
@@ -225,7 +225,7 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                 </div>
                                 <SkeletonField />
                                 <SkeletonField />
-                                <div className="h-12 bg-indigo-100 rounded-2xl animate-pulse mt-2" />
+                                <div className="h-12 bg-ops-accent/15 rounded-2xl animate-pulse mt-2" />
                             </motion.div>
 
                         ) : (
@@ -244,7 +244,7 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                         <label className={labelCls}>Full Name *</label>
                                         <div className="relative group">
                                             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                                <User className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+                                                <User className="h-5 w-5 text-slate-400 group-focus-within:text-ops-accent transition-colors" />
                                             </div>
                                             <input type="text" value={name} onChange={e => setName(e.target.value)} className={inputCls} placeholder="John Doe" required />
                                         </div>
@@ -253,7 +253,7 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                         <label className={labelCls}>Phone Number</label>
                                         <div className="relative group">
                                             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                                <Phone className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+                                                <Phone className="h-5 w-5 text-slate-400 group-focus-within:text-ops-accent transition-colors" />
                                             </div>
                                             <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} className={inputCls} placeholder="9876543210" />
                                         </div>
@@ -265,7 +265,7 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                     <label className={labelCls}>Email Address *</label>
                                     <div className="relative group">
                                         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                            <Mail className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+                                            <Mail className="h-5 w-5 text-slate-400 group-focus-within:text-ops-accent transition-colors" />
                                         </div>
                                         <input type="email" value={email} onChange={e => setEmail(e.target.value)} className={inputCls} placeholder="john@example.com" required />
                                     </div>
@@ -277,7 +277,7 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                         <label className={labelCls}>Monthly Rent (₹) *</label>
                                         <div className="relative group">
                                             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                                <CreditCard className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+                                                <CreditCard className="h-5 w-5 text-slate-400 group-focus-within:text-ops-accent transition-colors" />
                                             </div>
                                             <input
                                                 type="number"
@@ -295,7 +295,7 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                         <label className={labelCls}>Assign Room *</label>
                                         <div className="relative group">
                                             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                                <Home className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+                                                <Home className="h-5 w-5 text-slate-400 group-focus-within:text-ops-accent transition-colors" />
                                             </div>
                                             <select value={roomId} onChange={handleRoomChange} className={`${inputCls} appearance-none`} required>
                                                 <option value="">Select a room</option>
@@ -325,7 +325,7 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                     <label className={labelCls}>Joining Date *</label>
                                     <div className="relative group">
                                         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                            <Calendar className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+                                            <Calendar className="h-5 w-5 text-slate-400 group-focus-within:text-ops-accent transition-colors" />
                                         </div>
                                         <input type="date" value={joiningDate} onChange={e => setJoiningDate(e.target.value)} className={inputCls} required />
                                     </div>
@@ -344,7 +344,7 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                     </label>
                                     <div className="relative group">
                                         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                            <Wallet className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+                                            <Wallet className="h-5 w-5 text-slate-400 group-focus-within:text-ops-accent transition-colors" />
                                         </div>
                                         <input type="number" min="0" value={advanceAmount} onChange={updateCustomized('advance_deposit', setAdvanceAmount)} className={inputCls} placeholder="0" />
                                     </div>
@@ -364,7 +364,7 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                         </label>
                                         <div className="relative group">
                                             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                                <Wrench className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+                                                <Wrench className="h-5 w-5 text-slate-400 group-focus-within:text-ops-accent transition-colors" />
                                             </div>
                                             <input type="number" min="0" value={maintenanceAmount} onChange={updateCustomized('maintenance_charge', setMaintenanceAmount)} className={inputCls} placeholder="0" disabled={maintenanceType === 'NONE'} />
                                         </div>
@@ -373,7 +373,7 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                         <label className={labelCls}>Type</label>
                                         <div className="relative group">
                                             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                                <Settings2 className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+                                                <Settings2 className="h-5 w-5 text-slate-400 group-focus-within:text-ops-accent transition-colors" />
                                             </div>
                                             <select value={maintenanceType} onChange={handleMaintenanceTypeChange} className={`${inputCls} appearance-none`}>
                                                 <option value="MONTHLY">Monthly</option>
@@ -392,7 +392,7 @@ const TenantInvitationForm = ({ isOpen, onClose, onInviteSuccess }) => {
                                 <button
                                     type="submit"
                                     disabled={isSubmitting || loadingDefaults}
-                                    className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl shadow-xl shadow-indigo-600/20 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-70 disabled:hover:scale-100 mt-2"
+                                    className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl shadow-xl shadow-teal-600/20 text-sm font-bold text-white bg-ops-accent hover:bg-ops-accent/700 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-70 disabled:hover:scale-100 mt-2"
                                 >
                                     {isSubmitting || loadingDefaults ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Send size={18} />Send Invitation</>}
                                 </button>

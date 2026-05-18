@@ -173,9 +173,9 @@ const TenantDashboard = () => {
             },
             LEFT: {
                 title: 'No Active Tenancy',
-                message: 'You are no longer an active tenant of this hostel.',
+                message: 'You are no longer an active tenant. If you would like to rejoin, send a request to the owner.',
                 card: 'bg-slate-100 border-slate-300 text-slate-700',
-                button: false
+                button: true
             },
             CANCELLED: {
                 title: 'Invitation Cancelled',
@@ -274,9 +274,9 @@ const TenantDashboard = () => {
                             <button
                                 onClick={requestReactivation}
                                 disabled={requestLoading}
-                                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-semibold"
+                                className="px-4 py-2 rounded-xl bg-ops-accent hover:bg-ops-accent/700 disabled:opacity-60 text-white text-sm font-semibold"
                             >
-                                {requestLoading ? 'Sending...' : 'Request Activation'}
+                                {requestLoading ? 'Sending...' : normalizedStatus === 'LEFT' ? 'Request Rejoin' : 'Request Activation'}
                             </button>
                         )}
                         <button
@@ -312,7 +312,7 @@ const TenantDashboard = () => {
                 <div className="flex gap-3">
                     <button 
                         onClick={() => navigate('/tenant/payments')}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-medium shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-2"
+                        className="bg-ops-accent hover:bg-ops-accent/700 text-white px-5 py-2.5 rounded-xl font-medium shadow-lg shadow-teal-500/20 transition-all flex items-center gap-2"
                     >
                         <CreditCard size={18} />
                         Pay Rent
@@ -328,8 +328,8 @@ const TenantDashboard = () => {
                         val: roomNo || 'Unassigned',
                         sub: roomNo ? `Capacity: ${roomCapacity}` : 'Not assigned yet',
                         icon: Home,
-                        color: 'text-indigo-600',
-                        bg: 'bg-indigo-50'
+                        color: 'text-ops-accent',
+                        bg: 'bg-ops-accent/10'
                     },
                     {
                         label: 'Monthly Rent',
@@ -389,7 +389,7 @@ const TenantDashboard = () => {
                     <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                             <div className="flex items-center gap-3 mb-2">
-                                <BedDouble className="text-indigo-500" size={20} />
+                                <BedDouble className="text-ops-accent" size={20} />
                                 <span className="font-semibold text-slate-700">Room Configuration</span>
                             </div>
                             <p className="text-slate-600 text-sm">{getRoomConfig()}</p>
@@ -397,7 +397,7 @@ const TenantDashboard = () => {
                         </div>
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                             <div className="flex items-center gap-3 mb-2">
-                                <User className="text-indigo-500" size={20} />
+                                <User className="text-ops-accent" size={20} />
                                 <span className="font-semibold text-slate-700">
                                     Roommates {roommates.length > 0 ? `(${roommates.length})` : ''}
                                 </span>
@@ -406,7 +406,7 @@ const TenantDashboard = () => {
                                 <div className="space-y-1">
                                     {roommates.map((r, idx) => (
                                         <p key={idx} className="text-slate-600 text-sm flex items-center gap-2">
-                                            <span className="w-6 h-6 bg-indigo-100 text-indigo-600 rounded-full text-xs flex items-center justify-center font-bold">
+                                            <span className="w-6 h-6 bg-ops-accent/15 text-ops-accent rounded-full text-xs flex items-center justify-center font-bold">
                                                 {String(r.name || '?').charAt(0).toUpperCase()}
                                             </span>
                                             {r.name || 'Roommate'}
@@ -426,7 +426,7 @@ const TenantDashboard = () => {
                         <h3 className="font-bold text-slate-900">Announcements</h3>
                         <div className="flex items-center gap-2">
                             {unreadAnnouncements > 0 && (
-                                <span className="px-2 py-0.5 text-xs font-bold bg-indigo-100 text-indigo-700 rounded-full">
+                                <span className="px-2 py-0.5 text-xs font-bold bg-ops-accent/15 text-ops-accent rounded-full">
                                     {unreadAnnouncements} new
                                 </span>
                             )}
@@ -452,7 +452,7 @@ const TenantDashboard = () => {
                                             <p className="text-sm text-slate-500 mt-0.5">{item.message}</p>
                                         </div>
                                         <div className="text-right shrink-0">
-                                            {!item.is_read && <span className="inline-block w-2 h-2 rounded-full bg-indigo-500" />}
+                                            {!item.is_read && <span className="inline-block w-2 h-2 rounded-full bg-ops-accent" />}
                                             <p className="text-xs text-slate-400 mt-1">{formatNotificationTime(item.created_at)}</p>
                                         </div>
                                     </div>

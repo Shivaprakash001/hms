@@ -147,13 +147,13 @@ export default function BuyRemindersModal({ onClose, trigger = 'manual', current
                             onClick={() => setSelected(pack.id)}
                             className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border-2 text-left transition-all ${
                                 selected === pack.id
-                                    ? 'border-indigo-500 bg-indigo-50'
+                                    ? 'border-ops-accent/500 bg-ops-accent/10'
                                     : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
                             } disabled:opacity-60`}
                         >
                             {/* Radio circle */}
                             <div className={`flex-shrink-0 w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${
-                                selected === pack.id ? 'border-indigo-500 bg-indigo-500' : 'border-slate-300'
+                                selected === pack.id ? 'border-ops-accent/500 bg-ops-accent' : 'border-slate-300'
                             }`}>
                                 {selected === pack.id && <Check size={8} className="text-white" strokeWidth={3} />}
                             </div>
@@ -172,7 +172,7 @@ export default function BuyRemindersModal({ onClose, trigger = 'manual', current
                                 <p className="text-[11px] text-slate-400 mt-0.5">{pack.perCredit} · {pack.daysLabel}</p>
                             </div>
 
-                            <span className={`text-base font-bold flex-shrink-0 ${selected === pack.id ? 'text-indigo-600' : 'text-slate-600'}`}>
+                            <span className={`text-base font-bold flex-shrink-0 ${selected === pack.id ? 'text-ops-accent' : 'text-slate-600'}`}>
                                 {pack.price}
                             </span>
                         </button>
@@ -190,7 +190,7 @@ export default function BuyRemindersModal({ onClose, trigger = 'manual', current
                 {/* ── CTA ── */}
                 <div className="px-5 pb-4 pt-1 flex flex-col gap-2">
                     <button type="button" onClick={handleBuy} disabled={loading}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm font-bold transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
+                        className="w-full flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl bg-ops-accent hover:bg-ops-accent/700 active:bg-indigo-800 text-white text-sm font-bold transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
                         {loading
                             ? <><Loader2 size={16} className="animate-spin" /> Redirecting to payment…</>
                             : <><CreditCard size={16} /> Buy {selectedPack?.credits} Credits — {selectedPack?.price} <ArrowRight size={14} /></>}

@@ -14,7 +14,7 @@ export default function OnboardingAutomation() {
 
   const timeline = [
     { day: `MAY ${genDay}`, icon: '📋', title: 'Rent generated', desc: 'Tenants see the due bill instantly', color: 'bg-purple-600' },
-    { day: `MAY ${dueDay}`, icon: '📅', title: 'Due date', desc: 'Tenants must pay by this day', color: 'bg-indigo-600' },
+    { day: `MAY ${dueDay}`, icon: '📅', title: 'Due date', desc: 'Tenants must pay by this day', color: 'bg-ops-accent' },
     { day: `FROM DUE DATE +1`, icon: '🔔', title: 'Reminders start', desc: 'Automatic WhatsApp + in-app alerts', color: 'bg-amber-500' },
   ];
 

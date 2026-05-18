@@ -82,7 +82,7 @@ for (const [alias, target] of Object.entries(delegateAliases)) {
   }
 }
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+globalForPrisma.prisma = prisma;
 
 // Supabase Client for RPC calls (Atomic Operations)
 const supabaseUrl = process.env.SUPABASE_URL || "";

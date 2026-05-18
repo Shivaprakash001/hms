@@ -26,7 +26,7 @@ const LogoImage = ({ src }) => {
     const [error, setError] = useState(false);
     if (!src || error) {
         return (
-            <div className="w-full h-full bg-indigo-600 flex items-center justify-center text-white">
+            <div className="w-full h-full bg-ops-accent flex items-center justify-center text-white">
                 <ShieldCheck size={20} />
             </div>
         );
@@ -346,8 +346,8 @@ const PortfolioLayout = () => {
         const t = type?.toLowerCase();
         switch (t) {
             case 'payment': return <CheckCircle2 size={16} className="text-green-500" />;
-            case 'tenant': return <User size={16} className="text-indigo-500" />;
-            case 'room': return <Bed size={16} className="text-indigo-500" />;
+            case 'tenant': return <User size={16} className="text-ops-accent" />;
+            case 'room': return <Bed size={16} className="text-ops-accent" />;
             default: return <Clock size={16} className="text-slate-500" />;
         }
     };
@@ -364,7 +364,7 @@ const PortfolioLayout = () => {
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans text-slate-900 flex overflow-x-hidden relative">
+        <div className="min-h-screen bg-ops-surface font-sans text-foreground flex overflow-x-hidden relative">
             {/* Sidebar (Desktop) */}
             <aside
                 className={`hidden lg:flex flex-col fixed inset-y-0 left-0 z-50 bg-slate-900 border-r border-slate-800 transition-all duration-300 ease-in-out shadow-xl ${sidebarOpen ? 'w-72' : 'w-20'}`}
@@ -375,12 +375,12 @@ const PortfolioLayout = () => {
                     onClick={() => navigate('/dashboard')}
                 >
                     <div className="flex items-center gap-3 overflow-hidden">
-                        <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shrink-0 shadow-sm border border-slate-800/50 overflow-hidden group-hover:border-indigo-500/30 transition-colors">
+                        <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shrink-0 shadow-sm border border-slate-800/50 overflow-hidden group-hover:border-ops-accent/30 transition-colors">
                             <LogoImage src={hostelLogoUrl || "/logo.png"} />
                         </div>
                         <div className={`transition-all duration-300 ${sidebarOpen ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4 hidden'}`}>
                             <h1 className="font-bold text-lg tracking-tight text-white leading-tight">
-                                Trishul <span className="text-indigo-400">Solutions</span>
+                                Trishul <span className="text-teal-400">Solutions</span>
                             </h1>
                         </div>
                     </div>
@@ -399,7 +399,7 @@ const PortfolioLayout = () => {
                                 className={`
                                     relative flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all duration-200 group
                                     ${isActive
-                                        ? 'bg-indigo-600 text-white font-medium shadow-md shadow-indigo-900/20'
+                                        ? 'bg-ops-accent text-white font-medium shadow-md shadow-teal-900/20'
                                         : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                                     }
                                 `}
@@ -497,7 +497,7 @@ const PortfolioLayout = () => {
                         <button
                             key={item.name}
                             onClick={() => { navigate(item.path); setMobileMenuOpen(false); }}
-                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${(location.pathname === item.path) ? 'bg-indigo-600 text-white font-semibold' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${(location.pathname === item.path) ? 'bg-ops-accent text-white font-semibold' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                                 }`}
                         >
                             <item.icon size={20} />
@@ -535,8 +535,8 @@ const PortfolioLayout = () => {
                         </button>
                         {/* Search Bar */}
                         <div className="relative hidden md:block w-80" ref={searchRef}>
-                            <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus-within:ring-2 focus-within:ring-indigo-100 focus-within:border-indigo-400 transition-all group">
-                                <Search size={16} className="text-slate-400 group-focus-within:text-indigo-500" />
+                            <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus-within:ring-2 focus-within:ring-ops-accent/20 focus-within:border-ops-accent transition-all group">
+                                <Search size={16} className="text-slate-400 group-focus-within:text-ops-accent" />
                                 <input
                                     type="text"
                                     value={searchQuery}
@@ -572,7 +572,7 @@ const PortfolioLayout = () => {
                         <div className="relative" ref={notificationRef}>
                             <button
                                 onClick={() => setNotificationsOpen(!notificationsOpen)}
-                                className={`relative p-2 rounded-full transition-colors ${notificationsOpen ? 'bg-indigo-50 text-indigo-600' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'}`}
+                                className={`relative p-2 rounded-full transition-colors ${notificationsOpen ? 'bg-ops-accent/10 text-ops-accent' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'}`}
                             >
                                 <Bell size={20} />
                                 {unreadCount > 0 && (
@@ -593,7 +593,7 @@ const PortfolioLayout = () => {
                                             <h3 className="font-semibold text-slate-900">Notifications</h3>
                                             <button
                                                 onClick={handleMarkAllRead}
-                                                className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
+                                                className="text-xs font-medium text-ops-accent hover:text-ops-accent"
                                             >
                                                 Mark all read
                                             </button>
@@ -606,7 +606,7 @@ const PortfolioLayout = () => {
                                                 </div>
                                             ) : (
                                                 notifications.map(notification => (
-                                                    <div key={notification.id} className={`p-4 border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer flex gap-3 ${!notification.is_read ? 'bg-indigo-50/30' : ''}`}>
+                                                    <div key={notification.id} className={`p-4 border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer flex gap-3 ${!notification.is_read ? 'bg-ops-accent/10/30' : ''}`}>
                                                         <div className={`mt-0.5 p-1.5 rounded-full ${!notification.is_read ? 'bg-white shadow-sm' : 'bg-slate-100'}`}>
                                                             {getNotificationIcon(notification.type)}
                                                         </div>
@@ -622,14 +622,14 @@ const PortfolioLayout = () => {
                                                             <p className="text-xs text-slate-500 line-clamp-2">{notification.message}</p>
                                                         </div>
                                                         {!notification.is_read && (
-                                                            <div className="self-center w-2 h-2 bg-indigo-500 rounded-full shrink-0" />
+                                                            <div className="self-center w-2 h-2 bg-ops-accent/100 rounded-full shrink-0" />
                                                         )}
                                                     </div>
                                                 ))
                                             )}
                                         </div>
                                         <div className="p-2 border-t border-slate-100 bg-slate-50/50">
-                                            <button className="w-full py-1.5 text-xs font-medium text-slate-600 hover:text-indigo-600 transition-colors">
+                                            <button className="w-full py-1.5 text-xs font-medium text-slate-600 hover:text-ops-accent transition-colors">
                                                 View all notifications
                                             </button>
                                         </div>

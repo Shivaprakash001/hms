@@ -66,7 +66,7 @@ export default function OnboardingTenant() {
             <p className="text-slate-400 text-xs leading-relaxed mb-3">You can skip this step and add tenants from the dashboard later.</p>
             <button 
               onClick={() => navigate('/onboarding/done')}
-              className="text-xs font-black text-purple-600 hover:text-purple-700 transition-colors uppercase tracking-widest flex items-center justify-center sm:justify-start gap-1"
+              className="text-xs font-black text-ops-accent hover:text-purple-700 transition-colors uppercase tracking-widest flex items-center justify-center sm:justify-start gap-1"
             >
               Skip this for now
               <ArrowRight className="w-3 h-3" />

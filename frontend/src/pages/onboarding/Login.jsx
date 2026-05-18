@@ -36,7 +36,7 @@ const Login = () => {
           <div className="space-y-2">
             <div className="flex justify-between items-center px-1">
               <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Password</label>
-              <button className="text-xs font-medium text-purple-600 hover:text-purple-700 transition-colors">
+              <button className="text-xs font-medium text-ops-accent hover:text-purple-700 transition-colors">
                 Forgot password?
               </button>
             </div>
@@ -72,7 +72,7 @@ const Login = () => {
 
         <p className="mt-8 text-center text-sm text-slate-500">
           Don't have an account?{' '}
-          <Link to="/signup" className="text-purple-600 font-semibold hover:underline">
+          <Link to="/signup" className="text-ops-accent font-semibold hover:underline">
             Create account
           </Link>
         </p>

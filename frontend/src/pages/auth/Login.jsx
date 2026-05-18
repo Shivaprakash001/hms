@@ -100,7 +100,7 @@ const Login = () => {
                         <div className="space-y-2">
                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Email Address</label>
                             <div className="relative group">
-                                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-purple-600 transition-colors" />
+                                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-ops-accent transition-colors" />
                                 <Input 
                                     type="email" 
                                     value={email}
@@ -115,12 +115,12 @@ const Login = () => {
                         <div className="space-y-2">
                             <div className="flex justify-between items-center px-1">
                                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Password</label>
-                                <button type="button" className="text-[10px] font-bold text-purple-600 uppercase tracking-widest hover:underline">
+                                <button type="button" className="text-[10px] font-bold text-ops-accent uppercase tracking-widest hover:underline">
                                     Forgot?
                                 </button>
                             </div>
                             <div className="relative group">
-                                <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-purple-600 transition-colors" />
+                                <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-ops-accent transition-colors" />
                                 <Input 
                                     type={showPassword ? "text" : "password"} 
                                     value={password}
@@ -177,7 +177,7 @@ const Login = () => {
 
                     <p className="mt-10 text-center text-xs font-bold uppercase tracking-widest text-slate-400">
                         New here?{' '}
-                        <Link to="/register" className="text-purple-600 hover:underline">
+                        <Link to="/register" className="text-ops-accent hover:underline">
                             Create account
                         </Link>
                     </p>

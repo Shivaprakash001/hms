@@ -88,7 +88,7 @@ const HostelSetup = () => {
                   <button
                     key={type}
                     onClick={() => setFormData({...formData, type})}
-                    className={`p-4 rounded-2xl border-2 transition-all text-sm font-bold ${formData.type === type ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-slate-100 text-slate-500 hover:border-slate-200'}`}
+                    className={`p-4 rounded-2xl border-2 transition-all text-sm font-bold ${formData.type === type ? 'border-purple-500 bg-ops-accent/10 text-purple-700' : 'border-slate-100 text-slate-500 hover:border-slate-200'}`}
                   >
                     {type}
                   </button>
@@ -138,7 +138,7 @@ const HostelSetup = () => {
             ].map((item) => (
               <div key={item.field} className="flex items-center justify-between p-6 rounded-3xl bg-slate-50 border border-slate-100">
                 <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-purple-600 shadow-sm">
+                  <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-ops-accent shadow-sm">
                     {item.icon}
                   </div>
                   <div>
@@ -183,7 +183,7 @@ const HostelSetup = () => {
               <button
                 key={amenity.id}
                 onClick={() => toggleAmenity(amenity.id)}
-                className={`p-6 rounded-3xl border-2 transition-all flex flex-col items-center gap-3 ${formData.amenities.includes(amenity.id) ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-slate-100 text-slate-400 hover:border-slate-200'}`}
+                className={`p-6 rounded-3xl border-2 transition-all flex flex-col items-center gap-3 ${formData.amenities.includes(amenity.id) ? 'border-purple-500 bg-ops-accent/10 text-purple-700' : 'border-slate-100 text-slate-400 hover:border-slate-200'}`}
               >
                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${formData.amenities.includes(amenity.id) ? 'bg-white shadow-sm' : 'bg-slate-50'}`}>
                   {React.cloneElement(amenity.icon, { className: "w-6 h-6" })}
@@ -201,11 +201,11 @@ const HostelSetup = () => {
           >
             <div className="flex flex-col items-center">
               <div className="relative group cursor-pointer">
-                <div className="w-32 h-32 rounded-3xl bg-slate-50 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 group-hover:border-purple-400 group-hover:bg-purple-50 transition-all">
+                <div className="w-32 h-32 rounded-3xl bg-slate-50 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 group-hover:border-purple-400 group-hover:bg-ops-accent/10 transition-all">
                   <ImageIcon className="w-8 h-8 mb-2" />
                   <span className="text-[10px] font-bold uppercase">Upload Logo</span>
                 </div>
-                <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-white rounded-2xl shadow-lg border border-slate-100 flex items-center justify-center text-purple-600">
+                <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-white rounded-2xl shadow-lg border border-slate-100 flex items-center justify-center text-ops-accent">
                   <CheckCircle2 className="w-5 h-5" />
                 </div>
               </div>

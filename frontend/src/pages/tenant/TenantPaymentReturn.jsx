@@ -168,7 +168,7 @@ const TenantPaymentReturn = () => {
             <div className="min-h-screen bg-slate-50 px-4 py-10">
                 <div className="mx-auto max-w-xl rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
                     <div className="flex flex-col items-center justify-center py-12">
-                        <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
+                        <Loader2 className="h-10 w-10 animate-spin text-ops-accent" />
                         <h1 className="mt-4 text-xl font-bold text-slate-900">Verifying Payment</h1>
                         <p className="mt-2 text-sm text-slate-500">
                             Please wait while we confirm your payment…
@@ -320,7 +320,7 @@ const TenantPaymentReturn = () => {
             <div className={`mx-auto max-w-xl rounded-3xl border bg-white p-8 shadow-sm ${
                 isSuccess ? 'border-emerald-200' : isFailed ? 'border-rose-200' : 'border-slate-200'
             }`}>
-                <p className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-500">Payment Return</p>
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-ops-accent">Payment Return</p>
                 <h1 className="mt-3 text-3xl font-black text-slate-900">
                     {isSuccess ? 'Payment Confirmed' : isFailed ? 'Payment Failed' : 'Payment Status'}
                 </h1>

@@ -27,12 +27,12 @@ export default function OnboardingDone() {
       <motion.div 
         animate={{ rotate: 360 }}
         transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
-        className="absolute top-0 right-0 -mr-24 -mt-24 w-80 h-80 bg-purple-50 rounded-full opacity-60 blur-[100px]"
+        className="absolute top-0 right-0 -mr-24 -mt-24 w-80 h-80 bg-ops-accent/10 rounded-full opacity-60 blur-[100px]"
       />
       <motion.div 
         animate={{ rotate: -360 }}
         transition={{ duration: 40, repeat: Infinity, ease: "linear" }}
-        className="absolute bottom-0 left-0 -ml-24 -mb-24 w-80 h-80 bg-indigo-50 rounded-full opacity-60 blur-[100px]"
+        className="absolute bottom-0 left-0 -ml-24 -mb-24 w-80 h-80 bg-ops-accent/10 rounded-full opacity-60 blur-[100px]"
       />
 
       <div className="relative z-10">

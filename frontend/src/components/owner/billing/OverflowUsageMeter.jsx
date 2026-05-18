@@ -2,7 +2,7 @@ import React from 'react';
 import { Users, AlertTriangle, TrendingUp } from 'lucide-react';
 
 const THRESHOLD_CONFIG = {
-  SAFE:       { bar: 'bg-indigo-500',  label: null,                                             banner: null },
+  SAFE:       { bar: 'bg-ops-accent',  label: null,                                             banner: null },
   WARNING_80: { bar: 'bg-amber-400',   label: 'Nearing capacity',                               banner: 'warning' },
   OVERFLOW:   { bar: 'bg-orange-500',  label: 'Extra tenant usage charges apply',               banner: 'overflow' },
   NEAR_CAP:   { bar: 'bg-rose-500',    label: 'Near hard cap — upgrade for smoother scaling',   banner: 'near_cap' },

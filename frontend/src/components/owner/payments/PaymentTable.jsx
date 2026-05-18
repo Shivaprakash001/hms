@@ -62,7 +62,7 @@ const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadRece
                             >
                                 <td className="py-4 px-6">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center text-xs font-bold">
+                                        <div className="w-8 h-8 rounded-full bg-ops-accent/10 text-ops-accent flex items-center justify-center text-xs font-bold">
                                             {(() => {
                                                 const tn = payment.tenantName;
                                                 return typeof tn === 'string' && tn.length > 0
@@ -97,7 +97,7 @@ const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadRece
                                                 }
                                             }}
                                             disabled={!payment.latestPaymentId}
-                                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-40"
+                                            className="p-2 text-slate-400 hover:text-ops-accent hover:bg-ops-accent/10 rounded-lg transition-colors disabled:opacity-40"
                                             title="Download Receipt"
                                         >
                                             <Download size={18} />
@@ -108,20 +108,20 @@ const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadRece
                                             e.stopPropagation();
                                             onViewHistory(payment);
                                         }}
-                                        className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                        className="p-2 text-slate-400 hover:text-ops-accent hover:bg-ops-accent/10 rounded-lg transition-colors"
                                         title="View History"
                                     >
                                         <History size={18} />
                                     </button>
                                     <button
-                                        className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                        className="p-2 text-slate-400 hover:text-ops-accent hover:bg-ops-accent/10 rounded-lg transition-colors"
                                         title="View Details"
                                     >
                                         <Eye size={18} />
                                     </button>
                                     {Number(payment.balance || 0) > 0 && payment.status !== 'waived' && (
                                         <button
-                                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                            className="p-2 text-slate-400 hover:text-ops-accent hover:bg-ops-accent/10 rounded-lg transition-colors"
                                             title="Start Online Payment"
                                             onClick={(e) => {
                                                 e.stopPropagation();
@@ -166,7 +166,7 @@ const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadRece
                         >
                             <div className="flex justify-between items-start">
                                 <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center text-xs font-bold">
+                                    <div className="w-8 h-8 rounded-full bg-ops-accent/10 text-ops-accent flex items-center justify-center text-xs font-bold">
                                             {(() => {
                                                 const tn = payment.tenantName;
                                                 return typeof tn === 'string' && tn.length > 0
@@ -211,7 +211,7 @@ const PaymentTable = ({ payments, onSelectPayment, onViewHistory, onDownloadRece
                                         e.stopPropagation();
                                         onSelectPayment(payment);
                                     }}
-                                    className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-all"
+                                    className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold bg-ops-accent/10 text-ops-accent hover:bg-ops-accent/15 transition-all"
                                 >
                                     <Eye size={14} />
                                     <span>View Details</span>

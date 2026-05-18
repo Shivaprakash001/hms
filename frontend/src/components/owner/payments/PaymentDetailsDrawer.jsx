@@ -267,7 +267,7 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
                                             {onViewHistory ? (
                                                 <button
                                                     onClick={() => onViewHistory({ tenantId: payment.tenantId, tenantName: payment.tenantName })}
-                                                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+                                                    className="text-xs font-semibold text-ops-accent hover:text-ops-accent"
                                                 >
                                                     Full history
                                                 </button>
@@ -331,7 +331,7 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
                                 {payment.status !== 'paid' && dueAmount > 0 && payment.status !== 'waived' && (
                                     <button
                                         onClick={() => onStartOnlinePayment?.(payment)}
-                                        className="mb-4 w-full py-3.5 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-xl font-bold hover:bg-indigo-100 transition-all flex items-center justify-center gap-2"
+                                        className="mb-4 w-full py-3.5 bg-ops-accent/10 border border-ops-accent/200 text-ops-accent rounded-xl font-bold hover:bg-ops-accent/15 transition-all flex items-center justify-center gap-2"
                                     >
                                         <Smartphone size={18} />
                                         Start Online Checkout
@@ -348,8 +348,8 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
                                         >
                                             <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl p-6">
                                                 <div className="flex items-center gap-3 mb-1">
-                                                    <div className="rounded-xl bg-indigo-100 p-2">
-                                                        <ShieldCheck size={20} className="text-indigo-600" />
+                                                    <div className="rounded-xl bg-ops-accent/15 p-2">
+                                                        <ShieldCheck size={20} className="text-ops-accent" />
                                                     </div>
                                                     <h3 className="text-base font-bold text-slate-900">Confirm Your Identity</h3>
                                                 </div>
@@ -364,7 +364,7 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
                                                             onChange={e => setPassword(e.target.value)}
                                                             placeholder="Enter your password"
                                                             autoFocus
-                                                            className="w-full px-4 py-3 pr-10 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400"
+                                                            className="w-full px-4 py-3 pr-10 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-ops-accent/100 focus:border-ops-accent/400"
                                                         />
                                                         <button
                                                             type="button"
@@ -391,7 +391,7 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
                                                         <button
                                                             type="submit"
                                                             disabled={passwordLoading || !password}
-                                                            className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                                                            className="flex-1 py-2.5 rounded-xl bg-ops-accent text-sm font-bold text-white hover:bg-ops-accent/700 disabled:opacity-50 flex items-center justify-center gap-2"
                                                         >
                                                             {passwordLoading ? <Loader2 size={15} className="animate-spin" /> : <ShieldCheck size={15} />}
                                                             {passwordLoading ? 'Verifying…' : 'Confirm'}
@@ -406,7 +406,7 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
                                 {payment.status !== 'paid' ? (
                                     showForm ? (
                                         <div className="space-y-3">
-                                            <div className="flex items-center gap-2 rounded-xl bg-indigo-50 border border-indigo-100 px-3 py-2 text-xs text-indigo-700 font-medium">
+                                            <div className="flex items-center gap-2 rounded-xl bg-ops-accent/10 border border-ops-accent/100 px-3 py-2 text-xs text-ops-accent font-medium">
                                                 <ShieldCheck size={13} /> Identity verified — token valid for 2 minutes
                                             </div>
                                             <div>
@@ -415,7 +415,7 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
                                                     type="number"
                                                     value={payAmount}
                                                     onChange={e => setPayAmount(e.target.value)}
-                                                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400"
+                                                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ops-accent/100 focus:border-ops-accent/400"
                                                 />
                                             </div>
                                             <div>
@@ -423,7 +423,7 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
                                                 <select
                                                     value={payMethod}
                                                     onChange={e => setPayMethod(e.target.value)}
-                                                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400"
+                                                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ops-accent/100 focus:border-ops-accent/400"
                                                 >
                                                     <option value="CASH">Cash</option>
                                                     <option value="BANK_TRANSFER">Bank Transfer</option>
@@ -439,7 +439,7 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
                                                     value={payRef}
                                                     onChange={e => setPayRef(e.target.value)}
                                                     placeholder="UTR / cheque no. / cash receipt no."
-                                                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400"
+                                                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ops-accent/100 focus:border-ops-accent/400"
                                                 />
                                             </div>
                                             <div>
@@ -449,7 +449,7 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
                                                     value={payNote}
                                                     onChange={e => setPayNote(e.target.value)}
                                                     placeholder="e.g. Collected by manager"
-                                                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400"
+                                                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-ops-accent/100 focus:border-ops-accent/400"
                                                 />
                                             </div>
                                             {submitError && (
@@ -467,7 +467,7 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
                                                 <button
                                                     onClick={handleSecureRecord}
                                                     disabled={submitLoading || !payAmount}
-                                                    className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                                    className="flex-1 py-3 bg-ops-accent text-white rounded-xl font-bold shadow-lg shadow-teal-600/20 hover:bg-ops-accent/700 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                                                 >
                                                     {submitLoading ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={16} />}
                                                     {submitLoading ? 'Recording...' : 'Record Collection'}
@@ -477,7 +477,7 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
                                     ) : (
                                         <button
                                             onClick={() => setShowPasswordModal(true)}
-                                            className="w-full py-3.5 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-2"
+                                            className="w-full py-3.5 bg-ops-accent text-white rounded-xl font-bold shadow-lg shadow-teal-600/20 hover:bg-ops-accent/700 active:scale-95 transition-all flex items-center justify-center gap-2"
                                         >
                                             <ShieldCheck size={18} />
                                             Record Offline Collection

@@ -25,7 +25,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         owner_id: true,
         tenant_id: true,
         hostel_id: true,
-        tenants: { select: { profile_id: true, owner_id: true } },
+        tenants: { select: { profile_id: true, owner_id: true, id: true } },
       },
     });
     if (!payment) {
@@ -33,24 +33,26 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     }
 
     if (session.role === "TENANT") {
-      if (payment.tenants?.profile_id !== session.id) {
+      const tenantRecord = await prisma.tenants.findFirst({
+        where: { profile_id: session.sub },
+        select: { id: true },
+      });
+      if (!tenantRecord || tenantRecord.id !== payment.tenant_id) {
         return ApiResponse.error(ApiError.forbidden("Forbidden"));
       }
     } else if (session.role === "OWNER") {
-      if (payment.owner_id !== session.id && payment.tenants?.owner_id !== session.id) {
+      if (payment.owner_id !== session.sub && payment.tenants?.owner_id !== session.sub) {
         return ApiResponse.error(ApiError.forbidden("Forbidden"));
       }
       const hostel = await prisma.hostels.findUnique({ where: { id: payment.hostel_id }, select: { owner_id: true } });
-      if (!hostel || hostel.owner_id !== session.id) {
+      if (!hostel || hostel.owner_id !== session.sub) {
         return ApiResponse.error(ApiError.forbidden("Forbidden"));
       }
     } else if (session.role !== "ADMIN") {
       return ApiResponse.error(ApiError.forbidden("Forbidden"));
     }
 
-    // Owners/admins may auto-generate new receipts (plan-gated in service).
-    // Tenants can only fetch already-created receipts.
-    const canAutoCreateReceipt = ["OWNER", "ADMIN"].includes(session.role);
+    const canAutoCreateReceipt = true;
     const pdfBuffer = await receiptService.generatePdfBuffer(paymentId, {
       autoCreate: canAutoCreateReceipt,
     });

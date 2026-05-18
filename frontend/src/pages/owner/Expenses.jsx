@@ -143,7 +143,7 @@ export default function Expenses() {
     const getCategoryStyles = (category) => {
         const styles = {
             'Electricity': { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-100', icon: Zap },
-            'Maintenance': { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-100', icon: Wrench },
+            'Maintenance': { bg: 'bg-ops-accent/10', text: 'text-ops-accent', border: 'border-ops-accent/100', icon: Wrench },
             'Food': { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-100', icon: Utensils },
             'Utilities': { bg: 'bg-violet-50', text: 'text-violet-700', border: 'border-violet-100', icon: Box },
             'Other': { bg: 'bg-slate-50', text: 'text-slate-700', border: 'border-slate-100', icon: Box }
@@ -216,13 +216,13 @@ export default function Expenses() {
                 </div>
                 <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
                     <div className="relative w-full sm:w-64 group">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={16} />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-ops-accent transition-colors" size={16} />
                         <input
                             type="text"
                             placeholder="Search expenses..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 w-full transition-all"
+                            className="pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-ops-accent/100 focus:border-ops-accent/400 w-full transition-all"
                         />
                     </div>
                     <button
@@ -230,7 +230,7 @@ export default function Expenses() {
                             resetForm();
                             setIsModalOpen(true);
                         }}
-                        className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-lg shadow-indigo-600/20 transition-all text-sm font-bold active:scale-95"
+                        className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-ops-accent hover:bg-ops-accent/700 text-white rounded-xl shadow-lg shadow-teal-600/20 transition-all text-sm font-bold active:scale-95"
                     >
                         <Plus size={18} /> Add Expense
                     </button>
@@ -255,7 +255,7 @@ export default function Expenses() {
                             </div>
                             <p className="text-slate-400 text-xs mt-2 font-medium">vs. ₹{Math.round(totalStats.total * 0.92).toLocaleString()} last month</p>
                         </div>
-                        <div className="p-3 bg-indigo-50 rounded-2xl text-indigo-600">
+                        <div className="p-3 bg-ops-accent/10 rounded-2xl text-ops-accent">
                             <IndianRupee size={24} />
                         </div>
                     </div>
@@ -337,7 +337,7 @@ export default function Expenses() {
                         <select
                             value={dateFilter}
                             onChange={(e) => setDateFilter(e.target.value)}
-                            className="bg-white border border-slate-200 text-slate-600 text-xs font-bold py-2 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-100 cursor-pointer hover:border-slate-300 transition-all flex-1 sm:flex-none"
+                            className="bg-white border border-slate-200 text-slate-600 text-xs font-bold py-2 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-ops-accent/100 cursor-pointer hover:border-slate-300 transition-all flex-1 sm:flex-none"
                         >
                             <option value="all">All Time</option>
                             <option value="today">Today</option>
@@ -349,7 +349,7 @@ export default function Expenses() {
                             onClick={handleDownloadExpenses}
                             disabled={isExporting}
                             title="Download filtered expenses"
-                            className="p-2.5 text-slate-500 hover:text-indigo-600 hover:bg-white border border-transparent hover:border-slate-200 rounded-lg transition-all disabled:opacity-50"
+                            className="p-2.5 text-slate-500 hover:text-ops-accent hover:bg-white border border-transparent hover:border-slate-200 rounded-lg transition-all disabled:opacity-50"
                         >
                             <Download size={18} />
                         </button>
@@ -411,7 +411,7 @@ export default function Expenses() {
                                             className="hover:bg-slate-50/80 transition-colors group cursor-pointer"
                                         >
                                             <td className="px-6 py-4">
-                                                <p className="text-sm font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors">
+                                                <p className="text-sm font-semibold text-slate-900 group-hover:text-ops-accent transition-colors">
                                                     {expense.title}
                                                 </p>
                                             </td>
@@ -447,7 +447,7 @@ export default function Expenses() {
                                                     )}
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); openEditModal(expense); }}
-                                                        className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                                        className="p-2 text-slate-400 hover:text-ops-accent hover:bg-ops-accent/10 rounded-lg transition-colors"
                                                     >
                                                         <Edit size={16} />
                                                     </button>
@@ -509,7 +509,7 @@ export default function Expenses() {
                                                 )}
                                                 <button
                                                     onClick={() => openEditModal(expense)}
-                                                    className="p-1.5 text-slate-400 hover:text-indigo-600 bg-slate-50 rounded-lg"
+                                                    className="p-1.5 text-slate-400 hover:text-ops-accent bg-slate-50 rounded-lg"
                                                 >
                                                     <Edit size={14} />
                                                 </button>
@@ -567,7 +567,7 @@ export default function Expenses() {
                                             required
                                             value={formData.title}
                                             onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                                            className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
+                                            className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:border-ops-accent/500 focus:ring-2 focus:ring-ops-accent/200 outline-none transition-all"
                                             placeholder="e.g. Electricity Bill"
                                         />
                                     </div>
@@ -583,7 +583,7 @@ export default function Expenses() {
                                                     min="0"
                                                     value={formData.amount}
                                                     onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                                                    className="w-full pl-8 pr-4 py-2 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
+                                                    className="w-full pl-8 pr-4 py-2 rounded-xl border border-slate-200 focus:border-ops-accent/500 focus:ring-2 focus:ring-ops-accent/200 outline-none transition-all"
                                                     placeholder="0.00"
                                                 />
                                             </div>
@@ -595,7 +595,7 @@ export default function Expenses() {
                                                 required
                                                 value={formData.date}
                                                 onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                                                className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
+                                                className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:border-ops-accent/500 focus:ring-2 focus:ring-ops-accent/200 outline-none transition-all"
                                             />
                                         </div>
                                     </div>
@@ -606,7 +606,7 @@ export default function Expenses() {
                                             <select
                                                 value={formData.category}
                                                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                                                className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
+                                                className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:border-ops-accent/500 focus:ring-2 focus:ring-ops-accent/200 outline-none transition-all"
                                             >
                                                 {categories.map(cat => (
                                                     <option key={cat} value={cat}>{cat}</option>
@@ -618,7 +618,7 @@ export default function Expenses() {
                                             <select
                                                 value={formData.status}
                                                 onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                                                className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
+                                                className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:border-ops-accent/500 focus:ring-2 focus:ring-ops-accent/200 outline-none transition-all"
                                             >
                                                 <option value="paid">Paid</option>
                                                 <option value="pending">Pending</option>
@@ -637,7 +637,7 @@ export default function Expenses() {
                                         </button>
                                         <button
                                             type="submit"
-                                            className="flex-1 px-4 py-2 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-500/20"
+                                            className="flex-1 px-4 py-2 rounded-xl bg-ops-accent text-white font-medium hover:bg-ops-accent/700 transition-colors shadow-lg shadow-teal-500/20"
                                         >
                                             {editingExpense ? 'Update Expense' : 'Add Expense'}
                                         </button>

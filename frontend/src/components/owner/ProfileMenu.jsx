@@ -27,7 +27,7 @@ const ProfileMenu = ({
             >
                 <div className="text-end leading-tight">
                     <p className="text-xs font-medium text-slate-500 capitalize">{role}</p>
-                    <p className="text-sm font-bold text-slate-900 group-hover:text-indigo-700 transition-colors">{firstName}</p>
+                    <p className="text-sm font-bold text-slate-900 group-hover:text-ops-accent transition-colors">{firstName}</p>
                 </div>
                 <Avatar
                     src={logoUrl}

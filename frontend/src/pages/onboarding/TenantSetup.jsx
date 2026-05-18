@@ -68,7 +68,7 @@ const TenantSetup = () => {
               <p className="text-xs text-slate-600 font-medium">You can upload documents and ID proofs later.</p>
               <button 
                 onClick={() => navigate('/onboarding/complete')}
-                className="text-xs font-bold text-purple-600 hover:underline"
+                className="text-xs font-bold text-ops-accent hover:underline"
               >
                 Skip this for now
               </button>

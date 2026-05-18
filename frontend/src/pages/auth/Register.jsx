@@ -175,7 +175,7 @@ const Register = () => {
                             <div className="space-y-1.5">
                                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Full Name</label>
                                 <div className="relative group">
-                                    <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-purple-600 transition-colors" />
+                                    <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-ops-accent transition-colors" />
                                     <Input 
                                         name="name"
                                         value={formData.name}
@@ -189,7 +189,7 @@ const Register = () => {
                             <div className="space-y-1.5">
                                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Phone Number</label>
                                 <div className="relative group">
-                                    <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-purple-600 transition-colors" />
+                                    <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-ops-accent transition-colors" />
                                     <Input 
                                         name="phone"
                                         value={indianPhoneDigits(formData.phone)}
@@ -206,7 +206,7 @@ const Register = () => {
                         <div className="space-y-1.5">
                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Email Address</label>
                             <div className="relative group">
-                                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-purple-600 transition-colors" />
+                                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-ops-accent transition-colors" />
                                 <Input 
                                     name="email"
                                     type="email"
@@ -223,7 +223,7 @@ const Register = () => {
                             <div className="space-y-1.5">
                                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Password</label>
                                 <div className="relative group">
-                                    <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-purple-600 transition-colors" />
+                                    <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-ops-accent transition-colors" />
                                     <Input 
                                         name="password"
                                         type={showPw ? "text" : "password"} 
@@ -236,14 +236,14 @@ const Register = () => {
                                 </div>
                                 <div className="flex gap-1 h-1 mt-1 px-1">
                                     {[1, 2, 3, 4].map(i => (
-                                        <div key={i} className={`h-full flex-1 rounded-full ${i <= strength ? 'bg-purple-500' : 'bg-slate-100'}`} />
+                                        <div key={i} className={`h-full flex-1 rounded-full ${i <= strength ? 'bg-ops-accent/100' : 'bg-slate-100'}`} />
                                     ))}
                                 </div>
                             </div>
                             <div className="space-y-1.5">
                                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Confirm Password</label>
                                 <div className="relative group">
-                                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-purple-600 transition-colors" />
+                                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-ops-accent transition-colors" />
                                     <Input 
                                         name="confirmPassword"
                                         type="password" 
@@ -284,7 +284,7 @@ const Register = () => {
 
                     <p className="mt-8 text-center text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
                         Already have an account?{' '}
-                        <Link to="/login" className="text-purple-600 hover:underline">Login</Link>
+                        <Link to="/login" className="text-ops-accent hover:underline">Login</Link>
                     </p>
                 </div>
             </motion.div>

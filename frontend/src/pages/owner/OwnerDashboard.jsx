@@ -85,7 +85,7 @@ const OwnerDashboard = () => {
 
     if (isLoading) return (
         <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4">
-            <div className="w-12 h-12 bg-purple-50 rounded-2xl flex items-center justify-center text-purple-600 animate-pulse shadow-xl shadow-purple-50">
+            <div className="w-12 h-12 bg-ops-accent/10 rounded-2xl flex items-center justify-center text-ops-accent animate-pulse shadow-xl shadow-purple-50">
                 <RefreshCw size={24} className="animate-spin" />
             </div>
             <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em]">Syncing Intelligence...</p>
@@ -178,7 +178,7 @@ const ReminderButton = ({ tenantId, tenantName, onNoCredits }) => {
     };
     const variants = {
         idle: { bg: 'bg-slate-50', text: 'text-slate-400', icon: Bell },
-        sending: { bg: 'bg-indigo-50', text: 'text-indigo-600', icon: RefreshCw },
+        sending: { bg: 'bg-ops-accent/10', text: 'text-ops-accent', icon: RefreshCw },
         sent: { bg: 'bg-emerald-50', text: 'text-emerald-600', icon: CheckCircle2 },
         error: { bg: 'bg-rose-50', text: 'text-rose-600', icon: AlertTriangle }
     };
@@ -413,7 +413,7 @@ const InsightStrip = ({ insights, severity }) => {
     if (!insights?.length) return null;
     const theme = severity === 'HIGH' ? 'bg-rose-50 border-rose-100 text-rose-700'
         : severity === 'MEDIUM'     ? 'bg-amber-50 border-amber-100 text-amber-700'
-        : 'bg-indigo-50 border-indigo-100 text-indigo-700';
+        : 'bg-ops-accent/10 border-ops-accent/100 text-ops-accent';
     return (
         <div className={`rounded-[2rem] border p-6 ${theme} shadow-sm relative overflow-hidden`}>
             <div className="absolute top-0 right-0 p-4 opacity-10"><Sparkles size={40} /></div>
@@ -439,7 +439,7 @@ const S1_Cashflow = ({ cfStats, cfSeverity, cfInsights, preferences, navigate, o
 
     const highRisk = cfStats.topDefaulters.filter(d => riskBadge(d) === 'HIGH').length;
     const actionItems = [
-        cfStats.overdueCount > 0 && { id: 'remind',  icon: Bell,       color: 'text-indigo-600 bg-indigo-50',  label: `${cfStats.overdueCount} Unpaid Dues`, desc: 'Send bulk WhatsApp reminders', path: null },
+        cfStats.overdueCount > 0 && { id: 'remind',  icon: Bell,       color: 'text-ops-accent bg-ops-accent/10',  label: `${cfStats.overdueCount} Unpaid Dues`, desc: 'Send bulk WhatsApp reminders', path: null },
         highRisk > 0             && { id: 'high',    icon: ShieldAlert, color: 'text-rose-600 bg-rose-50',      label: `${highRisk} Critical Defaulters`, desc: 'Overdue by 10+ days', path: opPath('tenants') },
         cfStats.pending > 0      && { id: 'collect', icon: Wallet,      color: 'text-emerald-600 bg-emerald-50', label: 'Potential Revenue', desc: `${formatCurrency(cfStats.pending, preferences)} collectible`, path: opPath('payments') },
     ].filter(Boolean);
@@ -517,7 +517,7 @@ const S1_Cashflow = ({ cfStats, cfSeverity, cfInsights, preferences, navigate, o
                 </div>
             )}
 
-            <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white relative overflow-hidden shadow-2xl shadow-indigo-100">
+            <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white relative overflow-hidden shadow-2xl shadow-teal-100">
                 <div className="absolute top-0 right-0 p-8 opacity-10 rotate-12"><Activity size={100} /></div>
                 <div className="relative z-10">
                     <p className="text-indigo-400 text-[10px] font-black uppercase tracking-[0.3em] mb-4">Action Center</p>
@@ -620,7 +620,7 @@ const S2_Tenants = ({ data, severity, insights, loading, preferences, navigate, 
                 {[
                     { label: 'On-Time', value: `${beh.on_time_percentage ?? 0}%`, color: 'text-emerald-600 bg-emerald-50' },
                     { label: 'Avg Delay', value: `${Math.round(beh.avg_delay_days ?? 0)}d`, color: 'text-amber-600 bg-amber-50' },
-                    { label: 'Dependent', value: `${beh.reminder_dependency_rate ?? 0}%`, color: 'text-indigo-600 bg-indigo-50' }
+                    { label: 'Dependent', value: `${beh.reminder_dependency_rate ?? 0}%`, color: 'text-ops-accent bg-ops-accent/10' }
                 ].map(c => (
                     <div key={c.label} className={`p-5 rounded-[2rem] text-center ${c.color} shadow-sm border border-black/5`}>
                         <p className="text-xl font-black mb-1">{c.value}</p>
@@ -677,8 +677,8 @@ const S3_Funnel = ({ data, severity, insights, loading, preferences, navigate, o
                 </button>
             </header>
 
-            <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-indigo-100 relative overflow-hidden">
-                <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-indigo-500/20 rounded-full blur-3xl" />
+            <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-teal-100 relative overflow-hidden">
+                <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-ops-accent/20 rounded-full blur-3xl" />
                 <div className="flex justify-between items-center mb-10">
                     <div>
                         <p className="text-indigo-400 text-[10px] font-black uppercase tracking-widest mb-1">Conversion Rate</p>
@@ -695,7 +695,7 @@ const S3_Funnel = ({ data, severity, insights, loading, preferences, navigate, o
                             <span>{sent}</span>
                         </div>
                         <div className="h-3 bg-white/10 rounded-full overflow-hidden">
-                            <motion.div initial={{ width: 0 }} animate={{ width: '100%' }} className="h-full bg-indigo-500" />
+                            <motion.div initial={{ width: 0 }} animate={{ width: '100%' }} className="h-full bg-ops-accent" />
                         </div>
                     </div>
                     <div className="space-y-2">
@@ -719,7 +719,7 @@ const S3_Funnel = ({ data, severity, insights, loading, preferences, navigate, o
                 <div className="bg-white rounded-[2rem] border border-slate-100 p-6 shadow-sm">
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Avg Pay Time</p>
                     <p className="text-2xl font-black text-slate-900">{data.avg_time_to_pay_hours?.toFixed(1)}h</p>
-                    <p className="text-[10px] font-bold text-indigo-500 uppercase mt-1">Post Alert</p>
+                    <p className="text-[10px] font-bold text-ops-accent uppercase mt-1">Post Alert</p>
                 </div>
             </div>
 
@@ -731,7 +731,7 @@ const S3_Funnel = ({ data, severity, insights, loading, preferences, navigate, o
                             <div key={i} className="flex items-center gap-4">
                                 <span className="text-xs font-black text-slate-600 w-20 uppercase tracking-tighter">{ch.channel}</span>
                                 <div className="flex-1 h-3 bg-slate-50 rounded-full overflow-hidden">
-                                    <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${ch.conversion_rate}%` }} />
+                                    <div className="h-full bg-ops-accent rounded-full" style={{ width: `${ch.conversion_rate}%` }} />
                                 </div>
                                 <span className="text-xs font-black text-slate-900">{ch.conversion_rate.toFixed(0)}%</span>
                             </div>
@@ -783,7 +783,7 @@ const S4_Operations = ({ data, severity, insights, loading, preferences, navigat
                     <motion.div 
                         initial={{ width: 0 }} 
                         animate={{ width: `${occ}%` }} 
-                        className={`h-full rounded-full ${occ >= 80 ? 'bg-emerald-500' : 'bg-indigo-500'}`} 
+                        className={`h-full rounded-full ${occ >= 80 ? 'bg-emerald-500' : 'bg-ops-accent'}`} 
                     />
                 </div>
                 <div className="grid grid-cols-3 gap-4 pt-6 border-t border-slate-50">
@@ -799,7 +799,7 @@ const S4_Operations = ({ data, severity, insights, loading, preferences, navigat
                     {[
                         { label: 'Revenue', value: rev, color: 'bg-emerald-500', max: rev },
                         { label: 'Expenses', value: exp, color: 'bg-rose-400', max: rev },
-                        { label: 'Profit', value: profit, color: 'bg-indigo-500', max: rev }
+                        { label: 'Profit', value: profit, color: 'bg-ops-accent', max: rev }
                     ].map(row => (
                         <div key={row.label}>
                             <div className="flex justify-between items-center mb-2 px-1">
@@ -856,9 +856,9 @@ const TabBar = ({ active, onChange, badge }) => {
                         <button 
                             key={t.id} 
                             onClick={() => onChange(t.id)} 
-                            className={`flex-1 flex flex-col items-center justify-center gap-1.5 transition-all duration-300 relative ${on ? 'text-purple-600' : 'text-slate-400'}`}
+                            className={`flex-1 flex flex-col items-center justify-center gap-1.5 transition-all duration-300 relative ${on ? 'text-ops-accent' : 'text-slate-400'}`}
                         >
-                            <div className={`p-2 rounded-2xl transition-all ${on ? 'bg-purple-50 scale-110 shadow-lg shadow-purple-50/50' : ''}`}>
+                            <div className={`p-2 rounded-2xl transition-all ${on ? 'bg-ops-accent/10 scale-110 shadow-lg shadow-purple-50/50' : ''}`}>
                                 <t.Icon size={20} strokeWidth={on ? 2.5 : 2} />
                                 {t.id === 'tenants' && badge > 0 && (
                                     <span className="absolute top-1 right-1/4 w-4 h-4 bg-rose-500 rounded-full text-[8px] font-black text-white flex items-center justify-center shadow-lg border-2 border-white">{badge}</span>

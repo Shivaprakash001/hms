@@ -121,7 +121,7 @@ export default function ProfileLogoUploader({ logoUrl, onUpload, onRemove, disab
                     type="button"
                     onClick={handleChooseFile}
                     disabled={disabled || uploading}
-                    className="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-70"
+                    className="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-ops-accent text-white text-sm font-semibold hover:bg-ops-accent/700 transition-colors disabled:opacity-70"
                 >
                     {uploading ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} />}
                     {uploading ? 'Uploading...' : 'Upload Logo'}

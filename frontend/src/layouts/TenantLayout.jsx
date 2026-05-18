@@ -55,7 +55,7 @@ const TenantLayout = () => {
     };
 
     return (
-        <div className="flex h-screen bg-slate-50 font-sans">
+        <div className="flex h-screen bg-ops-surface font-sans text-foreground">
             {/* Sidebar */}
             <motion.aside
                 initial={false}
@@ -63,7 +63,7 @@ const TenantLayout = () => {
                 className="bg-slate-900 text-white flex-shrink-0 relative hidden md:flex flex-col shadow-xl z-20"
             >
                 <div className="p-6 flex items-center gap-3 border-b border-slate-800">
-                    <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                    <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-ops-accent to-teal-600 flex items-center justify-center shadow-lg shadow-teal-500/20">
                         <span className="font-bold text-white text-lg">S</span>
                     </div>
                     <AnimatePresence>
@@ -88,7 +88,7 @@ const TenantLayout = () => {
                                 key={item.path}
                                 onClick={() => navigate(item.path)}
                                 className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-300 group relative overflow-hidden ${isActive
-                                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20'
+                                    ? 'bg-ops-accent text-white shadow-lg shadow-teal-900/20'
                                     : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                                     }`}
                             >
@@ -127,7 +127,7 @@ const TenantLayout = () => {
             <aside className={`md:hidden fixed inset-y-0 left-0 z-50 w-72 bg-slate-900 shadow-2xl transition-transform duration-300 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
                 <div className="h-16 flex items-center justify-between px-6 border-b border-slate-800">
                     <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                        <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-ops-accent to-teal-600 flex items-center justify-center shadow-lg shadow-teal-500/20">
                             <span className="font-bold text-white text-lg">S</span>
                         </div>
                         <span className="font-bold text-lg tracking-tight text-white">Tenant Portal</span>
@@ -148,7 +148,7 @@ const TenantLayout = () => {
                                     setMobileMenuOpen(false);
                                 }}
                                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${isActive
-                                    ? 'bg-indigo-600 text-white font-semibold'
+                                    ? 'bg-ops-accent text-white font-semibold'
                                     : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                                     }`}
                             >
@@ -212,7 +212,7 @@ const TenantLayout = () => {
                             src={user?.avatar_url || user?.profile_photo_url || user?.avatar}
                             name={user?.name}
                             size={32}
-                            className="border border-indigo-200 hover:ring-2 hover:ring-indigo-500 transition-all"
+                            className="border border-ops-accent/200 hover:ring-2 hover:ring-indigo-500 transition-all"
                         />
                     </div>
                 </header>

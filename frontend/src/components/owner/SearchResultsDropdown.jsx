@@ -16,7 +16,7 @@ const SearchResultsDropdown = ({
         <div className="absolute top-full left-0 right-0 mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-200/70">
             {isLoading ? (
                 <div className="flex items-center gap-3 px-4 py-5 text-sm text-slate-500">
-                    <Loader2 size={16} className="animate-spin text-indigo-500" />
+                    <Loader2 size={16} className="animate-spin text-ops-accent" />
                     <span>Searching tenants...</span>
                 </div>
             ) : hasError ? (
@@ -42,7 +42,7 @@ const SearchResultsDropdown = ({
                             key={tenant.id}
                             onClick={() => onSelect(tenant)}
                             className={`flex w-full items-start justify-between gap-4 px-4 py-3 text-left transition-colors ${
-                                activeIndex === index ? 'bg-indigo-50' : 'hover:bg-slate-50'
+                                activeIndex === index ? 'bg-ops-accent/10' : 'hover:bg-slate-50'
                             }`}
                         >
                             <div className="min-w-0">

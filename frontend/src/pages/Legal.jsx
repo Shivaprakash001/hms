@@ -68,7 +68,7 @@ export default function Legal() {
               <a
                 key={id}
                 href={`#${id}`}
-                className="text-sm text-indigo-600 hover:text-indigo-800 font-medium transition-colors"
+                className="text-sm text-ops-accent hover:text-indigo-800 font-medium transition-colors"
               >
                 {title}
               </a>

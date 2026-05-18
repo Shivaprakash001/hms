@@ -52,7 +52,7 @@ export default function MoveOutRequestFlow({ actions, onSuccess, onBack }) {
       {/* Progress */}
       <div className="flex gap-1.5 mb-8">
         {[0, 1, 2].map(i => (
-          <div key={i} className={`h-1 flex-1 rounded-full transition-all duration-500 ${i <= step ? 'bg-indigo-500' : 'bg-slate-200'}`} />
+          <div key={i} className={`h-1 flex-1 rounded-full transition-all duration-500 ${i <= step ? 'bg-ops-accent' : 'bg-slate-200'}`} />
         ))}
       </div>
 
@@ -66,14 +66,14 @@ export default function MoveOutRequestFlow({ actions, onSuccess, onBack }) {
         {step === 0 && (
           <motion.div key="date" {...slide}>
             <div className="mb-3">
-              <Calendar className="w-8 h-8 text-indigo-500 mb-3" />
+              <Calendar className="w-8 h-8 text-ops-accent mb-3" />
               <h3 className="text-base font-semibold text-slate-800 mb-1">When are you planning to leave?</h3>
               <p className="text-sm text-slate-500">Pick your preferred move-out date.</p>
             </div>
             <input
               type="date" min={minDate} value={date}
               onChange={e => setDate(e.target.value)}
-              className="w-full p-3.5 rounded-xl border border-slate-200 text-base bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 outline-none transition-all"
+              className="w-full p-3.5 rounded-xl border border-slate-200 text-base bg-white focus:ring-2 focus:ring-ops-accent/500/20 focus:border-ops-accent/400 outline-none transition-all"
             />
             {noticeLow && (
               <div className="mt-3 flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-100">
@@ -90,7 +90,7 @@ export default function MoveOutRequestFlow({ actions, onSuccess, onBack }) {
         {step === 1 && (
           <motion.div key="reason" {...slide}>
             <div className="mb-4">
-              <MessageSquare className="w-8 h-8 text-indigo-500 mb-3" />
+              <MessageSquare className="w-8 h-8 text-ops-accent mb-3" />
               <h3 className="text-base font-semibold text-slate-800 mb-1">Why are you leaving?</h3>
               <p className="text-sm text-slate-500">This helps us improve. Select the main reason.</p>
             </div>
@@ -99,7 +99,7 @@ export default function MoveOutRequestFlow({ actions, onSuccess, onBack }) {
                 <button key={r.value} onClick={() => setReason(r.value)}
                   className={`flex items-center gap-2 p-3 rounded-xl border text-left text-sm transition-all active:scale-[0.97] ${
                     reason === r.value
-                      ? 'border-indigo-400 bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200'
+                      ? 'border-ops-accent/400 bg-ops-accent/10 text-ops-accent ring-1 ring-indigo-200'
                       : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
                   }`}>
                   <span>{r.emoji}</span>
@@ -114,7 +114,7 @@ export default function MoveOutRequestFlow({ actions, onSuccess, onBack }) {
         {step === 2 && (
           <motion.div key="review" {...slide}>
             <div className="mb-4">
-              <Check className="w-8 h-8 text-indigo-500 mb-3" />
+              <Check className="w-8 h-8 text-ops-accent mb-3" />
               <h3 className="text-base font-semibold text-slate-800 mb-1">Review your request</h3>
               <p className="text-sm text-slate-500">Make sure everything looks right.</p>
             </div>
@@ -136,7 +136,7 @@ export default function MoveOutRequestFlow({ actions, onSuccess, onBack }) {
               value={reasonText} onChange={e => setReasonText(e.target.value)}
               placeholder="Anything else you'd like us to know? (optional)"
               rows={3}
-              className="w-full mt-4 p-3.5 rounded-xl border border-slate-200 text-sm bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 outline-none resize-none transition-all"
+              className="w-full mt-4 p-3.5 rounded-xl border border-slate-200 text-sm bg-white focus:ring-2 focus:ring-ops-accent/500/20 focus:border-ops-accent/400 outline-none resize-none transition-all"
             />
             <p className="mt-4 text-xs text-slate-400 leading-relaxed">
               After submitting, the hostel team will schedule a room inspection and calculate your final settlement.
@@ -156,13 +156,13 @@ export default function MoveOutRequestFlow({ actions, onSuccess, onBack }) {
         {step < 2 ? (
           <button onClick={() => setStep(s => s + 1)} disabled={!canNext}
             className={`flex-1 py-3 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 transition-all ${
-              canNext ? 'bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] shadow-lg shadow-indigo-600/20' : 'bg-slate-300 cursor-not-allowed'
+              canNext ? 'bg-ops-accent hover:bg-ops-accent/700 active:scale-[0.98] shadow-lg shadow-teal-600/20' : 'bg-slate-300 cursor-not-allowed'
             }`}>
             Continue <ArrowRight className="w-4 h-4" />
           </button>
         ) : (
           <button onClick={handleSubmit} disabled={actions.submitting}
-            className="flex-1 py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 active:scale-[0.98] transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-50">
+            className="flex-1 py-3 rounded-xl bg-ops-accent text-white text-sm font-semibold hover:bg-ops-accent/700 active:scale-[0.98] transition-all shadow-lg shadow-teal-600/20 disabled:opacity-50">
             {actions.submitting ? 'Submitting…' : 'Submit Request'}
           </button>
         )}

@@ -265,7 +265,7 @@ const TenantProfile = () => {
                     {isEditing && (
                         <button
                             onClick={handlePhotoPick}
-                            className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center shadow hover:bg-indigo-700"
+                            className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-ops-accent text-white flex items-center justify-center shadow hover:bg-ops-accent/700"
                         >
                             <Camera size={14} />
                         </button>
@@ -283,7 +283,7 @@ const TenantProfile = () => {
                     <h1 className="text-xl font-bold text-slate-900">{formData.name || user?.name || 'Tenant'}</h1>
                     <p className="text-sm text-slate-500">{formData.email || user?.email || 'N/A'}</p>
                     <div className="flex flex-wrap gap-2 mt-2 justify-center sm:justify-start">
-                        <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 text-xs font-semibold">Room {roomNo}</span>
+                        <span className="px-2 py-0.5 rounded-full bg-ops-accent/10 text-ops-accent text-xs font-semibold">Room {roomNo}</span>
                         <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 text-xs font-semibold">{tenantInfo?.status || 'Resident'}</span>
                     </div>
 
@@ -301,7 +301,7 @@ const TenantProfile = () => {
                     {isEditing ? (
                         <>
                             <button onClick={() => setIsEditing(false)} className="px-3 py-2 text-xs font-semibold border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50">Cancel</button>
-                            <button onClick={handleSave} className="px-3 py-2 text-xs font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 flex items-center gap-1.5" disabled={saveLoading}>
+                            <button onClick={handleSave} className="px-3 py-2 text-xs font-semibold rounded-lg bg-ops-accent text-white hover:bg-ops-accent/700 flex items-center gap-1.5" disabled={saveLoading}>
                                 {saveLoading ? 'Saving...' : 'Save'} {!saveLoading && <Save size={12} />}
                             </button>
                         </>
@@ -347,14 +347,14 @@ const TenantProfile = () => {
                     <button
                         disabled={!isEditing}
                         onClick={() => setFormData(prev => ({ ...prev, profile_type: 'tenant' }))}
-                        className={`px-4 py-2 text-sm font-semibold rounded-lg transition ${formData.profile_type === 'tenant' ? 'bg-white text-indigo-600 shadow' : 'text-slate-600'}`}
+                        className={`px-4 py-2 text-sm font-semibold rounded-lg transition ${formData.profile_type === 'tenant' ? 'bg-white text-ops-accent shadow' : 'text-slate-600'}`}
                     >
                         <span className="inline-flex items-center gap-2"><GraduationCap size={14} /> Tenant</span>
                     </button>
                     <button
                         disabled={!isEditing}
                         onClick={() => setFormData(prev => ({ ...prev, profile_type: 'work' }))}
-                        className={`px-4 py-2 text-sm font-semibold rounded-lg transition ${formData.profile_type === 'work' ? 'bg-white text-indigo-600 shadow' : 'text-slate-600'}`}
+                        className={`px-4 py-2 text-sm font-semibold rounded-lg transition ${formData.profile_type === 'work' ? 'bg-white text-ops-accent shadow' : 'text-slate-600'}`}
                     >
                         <span className="inline-flex items-center gap-2"><Briefcase size={14} /> Work</span>
                     </button>
@@ -419,7 +419,7 @@ const InfoField = ({ label, value, icon, isEditable, onChange, type = "text", op
                     <select
                         value={value || ''}
                         onChange={onChange}
-                        className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all text-sm font-medium text-slate-900"
+                        className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-ops-accent/500/10 focus:border-ops-accent/500 outline-none transition-all text-sm font-medium text-slate-900"
                     >
                         <option value="">{selectPlaceholder}</option>
                         {options.map((option) => (
@@ -433,7 +433,7 @@ const InfoField = ({ label, value, icon, isEditable, onChange, type = "text", op
                         type={type}
                         value={value || ''}
                         onChange={onChange}
-                        className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all text-sm font-medium text-slate-900"
+                        className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-ops-accent/500/10 focus:border-ops-accent/500 outline-none transition-all text-sm font-medium text-slate-900"
                     />
                 )}
             </div>

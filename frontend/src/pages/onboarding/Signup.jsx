@@ -123,7 +123,7 @@ const Signup = () => {
 
         <p className="mt-8 text-center text-sm text-slate-500">
           Already have an account?{' '}
-          <Link to="/login" className="text-purple-600 font-semibold hover:underline">
+          <Link to="/login" className="text-ops-accent font-semibold hover:underline">
             Login
           </Link>
         </p>

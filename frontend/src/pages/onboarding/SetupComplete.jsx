@@ -29,7 +29,7 @@ const SetupComplete = () => {
         <motion.div 
           animate={{ rotate: 360 }}
           transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-          className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-purple-50 rounded-full opacity-50 blur-3xl"
+          className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-ops-accent/10 rounded-full opacity-50 blur-3xl"
         />
         <motion.div 
           animate={{ rotate: -360 }}

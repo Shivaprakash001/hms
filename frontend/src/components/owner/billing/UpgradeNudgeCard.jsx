@@ -18,17 +18,17 @@ export default function UpgradeNudgeCard({ overflow, onUpgrade, upgrading }) {
   const isViolet = details.color === 'violet';
   const baseClass = isViolet
     ? 'bg-violet-50 border-violet-200 text-violet-900'
-    : 'bg-indigo-50 border-indigo-200 text-indigo-900';
+    : 'bg-ops-accent/10 border-ops-accent/200 text-indigo-900';
   const btnClass = isViolet
     ? 'bg-violet-600 hover:bg-violet-700 text-white'
-    : 'bg-indigo-600 hover:bg-indigo-700 text-white';
-  const subtleClass = isViolet ? 'text-violet-600' : 'text-indigo-600';
+    : 'bg-ops-accent hover:bg-ops-accent/700 text-white';
+  const subtleClass = isViolet ? 'text-violet-600' : 'text-ops-accent';
 
   return (
     <div className={`rounded-2xl border p-5 ${baseClass}`}>
       <div className="flex items-start gap-3">
         <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-          isViolet ? 'bg-violet-100' : 'bg-indigo-100'
+          isViolet ? 'bg-violet-100' : 'bg-ops-accent/15'
         }`}>
           <TrendingUp size={15} className={subtleClass} />
         </div>
@@ -43,13 +43,13 @@ export default function UpgradeNudgeCard({ overflow, onUpgrade, upgrading }) {
       )}
 
       <div className="mt-4 grid grid-cols-2 gap-2 text-center text-xs">
-        <div className={`rounded-xl py-2 px-3 ${isViolet ? 'bg-violet-100' : 'bg-indigo-100'}`}>
+        <div className={`rounded-xl py-2 px-3 ${isViolet ? 'bg-violet-100' : 'bg-ops-accent/15'}`}>
           <p className={`font-bold text-sm ${subtleClass}`}>
             ₹{Math.round(monthly_overflow_cost / 100).toLocaleString('en-IN')}/mo
           </p>
           <p className="text-slate-500 text-[10px] mt-0.5">Overflow cost now</p>
         </div>
-        <div className={`rounded-xl py-2 px-3 ${isViolet ? 'bg-violet-100' : 'bg-indigo-100'}`}>
+        <div className={`rounded-xl py-2 px-3 ${isViolet ? 'bg-violet-100' : 'bg-ops-accent/15'}`}>
           <p className={`font-bold text-sm ${subtleClass}`}>
             +₹{Math.round(plan_price_gap / 100).toLocaleString('en-IN')}/mo
           </p>

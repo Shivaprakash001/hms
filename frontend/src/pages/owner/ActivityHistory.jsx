@@ -80,18 +80,18 @@ const ActivityHistory = () => {
             <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="relative group">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-ops-accent transition-colors" size={18} />
                         <input
                             type="text"
                             placeholder="Search by tenant, room, or detail..."
-                            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all"
+                            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-ops-accent/100 focus:border-ops-accent/400 transition-all"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
                     </div>
                     <div className="flex gap-2">
                         <select
-                            className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100 cursor-pointer"
+                            className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-ops-accent/100 cursor-pointer"
                             value={typeFilter}
                             onChange={(e) => setTypeFilter(e.target.value)}
                         >
@@ -111,14 +111,14 @@ const ActivityHistory = () => {
                     <div className="flex items-center gap-2 w-full sm:w-auto">
                         <input
                             type="date"
-                            className="flex-1 sm:w-auto px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                            className="flex-1 sm:w-auto px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-600 focus:outline-none focus:ring-2 focus:ring-ops-accent/100"
                             value={dateFilter.start}
                             onChange={(e) => setDateFilter((prev) => ({ ...prev, start: e.target.value }))}
                         />
                         <span className="text-slate-300">to</span>
                         <input
                             type="date"
-                            className="flex-1 sm:w-auto px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                            className="flex-1 sm:w-auto px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-600 focus:outline-none focus:ring-2 focus:ring-ops-accent/100"
                             value={dateFilter.end}
                             onChange={(e) => setDateFilter((prev) => ({ ...prev, end: e.target.value }))}
                         />
@@ -147,7 +147,7 @@ const ActivityHistory = () => {
                             key={act.id}
                             className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all group flex items-center gap-4"
                         >
-                            <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 bg-indigo-50 text-indigo-600 group-hover:scale-105 transition-transform">
+                            <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 bg-ops-accent/10 text-ops-accent group-hover:scale-105 transition-transform">
                                 {getTypeIcon(act.event_type)}
                             </div>
                             <div className="flex-1 min-w-0">
@@ -157,7 +157,7 @@ const ActivityHistory = () => {
                                         {formatDate(act.event_at, preferences, '')}
                                     </span>
                                 </div>
-                                <p className="text-sm text-indigo-600 font-semibold mb-1 flex items-center gap-1.5">
+                                <p className="text-sm text-ops-accent font-semibold mb-1 flex items-center gap-1.5">
                                     {act.title || act.event_type}
                                     <ChevronRight size={14} className="text-slate-300" />
                                 </p>

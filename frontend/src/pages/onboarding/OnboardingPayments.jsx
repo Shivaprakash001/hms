@@ -95,7 +95,7 @@ export default function OnboardingPayments() {
             value={upiId}
             onChange={e => { setUpiId(e.target.value); setError(''); }}
             placeholder="yourname@upi"
-            className={`w-full px-4 py-3.5 rounded-xl border bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all ${error ? 'border-red-400' : 'border-slate-200'}`}
+            className={`w-full px-4 py-3.5 rounded-xl border bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-ops-accent/500 transition-all ${error ? 'border-red-400' : 'border-slate-200'}`}
           />
           {error && <p className="mt-1 text-xs text-red-500 font-medium">{error}</p>}
         </div>
@@ -110,9 +110,9 @@ export default function OnboardingPayments() {
       </div>
 
       {/* Coming soon note */}
-      <div className="p-4 bg-gradient-to-r from-indigo-50 to-violet-50 border border-indigo-100 rounded-2xl">
-        <p className="text-xs font-black text-indigo-700 mb-1">🚀 PhonePe Integration (Starter plan)</p>
-        <p className="text-xs text-indigo-600 font-medium">
+      <div className="p-4 bg-gradient-to-r from-indigo-50 to-violet-50 border border-ops-accent/100 rounded-2xl">
+        <p className="text-xs font-black text-ops-accent mb-1">🚀 PhonePe Integration (Starter plan)</p>
+        <p className="text-xs text-ops-accent font-medium">
           Upgrade to enable automated payment links, instant settlements, and full reconciliation.
         </p>
       </div>
@@ -135,7 +135,7 @@ export default function OnboardingPayments() {
           onClick={handleSave}
           disabled={saving}
           id="onboarding-payments-continue"
-          className="w-full flex items-center justify-center gap-2 py-4 px-6 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-black rounded-2xl shadow-2xl shadow-indigo-600/25 transition-all text-base"
+          className="w-full flex items-center justify-center gap-2 py-4 px-6 bg-ops-accent hover:bg-ops-accent/700 disabled:opacity-60 text-white font-black rounded-2xl shadow-2xl shadow-teal-600/25 transition-all text-base"
         >
           {saving ? <Loader2 size={18} className="animate-spin" /> : <>Back to Checklist <ArrowRight size={18} /></>}
         </motion.button>

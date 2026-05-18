@@ -36,7 +36,7 @@ export default function OwnerFinanceTransfers() {
         <div>
           <Link
             to="/dashboard/finance"
-            className="mb-2 inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 transition hover:text-indigo-600"
+            className="mb-2 inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 transition hover:text-ops-accent"
           >
             <ArrowLeft size={14} />
             Back to Finance

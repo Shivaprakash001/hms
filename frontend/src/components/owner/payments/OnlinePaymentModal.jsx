@@ -126,8 +126,8 @@ const OnlinePaymentModal = ({ isOpen, onClose, obligation, onSettled }) => {
                         </div>
 
                         <div className="space-y-4 p-6">
-                            <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-4">
-                                <p className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-500">Payable Amount</p>
+                            <div className="rounded-2xl border border-ops-accent/100 bg-ops-accent/10 p-4">
+                                <p className="text-xs font-bold uppercase tracking-[0.2em] text-ops-accent">Payable Amount</p>
                                 <p className="mt-2 text-3xl font-black text-slate-900">{formatCurrency(amount, preferences)}</p>
                                 <p className="mt-1 text-sm text-slate-500">Rent Entry: {obligation.obligationId}</p>
                             </div>
@@ -152,7 +152,7 @@ const OnlinePaymentModal = ({ isOpen, onClose, obligation, onSettled }) => {
                                         type="button"
                                         onClick={handleCreateIntent}
                                         disabled={loading}
-                                        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-4 py-4 font-bold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                                        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-ops-accent px-4 py-4 font-bold text-white hover:bg-ops-accent/700 disabled:cursor-not-allowed disabled:bg-slate-300"
                                     >
                                         {loading ? <Loader2 size={18} className="animate-spin" /> : <Smartphone size={18} />}
                                         {loading ? 'Starting checkout...' : 'Start PhonePe Checkout'}
@@ -209,7 +209,7 @@ const OnlinePaymentModal = ({ isOpen, onClose, obligation, onSettled }) => {
                                                     rel="noreferrer"
                                                     className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold ${
                                                         attempt.upi_intent_url
-                                                            ? 'bg-indigo-600 text-white hover:bg-indigo-500'
+                                                            ? 'bg-ops-accent text-white hover:bg-ops-accent'
                                                             : 'bg-slate-100 text-slate-400 pointer-events-none'
                                                     }`}
                                                 >

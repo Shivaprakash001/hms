@@ -125,7 +125,7 @@ export default function ManageTenants() {
                         </button>
                         <button
                             onClick={() => setShowInviteModal(true)}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-semibold text-sm transition-all flex items-center gap-2 shadow-lg shadow-indigo-600/20 active:scale-95"
+                            className="bg-ops-accent hover:bg-ops-accent/700 text-white px-4 py-2.5 rounded-xl font-semibold text-sm transition-all flex items-center gap-2 shadow-lg shadow-teal-600/20 active:scale-95"
                         >
                             <Plus size={18} />
                             Invite Tenant
@@ -208,13 +208,13 @@ export default function ManageTenants() {
                 {/* Search & Toggle */}
                 <div className="flex flex-col md:flex-row gap-4 items-center">
                     <div className="relative flex-1 group w-full">
-                        <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={20} />
+                        <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-ops-accent transition-colors" size={20} />
                         <input
                             type="text"
                             placeholder="Search by name, room, roll no, or phone..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-14 pr-6 py-4 bg-white border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-50 focus:border-indigo-200 outline-none transition-all text-slate-700 font-medium shadow-sm placeholder:text-slate-400"
+                            className="w-full pl-14 pr-6 py-4 bg-white border border-slate-200 rounded-2xl focus:ring-4 focus:ring-ops-accent/50 focus:border-ops-accent/200 outline-none transition-all text-slate-700 font-medium shadow-sm placeholder:text-slate-400"
                         />
                     </div>
                     <button

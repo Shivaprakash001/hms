@@ -147,7 +147,7 @@ const TenantHistoryModal = ({ isOpen, onClose, tenantId, tenantName, hostelId })
                                                     {payment.status === 'paid' && (
                                                         <button
                                                             onClick={() => handleDownloadReceipt(payment.id)}
-                                                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                                            className="p-2 text-slate-400 hover:text-ops-accent hover:bg-ops-accent/10 rounded-lg transition-colors"
                                                             title="Download Receipt"
                                                         >
                                                             <Download size={18} />

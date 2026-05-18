@@ -9,8 +9,8 @@ const features = [
   {
     title: "Rent Automation",
     description: "Automated collection and reminders",
-    icon: <Zap className="w-6 h-6 text-purple-600" />,
-    color: "bg-purple-50"
+    icon: <Zap className="w-6 h-6 text-ops-accent" />,
+    color: "bg-ops-accent/10"
   },
   {
     title: "Tenant Management",
@@ -38,14 +38,14 @@ const WelcomeIntro = () => {
   return (
     <OnboardingLayout>
       <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 p-8 md:p-12 overflow-hidden relative">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-purple-50 rounded-bl-full -mr-8 -mt-8 opacity-50" />
+        <div className="absolute top-0 right-0 w-32 h-32 bg-ops-accent/10 rounded-bl-full -mr-8 -mt-8 opacity-50" />
         
         <div className="relative z-10 text-center mb-10">
           <motion.div
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ duration: 0.5 }}
-            className="inline-flex items-center gap-2 bg-purple-50 text-purple-700 px-4 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wider mb-6"
+            className="inline-flex items-center gap-2 bg-ops-accent/10 text-purple-700 px-4 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wider mb-6"
           >
             <Sparkles className="w-3 h-3" />
             Quick Setup

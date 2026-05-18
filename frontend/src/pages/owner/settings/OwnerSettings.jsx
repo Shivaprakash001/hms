@@ -82,7 +82,7 @@ function SectionCard({ title, description, children, icon: Icon }) {
         >
             <div className="flex items-center gap-4 mb-8">
                 {Icon && (
-                    <div className="w-12 h-12 bg-purple-50 rounded-2xl flex items-center justify-center text-purple-600 shadow-sm">
+                    <div className="w-12 h-12 bg-ops-accent/10 rounded-2xl flex items-center justify-center text-ops-accent shadow-sm">
                         <Icon size={22} />
                     </div>
                 )}
@@ -127,7 +127,7 @@ function SaveButton({ dirty, saving, saved }) {
             disabled={!dirty || saving}
             className={`h-12 px-8 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 ${
                 dirty 
-                ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100' 
+                ? 'bg-ops-accent text-white shadow-xl shadow-teal-100' 
                 : 'bg-slate-100 text-slate-400 cursor-not-allowed'
             }`}
         >
@@ -316,7 +316,7 @@ export default function OwnerSettings() {
 
     if (loading) return (
         <div className="flex flex-col items-center justify-center p-20 gap-4">
-            <div className="w-12 h-12 bg-purple-50 rounded-2xl flex items-center justify-center text-purple-600 animate-pulse">
+            <div className="w-12 h-12 bg-ops-accent/10 rounded-2xl flex items-center justify-center text-ops-accent animate-pulse">
                 <RefreshCw size={24} className="animate-spin" />
             </div>
             <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em]">Syncing Preferences...</p>
@@ -360,11 +360,11 @@ export default function OwnerSettings() {
                                             onClick={() => setActiveSection(section.id)}
                                             className={`w-full flex items-center gap-4 px-6 py-4 rounded-3xl transition-all duration-300 group ${
                                                 isActive 
-                                                ? 'bg-white border border-slate-100 shadow-xl shadow-slate-100/50 text-purple-600 font-black' 
+                                                ? 'bg-white border border-slate-100 shadow-xl shadow-slate-100/50 text-ops-accent font-black' 
                                                 : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
                                             }`}
                                         >
-                                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all ${isActive ? 'bg-purple-50 text-purple-600' : 'bg-slate-50 text-slate-400 group-hover:bg-white shadow-sm'}`}>
+                                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all ${isActive ? 'bg-ops-accent/10 text-ops-accent' : 'bg-slate-50 text-slate-400 group-hover:bg-white shadow-sm'}`}>
                                                 <Icon size={18} />
                                             </div>
                                             <div className="text-left">

@@ -13,7 +13,7 @@ const EVENT_ICONS = {
 const STATUS_COPY = {
   REQUESTED: {
     label: 'Request Submitted',
-    color: 'bg-indigo-100 text-indigo-700',
+    color: 'bg-ops-accent/15 text-ops-accent',
     hint: 'Request was successfully sent to the owner and is waiting for approval.',
     reassurance: 'To get things done faster, contact the hostel owner and make sure your payments are all set.',
   },
@@ -107,13 +107,13 @@ export default function MoveOutTracker({ data, actions, refetch }) {
           <div className="flex items-center justify-between relative">
             <div className="absolute top-4 left-[10%] right-[10%] h-0.5 bg-slate-200" />
             {steps.map((s, i) => {
-              const filled = s.completed ? 'bg-indigo-500 text-white' : s.active ? 'bg-white border-2 border-indigo-500 text-indigo-600' : 'bg-slate-100 text-slate-400';
+              const filled = s.completed ? 'bg-ops-accent text-white' : s.active ? 'bg-white border-2 border-ops-accent/500 text-ops-accent' : 'bg-slate-100 text-slate-400';
               return (
                 <div key={i} className="flex flex-col items-center z-10 flex-1">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${filled} ${s.active ? 'ring-4 ring-indigo-500/10' : ''}`}>
                     {s.completed ? '✓' : s.icon}
                   </div>
-                  <span className={`text-[10px] mt-1.5 font-medium text-center leading-tight ${s.completed || s.active ? 'text-indigo-600' : 'text-slate-400'}`}>{s.label}</span>
+                  <span className={`text-[10px] mt-1.5 font-medium text-center leading-tight ${s.completed || s.active ? 'text-ops-accent' : 'text-slate-400'}`}>{s.label}</span>
                 </div>
               );
             })}
@@ -157,7 +157,7 @@ export default function MoveOutTracker({ data, actions, refetch }) {
           {canDispute && !showDispute && (
             <div className="px-5 pb-4 border-t border-slate-100 pt-3">
               <button onClick={() => setShowDispute(true)}
-                className="text-xs text-slate-500 hover:text-indigo-600 transition-colors">
+                className="text-xs text-slate-500 hover:text-ops-accent transition-colors">
                 Something doesn't look right? <span className="underline underline-offset-2">Raise a concern</span>
               </button>
             </div>
@@ -187,13 +187,13 @@ export default function MoveOutTracker({ data, actions, refetch }) {
                 {events.map((ev, i) => (
                   <div key={i} className="relative">
                     <div className={`absolute -left-[25px] top-0.5 w-3 h-3 rounded-full border-2 border-white ${
-                      ev.type === 'COMPLETED' ? 'bg-emerald-500' : ev.type === 'DISPUTE' ? 'bg-amber-400' : 'bg-indigo-500'
+                      ev.type === 'COMPLETED' ? 'bg-emerald-500' : ev.type === 'DISPUTE' ? 'bg-amber-400' : 'bg-ops-accent'
                     }`} />
                     <p className="text-sm font-medium text-slate-700">{EVENT_ICONS[ev.type] || '📌'} {ev.title}</p>
                     {ev.detail && <p className="text-xs text-slate-500 mt-0.5">{ev.detail}</p>}
                     {/* Action-oriented: what happens next */}
                     {NEXT_ACTION[ev.type] && i === events.length - 1 && (
-                      <p className="text-xs text-indigo-500 mt-1 font-medium">→ {NEXT_ACTION[ev.type]}</p>
+                      <p className="text-xs text-ops-accent mt-1 font-medium">→ {NEXT_ACTION[ev.type]}</p>
                     )}
                     <p className="text-[10px] text-slate-400 mt-0.5">
                       {new Date(ev.timestamp).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} · {new Date(ev.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
@@ -221,7 +221,7 @@ export default function MoveOutTracker({ data, actions, refetch }) {
           <h3 className="text-lg font-semibold text-slate-800 mb-1">Thank you for staying with us</h3>
           <p className="text-sm text-slate-500 mb-6">We wish you all the best ahead.</p>
           <button onClick={() => setShowFeedback(true)}
-            className="text-sm text-indigo-600 font-medium hover:underline">
+            className="text-sm text-ops-accent font-medium hover:underline">
             Before you go, share your feedback →
           </button>
         </motion.div>

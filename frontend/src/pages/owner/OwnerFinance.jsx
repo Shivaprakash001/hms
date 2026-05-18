@@ -86,7 +86,7 @@ export default function OwnerFinance() {
         </div>
         <Link
           to="/dashboard/finance/transfers"
-          className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:border-indigo-300 hover:text-indigo-600"
+          className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:border-ops-accent/300 hover:text-ops-accent"
         >
           View transfers
           <ArrowRight size={16} />

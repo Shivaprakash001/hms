@@ -30,7 +30,7 @@ export default function DisputeFlow({ requestId, actions, onClose }) {
         {TYPES.map(t => (
           <button key={t.value} onClick={() => setType(t.value)}
             className={`w-full text-left p-3 rounded-xl border text-sm transition-all ${
-              type === t.value ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-600 hover:border-slate-300'
+              type === t.value ? 'border-ops-accent/400 bg-ops-accent/10 text-ops-accent' : 'border-slate-200 text-slate-600 hover:border-slate-300'
             }`}>
             {t.label}
           </button>
@@ -40,11 +40,11 @@ export default function DisputeFlow({ requestId, actions, onClose }) {
       <textarea value={description} onChange={e => setDescription(e.target.value)}
         placeholder="Please describe your concern in detail…"
         rows={3}
-        className="w-full p-3 rounded-xl border border-slate-200 text-sm bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 outline-none resize-none transition-all mb-4"
+        className="w-full p-3 rounded-xl border border-slate-200 text-sm bg-white focus:ring-2 focus:ring-ops-accent/500/20 focus:border-ops-accent/400 outline-none resize-none transition-all mb-4"
       />
 
       <button onClick={handleSubmit} disabled={!type || !description.trim() || actions.submitting}
-        className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+        className="w-full py-3 rounded-xl bg-ops-accent text-white text-sm font-semibold hover:bg-ops-accent/700 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed">
         {actions.submitting ? 'Submitting…' : 'Submit Concern'}
       </button>
     </div>

@@ -45,7 +45,7 @@ export default function FeedbackForm({ requestId, actions, refetch }) {
                 <button key={n} onClick={() => setRatings(p => ({ ...p, [d.key]: n }))}
                   className={`flex-1 h-9 rounded-lg text-base transition-all active:scale-95 ${
                     (ratings[d.key] || 0) >= n
-                      ? 'bg-indigo-100 border-indigo-300 border'
+                      ? 'bg-ops-accent/15 border-ops-accent/300 border'
                       : 'bg-slate-50 border border-slate-200'
                   }`}>
                   {STARS[n - 1]}
@@ -63,7 +63,7 @@ export default function FeedbackForm({ requestId, actions, refetch }) {
             <button key={String(v)} onClick={() => setRecommend(v)}
               className={`flex-1 py-2.5 rounded-xl border text-sm font-medium transition-all active:scale-[0.97] ${
                 recommend === v
-                  ? 'border-indigo-400 bg-indigo-50 text-indigo-700'
+                  ? 'border-ops-accent/400 bg-ops-accent/10 text-ops-accent'
                   : 'border-slate-200 text-slate-600 hover:border-slate-300'
               }`}>
               {v ? '👍 Yes' : '👎 No'}
@@ -75,11 +75,11 @@ export default function FeedbackForm({ requestId, actions, refetch }) {
       <textarea value={text} onChange={e => setText(e.target.value)}
         placeholder="Any suggestions? (optional)"
         rows={2}
-        className="w-full p-3 rounded-xl border border-slate-200 text-sm bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 outline-none resize-none transition-all mb-4"
+        className="w-full p-3 rounded-xl border border-slate-200 text-sm bg-white focus:ring-2 focus:ring-ops-accent/500/20 focus:border-ops-accent/400 outline-none resize-none transition-all mb-4"
       />
 
       <button onClick={handleSubmit} disabled={actions.submitting}
-        className="w-full py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 active:scale-[0.98] transition-all disabled:opacity-50">
+        className="w-full py-3 rounded-xl bg-ops-accent text-white text-sm font-semibold hover:bg-ops-accent/700 active:scale-[0.98] transition-all disabled:opacity-50">
         {actions.submitting ? 'Sending…' : 'Submit Feedback'}
       </button>
     </div>

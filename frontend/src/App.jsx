@@ -21,7 +21,8 @@ const CompleteProfile = lazy(() => import('./pages/auth/CompleteProfile.jsx'));
 const GoogleCallback  = lazy(() => import('./pages/auth/GoogleCallback.jsx').then(m => ({ default: m.GoogleCallback })));
 
 // ── Owner pages — code-split per route ───────────────────────────────────────
-const OwnerDashboard    = lazy(() => import('./pages/owner/OwnerDashboard.jsx'));
+const OwnerDashboardLegacy = lazy(() => import('./pages/owner/OwnerDashboard.jsx'));
+const OwnerDashboard       = lazy(() => import('./pages/owner/OwnerDashboardV2.jsx'));
 const ManageTenants     = lazy(() => import('./pages/owner/ManageTenants.jsx'));
 const ManageRooms       = lazy(() => import('./pages/owner/ManageRooms.jsx'));
 const Payments          = lazy(() => import('./pages/owner/Payments.jsx'));
@@ -47,8 +48,8 @@ const TenantMoveOut       = lazy(() => import('./pages/tenant/TenantMoveOut.jsx'
 
 // Minimal inline fallback — no extra component needed
 const PageLoader = () => (
-  <div className="flex items-center justify-center min-h-screen bg-slate-50">
-    <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+  <div className="flex items-center justify-center min-h-screen bg-ops-surface">
+    <div className="w-8 h-8 border-4 border-ops-accent border-t-transparent rounded-full animate-spin" />
   </div>
 );
 
@@ -98,7 +99,9 @@ function App() {
               {/* Hostel Workspace Mode */}
               <Route path="/dashboard/:hostelId" element={<HostelContextProvider><HostelWorkspaceLayout /></HostelContextProvider>}>
                 <Route index element={<Navigate to="overview" replace />} />
-                <Route path="overview"   element={<OwnerDashboard />} />
+                <Route path="overview" element={<OwnerDashboard />} />
+                <Route path="overview-legacy" element={<OwnerDashboardLegacy />} />
+                <Route path="overview-v2" element={<Navigate to="overview" replace />} />
                 <Route path="tenants"    element={<ManageTenants />} />
                 <Route path="tenants/:id" element={<TenantProfilePage />} />
                 <Route path="bulk-import" element={<BulkImport />} />

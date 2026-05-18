@@ -193,7 +193,7 @@ export default function BulkImport() {
                                 className={`flex-1 py-3 px-5 rounded-xl font-bold text-sm transition-all shadow-lg flex items-center justify-center gap-2 ${
                                     !hostelId || isGeneratingPrompt
                                         ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                                        : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/20 active:scale-95'
+                                        : 'bg-ops-accent hover:bg-ops-accent/700 text-white shadow-teal-600/20 active:scale-95'
                                 }`}
                             >
                                 {isGeneratingPrompt ? (

@@ -202,8 +202,8 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, obligationIds = [
 
                         <div className="space-y-5 p-6">
                             {/* Amount Display */}
-                            <div className="rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3">
-                                <p className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-500">Total Due</p>
+                            <div className="rounded-2xl border border-ops-accent/100 bg-ops-accent/10 px-4 py-3">
+                                <p className="text-xs font-bold uppercase tracking-[0.2em] text-ops-accent">Total Due</p>
                                 <p className="mt-2 text-3xl font-black text-slate-900">{formatCurrency(Number(amount || 0), preferences)}</p>
                             </div>
 
@@ -257,7 +257,7 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, obligationIds = [
                                         type="button"
                                         onClick={handleCreateIntent}
                                         disabled={loading || Number(amount || 0) <= 0}
-                                        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-4 py-4 font-bold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                                        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-ops-accent px-4 py-4 font-bold text-white hover:bg-ops-accent/700 disabled:cursor-not-allowed disabled:bg-slate-300"
                                     >
                                         {loading ? <Loader2 size={18} className="animate-spin" /> : <ShieldCheck size={18} />}
                                         {loading ? 'Starting checkout...' : 'Continue to PhonePe Checkout'}
@@ -277,7 +277,7 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, obligationIds = [
                                         {/* Open Payment App */}
                                         <button
                                             onClick={handleOpenUpi}
-                                            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white hover:bg-indigo-500"
+                                            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-ops-accent px-4 py-3 text-sm font-bold text-white hover:bg-ops-accent"
                                         >
                                             <Smartphone size={16} />
                                             Open Payment App
@@ -327,7 +327,7 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, obligationIds = [
                                             value={upiReference}
                                             onChange={(e) => setUpiReference(e.target.value)}
                                             placeholder="e.g. T2304260142301234"
-                                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-mono text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-mono text-slate-900 placeholder-slate-400 focus:border-ops-accent/500 focus:outline-none focus:ring-2 focus:ring-ops-accent/200"
                                             autoFocus
                                         />
                                         <p className="mt-2 text-xs text-slate-400">

@@ -89,7 +89,7 @@ export default function TenantScoreCard({ scoreData, loading = false, compact = 
                     <p className="text-[11px] uppercase tracking-wider text-slate-500 font-bold mb-2">Suggestions</p>
                     {scoreData.suggestions.slice(0, 2).map((item, idx) => (
                         <p key={idx} className="text-sm text-slate-700 flex items-start gap-2 mb-1 last:mb-0">
-                            <Sparkles size={14} className="text-indigo-500 mt-0.5 shrink-0" />
+                            <Sparkles size={14} className="text-ops-accent mt-0.5 shrink-0" />
                             <span>{item}</span>
                         </p>
                     ))}

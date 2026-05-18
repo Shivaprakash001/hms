@@ -51,12 +51,12 @@ function ChecklistItem({ item, done, onClick }) {
       whileTap={{ scale: 0.985 }}
       onClick={onClick}
       className={`w-full rounded-3xl border p-4 text-left shadow-sm transition ${
-        done ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-white hover:border-indigo-200'
+        done ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-white hover:border-ops-accent/200'
       }`}
     >
       <div className="flex items-start gap-4">
         <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${
-          done ? 'bg-emerald-100 text-emerald-700' : 'bg-indigo-50 text-indigo-600'
+          done ? 'bg-emerald-100 text-emerald-700' : 'bg-ops-accent/10 text-ops-accent'
         }`}>
           {done ? <CheckCircle2 size={22} /> : <Icon size={22} />}
         </div>
@@ -188,7 +188,7 @@ export default function OnboardingChecklist() {
         <button
           type="button"
           onClick={openDashboard}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-4 text-base font-black text-white shadow-2xl shadow-indigo-600/25 active:scale-[0.98]"
+          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-4 text-base font-black text-white shadow-2xl shadow-teal-600/25 active:scale-[0.98]"
         >
           <LayoutDashboard size={18} /> Open Owner Today Dashboard
         </button>

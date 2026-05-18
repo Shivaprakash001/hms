@@ -8,7 +8,7 @@ const PaymentStatsCard = ({ title, value, subtext, type = 'neutral', icon: Icon 
         success: 'bg-emerald-50 text-emerald-600 border-emerald-100',
         warning: 'bg-amber-50 text-amber-600 border-amber-100',
         neutral: 'bg-slate-50 text-slate-600 border-slate-100',
-        primary: 'bg-indigo-50 text-indigo-600 border-indigo-100',
+        primary: 'bg-ops-accent/10 text-ops-accent border-ops-accent/100',
         danger: 'bg-rose-50 text-rose-600 border-rose-100'
     };
 

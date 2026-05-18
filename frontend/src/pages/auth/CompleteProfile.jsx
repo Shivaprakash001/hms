@@ -189,8 +189,8 @@ const CompleteProfile = () => {
         <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 relative font-sans">
             {/* Soft decorative background */}
             <div className="fixed inset-0 pointer-events-none flex justify-center items-center overflow-hidden">
-                <div className="absolute top-[-10%] sm:w-[800px] sm:h-[800px] w-[400px] h-[400px] bg-indigo-50/50 rounded-full blur-3xl mix-blend-multiply" />
-                <div className="absolute bottom-[-10%] sm:w-[600px] sm:h-[600px] w-[300px] h-[300px] bg-purple-50/50 rounded-full blur-3xl mix-blend-multiply" />
+                <div className="absolute top-[-10%] sm:w-[800px] sm:h-[800px] w-[400px] h-[400px] bg-ops-accent/10/50 rounded-full blur-3xl mix-blend-multiply" />
+                <div className="absolute bottom-[-10%] sm:w-[600px] sm:h-[600px] w-[300px] h-[300px] bg-ops-accent/10/50 rounded-full blur-3xl mix-blend-multiply" />
             </div>
 
             <main className="w-full max-w-[500px] relative z-10 pt-4 pb-12">
@@ -211,7 +211,7 @@ const CompleteProfile = () => {
                     <div className="flex justify-center items-center gap-3 mb-8">
                         {[1, 2, 3].map((step) => (
                             <div key={step} className="flex flex-col flex-1 max-w-[40px] gap-1.5 items-center">
-                                <div className={`h-1.5 w-full rounded-full transition-all duration-300 ${step <= currentStep ? 'bg-indigo-600' : 'bg-slate-200'}`} />
+                                <div className={`h-1.5 w-full rounded-full transition-all duration-300 ${step <= currentStep ? 'bg-ops-accent' : 'bg-slate-200'}`} />
                             </div>
                         ))}
                     </div>
@@ -236,7 +236,7 @@ const CompleteProfile = () => {
                                     </div>
                                     <h2 className="text-2xl font-black text-slate-900 mb-3">You're all set!</h2>
                                     <p className="text-slate-500 font-medium mb-8">Your profile has been built securely. Redirecting you to your dashboard...</p>
-                                    <Loader2 className="w-8 h-8 text-indigo-500 animate-spin mx-auto" />
+                                    <Loader2 className="w-8 h-8 text-ops-accent animate-spin mx-auto" />
                                 </motion.div>
                             ) : (
                                 <motion.div key={`step-${currentStep}`} variants={SlideVariant} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.2 }}>
@@ -269,7 +269,7 @@ const CompleteProfile = () => {
                                                             <p className="text-xs text-slate-400">JPG/PNG/WEBP, up to 2MB</p>
                                                         </div>
                                                         <Input type="file" className="hidden" accept="image/jpeg,image/png,image/webp" onChange={handleProfilePhotoChange} />
-                                                        <span className="text-xs font-semibold text-indigo-600">Choose</span>
+                                                        <span className="text-xs font-semibold text-ops-accent">Choose</span>
                                                     </label>
 
                                                 </div>
@@ -286,7 +286,7 @@ const CompleteProfile = () => {
                                                     </div>
                                                     <div>
                                                         <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 block">Gender</Label>
-                                                        <select name="gender" value={formData.gender} onChange={handleChange} className="flex h-12 w-full rounded-md border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500">
+                                                        <select name="gender" value={formData.gender} onChange={handleChange} className="flex h-12 w-full rounded-md border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ops-accent/500">
                                                             <option value="" disabled>Select</option>
                                                             <option value="Male">Male</option>
                                                             <option value="Female">Female</option>
@@ -306,7 +306,7 @@ const CompleteProfile = () => {
 
                                                 <div>
                                                     <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 block">Permanent Home Address</Label>
-                                                    <textarea name="permanent_address" value={formData.permanent_address} onChange={handleChange} className="flex w-full rounded-md border border-slate-200 bg-slate-50/50 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 resize-none h-20" placeholder="Flat No, Street, City, State..." />
+                                                    <textarea name="permanent_address" value={formData.permanent_address} onChange={handleChange} className="flex w-full rounded-md border border-slate-200 bg-slate-50/50 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-ops-accent/500 resize-none h-20" placeholder="Flat No, Street, City, State..." />
                                                 </div>
                                             </div>
                                         </div>
@@ -325,7 +325,7 @@ const CompleteProfile = () => {
                                                 <button
                                                     type="button"
                                                     onClick={() => setFormData(p => ({ ...p, profile_type: 'STUDENT' }))}
-                                                    className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-2 ${formData.profile_type === 'STUDENT' ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-100 bg-white hover:bg-slate-50 text-slate-500'}`}
+                                                    className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-2 ${formData.profile_type === 'STUDENT' ? 'border-ops-accent/600 bg-ops-accent/10 text-ops-accent' : 'border-slate-100 bg-white hover:bg-slate-50 text-slate-500'}`}
                                                 >
                                                     <GraduationCap size={32} />
                                                     <span className="font-bold text-sm">Student</span>
@@ -333,7 +333,7 @@ const CompleteProfile = () => {
                                                 <button
                                                     type="button"
                                                     onClick={() => setFormData(p => ({ ...p, profile_type: 'WORKING_PROFESSIONAL' }))}
-                                                    className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-2 ${formData.profile_type === 'WORKING_PROFESSIONAL' ? 'border-purple-600 bg-purple-50 text-purple-700' : 'border-slate-100 bg-white hover:bg-slate-50 text-slate-500'}`}
+                                                    className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-2 ${formData.profile_type === 'WORKING_PROFESSIONAL' ? 'border-purple-600 bg-ops-accent/10 text-purple-700' : 'border-slate-100 bg-white hover:bg-slate-50 text-slate-500'}`}
                                                 >
                                                     <Briefcase size={32} />
                                                     <span className="font-bold text-sm">Working</span>
@@ -411,7 +411,7 @@ const CompleteProfile = () => {
                                                 Continue <ChevronRight size={18} className="ml-1" />
                                             </Button>
                                         ) : (
-                                            <Button type="button" disabled={isLoading} className="h-12 px-8 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-600/20 font-bold w-full sm:w-auto" onClick={handleSubmitComplete}>
+                                            <Button type="button" disabled={isLoading} className="h-12 px-8 rounded-xl bg-ops-accent hover:bg-ops-accent/700 text-white shadow-lg shadow-teal-600/20 font-bold w-full sm:w-auto" onClick={handleSubmitComplete}>
                                                 {isLoading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Complete Registration'}
                                             </Button>
                                         )}

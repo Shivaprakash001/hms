@@ -75,7 +75,7 @@ const Pricing = () => {
                 </div>
               )}
               
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-6 ${plan.recommended ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-600'}`}>
+              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-6 ${plan.recommended ? 'bg-purple-100 text-ops-accent' : 'bg-slate-100 text-slate-600'}`}>
                 {plan.icon}
               </div>
 
@@ -88,7 +88,7 @@ const Pricing = () => {
               <div className="space-y-4 mb-8">
                 {plan.features.map((feature, fIdx) => (
                   <div key={fIdx} className="flex items-start gap-3">
-                    <div className={`mt-0.5 w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${plan.recommended ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-500'}`}>
+                    <div className={`mt-0.5 w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${plan.recommended ? 'bg-purple-100 text-ops-accent' : 'bg-slate-100 text-slate-500'}`}>
                       <Check className="w-3 h-3 stroke-[3]" />
                     </div>
                     <span className="text-slate-600 text-sm">{feature}</span>

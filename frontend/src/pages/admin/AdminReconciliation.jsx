@@ -18,7 +18,7 @@ const SEVERITY_META = {
 
 const STATUS_META = {
   OPEN:          { className: 'bg-slate-100 text-slate-700 border-slate-200',   label: 'Open' },
-  INVESTIGATING: { className: 'bg-indigo-50 text-indigo-700 border-indigo-200', label: 'Investigating' },
+  INVESTIGATING: { className: 'bg-ops-accent/10 text-ops-accent border-ops-accent/200', label: 'Investigating' },
   RESOLVED:      { className: 'bg-emerald-50 text-emerald-700 border-emerald-200', label: 'Resolved' },
   IGNORED:       { className: 'bg-slate-50 text-slate-500 border-slate-200',     label: 'Ignored' },
 };
@@ -60,7 +60,7 @@ function IssueRow({ issue, onTransition, isTransitioning, expanded, onToggle, pr
           <div className="flex items-center justify-end gap-2">
             <button
               onClick={() => onToggle(issue.id)}
-              className="rounded-lg border border-slate-200 p-1.5 text-slate-500 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600"
+              className="rounded-lg border border-slate-200 p-1.5 text-slate-500 transition hover:border-ops-accent/300 hover:bg-ops-accent/10 hover:text-ops-accent"
               title={expanded ? 'Hide details' : 'Show details'}
             >
               {expanded ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -69,7 +69,7 @@ function IssueRow({ issue, onTransition, isTransitioning, expanded, onToggle, pr
               <button
                 disabled={isTransitioning}
                 onClick={() => onTransition(issue.id, 'INVESTIGATING')}
-                className="rounded-lg bg-indigo-50 px-2.5 py-1.5 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100 disabled:opacity-50"
+                className="rounded-lg bg-ops-accent/10 px-2.5 py-1.5 text-xs font-bold text-ops-accent transition hover:bg-ops-accent/15 disabled:opacity-50"
               >
                 Investigate
               </button>
@@ -218,7 +218,7 @@ export default function AdminReconciliation() {
             <button
               disabled={scanMut.isPending}
               onClick={() => scanMut.mutate({ persist: false })}
-              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:border-ops-accent/300 hover:text-ops-accent disabled:opacity-50"
             >
               {scanMut.isPending ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
               Dry-run scan
@@ -226,7 +226,7 @@ export default function AdminReconciliation() {
             <button
               disabled={scanMut.isPending}
               onClick={() => scanMut.mutate({ persist: true })}
-              className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-2xl bg-ops-accent px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-ops-accent/700 disabled:opacity-50"
             >
               {scanMut.isPending ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
               Scan & persist
@@ -245,7 +245,7 @@ export default function AdminReconciliation() {
                 </div>
               </div>
               <details className="text-xs text-slate-600">
-                <summary className="cursor-pointer font-semibold text-indigo-600">Per-detector breakdown</summary>
+                <summary className="cursor-pointer font-semibold text-ops-accent">Per-detector breakdown</summary>
                 <div className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
                   {(lastScan.summary || []).map((s) => (
                     <div key={s.detector_kind} className="rounded-lg border border-slate-100 bg-slate-50 p-2">
@@ -268,7 +268,7 @@ export default function AdminReconciliation() {
               onClick={() => setSeverityFilter(severityFilter === sev ? '' : sev)}
               className={`rounded-3xl border p-5 text-left shadow-sm transition ${
                 severityFilter === sev
-                  ? 'border-indigo-300 bg-indigo-50/60 ring-2 ring-indigo-100'
+                  ? 'border-ops-accent/300 bg-ops-accent/10/60 ring-2 ring-indigo-100'
                   : 'border-slate-100 bg-white hover:border-slate-200'
               }`}
             >
@@ -310,14 +310,14 @@ export default function AdminReconciliation() {
           {(severityFilter || issueTypeFilter) && (
             <button
               onClick={() => { setSeverityFilter(''); setIssueTypeFilter(''); }}
-              className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+              className="text-xs font-semibold text-ops-accent hover:text-ops-accent"
             >
               Clear filters
             </button>
           )}
           <button
             onClick={() => issuesQ.refetch()}
-            className="ml-auto inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-indigo-300 hover:text-indigo-600"
+            className="ml-auto inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-ops-accent/300 hover:text-ops-accent"
           >
             <RefreshCw size={12} />
             Refresh

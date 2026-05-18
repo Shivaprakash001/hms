@@ -80,7 +80,7 @@ const ActivateAccount = () => {
         return (
             <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
                 <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center">
-                    <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mx-auto mb-4" />
+                    <Loader2 className="w-8 h-8 text-ops-accent animate-spin mx-auto mb-4" />
                     <h2 className="text-xl font-bold text-slate-900 mb-2">Checking activation link</h2>
                     <p className="text-slate-500">Please wait...</p>
                 </div>
@@ -133,7 +133,7 @@ const ActivateAccount = () => {
                                 <p className="text-slate-500 font-medium mb-8">
                                     Your password has been set successfully. Redirecting you to the login page...
                                 </p>
-                                <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mx-auto" />
+                                <Loader2 className="w-8 h-8 text-ops-accent animate-spin mx-auto" />
                             </motion.div>
                         ) : (
                             <motion.div key="form">
@@ -156,13 +156,13 @@ const ActivateAccount = () => {
                                         <label className="text-xs font-bold text-slate-500 ml-1 uppercase tracking-wider">New Password</label>
                                         <div className="relative group">
                                             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                                <Lock className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+                                                <Lock className="h-5 w-5 text-slate-400 group-focus-within:text-ops-accent transition-colors" />
                                             </div>
                                             <input
                                                 type={showPassword ? "text" : "password"}
                                                 value={password}
                                                 onChange={(e) => setPassword(e.target.value)}
-                                                className="block w-full pl-11 pr-11 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all"
+                                                className="block w-full pl-11 pr-11 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-ops-accent/100 focus:border-ops-accent/500 outline-none transition-all"
                                                 placeholder="••••••••"
                                                 required
                                             />
@@ -180,13 +180,13 @@ const ActivateAccount = () => {
                                         <label className="text-xs font-bold text-slate-500 ml-1 uppercase tracking-wider">Confirm Password</label>
                                         <div className="relative group">
                                             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                                <Lock className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+                                                <Lock className="h-5 w-5 text-slate-400 group-focus-within:text-ops-accent transition-colors" />
                                             </div>
                                             <input
                                                 type={showPassword ? "text" : "password"}
                                                 value={confirmPassword}
                                                 onChange={(e) => setConfirmPassword(e.target.value)}
-                                                className="block w-full pl-11 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all"
+                                                className="block w-full pl-11 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-ops-accent/100 focus:border-ops-accent/500 outline-none transition-all"
                                                 placeholder="••••••••"
                                                 required
                                             />
@@ -196,7 +196,7 @@ const ActivateAccount = () => {
                                     <button
                                         type="submit"
                                         disabled={isLoading}
-                                        className="w-full flex items-center justify-center py-4 px-4 rounded-xl shadow-lg shadow-indigo-600/25 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-all disabled:opacity-70 mt-4"
+                                        className="w-full flex items-center justify-center py-4 px-4 rounded-xl shadow-lg shadow-teal-600/25 text-sm font-bold text-white bg-ops-accent hover:bg-ops-accent/700 transition-all disabled:opacity-70 mt-4"
                                     >
                                         {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Activate Account"}
                                     </button>

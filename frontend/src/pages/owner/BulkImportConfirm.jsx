@@ -177,7 +177,7 @@ export default function BulkImportConfirm() {
                     <div className="flex gap-4">
                         <button
                             onClick={() => navigate(`/hostels/${hostelId}/tenants`)}
-                            className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-3 px-6 rounded-xl font-bold shadow-lg shadow-indigo-600/20 transition-all active:scale-95"
+                            className="flex-1 bg-ops-accent hover:bg-ops-accent/700 text-white py-3 px-6 rounded-xl font-bold shadow-lg shadow-teal-600/20 transition-all active:scale-95"
                         >
                             View Imported Tenants
                         </button>

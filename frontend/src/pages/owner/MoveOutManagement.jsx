@@ -91,7 +91,7 @@ export default function MoveOutManagement() {
           {TABS.map(t => (
             <button key={t.key} onClick={() => setTab(t.key)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
-                tab === t.key ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                tab === t.key ? 'bg-ops-accent text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}>{t.label}</button>
           ))}
         </div>
@@ -112,7 +112,7 @@ export default function MoveOutManagement() {
             {requests.map(req => (
               <button key={req.id} onClick={() => openDetail(req.id)}
                 className={`w-full text-left p-4 rounded-xl border transition-all hover:shadow-sm ${
-                  selected === req.id ? 'border-indigo-400 bg-indigo-50/50 shadow-sm' : 'border-slate-200 bg-white'
+                  selected === req.id ? 'border-ops-accent/400 bg-ops-accent/10/50 shadow-sm' : 'border-slate-200 bg-white'
                 }`}>
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-semibold text-sm text-slate-800 truncate">{req.tenant?.profiles?.name || 'Unknown'}</span>
@@ -141,7 +141,7 @@ export default function MoveOutManagement() {
             </button>
 
             {detailLoading ? (
-              <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-indigo-500" /></div>
+              <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-ops-accent" /></div>
             ) : detail ? (
               <div className="space-y-4">
                 {msg.text && (
@@ -196,7 +196,7 @@ export default function MoveOutManagement() {
                       ))}
                     </div>
                     <button onClick={() => act(() => api.post(`/move-out/requests/${selected}/inspect`, insp))} disabled={submitting}
-                      className="w-full py-2.5 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-all">
+                      className="w-full py-2.5 rounded-lg bg-ops-accent text-white text-sm font-medium hover:bg-ops-accent/700 disabled:opacity-50 transition-all">
                       {submitting ? 'Saving…' : 'Submit Inspection'}
                     </button>
                   </div>

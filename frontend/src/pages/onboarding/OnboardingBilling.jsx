@@ -19,7 +19,7 @@ function DayStepper({ id, value, onChange, label, hint }) {
         <button
           type="button"
           onClick={dec}
-          className="flex-1 py-4 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors active:scale-95"
+          className="flex-1 py-4 flex items-center justify-center text-slate-400 hover:text-ops-accent hover:bg-ops-accent/10 transition-colors active:scale-95"
         >
           <ChevronDown size={20} />
         </button>
@@ -30,7 +30,7 @@ function DayStepper({ id, value, onChange, label, hint }) {
         <button
           type="button"
           onClick={inc}
-          className="flex-1 py-4 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors active:scale-95"
+          className="flex-1 py-4 flex items-center justify-center text-slate-400 hover:text-ops-accent hover:bg-ops-accent/10 transition-colors active:scale-95"
         >
           <ChevronUp size={20} />
         </button>
@@ -47,7 +47,7 @@ function TimelinePreview({ rentDay, dueDay }) {
   const nextMonth = new Date(new Date().setMonth(new Date().getMonth() + 1)).toLocaleString('default', { month: 'long' });
 
   const events = [
-    { day: `${thisMonth} ${rentDay}`, label: '📋 Rent schedule saved', sub: 'Use this as the monthly billing date for this hostel', color: 'bg-indigo-100 text-indigo-700' },
+    { day: `${thisMonth} ${rentDay}`, label: '📋 Rent schedule saved', sub: 'Use this as the monthly billing date for this hostel', color: 'bg-ops-accent/15 text-ops-accent' },
     { day: `${shifted ? nextMonth : thisMonth} ${dueDay}`, label: '📅 Due date', sub: 'Tenants must pay by this day', color: 'bg-violet-100 text-violet-700' },
     { day: 'After due date', label: '🔔 Reminder window', sub: 'Automatic reminders unlock on Starter', color: 'bg-amber-100 text-amber-700' },
   ];
@@ -107,7 +107,7 @@ function MoneyInput({ label, value, onChange, icon: Icon, disabled = false, hint
           className={`w-full pl-11 pr-4 py-4 rounded-2xl border font-black outline-none transition-all ${
             disabled
               ? 'bg-slate-100 border-slate-200 text-slate-400'
-              : 'bg-white border-slate-200 text-slate-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100'
+              : 'bg-white border-slate-200 text-slate-900 focus:border-ops-accent/500 focus:ring-2 focus:ring-ops-accent/100'
           }`}
         />
       </div>
@@ -266,7 +266,7 @@ export default function OnboardingBilling() {
           <select
             value={maintenanceType}
             onChange={(e) => setMaintenanceType(e.target.value)}
-            className="w-full px-4 py-4 rounded-2xl border border-slate-200 bg-white text-slate-900 font-black outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+            className="w-full px-4 py-4 rounded-2xl border border-slate-200 bg-white text-slate-900 font-black outline-none focus:border-ops-accent/500 focus:ring-2 focus:ring-ops-accent/100"
           >
             <option value="MONTHLY">Monthly maintenance</option>
             <option value="ONE_TIME">One-time maintenance</option>
@@ -292,7 +292,7 @@ export default function OnboardingBilling() {
             WhatsApp and in-app reminders unlock on Starter
           </p>
         </div>
-        <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full">
+        <span className="text-[10px] font-black uppercase tracking-widest text-ops-accent bg-ops-accent/10 px-3 py-1.5 rounded-full">
           Starter
         </span>
       </div>
@@ -314,7 +314,7 @@ export default function OnboardingBilling() {
           onClick={handleSave}
           disabled={saving}
           id="onboarding-billing-continue"
-          className="w-full flex items-center justify-center gap-2 py-4 px-6 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-black rounded-2xl shadow-2xl shadow-indigo-600/25 transition-all text-base"
+          className="w-full flex items-center justify-center gap-2 py-4 px-6 bg-ops-accent hover:bg-ops-accent/700 disabled:opacity-60 text-white font-black rounded-2xl shadow-2xl shadow-teal-600/25 transition-all text-base"
         >
           {saving ? <Loader2 size={18} className="animate-spin" /> : <>Save & Continue <ArrowRight size={18} /></>}
         </motion.button>

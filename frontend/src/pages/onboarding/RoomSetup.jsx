@@ -48,7 +48,7 @@ const RoomSetup = () => {
             animate={{ opacity: 1, scale: 1 }}
             className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 p-12 text-center"
           >
-            <div className="w-20 h-20 bg-purple-100 text-purple-600 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-sm">
+            <div className="w-20 h-20 bg-purple-100 text-ops-accent rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-sm">
               <Home className="w-10 h-10" />
             </div>
             <h1 className="text-3xl font-black text-slate-900 mb-4">Quick Room Generator</h1>
@@ -63,7 +63,7 @@ const RoomSetup = () => {
               >
                 -
               </button>
-              <div className="text-6xl font-black text-purple-600 w-32 tracking-tighter">
+              <div className="text-6xl font-black text-ops-accent w-32 tracking-tighter">
                 {roomCount}
               </div>
               <button 
@@ -115,7 +115,7 @@ const RoomSetup = () => {
                   >
                     <div className="flex justify-between items-start mb-6">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center font-black">
+                        <div className="w-10 h-10 bg-ops-accent/10 text-ops-accent rounded-xl flex items-center justify-center font-black">
                           {room.name[0]}
                         </div>
                         <input 

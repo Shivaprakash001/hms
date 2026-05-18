@@ -53,7 +53,7 @@ function StatusBadge({ status }) {
 function UsageBar({ label, used, limit, Icon }) {
     const hasLimit = typeof limit === 'number' && limit > 0;
     const pct = hasLimit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
-    const barColor = pct >= 90 ? 'bg-rose-500' : pct >= 75 ? 'bg-amber-400' : 'bg-indigo-500';
+    const barColor = pct >= 90 ? 'bg-rose-500' : pct >= 75 ? 'bg-amber-400' : 'bg-ops-accent';
     return (
         <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
             <div className="flex items-center justify-between mb-3">
@@ -92,9 +92,9 @@ function PlanCard({ plan, isCurrent, isUpgrade, upgrading, onUpgrade, onBuyCredi
             whileHover={{ y: -4 }}
             className={`relative flex flex-col rounded-[2.5rem] border p-8 transition-all duration-300 h-full ${
                 isCurrent
-                ? 'border-purple-200 bg-purple-50/50 shadow-2xl shadow-purple-100/50 ring-2 ring-purple-100'
+                ? 'border-purple-200 bg-ops-accent/10/50 shadow-2xl shadow-purple-100/50 ring-2 ring-purple-100'
                 : isPopular
-                    ? 'border-indigo-100 bg-white shadow-2xl shadow-indigo-50 hover:border-indigo-200'
+                    ? 'border-ops-accent/100 bg-white shadow-2xl shadow-teal-50 hover:border-ops-accent/200'
                     : 'border-slate-100 bg-white hover:border-slate-200'
             }`}
         >
@@ -104,7 +104,7 @@ function PlanCard({ plan, isCurrent, isUpgrade, upgrading, onUpgrade, onBuyCredi
                 </div>
             )}
             {!isCurrent && isPopular && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-indigo-600 text-white text-[10px] font-black uppercase tracking-[0.2em] px-4 py-1.5 rounded-full shadow-lg">
+                <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-ops-accent text-white text-[10px] font-black uppercase tracking-[0.2em] px-4 py-1.5 rounded-full shadow-lg">
                     Most Popular
                 </div>
             )}
@@ -141,7 +141,7 @@ function PlanCard({ plan, isCurrent, isUpgrade, upgrading, onUpgrade, onBuyCredi
                             </Button>
                         </div>
                     ) : (
-                        <div className="w-full h-14 bg-purple-100 text-purple-600 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center">
+                        <div className="w-full h-14 bg-purple-100 text-ops-accent rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center">
                             Currently Active
                         </div>
                     )
@@ -217,7 +217,7 @@ export default function BillingPlans() {
     if (subLoading || plansLoading) {
         return (
             <div className="flex flex-col items-center justify-center p-20 gap-4">
-                <div className="w-12 h-12 bg-purple-50 rounded-2xl flex items-center justify-center text-purple-600 animate-pulse">
+                <div className="w-12 h-12 bg-ops-accent/10 rounded-2xl flex items-center justify-center text-ops-accent animate-pulse">
                     <RefreshCw size={24} className="animate-spin" />
                 </div>
                 <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em]">Syncing Billing...</p>
@@ -266,7 +266,7 @@ export default function BillingPlans() {
 
             <section className="bg-white rounded-[2.5rem] border border-slate-100 p-8 shadow-xl shadow-slate-50">
                 <div className="flex items-center gap-3 mb-8">
-                    <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 shadow-sm">
+                    <div className="w-10 h-10 bg-ops-accent/10 rounded-xl flex items-center justify-center text-ops-accent shadow-sm">
                         <TrendingUp size={20} />
                     </div>
                     <div>
@@ -294,7 +294,7 @@ export default function BillingPlans() {
 
             <section>
                 <div className="flex items-center gap-3 mb-8 px-4">
-                    <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center text-purple-600 shadow-sm">
+                    <div className="w-10 h-10 bg-ops-accent/10 rounded-xl flex items-center justify-center text-ops-accent shadow-sm">
                         <Zap size={20} />
                     </div>
                     <div>

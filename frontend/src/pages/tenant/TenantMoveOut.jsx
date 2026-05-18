@@ -17,7 +17,7 @@ export default function TenantMoveOut() {
       <div className="max-w-lg mx-auto py-20 text-center px-4">
         <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-red-50 flex items-center justify-center"><span className="text-2xl">😕</span></div>
         <p className="text-slate-500 text-sm mb-4">We couldn't load your move-out status right now.</p>
-        <button onClick={refetch} className="text-indigo-600 font-medium text-sm hover:underline">Try again</button>
+        <button onClick={refetch} className="text-ops-accent font-medium text-sm hover:underline">Try again</button>
       </div>
     );
   }
@@ -61,7 +61,7 @@ function IdleState({ onStart }) {
         The whole process usually takes 3–7 days after submission.
       </p>
       <button onClick={onStart}
-        className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl bg-indigo-600 text-white font-medium text-sm hover:bg-indigo-700 active:scale-[0.98] transition-all shadow-lg shadow-indigo-600/20">
+        className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl bg-ops-accent text-white font-medium text-sm hover:bg-ops-accent/700 active:scale-[0.98] transition-all shadow-lg shadow-teal-600/20">
         Request Move-Out
       </button>
     </div>

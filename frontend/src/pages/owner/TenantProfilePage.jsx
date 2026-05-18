@@ -62,7 +62,7 @@ export default function TenantProfilePage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-ops-accent/600"></div>
       </div>
     );
   }
@@ -95,7 +95,7 @@ export default function TenantProfilePage() {
     <div className="font-sans pb-24 md:pb-8 max-w-4xl mx-auto">
       {/* Top Navigation */}
       <div className="flex items-center gap-4 mb-6 sticky top-0 bg-slate-50 py-4 z-10">
-        <button onClick={() => navigate(-1)} className="p-2 bg-white border border-slate-200 rounded-full text-slate-500 hover:text-indigo-600 hover:border-indigo-200 transition-colors shadow-sm">
+        <button onClick={() => navigate(-1)} className="p-2 bg-white border border-slate-200 rounded-full text-slate-500 hover:text-ops-accent hover:border-ops-accent/200 transition-colors shadow-sm">
           <ArrowLeft size={20} />
         </button>
         <h1 className="text-xl md:text-2xl font-black text-slate-900 leading-none">Tenant Profile</h1>
@@ -104,10 +104,10 @@ export default function TenantProfilePage() {
       <div className="space-y-6">
         {/* 1. OVERVIEW CARD */}
         <section className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-100 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50 rounded-full blur-3xl opacity-50 -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+          <div className="absolute top-0 right-0 w-64 h-64 bg-ops-accent/10 rounded-full blur-3xl opacity-50 -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
           
           <div className="flex flex-col md:flex-row items-center md:items-start gap-6 relative z-10">
-            <div className="w-24 h-24 rounded-[1.5rem] bg-indigo-100 text-indigo-600 flex items-center justify-center text-3xl font-black shadow-inner overflow-hidden shrink-0">
+            <div className="w-24 h-24 rounded-[1.5rem] bg-ops-accent/15 text-ops-accent flex items-center justify-center text-3xl font-black shadow-inner overflow-hidden shrink-0">
                {tenant.photo_url ? (
                   <img src={tenant.photo_url} alt="Profile" className="w-full h-full object-cover" />
                ) : (
@@ -140,7 +140,7 @@ export default function TenantProfilePage() {
                 </div>
                 <div>
                   <p className="text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Monthly Rent</p>
-                  <p className="font-bold border-slate-800 bg-indigo-50 text-indigo-700 w-fit px-2 py-0.5 rounded-lg">{formatCurrency(tenant.monthly_rent, preferences)}</p>
+                  <p className="font-bold border-slate-800 bg-ops-accent/10 text-ops-accent w-fit px-2 py-0.5 rounded-lg">{formatCurrency(tenant.monthly_rent, preferences)}</p>
                 </div>
                 <div>
                   <p className="text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Roll No.</p>
@@ -158,7 +158,7 @@ export default function TenantProfilePage() {
         {/* 2. PERSONAL INFO */}
         <section className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-100">
           <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl"><User size={20} className="stroke-[2.5px]" /></div>
+            <div className="p-2 bg-ops-accent/10 text-ops-accent rounded-xl"><User size={20} className="stroke-[2.5px]" /></div>
             <h3 className="text-lg font-black text-slate-800">Personal Details</h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-8">
@@ -181,7 +181,7 @@ export default function TenantProfilePage() {
         {/* 3. ACADEMIC INFO */}
         <section className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-100">
           <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-purple-50 text-purple-600 rounded-xl"><GraduationCap size={20} className="stroke-[2.5px]" /></div>
+            <div className="p-2 bg-ops-accent/10 text-ops-accent rounded-xl"><GraduationCap size={20} className="stroke-[2.5px]" /></div>
             <h3 className="text-lg font-black text-slate-800">Academic Details</h3>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
@@ -313,7 +313,7 @@ export default function TenantProfilePage() {
             <button className="flex-1 py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black uppercase tracking-widest text-xs md:text-sm rounded-xl transition-colors">
                Manage Room
             </button>
-            <button className="flex-1 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-widest text-xs md:text-sm rounded-xl transition-all shadow-lg shadow-indigo-600/20 active:scale-[0.98]">
+            <button className="flex-1 py-4 bg-ops-accent hover:bg-ops-accent/700 text-white font-black uppercase tracking-widest text-xs md:text-sm rounded-xl transition-all shadow-lg shadow-teal-600/20 active:scale-[0.98]">
                Record Payment
             </button>
          </div>

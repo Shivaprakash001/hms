@@ -121,7 +121,7 @@ const ManageRooms = () => {
                             key={status}
                             onClick={() => setFilterStatus(status)}
                             className={`px-5 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${filterStatus === status
-                                ? 'bg-indigo-600 text-white shadow-md'
+                                ? 'bg-ops-accent text-white shadow-md'
                                 : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
                                 }`}
                         >
@@ -143,7 +143,7 @@ const ManageRooms = () => {
                             setSelectedFloorForRoom(null);
                             setShowAddRoomModal(true);
                         }}
-                        className="flex-1 md:flex-none px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-100"
+                        className="flex-1 md:flex-none px-6 py-3 bg-ops-accent text-white rounded-xl font-bold hover:bg-ops-accent/700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-teal-100"
                     >
                         <Plus size={18} />
                         Add Room
@@ -185,7 +185,7 @@ const ManageRooms = () => {
                                         setSelectedFloorForRoom(floor.number);
                                         setShowAddRoomModal(true);
                                     }}
-                                    className="h-[180px] rounded-24px border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-3 text-slate-400 hover:border-indigo-300 hover:text-indigo-500 hover:bg-indigo-50/30 transition-all group"
+                                    className="h-[180px] rounded-24px border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-3 text-slate-400 hover:border-ops-accent/300 hover:text-ops-accent hover:bg-ops-accent/10/30 transition-all group"
                                 >
                                     <div className="w-12 h-12 rounded-full bg-slate-50 group-hover:bg-white flex items-center justify-center transition-colors">
                                         <Plus size={24} />
@@ -208,7 +208,7 @@ const ManageRooms = () => {
                         </p>
                         <button
                             onClick={() => setShowAddFloorModal(true)}
-                            className="px-8 py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100"
+                            className="px-8 py-4 bg-ops-accent text-white rounded-2xl font-bold hover:bg-ops-accent/700 transition-all shadow-xl shadow-teal-100"
                         >
                             Add First Floor
                         </button>

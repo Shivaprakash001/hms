@@ -47,14 +47,14 @@ export default function OnboardingHostel() {
   return (
     <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 p-8 md:p-12 max-w-2xl mx-auto overflow-hidden relative">
       {/* Decorative background accent */}
-      <div className="absolute top-0 right-0 w-32 h-32 bg-purple-50 rounded-full blur-3xl -mr-16 -mt-16 opacity-50" />
+      <div className="absolute top-0 right-0 w-32 h-32 bg-ops-accent/10 rounded-full blur-3xl -mr-16 -mt-16 opacity-50" />
       
       <div className="relative z-10">
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center shadow-sm">
+          <div className="w-10 h-10 bg-ops-accent/10 text-ops-accent rounded-xl flex items-center justify-center shadow-sm">
             <Building2 className="w-5 h-5" />
           </div>
-          <span className="text-[10px] font-black text-purple-600 uppercase tracking-[0.2em]">Property Setup</span>
+          <span className="text-[10px] font-black text-ops-accent uppercase tracking-[0.2em]">Property Setup</span>
         </div>
 
         <div className="mb-10">
@@ -78,7 +78,7 @@ export default function OnboardingHostel() {
           <div className="space-y-1.5">
             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Property Name</label>
             <div className="relative group">
-              <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 group-focus-within:text-purple-600 transition-colors" />
+              <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 group-focus-within:text-ops-accent transition-colors" />
               <Input 
                 value={formData.name}
                 onChange={e => setFormData({ ...formData, name: e.target.value })}
@@ -92,7 +92,7 @@ export default function OnboardingHostel() {
           <div className="space-y-1.5">
             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Support Phone (Optional)</label>
             <div className="relative group">
-              <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 group-focus-within:text-purple-600 transition-colors" />
+              <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 group-focus-within:text-ops-accent transition-colors" />
               <Input 
                 value={formData.phone}
                 onChange={e => setFormData({ ...formData, phone: e.target.value })}
@@ -105,7 +105,7 @@ export default function OnboardingHostel() {
           <div className="space-y-1.5">
             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Full Address</label>
             <div className="relative group">
-              <MapPin className="absolute left-4 top-4 w-4 h-4 text-slate-300 group-focus-within:text-purple-600 transition-colors" />
+              <MapPin className="absolute left-4 top-4 w-4 h-4 text-slate-300 group-focus-within:text-ops-accent transition-colors" />
               <textarea 
                 value={formData.address}
                 onChange={e => setFormData({ ...formData, address: e.target.value })}
