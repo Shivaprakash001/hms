@@ -219,46 +219,111 @@ export class PropertyService {
     return hostelPolicyService.updateHostelPolicy(hostelId, userId, policyPatch, userId);
   }
 
-  async getFloorsWithRooms(ownerId: string, hostelId: string) {
-    const rooms = await prisma.rooms.findMany({
-      where: {
-        hostels: { owner_id: ownerId },
-        is_active: true,
-        hostel_id: hostelId,
-      },
+  async getFloors(ownerId: string, hostelId: string) {
+    const floors = await prisma.floors.findMany({
+      where: { hostel_id: hostelId, hostel: { owner_id: ownerId } },
       include: {
-        room_allocations: {
-          where: { is_active: true, end_date: null },
-          include: {
-            tenant: {
-              include: {
-                profiles: true,
-                rent_obligations: {
-                  where: { status: { in: ["PENDING", "PARTIAL"] } },
-                  include: { payments: { select: { amount_paid: true, payment_date: true } } }
-                }
-              }
-            }
-          }
-        }
+        rooms: {
+          where: { is_active: true },
+          select: {
+            id: true,
+            room_allocations: { where: { is_active: true, end_date: null }, select: { id: true } },
+          },
+        },
       },
-      orderBy: { room_no: "asc" }
+      orderBy: { sort_order: "asc" },
     });
 
-    const floorsMap: Map<number, any> = new Map();
+    return floors.map((f: any) => ({
+      id: f.id,
+      hostel_id: f.hostel_id,
+      name: f.name,
+      sort_order: f.sort_order,
+      room_count: f.rooms.length,
+      occupied_count: f.rooms.reduce((s: number, r: any) => s + r.room_allocations.length, 0),
+    }));
+  }
+
+  async createFloor(ownerId: string, hostelId: string, data: { name: string; sort_order?: number }) {
+    const hostel = await prisma.hostels.findFirst({ where: { id: hostelId, owner_id: ownerId } });
+    if (!hostel) throw new Error("NOT_FOUND: Hostel not found");
+
+    return await prisma.floors.create({
+      data: {
+        hostel_id: hostelId,
+        owner_id: ownerId,
+        name: data.name.trim(),
+        sort_order: data.sort_order ?? 0,
+      },
+    });
+  }
+
+  async updateFloor(floorId: string, ownerId: string, data: { name?: string; sort_order?: number }) {
+    const floor = await prisma.floors.findFirst({
+      where: { id: floorId, hostel: { owner_id: ownerId } },
+    });
+    if (!floor) throw new Error("NOT_FOUND: Floor not found");
+
+    const updateData: any = {};
+    if (data.name !== undefined) updateData.name = data.name.trim();
+    if (data.sort_order !== undefined) updateData.sort_order = Number(data.sort_order);
+    if (Object.keys(updateData).length === 0) return floor;
+
+    return await prisma.floors.update({ where: { id: floorId }, data: updateData });
+  }
+
+  async deleteFloor(floorId: string, ownerId: string) {
+    const floor = await prisma.floors.findFirst({
+      where: { id: floorId, hostel: { owner_id: ownerId } },
+      include: { rooms: { where: { is_active: true }, select: { id: true } } },
+    });
+    if (!floor) throw new Error("NOT_FOUND: Floor not found");
+    if (floor.rooms.length > 0) throw new Error("VALIDATION: Cannot delete floor with active rooms");
+
+    await prisma.floors.delete({ where: { id: floorId } });
+  }
+
+  async getFloorsWithRooms(ownerId: string, hostelId: string) {
+    // Load named floors ordered by sort_order; fall back to a synthetic record for rooms with no floor_id.
+    const [floors, rooms] = await Promise.all([
+      prisma.floors.findMany({
+        where: { hostel_id: hostelId, hostel: { owner_id: ownerId } },
+        orderBy: { sort_order: "asc" },
+      }),
+      prisma.rooms.findMany({
+        where: { hostels: { owner_id: ownerId }, is_active: true, hostel_id: hostelId },
+        include: {
+          room_allocations: {
+            where: { is_active: true, end_date: null },
+            include: {
+              tenant: {
+                include: {
+                  profiles: true,
+                  rent_obligations: {
+                    where: { status: { in: ["PENDING", "PARTIAL"] } },
+                    include: { payments: { select: { amount_paid: true, payment_date: true } } },
+                  },
+                },
+              },
+            },
+          },
+        },
+        orderBy: { room_no: "asc" },
+      }),
+    ]);
+
+    // Build floor index by id; also a fallback bucket for rooms with no floor_id.
+    const floorMap = new Map<string, any>();
+    floors.forEach((f: any) => {
+      floorMap.set(f.id, { id: f.id, name: f.name, sort_order: f.sort_order, rooms: [] });
+    });
+    const unassigned: any = { id: "__unassigned", name: "Unassigned", sort_order: 999, rooms: [] };
 
     rooms.forEach((room: any) => {
-      const floorNum = room.floor ?? 0;
-      if (!floorsMap.has(floorNum)) {
-        floorsMap.set(floorNum, { id: `f${floorNum}`, number: floorNum, rooms: [] });
-      }
-
       const tenants = room.room_allocations.map((a: any) => {
         const tenant = a.tenant;
         const profile = tenant.profiles;
         const summary = financialService.getTenantPaymentSummary(tenant.id, tenant.rent_obligations || []);
-        const pendingDues = Number(summary.pending_amount || 0);
-
         return {
           tenant_id: tenant.id,
           name: profile.name,
@@ -266,24 +331,31 @@ export class PropertyService {
           phone: profile.phone,
           joined_date: a.start_date,
           rent: Number(tenant.monthly_rent),
-          pending_dues: pendingDues,
-          status: tenant.status
+          pending_dues: Number(summary.pending_amount || 0),
+          status: tenant.status,
         };
       });
 
-      floorsMap.get(floorNum).rooms.push({
+      const roomEntry = {
         id: room.id,
         room_no: room.room_no,
         capacity: room.capacity,
         base_rent: room.base_rent,
+        wifi_name: room.wifi_name ?? null,
+        notes: room.notes ?? null,
         occupied: tenants.length,
-        floor: floorNum,
+        floor_id: room.floor_id ?? null,
         tenants,
-        pending_dues: tenants.reduce((sum: number, t: any) => sum + t.pending_dues, 0)
-      });
+        pending_dues: tenants.reduce((s: number, t: any) => s + t.pending_dues, 0),
+      };
+
+      const bucket = room.floor_id ? floorMap.get(room.floor_id) : null;
+      (bucket ?? unassigned).rooms.push(roomEntry);
     });
 
-    return Array.from(floorsMap.values()).sort((a, b) => a.number - b.number);
+    const result = Array.from(floorMap.values());
+    if (unassigned.rooms.length > 0) result.push(unassigned);
+    return result;
   }
 
   async getRoomOverview(roomId: string, ownerId: string) {
@@ -409,19 +481,24 @@ export class PropertyService {
       if (duplicate) throw new Error(`VALIDATION: Room ${data.room_no} already exists`);
     }
 
-    const { capacity, floor, room_no, base_rent } = data;
+    const { capacity, floor, floor_id, room_no, base_rent, wifi_name, wifi_password, notes } = data;
     const updateData: any = {
-      ...(capacity !== undefined && { capacity: Number(capacity) }),
-      ...(floor !== undefined && { floor: Number(floor) }),
-      ...(room_no !== undefined && { room_no }),
-      ...(base_rent !== undefined && { base_rent: Number(base_rent) })
+      ...(capacity  !== undefined && { capacity:  Number(capacity) }),
+      ...(floor     !== undefined && { floor:     Number(floor) }),
+      ...(floor_id  !== undefined && { floor_id }),
+      ...(room_no   !== undefined && { room_no }),
+      ...(base_rent !== undefined && { base_rent: Number(base_rent) }),
+      ...(wifi_name     !== undefined && { wifi_name:     wifi_name     ?? null }),
+      ...(wifi_password !== undefined && { wifi_password: wifi_password ?? null }),
+      ...(notes         !== undefined && { notes:         notes         ?? null }),
+      updated_at: new Date(),
     };
 
-    if (Object.keys(updateData).length === 0) return room;
+    // Remove updated_at if nothing meaningful changed
+    const meaningfulKeys = Object.keys(updateData).filter((k) => k !== "updated_at");
+    if (meaningfulKeys.length === 0) return room;
 
-    const logEntry = `Fields updated: ${Object.keys(updateData).join(", ")}`;
-
-    return await prisma.$transaction(async (tx) => {
+    return await prisma.$transaction(async (tx: any) => {
       const updated = await tx.rooms.update({
         where: { id: roomId },
         data: updateData
@@ -433,7 +510,7 @@ export class PropertyService {
           owner_id: ownerId,
           action: "ROOM_EDITED",
           previous_value: JSON.stringify({ room_no: room.room_no, capacity: room.capacity, floor: room.floor, base_rent: room.base_rent }),
-          new_value: JSON.stringify(updateData)
+          new_value: JSON.stringify(Object.fromEntries(meaningfulKeys.map((k) => [k, updateData[k]])))
         }
       });
 

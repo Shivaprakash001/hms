@@ -198,6 +198,7 @@ model hostels {
   rent_obligations    rent_obligations[]
   room_allocations    roomAllocation[]
   rooms               rooms[]
+  floors              floors[]
   tenants             tenants[]
   move_out_requests   move_out_requests[]
 
@@ -854,20 +855,40 @@ model rooms {
   hostel_id          String               @db.Uuid
   room_no            String
   floor              Int?
+  floor_id           String?              @db.Uuid
   capacity           Int
   room_type          String?
   is_active          Boolean              @default(true)
   created_at         DateTime             @default(now()) @db.Timestamptz(6)
   updated_at         DateTime?            @db.Timestamptz(6)
   base_rent          Int?
+  wifi_name          String?
+  wifi_password      String?
+  notes              String?
   room_activity_logs room_activity_logs[]
   room_allocations   roomAllocation[]
   hostels            hostels              @relation(fields: [hostel_id], references: [id])
+  floor_ref          floors?              @relation(fields: [floor_id], references: [id])
 
   @@unique([hostel_id, room_no])
   @@index([hostel_id])
+  @@index([floor_id])
 }
 
+
+model floors {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  hostel_id  String   @db.Uuid
+  owner_id   String   @db.Uuid
+  name       String
+  sort_order Int      @default(0)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  hostel     hostels  @relation(fields: [hostel_id], references: [id])
+  rooms      rooms[]
+
+  @@index([hostel_id])
+  @@index([owner_id])
+}
 
 model systemEventLog {
   id         String   @id @db.Uuid

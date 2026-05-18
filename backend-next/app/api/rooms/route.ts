@@ -53,6 +53,7 @@ export async function GET(req: NextRequest) {
         is_active: true,
       },
       include: {
+        floor_ref: { select: { id: true, name: true, sort_order: true } },
         room_allocations: {
           where: { is_active: true, end_date: null },
           include: {
@@ -73,21 +74,26 @@ export async function GET(req: NextRequest) {
       const allocs = room.room_allocations ?? [];
       const occupiedCount = allocs.length;
       const firstTenant = allocs[0]?.tenant ?? null;
-      const derivedStatus =
-        occupiedCount === 0 ? "vacant" : occupiedCount >= room.capacity ? "occupied" : "occupied";
+      const derivedStatus = occupiedCount === 0 ? "vacant" : "occupied";
       return {
         id: room.id,
         room_no: room.room_no,
         room_number: room.room_no,
         capacity: room.capacity,
         floor: room.floor,
+        floor_id: room.floor_id ?? null,
+        floor_name: room.floor_ref?.name ?? null,
+        floor_sort_order: room.floor_ref?.sort_order ?? 999,
         base_rent: room.base_rent,
         monthly_rent: room.base_rent,
         rent: room.base_rent,
+        wifi_name: room.wifi_name ?? null,
+        notes: room.notes ?? null,
         hostel_id: room.hostel_id,
         is_active: room.is_active,
         status: derivedStatus,
         occupied_count: occupiedCount,
+        vacant_count: Math.max(0, room.capacity - occupiedCount),
         tenant_name: firstTenant?.profiles?.name ?? null,
         tenant_id: firstTenant?.id ?? null,
         tenant_phone: firstTenant?.profiles?.phone ?? null,
@@ -150,8 +156,12 @@ export async function POST(req: NextRequest) {
         room_no: validated.data.room_no,
         capacity: validated.data.capacity,
         floor: validated.data.floor,
+        floor_id: validated.data.floor_id,
         room_type: validated.data.room_type,
         base_rent: validated.data.base_rent,
+        wifi_name: validated.data.wifi_name,
+        wifi_password: validated.data.wifi_password,
+        notes: validated.data.notes,
       },
     });
 
