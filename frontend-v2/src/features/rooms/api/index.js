@@ -1,5 +1,24 @@
 import api from '@lib/api-client';
 
+export const floorService = {
+    getAll: async (hostelId) => {
+        const response = await api.get('/floors', { params: { hostelId } });
+        return response.data.success ? response.data.data : response.data;
+    },
+    create: async (hostelId, data) => {
+        const response = await api.post('/floors', { hostelId, ...data });
+        return response.data.success ? response.data.data : response.data;
+    },
+    update: async (id, data) => {
+        const response = await api.patch(`/floors/${id}`, data);
+        return response.data.success ? response.data.data : response.data;
+    },
+    delete: async (id) => {
+        const response = await api.delete(`/floors/${id}`);
+        return response.data;
+    },
+};
+
 export const roomService = {
     getAll: async (hostelId, params = {}) => {
         const response = await api.get('/rooms', { params: { ...params, hostelId } });
