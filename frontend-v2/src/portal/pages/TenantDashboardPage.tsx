@@ -32,16 +32,12 @@ export function TenantDashboardPage() {
     );
   }
 
-  const prof = (profile?.profile ?? profile?.profiles) as Record<string, unknown> | undefined;
-  const name = String(prof?.name ?? prof?.full_name ?? 'Tenant');
-  const status = String(profile?.status ?? 'ACTIVE');
-  const allocation = (profile as Record<string, unknown>)?.room_allocations as
-    | { room?: { room_no?: string } }[]
-    | undefined;
-  const roomNo =
-    profile?.room_no ??
-    allocation?.[0]?.room?.room_no ??
-    profile?.current_room?.room_no;
+  const prof = profile?.profile as Record<string, unknown> | undefined;
+  const tenant = profile?.tenant as Record<string, unknown> | undefined;
+  const name = String(prof?.name ?? 'Tenant');
+  const status = String(tenant?.status ?? profile?.status ?? 'ACTIVE');
+  const roomNo = profile?.room?.room_no ?? profile?.room_no ?? null;
+  const profileDocs = (profile?.documents ?? documents) as unknown[];
 
   const advanceBalance = Number(advance?.balance ?? 0);
   const depositCredits = (advance?.entries ?? []).filter(
@@ -100,7 +96,7 @@ export function TenantDashboardPage() {
         </Link>
       )}
 
-      <TenantDocumentStatus documents={documents as never[]} />
+      <TenantDocumentStatus documents={profileDocs as never[]} />
 
       <TenantAnnouncements
         items={

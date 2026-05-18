@@ -54,7 +54,7 @@ export function TenantDocumentStatus({ documents }: { documents?: Doc[] | null }
     <section className="rounded-xl border border-border bg-card p-4">
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-sm font-semibold text-foreground">Documents</h2>
-        <Link to="/tenant/documents" className="text-xs text-accent font-medium">
+        <Link to="/tenant/profile#documents" className="text-xs text-accent font-medium">
           View all
         </Link>
       </div>

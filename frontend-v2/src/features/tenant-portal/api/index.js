@@ -27,6 +27,28 @@ export const tenantPortalApi = {
     return Array.isArray(data) ? data : data?.notifications ?? [];
   },
   getAdvance: async () => tenantService.getMyAdvance(),
+  uploadMyPhoto: async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post('/tenants/me/photo', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return unwrap(response);
+  },
+  uploadMyDocument: async (docType, file, docNumber = '') => {
+    const formData = new FormData();
+    formData.append('doc_type', docType);
+    formData.append('file', file);
+    if (docNumber) formData.append('doc_number', docNumber);
+    const response = await api.post('/tenants/me/documents', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return unwrap(response);
+  },
+  logout: async () => {
+    const response = await api.post('/auth/logout');
+    return response.data;
+  },
   downloadReceipt: (paymentId) => paymentService.downloadReceipt(paymentId),
   createPaymentIntent: (data) => paymentService.createIntent(data),
   getAttempt: (attemptId) => paymentService.getAttempt(attemptId),

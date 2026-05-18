@@ -65,7 +65,13 @@ export function useTenantDashboard() {
 
   const documentsQ = useQuery({
     queryKey: tenantQueryKeys.documents(),
-    queryFn: () => tenantPortalApi.getMyDocuments(),
+    queryFn: async () => {
+      try {
+        return await tenantPortalApi.getMyDocuments();
+      } catch {
+        return [];
+      }
+    },
     staleTime: 60_000,
   });
 

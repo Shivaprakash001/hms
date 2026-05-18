@@ -227,7 +227,7 @@ export class TenantService {
       }
     }
 
-    const profileFields = ["name", "email", "phone", "emergency_contact"];
+    const profileFields = ["name", "email", "phone", "emergency_contact", "city", "state", "pincode"];
     const tenantFields = [
       "photo_url", "phone_1", "phone_2", "phone_3", "personal_email",
       "college_name", "roll_number", "course", "year_of_study", "section", "branch",

@@ -3,15 +3,15 @@ export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
-import { prisma } from "@/lib/db";
 import { tenantService } from "@/src/services/tenants/tenant-service";
 import { TenantProfileUpdateSchema } from "@/lib/validators";
-
-
+import {
+  getTenantPortalProfile,
+  validateTenantPhones,
+} from "@/lib/services/tenant-profile-portal-service";
 
 /**
- * 👨‍🎓 TENANT ME PROFILE
- * GET /api/tenants/me/profile
+ * GET /api/tenants/me/profile — Full tenant portal profile (operational + editable fields)
  */
 export async function GET(req: NextRequest) {
   const session = await getSession(req);
@@ -20,93 +20,12 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const tenant = await prisma.tenants.findUnique({
-      where: { profile_id: session.sub },
-      select: {
-        id: true,
-        profile_id: true,
-        monthly_rent: true,
-        joined_on: true,
-        status: true,
-        owner_id: true,
-        profile_completed: true,
-        photo_url: true,
-        phone_1: true,
-        phone_2: true,
-        phone_3: true,
-        personal_email: true,
-        college_name: true,
-        roll_number: true,
-        course: true,
-        year_of_study: true,
-        section: true,
-        branch: true,
-        office_name: true,
-        office_location: true,
-        job_role: true,
-        profile_type: true,
-        gender: true,
-        date_of_birth: true,
-        permanent_address: true,
-        temporary_address: true,
-        created_at: true,
-        updated_at: true,
-        profiles: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            phone: true,
-            emergency_contact: true
-          }
-        },
-        room_allocations: {
-          where: { is_active: true, end_date: null },
-          orderBy: { start_date: "desc" },
-          take: 1,
-          include: { room: true }
-        }
-      }
-    });
-
-    if (!tenant) {
-      return apiError("Tenant profile not found", "NOT_FOUND", 404);
-    }
-
-    const allocation = (tenant as any).room_allocations?.[0];
-    const profile = (tenant as any).profiles;
-
-    const verification_badge = null;
-
-    return apiResponse({
-      ...tenant,
-      verification_badge,
-      profile: {
-        id: profile.id,
-        full_name: profile.name,
-        name: profile.name,
-        email: profile.email,
-        phone: profile.phone,
-        emergency_contact: profile.emergency_contact,
-        personal_email: tenant.personal_email,
-        permanent_address: tenant.permanent_address,
-        temporary_address: tenant.temporary_address,
-        gender: tenant.gender,
-        date_of_birth: tenant.date_of_birth
-      },
-      tenant_details: tenant,
-      current_room: allocation?.room
-        ? {
-            room_no: allocation.room.room_no,
-            floor: allocation.room.floor ?? null,
-          }
-        : null,
-      room_no: allocation?.room?.room_no || null,
-      floor: allocation?.room?.floor ?? null,
-      status: tenant.status
-    });
-  } catch (error: any) {
-    return apiError(error?.message || "Failed to fetch tenant profile");
+    const data = await getTenantPortalProfile(session.sub);
+    if (!data) return apiError("Tenant profile not found", "NOT_FOUND", 404);
+    return apiResponse(data);
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return apiError(msg || "Failed to fetch tenant profile");
   }
 }
 
@@ -120,12 +39,36 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json();
     const validated = TenantProfileUpdateSchema.safeParse(body);
     if (!validated.success) {
-      return apiError(`Validation error: ${validated.error.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join(", ")}`, "VALIDATION_ERROR", 400);
+      return apiError(
+        `Validation error: ${validated.error.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join(", ")}`,
+        "VALIDATION_ERROR",
+        400
+      );
     }
 
-    const updated = await tenantService.updateTenantSelfProfile(session.sub, validated.data, session.sub);
-    return apiResponse(updated);
-  } catch (error: any) {
-    return apiError(error?.message || "Failed to update profile");
+    const phoneErr = validateTenantPhones(validated.data);
+    if (phoneErr) return apiError(phoneErr, "VALIDATION_ERROR", 400);
+
+    await tenantService.updateTenantSelfProfile(session.sub, validated.data, session.sub);
+
+    const profileFields = ["city", "state", "pincode"] as const;
+    const profilePatch: Record<string, string | null> = {};
+    for (const key of profileFields) {
+      if (key in body) profilePatch[key] = body[key] ?? null;
+    }
+    if (Object.keys(profilePatch).length > 0) {
+      const { prisma } = await import("@/lib/db");
+      await prisma.profile.update({
+        where: { id: session.sub },
+        data: profilePatch,
+      });
+    }
+
+    const refreshed = await getTenantPortalProfile(session.sub);
+    return apiResponse(refreshed);
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (msg.includes("FORBIDDEN")) return apiError(msg.split(": ")[1] ?? msg, "FORBIDDEN", 403);
+    return apiError(msg || "Failed to update profile");
   }
 }
