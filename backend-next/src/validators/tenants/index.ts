@@ -37,7 +37,7 @@ export const InvitationSchema = z.object({
   name: z.string().min(2),
   phone: z.string().optional(),
   room_id: z.string().uuid(),
-  monthly_rent: z.number().positive(),
+  monthly_rent: z.number().positive().optional(),
   advance_amount: z.number().min(0).optional(),
   maintenance_amount: z.number().min(0).optional(),
   joining_date: z.string().optional(),            // ISO date string, defaults to today

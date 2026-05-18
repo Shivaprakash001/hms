@@ -93,7 +93,7 @@ export const tenantService = {
         return response.data.success !== undefined ? (response.data.data !== undefined ? response.data.data : response.data) : response.data;
     },
     invite: async (data) => {
-        const response = await api.post('/tenants/invite', data);
+        const response = await api.post('/owners/invitations', data);
         return response.data.success !== undefined ? (response.data.data !== undefined ? response.data.data : response.data) : response.data;
     },
     resendInvitation: async (email) => {
