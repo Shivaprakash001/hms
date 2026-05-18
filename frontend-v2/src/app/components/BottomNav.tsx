@@ -1,12 +1,12 @@
 import { NavLink } from 'react-router-dom';
-import { Building2, Home, Bell, CreditCard, Settings } from 'lucide-react';
+import { Building2, Home, Bell, CreditCard, Users } from 'lucide-react';
 
 const navItems = [
-  { to: '/dashboard', icon: Home, label: 'Portfolio' },
+  { to: '/dashboard', icon: Home, label: 'Home' },
   { to: '/hostels', icon: Building2, label: 'Hostels' },
+  { to: '/tenants', icon: Users, label: 'Tenants' },
   { to: '/alerts', icon: Bell, label: 'Alerts' },
   { to: '/billing', icon: CreditCard, label: 'Billing' },
-  { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 
 export function BottomNav() {

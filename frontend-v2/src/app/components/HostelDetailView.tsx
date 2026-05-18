@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, MapPin, Users, DollarSign, BedDouble, Receipt, AlertCircle, Plus, CreditCard, Phone, Wifi, FileText, Eye, EyeOff, Copy, Check, Pencil, Layers, ChevronDown, ChevronRight, X, Trash2, MoreVertical } from 'lucide-react';
 import { ownerService } from '@features/owners/api';
@@ -779,6 +779,14 @@ function TenantsTab({ hostelId }: { hostelId: string }) {
           <Plus className="w-3.5 h-3.5" /> Add Tenant
         </button>
       </div>
+
+      <Link
+        to={`/hostels/${hostelId}/tenants`}
+        className="flex items-center justify-between p-3 rounded-xl border border-accent/30 bg-accent/5 text-sm font-medium text-accent"
+      >
+        Manage all tenants
+        <ChevronRight className="w-4 h-4" />
+      </Link>
 
       {tenants.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 gap-3">

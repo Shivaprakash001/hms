@@ -6,4 +6,6 @@ export { paymentService, rentService } from '@features/payments/api';
 export { expenseService } from '@features/expenses/api';
 export { notificationService, reminderService } from '@features/notifications/api';
 export { analyticsService, activityService } from '@features/reports/api';
+export { activityListService } from '@features/activity/api';
+export { moveOutService } from '@features/move-out/api';
 export { roomService, allocationService } from '@features/rooms/api';

@@ -1,5 +1,12 @@
 import api from '@lib/api-client';
 
+const unwrap = (response) => {
+    if (response.data?.success !== undefined) {
+        return response.data.data !== undefined ? response.data.data : response.data;
+    }
+    return response.data;
+};
+
 export const tenantService = {
     getAll: async (hostelId, params = {}) => {
         const response = await api.get('/tenants', { params: { ...params, hostelId } });
@@ -11,7 +18,37 @@ export const tenantService = {
     },
     getOwnerTenantOverview: async (id) => {
         const response = await api.get(`/tenants/owner/tenants/${id}/overview`);
-        return response.data.success !== undefined ? (response.data.data !== undefined ? response.data.data : response.data) : response.data;
+        return unwrap(response);
+    },
+    getFull: async (id) => {
+        const response = await api.get(`/tenants/${id}/full`);
+        return unwrap(response);
+    },
+    getDocuments: async (tenantId) => {
+        try {
+            const response = await api.get(`/tenants/${tenantId}/documents`);
+            const data = unwrap(response);
+            return data?.documents ?? (Array.isArray(data) ? data : []);
+        } catch {
+            const full = await tenantService.getFull(tenantId);
+            return full?.identification_documents ?? full?.documents ?? [];
+        }
+    },
+    verifyDocument: async (tenantId, docId) => {
+        const response = await api.patch(`/tenants/${tenantId}/documents/${docId}/verify`);
+        return unwrap(response);
+    },
+    rejectDocument: async (tenantId, docId, reason) => {
+        const response = await api.patch(`/tenants/${tenantId}/documents/${docId}/reject`, { reason });
+        return unwrap(response);
+    },
+    activate: async (token) => {
+        const response = await api.get('/tenants/activate', { params: { token } });
+        return unwrap(response);
+    },
+    activateAccount: async (data) => {
+        const response = await api.post('/tenants/activate', data);
+        return unwrap(response);
     },
     getByProfileId: async (profileId) => {
         const response = await api.get(`/tenants/by-profile/${profileId}`);
@@ -103,5 +140,9 @@ export const tenantService = {
     cancelInvitation: async (id) => {
         const response = await api.post(`/tenants/${id}/cancel-invitation`);
         return response.data.success !== undefined ? (response.data.data !== undefined ? response.data.data : response.data) : response.data;
-    }
+    },
+    getAdvance: async (tenantId) => {
+        const response = await api.get(`/tenants/${tenantId}/advance`);
+        return unwrap(response);
+    },
 };

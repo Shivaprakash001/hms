@@ -37,8 +37,33 @@ export const queryKeys = {
       hostelKey(hostelId, 'tenants', 'list', filters ?? {}),
     detail: (hostelId: string, id: string) =>
       hostelKey(hostelId, 'tenants', 'detail', id),
+    overview: (hostelId: string, id: string) =>
+      hostelKey(hostelId, 'tenants', 'overview', id),
+    full: (hostelId: string, id: string) =>
+      hostelKey(hostelId, 'tenants', 'full', id),
+    dashboard: (hostelId: string) => hostelKey(hostelId, 'tenants', 'dashboard'),
+    allocations: (hostelId: string, tenantId: string) =>
+      hostelKey(hostelId, 'tenants', tenantId, 'allocations'),
+    obligations: (hostelId: string, tenantId: string) =>
+      hostelKey(hostelId, 'tenants', tenantId, 'obligations'),
+    advance: (hostelId: string, tenantId: string) =>
+      hostelKey(hostelId, 'tenants', tenantId, 'advance'),
+    documents: (hostelId: string, tenantId: string) =>
+      hostelKey(hostelId, 'tenants', tenantId, 'documents'),
+    activity: (hostelId: string, tenantId: string) =>
+      hostelKey(hostelId, 'tenants', tenantId, 'activity'),
     paymentHistory: (hostelId: string, id: string) =>
       hostelKey(hostelId, 'tenants', id, 'payments'),
+    moveOut: (hostelId: string, tenantId?: string) =>
+      hostelKey(hostelId, 'move-out', tenantId ?? 'all'),
+    reactivation: () => ownerKey('reactivation-requests'),
+  },
+
+  moveOut: {
+    all: (hostelId: string) => hostelKey(hostelId, 'move-out'),
+    list: (hostelId: string, status?: string) =>
+      hostelKey(hostelId, 'move-out', 'list', status ?? 'all'),
+    detail: (hostelId: string, id: string) => hostelKey(hostelId, 'move-out', 'detail', id),
   },
 
   rooms: {

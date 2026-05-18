@@ -17,6 +17,14 @@ export const paymentService = {
         const response = await api.get('/payments/dues', { params: { ...params, hostelId } });
         return unwrap(response);
     },
+    getTenantDues: async (tenantId, hostelId) => {
+        const response = await api.get('/payments/tenant-dues', { params: { tenant_id: tenantId, hostelId } });
+        return unwrap(response);
+    },
+    payDues: async (data) => {
+        const response = await api.post('/payments/pay-dues', data);
+        return unwrap(response);
+    },
     getTenantHistory: async (tenantId, hostelId) => {
         try {
             const storedTenant = localStorage.getItem('tenantUser');
