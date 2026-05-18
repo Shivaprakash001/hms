@@ -32,10 +32,7 @@ export async function GET(req: NextRequest) {
     }
     
     const stats = await dashboardService.getOwnerStats(scope.owner_id, hostelId);
-    return apiResponse({
-      success: true,
-      data: stats
-    });
+    return apiResponse(stats);
   } catch (error: any) {
     console.error("Detailed API Error [dashboard.stats]:", error);
     return Response.json(

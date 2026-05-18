@@ -189,9 +189,21 @@ export class TenantService {
     const mappedTenants = tenants.map((s: any) => {
       const tenant = this.withLegacyTenantRelations(s);
       const summary = financialService.getTenantPaymentSummary(tenant.id, tenant.obligations ?? []);
+      const firstAllocation = tenant.room_allocations?.[0];
+      const firstObligation = (tenant.obligations ?? [])[0];
       return {
         ...tenant,
         payment_summary: summary,
+        // Denormalized top-level fields consumed by the frontend
+        name: tenant.profiles?.name ?? null,
+        email: tenant.profiles?.email ?? null,
+        phone: tenant.profiles?.phone ?? tenant.phone_1 ?? null,
+        room_no: firstAllocation?.room?.room_no ?? null,
+        room_number: firstAllocation?.room?.room_no ?? null,
+        payment_status: summary.payment_status,
+        outstanding_amount: summary.pending_amount,
+        due_date: firstObligation?.due_date ?? null,
+        obligation_id: firstObligation?.id ?? null,
       };
     });
 

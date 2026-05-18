@@ -52,7 +52,7 @@ export class DashboardService {
     const hostelPaymentFilter = { hostel_id: hostelId };
 
     // ✅ Use count()+aggregate instead of findMany — avoids fetching full rows for JS-side counting
-    const [totalTenants, activeTenants, roomStats, payments, costs] = await Promise.all([
+    const [totalTenants, activeTenants, roomStats, payments, costs, occupiedRoomCount] = await Promise.all([
       prisma.tenants.count({ where: { owner_id: userId, hostel_id: hostelId } }),
       prisma.tenants.count({ where: { owner_id: userId, status: "ACTIVE", hostel_id: hostelId } }),
       prisma.$queryRaw<{ total_rooms: number; total_capacity: number }[]>`
@@ -79,6 +79,14 @@ export class DashboardService {
         },
         _sum: { amount: true },
       }),
+      // Count rooms that have at least one active allocation (source-of-truth occupancy)
+      prisma.rooms.count({
+        where: {
+          hostel_id: hostelId,
+          is_active: true,
+          room_allocations: { some: { is_active: true, end_date: null } },
+        },
+      }),
     ]);
 
     const totalCapacity = Number(roomStats[0]?.total_capacity ?? 0);
@@ -100,12 +108,15 @@ export class DashboardService {
 
     return {
       total_rooms: Number(roomStats[0]?.total_rooms ?? 0),
+      occupied_rooms: occupiedRoomCount,
       total_tenants: totalTenants,
       active_tenants: activeTenants,
       total_capacity: totalCapacity,
       vacant_beds: Math.max(totalCapacity - activeTenants, 0),
       occupancy_rate: occupancyRate,
       revenue: currentRevenue,
+      total_revenue: currentRevenue,
+      monthly_revenue: currentRevenue,
       expenses_this_month: monthlyExpenses,
       rent_collected_this_month: currentRevenue,
       pending_dues: pendingTotal,

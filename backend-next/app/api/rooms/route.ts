@@ -8,6 +8,7 @@ import { RoomCreateSchema } from "@/lib/validators";
 import { ApiResponse } from "@/src/lib/api-response";
 import { ApiError } from "@/src/lib/api-error";
 import { roomRepository } from "@/src/repositories/roomRepository";
+import { prisma } from "@/lib/db";
 import { propertyService } from "@/lib/services/property-service";
 import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
 import { assertHostelBelongsToOwner, requireHostelBelongsToOwner, scopedRoomWhere } from "@/lib/security/scoped-query";
@@ -28,7 +29,7 @@ export async function GET(req: NextRequest) {
   try {
     const scope = resolveOwnerScope(session);
     const { searchParams } = new URL(req.url);
-    const grouped = searchParams.get("grouped") !== "false";
+    const grouped = searchParams.get("grouped") === "true";
     const hostelId = searchParams.get("hostelId") || undefined;
     
     console.log(`[rooms.GET] Fetching rooms for owner ${scope.owner_id}, hostel ${hostelId}, grouped=${grouped}`);
@@ -44,12 +45,56 @@ export async function GET(req: NextRequest) {
       return ApiResponse.success(floors);
     }
 
-    // Flat list
-    const rooms = await roomRepository.findMany({
-      where: scopedRoomWhere({ owner_id: scope.owner_id, hostel_id: hostelId }, { is_active: true }),
+    // Flat list — includes active allocations so the UI can derive occupancy from source of truth
+    const rawRooms = await prisma.rooms.findMany({
+      where: {
+        hostel_id: hostelId,
+        hostels: { owner_id: scope.owner_id },
+        is_active: true,
+      },
+      include: {
+        room_allocations: {
+          where: { is_active: true, end_date: null },
+          include: {
+            tenant: {
+              select: {
+                id: true,
+                monthly_rent: true,
+                profiles: { select: { name: true, phone: true } },
+              },
+            },
+          },
+        },
+      },
       orderBy: { room_no: "asc" },
     });
-    
+
+    const rooms = rawRooms.map((room: any) => {
+      const allocs = room.room_allocations ?? [];
+      const occupiedCount = allocs.length;
+      const firstTenant = allocs[0]?.tenant ?? null;
+      const derivedStatus =
+        occupiedCount === 0 ? "vacant" : occupiedCount >= room.capacity ? "occupied" : "occupied";
+      return {
+        id: room.id,
+        room_no: room.room_no,
+        room_number: room.room_no,
+        capacity: room.capacity,
+        floor: room.floor,
+        base_rent: room.base_rent,
+        monthly_rent: room.base_rent,
+        rent: room.base_rent,
+        hostel_id: room.hostel_id,
+        is_active: room.is_active,
+        status: derivedStatus,
+        occupied_count: occupiedCount,
+        tenant_name: firstTenant?.profiles?.name ?? null,
+        tenant_id: firstTenant?.id ?? null,
+        tenant_phone: firstTenant?.profiles?.phone ?? null,
+        tenant_rent: firstTenant ? Number(firstTenant.monthly_rent ?? room.base_rent) : null,
+      };
+    });
+
     return ApiResponse.success(rooms);
   } catch (error: any) {
     console.error("Detailed API Error [rooms.GET]:", error);
