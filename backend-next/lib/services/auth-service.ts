@@ -500,7 +500,7 @@ export class AuthService {
     // 3. Find or Create Profile
     let profile = await prisma.profile.findUnique({
       where: { email: normalizedEmail },
-      include: { tenant_details: true }
+      include: { tenants: true }
     });
 
     if (!profile) {
@@ -515,7 +515,7 @@ export class AuthService {
           is_active: true,
           owner_id: newProfileId,
         },
-        include: { tenant_details: true }
+        include: { tenants: true }
       });
 
       // Bootstrap FREE subscription for Google OAuth owners, same as email registration.
@@ -536,10 +536,10 @@ export class AuthService {
       throw new Error("FORBIDDEN: Account is disabled");
     }
 
-    let tenantId = profile.tenant_details?.id || null;
-    let tenantProfileCompleted = profile.tenant_details ? profile.tenant_details.profile_completed : profile.is_profile_completed;
+    let tenantId = profile.tenants?.id || null;
+    let tenantProfileCompleted = profile.tenants ? profile.tenants.profile_completed : profile.is_profile_completed;
 
-    if (profile.role === "TENANT" && profile.tenant_details?.status === "INVITED") {
+    if (profile.role === "TENANT" && profile.tenants?.status === "INVITED") {
       throw new Error("FORBIDDEN: Account not activated. Please check your email.");
     }
 

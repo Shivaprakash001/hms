@@ -62,7 +62,7 @@ const TenantProfile = () => {
                     meData = await tenantService.getByProfileId(user.id);
                 }
 
-                const tenantRecord = meData?.tenant_details || meData || {};
+                const tenantRecord = meData?.tenants || meData?.tenant_details || meData || {};
                 const apiProfile = meData?.profile || {};
                 const profRel = meData?.profile || meData?.profiles;
                 const prof = Array.isArray(profRel) ? (profRel[0] || {}) : (profRel || {});

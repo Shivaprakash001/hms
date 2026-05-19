@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
         name: true,
         phone: true,
         email: true,
-        tenant_details: {
+        tenants: {
           select: {
             id: true,
             status: true,
@@ -67,13 +67,13 @@ export async function GET(req: NextRequest) {
     // 3. Format response for frontend 
     // Usually the frontend expects an array of tenant objects.
     const results = profiles.map(p => ({
-      id: p.tenant_details?.id, // Tenant ID
+      id: p.tenants?.id, // Tenant ID
       profile_id: p.id,
       name: p.name,
       phone: p.phone,
       email: p.email,
-      status: p.tenant_details?.status,
-      photo_url: p.tenant_details?.photo_url,
+      status: p.tenants?.status,
+      photo_url: p.tenants?.photo_url,
     })).filter(p => p.id); // Valid tenants only
 
     return NextResponse.json(results);

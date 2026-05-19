@@ -37,13 +37,13 @@ export class InvitationService {
     // 1. Duplicate check
     const existingProfile = await prisma.profile.findUnique({
       where: { email: normalizedEmail },
-      include: { tenant_details: true },
+      include: { tenants: true },
     });
     if (existingProfile) {
       if (
         existingProfile.role === "TENANT" &&
         existingProfile.owner_id === ownerId &&
-        existingProfile.tenant_details?.status === "INVITED"
+        existingProfile.tenants?.status === "INVITED"
       ) {
         logger.info(`Existing INVITED tenant found for ${normalizedEmail}; converting invite to resend.`);
         return this.resendInvitation(normalizedEmail, { id: ownerId, role: "OWNER" }, {
@@ -293,13 +293,13 @@ export class InvitationService {
         id: true,
         email: true,
         name: true,
-        tenant_details: {
+        tenants: {
           select: { status: true },
         },
       },
     });
 
-    if (!profile || profile.tenant_details?.status !== "INVITED") {
+    if (!profile || profile.tenants?.status !== "INVITED") {
       throw new Error("INVALID: Activation link expired or already used");
     }
 
@@ -325,20 +325,20 @@ export class InvitationService {
     // 1. Find the tenant by email
     const profile = await prisma.profile.findUnique({
       where: { email: normalizedEmail },
-      include: { tenant_details: true },
+      include: { tenants: true },
     });
-    if (!profile || !profile.tenant_details) {
+    if (!profile || !profile.tenants) {
       logger.warn(`Resend failed: User not found for email ${normalizedEmail}`);
       throw new Error("NOT_FOUND: User not found");
     }
-    const tenantDetails = profile.tenant_details;
+    const tenantDetails = profile.tenants;
 
     if (actor?.role === "OWNER" && profile.owner_id !== actor.id) {
       logger.warn(`Owner ${actor.id} attempted resend for foreign tenant ${normalizedEmail}`);
       throw new Error("FORBIDDEN: You can only resend invitations for your own tenants");
     }
 
-    if (profile.tenant_details.status !== "INVITED") {
+    if (profile.tenants.status !== "INVITED") {
       logger.warn(`Resend failed: Tenant ${normalizedEmail} is not in INVITED state.`);
       throw new Error("BAD_REQUEST: Tenant is already active or left");
     }
