@@ -112,6 +112,11 @@ export function LoginPage() {
         </form>
 
         <div className="text-center space-y-4 mt-6">
+          <p className="text-sm">
+            <a href="/pricing" className="text-muted-foreground hover:text-foreground font-medium underline underline-offset-4 decoration-border transition-colors">
+              View Room Plans & Pricing
+            </a>
+          </p>
           <p className="text-xs text-muted-foreground/80">
             By continuing, you agree to the{' '}
             <a href="/legal#terms" className="text-muted-foreground hover:text-foreground underline underline-offset-4 decoration-muted-foreground/30 transition-colors">
