@@ -1,8 +1,10 @@
+import { LegalPage } from "./pages/LegalPage";
 import { Routes, Route, Navigate } from 'react-router-dom';
 import App from './App';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { ProtectedTenantRoute } from './components/ProtectedTenantRoute';
 import { LoginPage } from './pages/LoginPage';
+import { LegalPage } from './pages/LegalPage';
 import { PortfolioView } from './components/views/PortfolioView';
 import { AlertsView } from './components/views/AlertsView';
 import { BillingView } from './components/views/BillingView';
@@ -28,6 +30,9 @@ export function AppRouter() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/activate" element={<ActivateAccountPage />} />
+      <Route path="/legal" element={<LegalPage />} />
+      <Route path="/terms" element={<LegalPage />} />
+      <Route path="/privacy" element={<LegalPage />} />
 
       <Route
         element={

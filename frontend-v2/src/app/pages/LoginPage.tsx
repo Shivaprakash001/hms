@@ -111,9 +111,21 @@ export function LoginPage() {
           </button>
         </form>
 
-        <p className="text-center text-xs text-muted-foreground">
-          NIVĀ Platform — Hostel Management System
-        </p>
+        <div className="text-center space-y-4 mt-6">
+          <p className="text-xs text-muted-foreground/80">
+            By continuing, you agree to the{' '}
+            <a href="/legal#terms" className="text-muted-foreground hover:text-foreground underline underline-offset-4 decoration-muted-foreground/30 transition-colors">
+              Terms & Conditions
+            </a>
+            {' '}and{' '}
+            <a href="/legal#privacy" className="text-muted-foreground hover:text-foreground underline underline-offset-4 decoration-muted-foreground/30 transition-colors">
+              Privacy Policy
+            </a>.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            NIVĀ Platform — Hostel Management System
+          </p>
+        </div>
       </div>
     </div>
   );
