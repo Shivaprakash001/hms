@@ -32,14 +32,12 @@ export function TenantDefaultsSection({ hostelId, policy }: Props) {
   const [local, setLocal] = useState<Local>(() => init(policy));
   const snap = useRef(local);
   const [error, setError] = useState<string | null>(null);
-  const [initId, setInitId] = useState(hostelId);
   const mutation = useUpdateHostelPolicy(hostelId);
 
   useEffect(() => {
-    if (policy && (hostelId !== initId || !snap.current.maintenance_type)) {
-      const next = init(policy);
-      setLocal(next); snap.current = next; setInitId(hostelId);
-    }
+    if (!policy) return;
+    const next = init(policy);
+    setLocal(next); snap.current = next;
   }, [hostelId, policy]);
 
   const isDirty = JSON.stringify(local) !== JSON.stringify(snap.current);

@@ -576,18 +576,29 @@ function deepMerge<T extends Record<string, any>>(base: T, patch: Record<string,
 
 function mergePolicy(current: HostelPolicy, patch: Record<string, any>): HostelPolicy {
   validateAllowedDomains(patch);
+  const automationPatch = asObject(patch.automation);
+  const receiptsPatch = asObject(patch.receipts);
+  const receiptAutoEmail = receiptsPatch.auto_email !== undefined
+    ? receiptsPatch.auto_email
+    : automationPatch.auto_email_receipts;
   const nextConfig = {
     policy_version: current.policy_version + 1,
     schema_version: SCHEMA_VERSION,
     billing: deepMerge(current.billing, asObject(patch.billing)),
     payments: deepMerge(current.payments, asObject(patch.payments)),
     reminders: deepMerge(current.reminders, asObject(patch.reminders)),
-    receipts: deepMerge(current.receipts, asObject(patch.receipts)),
+    receipts: deepMerge(current.receipts, {
+      ...receiptsPatch,
+      ...(receiptAutoEmail !== undefined ? { auto_email: receiptAutoEmail } : {}),
+    }),
     branding: deepMerge(current.branding, asObject(patch.branding)),
     tenant_rules: deepMerge(current.tenant_rules, asObject(patch.tenant_rules)),
 
     room_rules: deepMerge(current.room_rules, asObject(patch.room_rules)),
-    automation: deepMerge(current.automation, asObject(patch.automation)),
+    automation: deepMerge(current.automation, {
+      ...automationPatch,
+      ...(receiptAutoEmail !== undefined ? { auto_email_receipts: receiptAutoEmail } : {}),
+    }),
     dashboard: deepMerge(current.dashboard, asObject(patch.dashboard)),
     notifications: deepMerge(current.notifications, asObject(patch.notifications)),
     operations: deepMerge(current.operations, asObject(patch.operations)),

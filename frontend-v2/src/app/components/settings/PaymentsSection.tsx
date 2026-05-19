@@ -20,17 +20,12 @@ export function PaymentsSection({ hostelId, policy }: Props) {
   const [local, setLocal] = useState<Local>(() => init(policy));
   const snap = useRef(local);
   const [error, setError] = useState<string | null>(null);
-  const [initId, setInitId] = useState(hostelId);
   const mutation = useUpdateHostelPolicy(hostelId);
 
   useEffect(() => {
-    if (policy && hostelId !== initId) {
-      const next = init(policy);
-      setLocal(next); snap.current = next; setInitId(hostelId);
-    } else if (policy && !snap.current.upi_id && policy.payments.upi_id) {
-      const next = init(policy);
-      setLocal(next); snap.current = next;
-    }
+    if (!policy) return;
+    const next = init(policy);
+    setLocal(next); snap.current = next;
   }, [hostelId, policy]);
 
   const isDirty = JSON.stringify(local) !== JSON.stringify(snap.current);

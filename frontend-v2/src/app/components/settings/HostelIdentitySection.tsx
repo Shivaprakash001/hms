@@ -20,19 +20,12 @@ export function HostelIdentitySection({ hostelId, hostel }: Props) {
   const [local, setLocal] = useState<Local>(() => init(hostel));
   const snap = useRef(local);
   const [error, setError] = useState<string | null>(null);
-  const [initHostelId, setInitHostelId] = useState(hostelId);
 
   useEffect(() => {
-    if (hostel && hostelId !== initHostelId) {
-      const next = init(hostel);
-      setLocal(next);
-      snap.current = next;
-      setInitHostelId(hostelId);
-    } else if (hostel && !snap.current.name) {
-      const next = init(hostel);
-      setLocal(next);
-      snap.current = next;
-    }
+    if (!hostel) return;
+    const next = init(hostel);
+    setLocal(next);
+    snap.current = next;
   }, [hostelId, hostel]);
 
   const isDirty = JSON.stringify(local) !== JSON.stringify(snap.current);

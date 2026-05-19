@@ -5,22 +5,24 @@ import { useAuth } from '@context/AuthContext';
 import { useHostelPolicy } from '@features/settings/settingsHooks';
 import { queryKeys } from '@lib/queryKeys';
 import {
-  User, Receipt, UserCheck, CreditCard,
+  User, Receipt, UserCheck, CreditCard, Building2,
   Bell, Zap, Shield, LogOut, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { ProfileSection } from '../settings/ProfileSection';
 import { BillingSection } from '../settings/BillingSection';
 import { TenantDefaultsSection } from '../settings/TenantDefaultsSection';
+import { HostelIdentitySection } from '../settings/HostelIdentitySection';
 import { PaymentsSection } from '../settings/PaymentsSection';
 import { NotificationsSection } from '../settings/NotificationsSection';
 import { AutomationSection } from '../settings/AutomationSection';
 import { AccessDocsSection } from '../settings/AccessDocsSection';
 import { SkeletonSection } from '../settings/shared';
 
-type SectionId = 'profile' | 'billing' | 'tenant-defaults' | 'payments' | 'notifications' | 'automation' | 'access';
+type SectionId = 'profile' | 'hostel' | 'billing' | 'tenant-defaults' | 'payments' | 'notifications' | 'automation' | 'access';
 
 const SECTIONS: { id: SectionId; label: string; icon: React.ElementType; description: string; hostelScoped: boolean }[] = [
   { id: 'profile', label: 'My Profile', icon: User, description: 'Name, phone, password', hostelScoped: false },
+  { id: 'hostel', label: 'Hostel Identity', icon: Building2, description: 'Name, logo, GST, address', hostelScoped: true },
   { id: 'billing', label: 'Rent & Billing', icon: Receipt, description: 'Cycles, due dates, late fees', hostelScoped: true },
   { id: 'tenant-defaults', label: 'Tenant Defaults', icon: UserCheck, description: 'Deposit, maintenance, invite', hostelScoped: true },
   { id: 'payments', label: 'Payments', icon: CreditCard, description: 'UPI, partial payments', hostelScoped: true },
@@ -52,6 +54,7 @@ export function SettingsView() {
 
   const { data: policyData, isLoading: policyLoading } = useHostelPolicy(selectedHostelId);
   const policy = policyData?.policy;
+  const hostel = policyData?.hostel;
 
   const sectionProps = { hostelId: selectedHostelId!, policy };
 
@@ -62,6 +65,7 @@ export function SettingsView() {
     if (policyLoading && id !== 'profile') return <SkeletonSection />;
     switch (id) {
       case 'profile': return <ProfileSection />;
+      case 'hostel': return <HostelIdentitySection hostelId={selectedHostelId!} policy={policy} hostel={hostel} />;
       case 'billing': return <BillingSection {...sectionProps} />;
       case 'tenant-defaults': return <TenantDefaultsSection {...sectionProps} />;
       case 'payments': return <PaymentsSection {...sectionProps} />;

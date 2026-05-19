@@ -10,10 +10,6 @@ interface Local {
 
 const CYCLE_OPTIONS = [
   { value: 'MONTHLY', label: 'Monthly' },
-  { value: 'BIMONTHLY', label: 'Bi-monthly' },
-  { value: 'QUARTERLY', label: 'Quarterly' },
-  { value: 'HALFYEARLY', label: 'Half-yearly' },
-  { value: 'YEARLY', label: 'Yearly' },
 ];
 
 const RULE_TYPE_OPTIONS = [
@@ -51,17 +47,15 @@ export function BillingSection({ hostelId, policy }: Props) {
   const [local, setLocal] = useState<Local>(() => init(policy));
   const snap = useRef(local);
   const [error, setError] = useState<string | null>(null);
-  const [initId, setInitId] = useState(hostelId);
   const [showPreview, setShowPreview] = useState(false);
   const [previewRent, setPreviewRent] = useState('8000');
   const [previewDays, setPreviewDays] = useState('7');
   const mutation = useUpdateHostelPolicy(hostelId);
 
   useEffect(() => {
-    if (policy && (hostelId !== initId || !snap.current.rent_cycle)) {
-      const next = init(policy);
-      setLocal(next); snap.current = next; setInitId(hostelId);
-    }
+    if (!policy) return;
+    const next = init(policy);
+    setLocal(next); snap.current = next;
   }, [hostelId, policy]);
 
   const isDirty = JSON.stringify(local) !== JSON.stringify(snap.current);

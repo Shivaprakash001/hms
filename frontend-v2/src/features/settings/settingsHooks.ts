@@ -47,7 +47,10 @@ export function useUploadHostelLogo(hostelId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (file: File) => ownerService.uploadLogo(file, hostelId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: policyKey(hostelId) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: policyKey(hostelId) });
+      qc.invalidateQueries({ queryKey: ['owner', 'hostels'] });
+    },
   });
 }
 
@@ -55,7 +58,10 @@ export function useRemoveHostelLogo(hostelId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => ownerService.removeLogo(hostelId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: policyKey(hostelId) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: policyKey(hostelId) });
+      qc.invalidateQueries({ queryKey: ['owner', 'hostels'] });
+    },
   });
 }
 

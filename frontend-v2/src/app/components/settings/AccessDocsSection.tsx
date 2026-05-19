@@ -41,15 +41,11 @@ export function AccessDocsSection({ hostelId, policy }: Props) {
   const [local, setLocal] = useState<Local>(() => init(policy));
   const snap = useRef(local);
   const [error, setError] = useState<string | null>(null);
-  const [initId, setInitId] = useState(hostelId);
   const mutation = useUpdateHostelPolicy(hostelId);
 
   useEffect(() => {
-    if (policy && hostelId !== initId) {
-      const next = init(policy); setLocal(next); snap.current = next; setInitId(hostelId);
-    } else if (policy && !snap.current.prefix) {
-      const next = init(policy); setLocal(next); snap.current = next;
-    }
+    if (!policy) return;
+    const next = init(policy); setLocal(next); snap.current = next;
   }, [hostelId, policy]);
 
   const isDirty = JSON.stringify(local) !== JSON.stringify(snap.current);
@@ -59,6 +55,7 @@ export function AccessDocsSection({ hostelId, policy }: Props) {
     mutation.mutate({
       tenant_rules: { allow_profile_edits: local.allow_profile_edits, profile_photo_required: local.profile_photo_required },
       receipts: { prefix: local.prefix, footer: local.receipt_footer, auto_email: local.auto_email_receipt },
+      automation: { auto_email_receipts: local.auto_email_receipt },
       operations: { currency: local.currency, timezone: local.timezone, date_format: local.date_format, time_format: local.time_format },
     }, {
       onSuccess: () => { snap.current = local; },

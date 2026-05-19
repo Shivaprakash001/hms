@@ -21,20 +21,18 @@ export function AutomationSection({ hostelId, policy }: Props) {
   const [local, setLocal] = useState<Local>(() => init(policy));
   const snap = useRef(local);
   const [error, setError] = useState<string | null>(null);
-  const [initId, setInitId] = useState(hostelId);
   const mutation = useUpdateHostelPolicy(hostelId);
 
   useEffect(() => {
-    if (policy && hostelId !== initId) {
-      const next = init(policy); setLocal(next); snap.current = next; setInitId(hostelId);
-    }
+    if (!policy) return;
+    const next = init(policy); setLocal(next); snap.current = next;
   }, [hostelId, policy]);
 
   const isDirty = JSON.stringify(local) !== JSON.stringify(snap.current);
 
   const save = () => {
     setError(null);
-    mutation.mutate({ automation: local }, {
+    mutation.mutate({ automation: local, receipts: { auto_email: local.auto_email_receipts } }, {
       onSuccess: () => { snap.current = local; },
       onError: (e: any) => setError(e?.response?.data?.error?.message ?? 'Failed to save'),
     });
