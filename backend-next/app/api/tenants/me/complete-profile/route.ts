@@ -8,11 +8,6 @@ import { TenantProfileUpdateSchema } from "@/lib/validators";
 import { getTenantOperationalContext } from "@/lib/hostel-context";
 import { imagekit } from "@/lib/imagekit";
 import { normalizeIndianPhone } from "@/lib/utils/phone-utils";
-import { verifyIdentityToken } from "@/lib/auth-edge";
-
-
-const OTP_PURPOSE = "PHONE_VERIFICATION";
-const OTP_ACTION  = "tenant_onboarding";
 
 /**
  * 👨‍🎓 COMPLETE TENANT PROFILE (Onboarding)
@@ -53,23 +48,6 @@ export async function POST(req: NextRequest) {
       return apiError("Valid Indian mobile number is required", "VALIDATION_ERROR", 400);
     }
 
-    // ── Verify MSG91 flow token ─────────────────────────────────────────────
-    if (!payload.verification_token) {
-      return apiError("Mobile OTP verification is required", "PHONE_VERIFICATION_REQUIRED", 403);
-    }
-
-    const otpPayload = await verifyIdentityToken(payload.verification_token, OTP_PURPOSE, OTP_ACTION);
-    if (!otpPayload || otpPayload.userId !== normalizedPhone) {
-      return apiError("Invalid or expired verification token", "UNAUTHORIZED", 401);
-    }
-
-    const tokenRecord = await prisma.identity_tokens.findUnique({
-      where: { jti: otpPayload.jti },
-    });
-    if (!tokenRecord || tokenRecord.used) {
-      return apiError("Verification token already used", "UNAUTHORIZED", 401);
-    }
-    
     // Default mapped values
     let gender = payload.gender;
     if (gender === "Prefer not to say") gender = null;
@@ -84,9 +62,14 @@ export async function POST(req: NextRequest) {
       where: { profile_id: session.sub },
       select: { id: true, owner_id: true, hostel_id: true },
     });
-    const ownerPrefs = tenantOwner?.owner_id
-      ? (await getTenantOperationalContext(tenantOwner.id, tenantOwner.owner_id, tenantOwner.hostel_id)).prefs
-      : null;
+    let ownerPrefs: any = null;
+    if (tenantOwner?.owner_id) {
+      try {
+        ownerPrefs = (await getTenantOperationalContext(tenantOwner.id, tenantOwner.owner_id, tenantOwner.hostel_id)).prefs;
+      } catch (prefsError) {
+        console.error("[tenant.complete-profile] Failed to resolve onboarding preferences", prefsError);
+      }
+    }
     const profilePhotoRequired = Boolean(ownerPrefs?.require_profile_photo_onboarding);
     if (profilePhotoRequired && !profilePhotoFile) {
       return apiError("Profile photo is required by your hostel owner.", "VALIDATION_ERROR", 400);
@@ -105,32 +88,32 @@ export async function POST(req: NextRequest) {
     // Upload profile photo to ImageKit before the DB transaction
     let photoUrl: string | undefined;
     if (profilePhotoFile && tenantOwner) {
-      const photoBuffer = Buffer.from(await profilePhotoFile.arrayBuffer());
-      const upload = await imagekit.files.upload({
-        file:              photoBuffer.toString("base64"),
-        fileName:          profilePhotoFile.name || "profile.jpg",
-        folder:            `owners/${tenantOwner.owner_id}/tenants/${tenantOwner.id}/documents/PROFILE_PHOTO`,
-        useUniqueFileName: true,
-        tags:              ["PROFILE_PHOTO", tenantOwner.id],
-      });
-      photoUrl = upload.url;
+      try {
+        const photoBuffer = Buffer.from(await profilePhotoFile.arrayBuffer());
+        const upload = await imagekit.files.upload({
+          file:              photoBuffer.toString("base64"),
+          fileName:          profilePhotoFile.name || "profile.jpg",
+          folder:            `owners/${tenantOwner.owner_id}/tenants/${tenantOwner.id}/documents/PROFILE_PHOTO`,
+          useUniqueFileName: true,
+          tags:              ["PROFILE_PHOTO", tenantOwner.id],
+        });
+        photoUrl = upload.url;
+      } catch (uploadError) {
+        console.error("[tenant.complete-profile] Profile photo upload failed", uploadError);
+        if (profilePhotoRequired) {
+          return apiError("Profile photo upload failed. Please try again.", "UPLOAD_FAILED", 502);
+        }
+      }
     }
 
     // Atomic onboarding transaction
-    const updated = await prisma.$transaction(async (tx) => {
-      await tx.identity_tokens.update({
-        where: { jti: otpPayload.jti },
-        data: { used: true },
-      });
-
+    const updated = await prisma.$transaction(async (tx: any) => {
       // 1. Update Profile Layer
       await tx.profile.update({
         where: { id: session.sub },
         data: {
           name: payload.name || undefined,
-          email: payload.personal_email || undefined,
           phone: normalizedPhone,
-          mobile_verified: true,
           emergency_contact: payload.emergency_contact || undefined,
           is_profile_completed: true,
         }
@@ -141,7 +124,6 @@ export async function POST(req: NextRequest) {
         where: { profile_id: session.sub },
         data: {
           phone_1: normalizedPhone,
-          mobile_verified: true,
           personal_email: payload.personal_email || undefined,
           gender: gender || undefined,
           date_of_birth: payload.date_of_birth ? new Date(payload.date_of_birth) : undefined,

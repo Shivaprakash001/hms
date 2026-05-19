@@ -60,6 +60,11 @@ const CompleteProfile = () => {
     const [profilePhotoFile, setProfilePhotoFile] = useState(null);
     const [profilePhotoPreview, setProfilePhotoPreview] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [isPrefilling, setIsPrefilling] = useState(true);
+    const [onboardingSettings, setOnboardingSettings] = useState({
+        require_profile_photo_onboarding: false,
+        require_phone_otp_onboarding: false,
+    });
     const [error, setError] = useState('');
     const [isSuccess, setIsSuccess] = useState(false);
 
@@ -72,9 +77,51 @@ const CompleteProfile = () => {
         }));
     }, [user]);
 
+    useEffect(() => {
+        if (!user) return;
+        let mounted = true;
+
+        tenantService.getMyOnboardingSettings()
+            .then((settings) => {
+                if (!mounted) return;
+                const defaults = settings?.invited_defaults || {};
+                setOnboardingSettings({
+                    require_profile_photo_onboarding: Boolean(settings?.require_profile_photo_onboarding),
+                    require_phone_otp_onboarding: Boolean(settings?.require_phone_otp_onboarding),
+                });
+                setFormData(prev => ({
+                    ...prev,
+                    name: prev.name || defaults.name || user?.name || '',
+                    phone: prev.phone || defaults.phone || '',
+                    emergency_contact: prev.emergency_contact || defaults.emergency_contact || '',
+                    personal_email: prev.personal_email || defaults.personal_email || user?.email || '',
+                    gender: prev.gender || defaults.gender || '',
+                    date_of_birth: prev.date_of_birth || defaults.date_of_birth || '',
+                    temporary_address: prev.temporary_address || defaults.temporary_address || '',
+                    permanent_address: prev.permanent_address || defaults.permanent_address || '',
+                    profile_type: prev.profile_type || defaults.profile_type || '',
+                    college_name: prev.college_name || defaults.college_name || '',
+                    roll_number: prev.roll_number || defaults.roll_number || '',
+                    course: prev.course || defaults.course || '',
+                    year_of_study: prev.year_of_study || defaults.year_of_study || '',
+                    section: prev.section || defaults.section || '',
+                    branch: prev.branch || defaults.branch || '',
+                    office_name: prev.office_name || defaults.office_name || '',
+                    office_location: prev.office_location || defaults.office_location || '',
+                    job_role: prev.job_role || defaults.job_role || '',
+                }));
+            })
+            .catch(() => {})
+            .finally(() => {
+                if (mounted) setIsPrefilling(false);
+            });
+
+        return () => { mounted = false; };
+    }, [user]);
 
 
-    if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-600">Loading...</div>;
+
+    if (loading || isPrefilling) return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-600">Loading...</div>;
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -120,6 +167,9 @@ const CompleteProfile = () => {
     };
 
     const validateStep3 = () => {
+        if (onboardingSettings.require_profile_photo_onboarding && !profilePhotoFile) {
+            return 'Profile photo is required by your hostel owner';
+        }
         return null;
     };
 
@@ -175,7 +225,7 @@ const CompleteProfile = () => {
                 job_role: formData.job_role.trim() || undefined,
             };
 
-            await tenantService.completeMyProfile(payload, null, profilePhotoFile);
+            await tenantService.completeMyProfile(payload, profilePhotoFile);
             setIsSuccess(true);
             setTimeout(() => window.location.href = '/tenant/dashboard', 1500);
         } catch (err) {
@@ -254,7 +304,7 @@ const CompleteProfile = () => {
                                             <div className="space-y-5">
                                                 <div>
                                                     <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 block">
-                                                        Profile Photo (Optional)
+                                                        Profile Photo {onboardingSettings.require_profile_photo_onboarding ? '*' : '(Optional)'}
                                                     </Label>
                                                     <label className="flex items-center gap-4 p-3 rounded-xl border border-slate-200 bg-slate-50/50 cursor-pointer hover:bg-slate-50 transition-colors">
                                                         <div className="w-14 h-14 rounded-full overflow-hidden bg-white border border-slate-200 flex items-center justify-center">
