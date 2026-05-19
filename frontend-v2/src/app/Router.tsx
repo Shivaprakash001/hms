@@ -5,6 +5,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { ProtectedTenantRoute } from './components/ProtectedTenantRoute';
 import { LoginPage } from './pages/LoginPage';
 import { LegalPage } from './pages/LegalPage';
+import { PricingPage } from './pages/PricingPage';
 import { PortfolioView } from './components/views/PortfolioView';
 import { AlertsView } from './components/views/AlertsView';
 import { BillingView } from './components/views/BillingView';
@@ -33,6 +34,7 @@ export function AppRouter() {
       <Route path="/legal" element={<LegalPage />} />
       <Route path="/terms" element={<LegalPage />} />
       <Route path="/privacy" element={<LegalPage />} />
+      <Route path="/pricing" element={<PricingPage />} />
 
       <Route
         element={
