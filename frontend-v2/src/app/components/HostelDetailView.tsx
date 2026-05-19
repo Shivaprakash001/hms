@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, MapPin, Users, DollarSign, BedDouble, Receipt, AlertCircle, Plus, CreditCard, Phone, Wifi, FileText, Eye, EyeOff, Copy, Check, Pencil, Layers, ChevronDown, ChevronRight, X, Trash2, MoreVertical } from 'lucide-react';
+import { ChevronLeft, MapPin, Users, DollarSign, BedDouble, Receipt, AlertCircle, Plus, CreditCard, Phone, Wifi, FileText, Eye, EyeOff, Copy, Check, Pencil, Layers, ChevronDown, ChevronRight, X, Trash2, MoreVertical, TrendingUp, TrendingDown, Sparkles, Search, CalendarDays, Repeat2, Upload, Zap } from 'lucide-react';
 import { ownerService } from '@features/owners/api';
 import { dashboardService } from '@features/dashboard/api';
 import { queryKeys } from '@lib/queryKeys';
@@ -971,55 +971,629 @@ function FinancialsTab({ hostelId }: { hostelId: string }) {
 }
 
 function ExpensesTab({ hostelId }: { hostelId: string }) {
+  const queryClient = useQueryClient();
+  const [range, setRange] = useState('month');
+  const [status, setStatus] = useState('all');
+  const [sort, setSort] = useState('recent');
+  const [search, setSearch] = useState('');
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [showAddExpense, setShowAddExpense] = useState(false);
+  const params = useMemo(
+    () => ({
+      range,
+      status,
+      sort,
+      search,
+      categories: selectedCategories.join(','),
+      limit: 40,
+    }),
+    [range, search, selectedCategories, sort, status],
+  );
+
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: queryKeys.expenses.list(hostelId),
-    queryFn: () => import('@features/expenses/api').then((m) => m.expenseService.getAll(hostelId)),
+    queryKey: [...queryKeys.expenses.list(hostelId), params],
+    queryFn: () =>
+      import('@features/expenses/api').then((m) => m.expenseService.getAll(hostelId, params)),
     staleTime: 2 * 60 * 1000,
   });
 
   if (isLoading) return <TabSkeleton />;
   if (isError) return <TabError onRetry={refetch} />;
 
-  const expenses: Record<string, unknown>[] = Array.isArray(data)
-    ? data
-    : Array.isArray((data as Record<string, unknown>)?.expenses)
-    ? ((data as Record<string, unknown>).expenses as Record<string, unknown>[])
-    : [];
+  const payload = (data || {}) as Record<string, any>;
+  const expenses: Record<string, any>[] = Array.isArray(payload.expenses) ? payload.expenses : [];
+  const kpis = payload.kpis || {};
+  const categories = Array.isArray(payload.category_breakdown) ? payload.category_breakdown : [];
+  const insights = Array.isArray(payload.insights) ? payload.insights : [];
+  const monthlyTrend = Array.isArray(payload.monthly_trend) ? payload.monthly_trend : [];
+  const occupancy = payload.occupancy_impact || {};
+  const allCategories: string[] = payload.meta?.categories || EXPENSE_CATEGORIES;
+  const maxCategory = Math.max(...categories.map((c: any) => Number(c.amount || 0)), 1);
+  const maxTrend = Math.max(
+    ...monthlyTrend.map((m: any) => Math.max(Number(m.revenue || 0), Number(m.expenses || 0), Number(m.profit || 0))),
+    1,
+  );
 
-  const total = expenses.reduce((sum, e) => sum + Number(e.amount ?? 0), 0);
+  const createMutation = useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      import('@features/expenses/api').then((m) => m.expenseService.create(hostelId, body)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all(hostelId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
+      setShowAddExpense(false);
+    },
+  });
 
-  if (expenses.length === 0) {
-    return <div className="text-center py-12 text-sm text-muted-foreground">No expenses recorded</div>;
-  }
+  const updateMutation = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
+      import('@features/expenses/api').then((m) => m.expenseService.update(id, body)),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all(hostelId) }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => import('@features/expenses/api').then((m) => m.expenseService.delete(id)),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all(hostelId) }),
+  });
+
+  const toggleCategory = (category: string) => {
+    setSelectedCategories((current) =>
+      current.includes(category) ? current.filter((c) => c !== category) : [...current, category],
+    );
+  };
 
   return (
-    <div className="space-y-6">
-      <div className="bg-card border border-border rounded-xl p-4">
-        <div className="text-xs text-muted-foreground mb-1">Total Expenses</div>
-        <div className="text-2xl font-semibold text-foreground">{fmt(total)}</div>
-        <div className="text-[10px] text-muted-foreground mt-1">{expenses.length} transactions</div>
+    <div className="relative space-y-5 pb-24">
+      <div className="sticky top-[92px] z-10 -mx-4 px-4 py-3 bg-background/95 backdrop-blur border-b border-border">
+        <div className="grid grid-cols-2 gap-3">
+          <ExpenseKpi
+            label="This Month Expenses"
+            value={fmt(kpis.this_month_expenses)}
+            sub={`${Math.abs(Number(kpis.expense_growth_rate || 0)).toFixed(0)}% ${Number(kpis.expense_growth_rate || 0) >= 0 ? 'vs last month' : 'lower'}`}
+            state={Number(kpis.expense_growth_rate || 0) > 20 ? 'dangerous' : Number(kpis.expense_growth_rate || 0) > 5 ? 'warning' : 'healthy'}
+            trend={Number(kpis.expense_growth_rate || 0)}
+          />
+          <ExpenseKpi
+            label="Net Profit"
+            value={fmt(kpis.net_profit)}
+            sub={`${Number(kpis.profit_margin || 0).toFixed(0)}% margin`}
+            state={String(kpis.health || 'healthy')}
+          />
+          <ExpenseKpi
+            label="Expense / Tenant"
+            value={fmt(kpis.expense_per_tenant)}
+            sub="operational load"
+            state={Number(kpis.expense_per_tenant || 0) > 10000 ? 'warning' : 'healthy'}
+          />
+          <ExpenseKpi
+            label="Expense Ratio"
+            value={`${Number(kpis.expense_revenue_ratio || 0).toFixed(0)}%`}
+            sub="of revenue consumed"
+            state={String(kpis.expense_ratio_health || 'healthy')}
+          />
+        </div>
       </div>
-      <div>
-        <h3 className="text-sm font-medium text-foreground mb-3">Expense History</h3>
-        <div className="space-y-2">
-          {expenses.map((expense, i) => (
-            <div key={String(expense.id ?? i)} className="bg-card border border-border rounded-lg p-3">
-              <div className="flex items-start justify-between mb-1">
-                <div>
-                  <div className="text-sm font-medium text-foreground">{String(expense.category ?? expense.expense_type ?? 'Expense')}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">{String(expense.description ?? expense.notes ?? '')}</div>
-                </div>
-                <div className="text-sm font-semibold text-foreground">{fmt(expense.amount)}</div>
+
+      <section className="space-y-3">
+        <SectionTitle title="Expense Intelligence" sub="Where money is moving and what needs attention" />
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="bg-card border border-border rounded-xl p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-foreground">Category Breakdown</h3>
+              <span className="text-[10px] text-muted-foreground">This month</span>
+            </div>
+            {categories.length === 0 ? (
+              <EmptyMini text="Add expenses to reveal category leakage." />
+            ) : (
+              <div className="space-y-3">
+                {categories.slice(0, 8).map((cat: any) => (
+                  <div key={String(cat.category)}>
+                    <div className="flex items-center justify-between gap-3 text-xs mb-1.5">
+                      <span className="font-medium text-foreground">{cat.category}</span>
+                      <span className="text-muted-foreground">
+                        {fmt(cat.amount)} · {Number(cat.percentage || 0).toFixed(0)}%
+                      </span>
+                    </div>
+                    <div className="h-2.5 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className={`h-full ${categoryTone(cat.category).bar}`}
+                        style={{ width: `${Math.max(4, (Number(cat.amount || 0) / maxCategory) * 100)}%` }}
+                      />
+                    </div>
+                    {cat.anomaly && (
+                      <div className="mt-1 text-[10px] font-medium text-warning">{cat.anomaly}</div>
+                    )}
+                  </div>
+                ))}
               </div>
-              <div className="text-[10px] text-muted-foreground">
-                {expense.expense_date ? new Date(String(expense.expense_date)).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : ''}
+            )}
+          </div>
+
+          <div className="bg-card border border-border rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-4">
+              <Sparkles className="w-4 h-4 text-accent" />
+              <h3 className="text-sm font-semibold text-foreground">Health Insights</h3>
+            </div>
+            <div className="space-y-2">
+              {insights.map((insight: any, i: number) => (
+                <div key={`${insight.title}-${i}`} className="rounded-lg border border-border bg-background p-3">
+                  <div className="flex items-start gap-2">
+                    <span className={`mt-1 h-2 w-2 rounded-full ${severityDot(insight.severity)}`} />
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">{insight.title}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{insight.detail}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="bg-card border border-border rounded-xl p-4">
+            <h3 className="text-sm font-semibold text-foreground mb-4">Revenue · Expense · Profit</h3>
+            <div className="space-y-3">
+              {monthlyTrend.map((m: any) => (
+                <div key={String(m.month)} className="space-y-1.5">
+                  <div className="flex justify-between text-[10px] text-muted-foreground">
+                    <span>{String(m.month)}</span>
+                    <span>{fmt(m.profit)} profit</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1 h-8 items-end">
+                    <TrendBar value={Number(m.revenue || 0)} max={maxTrend} className="bg-success" />
+                    <TrendBar value={Number(m.expenses || 0)} max={maxTrend} className="bg-destructive" />
+                    <TrendBar value={Math.max(0, Number(m.profit || 0))} max={maxTrend} className="bg-accent" />
+                  </div>
+                </div>
+              ))}
+              <div className="flex gap-3 text-[10px] text-muted-foreground pt-1">
+                <span className="inline-flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-success" />Revenue</span>
+                <span className="inline-flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-destructive" />Expenses</span>
+                <span className="inline-flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-accent" />Profit</span>
               </div>
             </div>
-          ))}
+          </div>
+
+          <div className="bg-card border border-border rounded-xl p-4">
+            <h3 className="text-sm font-semibold text-foreground mb-4">Occupancy Impact</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <ImpactMetric label="Occupancy" value={`${Number(occupancy.occupancy_rate || 0).toFixed(0)}%`} />
+              <ImpactMetric label="Expense / Bed" value={fmt(occupancy.expense_per_occupied_bed)} />
+              <ImpactMetric label="Vacancy Loss" value={fmt(occupancy.vacancy_loss_estimate)} />
+              <ImpactMetric label="Fixed Cost" value={`${Number(occupancy.fixed_cost_pressure || 0).toFixed(0)}%`} />
+            </div>
+            <div className="mt-4 rounded-lg bg-warning/10 border border-warning/20 p-3 text-xs text-foreground">
+              {occupancy.message || 'Occupancy and cost pressure will appear as snapshots build.'}
+            </div>
+          </div>
         </div>
+      </section>
+
+      <section className="space-y-3">
+        <SectionTitle title="Expense Ledger" sub={`${payload.total || expenses.length} records`} />
+        <div className="sticky top-[260px] z-[9] -mx-4 px-4 py-3 bg-background/95 backdrop-blur border-y border-border space-y-3">
+          <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+            {[
+              ['today', 'Today'],
+              ['week', 'This Week'],
+              ['month', 'This Month'],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                onClick={() => setRange(value)}
+                className={`shrink-0 px-3 py-2 rounded-full text-xs font-semibold border ${
+                  range === value ? 'bg-accent text-accent-foreground border-accent' : 'bg-card border-border text-muted-foreground'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+            <select value={status} onChange={(e) => setStatus(e.target.value)} className="shrink-0 px-3 py-2 rounded-full text-xs border border-border bg-card">
+              <option value="all">All Status</option>
+              <option value="paid">Paid</option>
+              <option value="pending">Pending</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+            <select value={sort} onChange={(e) => setSort(e.target.value)} className="shrink-0 px-3 py-2 rounded-full text-xs border border-border bg-card">
+              <option value="recent">Recent</option>
+              <option value="highest">Highest Amount</option>
+              <option value="oldest">Oldest</option>
+              <option value="category">Category</option>
+            </select>
+          </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search title, vendor, notes"
+              className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-border bg-card text-sm outline-none focus:ring-2 focus:ring-accent/20"
+            />
+          </div>
+          <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+            {allCategories.slice(0, 12).map((category) => (
+              <button
+                key={category}
+                onClick={() => toggleCategory(category)}
+                className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-semibold border ${
+                  selectedCategories.includes(category)
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-card border-border text-muted-foreground'
+                }`}
+              >
+                {category}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {expenses.length === 0 ? (
+          <ExpenseEmptyState onAdd={() => setShowAddExpense(true)} />
+        ) : (
+          <div className="space-y-3">
+            {expenses.map((expense) => (
+              <ExpenseCard
+                key={String(expense.id)}
+                expense={expense}
+                onDuplicate={() => setShowAddExpense(true)}
+                onMarkPending={() => updateMutation.mutate({ id: String(expense.id), body: { status: 'pending' } })}
+                onDelete={() => deleteMutation.mutate(String(expense.id))}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <button
+        type="button"
+        onClick={() => setShowAddExpense(true)}
+        className="fixed right-5 bottom-6 z-20 h-14 w-14 rounded-full bg-accent text-accent-foreground shadow-lg flex items-center justify-center active:scale-95"
+        aria-label="Add expense"
+      >
+        <Plus className="w-6 h-6" />
+      </button>
+
+      {showAddExpense && (
+        <AddExpenseModal
+          categories={allCategories}
+          loading={createMutation.isPending}
+          onClose={() => setShowAddExpense(false)}
+          onSubmit={(body) => createMutation.mutate(body)}
+        />
+      )}
+    </div>
+  );
+}
+
+const EXPENSE_CATEGORIES = [
+  'Food',
+  'Electricity',
+  'Water',
+  'Internet',
+  'Staff Salary',
+  'Maintenance',
+  'Repairs',
+  'Cleaning',
+  'Security',
+  'Furniture',
+  'Kitchen',
+  'Marketing',
+  'Transport',
+  'Miscellaneous',
+];
+
+function SectionTitle({ title, sub }: { title: string; sub?: string }) {
+  return (
+    <div className="flex items-end justify-between gap-3">
+      <h2 className="text-base font-semibold text-foreground">{title}</h2>
+      {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
+    </div>
+  );
+}
+
+function ExpenseKpi({ label, value, sub, state, trend }: { label: string; value: string; sub: string; state: string; trend?: number }) {
+  const color = state === 'dangerous' ? 'text-destructive' : state === 'warning' ? 'text-warning' : 'text-success';
+  return (
+    <div className="bg-card border border-border rounded-xl p-3 min-w-0">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold truncate">{label}</p>
+        {trend !== undefined ? (
+          trend >= 0 ? <TrendingUp className={`w-3.5 h-3.5 ${color}`} /> : <TrendingDown className="w-3.5 h-3.5 text-success" />
+        ) : (
+          <span className={`w-2 h-2 rounded-full ${state === 'dangerous' ? 'bg-destructive' : state === 'warning' ? 'bg-warning' : 'bg-success'}`} />
+        )}
+      </div>
+      <div className={`mt-2 text-xl font-bold ${color}`}>{value}</div>
+      <div className="mt-1 text-[10px] text-muted-foreground truncate">{sub}</div>
+    </div>
+  );
+}
+
+function categoryTone(category: string) {
+  const tones: Record<string, { chip: string; bar: string }> = {
+    Food: { chip: 'bg-warning/10 text-warning', bar: 'bg-warning' },
+    Electricity: { chip: 'bg-destructive/10 text-destructive', bar: 'bg-destructive' },
+    Water: { chip: 'bg-info/10 text-info', bar: 'bg-info' },
+    Internet: { chip: 'bg-accent/10 text-accent', bar: 'bg-accent' },
+    Maintenance: { chip: 'bg-primary/10 text-primary', bar: 'bg-primary' },
+  };
+  return tones[category] || { chip: 'bg-muted text-muted-foreground', bar: 'bg-muted-foreground' };
+}
+
+function severityDot(severity: string) {
+  if (severity === 'dangerous') return 'bg-destructive';
+  if (severity === 'warning') return 'bg-warning';
+  return 'bg-success';
+}
+
+function TrendBar({ value, max, className }: { value: number; max: number; className: string }) {
+  return (
+    <div className="h-8 flex items-end rounded bg-muted/40 overflow-hidden">
+      <div className={`w-full rounded-t ${className}`} style={{ height: `${Math.max(5, (value / max) * 100)}%` }} />
+    </div>
+  );
+}
+
+function ImpactMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-background border border-border p-3">
+      <p className="text-[10px] text-muted-foreground">{label}</p>
+      <p className="mt-1 text-lg font-bold text-foreground">{value}</p>
+    </div>
+  );
+}
+
+function EmptyMini({ text }: { text: string }) {
+  return <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">{text}</div>;
+}
+
+function ExpenseEmptyState({ onAdd }: { onAdd: () => void }) {
+  return (
+    <div className="rounded-xl border border-border bg-card p-6 text-center">
+      <div className="mx-auto w-12 h-12 rounded-xl bg-accent/10 text-accent flex items-center justify-center">
+        <Zap className="w-6 h-6" />
+      </div>
+      <h3 className="mt-4 text-lg font-bold text-foreground">Start tracking hostel operations</h3>
+      <p className="mt-2 text-sm text-muted-foreground">
+        Track electricity, food, maintenance and staff costs to understand profitability.
+      </p>
+      <div className="mt-4 grid gap-2 text-left text-xs text-muted-foreground">
+        <div className="rounded-lg bg-background border border-border p-3">Food cost vs revenue insight</div>
+        <div className="rounded-lg bg-background border border-border p-3">Expense per occupied bed</div>
+        <div className="rounded-lg bg-background border border-border p-3">Profit margin warnings</div>
+      </div>
+      <button onClick={onAdd} className="mt-5 px-4 py-2.5 rounded-xl bg-accent text-accent-foreground text-sm font-semibold">
+        Add First Expense
+      </button>
+    </div>
+  );
+}
+
+function ExpenseCard({
+  expense,
+  onDuplicate,
+  onMarkPending,
+  onDelete,
+}: {
+  expense: Record<string, any>;
+  onDuplicate: () => void;
+  onMarkPending: () => void;
+  onDelete: () => void;
+}) {
+  const tone = categoryTone(String(expense.category || 'Miscellaneous'));
+  return (
+    <div className="rounded-xl border border-border bg-card p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-foreground truncate">{String(expense.title || 'Expense')}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className={`px-2 py-1 rounded-full text-[10px] font-semibold ${tone.chip}`}>{String(expense.category || 'Misc')}</span>
+            <span className="text-[10px] text-muted-foreground inline-flex items-center gap-1">
+              <CalendarDays className="w-3 h-3" />
+              {expense.date ? new Date(String(expense.date)).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : 'No date'}
+            </span>
+            {expense.is_recurring && (
+              <span className="text-[10px] text-accent inline-flex items-center gap-1">
+                <Repeat2 className="w-3 h-3" />
+                Recurring
+              </span>
+            )}
+          </div>
+          {(expense.notes || expense.vendor_name || expense.hostel) && (
+            <p className="mt-2 text-xs text-muted-foreground line-clamp-2">
+              {[expense.vendor_name, expense.notes, expense.hostel].filter(Boolean).join(' · ')}
+            </p>
+          )}
+        </div>
+        <div className="text-right shrink-0">
+          <p className="text-xl font-bold text-foreground">{fmt(expense.amount)}</p>
+          <p className={`mt-1 text-[10px] font-semibold ${expense.status === 'paid' ? 'text-success' : expense.status === 'cancelled' ? 'text-destructive' : 'text-warning'}`}>
+            {String(expense.status || 'paid').toUpperCase()}
+          </p>
+        </div>
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-2">
+        <button onClick={onDuplicate} className="rounded-lg border border-border py-2 text-[10px] font-semibold text-muted-foreground">Duplicate</button>
+        <button onClick={onMarkPending} className="rounded-lg border border-border py-2 text-[10px] font-semibold text-muted-foreground">Mark Pending</button>
+        <button onClick={onDelete} className="rounded-lg border border-destructive/20 py-2 text-[10px] font-semibold text-destructive">Delete</button>
       </div>
     </div>
   );
+}
+
+function AddExpenseModal({
+  categories,
+  loading,
+  onClose,
+  onSubmit,
+}: {
+  categories: string[];
+  loading: boolean;
+  onClose: () => void;
+  onSubmit: (body: Record<string, unknown>) => void;
+}) {
+  const [form, setForm] = useState({
+    title: '',
+    amount: '',
+    category: 'Miscellaneous',
+    date: new Date().toISOString().slice(0, 10),
+    status: 'paid',
+    notes: '',
+    payment_method: '',
+    vendor_name: '',
+    is_recurring: false,
+    recurring_frequency: 'monthly',
+  });
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const suggestion = form.title ? suggestExpenseCategory(form.title) : '';
+
+  const submit = () => {
+    if (!form.title.trim() || !Number(form.amount) || !form.category || !form.date) return;
+    onSubmit({
+      ...form,
+      title: form.title.trim(),
+      amount: Number(form.amount),
+      category: form.category,
+      notes: form.notes.trim() || undefined,
+      vendor_name: form.vendor_name.trim() || undefined,
+      payment_method: form.payment_method || undefined,
+      receipt_image: receiptFile || undefined,
+      is_recurring: form.is_recurring,
+      recurring_frequency: form.is_recurring ? form.recurring_frequency : undefined,
+      expense_type: ['Internet', 'Security', 'Staff Salary', 'Salary'].includes(form.category) ? 'FIXED' : 'VARIABLE',
+      metadata: suggestion && suggestion !== form.category ? { category_suggestion: suggestion } : undefined,
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center justify-center">
+      <div className="w-full sm:max-w-lg bg-card rounded-t-2xl sm:rounded-2xl border border-border p-4 max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-bold text-foreground">Add Expense</h3>
+            <p className="text-xs text-muted-foreground">Fast entry for daily operations</p>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-muted">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <input
+            value={form.title}
+            onChange={(e) => {
+              const title = e.target.value;
+              setForm((f) => ({ ...f, title, category: f.category === 'Miscellaneous' ? suggestExpenseCategory(title) : f.category }));
+            }}
+            placeholder="Title, e.g. EB Bill"
+            className="w-full px-3 py-3 rounded-xl border border-border bg-background text-sm outline-none"
+          />
+          {suggestion && (
+            <button
+              onClick={() => setForm((f) => ({ ...f, category: suggestion }))}
+              className="text-[10px] font-semibold text-accent"
+            >
+              Suggested category: {suggestion}
+            </button>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <input
+              type="number"
+              value={form.amount}
+              onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+              placeholder="Amount"
+              className="w-full px-3 py-3 rounded-xl border border-border bg-background text-sm outline-none"
+            />
+            <input
+              type="date"
+              value={form.date}
+              onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+              className="w-full px-3 py-3 rounded-xl border border-border bg-background text-sm outline-none"
+            />
+          </div>
+          <select value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))} className="w-full px-3 py-3 rounded-xl border border-border bg-background text-sm">
+            {categories.map((category) => <option key={category} value={category}>{category}</option>)}
+          </select>
+          <div className="grid grid-cols-2 gap-3">
+            <select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} className="w-full px-3 py-3 rounded-xl border border-border bg-background text-sm">
+              <option value="paid">Paid</option>
+              <option value="pending">Pending</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+            <input
+              value={form.payment_method}
+              onChange={(e) => setForm((f) => ({ ...f, payment_method: e.target.value }))}
+              placeholder="Payment method"
+              className="w-full px-3 py-3 rounded-xl border border-border bg-background text-sm outline-none"
+            />
+          </div>
+          <input
+            value={form.vendor_name}
+            onChange={(e) => setForm((f) => ({ ...f, vendor_name: e.target.value }))}
+            placeholder="Vendor name"
+            className="w-full px-3 py-3 rounded-xl border border-border bg-background text-sm outline-none"
+          />
+          <textarea
+            value={form.notes}
+            onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+            placeholder="Notes"
+            rows={3}
+            className="w-full px-3 py-3 rounded-xl border border-border bg-background text-sm outline-none resize-none"
+          />
+          <label className="flex items-center gap-3 rounded-xl border border-dashed border-border bg-background p-3 cursor-pointer hover:bg-muted/40">
+            <Upload className="w-4 h-4 text-muted-foreground" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-foreground truncate">
+                {receiptFile ? receiptFile.name : 'Attach receipt image'}
+              </p>
+              <p className="text-[11px] text-muted-foreground">JPG, PNG or WEBP under 4MB</p>
+            </div>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
+            />
+          </label>
+          <label className="flex items-center justify-between rounded-xl border border-border bg-background p-3">
+            <span className="text-sm font-medium text-foreground">Recurring expense</span>
+            <input
+              type="checkbox"
+              checked={form.is_recurring}
+              onChange={(e) => setForm((f) => ({ ...f, is_recurring: e.target.checked }))}
+            />
+          </label>
+          {form.is_recurring && (
+            <select value={form.recurring_frequency} onChange={(e) => setForm((f) => ({ ...f, recurring_frequency: e.target.value }))} className="w-full px-3 py-3 rounded-xl border border-border bg-background text-sm">
+              <option value="monthly">Monthly</option>
+              <option value="weekly">Weekly</option>
+              <option value="yearly">Yearly</option>
+            </select>
+          )}
+        </div>
+
+        <button
+          onClick={submit}
+          disabled={loading || !form.title.trim() || !Number(form.amount)}
+          className="mt-5 w-full py-3 rounded-xl bg-accent text-accent-foreground text-sm font-semibold disabled:opacity-50"
+        >
+          {loading ? 'Saving...' : 'Save Expense'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function suggestExpenseCategory(title: string) {
+  const text = title.toLowerCase();
+  if (/(electric|power|eb|current|bill)/.test(text)) return 'Electricity';
+  if (/(food|rice|milk|grocery|vegetable|kitchen|meal)/.test(text)) return 'Food';
+  if (/(wifi|internet|broadband|router|airtel|jio)/.test(text)) return 'Internet';
+  if (/(repair|plumb|paint|fix|carpenter)/.test(text)) return 'Repairs';
+  if (/(clean|housekeep)/.test(text)) return 'Cleaning';
+  if (/(salary|staff|warden|watchman)/.test(text)) return 'Staff Salary';
+  if (/(water|tanker)/.test(text)) return 'Water';
+  return 'Miscellaneous';
 }
 
 function MoveOutsTab({ hostelId }: { hostelId: string }) {

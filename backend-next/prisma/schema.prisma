@@ -88,20 +88,34 @@ model complaints {
 }
 
 model expenses {
-  id         String   @id @db.Uuid
-  owner_id   String   @db.Uuid
-  title      String
-  amount     Decimal  @db.Decimal(10, 2)
-  date       DateTime @db.Date
-  category   String
-  status     String?  @default("paid")
-  created_at DateTime @default(now()) @db.Timestamptz(6)
-  hostel_id  String   @db.Uuid
-  hostels    hostels  @relation(fields: [hostel_id], references: [id])
-  profiles   profile @relation(fields: [owner_id], references: [id])
+  id                  String    @id @db.Uuid
+  owner_id            String    @db.Uuid
+  title               String
+  amount              Decimal   @db.Decimal(10, 2)
+  date                DateTime  @db.Date
+  category            String
+  status              String?   @default("paid")
+  created_at          DateTime  @default(now()) @db.Timestamptz(6)
+  hostel_id           String    @db.Uuid
+  notes               String?
+  vendor_name         String?
+  payment_method      String?
+  receipt_url         String?
+  receipt_uploaded_at DateTime? @db.Timestamptz(6)
+  is_recurring        Boolean   @default(false)
+  recurring_frequency String?
+  created_by          String?   @db.Uuid
+  approved_by         String?   @db.Uuid
+  expense_type        String    @default("VARIABLE")
+  tags                String[]  @default([])
+  metadata            Json?
+  hostels             hostels   @relation(fields: [hostel_id], references: [id])
+  profiles            profile   @relation(fields: [owner_id], references: [id])
 
   @@index([date])
+  @@index([hostel_id, category, date])
   @@index([hostel_id, date])
+  @@index([hostel_id, status])
   @@index([hostel_id])
   @@index([owner_id, date])
   @@index([owner_id])
