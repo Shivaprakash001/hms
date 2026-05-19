@@ -15,19 +15,19 @@ import { InvitationSchema } from "@/lib/validators";
 export async function POST(req: NextRequest) {
   const session = await getSession(req);
   if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
-    return ApiResponse.error(ApiError.forbidden("Only owners/admins can invite tenants"));
+    return apiError("Only owners/admins can invite tenants", "FORBIDDEN", 403);
   }
 
   try {
     const body = await req.json();
     const validatedData = InvitationSchema.safeParse(body);
     if (!validatedData.success) {
-      return ApiResponse.error(ApiError.validationError("Validation failed"));
+      return apiError("Validation failed", "VALIDATION_ERROR", 400);
     }
 
     const result = await invitationService.inviteTenant(validatedData.data, session.sub);
     
-    return ApiResponse.success(result, 201);
+    return apiResponse(result, result?.email_sent === false ? 202 : 201);
   } catch (error: any) {
     const rawMessage = String(error?.message || "Failed to send invitation");
     const [maybeCode, ...rest] = rawMessage.split(":");
@@ -45,6 +45,6 @@ export async function POST(req: NextRequest) {
     };
 
     const status = statusMap[normalizedCode] || 500;
-    return ApiResponse.error(new ApiError(status, normalizedCode || "INVITATION_ERROR", normalizedMessage));
+    return apiError(normalizedMessage, normalizedCode || "INVITATION_ERROR", status);
   }
 }

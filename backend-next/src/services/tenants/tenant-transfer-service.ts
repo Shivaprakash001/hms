@@ -25,6 +25,7 @@ import { prisma } from "../../../lib/db";
 import { eventSystem } from "../../../lib/events";
 import { eventLog } from "../../../lib/services/event-log-service";
 import { getLogger } from "../../../lib/logger";
+import crypto from "crypto";
 
 const logger = getLogger("tenant-transfer-service");
 
@@ -122,7 +123,7 @@ export class TenantTransferService {
 
     // ── Atomic transfer transaction ─────────────────────────────────────────
 
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       // A. Close old allocation
       await tx.roomAllocation.update({
         where: { id: currentAllocation.id },
@@ -135,6 +136,7 @@ export class TenantTransferService {
       // B. Create new allocation with denormalized hostel_id
       const newAllocation = await tx.roomAllocation.create({
         data: {
+          id: crypto.randomUUID(),
           tenant_id: tenantId,
           room_id: targetRoomId,
           start_date: transferDate,

@@ -112,19 +112,20 @@ export class InvitationService {
 
     let createdBundle: { profile: any; tenant: any; obligations: string[]; allocationId: string };
     try {
-      createdBundle = await prisma.$transaction(async (tx) => {
+      createdBundle = await prisma.$transaction(async (tx: any) => {
         const profile = await tx.profile.create({
-        data: {
-          email: normalizedEmail,
-          name,
-          phone,
-          role: "TENANT",
-          is_active: false,
-          owner_id: ownerId,
-          invitation_token: token,
-          invitation_expires_at: expiresAt,
-        },
-      });
+          data: {
+            id: crypto.randomUUID(),
+            email: normalizedEmail,
+            name,
+            phone,
+            role: "TENANT",
+            is_active: false,
+            owner_id: ownerId,
+            invitation_token: token,
+            invitation_expires_at: expiresAt,
+          },
+        });
 
       const tenant = await tx.tenants.create({
         data: {
@@ -144,6 +145,7 @@ export class InvitationService {
 
       const allocation = await tx.roomAllocation.create({
         data: {
+          id: crypto.randomUUID(),
           tenant_id: tenant.id,
           room_id,
           start_date: joiningDate,
@@ -214,7 +216,15 @@ export class InvitationService {
     });
     if (!emailResult.sent) {
       logger.error(`Failed to send invitation email to ${normalizedEmail}: ${String(emailResult.error || "unknown")}`);
-      throw new Error("INTERNAL_ERROR: EMAIL_DELIVERY_FAILED");
+      return {
+        tenant_id: newTenant.id,
+        email: normalizedEmail,
+        activation_link: activationLink,
+        action: "INVITED",
+        obligations,
+        email_sent: false,
+        email_error: String(emailResult.error || "unknown"),
+      };
     }
     logger.info(`Successfully queued invitation email for ${normalizedEmail}`);
 
@@ -224,6 +234,7 @@ export class InvitationService {
       activation_link: activationLink,
       action: "INVITED",
       obligations,
+      email_sent: true,
     };
   }
 
@@ -257,19 +268,21 @@ export class InvitationService {
 
     const hashedPassword = await hashPassword(password);
 
-    await prisma.profile.update({
-      where: { id: profile.id },
-      data: {
-        password_hash: hashedPassword,
-        is_active: true,
-        invitation_token: null,
-        invitation_expires_at: null,
-      },
-    });
+    await prisma.$transaction(async (tx: any) => {
+      await tx.profile.update({
+        where: { id: profile.id },
+        data: {
+          password_hash: hashedPassword,
+          is_active: true,
+          invitation_token: null,
+          invitation_expires_at: null,
+        },
+      });
 
-    await prisma.tenants.update({
-      where: { id: tenant.id },
-      data: { status: "ACTIVE" },
+      await tx.tenants.update({
+        where: { id: tenant.id },
+        data: { status: "ACTIVE" },
+      });
     });
     await allocationReconciliationService.reconcileTenant(tenant.id).catch((err: any) => {
       logger.error("reconcile_after_activate_failed", {
@@ -347,7 +360,7 @@ export class InvitationService {
     const roomIdOverride = overrides?.room_id ? String(overrides.room_id) : undefined;
     if (overrides?.name || typeof overrides?.phone !== "undefined" || typeof overrides?.monthly_rent !== "undefined" || roomIdOverride) {
       try {
-        await prisma.$transaction(async (tx) => {
+        await prisma.$transaction(async (tx: any) => {
           if (overrides?.name || typeof overrides?.phone !== "undefined") {
             await tx.profile.update({
               where: { id: profile.id },
@@ -398,6 +411,7 @@ export class InvitationService {
             } else {
               await tx.roomAllocation.create({
                 data: {
+                  id: crypto.randomUUID(),
                   tenant_id: tenantDetails.id,
                   room_id: roomIdOverride,
                   hostel_id: targetRoom.hostels.id,
@@ -557,7 +571,7 @@ export class InvitationService {
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
 
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: any) => {
       await tx.profile.update({
         where: { id: tenant.profile_id },
         data: {
@@ -592,6 +606,7 @@ export class InvitationService {
       } else {
         await tx.roomAllocation.create({
           data: {
+            id: crypto.randomUUID(),
             tenant_id: tenant.id,
             room_id: targetRoom.id,
             hostel_id: targetRoom.hostel_id,

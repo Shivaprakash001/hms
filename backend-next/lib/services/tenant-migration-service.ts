@@ -95,7 +95,7 @@ export class TenantMigrationService {
 
       const { obligationEngine } = await import("../../src/services/payments/obligation-engine");
 
-      const result = await prisma.$transaction(async (tx) => {
+      const result = await prisma.$transaction(async (tx: any) => {
         await tx.$executeRaw`SELECT id FROM rooms WHERE id = ${room.id}::uuid FOR UPDATE`;
 
         const currentOccupancy = await tx.roomAllocation.count({
@@ -111,6 +111,7 @@ export class TenantMigrationService {
 
         const profile = await tx.profile.create({
           data: {
+            id: crypto.randomUUID(),
             email: normalizedEmail,
             name: data.name,
             phone: normalizedPhone,
@@ -146,6 +147,7 @@ export class TenantMigrationService {
 
         const allocation = await tx.roomAllocation.create({
           data: {
+            id: crypto.randomUUID(),
             tenant_id: tenant.id,
             room_id: room.id,
             hostel_id: hostelId,

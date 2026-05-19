@@ -3,6 +3,7 @@ import { eventSystem } from "../../../lib/events";
 import { allocationReconciliationService } from "../../../lib/services/allocation-reconciliation-service";
 import { getLogger } from "../../../lib/logger";
 import { allocationRepository } from "../../repositories/allocationRepository";
+import crypto from "crypto";
 
 const logger = getLogger("room-allocation-service");
 
@@ -42,7 +43,7 @@ export class RoomAllocationService {
 
     let allocationData: any;
     try {
-      allocationData = await prisma.$transaction(async (tx) => {
+      allocationData = await prisma.$transaction(async (tx: any) => {
         // 1. Check if tenant already has an active allocation
         const existing = await tx.roomAllocation.findFirst({
           where: { tenant_id: tenantId, is_active: true, end_date: null }
@@ -72,6 +73,7 @@ export class RoomAllocationService {
         // 3. Create allocation with denormalized hostel_id (immutable snapshot)
         const allocation = await tx.roomAllocation.create({
           data: {
+            id: crypto.randomUUID(),
             tenant_id: tenantId,
             room_id: roomId,
             start_date: new Date(startDate),
@@ -131,7 +133,7 @@ export class RoomAllocationService {
 
     let shiftData: any;
     try {
-      shiftData = await prisma.$transaction(async (tx) => {
+      shiftData = await prisma.$transaction(async (tx: any) => {
         // 1. Find active allocation
         const active = await tx.roomAllocation.findFirst({
           where: { tenant_id: tenantId, is_active: true, end_date: null },
@@ -171,6 +173,7 @@ export class RoomAllocationService {
         // 4. Create new allocation with denormalized hostel_id (immutable snapshot)
         const newAllocation = await tx.roomAllocation.create({
           data: {
+            id: crypto.randomUUID(),
             tenant_id: tenantId,
             room_id: newRoomId,
             start_date: new Date(shiftDate),
