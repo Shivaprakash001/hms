@@ -1,4 +1,5 @@
 export const PRODUCTION_FRONTEND_URL = "https://sriadithyahostels.in";
+export const PRODUCTION_FRONTEND_WWW_URL = "https://www.sriadithyahostels.in";
 export const PRODUCTION_BACKEND_URL = "https://api.sriadithyahostels.in";
 
 const TEMPORARY_LEGACY_FRONTEND_ORIGINS = [
@@ -78,6 +79,7 @@ export function getGoogleRedirectUri() {
 export function getAllowedFrontendOrigins() {
   return Array.from(new Set([
     PRODUCTION_FRONTEND_URL,
+    PRODUCTION_FRONTEND_WWW_URL,
     getFrontendUrl(),
     ...envList(process.env.CORS_ALLOWED_ORIGINS),
     ...envList(process.env.LEGACY_FRONTEND_ORIGINS),
@@ -87,6 +89,6 @@ export function getAllowedFrontendOrigins() {
 
 export function getCorsAllowOrigin(requestOrigin?: string | null) {
   const origin = normalizeUrl(requestOrigin);
-  if (!origin) return getFrontendUrl();
-  return getAllowedFrontendOrigins().includes(origin) ? origin : getFrontendUrl();
+  if (!origin) return PRODUCTION_FRONTEND_URL;
+  return getAllowedFrontendOrigins().includes(origin) ? origin : PRODUCTION_FRONTEND_URL;
 }
