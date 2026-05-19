@@ -21,6 +21,10 @@
       "@/*": ["./src/*"],
       "@lib/*": ["./src/lib/*"],
       "@features/*": ["./src/features/*"],
+      "@domains/*": ["./src/domains/*"],
+      "@platforms/*": ["./src/platforms/*"],
+      "@shared/*": ["./src/shared/*"],
+      "@infrastructure/*": ["./src/infrastructure/*"],
       "@context/*": ["./src/context/*"],
       "@services/*": ["./src/services/*"]
     }

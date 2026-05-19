@@ -170,7 +170,7 @@ export function SettingsView() {
           <span className="font-medium">Log Out</span>
         </button>
 
-        <div className="text-center text-xs text-muted-foreground">NIVĀ Platform v1.0.0</div>
+        <div className="text-center text-xs text-muted-foreground">Sri Adithya Hostels v1.0.0</div>
       </div>
     </div>
   );

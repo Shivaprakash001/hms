@@ -42,7 +42,7 @@ export function LoginPage() {
           </div>
           <div>
             <h1 className="text-2xl font-semibold text-foreground">Welcome back</h1>
-            <p className="text-sm text-muted-foreground mt-1">Sign in to your NIVĀ account</p>
+            <p className="text-sm text-muted-foreground mt-1">Sign in to your Sri Adithya account</p>
           </div>
         </div>
 
@@ -128,7 +128,7 @@ export function LoginPage() {
             </a>.
           </p>
           <p className="text-xs text-muted-foreground">
-            NIVĀ Platform — Hostel Management System
+            Sri Adithya Hostels — Hostel Management System
           </p>
         </div>
       </div>

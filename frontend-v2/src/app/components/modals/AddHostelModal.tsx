@@ -102,7 +102,7 @@ export function AddHostelModal({ onClose }: AddHostelModalProps) {
                 value={formData.hostelName}
                 onChange={(e) => handleChange('hostelName', e.target.value)}
                 className="w-full px-4 py-3 bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
-                placeholder="e.g. NIVĀ Koramangala"
+                placeholder="e.g. Sri Adithya Boys Hostel"
               />
             </div>
 
