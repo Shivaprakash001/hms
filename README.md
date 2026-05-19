@@ -15,7 +15,7 @@ online payments (PhonePe), expenses, and receipts.
 | `scripts/backup/` | Bash | Local/Supabase Storage backup utilities |
 | `.github/workflows/db-backup.yml` | GitHub Actions | Daily + monthly + weekly-verify DB backups |
 
-The SPA's production base URL is hard-coded to `https://hms-r68g.vercel.app/api`
+The SPA's production base URL is hard-coded to `https://api.sriadithyahostels.in/api`
 (the Next.js deployment) in `frontend/src/api/axios.js:6`.
 
 ## Core features (verified in code)

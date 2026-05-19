@@ -7,6 +7,8 @@ type Finding = {
 };
 
 const findings: Finding[] = [];
+const EXPECTED_FRONTEND_URL = "https://sriadithyahostels.in";
+const EXPECTED_BACKEND_URL = "https://api.sriadithyahostels.in";
 
 function required(key: string, message?: string) {
   if (!process.env[key]) {
@@ -29,7 +31,7 @@ required("PHONEPE_CLIENT_ID", "PhonePe OAuth client id is required");
 required("PHONEPE_CLIENT_SECRET", "PhonePe OAuth client secret is required");
 required("PHONEPE_WEBHOOK_USERNAME", "PhonePe webhook username is required; webhook must fail closed");
 required("PHONEPE_WEBHOOK_PASSWORD", "PhonePe webhook password is required; webhook must fail closed");
-required("NEXT_PUBLIC_APP_URL", "Public backend URL is required for PhonePe callback/webhook context");
+required("NEXT_PUBLIC_APP_URL", `Public backend URL is required and should be ${EXPECTED_BACKEND_URL}`);
 required("CRON_SECRET", "Cron secret is required so reconciliation endpoints are not publicly executable");
 
 warn("PHONEPE_CLIENT_VERSION", "PhonePe client version defaults to 1; set it explicitly for production");
@@ -54,6 +56,22 @@ for (const key of ["NEXT_PUBLIC_APP_URL", "NEXT_PUBLIC_FRONTEND_URL", "PHONEPE_R
       message: `${key} must use https:// in production`,
     });
   }
+}
+
+if (process.env.NEXT_PUBLIC_APP_URL && process.env.NEXT_PUBLIC_APP_URL.replace(/\/+$/, "") !== EXPECTED_BACKEND_URL) {
+  findings.push({
+    severity: "WARN",
+    key: "NEXT_PUBLIC_APP_URL",
+    message: `Expected production backend domain ${EXPECTED_BACKEND_URL}`,
+  });
+}
+
+if (process.env.NEXT_PUBLIC_FRONTEND_URL && process.env.NEXT_PUBLIC_FRONTEND_URL.replace(/\/+$/, "") !== EXPECTED_FRONTEND_URL) {
+  findings.push({
+    severity: "WARN",
+    key: "NEXT_PUBLIC_FRONTEND_URL",
+    message: `Expected production frontend domain ${EXPECTED_FRONTEND_URL}`,
+  });
 }
 
 const blockerCount = findings.filter((f) => f.severity === "BLOCKER").length;

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyToken } from "./lib/auth-edge";
+import { getCorsAllowOrigin } from "./lib/config/domains";
 
 const PUBLIC_ROUTES = [
   "/api/health",
@@ -25,18 +26,15 @@ const PUBLIC_ROUTES = [
  * Policy: No Wildcards Allowed + Strictly Credentialed Cookies.
  */
 function getCorsHeaders(req: NextRequest) {
-  const allowedOrigin = process.env.NEXT_PUBLIC_FRONTEND_URL || "";
   const requestOrigin = req.headers.get("origin") || "";
-
-  // Security Logic: Only echo back the origin if it matches our whitelist
-  // Browsers BLOCK Access-Control-Allow-Origin: * when Credentials=true
-  const origin = (allowedOrigin === requestOrigin || !allowedOrigin) ? requestOrigin : allowedOrigin;
+  const origin = getCorsAllowOrigin(requestOrigin);
 
   return {
     "Access-Control-Allow-Credentials": "true",
-    "Access-Control-Allow-Origin": origin || "*",
+    "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "GET,DELETE,PATCH,POST,PUT,OPTIONS",
     "Access-Control-Allow-Headers": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization",
+    "Vary": "Origin",
   };
 }
 

@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "https://hms-r68g.vercel.app/api/$1"
+      "destination": "https://api.sriadithyahostels.in/api/$1"
     },
     { 
       "source": "/(.*)", 

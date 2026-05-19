@@ -7,6 +7,7 @@ import { getLogger } from "../../../lib/logger";
 import { allocationReconciliationService } from "../../../lib/services/allocation-reconciliation-service";
 import { hostelBillingPreferencesService, type MaintenanceType } from "../../../lib/services/hostel-billing-preferences-service";
 import { eventLog } from "../../../lib/services/event-log-service";
+import { frontendUrl } from "../../../lib/config/domains";
 
 const logger = getLogger("invitation-service");
 
@@ -191,13 +192,7 @@ export class InvitationService {
     });
 
     // 6. Send enhanced invitation email
-    let baseUrl = process.env.NEXT_PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || "https://trishul.solutions";
-    if (!baseUrl.startsWith("http")) {
-      baseUrl = `https://${baseUrl}`;
-    } else if (baseUrl.startsWith("http://") && !baseUrl.includes("localhost")) {
-      baseUrl = baseUrl.replace("http://", "https://");
-    }
-    const activationLink = `${baseUrl}/activate?token=${token}`;
+    const activationLink = frontendUrl(`/activate?token=${token}`);
 
     const emailResult = await EmailService.sendInvitation({
       toEmail: normalizedEmail,
@@ -456,13 +451,7 @@ export class InvitationService {
     // 2. Generate new token
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
-    let baseUrl = process.env.NEXT_PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || "https://trishul.solutions";
-    if (!baseUrl.startsWith("http")) {
-      baseUrl = `https://${baseUrl}`;
-    } else if (baseUrl.startsWith("http://") && !baseUrl.includes("localhost")) {
-      baseUrl = baseUrl.replace("http://", "https://");
-    }
-    const activationLink = `${baseUrl}/activate?token=${token}`;
+    const activationLink = frontendUrl(`/activate?token=${token}`);
 
     await prisma.profile.update({
       where: { id: profile.id },
@@ -641,13 +630,7 @@ export class InvitationService {
     const owner = await prisma.profile.findUnique({ where: { id: ownerId } });
     if (!owner) throw new Error("INTERNAL_ERROR: Cannot resend, missing owner details.");
 
-    let baseUrl = process.env.NEXT_PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || "https://trishul.solutions";
-    if (!baseUrl.startsWith("http")) {
-      baseUrl = `https://${baseUrl}`;
-    } else if (baseUrl.startsWith("http://") && !baseUrl.includes("localhost")) {
-      baseUrl = baseUrl.replace("http://", "https://");
-    }
-    const activationLink = `${baseUrl}/activate?token=${token}`;
+    const activationLink = frontendUrl(`/activate?token=${token}`);
 
     const emailResult = await EmailService.sendInvitation({
       toEmail: normalizedEmail,

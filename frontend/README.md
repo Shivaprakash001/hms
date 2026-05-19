@@ -33,7 +33,7 @@ Protected — tenant (`components/ProtectedTenantRoute.jsx`):
 Defined in `src/api/axios.js`:
 
 ```js
-const PRODUCTION_API_URL = 'https://hms-r68g.vercel.app/api';
+const PRODUCTION_API_URL = 'https://api.sriadithyahostels.in/api';
 // In non-localhost hosts, VITE_API_URL is ignored — see ../docs/TASKS.md:T-009
 ```
 

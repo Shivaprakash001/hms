@@ -15,7 +15,7 @@ export default function Legal() {
       canonical.setAttribute("rel", "canonical")
       document.head.appendChild(canonical)
     }
-    canonical.setAttribute("href", "https://trishul.solutions/legal")
+    canonical.setAttribute("href", "https://sriadithyahostels.in/legal")
   }, [])
 
   return (

@@ -1,8 +1,8 @@
 import axios from 'axios';
 
-// Force production traffic to the Vercel API deployment.
+// Force production traffic to the primary API domain.
 // This avoids stale/misconfigured VITE_API_URL values.
-const PRODUCTION_API_URL = 'https://hms-r68g.vercel.app/api';
+const PRODUCTION_API_URL = 'https://api.sriadithyahostels.in/api';
 const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
 const isLocalDev = typeof window !== 'undefined' && LOCAL_HOSTNAMES.has(window.location.hostname);
 

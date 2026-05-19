@@ -147,7 +147,7 @@ function PlanCard({ plan, isCurrent, isUpgrade, upgrading, onUpgrade, onBuyCredi
                     )
                 ) : isScale ? (
                     <Button 
-                        onClick={() => window.location.href = "mailto:hello@trishul.solutions"}
+                        onClick={() => window.location.href = "mailto:hello@sriadithyahostels.in"}
                         className="w-full h-14 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest"
                     >
                         Contact Enterprise

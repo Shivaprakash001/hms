@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { PAYMENT_DOMAIN, PAYMENT_FLOW, PAYMENT_SCOPE, MERCHANT_CONTEXT } from "./financial-domain";
 import { resolvePhonePeEnvironment } from "./phonepe-env";
+import { backendUrl, getBackendUrl } from "@/lib/config/domains";
 
 
 type MaybeHostelId = string | null;
@@ -44,7 +45,7 @@ export async function getProviderContext(params: {
         saltKey: process.env.PHONEPE_SALT_KEY || "",
         saltIndex: process.env.PHONEPE_SALT_INDEX || "",
         environment: resolvePhonePeEnvironment(),
-        callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL || ""}/api/webhooks/payments/phonepe`,
+        callbackUrl: backendUrl("/api/webhooks/payments/phonepe"),
       },
     };
   }
@@ -92,7 +93,7 @@ export async function getProviderContext(params: {
       PHONEPE_CLIENT_ID_suffix: process.env.PHONEPE_CLIENT_ID?.slice(-4) ?? null,
       PHONEPE_CLIENT_VERSION:   process.env.PHONEPE_CLIENT_VERSION ?? "(not set — will default to 1)",
       PHONEPE_MERCHANT_ID_set:  Boolean(process.env.PHONEPE_MERCHANT_ID),
-      NEXT_PUBLIC_APP_URL:      process.env.NEXT_PUBLIC_APP_URL ?? "(not set — callbackUrl will be relative)",
+      backend_url:              getBackendUrl(),
       oauth_url_will_be:        isProduction
         ? "https://api.phonepe.com/apis/identity-manager/v1/oauth/token"
         : "https://api-preprod.phonepe.com/apis/pg-sandbox/v1/oauth/token",
@@ -119,7 +120,7 @@ export async function getProviderContext(params: {
         saltKey: process.env.PHONEPE_SALT_KEY || "",
         saltIndex: process.env.PHONEPE_SALT_INDEX || "",
         environment: resolvedEnv,
-        callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL || ""}/api/webhooks/payments/phonepe`,
+        callbackUrl: backendUrl("/api/webhooks/payments/phonepe"),
         treasuryMode: true,
         hostelId: hostel.id,
         operationalOwnerId,

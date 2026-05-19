@@ -26,7 +26,7 @@
 
 ## 2. Frontend/Backend Coupling & Deployment Assumptions
 
-**FACT:** The Vite SPA hard-codes the production API base URL to `https://hms-r68g.vercel.app/api` in production, completely ignoring `VITE_API_URL` unless on `localhost`.
+**FACT:** The Vite SPA hard-codes the production API base URL to `https://api.sriadithyahostels.in/api` in production, completely ignoring `VITE_API_URL` unless on `localhost`.
 **SOURCE:** `frontend/src/api/axios.js`
 
 **FACT:** Next.js deployment assumes Vercel (via `backend-next/vercel.json`), reading `DATABASE_URL` and `DIRECT_URL` for Prisma Postgres connections.

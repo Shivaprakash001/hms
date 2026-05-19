@@ -1,6 +1,7 @@
 import { PaymentProvider, CreateIntentResult, WebhookVerificationResult, FetchStatusResult } from "../provider-base";
 import crypto from "crypto";
 import { resolvePhonePeEnvironment } from "../phonepe-env";
+import { frontendUrl, getFrontendUrl } from "@/lib/config/domains";
 
 // ── Startup validation ────────────────────────────────────────────────────────
 // In production deployments: resolve (and validate) PHONEPE_ENV at module load
@@ -160,11 +161,10 @@ export class PhonePeProvider extends PaymentProvider {
     // guaranteed identifier in useSearchParams() regardless of what params
     // PhonePe appends. Without this, a POST-mode redirect loses all data
     // because the browser navigates to the URL and the POST body is discarded.
-    const frontendUrl = process.env.NEXT_PUBLIC_FRONTEND_URL || "https://trishul.solutions";
     const returnBase =
       data.metadata?.flow_type === "SUBSCRIPTION" || data.metadata?.invoice_id
-        ? `${frontendUrl}/dashboard/billing`
-        : process.env.PHONEPE_REDIRECT_URL || `${frontendUrl}/payment-return`;
+        ? frontendUrl("/dashboard/billing")
+        : process.env.PHONEPE_REDIRECT_URL || frontendUrl("/payment-return");
     const sep = returnBase.includes("?") ? "&" : "?";
     // For ADDON payments, embed attempt_id so the frontend can run the verify fallback
     // and show the correct success state without relying solely on sessionStorage.
@@ -192,7 +192,7 @@ export class PhonePeProvider extends PaymentProvider {
       data.metadata?.invoice_id ||
       "unknown-user";
 
-    const frontendOriginForLog = (process.env.NEXT_PUBLIC_FRONTEND_URL || "https://trishul.solutions");
+    const frontendOriginForLog = getFrontendUrl();
     console.info("[PhonePe] createIntent", {
       environment:          this.isProduction ? "PRODUCTION" : "SANDBOX",
       checkout_endpoint:    `${this.baseUrl}/checkout/v2/pay`,

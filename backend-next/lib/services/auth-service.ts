@@ -3,11 +3,12 @@ import { verifyPassword, hashPassword, generateToken, generateRefreshToken, hash
 import { z } from "zod";
 import { LoginSchema } from "../validators";
 import { randomUUID } from "crypto";
+import { getGoogleRedirectUri } from "../config/domains";
 
 export class AuthService {
   private getGoogleCodeRedirectUri(redirectUri?: string) {
     if (!redirectUri) {
-      return process.env.GOOGLE_REDIRECT_URI || "https://hms-sand-five.vercel.app/callback";
+      return getGoogleRedirectUri();
     }
     return redirectUri;
   }

@@ -18,7 +18,7 @@
 
 **FACT:** Every request to `/api/*` goes through Edge middleware (`backend-next/middleware.ts`).
 
-1. **CORS:** Middleware handles `OPTIONS` requests, strictly setting `Access-Control-Allow-Origin` dynamically based on the request origin compared to `NEXT_PUBLIC_FRONTEND_URL` (wildcard blocked for credentials).
+1. **CORS:** Middleware handles `OPTIONS` requests, strictly setting `Access-Control-Allow-Origin` dynamically from the centralized frontend-origin allowlist (wildcard blocked for credentials).
 2. **Whitelist Bypass:** Public routes (`/api/health`, `/api/auth/login`, `/api/webhooks/*`, `/api/cron/*`) skip JWT validation here.
 3. **Auth Extraction:** Extracts JWT from `Authorization: Bearer` (priority 1), `hms_session` HTTP-only cookie (priority 2), or `?token=` query param (priority 3, for SSE).
 4. **JWT Verification:** Uses `jose` (`lib/auth-edge.ts`) with `HS256`.

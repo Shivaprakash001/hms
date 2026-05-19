@@ -20,6 +20,7 @@ import { paymentRepository } from "@/src/repositories/paymentRepository";
 import { paymentOperationalAnomalyService } from "@/lib/services/payment-operational-anomaly-service";
 import { paymentWebhookEventService } from "@/lib/services/payment-webhook-event-service";
 import { paymentProviderVerificationSnapshotService } from "@/lib/services/payment-provider-verification-snapshot-service";
+import { backendUrl } from "@/lib/config/domains";
 
 const logger = getLogger("payment.service");
 type MaybeHostelId = string | null;
@@ -2654,7 +2655,7 @@ export class PaymentService {
       saltKey: process.env.PHONEPE_SALT_KEY!,
       saltIndex: process.env.PHONEPE_SALT_INDEX!,
       environment: (process.env.PHONEPE_ENV as "SANDBOX" | "PRODUCTION") || "SANDBOX",
-      callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL || ""}/api/webhooks/payments/phonepe`,
+      callbackUrl: backendUrl("/api/webhooks/payments/phonepe"),
     };
   }
 

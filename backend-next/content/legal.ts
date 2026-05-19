@@ -25,7 +25,7 @@ export const legalSections: LegalSection[] = [
       },
       {
         type: "paragraph",
-        text: "This document is published in accordance with the provisions of Rule 3 (1) of the Information Technology (Intermediaries guidelines) Rules, 2011 that require publishing the rules and regulations, privacy policy and Terms of Use for access or usage of domain name https://trishul.solutions ('Website'), including the related mobile site and mobile application (hereinafter referred to as 'Platform').",
+        text: "This document is published in accordance with the provisions of Rule 3 (1) of the Information Technology (Intermediaries guidelines) Rules, 2011 that require publishing the rules and regulations, privacy policy and Terms of Use for access or usage of domain name https://sriadithyahostels.in ('Website'), including the related mobile site and mobile application (hereinafter referred to as 'Platform').",
       },
       {
         type: "paragraph",
@@ -130,7 +130,7 @@ export const legalSections: LegalSection[] = [
       },
       {
         type: "paragraph",
-        text: "This Privacy Policy describes how Trishul Solutions and its affiliates (collectively \"Trishul Solutions, we, our, us\") collect, use, share, protect or otherwise process your information/personal data through our website https://trishul.solutions (hereinafter referred to as Platform). Please note that you may be able to browse certain sections of the Platform without registering with us. We do not offer any product/service under this Platform outside India and your personal data will primarily be stored and processed in India. By visiting this Platform, providing your information or availing any product/service offered on the Platform, you expressly agree to be bound by the terms and conditions of this Privacy Policy, the Terms of Use and the applicable service/product terms and conditions, and agree to be governed by the laws of India including but not limited to the laws applicable to data protection and privacy. If you do not agree please do not use or access our Platform.",
+        text: "This Privacy Policy describes how Trishul Solutions and its affiliates (collectively \"Trishul Solutions, we, our, us\") collect, use, share, protect or otherwise process your information/personal data through our website https://sriadithyahostels.in (hereinafter referred to as Platform). Please note that you may be able to browse certain sections of the Platform without registering with us. We do not offer any product/service under this Platform outside India and your personal data will primarily be stored and processed in India. By visiting this Platform, providing your information or availing any product/service offered on the Platform, you expressly agree to be bound by the terms and conditions of this Privacy Policy, the Terms of Use and the applicable service/product terms and conditions, and agree to be governed by the laws of India including but not limited to the laws applicable to data protection and privacy. If you do not agree please do not use or access our Platform.",
       },
       {
         type: "subheading",

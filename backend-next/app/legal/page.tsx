@@ -8,13 +8,13 @@ export const metadata: Metadata = {
   description:
     "Terms & Conditions, Privacy Policy, and Refund Policy for Trishul Solutions HMS — the hostel management SaaS platform.",
   alternates: {
-    canonical: "https://trishul.solutions/legal",
+    canonical: "https://sriadithyahostels.in/legal",
   },
   openGraph: {
     title: "Legal & Policies | Trishul Solutions",
     description:
       "Terms & Conditions, Privacy Policy, and Refund Policy for Trishul Solutions HMS.",
-    url: "https://trishul.solutions/legal",
+    url: "https://sriadithyahostels.in/legal",
     siteName: "Trishul Solutions",
     type: "website",
   },

@@ -2,9 +2,10 @@ import { Resend } from "resend";
 import { eventLog } from "./event-log-service";
 import { formatCurrency } from "../format";
 import type { HostelPreferences } from "../preferences";
+import { frontendUrl } from "../config/domains";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const DEFAULT_FROM = process.env.EMAIL_FROM || "noreply@mail.trishul.solutions";
+const DEFAULT_FROM = process.env.EMAIL_FROM || "noreply@mail.sriadithyahostels.in";
 
 export class EmailService {
   private static normalizeProviderError(error: unknown): string {
@@ -214,7 +215,7 @@ export class EmailService {
             You can pay directly via the tenant dashboard or using the hostel UPI ID.
           </p>
           <div style="text-align: center; margin-top: 10px; margin-bottom: 10px;">
-            <a href="https://trishul.solutions/login" target="_blank" style="display: inline-block; padding: 12px 24px; background-color: ${color}; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
+            <a href="${frontendUrl("/login")}" target="_blank" style="display: inline-block; padding: 12px 24px; background-color: ${color}; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
               Pay Now
             </a>
           </div>
