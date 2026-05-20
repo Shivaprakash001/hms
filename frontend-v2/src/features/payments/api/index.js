@@ -1,5 +1,4 @@
 import api from '@lib/api-client';
-import axios from 'axios';
 
 const unwrap = (response) => {
     if (response.data && response.data.success === true && response.data.data !== undefined) {
@@ -95,19 +94,11 @@ export const paymentService = {
         }
     },
     recordPayment: async (data) => {
-        try {
-            const response = await axios.post('/api/payments/record-offline', data, { withCredentials: true });
-            return unwrap(response);
-        } catch (error) {
-            if (error?.response?.status === 404) {
-                const fallback = await axios.post('/api/payments/record-offline', data, { withCredentials: true });
-                return unwrap(fallback);
-            }
-            throw error;
-        }
+        const response = await api.post('/payments/record-offline', data);
+        return unwrap(response);
     },
     recordOfflinePayment: async ({ identityToken, obligationId, amountPaid, paymentMethod, referenceNumber, paymentDate, note, hostelId }) => {
-        const response = await axios.post('/api/payments/record-offline', {
+        const response = await api.post('/payments/record-offline', {
             identity_token: identityToken,
             obligation_id: obligationId,
             amount_paid: amountPaid,
@@ -116,7 +107,7 @@ export const paymentService = {
             payment_date: paymentDate,
             note,
             hostelId,
-        }, { withCredentials: true });
+        });
         return unwrap(response);
     },
     initiatePayment: async (data) => {

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { X, IndianRupee, Calendar, Loader2 } from 'lucide-react';
 import { paymentService } from '@features/payments/api';
+import { identityService } from '@features/auth/api';
 import { queryKeys } from '@lib/queryKeys';
 
 interface RecordPaymentModalProps {
@@ -10,6 +11,16 @@ interface RecordPaymentModalProps {
   hostelId: string;
   initialDueId?: string;
   initialAmount?: string;
+}
+
+interface OfflinePaymentPayload {
+  obligationId: string;
+  amountPaid: number;
+  paymentMethod: string;
+  referenceNumber?: string;
+  paymentDate: string;
+  note?: string;
+  hostelId: string;
 }
 
 export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initialAmount = '' }: RecordPaymentModalProps) {
@@ -20,7 +31,10 @@ export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initi
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [referenceNumber, setReferenceNumber] = useState('');
   const [note, setNote] = useState('');
+  const [password, setPassword] = useState('');
   const [apiError, setApiError] = useState<string | null>(null);
+  const [fieldError, setFieldError] = useState<string | null>(null);
+  const [successSummary, setSuccessSummary] = useState<Record<string, unknown> | null>(null);
 
   const { data: duesData, isLoading: duesLoading } = useQuery({
     queryKey: queryKeys.payments.dues(hostelId),
@@ -37,14 +51,27 @@ export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initi
   const selectedDue = dues.find((d) => String(d.obligation_id ?? d.id) === selectedDueId);
 
   const mutation = useMutation({
-    mutationFn: (payload: Parameters<typeof paymentService.recordOfflinePayment>[0]) =>
-      paymentService.recordOfflinePayment(payload),
-    onSuccess: () => {
+    mutationFn: async (payload: OfflinePaymentPayload & { password: string }) => {
+      const identity = await identityService.confirmIdentity(payload.password);
+      const identityToken = identity?.identity_token ?? identity?.data?.identity_token;
+      if (!identityToken) throw new Error('Identity verification failed. Please try again.');
+      return paymentService.recordOfflinePayment({
+        identityToken,
+        obligationId: payload.obligationId,
+        amountPaid: payload.amountPaid,
+        paymentMethod: payload.paymentMethod,
+        referenceNumber: payload.referenceNumber,
+        paymentDate: payload.paymentDate,
+        note: payload.note,
+        hostelId: payload.hostelId,
+      });
+    },
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.payments.all(hostelId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.payments.dues(hostelId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.stats(hostelId) });
       toast.success('Payment recorded successfully');
-      onClose();
+      setSuccessSummary(result?.payment ?? result);
     },
     onError: (error: unknown) => {
       const msg =
@@ -59,17 +86,36 @@ export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initi
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedDue) return;
+    if (!selectedDue) {
+      setFieldError('Select a tenant due to record payment.');
+      return;
+    }
+    const parsedAmount = Number(amount);
+    if (!parsedAmount || parsedAmount <= 0) {
+      setFieldError('Enter a valid payment amount.');
+      return;
+    }
+    if (outstandingForSelected > 0 && parsedAmount > outstandingForSelected) {
+      setFieldError(`Amount cannot exceed outstanding balance of ₹${outstandingForSelected.toLocaleString('en-IN')}.`);
+      return;
+    }
+    if (!password.trim()) {
+      setFieldError('Enter your password to confirm this offline payment.');
+      return;
+    }
+    if (mutation.isPending) return;
     setApiError(null);
+    setFieldError(null);
+    setSuccessSummary(null);
     mutation.mutate({
       obligationId: String(selectedDue.obligation_id ?? selectedDue.id),
-      identityToken: String(selectedDue.identity_token ?? selectedDue.tenant_identity_token ?? ''),
-      amountPaid: Number(amount),
+      amountPaid: parsedAmount,
       paymentMethod: paymentMode.toUpperCase(),
       referenceNumber: referenceNumber || undefined,
       paymentDate,
       note: note || undefined,
       hostelId,
+      password,
     });
   };
 
@@ -208,15 +254,50 @@ export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initi
             <div className="bg-destructive/10 text-destructive text-sm px-4 py-3 rounded-lg">{apiError}</div>
           )}
 
+          {fieldError && (
+            <div className="bg-destructive/10 text-destructive text-sm px-4 py-3 rounded-lg">{fieldError}</div>
+          )}
+
+          <div>
+            <label className="block text-xs text-muted-foreground mb-1.5">Confirm Password *</label>
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-4 py-3 bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
+              placeholder="Enter your password"
+              autoComplete="current-password"
+            />
+            <p className="text-xs text-muted-foreground mt-1.5">Required for secure offline payment recording.</p>
+          </div>
+
+          {successSummary && (
+            <div className="bg-emerald-500/10 text-emerald-600 text-sm px-4 py-3 rounded-lg space-y-1">
+              <div className="font-medium">Payment recorded</div>
+              <div>Amount: ₹{Number((successSummary as any).amount_paid ?? amount).toLocaleString('en-IN')}</div>
+              <div>Method: {String((successSummary as any).payment_method ?? paymentMode.toUpperCase())}</div>
+            </div>
+          )}
+
           <button
             type="submit"
-            disabled={mutation.isPending || !selectedDueId || duesLoading}
+            disabled={mutation.isPending || !selectedDueId || duesLoading || Boolean(successSummary)}
             className="w-full bg-accent text-accent-foreground py-4 rounded-xl font-medium active:scale-95 transition-transform disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {mutation.isPending ? (
-              <><Loader2 className="w-4 h-4 animate-spin" /> Recording...</>
+              <><Loader2 className="w-4 h-4 animate-spin" /> Verifying & Recording...</>
             ) : 'Record Payment'}
           </button>
+          {successSummary && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full border border-border text-foreground py-3 rounded-xl font-medium active:scale-95 transition-transform"
+            >
+              Done
+            </button>
+          )}
         </form>
       </div>
     </div>
