@@ -18,6 +18,7 @@ import { queryKeys } from '@lib/queryKeys';
 import { PortfolioRevenueChart } from '@/app/components/portfolio/PortfolioRevenueChart';
 import { HostelPerformanceCard } from '@/app/components/portfolio/HostelPerformanceCard';
 import { AddHostelModal } from '@/app/components/modals/AddHostelModal';
+import { AddTenantModal } from '@/app/components/modals/AddTenantModal';
 import { FilterModal, FilterOptions } from '@/app/components/modals/FilterModal';
 import { EditHostelSheet } from '@/app/components/modals/EditHostelSheet';
 
@@ -33,6 +34,7 @@ export function PortfolioView() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddHostel, setShowAddHostel] = useState(false);
+  const [showAddTenant, setShowAddTenant] = useState(false);
   const [showFilter, setShowFilter] = useState(false);
   const [editingHostelId, setEditingHostelId] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterOptions>({ occupancy: [], revenue: [], alerts: [] });
@@ -170,7 +172,7 @@ export function PortfolioView() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => navigate(`/hostels/${firstHostelId}/tenants`)}
+                  onClick={() => setShowAddTenant(true)}
                   className="flex items-center gap-2 px-4 py-2.5 bg-card border border-border rounded-xl text-xs font-semibold shrink-0"
                 >
                   <UserPlus className="w-3.5 h-3.5" />
@@ -238,6 +240,7 @@ export function PortfolioView() {
       )}
 
       {showAddHostel && <AddHostelModal onClose={() => { setShowAddHostel(false); refetch(); }} />}
+      {showAddTenant && <AddTenantModal onClose={() => { setShowAddTenant(false); refetch(); }} />}
       {showFilter && (
         <FilterModal onClose={() => setShowFilter(false)} onApply={setFilters} currentFilters={filters} />
       )}

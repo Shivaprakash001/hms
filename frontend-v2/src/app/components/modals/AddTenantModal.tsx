@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { X, User, BedDouble, Calendar, ChevronDown, ChevronRight, Copy, Check, Loader2, IndianRupee, RotateCcw } from 'lucide-react';
-import { tenantService } from '@features/tenants/api';
-import { roomService } from '@features/rooms/api';
+import { X, User, BedDouble, Calendar, ChevronDown, ChevronRight, Copy, Check, Loader2, IndianRupee, RotateCcw, Building2 } from 'lucide-react';
+import { ownerService } from '@domains/hostels/api';
+import { roomService } from '@domains/rooms/api';
+import { tenantService } from '@domains/tenants/api';
 import { queryKeys } from '@lib/queryKeys';
 
 interface AddTenantModalProps {
   onClose: () => void;
-  hostelId: string;
+  hostelId?: string;
   preselectedRoomId?: string;
 }
 
@@ -20,6 +21,7 @@ const inp = 'w-full px-3 py-2.5 rounded-lg border border-border bg-background te
 export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTenantModalProps) {
   const qc = useQueryClient();
 
+  const [selectedHostelId, setSelectedHostelId] = useState(hostelId ?? '');
   const [name, setName]               = useState('');
   const [phone, setPhone]             = useState('');
   const [email, setEmail]             = useState('');
@@ -32,10 +34,33 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
   const [link, setLink]               = useState('');
   const [copied, setCopied]           = useState(false);
 
+  const { data: hostelsRaw = [] } = useQuery({
+    queryKey: queryKeys.owner.hostels(),
+    queryFn: () => ownerService.getHostels(),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const hostels = Array.isArray(hostelsRaw)
+    ? hostelsRaw
+    : Array.isArray((hostelsRaw as any)?.hostels)
+      ? (hostelsRaw as any).hostels
+      : [];
+
+  useEffect(() => {
+    if (!selectedHostelId && hostels.length > 0) {
+      setSelectedHostelId(String(hostels[0].id ?? hostels[0].hostel_id));
+    }
+  }, [hostels, selectedHostelId]);
+
+  useEffect(() => {
+    if (hostelId) setSelectedHostelId(hostelId);
+  }, [hostelId]);
+
   // ── Available rooms (ACTIVE + has free beds) ─────────────────────────────
   const { data: roomsRaw = [] } = useQuery({
-    queryKey: queryKeys.rooms.list(hostelId),
-    queryFn: () => roomService.getAll(hostelId),
+    queryKey: queryKeys.rooms.list(selectedHostelId),
+    queryFn: () => roomService.getAll(selectedHostelId),
+    enabled: Boolean(selectedHostelId),
     staleTime: 2 * 60 * 1000,
   });
   const rooms: Record<string, any>[] = Array.isArray(roomsRaw) ? roomsRaw : [];
@@ -80,9 +105,10 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
   const inviteMutation = useMutation({
     mutationFn: (data: Record<string, unknown>) => tenantService.invite(data),
     onSuccess: (res: any) => {
-      qc.invalidateQueries({ queryKey: queryKeys.tenants.all(hostelId) });
-      qc.invalidateQueries({ queryKey: queryKeys.rooms.list(hostelId) });
-      qc.invalidateQueries({ queryKey: queryKeys.dashboard.stats(hostelId) });
+      qc.invalidateQueries({ queryKey: queryKeys.tenants.all(selectedHostelId) });
+      qc.invalidateQueries({ queryKey: queryKeys.rooms.list(selectedHostelId) });
+      qc.invalidateQueries({ queryKey: queryKeys.dashboard.stats(selectedHostelId) });
+      qc.invalidateQueries({ queryKey: queryKeys.portfolio.performance(6) });
       setLink(res?.activation_link ?? '');
       setSuccess(true);
     },
@@ -103,6 +129,7 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
       name:               name.trim(),
       phone:              phone.trim() || undefined,
       email:              email.trim().toLowerCase(),
+      hostel_id:          selectedHostelId,
       room_id:            roomId,
       joining_date:       joiningDate,
       monthly_rent:       display.monthly_rent || undefined,
@@ -204,9 +231,32 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
             <SectionHeader icon={<BedDouble className="w-3.5 h-3.5" />} label="Stay Details" />
             <div className="space-y-3">
               <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  <span className="flex items-center gap-1.5"><Building2 className="w-3 h-3" /> Hostel *</span>
+                </label>
+                <select
+                  value={selectedHostelId}
+                  onChange={(e) => {
+                    setSelectedHostelId(e.target.value);
+                    setRoomId('');
+                    setOverrides({});
+                  }}
+                  required
+                  className={inp}
+                >
+                  <option value="">Select a hostel…</option>
+                  {hostels.map((h: any) => (
+                    <option key={String(h.id ?? h.hostel_id)} value={String(h.id ?? h.hostel_id)}>
+                      {String(h.name ?? h.hostel_name ?? 'Hostel')}
+                      {h.city ? ` · ${String(h.city)}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <label className="text-xs text-muted-foreground mb-1 block">Room *</label>
-                <select value={roomId} onChange={(e) => setRoomId(e.target.value)} required className={inp}>
-                  <option value="">Select a room…</option>
+                <select value={roomId} onChange={(e) => setRoomId(e.target.value)} required disabled={!selectedHostelId} className={inp}>
+                  <option value="">{selectedHostelId ? 'Select a room…' : 'Select a hostel first…'}</option>
                   {availableRooms.map((r) => {
                     const occ   = Number(r.occupied_count ?? 0);
                     const cap   = Number(r.capacity ?? 1);
@@ -302,7 +352,7 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
           {/* Submit */}
           <button
             type="submit"
-            disabled={inviteMutation.isPending || !roomId || !name.trim() || !email.trim()}
+            disabled={inviteMutation.isPending || !selectedHostelId || !roomId || !name.trim() || !email.trim()}
             className="w-full py-3 bg-accent text-accent-foreground rounded-xl text-sm font-semibold active:scale-[0.98] transition-transform disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {inviteMutation.isPending
