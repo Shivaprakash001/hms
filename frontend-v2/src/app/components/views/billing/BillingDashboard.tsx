@@ -13,11 +13,13 @@ export function BillingDashboard() {
     staleTime: 10 * 60 * 1000,
   });
 
-  const hostels: any[] = Array.isArray(hostelsData?.data)
-    ? hostelsData.data
-    : Array.isArray(hostelsData)
-      ? hostelsData
-      : [];
+  const hostels: any[] = Array.isArray(hostelsData)
+    ? hostelsData
+    : Array.isArray((hostelsData as any)?.data?.hostels)
+      ? (hostelsData as any).data.hostels
+      : Array.isArray((hostelsData as any)?.hostels)
+        ? (hostelsData as any).hostels
+        : [];
 
   const activeHostelId = selectedHostelId || hostels[0]?.id || '';
   const activeHostel = hostels.find((h) => h.id === activeHostelId);

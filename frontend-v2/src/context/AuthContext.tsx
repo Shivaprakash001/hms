@@ -19,6 +19,7 @@ interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<AuthUser>;
+  loginWithGoogle: (code: string, redirectUri: string) => Promise<AuthUser>;
   logout: () => void | Promise<void>;
 }
 
@@ -170,8 +171,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const loginWithGoogle = async (code: string, redirectUri: string): Promise<AuthUser> => {
+    try {
+      const response = await api.post('/auth/google-callback', { code, redirect_uri: redirectUri });
+      queryClient.clear();
+      clearSessionScopedStorage();
+
+      const { access_token, role, name, user_id, owner_id, tenant_id, hostel_id, is_profile_completed } =
+        response.data;
+      const normalizedRole = normalizeRole(role);
+      const userData: AuthUser = {
+        role: normalizedRole,
+        name,
+        id: user_id,
+        owner_id,
+        tenant_id,
+        hostel_id,
+        is_profile_completed,
+        token: access_token,
+      };
+      setUser(userData);
+
+      if (normalizedRole === 'owner' || normalizedRole === 'admin') {
+        localStorage.setItem('ownerUser', JSON.stringify(userData));
+        localStorage.removeItem('tenantUser');
+      } else {
+        localStorage.setItem('tenantUser', JSON.stringify(userData));
+        localStorage.removeItem('ownerUser');
+      }
+
+      return userData;
+    } catch (error: unknown) {
+      console.error("Google login failed:", error);
+      throw new Error(getApiErrorMessage(error) || 'Google authentication failed');
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading }}>
+    <AuthContext.Provider value={{ user, login, loginWithGoogle, logout, loading }}>
       {children}
     </AuthContext.Provider>
   );

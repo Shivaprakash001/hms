@@ -1,16 +1,47 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Building2, Eye, EyeOff, Loader2, Chrome } from 'lucide-react';
+import { useGoogleLogin } from '@react-oauth/google';
 import { useAuth } from '@context/AuthContext';
 
 export function LoginPage() {
-  const { login } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const navigateForUser = (user: any) => {
+    const role = (user?.role || '').toLowerCase();
+    if (role === 'owner' || role === 'admin') {
+      navigate('/dashboard', { replace: true });
+    } else {
+      navigate('/tenant/dashboard', { replace: true });
+    }
+  };
+
+  const loginGoogle = useGoogleLogin({
+    onSuccess: async (tokenResponse) => {
+      setIsLoading(true);
+      setError('');
+      try {
+        if (!tokenResponse?.code) throw new Error('Google did not return an authorization code.');
+        const redirectUri = window.location.origin;
+        const user = await loginWithGoogle(tokenResponse.code, redirectUri);
+        navigateForUser(user);
+      } catch (err: any) {
+        setError(err.message || 'Google authentication failed');
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    onError: () => setError('Google authentication failed. Please try again.'),
+    flow: 'auth-code',
+    ux_mode: 'popup',
+    scope: 'openid email profile',
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,12 +50,7 @@ export function LoginPage() {
     setError('');
     try {
       const user = await login(email, password);
-      const role = user.role?.toLowerCase();
-      if (role === 'owner' || role === 'admin') {
-        navigate('/dashboard', { replace: true });
-      } else {
-        navigate('/tenant/dashboard', { replace: true });
-      }
+      navigateForUser(user);
     } catch (err: unknown) {
       setError((err as Error).message || 'Login failed');
     } finally {
@@ -108,6 +134,25 @@ export function LoginPage() {
             ) : (
               'Sign In'
             )}
+          </button>
+
+          <div className="relative my-4 flex items-center justify-center">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-border"></div>
+            </div>
+            <div className="relative flex justify-center text-[10px] uppercase font-bold tracking-[0.2em] bg-background px-3 text-muted-foreground">
+              Or continue with
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => loginGoogle()}
+            disabled={isLoading}
+            className="w-full bg-card hover:bg-muted/40 border border-border text-foreground py-3 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
+          >
+            <Chrome className="w-4 h-4 text-accent" />
+            Continue with Google
           </button>
         </form>
 

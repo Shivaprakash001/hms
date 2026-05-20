@@ -457,23 +457,58 @@ export function ActivateAccountPage() {
               <SectionHeading icon={<ClipboardCheck className="w-5 h-5" />} title={ctx.rules.title || 'Hostel rules'} text="Review the important rules in short sections. Your acknowledgement is stored with the current rule snapshot." />
               <div className="grid gap-3">
                 {ruleCategories.map((category) => (
-                  <details key={category.id} open className="rounded-xl border border-border bg-background p-4">
+                  <details
+                    key={category.id}
+                    open
+                    className={`rounded-xl border p-4 bg-background transition-all duration-300 ${
+                      category.id === 'facilities'
+                        ? 'border-emerald-500/60 bg-emerald-50/5 dark:bg-emerald-950/5 shadow-md shadow-emerald-500/5 ring-1 ring-emerald-500/10'
+                        : 'border-border bg-background'
+                    }`}
+                  >
                     <summary className="cursor-pointer list-none">
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-2 font-semibold text-foreground">
-                          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/10 text-accent">
+                          <span
+                            className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+                              category.id === 'facilities'
+                                ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                                : 'bg-accent/10 text-accent'
+                            }`}
+                          >
                             <RuleIcon icon={category.icon} />
                           </span>
                           {category.title}
                         </div>
-                        <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${category.severity === 'critical' ? 'bg-destructive/10 text-destructive' : category.severity === 'important' ? 'bg-amber-100 text-amber-700' : 'bg-muted text-muted-foreground'}`}>
-                          {category.severity || 'standard'}
-                        </span>
+                        {category.id === 'facilities' ? (
+                          <span className="rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider bg-emerald-500 text-white shadow-sm shadow-emerald-500/20">
+                            Included Facilities
+                          </span>
+                        ) : (
+                          <span
+                            className={`rounded-full px-2 py-1 text-[11px] font-semibold ${
+                              category.severity === 'critical'
+                                ? 'bg-destructive/10 text-destructive'
+                                : category.severity === 'important'
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-muted text-muted-foreground'
+                            }`}
+                          >
+                            {category.severity || 'standard'}
+                          </span>
+                        )}
                       </div>
                     </summary>
                     <div className="mt-3 space-y-2">
                       {(category.highlights || []).map((item) => (
-                        <p key={item} className="rounded-lg bg-muted/50 px-3 py-2 text-sm font-medium text-foreground">
+                        <p
+                          key={item}
+                          className={`rounded-lg px-3 py-2 text-sm font-semibold leading-relaxed ${
+                            category.id === 'facilities'
+                              ? 'bg-emerald-500/10 border border-emerald-500/25 text-emerald-800 dark:text-emerald-300'
+                              : 'bg-muted/50 text-foreground'
+                          }`}
+                        >
                           {item}
                         </p>
                       ))}
