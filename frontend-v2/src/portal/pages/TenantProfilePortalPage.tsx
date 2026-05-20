@@ -66,6 +66,8 @@ export function TenantProfilePortalPage() {
   const [editing, setEditing] = useState(false);
   const [docType, setDocType] = useState<string>('AADHAAR');
   const [form, setForm] = useState<Record<string, string>>({});
+  const [selectedCollege, setSelectedCollege] = useState<string>('');
+  const [selectedCourse, setSelectedCourse] = useState<string>('');
 
   const { data, isLoading } = useQuery({
     queryKey: ['tenant', 'portal-profile'],
@@ -119,9 +121,6 @@ export function TenantProfilePortalPage() {
   const verification = data.verification ?? {};
   const moveOut = data.move_out;
   const isStudent = String(t?.profile_type ?? 'STUDENT').toUpperCase() === 'STUDENT';
-
-  const [selectedCollege, setSelectedCollege] = useState<string>('');
-  const [selectedCourse, setSelectedCourse] = useState<string>('');
 
   const startEdit = () => {
     const college = String(t.college_name ?? '');
