@@ -46,6 +46,14 @@ export const tenantService = {
         const response = await api.get('/tenants/activate', { params: { token } });
         return unwrap(response);
     },
+    getActivationContext: async (token) => {
+        const response = await api.get('/tenants/activate/context', { params: { token } });
+        return unwrap(response);
+    },
+    updateActivationWorkflow: async ({ token, step, data }) => {
+        const response = await api.patch('/tenants/activate', { token, step, data });
+        return unwrap(response);
+    },
     activateAccount: async (data) => {
         const response = await api.post('/tenants/activate', data);
         return unwrap(response);
@@ -144,6 +152,10 @@ export const tenantService = {
     cancelInvitation: async (id) => {
         const response = await api.post(`/tenants/${id}/cancel-invitation`);
         return response.data.success !== undefined ? (response.data.data !== undefined ? response.data.data : response.data) : response.data;
+    },
+    runComplianceAction: async (id, action) => {
+        const response = await api.post(`/tenants/${id}/compliance-action`, { action });
+        return unwrap(response);
     },
     getAdvance: async (tenantId) => {
         const response = await api.get(`/tenants/${tenantId}/advance`);

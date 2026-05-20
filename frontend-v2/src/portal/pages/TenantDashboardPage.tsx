@@ -69,6 +69,16 @@ export function TenantDashboardPage() {
 
       <TenantPriorityStrip dues={dues} payments={payments} moveOut={moveOut} />
 
+      {profileDocs.length === 0 && (
+        <Link
+          to="/tenant/profile#documents"
+          className="block rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+        >
+          <p className="font-semibold">Identity documents pending</p>
+          <p className="mt-1 text-xs">Upload your documents after activation so the hostel can complete verification.</p>
+        </Link>
+      )}
+
       <TenantScorePanel score={score} />
 
       {advance && (

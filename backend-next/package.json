@@ -12,6 +12,7 @@
     "prisma:push": "DOTENV_CONFIG_PATH=../.env node -r dotenv/config ./node_modules/prisma/build/index.js db push",
     "prisma:studio": "DOTENV_CONFIG_PATH=../.env node -r dotenv/config ./node_modules/prisma/build/index.js studio",
     "check:invariants": "tsx scripts/architectural-invariants-check.ts",
+    "check:activation-invariants": "DOTENV_CONFIG_PATH=../.env node -r dotenv/config ./node_modules/.bin/tsx scripts/activation-invariants-check.ts",
     "check:financial-safety": "DOTENV_CONFIG_PATH=../.env node -r dotenv/config ./node_modules/.bin/tsx scripts/payment-financial-safety-check.ts",
     "check:payment-production": "DOTENV_CONFIG_PATH=../.env node -r dotenv/config ./node_modules/.bin/tsx scripts/payment-production-readiness-check.ts",
     "chaos:payments": "DOTENV_CONFIG_PATH=../.env node -r dotenv/config ./node_modules/.bin/tsx scripts/payment-chaos-simulation.ts",

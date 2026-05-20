@@ -492,7 +492,16 @@ export class TenantService {
         rent_obligations: {
           where: { status: { in: ["PENDING", "PARTIAL"] } },
           include: { payments: { select: { amount_paid: true, payment_date: true, payment_method: true, reference_number: true } } }
-        }
+        },
+        identification_documents: {
+          where: { is_active: true },
+          orderBy: { created_at: "desc" },
+        },
+        rule_acceptances: {
+          orderBy: { accepted_at: "desc" },
+          take: 1,
+          include: { rule_version: true },
+        },
       }
     });
 
@@ -536,6 +545,8 @@ export class TenantService {
       }));
 
     const floor = currentRoom?.floor ?? null;
+    const latestRuleAcceptance = legacyTenant.rule_acceptances?.[0] ?? null;
+    const activeDocuments = legacyTenant.identification_documents ?? [];
 
     return {
       id: legacyTenant.id,
@@ -557,7 +568,32 @@ export class TenantService {
       total_paid: totalPaid,
       total_due: totalDue,
       outstanding: outstanding,
-      recent_payments: recentPayments
+      recent_payments: recentPayments,
+      compliance: {
+        profile_completed: Boolean(legacyTenant.profile_completed || legacyTenant.profile?.is_profile_completed),
+        rules_accepted: Boolean(latestRuleAcceptance),
+        rules_accepted_at: latestRuleAcceptance?.accepted_at ?? null,
+        rules_version: latestRuleAcceptance?.rules_version ?? latestRuleAcceptance?.rule_version?.version ?? null,
+        rule_version_id: latestRuleAcceptance?.rule_version_id ?? null,
+        rules_snapshot: latestRuleAcceptance?.rules_snapshot ?? latestRuleAcceptance?.rule_version?.content ?? latestRuleAcceptance?.rule_version?.content_snapshot ?? null,
+        documents_uploaded: activeDocuments.length,
+        document_types: activeDocuments.map((doc: any) => doc.doc_type),
+        document_verification_status: legacyTenant.document_verified ? "VERIFIED" : "PENDING",
+        activation_progress_percent: Math.round(([
+          Boolean(legacyTenant.profile?.password_hash && (legacyTenant.phone_1 || legacyTenant.profile?.phone)),
+          Boolean(latestRuleAcceptance),
+          Boolean(legacyTenant.profile_completed || legacyTenant.profile?.is_profile_completed),
+          legacyTenant.status === "ACTIVE",
+        ].filter(Boolean).length / 4) * 100),
+        activation_started_at: legacyTenant.activation_started_at ?? null,
+        activation_completed_at: legacyTenant.activation_completed_at ?? null,
+        onboarding_last_activity_at: legacyTenant.onboarding_last_activity_at ?? null,
+        pending: {
+          profile: !legacyTenant.profile_completed,
+          rules: !latestRuleAcceptance,
+          documents: activeDocuments.length === 0 || !legacyTenant.document_verified,
+        },
+      }
     };
   }
 

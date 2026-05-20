@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Phone, Mail, Loader2 } from 'lucide-react';
+import { ArrowLeft, Phone, Mail, Loader2, Bell, Download, FileCheck2, Send } from 'lucide-react';
+import { toast } from 'sonner';
+import { tenantService } from '@features/tenants/api';
 import { useTenantProfile } from '@features/tenants/hooks/useTenantProfile';
 import { useTenantActions } from '@features/tenants/hooks/useTenantActions';
 import { TenantStatusBadge } from '@features/tenants/components/badges/TenantStatusBadge';
@@ -21,6 +23,7 @@ const SECTIONS = [
   { id: 'billing', label: 'Billing' },
   { id: 'payments', label: 'Payments' },
   { id: 'documents', label: 'Documents' },
+  { id: 'compliance', label: 'Compliance' },
   { id: 'activity', label: 'Activity' },
   { id: 'complaints', label: 'Complaints' },
   { id: 'exit', label: 'Exit' },
@@ -81,6 +84,42 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
   }
 
   const paymentSummary = (overview.payment_summary ?? overview.financial_summary) as Record<string, unknown> | undefined;
+  const compliance = (overview.compliance ?? {}) as Record<string, unknown>;
+
+  const runComplianceAction = async (action: string, success: string) => {
+    try {
+      await tenantService.runComplianceAction(tenantId, action);
+      toast.success(success);
+      refetch();
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ||
+        'Action failed';
+      toast.error(message);
+    }
+  };
+
+  const downloadAcceptanceRecord = () => {
+    if (!compliance?.rules_accepted) {
+      toast.error('No rules acceptance record yet');
+      return;
+    }
+    const record = {
+      tenant_id: tenantId,
+      tenant_name: name,
+      accepted_at: compliance.rules_accepted_at,
+      rules_version: compliance.rules_version,
+      rule_version_id: compliance.rule_version_id,
+      rules_snapshot: compliance.rules_snapshot,
+    };
+    const blob = new Blob([JSON.stringify(record, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${name.replace(/\s+/g, '-').toLowerCase()}-rules-acceptance.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="px-4 py-5 max-w-3xl mx-auto pb-28 md:pb-8 min-w-0">
@@ -222,6 +261,122 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
         />
       )}
 
+      {section === 'compliance' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <ComplianceCard
+              label="Activation progress"
+              value={`${Number(compliance.activation_progress_percent ?? 0)}%`}
+              good={Number(compliance.activation_progress_percent ?? 0) === 100}
+            />
+            <ComplianceCard
+              label="Last activity"
+              value={
+                compliance.onboarding_last_activity_at
+                  ? new Date(String(compliance.onboarding_last_activity_at)).toLocaleDateString('en-IN')
+                  : '—'
+              }
+              good={Boolean(compliance.onboarding_last_activity_at)}
+            />
+            <ComplianceCard
+              label="Profile completed"
+              value={compliance.profile_completed ? 'Complete' : 'Pending'}
+              good={Boolean(compliance.profile_completed)}
+            />
+            <ComplianceCard
+              label="Rules accepted"
+              value={
+                compliance.rules_accepted
+                  ? new Date(String(compliance.rules_accepted_at)).toLocaleDateString('en-IN')
+                  : 'Pending'
+              }
+              good={Boolean(compliance.rules_accepted)}
+            />
+            <ComplianceCard
+              label="Documents uploaded"
+              value={String(compliance.documents_uploaded ?? 0)}
+              good={Number(compliance.documents_uploaded ?? 0) > 0}
+            />
+            <ComplianceCard
+              label="Verification"
+              value={String(compliance.document_verification_status ?? 'PENDING')}
+              good={String(compliance.document_verification_status) === 'VERIFIED'}
+            />
+          </div>
+
+          <div className="p-4 rounded-xl border border-border bg-card space-y-3">
+            <p className="font-semibold text-foreground">Owner actions</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {status === 'INVITED' && (
+                <button
+                  type="button"
+                  onClick={() => runComplianceAction('RESEND_INVITE', 'Invitation resent')}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-3 py-2.5 text-sm font-medium"
+                >
+                  <Send className="w-4 h-4 text-accent" />
+                  Resend invite
+                </button>
+              )}
+              {status === 'INVITED' && (
+                <button
+                  type="button"
+                  onClick={() => runComplianceAction('REGENERATE_INVITE_TOKEN', 'Activation link regenerated')}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-3 py-2.5 text-sm font-medium"
+                >
+                  <Send className="w-4 h-4 text-accent" />
+                  Regenerate link
+                </button>
+              )}
+              {status === 'INVITED' && (
+                <button
+                  type="button"
+                  onClick={() => runComplianceAction('EXTEND_INVITATION_EXPIRY', 'Invitation expiry extended')}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-3 py-2.5 text-sm font-medium"
+                >
+                  <Bell className="w-4 h-4 text-accent" />
+                  Extend expiry
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => runComplianceAction('RESEND_RULES', 'Rules reminder sent')}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-3 py-2.5 text-sm font-medium"
+              >
+                <Bell className="w-4 h-4 text-accent" />
+                Resend rules
+              </button>
+              <button
+                type="button"
+                onClick={() => runComplianceAction('REMIND_DOCUMENTS', 'Document reminder sent')}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-3 py-2.5 text-sm font-medium"
+              >
+                <FileCheck2 className="w-4 h-4 text-accent" />
+                Remind documents
+              </button>
+              <button
+                type="button"
+                onClick={downloadAcceptanceRecord}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-3 py-2.5 text-sm font-medium"
+              >
+                <Download className="w-4 h-4 text-accent" />
+                Download acceptance
+              </button>
+              <button
+                type="button"
+                onClick={() => runComplianceAction('MARK_DOCUMENTS_VERIFIED', 'Documents marked verified')}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-3 py-2.5 text-sm font-medium"
+              >
+                <FileCheck2 className="w-4 h-4 text-accent" />
+                Mark docs verified
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Document verification actions remain in the Documents tab.
+            </p>
+          </div>
+        </div>
+      )}
+
       {section === 'activity' && (
         <ActivityTimeline hostelId={hostelId} tenantId={tenantId} tenantName={name} />
       )}
@@ -246,6 +401,15 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
           }}
         />
       )}
+    </div>
+  );
+}
+
+function ComplianceCard({ label, value, good }: { label: string; value: string; good: boolean }) {
+  return (
+    <div className="p-3 rounded-xl border border-border bg-card">
+      <p className="text-muted-foreground text-xs">{label}</p>
+      <p className={`font-medium ${good ? 'text-emerald-600' : 'text-amber-600'}`}>{value}</p>
     </div>
   );
 }

@@ -192,7 +192,7 @@ export class InvitationService {
     });
 
     // 6. Send enhanced invitation email
-    const activationLink = frontendUrl(`/activate?token=${token}`);
+    const activationLink = frontendUrl(`/activate/${token}`);
 
     const emailResult = await EmailService.sendInvitation({
       toEmail: normalizedEmail,
@@ -451,7 +451,7 @@ export class InvitationService {
     // 2. Generate new token (7 days)
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    const activationLink = frontendUrl(`/activate?token=${token}`);
+    const activationLink = frontendUrl(`/activate/${token}`);
 
     await prisma.profile.update({
       where: { id: profile.id },
@@ -630,7 +630,7 @@ export class InvitationService {
     const owner = await prisma.profile.findUnique({ where: { id: ownerId } });
     if (!owner) throw new Error("INTERNAL_ERROR: Cannot resend, missing owner details.");
 
-    const activationLink = frontendUrl(`/activate?token=${token}`);
+    const activationLink = frontendUrl(`/activate/${token}`);
 
     const emailResult = await EmailService.sendInvitation({
       toEmail: normalizedEmail,

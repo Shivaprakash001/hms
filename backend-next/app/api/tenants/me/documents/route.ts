@@ -5,6 +5,7 @@ import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { imagekit } from "@/lib/imagekit";
+import { eventLog } from "@/lib/services/event-log-service";
 
 const ALLOWED_TYPES = ["AADHAAR", "COLLEGE_ID", "RENTAL_AGREEMENT", "OTHER"] as const;
 const ALLOWED_MIME = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
@@ -90,6 +91,12 @@ export async function POST(req: NextRequest) {
         },
       });
     });
+
+    await eventLog.log("documents_uploaded", tenant.owner_id || null, {
+      tenant_id: tenant.id,
+      doc_type: docType,
+      document_id: created.id,
+    }, tenant.id);
 
     return apiResponse(created, 201);
   } catch (error: unknown) {

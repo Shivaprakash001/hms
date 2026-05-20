@@ -10,6 +10,7 @@ export function PublicRoutes() {
     <>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/activate" element={<ActivateAccountPage />} />
+      <Route path="/activate/:token" element={<ActivateAccountPage />} />
       <Route path="/complete-profile" element={<CompleteProfilePage />} />
       <Route path="/legal" element={<LegalPage />} />
       <Route path="/terms" element={<LegalPage />} />

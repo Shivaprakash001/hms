@@ -28,37 +28,34 @@ model activity_logs {
   entity_id   String?
   metadata    Json?
   timestamp   DateTime @default(now()) @db.Timestamptz(6)
-
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 
-
-
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model bulk_import_batches {
-  id                                                     String     @id @db.Uuid
-  owner_id                                               String     @db.Uuid
-  hostel_id                                              String     @db.Uuid
+  id                                                     String    @id @db.Uuid
+  owner_id                                               String    @db.Uuid
+  hostel_id                                              String    @db.Uuid
   filename                                               String
   file_size                                              Int?
-  total_rows                                             Int        @default(0)
-  valid_rows                                             Int        @default(0)
-  failed_rows                                            Int        @default(0)
-  imported_rows                                          Int        @default(0)
-  duplicate_rows                                         Int        @default(0)
-  status                                                 String     @default("PENDING")
+  total_rows                                             Int       @default(0)
+  valid_rows                                             Int       @default(0)
+  failed_rows                                            Int       @default(0)
+  imported_rows                                          Int       @default(0)
+  duplicate_rows                                         Int       @default(0)
+  status                                                 String    @default("PENDING")
   validation_errors                                      Json?
   import_summary                                         Json?
-  import_source_version                                  String     @default("google_form_v1")
-  uploaded_by                                            String     @db.Uuid
-  uploaded_at                                            DateTime   @default(now()) @db.Timestamptz(6)
-  validated_at                                           DateTime?  @db.Timestamptz(6)
-  imported_at                                            DateTime?  @db.Timestamptz(6)
-  created_at                                             DateTime   @default(now()) @db.Timestamptz(6)
-  updated_at                                             DateTime?  @db.Timestamptz(6)
-  hostels                                                hostels    @relation(fields: [hostel_id], references: [id])
+  import_source_version                                  String    @default("google_form_v1")
+  uploaded_by                                            String    @db.Uuid
+  uploaded_at                                            DateTime  @default(now()) @db.Timestamptz(6)
+  validated_at                                           DateTime? @db.Timestamptz(6)
+  imported_at                                            DateTime? @db.Timestamptz(6)
+  created_at                                             DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at                                             DateTime? @db.Timestamptz(6)
+  hostels                                                hostels   @relation(fields: [hostel_id], references: [id])
   profiles_bulk_import_batches_uploaded_byToprofiles     profile   @relation("bulk_import_batches_uploaded_byToprofiles", fields: [uploaded_by], references: [id])
   profiles_profiles_import_batch_idTobulk_import_batches profile[] @relation("profiles_import_batch_idTobulk_import_batches")
 
@@ -181,8 +178,8 @@ model hostel_invariant_checks {
 }
 
 model hostels {
-  id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  owner_id            String                @db.Uuid
+  id                  String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  owner_id            String                   @db.Uuid
   name                String
   phone               String
   address             String
@@ -191,21 +188,23 @@ model hostels {
   pincode             String?
   upi_id              String?
   gst_number          String?
-  is_active           Boolean               @default(true)
-  currency            String                @default("INR") @db.VarChar(3)
-  rent_cycle          String                @default("MONTHLY")
-  receipt_prefix      String                @default("SAH")
-  timezone            String                @default("UTC")
-  auto_rent_day       Int                   @default(1)
+  is_active           Boolean                  @default(true)
+  currency            String                   @default("INR") @db.VarChar(3)
+  rent_cycle          String                   @default("MONTHLY")
+  receipt_prefix      String                   @default("SAH")
+  timezone            String                   @default("UTC")
+  auto_rent_day       Int                      @default(1)
   phonepe_merchant_id String?
-  created_at          DateTime              @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime?             @db.Timestamptz(6)
+  created_at          DateTime                 @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime?                @db.Timestamptz(6)
   logo_url            String?
   preferences_config  Json?
   bulk_import_batches bulk_import_batches[]
   complaints          complaints[]
+  rule_acceptances    TenantPolicyAcceptance[]
   expenses            expenses[]
-  profiles            profile              @relation(fields: [owner_id], references: [id])
+  rule_versions       RuleVersion[]
+  profiles            profile                  @relation(fields: [owner_id], references: [id])
   payments            payments[]
   receipts            receipts[]
   reminder_logs       reminder_logs[]
@@ -215,7 +214,6 @@ model hostels {
   floors              floors[]
   tenants             tenants[]
   move_out_requests   move_out_requests[]
-
 }
 
 model identity_tokens {
@@ -291,7 +289,6 @@ model message_logs {
   pack_id           String?  @db.Uuid
   deduction         Int      @default(0)
   provider_response String?
-
 }
 
 model message_packs {
@@ -302,7 +299,6 @@ model message_packs {
   messages_remaining Int
   price_inr          Int
   notes              String?
-
 }
 
 model migration_audit_runs {
@@ -329,10 +325,8 @@ model notifications {
   type       String
   is_read    Boolean  @default(false)
   created_at DateTime @default(now()) @db.Timestamptz(6)
-  profiles   profile @relation(fields: [profile_id], references: [id])
-
+  profiles   profile  @relation(fields: [profile_id], references: [id])
 }
-
 
 model owner_dashboard_snapshots {
   owner_id             String    @id @db.Uuid
@@ -362,10 +356,6 @@ model owner_dashboard_snapshots {
   @@index([stats_computed_at])
 }
 
-
-
-
-
 model payment_attempt_obligations {
   id                 String           @id @db.Uuid
   payment_attempt_id String           @db.Uuid
@@ -373,7 +363,7 @@ model payment_attempt_obligations {
   amount             Decimal          @db.Decimal(10, 2)
   created_at         DateTime         @default(now()) @db.Timestamptz(6)
   rent_obligations   rent_obligations @relation(fields: [obligation_id], references: [id])
-  payment_attempts   paymentAttempt @relation(fields: [payment_attempt_id], references: [id], onDelete: Cascade)
+  payment_attempts   paymentAttempt   @relation(fields: [payment_attempt_id], references: [id], onDelete: Cascade)
 
   @@unique([payment_attempt_id, obligation_id])
 }
@@ -400,45 +390,45 @@ model payment_attempt_status_events {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model paymentAttempt {
-  id                          String                        @id @db.Uuid
-  obligation_id               String?                       @db.Uuid
-  tenant_id                   String?                       @db.Uuid
-  owner_id                    String                        @db.Uuid
-  provider                    String
-  merchant_txn_id             String                        @unique
-  gateway_txn_id              String?                       @unique
-  amount                      Decimal                       @db.Decimal(10, 2)
-  status                      AttemptStatus                 @default(CREATED)
-  upi_intent_url              String?
-  qr_payload                  String?
-  expires_at                  DateTime?                     @db.Timestamptz(6)
-  confirmed_at                DateTime?                     @db.Timestamptz(6)
-  raw_create_response         Json?
-  raw_webhook_payload         Json?
-  created_at                  DateTime                      @default(now()) @db.Timestamptz(6)
-  updated_at                  DateTime?                     @db.Timestamptz(6)
-  checkout_url                String?
-  payment_type                String                        @default("RENT")
-  addon_pack                  String?
-  manual_confirmed_by         String?                       @db.Uuid
-  manual_confirmed_at         DateTime?                     @db.Timestamptz(6)
-  manual_confirm_ip           String?
-  hostel_id                   String?                       @db.Uuid
-  payment_domain              String?
-  scope_type                  String?
-  flow_type                   String?
-  merchant_context_type       String?
-  merchant_context_id         String?
-  settlement_status           String?
-  settled_at                  DateTime?                     @db.Timestamptz(6)
-  merchant_transaction_id     String?
-  provider_transaction_id     String?
-  provider_order_id           String?
-  provider_reference_id       String?
-  obligations                 payment_attempt_obligations[]
-  rent_obligations            rent_obligations?             @relation(fields: [obligation_id], references: [id])
-  tenants                     tenants?                      @relation(fields: [tenant_id], references: [id])
-  payments                    payments[]
+  id                      String                        @id @db.Uuid
+  obligation_id           String?                       @db.Uuid
+  tenant_id               String?                       @db.Uuid
+  owner_id                String                        @db.Uuid
+  provider                String
+  merchant_txn_id         String                        @unique
+  gateway_txn_id          String?                       @unique
+  amount                  Decimal                       @db.Decimal(10, 2)
+  status                  AttemptStatus                 @default(CREATED)
+  upi_intent_url          String?
+  qr_payload              String?
+  expires_at              DateTime?                     @db.Timestamptz(6)
+  confirmed_at            DateTime?                     @db.Timestamptz(6)
+  raw_create_response     Json?
+  raw_webhook_payload     Json?
+  created_at              DateTime                      @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime?                     @db.Timestamptz(6)
+  checkout_url            String?
+  payment_type            String                        @default("RENT")
+  addon_pack              String?
+  manual_confirmed_by     String?                       @db.Uuid
+  manual_confirmed_at     DateTime?                     @db.Timestamptz(6)
+  manual_confirm_ip       String?
+  hostel_id               String?                       @db.Uuid
+  payment_domain          String?
+  scope_type              String?
+  flow_type               String?
+  merchant_context_type   String?
+  merchant_context_id     String?
+  settlement_status       String?
+  settled_at              DateTime?                     @db.Timestamptz(6)
+  merchant_transaction_id String?
+  provider_transaction_id String?
+  provider_order_id       String?
+  provider_reference_id   String?
+  obligations             payment_attempt_obligations[]
+  rent_obligations        rent_obligations?             @relation(fields: [obligation_id], references: [id])
+  tenants                 tenants?                      @relation(fields: [tenant_id], references: [id])
+  payments                payments[]
 
   @@index([flow_type])
   @@index([hostel_id])
@@ -576,27 +566,27 @@ model payment_webhook_events {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model payments {
-  id                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  obligation_id       String            @db.Uuid
-  tenant_id           String            @db.Uuid
-  owner_id            String?           @db.Uuid
-  amount_paid         Decimal           @db.Decimal(10, 2)
+  id                  String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  obligation_id       String           @db.Uuid
+  tenant_id           String           @db.Uuid
+  owner_id            String?          @db.Uuid
+  amount_paid         Decimal          @db.Decimal(10, 2)
   payment_method      String
   reference_number    String?
-  payment_date        DateTime          @db.Date
-  payment_attempt_id  String?           @db.Uuid
-  payment_group_id    String?           @db.Uuid
-  idempotency_key     String?           @unique
-  created_at          DateTime          @default(now()) @db.Timestamptz(6)
-  offline_recorded_by String?           @db.Uuid
-  offline_recorded_at DateTime?         @db.Timestamptz(6)
+  payment_date        DateTime         @db.Date
+  payment_attempt_id  String?          @db.Uuid
+  payment_group_id    String?          @db.Uuid
+  idempotency_key     String?          @unique
+  created_at          DateTime         @default(now()) @db.Timestamptz(6)
+  offline_recorded_by String?          @db.Uuid
+  offline_recorded_at DateTime?        @db.Timestamptz(6)
   offline_recorded_ip String?
   offline_note        String?
-  hostel_id           String            @db.Uuid
-  hostels             hostels           @relation(fields: [hostel_id], references: [id])
-  obligation          rent_obligations  @relation(fields: [obligation_id], references: [id])
-  payment_attempts    paymentAttempt? @relation(fields: [payment_attempt_id], references: [id])
-  tenants             tenants           @relation(fields: [tenant_id], references: [id])
+  hostel_id           String           @db.Uuid
+  hostels             hostels          @relation(fields: [hostel_id], references: [id])
+  obligation          rent_obligations @relation(fields: [obligation_id], references: [id])
+  payment_attempts    paymentAttempt?  @relation(fields: [payment_attempt_id], references: [id])
+  tenants             tenants          @relation(fields: [tenant_id], references: [id])
   receipts            receipts?
 
   @@index([created_at])
@@ -608,7 +598,6 @@ model payments {
   @@index([tenant_id])
   @@index([tenant_id, payment_date])
 }
-
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model profile {
@@ -639,6 +628,7 @@ model profile {
   phone_verified                                                    Boolean               @default(false)
   bulk_import_batches_bulk_import_batches_uploaded_byToprofiles     bulk_import_batches[] @relation("bulk_import_batches_uploaded_byToprofiles")
   expenses                                                          expenses[]
+  rule_versions                                                     RuleVersion[]
   hostels                                                           hostels[]
   notifications                                                     notifications[]
   bulk_import_batches_profiles_import_batch_idTobulk_import_batches bulk_import_batches?  @relation("profiles_import_batch_idTobulk_import_batches", fields: [import_batch_id], references: [id])
@@ -657,20 +647,20 @@ model profile {
 }
 
 model PhoneVerificationOtp {
-  id                String    @id @default(uuid()) @db.Uuid
-  phone             String
-  otp_hash          String
-  purpose           String
-  status            String    @default("PENDING")
-  attempts          Int       @default(0)
-  max_attempts      Int       @default(5)
-  expires_at        DateTime  @db.Timestamptz(6)
-  verified_at       DateTime? @db.Timestamptz(6)
-  meta_message_id   String?
-  provider_status   String?
-  failure_reason    String?
-  request_ip        String?
-  created_at        DateTime  @default(now()) @db.Timestamptz(6)
+  id              String    @id @default(uuid()) @db.Uuid
+  phone           String
+  otp_hash        String
+  purpose         String
+  status          String    @default("PENDING")
+  attempts        Int       @default(0)
+  max_attempts    Int       @default(5)
+  expires_at      DateTime  @db.Timestamptz(6)
+  verified_at     DateTime? @db.Timestamptz(6)
+  meta_message_id String?
+  provider_status String?
+  failure_reason  String?
+  request_ip      String?
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
 
   @@index([phone])
   @@index([expires_at])
@@ -692,7 +682,6 @@ model reactivation_requests {
   processed_by            String?   @db.Uuid
   created_at              DateTime  @default(now()) @db.Timestamptz(6)
   tenants                 tenants   @relation(fields: [tenant_id], references: [id])
-
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -730,7 +719,7 @@ model refresh_tokens {
   token_hash String   @unique
   expires_at DateTime @db.Timestamptz(6)
   created_at DateTime @default(now()) @db.Timestamptz(6)
-  profiles   profile @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  profiles   profile  @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@index([expires_at])
   @@index([user_id])
@@ -816,7 +805,7 @@ model rent_obligations {
   payment_attempts            paymentAttempt[]
   payments                    payments[]
   reminder_logs               reminder_logs[]
-  room_allocations            roomAllocation?             @relation(fields: [allocation_id], references: [id])
+  room_allocations            roomAllocation?               @relation(fields: [allocation_id], references: [id])
   hostels                     hostels                       @relation(fields: [hostel_id], references: [id])
   tenants                     tenants                       @relation(fields: [tenant_id], references: [id])
 
@@ -889,7 +878,6 @@ model rooms {
   @@index([floor_id])
 }
 
-
 model floors {
   id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   hostel_id  String   @db.Uuid
@@ -922,7 +910,6 @@ model system_locks {
   key        String   @id
   locked_at  DateTime @default(now()) @db.Timestamptz(6)
   expires_at DateTime @db.Timestamptz(6)
-
 }
 
 model tenant_advance_ledger {
@@ -979,58 +966,65 @@ model tenant_transfer_logs {
 }
 
 model tenants {
-  id                     String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  profile_id             String                  @unique @db.Uuid
-  profile_type           String                  @default("STUDENT")
-  monthly_rent           Decimal?                @db.Decimal(10, 2)
-  joined_on              DateTime?               @db.Date
-  status                 TenantStatus            @default(INVITED)
-  owner_id               String?                 @db.Uuid
-  profile_completed      Boolean                 @default(false)
-  photo_url              String?
-  phone_1                String?
-  phone_2                String?
-  phone_3                String?
-  personal_email         String?
-  college_name           String?
-  roll_number            String?
-  course                 String?
-  year_of_study          Int?
-  section                String?
-  branch                 String?
-  office_name            String?
-  office_location        String?
-  job_role               String?
-  gender                 String?
-  date_of_birth          DateTime?               @db.Date
-  advance_deposit        Decimal                 @default(0) @db.Decimal(10, 2)
-  maintenance_charge     Decimal                 @default(0) @db.Decimal(10, 2)
-  maintenance_type       String                  @default("MONTHLY")
-  billing_start_date     DateTime?               @db.Date
-  permanent_address      String?
-  temporary_address      String?
-  created_at             DateTime                @default(now()) @db.Timestamptz(6)
-  updated_at             DateTime?               @db.Timestamptz(6)
-  exit_date              DateTime?               @db.Date
-  exit_notes             String?
-  exit_reason            String?
-  hostel_id              String                  @db.Uuid
-  mobile_verified        Boolean                 @default(false)
-  document_verified      Boolean                 @default(false)
-  complaints             complaints[]
-  payment_attempts       paymentAttempt[]
-  payments               payments[]
-  reactivation_requests  reactivation_requests[]
-  receipts               receipts[]
-  reminder_logs          reminder_logs[]
-  rent_obligations       rent_obligations[]
-  room_allocations       roomAllocation[]
-  tenant_advance_ledger  tenant_advance_ledger[]
-  tenant_behavior_scores tenant_behavior_scores?
-  move_out_requests      move_out_requests[]
+  id                       String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  profile_id               String                   @unique @db.Uuid
+  profile_type             String                   @default("STUDENT")
+  monthly_rent             Decimal?                 @db.Decimal(10, 2)
+  joined_on                DateTime?                @db.Date
+  status                   TenantStatus             @default(INVITED)
+  owner_id                 String?                  @db.Uuid
+  profile_completed        Boolean                  @default(false)
+  photo_url                String?
+  phone_1                  String?
+  phone_2                  String?
+  phone_3                  String?
+  guardian_name            String?
+  guardian_phone           String?
+  guardian_relation        String?
+  personal_email           String?
+  college_name             String?
+  roll_number              String?
+  course                   String?
+  year_of_study            Int?
+  section                  String?
+  branch                   String?
+  office_name              String?
+  office_location          String?
+  job_role                 String?
+  gender                   String?
+  date_of_birth            DateTime?                @db.Date
+  advance_deposit          Decimal                  @default(0) @db.Decimal(10, 2)
+  maintenance_charge       Decimal                  @default(0) @db.Decimal(10, 2)
+  maintenance_type         String                   @default("MONTHLY")
+  billing_start_date       DateTime?                @db.Date
+  permanent_address        String?
+  temporary_address        String?
+  created_at               DateTime                 @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime?                @db.Timestamptz(6)
+  activation_started_at    DateTime?                @db.Timestamptz(6)
+  activation_completed_at  DateTime?                @db.Timestamptz(6)
+  onboarding_last_activity_at DateTime?             @db.Timestamptz(6)
+  exit_date                DateTime?                @db.Date
+  exit_notes               String?
+  exit_reason              String?
+  hostel_id                String                   @db.Uuid
+  mobile_verified          Boolean                  @default(false)
+  document_verified        Boolean                  @default(false)
+  complaints               complaints[]
+  rule_acceptances         TenantPolicyAcceptance[]
+  payment_attempts         paymentAttempt[]
+  payments                 payments[]
+  reactivation_requests    reactivation_requests[]
+  receipts                 receipts[]
+  reminder_logs            reminder_logs[]
+  rent_obligations         rent_obligations[]
+  room_allocations         roomAllocation[]
+  tenant_advance_ledger    tenant_advance_ledger[]
+  tenant_behavior_scores   tenant_behavior_scores?
+  move_out_requests        move_out_requests[]
   identification_documents identificationDocument[]
-  hostels                hostels                 @relation(fields: [hostel_id], references: [id])
-  profiles               profile                @relation(fields: [profile_id], references: [id])
+  hostels                  hostels                  @relation(fields: [hostel_id], references: [id])
+  profiles                 profile                  @relation(fields: [profile_id], references: [id])
 
   @@index([hostel_id])
   @@index([owner_id])
@@ -1041,14 +1035,12 @@ model token_blacklist {
   token      String   @unique
   expires_at DateTime @db.Timestamptz(6)
   created_at DateTime @default(now()) @db.Timestamptz(6)
-
 }
 
 model usage_tracking {
   owner_id      String @id @db.Uuid
   tenants_count Int    @default(0)
   hostels_count Int    @default(0)
-
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -1111,13 +1103,11 @@ enum AdvanceLedgerReason {
   DEDUCTION
   REFUND
   CORRECTION
-
 }
 
 enum AdvanceLedgerType {
   CREDIT
   DEBIT
-
 }
 
 enum AttemptStatus {
@@ -1130,7 +1120,6 @@ enum AttemptStatus {
   EXPIRED
   CANCELLED
   PENDING_MANUAL_CONFIRMATION
-
 }
 
 enum PaymentStatus {
@@ -1138,7 +1127,6 @@ enum PaymentStatus {
   PARTIAL
   PAID
   WAIVED
-
 }
 
 enum Role {
@@ -1146,7 +1134,6 @@ enum Role {
   OWNER
   WARDEN
   TENANT
-
 }
 
 enum TenantStatus {
@@ -1156,7 +1143,6 @@ enum TenantStatus {
   LEFT
   EXPIRED
   CANCELLED
-
 }
 
 enum MoveOutStatus {
@@ -1169,7 +1155,6 @@ enum MoveOutStatus {
   COMPLETED
   CANCELLED
   REJECTED
-
 }
 
 enum MoveOutReason {
@@ -1185,7 +1170,6 @@ enum MoveOutReason {
   RULES_TOO_STRICT
   MOVING_CLOSER
   OTHER
-
 }
 
 // ============================================================
@@ -1196,45 +1180,45 @@ enum MoveOutReason {
 // ============================================================
 
 model move_out_requests {
-  id                           String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenant_id                    String                       @db.Uuid
-  hostel_id                    String                       @db.Uuid
-  owner_id                     String                       @db.Uuid
-  status                       MoveOutStatus                @default(REQUESTED)
-  reason                       MoveOutReason
-  reason_text                  String?
-  planned_exit_date            DateTime                     @db.Date
-  actual_exit_date             DateTime?                    @db.Date
-  financial_completion_date    DateTime?                    @db.Timestamptz(6)
-  physical_exit_date           DateTime?                    @db.Date
-  room_release_date            DateTime?                    @db.Date
-  notice_period_days           Int                          @default(0)
-  notice_period_violation      Boolean                      @default(false)
-  initiated_by                 String                       @db.Uuid
-  initiated_by_role            String                       @default("TENANT") @db.VarChar(20)
-  is_eviction                  Boolean                      @default(false)
-  eviction_reason              String?
-  reviewed_by                  String?                      @db.Uuid
-  reviewed_at                  DateTime?                    @db.Timestamptz(6)
-  review_notes                 String?
-  cancelled_at                 DateTime?                    @db.Timestamptz(6)
-  cancelled_by                 String?                      @db.Uuid
-  cancellation_reason          String?
-  completed_at                 DateTime?                    @db.Timestamptz(6)
+  id                        String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id                 String        @db.Uuid
+  hostel_id                 String        @db.Uuid
+  owner_id                  String        @db.Uuid
+  status                    MoveOutStatus @default(REQUESTED)
+  reason                    MoveOutReason
+  reason_text               String?
+  planned_exit_date         DateTime      @db.Date
+  actual_exit_date          DateTime?     @db.Date
+  financial_completion_date DateTime?     @db.Timestamptz(6)
+  physical_exit_date        DateTime?     @db.Date
+  room_release_date         DateTime?     @db.Date
+  notice_period_days        Int           @default(0)
+  notice_period_violation   Boolean       @default(false)
+  initiated_by              String        @db.Uuid
+  initiated_by_role         String        @default("TENANT") @db.VarChar(20)
+  is_eviction               Boolean       @default(false)
+  eviction_reason           String?
+  reviewed_by               String?       @db.Uuid
+  reviewed_at               DateTime?     @db.Timestamptz(6)
+  review_notes              String?
+  cancelled_at              DateTime?     @db.Timestamptz(6)
+  cancelled_by              String?       @db.Uuid
+  cancellation_reason       String?
+  completed_at              DateTime?     @db.Timestamptz(6)
   // Freeze flags — what is locked during move-out
-  freeze_room_transfer         Boolean                      @default(true)
-  freeze_rent_generation       Boolean                      @default(true)
-  freeze_profile_edits         Boolean                      @default(false)
-  created_at                   DateTime                     @default(now()) @db.Timestamptz(6)
-  updated_at                   DateTime?                    @db.Timestamptz(6)
+  freeze_room_transfer      Boolean       @default(true)
+  freeze_rent_generation    Boolean       @default(true)
+  freeze_profile_edits      Boolean       @default(false)
+  created_at                DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at                DateTime?     @db.Timestamptz(6)
 
-  tenant                       tenants                      @relation(fields: [tenant_id], references: [id])
-  hostel                       hostels                      @relation(fields: [hostel_id], references: [id])
-  inspection                   move_out_inspections?
-  inspection_items             move_out_inspection_items[]
-  settlement                   exit_settlement_transactions?
-  feedback                     exit_feedbacks?
-  disputes                     exit_disputes[]
+  tenant           tenants                       @relation(fields: [tenant_id], references: [id])
+  hostel           hostels                       @relation(fields: [hostel_id], references: [id])
+  inspection       move_out_inspections?
+  inspection_items move_out_inspection_items[]
+  settlement       exit_settlement_transactions?
+  feedback         exit_feedbacks?
+  disputes         exit_disputes[]
 
   @@unique([tenant_id, status], map: "udx_mor_tenant_active")
   @@index([hostel_id, status])
@@ -1244,24 +1228,24 @@ model move_out_requests {
 }
 
 model move_out_inspections {
-  id                String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  request_id        String            @unique @db.Uuid
-  inspected_by      String            @db.Uuid
-  room_condition    String            @default("GOOD") @db.VarChar(20)
-  cleaning_status   String            @default("CLEAN") @db.VarChar(30)
-  damages_amount    Decimal           @default(0) @db.Decimal(10, 2)
-  cleaning_fee      Decimal           @default(0) @db.Decimal(10, 2)
-  missing_items_fee Decimal           @default(0) @db.Decimal(10, 2)
-  other_deductions  Decimal           @default(0) @db.Decimal(10, 2)
-  total_deductions  Decimal           @default(0) @db.Decimal(10, 2)
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  request_id        String    @unique @db.Uuid
+  inspected_by      String    @db.Uuid
+  room_condition    String    @default("GOOD") @db.VarChar(20)
+  cleaning_status   String    @default("CLEAN") @db.VarChar(30)
+  damages_amount    Decimal   @default(0) @db.Decimal(10, 2)
+  cleaning_fee      Decimal   @default(0) @db.Decimal(10, 2)
+  missing_items_fee Decimal   @default(0) @db.Decimal(10, 2)
+  other_deductions  Decimal   @default(0) @db.Decimal(10, 2)
+  total_deductions  Decimal   @default(0) @db.Decimal(10, 2)
   deduction_notes   String?
-  evidence_urls     String[]          @default([])
+  evidence_urls     String[]  @default([])
   notes             String?
-  inspected_at      DateTime          @default(now()) @db.Timestamptz(6)
-  created_at        DateTime          @default(now()) @db.Timestamptz(6)
-  updated_at        DateTime?         @db.Timestamptz(6)
+  inspected_at      DateTime  @default(now()) @db.Timestamptz(6)
+  created_at        DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime? @db.Timestamptz(6)
 
-  request           move_out_requests @relation(fields: [request_id], references: [id], onDelete: Cascade)
+  request move_out_requests @relation(fields: [request_id], references: [id], onDelete: Cascade)
 
   @@index([inspected_at])
 }
@@ -1269,65 +1253,65 @@ model move_out_inspections {
 /// Structured inspection checklist — one row per item inspected.
 /// This replaces free-text inventory checklists.
 model move_out_inspection_items {
-  id                String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  request_id        String            @db.Uuid
-  item_name         String            @db.VarChar(100)
-  item_category     String            @default("FURNITURE") @db.VarChar(30)
-  condition         String            @default("OK") @db.VarChar(20)
-  charge_amount     Decimal           @default(0) @db.Decimal(10, 2)
-  notes             String?
-  evidence_url      String?
-  created_at        DateTime          @default(now()) @db.Timestamptz(6)
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  request_id    String   @db.Uuid
+  item_name     String   @db.VarChar(100)
+  item_category String   @default("FURNITURE") @db.VarChar(30)
+  condition     String   @default("OK") @db.VarChar(20)
+  charge_amount Decimal  @default(0) @db.Decimal(10, 2)
+  notes         String?
+  evidence_url  String?
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
 
-  request           move_out_requests @relation(fields: [request_id], references: [id], onDelete: Cascade)
+  request move_out_requests @relation(fields: [request_id], references: [id], onDelete: Cascade)
 
   @@index([request_id])
 }
 
 model exit_settlement_transactions {
-  id                      String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  request_id              String            @unique @db.Uuid
-  tenant_id               String            @db.Uuid
-  owner_id                String            @db.Uuid
-  hostel_id               String            @db.Uuid
+  id         String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  request_id String @unique @db.Uuid
+  tenant_id  String @db.Uuid
+  owner_id   String @db.Uuid
+  hostel_id  String @db.Uuid
 
   // Deposit side — sourced from tenant_advance_ledger
-  security_deposit_amount Decimal           @default(0) @db.Decimal(10, 2)
-  advance_balance         Decimal           @default(0) @db.Decimal(10, 2)
+  security_deposit_amount Decimal @default(0) @db.Decimal(10, 2)
+  advance_balance         Decimal @default(0) @db.Decimal(10, 2)
 
   // Dues side
-  pending_rent_dues       Decimal           @default(0) @db.Decimal(10, 2)
-  pending_late_fees       Decimal           @default(0) @db.Decimal(10, 2)
-  pending_utility_dues    Decimal           @default(0) @db.Decimal(10, 2)
+  pending_rent_dues    Decimal @default(0) @db.Decimal(10, 2)
+  pending_late_fees    Decimal @default(0) @db.Decimal(10, 2)
+  pending_utility_dues Decimal @default(0) @db.Decimal(10, 2)
 
   // Deductions from structured inspection
-  damages_deduction       Decimal           @default(0) @db.Decimal(10, 2)
-  cleaning_deduction      Decimal           @default(0) @db.Decimal(10, 2)
-  missing_items_deduction Decimal           @default(0) @db.Decimal(10, 2)
-  other_deductions        Decimal           @default(0) @db.Decimal(10, 2)
+  damages_deduction       Decimal @default(0) @db.Decimal(10, 2)
+  cleaning_deduction      Decimal @default(0) @db.Decimal(10, 2)
+  missing_items_deduction Decimal @default(0) @db.Decimal(10, 2)
+  other_deductions        Decimal @default(0) @db.Decimal(10, 2)
 
   // Computed totals
-  total_deductions        Decimal           @default(0) @db.Decimal(10, 2)
-  total_dues              Decimal           @default(0) @db.Decimal(10, 2)
+  total_deductions Decimal @default(0) @db.Decimal(10, 2)
+  total_dues       Decimal @default(0) @db.Decimal(10, 2)
 
   // Final settlement: positive = owner owes tenant, negative = tenant owes owner
-  net_settlement_amount   Decimal           @default(0) @db.Decimal(10, 2)
-  settlement_direction    String            @default("NONE") @db.VarChar(20)
+  net_settlement_amount Decimal @default(0) @db.Decimal(10, 2)
+  settlement_direction  String  @default("NONE") @db.VarChar(20)
 
   // Payment tracking
-  payment_status          String            @default("PENDING") @db.VarChar(20)
-  payment_method          String?           @db.VarChar(30)
-  payment_reference       String?
-  payment_notes           String?
-  settled_at              DateTime?         @db.Timestamptz(6)
-  settled_by              String?           @db.Uuid
-  confirmed_by_tenant     Boolean           @default(false)
-  confirmed_by_owner      Boolean           @default(false)
+  payment_status      String    @default("PENDING") @db.VarChar(20)
+  payment_method      String?   @db.VarChar(30)
+  payment_reference   String?
+  payment_notes       String?
+  settled_at          DateTime? @db.Timestamptz(6)
+  settled_by          String?   @db.Uuid
+  confirmed_by_tenant Boolean   @default(false)
+  confirmed_by_owner  Boolean   @default(false)
 
-  created_at              DateTime          @default(now()) @db.Timestamptz(6)
-  updated_at              DateTime?         @db.Timestamptz(6)
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @db.Timestamptz(6)
 
-  request                 move_out_requests @relation(fields: [request_id], references: [id], onDelete: Cascade)
+  request move_out_requests @relation(fields: [request_id], references: [id], onDelete: Cascade)
 
   @@index([tenant_id])
   @@index([owner_id, hostel_id])
@@ -1337,58 +1321,54 @@ model exit_settlement_transactions {
 /// Dispute layer — tracks disagreements on settlement amounts.
 /// Prevents disputes from going to WhatsApp.
 model exit_disputes {
-  id                String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  request_id        String            @db.Uuid
-  raised_by         String            @db.Uuid
-  raised_by_role    String            @db.VarChar(20)
-  dispute_type      String            @db.VarChar(40)
-  description       String
-  disputed_amount   Decimal?          @db.Decimal(10, 2)
-  evidence_urls     String[]          @default([])
-  status            String            @default("OPEN") @db.VarChar(20)
-  resolution_notes  String?
-  resolved_by       String?           @db.Uuid
-  resolved_at       DateTime?         @db.Timestamptz(6)
-  created_at        DateTime          @default(now()) @db.Timestamptz(6)
-  updated_at        DateTime?         @db.Timestamptz(6)
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  request_id       String    @db.Uuid
+  raised_by        String    @db.Uuid
+  raised_by_role   String    @db.VarChar(20)
+  dispute_type     String    @db.VarChar(40)
+  description      String
+  disputed_amount  Decimal?  @db.Decimal(10, 2)
+  evidence_urls    String[]  @default([])
+  status           String    @default("OPEN") @db.VarChar(20)
+  resolution_notes String?
+  resolved_by      String?   @db.Uuid
+  resolved_at      DateTime? @db.Timestamptz(6)
+  created_at       DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime? @db.Timestamptz(6)
 
-  request           move_out_requests @relation(fields: [request_id], references: [id], onDelete: Cascade)
+  request move_out_requests @relation(fields: [request_id], references: [id], onDelete: Cascade)
 
   @@index([request_id, status])
 }
 
 model exit_feedbacks {
-  id                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  request_id          String            @unique @db.Uuid
-  tenant_id           String            @db.Uuid
-  hostel_id           String            @db.Uuid
+  id         String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  request_id String @unique @db.Uuid
+  tenant_id  String @db.Uuid
+  hostel_id  String @db.Uuid
 
   // Ratings (1-5 scale) — actionable, specific dimensions
-  rating_cleanliness  Int?              @db.SmallInt
-  rating_food         Int?              @db.SmallInt
-  rating_wifi         Int?              @db.SmallInt
-  rating_management   Int?              @db.SmallInt
-  rating_maintenance  Int?              @db.SmallInt
-  rating_safety       Int?              @db.SmallInt
-  rating_value        Int?              @db.SmallInt
-  rating_noise        Int?              @db.SmallInt
+  rating_cleanliness Int? @db.SmallInt
+  rating_food        Int? @db.SmallInt
+  rating_wifi        Int? @db.SmallInt
+  rating_management  Int? @db.SmallInt
+  rating_maintenance Int? @db.SmallInt
+  rating_safety      Int? @db.SmallInt
+  rating_value       Int? @db.SmallInt
+  rating_noise       Int? @db.SmallInt
 
-  overall_rating      Int?              @db.SmallInt
-  would_recommend     Boolean?
-  improvement_text    String?
-  experience_text     String?
+  overall_rating   Int?     @db.SmallInt
+  would_recommend  Boolean?
+  improvement_text String?
+  experience_text  String?
 
-  created_at          DateTime          @default(now()) @db.Timestamptz(6)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
 
-  request             move_out_requests @relation(fields: [request_id], references: [id], onDelete: Cascade)
+  request move_out_requests @relation(fields: [request_id], references: [id], onDelete: Cascade)
 
   @@index([hostel_id])
   @@index([tenant_id])
 }
-
-
-
-
 
 model financial_reconciliation_issues {
   id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -1437,4 +1417,45 @@ model admin_financial_audit_log {
   @@index([subject_type, subject_id, created_at(sort: Desc)], map: "idx_afal_subject")
   @@index([action_type, created_at(sort: Desc)], map: "idx_afal_action_created")
   @@index([owner_id, created_at(sort: Desc)], map: "idx_afal_owner_created")
+}
+
+model RuleVersion {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  hostel_id        String   @db.Uuid
+  version          String // e.g., "2026-v1"
+  title            String   @default("Standard Hostel Rules")
+  content          Json?
+  content_snapshot Json
+  is_active        Boolean  @default(true)
+  active           Boolean  @default(true)
+  created_at       DateTime @default(now()) @db.Timestamptz(6)
+
+  hostel      hostels                  @relation(fields: [hostel_id], references: [id], onDelete: Cascade)
+  acceptances TenantPolicyAcceptance[]
+  profile     profile?                 @relation(fields: [profileId], references: [id])
+  profileId   String?                  @db.Uuid
+
+  @@index([hostel_id, active])
+  @@index([hostel_id, is_active])
+}
+
+model TenantPolicyAcceptance {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id            String   @db.Uuid
+  hostel_id            String   @db.Uuid
+  rule_version_id      String   @db.Uuid
+  rules_version        String
+  rules_snapshot       Json     @default("{}")
+  accepted_at          DateTime @default(now()) @db.Timestamptz(6)
+  accepted_ip          String?
+  accepted_user_agent  String?
+  typed_signature_name String?
+
+  tenant       tenants     @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  hostel       hostels     @relation(fields: [hostel_id], references: [id], onDelete: Cascade)
+  rule_version RuleVersion @relation(fields: [rule_version_id], references: [id], onDelete: Cascade)
+
+  @@unique([tenant_id, rule_version_id])
+  @@index([tenant_id])
+  @@index([hostel_id])
 }
