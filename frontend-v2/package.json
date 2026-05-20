@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "build": "vite build && node ../scripts/check-production-branding.mjs dist",
+    "build": "node scripts/check-architecture.mjs && vite build && node ../scripts/check-production-branding.mjs dist",
     "check:branding": "node ../scripts/check-production-branding.mjs dist",
     "check:architecture": "node scripts/check-architecture.mjs",
     "dev": "vite"

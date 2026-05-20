@@ -74,6 +74,43 @@ for (const rootDir of uiSurfaceRoots) {
   }
 }
 
+// ── features layer: must use api client, never raw axios or fetch ─────────────
+for (const file of walk(path.join(srcRoot, 'features')).filter(isSourceFile)) {
+  const source = fs.readFileSync(file, 'utf8');
+  const relative = rel(file);
+  if (/\bfetch\s*\(/.test(source)) {
+    failures.push(`${relative}: direct fetch() is not allowed in features; use api from @lib/api-client`);
+  }
+  if (/from ['"]axios['"]/.test(source)) {
+    failures.push(`${relative}: direct axios import is not allowed in features; use api from @lib/api-client`);
+  }
+}
+
+// ── portal layer: must use api client, never raw axios or fetch ───────────────
+for (const file of walk(path.join(srcRoot, 'portal')).filter(isSourceFile)) {
+  if (legacyPortalAllowlist.has(rel(file))) continue;
+  const source = fs.readFileSync(file, 'utf8');
+  const relative = rel(file);
+  if (/\bfetch\s*\(/.test(source)) {
+    failures.push(`${relative}: direct fetch() is not allowed in portal; use api from @lib/api-client`);
+  }
+  if (/from ['"]axios['"]/.test(source)) {
+    failures.push(`${relative}: direct axios import is not allowed in portal; use api from @lib/api-client`);
+  }
+}
+
+// ── context layer: must use api client, never raw axios or fetch ──────────────
+for (const file of walk(path.join(srcRoot, 'context')).filter(isSourceFile)) {
+  const source = fs.readFileSync(file, 'utf8');
+  const relative = rel(file);
+  if (/\bfetch\s*\(/.test(source)) {
+    failures.push(`${relative}: direct fetch() is not allowed in context; use api from @lib/api-client`);
+  }
+  if (/from ['"]axios['"]/.test(source)) {
+    failures.push(`${relative}: direct axios import is not allowed in context; use api from @lib/api-client`);
+  }
+}
+
 for (const file of walk(path.join(srcRoot, 'shared')).filter(isSourceFile)) {
   const source = fs.readFileSync(file, 'utf8');
   const relative = rel(file);
