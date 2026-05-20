@@ -11,8 +11,8 @@ import { api } from "@/lib/api-client";
  * Renders the FIVE money buckets distinguished by the financial-ops
  * brief:
  *
- *   1. HMS platform revenue       — what HMS earned (subscriptions/add-ons)
- *   2. Owner payable liability    — what HMS currently owes owners (live)
+ *   1. Platform revenue           — what Sri Adithya Hostels earned
+ *   2. Owner payable liability    — what is currently owed to owners (live)
  *   3. Unsettled liability        — un-reserved subset of (2)
  *   4. Settled payouts (window)   — money disbursed in the window
  *   5. Failed payout exposure     — failed items not yet retried
@@ -87,7 +87,7 @@ export default function AdminOverviewPage() {
       <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
         <Bucket
           tone="indigo"
-          label="HMS Platform Revenue"
+          label="Sri Adithya Platform Revenue"
           sub={`${data.buckets.hms_platform_revenue.payment_count} payments · last ${days}d`}
           value={rupees(data.buckets.hms_platform_revenue.total)}
           note="Subscriptions + add-ons. Never mixed with owner liability."
@@ -97,7 +97,7 @@ export default function AdminOverviewPage() {
           label="Owner Payable Liability"
           sub={`${data.buckets.owner_payable_liability.owner_hostel_pairs} owner-hostel pairs · live`}
           value={rupees(data.buckets.owner_payable_liability.total)}
-          note="Sum of current ledger balances HMS owes owners."
+          note="Sum of current ledger balances owed to owners."
         />
         <Bucket
           tone="amber"

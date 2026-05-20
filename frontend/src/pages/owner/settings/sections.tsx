@@ -39,7 +39,7 @@ export const DEFAULT_PREFS = {
     reminder_auto_stop_after_payment: true,
     late_fee_notification: true,
     owner_daily_summary: false,
-    receipt_prefix: 'HMS',
+    receipt_prefix: 'SAH',
     receipt_format: 'PREFIX-YEAR-SEQ',
     receipt_footer: '',
     auto_email_receipt: false,
@@ -400,10 +400,10 @@ export function NotificationsSection({ prefs, activeHostel, addonUsage, onSave, 
 }
 
 export function ReceiptsSection({ prefs, activeHostel, onSave, onBack }: any) {
-    const defaults = useMemo(() => ({ receipt_prefix: prefs.receipt_prefix || 'HMS', receipt_format: prefs.receipt_format || 'PREFIX-YEAR-SEQ', auto_email_receipt: !!prefs.auto_email_receipt, receipt_footer: prefs.receipt_footer || '' }), [prefs]);
+    const defaults = useMemo(() => ({ receipt_prefix: prefs.receipt_prefix || 'SAH', receipt_format: prefs.receipt_format || 'PREFIX-YEAR-SEQ', auto_email_receipt: !!prefs.auto_email_receipt, receipt_footer: prefs.receipt_footer || '' }), [prefs]);
     const state = useSectionForm(defaults, (values: any) => onSave('receipt-config', values));
     const { register, handleSubmit, watch, setValue } = state.form;
-    const prefix = String(watch('receipt_prefix') || 'HMS').slice(0, 6).toUpperCase();
+    const prefix = String(watch('receipt_prefix') || 'SAH').slice(0, 6).toUpperCase();
     return (
         <section aria-labelledby="receipts-heading">
             <FormShell section={sectionById.receipts} activeHostel={activeHostel} formState={state} onSubmit={handleSubmit(state.submit)} onBack={onBack}>

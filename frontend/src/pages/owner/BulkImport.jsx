@@ -155,7 +155,7 @@ export default function BulkImport() {
                         <div>
                             <h2 className="text-xl font-black text-slate-900 tracking-tight">Generate Google Form Prompt</h2>
                             <p className="text-sm text-slate-500 mt-1">
-                                Creates a strict copy-paste prompt using {activeHostel?.name || 'this hostel'} and its active room list. Google Forms will provide the responder email column; HMS will not ask for a second email field.
+                                Creates a strict copy-paste prompt using {activeHostel?.name || 'this hostel'} and its active room list. Google Forms will provide the responder email column; the import will not ask for a second email field.
                             </p>
                         </div>
                         {generatedPrompt?.room_count ? (

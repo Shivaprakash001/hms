@@ -148,7 +148,7 @@ export function PricingPage() {
             <ul className="space-y-3 text-amber-900/80">
               <li className="flex items-start gap-3">
                 <div className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-2 shrink-0" />
-                <p>All hostel rent payments must be made <strong>only through the official HMS web portal</strong>.</p>
+                <p>All hostel rent payments must be made <strong>only through the official Sri Adithya Hostels web portal</strong>.</p>
               </li>
               <li className="flex items-start gap-3">
                 <div className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-2 shrink-0" />

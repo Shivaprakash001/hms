@@ -25,7 +25,7 @@ export function Sidebar() {
           <div className="w-8 h-8 bg-accent rounded-lg flex items-center justify-center">
             <Building2 className="w-4 h-4 text-accent-foreground" />
           </div>
-          <span className="font-semibold text-foreground text-sm">HMS</span>
+          <span className="font-semibold text-foreground text-sm">Sri Adithya</span>
         </div>
       </div>
 

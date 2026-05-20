@@ -137,7 +137,7 @@ const OnlinePaymentModal = ({ isOpen, onClose, obligation, onSettled }) => {
                                     <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
                                         <Smartphone size={18} className="mt-0.5 shrink-0" />
                                         <span>
-                                            This opens HMS treasury checkout. Once paid, the owner settlement ledger is credited for this hostel.
+                                            This opens Sri Adithya Hostels checkout. Once paid, the owner settlement ledger is credited for this hostel.
                                         </span>
                                     </div>
 

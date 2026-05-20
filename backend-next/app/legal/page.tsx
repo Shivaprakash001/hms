@@ -4,18 +4,18 @@ import LegalNav from "@/components/legal/LegalNav"
 import LegalSection from "@/components/legal/LegalSection"
 
 export const metadata: Metadata = {
-  title: "Legal & Policies | Trishul Solutions",
+  title: "Legal & Policies | Sri Adithya Hostels",
   description:
-    "Terms & Conditions, Privacy Policy, and Refund Policy for Trishul Solutions HMS — the hostel management SaaS platform.",
+    "Terms & Conditions, Privacy Policy, and Refund Policy for Sri Adithya Hostels.",
   alternates: {
     canonical: "https://sriadithyahostels.in/legal",
   },
   openGraph: {
-    title: "Legal & Policies | Trishul Solutions",
+    title: "Legal & Policies | Sri Adithya Hostels",
     description:
-      "Terms & Conditions, Privacy Policy, and Refund Policy for Trishul Solutions HMS.",
+      "Terms & Conditions, Privacy Policy, and Refund Policy for Sri Adithya Hostels.",
     url: "https://sriadithyahostels.in/legal",
-    siteName: "Trishul Solutions",
+    siteName: "Sri Adithya Hostels",
     type: "website",
   },
   robots: {
@@ -33,14 +33,14 @@ export default function LegalPage() {
       <header className="bg-slate-900 text-white">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-14 sm:py-20 text-center">
           <p className="text-indigo-400 text-xs font-bold uppercase tracking-[0.2em] mb-4">
-            Trishul Solutions
+            Sri Adithya Hostels
           </p>
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
             Legal &amp; Policies
           </h1>
           <p className="mt-4 text-slate-400 text-base sm:text-lg max-w-xl mx-auto leading-relaxed">
-            Our commitment to transparency, privacy, and fair usage of the HMS
-            platform.
+            Our commitment to transparency, privacy, and fair usage of the Sri
+            Adithya Hostels platform.
           </p>
           {/* Quick jump links for no-JS fallback */}
           <div className="mt-8 flex flex-wrap justify-center gap-3">
@@ -74,7 +74,7 @@ export default function LegalPage() {
       <footer className="border-t border-slate-200 bg-slate-50">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-10 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-sm text-slate-500">
-            &copy; {new Date().getFullYear()} Trishul Solutions. All rights
+            &copy; {new Date().getFullYear()} Sri Adithya Hostels. All rights
             reserved.
           </p>
           <nav aria-label="Policy quick links" className="flex gap-5">

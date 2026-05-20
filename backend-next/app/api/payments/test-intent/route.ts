@@ -33,7 +33,7 @@ export async function POST(req: Request) {
       return apiError("Test payment amount must be between ₹1 and ₹100", "VALIDATION_ERROR", 400);
     }
     if (!process.env.PHONEPE_CLIENT_ID || !process.env.PHONEPE_CLIENT_SECRET) {
-      return apiError("HMS treasury PhonePe credentials are not configured", "CONFIG_ERROR", 422);
+      return apiError("Sri Adithya Hostels PhonePe credentials are not configured", "CONFIG_ERROR", 422);
     }
 
     const ownerId = user.id;

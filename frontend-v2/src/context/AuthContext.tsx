@@ -47,7 +47,7 @@ const clearSessionScopedStorage = () => {
   localStorage.removeItem('tenantUser');
   localStorage.removeItem('ownerUser');
   localStorage.removeItem('hms_onboarding_step');
-  localStorage.removeItem('niva_onboarding_complete');
+  localStorage.removeItem('sri_adithya_onboarding_complete');
   sessionStorage.clear();
 };
 

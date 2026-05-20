@@ -35,7 +35,7 @@
     --radius-lg: 12px;
     --radius-xl: 16px;
     --radius-full: 9999px;
-    /* Operations dashboard (NIVA-inspired) */
+    /* Operations dashboard (Sri Adithya-inspired) */
     --color-ops-accent: #14b8a6;
     --color-ops-accent-foreground: #ffffff;
     --color-ops-success: #10b981;
@@ -118,7 +118,7 @@ html {
 }
 
 :root {
-    /* HMS operational theme (temp-ui derived) */
+    /* Sri Adithya Hostels operational theme */
     --background: #f9fafb;
     --foreground: #111827;
     --card: #ffffff;

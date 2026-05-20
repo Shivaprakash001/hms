@@ -43,7 +43,7 @@ export default function OwnerFinanceTransfers() {
           </Link>
           <h1 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">Transfers</h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-500">
-            Every settlement HMS has paid to your bank account. The reference number (UTR / NEFT) is your authoritative proof; copy it for any disputes.
+            Every settlement paid to your bank account is listed here. The reference number (UTR / NEFT) is your authoritative proof; copy it for any disputes.
           </p>
         </div>
       </header>
@@ -69,7 +69,7 @@ export default function OwnerFinanceTransfers() {
                   <td colSpan={5} className="px-5 py-10 text-center">
                     <Receipt size={32} className="mx-auto mb-2 text-slate-300" />
                     <p className="text-sm font-semibold text-slate-600">No transfers yet</p>
-                    <p className="mt-1 text-xs text-slate-400">Settlements will appear here once HMS transfers funds to your bank.</p>
+                    <p className="mt-1 text-xs text-slate-400">Settlements will appear here once funds are transferred to your bank.</p>
                   </td>
                 </tr>
               )}

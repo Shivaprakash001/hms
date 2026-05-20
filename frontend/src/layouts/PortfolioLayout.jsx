@@ -376,11 +376,11 @@ const PortfolioLayout = () => {
                 >
                     <div className="flex items-center gap-3 overflow-hidden">
                         <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shrink-0 shadow-sm border border-slate-800/50 overflow-hidden group-hover:border-ops-accent/30 transition-colors">
-                            <LogoImage src={hostelLogoUrl || "/logo.png"} />
+                            <LogoImage src={hostelLogoUrl || "/android-chrome-512x512.png"} />
                         </div>
                         <div className={`transition-all duration-300 ${sidebarOpen ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4 hidden'}`}>
                             <h1 className="font-bold text-lg tracking-tight text-white leading-tight">
-                                Trishul <span className="text-teal-400">Solutions</span>
+                                Sri Adithya Hostels <span className="text-teal-400">Solutions</span>
                             </h1>
                         </div>
                     </div>
@@ -484,9 +484,9 @@ const PortfolioLayout = () => {
                 <div className="h-16 flex items-center justify-between px-6 border-b border-slate-800">
                     <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center overflow-hidden border border-slate-800">
-                            <LogoImage src={hostelLogoUrl || "/logo.png"} />
+                            <LogoImage src={hostelLogoUrl || "/android-chrome-512x512.png"} />
                         </div>
-                        <span className="font-bold text-lg text-white">Trishul</span>
+                        <span className="font-bold text-lg text-white">Sri Adithya Hostels</span>
                     </div>
                     <button onClick={() => setMobileMenuOpen(false)} className="text-slate-400 hover:text-white">
                         <X size={24} />

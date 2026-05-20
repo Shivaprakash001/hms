@@ -20,7 +20,7 @@ Once a rent settlement creates `Payment` rows:
 
 ### PlatformBilling
 
-Owner pays HMS/Trishul Solutions.
+Owner pays HMS/Sri Adithya Hostels.
 
 Flows:
 

@@ -338,7 +338,7 @@ export async function generateReceiptPdf(data: ReceiptRenderData): Promise<Uint8
   });
   
   page.drawText("Thank you for your timely payment.", { x: 36, y: 15, size: 10, font: fontRegular, color: COLORS.creamDim });
-  const rightFooter = "HMS - Hostel Management System";
+  const rightFooter = "Sri Adithya Hostels";
   page.drawText(rightFooter, { x: width - 36 - fontRegular.widthOfTextAtSize(rightFooter, 9), y: 15, size: 9, font: fontRegular, color: COLORS.gold });
 
   return await pdfDoc.save();

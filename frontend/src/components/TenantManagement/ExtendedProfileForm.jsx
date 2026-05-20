@@ -174,12 +174,12 @@ export default function ExtendedProfileForm({ isOpen, onClose, tenant, onSave })
                                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 sm:mt-2">Portrait</p>
                                 </div>
                                 <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                                    <SaaSInput label="Full Name" value={form.name} readOnly placeholder="Not Set" />
-                                    <SaaSInput label="Personal Email" value={form.personal_email} readOnly icon={Lock} placeholder="Not Set" />
-                                    <SaaSInput label="Phone Number" value={form.phone_1} readOnly placeholder="Not Set" />
-                                    <SaaSInput label="Aadhaar Number" value={form.aadhaar_number} readOnly placeholder="XXXX XXXX XXXX" />
+                                    <ReadOnlyInput label="Full Name" value={form.name} readOnly placeholder="Not Set" />
+                                    <ReadOnlyInput label="Personal Email" value={form.personal_email} readOnly icon={Lock} placeholder="Not Set" />
+                                    <ReadOnlyInput label="Phone Number" value={form.phone_1} readOnly placeholder="Not Set" />
+                                    <ReadOnlyInput label="Aadhaar Number" value={form.aadhaar_number} readOnly placeholder="XXXX XXXX XXXX" />
                                     <div className="sm:col-span-2">
-                                        <SaaSInput label="Emergency Contact" value={form.phone_2} readOnly placeholder="Primary Guardian / Relative Contact" />
+                                        <ReadOnlyInput label="Emergency Contact" value={form.phone_2} readOnly placeholder="Primary Guardian / Relative Contact" />
                                     </div>
                                 </div>
                             </div>
@@ -191,11 +191,11 @@ export default function ExtendedProfileForm({ isOpen, onClose, tenant, onSave })
                                 <MapPin size={12} /> Resident Status
                             </h3>
                             <div className="space-y-4 sm:space-y-6 p-5 sm:p-8 bg-slate-50/50 rounded-[1.5rem] sm:rounded-[2rem] border border-slate-100">
-                                <SaaSInput label="Permanent/Full Address" value={form.address} readOnly placeholder="Not Set" />
+                                <ReadOnlyInput label="Permanent/Full Address" value={form.address} readOnly placeholder="Not Set" />
                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
-                                    <SaaSInput label="City" value={form.city} readOnly placeholder="Not Set" />
-                                    <SaaSInput label="State" value={form.state} readOnly placeholder="Not Set" />
-                                    <SaaSInput label="Pincode" value={form.pincode} readOnly placeholder="Not Set" />
+                                    <ReadOnlyInput label="City" value={form.city} readOnly placeholder="Not Set" />
+                                    <ReadOnlyInput label="State" value={form.state} readOnly placeholder="Not Set" />
+                                    <ReadOnlyInput label="Pincode" value={form.pincode} readOnly placeholder="Not Set" />
                                 </div>
                             </div>
                         </div>
@@ -290,7 +290,7 @@ export default function ExtendedProfileForm({ isOpen, onClose, tenant, onSave })
                                 <h2 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight truncate">{form.name || 'Tenant Profile'}</h2>
                                 <div className="flex items-center gap-2 sm:gap-3 mt-1 sm:mt-1.5 flex-wrap">
                                     <span className="text-[8px] sm:text-[10px] font-black text-indigo-500 uppercase tracking-widest bg-indigo-50 px-1.5 py-0.5 rounded-md border border-indigo-100">
-                                        ID: {tenant?.rollNumber || tenant?.id?.substring(0, 8) || 'HMS-00'}
+                                        ID: {tenant?.rollNumber || tenant?.id?.substring(0, 8) || 'SAH-00'}
                                     </span>
                                     <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest border border-slate-100 px-1.5 py-0.5 rounded-md">
                                         Tenant Record
@@ -353,7 +353,7 @@ export default function ExtendedProfileForm({ isOpen, onClose, tenant, onSave })
 }
 
 // Internal Styled Input Component
-function SaaSInput({ label, value, readOnly = true, placeholder, icon: Icon }) {
+function ReadOnlyInput({ label, value, readOnly = true, placeholder, icon: Icon }) {
     const [isMasked, setIsMasked] = useState(label === 'Aadhaar Number');
     
     const displayValue = useMemo(() => {

@@ -2,13 +2,7 @@ export const PRODUCTION_FRONTEND_URL = "https://sriadithyahostels.in";
 export const PRODUCTION_FRONTEND_WWW_URL = "https://www.sriadithyahostels.in";
 export const PRODUCTION_BACKEND_URL = "https://api.sriadithyahostels.in";
 
-const TEMPORARY_LEGACY_FRONTEND_ORIGINS = [
-  "https://trishul.solutions",
-  "https://www.trishul.solutions",
-  "https://hms-sand-five.vercel.app",
-  "https://hms-r68g.vercel.app",
-  "https://hms-ep3rw8fe2-shivaprakash001s-projects.vercel.app",
-];
+const TEMPORARY_LEGACY_FRONTEND_ORIGINS: string[] = [];
 
 function normalizeUrl(value?: string | null) {
   const raw = String(value || "").trim();

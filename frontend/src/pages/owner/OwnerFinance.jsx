@@ -81,7 +81,7 @@ export default function OwnerFinance() {
         <div>
           <h1 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">Finance</h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-500">
-            Money tenants paid, what's pending settlement to you, and what HMS has already transferred to your bank account.
+            Money tenants paid, what's pending settlement to you, and what has already been transferred to your bank account.
           </p>
         </div>
         <Link

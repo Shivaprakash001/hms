@@ -26,7 +26,7 @@ const DATE_OPTIONS = [
 const init = (p?: HostelPolicy): Local => ({
   allow_profile_edits: p?.tenant_rules.allow_profile_edits ?? true,
   profile_photo_required: p?.tenant_rules.profile_photo_required ?? false,
-  prefix: p?.receipts.prefix ?? 'HMS',
+  prefix: p?.receipts.prefix ?? 'SAH',
   receipt_footer: p?.receipts.footer ?? '',
   auto_email_receipt: p?.receipts.auto_email ?? false,
   currency: p?.operations.currency ?? 'INR',
@@ -89,7 +89,7 @@ export function AccessDocsSection({ hostelId, policy }: Props) {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Receipt number prefix" hint={`Preview: ${local.prefix}-2025-0001`}>
             <input className={inp} maxLength={10} value={local.prefix}
-              onChange={e => upd('prefix', e.target.value.toUpperCase())} placeholder="HMS" />
+              onChange={e => upd('prefix', e.target.value.toUpperCase())} placeholder="SAH" />
           </Field>
         </div>
         <Field label="Receipt footer text" hint="Printed at the bottom of every receipt">

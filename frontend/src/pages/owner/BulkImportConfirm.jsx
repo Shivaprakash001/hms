@@ -201,7 +201,7 @@ export default function BulkImportConfirm() {
                 <div>
                     <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Confirm Import</h1>
                     <p className="text-slate-500 text-sm mt-2">
-                        HMS checked the sheet. Fix invalid rows first, then import the valid tenants.
+                        Sri Adithya Hostels checked the sheet. Fix invalid rows first, then import the valid tenants.
                     </p>
                 </div>
 
@@ -232,7 +232,7 @@ export default function BulkImportConfirm() {
                             <div>
                                 <h2 className="text-base font-bold text-amber-950">Some rows need your attention</h2>
                                 <p className="text-sm text-amber-800 mt-1">
-                                    Import is paused because HMS found rows it cannot safely create. The reasons are listed below with the spreadsheet row number.
+                                    Import is paused because some rows cannot be safely created. The reasons are listed below with the spreadsheet row number.
                                 </p>
                             </div>
                         </div>
@@ -325,7 +325,7 @@ export default function BulkImportConfirm() {
                             <div className="bg-white shadow-lg rounded-2xl border border-yellow-100 p-6">
                                 <h3 className="text-lg font-bold text-slate-900">Duplicate rows</h3>
                                 <p className="text-sm text-slate-500 mt-1 mb-4">
-                                    HMS skipped these rows to avoid creating duplicate tenants.
+                                    These rows were skipped to avoid creating duplicate tenants.
                                 </p>
                                 <div className="space-y-3">
                                     {duplicateRows.map((row) => (

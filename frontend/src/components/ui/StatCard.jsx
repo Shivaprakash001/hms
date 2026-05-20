@@ -11,7 +11,7 @@ const ICON_TONES = {
 };
 
 /**
- * Operational stat block — border-first, scan-friendly (NIVA / temp-ui style).
+ * Operational stat block — border-first, scan-friendly (Sri Adithya / temp-ui style).
  */
 export const StatCard = ({
   title,

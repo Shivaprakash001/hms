@@ -319,7 +319,7 @@ const TestPaymentModal = ({ isOpen, onClose, hostelId, preferences }) => {
 
                     <div className="space-y-4 p-5 sm:p-6">
                         <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-                            This is owner-only and creates a scoped test charge. Payment still goes through HMS treasury, webhook verification, receipt, and settlement ledger.
+                            This is owner-only and creates a scoped test charge. Payment still goes through secure checkout, webhook verification, receipt, and settlement ledger.
                         </div>
 
                         <div className="grid gap-3 sm:grid-cols-[1fr_140px]">

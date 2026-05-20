@@ -1,5 +1,5 @@
 # HMS → Single-Business Migration Audit
-**Apna Ghar / Trishul Solutions**
+**Apna Ghar / Sri Adithya Hostels**
 **Date:** May 2026 | **Status:** Pre-execution
 
 ---

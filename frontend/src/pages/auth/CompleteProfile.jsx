@@ -249,9 +249,9 @@ const CompleteProfile = () => {
                 {!isSuccess && (
                     <div className="mb-8 text-center px-4">
                         <div className="mx-auto w-16 h-16 bg-white rounded-2xl shadow-xl border border-slate-100 flex items-center justify-center mb-6 overflow-hidden p-2">
-                            <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
+                            <img src="/android-chrome-512x512.png" alt="Sri Adithya Hostels" className="w-full h-full object-contain" />
                         </div>
-                        <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-tight">Welcome to Trishul!</h1>
+                        <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-tight">Welcome to Sri Adithya Hostels!</h1>
                         <p className="text-slate-500 font-medium mt-2">Let’s quickly set up your profile.</p>
                     </div>
                 )}

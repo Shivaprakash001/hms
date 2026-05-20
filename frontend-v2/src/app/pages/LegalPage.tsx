@@ -31,7 +31,7 @@ export function LegalPage() {
             Legal & Policies
           </h1>
           <p className="mt-4 text-muted-foreground text-base sm:text-lg max-w-xl mx-auto leading-relaxed">
-            Our commitment to transparency, privacy, and fair usage of the HMS platform.
+            Our commitment to transparency, privacy, and fair usage of the Sri Adithya Hostels platform.
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             {navLinks.map(({ id, title }) => (

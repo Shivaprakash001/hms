@@ -210,7 +210,7 @@ export function TenantPaymentModal({
               <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3 flex gap-3">
                 <Smartphone className="w-5 h-5 text-emerald-600 shrink-0" />
                 <p className="text-sm text-foreground">
-                  Secure checkout via PhonePe. Your payment is recorded in HMS once confirmed.
+                  Secure checkout via PhonePe. Your payment is recorded in Sri Adithya Hostels once confirmed.
                 </p>
               </div>
               {error && (

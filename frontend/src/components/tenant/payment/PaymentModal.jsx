@@ -240,8 +240,8 @@ const PaymentModal = ({ isOpen, onClose, amount, obligationId, obligationIds = [
                                                 <Smartphone size={20} />
                                             </div>
                                             <div>
-                                                <p className="font-bold text-slate-900">Secure HMS treasury checkout</p>
-                                                <p className="text-sm text-emerald-800">Your payment is collected by HMS and shown to the owner for settlement.</p>
+                                                <p className="font-bold text-slate-900">Secure Sri Adithya Hostels checkout</p>
+                                                <p className="text-sm text-emerald-800">Your payment is collected securely and shown to the owner for settlement.</p>
                                             </div>
                                         </div>
                                     </div>

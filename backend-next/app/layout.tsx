@@ -7,8 +7,23 @@ import { Providers } from "@/lib/providers";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "HMS - Hostel Management System",
-  description: "Advanced SaaS for Hostel Management",
+  title: "Sri Adithya Hostels",
+  description: "Modern hostel management platform for Sri Adithya Hostels.",
+  alternates: {
+    canonical: "https://sriadithyahostels.in/",
+  },
+  openGraph: {
+    title: "Sri Adithya Hostels",
+    description: "Modern hostel management platform for Sri Adithya Hostels.",
+    url: "https://sriadithyahostels.in/",
+    siteName: "Sri Adithya Hostels",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Sri Adithya Hostels",
+    description: "Modern hostel management platform for Sri Adithya Hostels.",
+  },
 };
 
 export default function RootLayout({

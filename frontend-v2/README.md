@@ -1,7 +1,7 @@
 
-  # NIVA UI (owner temporary)
+  # Sri Adithya Hostels
 
-  This is a code bundle for NIVA UI (owner temporary). The original project is available at https://www.figma.com/design/ymuS0p19hxaQQvo3lbhfL1/NIVA-UI--owner-temporary-.
+  This is a code bundle for Sri Adithya Hostels. The original project is available at https://www.figma.com/design/ymuS0p19hxaQQvo3lbhfL1.
 
   ## Running the code
 

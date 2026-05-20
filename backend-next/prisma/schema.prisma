@@ -194,7 +194,7 @@ model hostels {
   is_active           Boolean               @default(true)
   currency            String                @default("INR") @db.VarChar(3)
   rent_cycle          String                @default("MONTHLY")
-  receipt_prefix      String                @default("HMS")
+  receipt_prefix      String                @default("SAH")
   timezone            String                @default("UTC")
   auto_rent_day       Int                   @default(1)
   phonepe_merchant_id String?

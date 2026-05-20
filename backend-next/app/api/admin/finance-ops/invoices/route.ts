@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 
-const GONE = { ok: false, message: "Decommissioned: SaaS platform billing invoice route removed in single-business migration" };
+const GONE = { ok: false, message: "Decommissioned: legacy platform billing invoice route removed in single-business migration" };
 
 export async function GET(_req: NextRequest) {
   return NextResponse.json(GONE, { status: 410 });

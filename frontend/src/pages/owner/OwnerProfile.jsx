@@ -42,7 +42,7 @@ const DEFAULT_PREFS = {
     reminder_auto_stop_after_payment: true,
     late_fee_notification: true,
     owner_daily_summary: false,
-    receipt_prefix: 'HMS',
+    receipt_prefix: 'SAH',
     receipt_format: 'PREFIX-YEAR-SEQ',
     receipt_footer: '',
     auto_email_receipt: false,

@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node ../scripts/check-production-branding.mjs dist",
+    "check:branding": "node ../scripts/check-production-branding.mjs dist",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest",
