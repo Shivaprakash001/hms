@@ -10,6 +10,7 @@ import {
   computeDueDate,
   type BillingValidationError,
 } from "@/lib/services/billing-validation";
+import crypto from "crypto";
 
 /**
  * 🏦 Rent Generation Service — Phases 1-7
@@ -495,6 +496,7 @@ export class RentGenerationService {
       // Write audit log
       await prisma.rent_generation_logs.create({
         data: {
+          id: crypto.randomUUID(),
           rent_month: rentMonth,
           trigger_type: triggerType,
           triggered_by: ownerId || null,

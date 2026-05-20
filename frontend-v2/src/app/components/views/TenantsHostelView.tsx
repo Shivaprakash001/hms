@@ -73,6 +73,7 @@ export function TenantsHostelView() {
             hostelId={hostelId}
             onReminder={(t) => reminderMutation.mutate(t.id)}
             onMoveOut={() => navigate(`/hostels/${hostelId}/move-outs`)}
+            onResend={(t) => t.email && actions.resendInvite.mutate(t.email)}
           />
           <TenantCardMobile
             tenants={tenants}
@@ -80,6 +81,7 @@ export function TenantsHostelView() {
             onSelect={handleView}
             onReminder={(t) => reminderMutation.mutate(t.id)}
             onCall={actions.callTenant}
+            onResend={(t) => t.email && actions.resendInvite.mutate(t.email)}
           />
           {total > pageSize && (
             <div className="flex justify-center gap-2 pt-4">

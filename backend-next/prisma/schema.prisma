@@ -758,7 +758,7 @@ model reminder_logs {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model rent_generation_ledgers {
-  id              String    @id @db.Uuid
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   owner_id        String    @db.Uuid
   hostel_id       String    @db.Uuid
   rent_month      DateTime  @db.Date
@@ -781,7 +781,7 @@ model rent_generation_ledgers {
 }
 
 model rent_generation_logs {
-  id                  String   @id @db.Uuid
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   rent_month          DateTime @db.Date
   trigger_type        String
   triggered_by        String?  @db.Uuid

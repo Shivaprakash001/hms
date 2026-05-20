@@ -1,4 +1,5 @@
 import { prisma } from "../db";
+import crypto from "crypto";
 
 export type RentGenerationLedgerStatus = "STARTED" | "COMPLETED" | "FAILED" | "SKIPPED";
 export type RentGenerationTrigger = "cron" | "manual" | "backfill";
@@ -54,7 +55,12 @@ export class RentGenerationLedgerService {
     };
 
     try {
-      return await prisma.rent_generation_ledgers.create({ data });
+      return await prisma.rent_generation_ledgers.create({
+        data: {
+          id: crypto.randomUUID(),
+          ...data,
+        },
+      });
     } catch (err: any) {
       if (err?.code !== "P2002") throw err;
       const existing = await prisma.rent_generation_ledgers.findUnique({

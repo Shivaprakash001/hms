@@ -34,7 +34,10 @@ export function useTenantActions(hostelId: string) {
 
   const resendInvite = useMutation({
     mutationFn: (email: string) => tenantService.resendInvitation(email),
-    onSuccess: () => toast.success('Invitation resent'),
+    onSuccess: () => {
+      toast.success('Invitation resent');
+      invalidate();
+    },
     onError: (e: Error & { response?: { data?: { error?: { message?: string } } } }) =>
       toast.error(e?.response?.data?.error?.message ?? 'Failed to resend'),
   });

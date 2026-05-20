@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Eye, Bell, LogOut } from 'lucide-react';
+import { Eye, Bell, LogOut, Send } from 'lucide-react';
 import { TenantStatusBadge } from '@features/tenants/components/badges/TenantStatusBadge';
 import { getInitials, type NormalizedTenant } from '@features/tenants/utils/normalize';
 
@@ -10,9 +10,10 @@ interface Props {
   hostelId: string;
   onReminder?: (t: NormalizedTenant) => void;
   onMoveOut?: (t: NormalizedTenant) => void;
+  onResend?: (t: NormalizedTenant) => void;
 }
 
-export function TenantTable({ tenants, hostelId, onReminder, onMoveOut }: Props) {
+export function TenantTable({ tenants, hostelId, onReminder, onMoveOut, onResend }: Props) {
   if (tenants.length === 0) {
     return (
       <p className="text-center text-sm text-muted-foreground py-12">No tenants match your filters</p>
@@ -108,6 +109,16 @@ export function TenantTable({ tenants, hostelId, onReminder, onMoveOut }: Props)
                         title="Start move-out"
                       >
                         <LogOut className="w-4 h-4" />
+                      </button>
+                    )}
+                    {onResend && t.status === 'INVITED' && (
+                      <button
+                        type="button"
+                        onClick={() => onResend(t)}
+                        className="p-1.5 rounded-lg hover:bg-amber-50 text-amber-600"
+                        title="Resend invitation"
+                      >
+                        <Send className="w-4 h-4" />
                       </button>
                     )}
                   </div>

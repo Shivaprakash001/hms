@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, MapPin, Users, DollarSign, BedDouble, Receipt, AlertCircle, Plus, CreditCard, Phone, Wifi, FileText, Eye, EyeOff, Copy, Check, Pencil, Layers, ChevronDown, ChevronRight, X, Trash2, MoreVertical, TrendingUp, TrendingDown, Sparkles, Search, CalendarDays, Repeat2, Upload, Zap, Activity, AlertTriangle, BellRing, ClipboardCheck, Flame, Home, IndianRupee, Megaphone, UserPlus } from 'lucide-react';
+import { ChevronLeft, MapPin, Users, DollarSign, BedDouble, Receipt, AlertCircle, Plus, CreditCard, Phone, Wifi, FileText, Eye, EyeOff, Copy, Check, Pencil, Layers, ChevronDown, ChevronRight, X, Trash2, MoreVertical, TrendingUp, TrendingDown, Sparkles, Search, CalendarDays, Repeat2, Upload, Zap, Activity, AlertTriangle, BellRing, ClipboardCheck, Flame, Home, IndianRupee, Megaphone, UserPlus, Send } from 'lucide-react';
 import { ownerService } from '@features/owners/api';
 import { dashboardService } from '@features/dashboard/api';
 import { queryKeys } from '@lib/queryKeys';
@@ -1024,6 +1024,19 @@ function TenantsTab({ hostelId }: { hostelId: string }) {
     staleTime: 2 * 60 * 1000,
   });
 
+  const { data: invitedData, refetch: refetchInvited } = useQuery({
+    queryKey: queryKeys.tenants.list(hostelId, { status: 'INVITED' }),
+    queryFn: () => import('@features/tenants/api').then((m) => m.tenantService.getAll(hostelId, { status: 'INVITED' })),
+    staleTime: 2 * 60 * 1000,
+  });
+
+  const { mutate: resendInvite, isPending: resending } = useMutation({
+    mutationFn: (email: string) => import('@features/tenants/api').then((m) => m.tenantService.resendInvitation(email)),
+    onSuccess: () => { toast.success('Invitation resent'); refetchInvited(); },
+    onError: (e: Error & { response?: { data?: { error?: { message?: string } } } }) =>
+      toast.error(e?.response?.data?.error?.message ?? 'Failed to resend'),
+  });
+
   if (isLoading) return <TabSkeleton />;
   if (isError) return <TabError onRetry={refetch} />;
 
@@ -1031,6 +1044,12 @@ function TenantsTab({ hostelId }: { hostelId: string }) {
     ? data
     : Array.isArray((data as Record<string, unknown>)?.tenants)
     ? ((data as Record<string, unknown>).tenants as Record<string, unknown>[])
+    : [];
+
+  const invitedTenants: Record<string, unknown>[] = Array.isArray(invitedData)
+    ? invitedData
+    : Array.isArray((invitedData as Record<string, unknown>)?.tenants)
+    ? ((invitedData as Record<string, unknown>).tenants as Record<string, unknown>[])
     : [];
 
   return (
@@ -1052,6 +1071,51 @@ function TenantsTab({ hostelId }: { hostelId: string }) {
         Manage all tenants
         <ChevronRight className="w-4 h-4" />
       </Link>
+
+      {invitedTenants.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-medium text-foreground">Pending Invitations</h4>
+            <span className="text-xs text-muted-foreground">{invitedTenants.length} waiting</span>
+          </div>
+          {invitedTenants.map((tenant) => {
+            const email = String(tenant.email ?? tenant.tenant_email ?? '');
+            const room = tenant.room_no ?? tenant.room_number ?? tenant.room;
+            return (
+              <div key={String(tenant.id)} className="bg-card border border-amber-500/20 rounded-xl p-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-xs font-bold bg-amber-500/10 text-amber-700">
+                    {String(tenant.name ?? tenant.tenant_name ?? 'T').charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-foreground truncate">
+                        {String(tenant.name ?? tenant.tenant_name ?? 'Invited tenant')}
+                      </span>
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-700">
+                        Invited
+                      </span>
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                      {email || 'No email available'}
+                      {room ? ` · Room ${String(room)}` : ''}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={!email || resending}
+                  onClick={() => email && resendInvite(email)}
+                  className="mt-3 w-full flex items-center justify-center gap-1.5 py-2.5 bg-amber-50 text-amber-700 rounded-lg text-xs font-semibold active:scale-[0.98] transition-transform touch-manipulation disabled:opacity-50"
+                >
+                  <Send className="w-3.5 h-3.5 shrink-0" />
+                  {resending ? 'Sending...' : 'Resend Invitation'}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {tenants.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 gap-3">

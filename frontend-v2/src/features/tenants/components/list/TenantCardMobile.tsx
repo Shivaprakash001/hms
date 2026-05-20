@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { ChevronRight, Bell, Phone } from 'lucide-react';
+import { ChevronRight, Bell, Phone, Send } from 'lucide-react';
 import { TenantStatusBadge } from '@features/tenants/components/badges/TenantStatusBadge';
 import { getInitials, type NormalizedTenant } from '@features/tenants/utils/normalize';
 
@@ -11,9 +11,10 @@ interface Props {
   onSelect?: (t: NormalizedTenant) => void;
   onReminder?: (t: NormalizedTenant) => void;
   onCall?: (phone: string) => void;
+  onResend?: (t: NormalizedTenant) => void;
 }
 
-export function TenantCardMobile({ tenants, hostelId, onSelect, onReminder, onCall }: Props) {
+export function TenantCardMobile({ tenants, hostelId, onSelect, onReminder, onCall, onResend }: Props) {
   if (tenants.length === 0) {
     return (
       <p className="text-center text-sm text-muted-foreground py-12 md:hidden">No tenants found</p>
@@ -71,6 +72,16 @@ export function TenantCardMobile({ tenants, hostelId, onSelect, onReminder, onCa
                   >
                     <Bell className="w-4 h-4" />
                     Remind
+                  </button>
+                )}
+                {onResend && t.status === 'INVITED' && (
+                  <button
+                    type="button"
+                    onClick={() => onResend(t)}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-amber-50 text-amber-700 text-sm font-medium touch-manipulation"
+                  >
+                    <Send className="w-4 h-4" />
+                    Resend Invite
                   </button>
                 )}
               </div>
