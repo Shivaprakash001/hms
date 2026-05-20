@@ -7,6 +7,7 @@ import { dashboardService } from '@features/dashboard/api';
 import { queryKeys } from '@lib/queryKeys';
 import { AddTenantModal } from './modals/AddTenantModal';
 import { RecordPaymentModal } from './modals/RecordPaymentModal';
+import { FinancialControlCenter } from './views/billing/FinancialControlCenter';
 
 type Tab = 'overview' | 'rooms' | 'tenants' | 'financials' | 'expenses' | 'moveouts';
 
@@ -1156,81 +1157,17 @@ function TenantsTab({ hostelId }: { hostelId: string }) {
 
 function FinancialsTab({ hostelId }: { hostelId: string }) {
   const [showRecordPayment, setShowRecordPayment] = useState(false);
-  const { data: payments, isLoading: pLoading, isError: pError, refetch: pRefetch } = useQuery({
-    queryKey: queryKeys.payments.ledger(hostelId, { limit: 20 }),
-    queryFn: () => import('@features/payments/api').then((m) => m.paymentService.getAll(hostelId, { limit: 20 })),
-    staleTime: 2 * 60 * 1000,
-  });
-  const { data: dues, isLoading: dLoading } = useQuery({
-    queryKey: queryKeys.payments.dues(hostelId),
-    queryFn: () => import('@features/payments/api').then((m) => m.paymentService.getAllDues(hostelId)),
-    staleTime: 2 * 60 * 1000,
-  });
-
-  if (pLoading || dLoading) return <TabSkeleton />;
-  if (pError) return <TabError onRetry={pRefetch} />;
-
-  const paymentList: Record<string, unknown>[] = Array.isArray(payments)
-    ? payments
-    : Array.isArray((payments as Record<string, unknown>)?.payments)
-    ? ((payments as Record<string, unknown>).payments as Record<string, unknown>[])
-    : [];
-
-  const duesList: Record<string, unknown>[] = Array.isArray(dues) ? dues : [];
-  const totalPending = duesList.reduce((sum, d) => sum + Number(d.amount ?? d.outstanding ?? 0), 0);
-  const totalCollected = paymentList.reduce((sum, p) => sum + Number(p.amount_paid ?? p.amount ?? 0), 0);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-foreground">Financials</h3>
-        <button
-          onClick={() => setShowRecordPayment(true)}
-          className="flex items-center gap-1.5 text-xs font-medium text-accent active:scale-95 transition-transform"
-        >
-          <Plus className="w-3.5 h-3.5" /> Record Payment
-        </button>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div className="bg-card border border-border rounded-xl p-4">
-          <div className="text-xs text-muted-foreground mb-1">Collected</div>
-          <div className="text-xl font-semibold text-foreground">{fmt(totalCollected)}</div>
-          <div className="text-[10px] text-muted-foreground mt-1">Recent payments</div>
-        </div>
-        <div className="bg-card border border-border rounded-xl p-4">
-          <div className="text-xs text-muted-foreground mb-1">Pending Dues</div>
-          <div className="text-xl font-semibold text-[#F59E0B]">{fmt(totalPending)}</div>
-          <div className="text-[10px] text-muted-foreground mt-1">{duesList.length} obligations</div>
-        </div>
-      </div>
-
+    <>
+      <FinancialControlCenter
+        hostelId={hostelId}
+        onRecordPayment={() => setShowRecordPayment(true)}
+      />
       {showRecordPayment && (
         <RecordPaymentModal hostelId={hostelId} onClose={() => setShowRecordPayment(false)} />
       )}
-
-      {paymentList.length > 0 && (
-        <div>
-          <h3 className="text-sm font-medium text-foreground mb-3">Recent Payments</h3>
-          <div className="space-y-2">
-            {paymentList.slice(0, 10).map((p) => (
-              <div key={String(p.id)} className="bg-card border border-border rounded-lg p-3 flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-medium text-foreground">{String(p.tenant_name ?? p.name ?? 'Tenant')}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    {p.payment_date ? new Date(String(p.payment_date)).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : ''}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-semibold text-foreground">{fmt(p.amount_paid ?? p.amount)}</div>
-                  <div className="text-[10px] text-[#10B981] mt-0.5">Received</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
+    </>
   );
 }
 

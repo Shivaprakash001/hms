@@ -169,6 +169,10 @@ export const paymentService = {
         const response = await api.post(`/payments/obligations/${obligationId}/waive`, { reason });
         return unwrap(response);
     },
+    getDetail: async (obligationId, hostelId) => {
+        const response = await api.get(`/payments/${obligationId}`, { params: { hostelId } });
+        return response.data?.data ?? response.data;
+    },
     downloadReceipt: async (paymentId) => {
         const response = await api.get(`/payments/${paymentId}/receipt`, {
             responseType: 'blob'

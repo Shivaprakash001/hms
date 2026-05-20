@@ -104,9 +104,9 @@ export class InvitationService {
       .map((a: any) => a.tenant?.profiles?.name)
       .filter(Boolean) as string[];
 
-    // 3. Generate Token (48h)
+    // 3. Generate Token (7 days)
     const token = crypto.randomBytes(32).toString("hex");
-    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     // 4. Atomic: Profile + Tenant + Allocation + Initial Obligations
     const { obligationEngine } = await import("../../../src/services/payments/obligation-engine");
@@ -448,9 +448,9 @@ export class InvitationService {
       throw new Error("INTERNAL_ERROR: Cannot resend, missing owner details.");
     }
 
-    // 2. Generate new token
+    // 2. Generate new token (7 days)
     const token = crypto.randomBytes(32).toString("hex");
-    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     const activationLink = frontendUrl(`/activate?token=${token}`);
 
     await prisma.profile.update({

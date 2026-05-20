@@ -16,7 +16,28 @@ export const dashboardService = {
     getMonthlyStats: async (hostelId, months = 6) => {
         const response = await requestWithRetry(() => api.get('/dashboard/monthly-stats', { params: { months, hostelId } }));
         return response.data;
-    }
+    },
+    getCashflow: async (hostelId, from, to) => {
+        const params = { hostelId };
+        if (from) params.from = from;
+        if (to) params.to = to;
+        const response = await requestWithRetry(() => api.get('/dashboard/cashflow', { params }));
+        return response.data?.data ?? response.data;
+    },
+    getFunnel: async (hostelId, from, to) => {
+        const params = { hostelId };
+        if (from) params.from = from;
+        if (to) params.to = to;
+        const response = await requestWithRetry(() => api.get('/dashboard/funnel', { params }));
+        return response.data?.data ?? response.data;
+    },
+    getOperations: async (hostelId, from, to) => {
+        const params = { hostelId };
+        if (from) params.from = from;
+        if (to) params.to = to;
+        const response = await requestWithRetry(() => api.get('/dashboard/operations', { params }));
+        return response.data?.data ?? response.data;
+    },
 };
 
 export const portfolioService = {

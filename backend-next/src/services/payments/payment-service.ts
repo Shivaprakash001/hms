@@ -3098,6 +3098,87 @@ export class PaymentService {
     }).catch(() => {});
     return summary;
   }
+
+  async getPaymentDetail(obligationId: string, ownerId: string, hostelId: string) {
+    const obligation = await prisma.rent_obligations.findFirst({
+      where: { id: obligationId, owner_id: ownerId, hostel_id: hostelId },
+      include: {
+        tenants: {
+          include: {
+            profiles: { select: { name: true, phone: true, email: true } },
+            tenant_behavior_scores: { select: { score: true } },
+            room_allocations: {
+              where: { is_active: true, end_date: null },
+              include: { room: { select: { room_no: true, floor: true, room_type: true, floor_ref: { select: { name: true } } } } },
+              take: 1,
+            },
+          },
+        },
+        payments: {
+          orderBy: { payment_date: "desc" },
+          include: { receipts: { select: { receipt_number: true } } },
+        },
+        reminder_logs: {
+          orderBy: { sent_at: "asc" },
+          select: { id: true, channel: true, sent_at: true, converted_to_payment: true, converted_at: true },
+        },
+      },
+    });
+
+    if (!obligation) throw new Error("NOT_FOUND: Obligation not found");
+
+    const tenant = obligation.tenants;
+    const profile = tenant?.profiles;
+    const behaviorScore = tenant?.tenant_behavior_scores?.score ?? null;
+    const allocation = tenant?.room_allocations?.[0];
+    const room = allocation?.room;
+    const floorLabel = room?.floor_ref?.name ?? (room?.floor != null ? `Floor ${room.floor}` : null);
+
+    const totalPaid = obligation.payments.reduce((s: number, p: any) => s + Number(p.amount_paid || 0), 0);
+    const totalAmount = Number(obligation.total_amount || obligation.amount || 0);
+    const remaining = Math.max(0, totalAmount - totalPaid);
+
+    return {
+      id: obligation.id,
+      rent_month: obligation.rent_month,
+      due_date: obligation.due_date,
+      status: obligation.status,
+      obligation_type: obligation.obligation_type,
+      total_amount: totalAmount,
+      amount_paid: totalPaid,
+      remaining,
+      tenant: {
+        id: tenant?.id ?? null,
+        name: profile?.name ?? "Unknown",
+        phone: profile?.phone ?? null,
+        email: profile?.email ?? null,
+        room_no: room?.room_no ?? "N/A",
+        floor: floorLabel,
+        room_type: room?.room_type ?? null,
+        behavior_score: behaviorScore,
+        joined_on: tenant?.joined_on ?? null,
+        status: tenant?.status ?? null,
+      },
+      payments: obligation.payments.map((p: any) => ({
+        id: p.id,
+        amount_paid: Number(p.amount_paid || 0),
+        payment_date: p.payment_date,
+        payment_method: p.payment_method,
+        reference_number: p.reference_number,
+        receipt_number: p.receipts?.receipt_number ?? null,
+        offline_note: p.offline_note ?? null,
+        recorded_by: p.recorded_by ?? null,
+        created_at: p.created_at,
+      })),
+      reminders: obligation.reminder_logs.map((r: any) => ({
+        id: r.id,
+        channel: r.channel,
+        sent_at: r.sent_at,
+        converted: r.converted_to_payment,
+        converted_at: r.converted_at,
+      })),
+    };
+  }
 }
 
 export const paymentService = new PaymentService();

@@ -30,6 +30,9 @@ export const queryKeys = {
     summary: (hostelId: string) => hostelKey(hostelId, 'dashboard', 'summary'),
     monthly: (hostelId: string, months?: number) =>
       hostelKey(hostelId, 'dashboard', 'monthly', months ?? 6),
+    cashflow: (hostelId: string) => hostelKey(hostelId, 'dashboard', 'cashflow'),
+    funnel: (hostelId: string) => hostelKey(hostelId, 'dashboard', 'funnel'),
+    operations: (hostelId: string) => hostelKey(hostelId, 'dashboard', 'operations'),
   },
 
   tenants: {
@@ -81,6 +84,8 @@ export const queryKeys = {
       hostelKey(hostelId, 'payments', 'ledger', params ?? {}),
     dues: (hostelId: string, params?: object) =>
       hostelKey(hostelId, 'payments', 'dues', params ?? {}),
+    detail: (hostelId: string, obligationId: string) =>
+      hostelKey(hostelId, 'payments', 'detail', obligationId),
   },
 
   expenses: {

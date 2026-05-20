@@ -138,6 +138,7 @@ export class DashboardService {
       recentExpenses,
       recentMoveOuts,
       recentAllocations,
+      paymentAttemptStats,
     ] = await Promise.all([
       prisma.hostels.findFirst({
         where: { id: hostelId, owner_id: userId, is_active: true },
@@ -294,6 +295,11 @@ export class DashboardService {
         orderBy: { created_at: "desc" },
         take: 5,
       }),
+      prisma.paymentAttempt.groupBy({
+        by: ["status"],
+        where: { owner_id: userId, hostel_id: hostelId, created_at: { gte: monthStart, lt: nextMonthStart } },
+        _count: { id: true },
+      }),
     ]);
 
     const expectedRevenue = Number(currentExpected._sum.total_amount || 0);
@@ -389,6 +395,15 @@ export class DashboardService {
     const reminderConversionRate = remindersSent > 0 ? Math.round((reminderConversions / remindersSent) * 100) : 0;
     const mostEffectiveChannel = reminderChannels.sort((a, b) => b._count.id - a._count.id)[0]?.channel || null;
     const tenantChurnRate = activeTenants > 0 ? Math.round((exitsThisMonth / activeTenants) * 100) : 0;
+
+    const attemptCountByStatus = new Map(paymentAttemptStats.map((s) => [s.status, s._count.id]));
+    const attemptsTotal = [...attemptCountByStatus.values()].reduce((a, b) => a + b, 0);
+    const attemptsFailed = (attemptCountByStatus.get("FAILED") || 0);
+    const attemptsPendingVerification = (attemptCountByStatus.get("PENDING_VERIFICATION") || 0) + (attemptCountByStatus.get("PENDING_MANUAL_CONFIRMATION") || 0);
+    const attemptsExpired = (attemptCountByStatus.get("EXPIRED") || 0);
+    const attemptsSuccess = (attemptCountByStatus.get("SUCCESS") || 0);
+    const attemptsDecisive = attemptsTotal - (attemptCountByStatus.get("CREATED") || 0) - (attemptCountByStatus.get("PENDING") || 0) - (attemptCountByStatus.get("PROCESSING") || 0);
+    const upiFailureRate = attemptsDecisive > 0 ? Math.round((attemptsFailed / attemptsDecisive) * 100) : 0;
 
     let operationalScore = 100;
     operationalScore -= Math.max(0, 90 - occupancyRate) * 0.5;
@@ -613,6 +628,14 @@ export class DashboardService {
           exits_this_month: exitsThisMonth,
           pending_onboarding: pendingInvites,
           inactive_invitations: inactiveInvites,
+        },
+        payment_attempts: {
+          total: attemptsTotal,
+          success: attemptsSuccess,
+          failed: attemptsFailed,
+          pending_verification: attemptsPendingVerification,
+          abandoned: attemptsExpired,
+          upi_failure_rate: upiFailureRate,
         },
         alerts,
         recent_activity: recentActivity,
