@@ -37,6 +37,37 @@ export function TenantMoveOutPage() {
     | Record<string, unknown>
     | undefined;
 
+  const cancelMutation = useMutation({
+    mutationFn: () => moveOutService.cancelRequest(request.id),
+    onSuccess: () => {
+      toast.success('Move-out request cancelled');
+      refetch();
+    },
+    onError: (e: Error & { response?: { data?: { error?: { message?: string } } } }) =>
+      toast.error(e?.response?.data?.error?.message ?? 'Failed to cancel'),
+  });
+
+  const [showDisputeForm, setShowDisputeForm] = useState(false);
+  const [disputeType, setDisputeType] = useState('DEDUCTIONS');
+  const [disputeDescription, setDisputeDescription] = useState('');
+  const [disputedAmount, setDisputedAmount] = useState('');
+
+  const disputeMutation = useMutation({
+    mutationFn: () =>
+      moveOutService.dispute(request.id, {
+        disputeType,
+        description: disputeDescription,
+        disputedAmount: Number(disputedAmount) || 0,
+      }),
+    onSuccess: () => {
+      toast.success('Dispute submitted');
+      setShowDisputeForm(false);
+      refetch();
+    },
+    onError: (e: Error & { response?: { data?: { error?: { message?: string } } } }) =>
+      toast.error(e?.response?.data?.error?.message ?? 'Failed to submit dispute'),
+  });
+
   if (isLoading) {
     return (
       <div className="flex justify-center py-20">
@@ -88,6 +119,104 @@ export function TenantMoveOutPage() {
             </p>
           </section>
         )}
+
+        {/* Actions section */}
+        <div className="space-y-3">
+          {['REQUESTED', 'INSPECTION_PENDING', 'INSPECTION_DONE'].includes(String(request.status).toUpperCase()) && (
+            <button
+              type="button"
+              disabled={cancelMutation.isPending}
+              onClick={() => {
+                if (window.confirm('Are you sure you want to cancel this move-out request?')) {
+                  cancelMutation.mutate();
+                }
+              }}
+              className="w-full py-2.5 rounded-xl border border-destructive/30 text-destructive bg-destructive/5 font-semibold text-sm hover:bg-destructive/10 transition-colors"
+            >
+              {cancelMutation.isPending ? 'Cancelling...' : 'Cancel Request'}
+            </button>
+          )}
+
+          {['SETTLEMENT_APPROVED', 'PAYMENT_PENDING'].includes(String(request.status).toUpperCase()) && (
+            !showDisputeForm ? (
+              <button
+                type="button"
+                onClick={() => setShowDisputeForm(true)}
+                className="w-full py-2.5 rounded-xl border border-border bg-card font-semibold text-sm hover:bg-secondary/20 transition-colors text-foreground"
+              >
+                Raise a Dispute
+              </button>
+            ) : (
+              <div className="p-4 rounded-xl border border-border bg-card space-y-3">
+                <h3 className="text-sm font-semibold">Raise a Dispute</h3>
+                
+                <label className="block text-xs">
+                  Dispute Type
+                  <select
+                    value={disputeType}
+                    onChange={(e) => setDisputeType(e.target.value)}
+                    className="mt-1 w-full px-2.5 py-2 rounded-lg border border-border bg-background"
+                  >
+                    <option value="DEDUCTIONS">Unfair Deductions / Damages</option>
+                    <option value="RENT_DUES">Incorrect Rent Calculation</option>
+                    <option value="DEPOSIT">Incorrect Deposit Amount</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </label>
+
+                <label className="block text-xs">
+                  Disputed Amount (₹) - optional
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="Amount you are contesting"
+                    value={disputedAmount}
+                    onChange={(e) => setDisputedAmount(e.target.value)}
+                    className="mt-1 w-full px-2.5 py-2 rounded-lg border border-border bg-background"
+                  />
+                </label>
+
+                <label className="block text-xs">
+                  Description of Dispute
+                  <textarea
+                    rows={3}
+                    placeholder="Provide details of why you disagree with the calculations..."
+                    value={disputeDescription}
+                    onChange={(e) => setDisputeDescription(e.target.value)}
+                    className="mt-1 w-full px-2.5 py-2 rounded-lg border border-border bg-background"
+                  />
+                </label>
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowDisputeForm(false)}
+                    className="flex-1 py-2 rounded-lg border border-border font-medium text-xs text-muted-foreground"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={disputeMutation.isPending || !disputeDescription}
+                    onClick={() => disputeMutation.mutate()}
+                    className="flex-1 py-2 rounded-lg bg-destructive text-destructive-foreground font-semibold text-xs disabled:opacity-50"
+                  >
+                    {disputeMutation.isPending ? 'Submitting...' : 'Submit Dispute'}
+                  </button>
+                </div>
+              </div>
+            )
+          )}
+
+          {String(request.status).toUpperCase() === 'DISPUTED' && (
+            <div className="p-4 rounded-xl border border-destructive/20 bg-destructive/5 text-destructive space-y-1">
+              <p className="text-sm font-semibold">⚠️ Dispute Under Review</p>
+              <p className="text-xs opacity-90">
+                You have raised a dispute regarding the settlement calculations. The owner has been notified and is reviewing the details.
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     );
   }

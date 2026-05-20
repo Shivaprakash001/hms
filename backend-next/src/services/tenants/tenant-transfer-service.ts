@@ -25,6 +25,7 @@ import { prisma } from "../../../lib/db";
 import { eventSystem } from "../../../lib/events";
 import { eventLog } from "../../../lib/services/event-log-service";
 import { getLogger } from "../../../lib/logger";
+import { assertCapability } from "../../../lib/services/move-out-service";
 import crypto from "crypto";
 
 const logger = getLogger("tenant-transfer-service");
@@ -60,6 +61,8 @@ export class TenantTransferService {
   async transferTenant(request: TransferRequest): Promise<TransferResult> {
     const { tenantId, targetRoomId, transferredBy, reason, notes } = request;
     const transferDate = request.transferDate || new Date();
+
+    await assertCapability(tenantId, "TRANSFER_ROOM");
 
     // ── Pre-flight validation (outside transaction for fast-fail) ────────────
 

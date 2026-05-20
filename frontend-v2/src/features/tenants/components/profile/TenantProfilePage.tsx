@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Phone, Mail, Loader2, Bell, Download, FileCheck2, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { tenantService } from '@features/tenants/api';
@@ -42,7 +42,8 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
   const hostelId = hostelIdProp ?? params.hostelId ?? '';
   const tenantId = tenantIdProp ?? params.tenantId ?? '';
   const navigate = useNavigate();
-  const [section, setSection] = useState<SectionId>('overview');
+  const [searchParams] = useSearchParams();
+  const [section, setSection] = useState<SectionId>((searchParams.get('tab') as SectionId) || 'overview');
   const [payObligationId, setPayObligationId] = useState<string | null>(null);
 
   const { overview, allocations, dues, advance, full, isLoading, isError, refetch } =

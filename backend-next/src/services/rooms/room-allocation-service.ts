@@ -3,6 +3,7 @@ import { eventSystem } from "../../../lib/events";
 import { allocationReconciliationService } from "../../../lib/services/allocation-reconciliation-service";
 import { getLogger } from "../../../lib/logger";
 import { allocationRepository } from "../../repositories/allocationRepository";
+import { assertCapability } from "../../../lib/services/move-out-service";
 import crypto from "crypto";
 
 const logger = getLogger("room-allocation-service");
@@ -30,6 +31,21 @@ export class RoomAllocationService {
       include: {
         room: true,
         tenant: true
+      },
+      orderBy: {
+        start_date: "desc"
+      }
+    });
+  }
+
+  async getTenantHistory(tenantId: string) {
+    return await allocationRepository.findMany({
+      where: {
+        tenant_id: tenantId
+      },
+      include: {
+        room: true,
+        hostel: true
       },
       orderBy: {
         start_date: "desc"
@@ -130,6 +146,7 @@ export class RoomAllocationService {
 
   // ✅ Shift Room
   async shiftRoom(tenantId: string, newRoomId: string, shiftDate: string, ownerId: string) {
+    await assertCapability(tenantId, "TRANSFER_ROOM");
 
     let shiftData: any;
     try {

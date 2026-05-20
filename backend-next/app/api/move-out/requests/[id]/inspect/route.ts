@@ -16,6 +16,26 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   try {
+    const { prisma } = await import("@/lib/db");
+    const request = await prisma.move_out_requests.findUnique({
+      where: { id: params.id },
+      select: { owner_id: true }
+    });
+    if (!request) return apiError("Move-out request not found", "NOT_FOUND", 404);
+
+    if (session.role === "OWNER" && request.owner_id !== session.sub) {
+      return apiError("Forbidden", "FORBIDDEN", 403);
+    }
+    if (session.role === "WARDEN") {
+      const userProfile = await prisma.profile.findUnique({
+        where: { id: session.sub },
+        select: { owner_id: true }
+      });
+      if (userProfile?.owner_id !== request.owner_id) {
+        return apiError("Forbidden", "FORBIDDEN", 403);
+      }
+    }
+
     const body = await req.json();
     const result = await moveOutService.submitInspection({
       requestId: params.id,

@@ -42,6 +42,10 @@ export const tenantService = {
         const response = await api.patch(`/tenants/${tenantId}/documents/${docId}/reject`, { reason });
         return unwrap(response);
     },
+    postDocumentMessage: async (tenantId, docId, message) => {
+        const response = await api.post(`/tenants/${tenantId}/documents/${docId}/message`, { message });
+        return unwrap(response);
+    },
     activate: async (token) => {
         const response = await api.get('/tenants/activate', { params: { token } });
         return unwrap(response);
@@ -52,6 +56,15 @@ export const tenantService = {
     },
     updateActivationWorkflow: async ({ token, step, data }) => {
         const response = await api.patch('/tenants/activate', { token, step, data });
+        return unwrap(response);
+    },
+    uploadActivationPhoto: async (token, file) => {
+        const formData = new FormData();
+        formData.append('token', token);
+        formData.append('file', file);
+        const response = await api.post('/tenants/activate/photo', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
         return unwrap(response);
     },
     activateAccount: async (data) => {
@@ -159,6 +172,10 @@ export const tenantService = {
     },
     getAdvance: async (tenantId) => {
         const response = await api.get(`/tenants/${tenantId}/advance`);
+        return unwrap(response);
+    },
+    getPendingDocuments: async (hostelId = '') => {
+        const response = await api.get('/tenants/pending-documents', { params: { hostelId } });
         return unwrap(response);
     },
 };

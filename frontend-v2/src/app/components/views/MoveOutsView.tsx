@@ -14,6 +14,14 @@ export function MoveOutsView() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const qc = useQueryClient();
 
+  const [showInspectForm, setShowInspectForm] = useState(false);
+  const [roomCondition, setRoomCondition] = useState('GOOD');
+  const [cleaningStatus, setCleaningStatus] = useState('CLEAN');
+  const [damagesAmount, setDamagesAmount] = useState('0');
+  const [cleaningFee, setCleaningFee] = useState('0');
+  const [deductionNotes, setDeductionNotes] = useState('');
+  const [generalNotes, setGeneralNotes] = useState('');
+
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.moveOut.list(hostelId),
     queryFn: () => moveOutService.listRequests(hostelId),
@@ -31,6 +39,13 @@ export function MoveOutsView() {
       moveOutService.inspect(selectedId!, payload),
     onSuccess: () => {
       toast.success('Inspection recorded');
+      setShowInspectForm(false);
+      setRoomCondition('GOOD');
+      setCleaningStatus('CLEAN');
+      setDamagesAmount('0');
+      setCleaningFee('0');
+      setDeductionNotes('');
+      setGeneralNotes('');
       qc.invalidateQueries({ queryKey: queryKeys.moveOut.all(hostelId) });
     },
   });
@@ -87,13 +102,114 @@ export function MoveOutsView() {
               <MoveOutStepper request={active as Record<string, unknown>} hostelId={hostelId} />
               <div className="flex flex-col gap-2">
                 {String(active.status) === 'REQUESTED' && (
-                  <button
-                    type="button"
-                    onClick={() => inspectMutation.mutate({ damages: [], cleaning_fee: 0 })}
-                    className="py-2.5 rounded-xl bg-secondary font-medium text-sm"
-                  >
-                    Start inspection
-                  </button>
+                  !showInspectForm ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowInspectForm(true)}
+                      className="py-2.5 rounded-xl bg-secondary font-medium text-sm"
+                    >
+                      Record inspection
+                    </button>
+                  ) : (
+                    <div className="p-4 rounded-xl border border-border bg-card space-y-3">
+                      <h3 className="text-sm font-semibold">Record Room Inspection</h3>
+                      
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <label className="block">
+                          Room Condition
+                          <select
+                            value={roomCondition}
+                            onChange={(e) => setRoomCondition(e.target.value)}
+                            className="mt-1 w-full px-2 py-1.5 rounded-lg border border-border bg-background"
+                          >
+                            <option value="GOOD">Good</option>
+                            <option value="FAIR">Fair</option>
+                            <option value="POOR">Poor</option>
+                          </select>
+                        </label>
+                        <label className="block">
+                          Cleaning Status
+                          <select
+                            value={cleaningStatus}
+                            onChange={(e) => setCleaningStatus(e.target.value)}
+                            className="mt-1 w-full px-2 py-1.5 rounded-lg border border-border bg-background"
+                          >
+                            <option value="CLEAN">Clean</option>
+                            <option value="DIRTY">Dirty</option>
+                          </select>
+                        </label>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <label className="block">
+                          Damage Charges (₹)
+                          <input
+                            type="number"
+                            min="0"
+                            value={damagesAmount}
+                            onChange={(e) => setDamagesAmount(e.target.value)}
+                            className="mt-1 w-full px-2 py-1.5 rounded-lg border border-border bg-background"
+                          />
+                        </label>
+                        <label className="block">
+                          Cleaning Fee (₹)
+                          <input
+                            type="number"
+                            min="0"
+                            value={cleaningFee}
+                            onChange={(e) => setCleaningFee(e.target.value)}
+                            className="mt-1 w-full px-2 py-1.5 rounded-lg border border-border bg-background"
+                          />
+                        </label>
+                      </div>
+
+                      <label className="block text-xs">
+                        Deduction Notes
+                        <input
+                          type="text"
+                          placeholder="e.g. Broken chair, dirty walls"
+                          value={deductionNotes}
+                          onChange={(e) => setDeductionNotes(e.target.value)}
+                          className="mt-1 w-full px-2 py-1.5 rounded-lg border border-border bg-background"
+                        />
+                      </label>
+
+                      <label className="block text-xs">
+                        General Inspection Notes
+                        <textarea
+                          rows={2}
+                          value={generalNotes}
+                          onChange={(e) => setGeneralNotes(e.target.value)}
+                          className="mt-1 w-full px-2 py-1.5 rounded-lg border border-border bg-background"
+                        />
+                      </label>
+
+                      <div className="flex gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowInspectForm(false)}
+                          className="flex-1 py-2 rounded-lg border border-border font-medium text-xs text-muted-foreground"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          disabled={inspectMutation.isPending}
+                          onClick={() => inspectMutation.mutate({
+                            roomCondition,
+                            cleaningStatus,
+                            damagesAmount: Number(damagesAmount) || 0,
+                            cleaningFee: Number(cleaningFee) || 0,
+                            deductionNotes: deductionNotes || null,
+                            notes: generalNotes || null,
+                          })}
+                          className="flex-1 py-2 rounded-lg bg-accent text-accent-foreground font-semibold text-xs disabled:opacity-50"
+                        >
+                          {inspectMutation.isPending ? 'Saving...' : 'Submit'}
+                        </button>
+                      </div>
+                    </div>
+                  )
                 )}
                 {String(active.status) === 'INSPECTION_DONE' && (
                   <button

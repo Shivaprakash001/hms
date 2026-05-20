@@ -285,6 +285,7 @@ export class ActivationWorkflowService {
     if (!tenant.gender) missingTier1.push("gender");
     if (!tenant.date_of_birth) missingTier1.push("date_of_birth");
     if (!tenant.phone_3) missingTier1.push("emergency_phone");
+    if (!tenant.photo_url) missingTier1.push("photo_url");
 
     const profileCompleted = missingTier1.length === 0;
     const rulesAccepted = Boolean(latestAcceptance);
@@ -562,6 +563,7 @@ export class ActivationWorkflowService {
     if (!emergencyPhone) throw new Error("VALIDATION_ERROR: Valid emergency contact phone is required");
     if (!["Male", "Female", "Other", "Prefer not to say"].includes(gender)) throw new Error("VALIDATION_ERROR: Gender is required");
     if (!dob) throw new Error("VALIDATION_ERROR: Valid date of birth is required");
+    if (!tenant.photo_url && !data?.photo_url) throw new Error("VALIDATION_ERROR: Profile photo is required");
 
     const profileType = data?.profile_type ? String(data.profile_type).toUpperCase() : tenant.profile_type || "STUDENT";
     const yearOfStudy = data?.year_of_study ? Number(data.year_of_study) : undefined;
@@ -596,6 +598,7 @@ export class ActivationWorkflowService {
           office_name: profileType === "WORKING_PROFESSIONAL" ? data?.office_name || undefined : null,
           office_location: profileType === "WORKING_PROFESSIONAL" ? data?.office_location || undefined : null,
           job_role: profileType === "WORKING_PROFESSIONAL" ? data?.job_role || undefined : null,
+          photo_url: data?.photo_url || undefined,
           onboarding_last_activity_at: new Date(),
         }),
       });

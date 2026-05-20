@@ -198,7 +198,7 @@ export class MoveOutService {
       });
 
       if (nextStatus === "COMPLETED") {
-        await this._executeCompletionSideEffects(tx, req.tenant_id, requestId, req.planned_exit_date, req.reason, req.reason_text, new Date());
+        await this.executeCompletionSideEffects(tx, req.tenant_id, requestId, req.planned_exit_date, req.reason, req.reason_text, new Date());
       }
       notifyMoveOutTransition(requestId, nextStatus);
       return { ...preview, status: nextStatus };
@@ -228,7 +228,7 @@ export class MoveOutService {
         data: { status: "COMPLETED", financial_completion_date: now, physical_exit_date: physicalDate, completed_at: now, updated_at: now },
       });
       // Room release and tenant update
-      await this._executeCompletionSideEffects(tx, req.tenant_id, params.requestId, physicalDate, req.reason, req.reason_text, now);
+      await this.executeCompletionSideEffects(tx, req.tenant_id, params.requestId, physicalDate, req.reason, req.reason_text, now);
       notifyMoveOutTransition(params.requestId, "COMPLETED");
       return { success: true, request_id: params.requestId, physical_exit_date: physicalDate };
     });
@@ -249,7 +249,7 @@ export class MoveOutService {
     });
   }
 
-  private async _executeCompletionSideEffects(tx: Tx, tenantId: string, requestId: string, exitDate: Date, reason: string, reasonText: string | null, now: Date) {
+  async executeCompletionSideEffects(tx: Tx, tenantId: string, requestId: string, exitDate: Date, reason: string, reasonText: string | null, now: Date) {
     if (exitDate <= now) {
       await tx.roomAllocation.updateMany({ where: { tenant_id: tenantId, is_active: true, end_date: null }, data: { is_active: false, end_date: exitDate } });
       await tx.move_out_requests.update({ where: { id: requestId }, data: { room_release_date: exitDate } });

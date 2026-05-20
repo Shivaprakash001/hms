@@ -9,6 +9,10 @@ import {
   MessageCircle,
   Phone,
   Upload,
+  Send,
+  MessageSquare,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { tenantPortalApi } from '@features/tenant-portal/api';
 import { tenantService } from '@features/tenants/api';
@@ -68,6 +72,8 @@ export function TenantProfilePortalPage() {
   const [form, setForm] = useState<Record<string, string>>({});
   const [selectedCollege, setSelectedCollege] = useState<string>('');
   const [selectedCourse, setSelectedCourse] = useState<string>('');
+  const [newMessages, setNewMessages] = useState<Record<string, string>>({});
+  const [expandedChats, setExpandedChats] = useState<Record<string, boolean>>({});
 
   const { data, isLoading } = useQuery({
     queryKey: ['tenant', 'portal-profile'],
@@ -103,6 +109,19 @@ export function TenantProfilePortalPage() {
     onError: () => toast.error('Document upload failed'),
   });
 
+  const messageMutation = useMutation({
+    mutationFn: ({ docId, message }: { docId: string; message: string }) => {
+      const tenantId = data?.tenant?.id ?? data?.id ?? '';
+      return tenantService.postDocumentMessage(tenantId, docId, message);
+    },
+    onSuccess: (_, variables) => {
+      setNewMessages((prev) => ({ ...prev, [variables.docId]: '' }));
+      queryClient.invalidateQueries({ queryKey: ['tenant'] });
+      toast.success('Message sent');
+    },
+    onError: () => toast.error('Failed to send message'),
+  });
+
   if (isLoading || !data) {
     return (
       <div className="flex justify-center py-20">
@@ -121,6 +140,39 @@ export function TenantProfilePortalPage() {
   const verification = data.verification ?? {};
   const moveOut = data.move_out;
   const isStudent = String(t?.profile_type ?? 'STUDENT').toUpperCase() === 'STUDENT';
+
+  const profileFields = [
+    { label: 'Full name', value: p.name },
+    { label: 'Gender', value: t.gender },
+    { label: 'Date of birth', value: t.date_of_birth },
+    { label: 'Profile photo', value: t.photo_url },
+    { label: 'Tenant phone', value: t.phone_1 || p.phone },
+    { label: 'Guardian phone', value: t.phone_2 },
+    { label: 'Emergency phone', value: t.phone_3 || p.emergency_contact },
+    { label: 'Profile type', value: t.profile_type },
+    { label: 'Permanent address', value: t.permanent_address },
+    { label: 'City', value: p.city },
+    { label: 'State', value: p.state },
+    { label: 'Pincode', value: p.pincode },
+    { label: 'Documents', value: docs.length > 0 ? 'uploaded' : '' },
+  ];
+
+  if (isStudent) {
+    profileFields.push(
+      { label: 'College name', value: t.college_name },
+      { label: 'Course', value: t.course },
+      { label: 'Year of study', value: t.year_of_study },
+    );
+  } else if (String(t.profile_type).toUpperCase() === 'WORKING_PROFESSIONAL') {
+    profileFields.push(
+      { label: 'Office name', value: t.office_name },
+      { label: 'Job role', value: t.job_role },
+      { label: 'Office location', value: t.office_location },
+    );
+  }
+
+  const completedFields = profileFields.filter(f => f.value != null && String(f.value).trim() !== '');
+  const completionPercent = Math.round((completedFields.length / profileFields.length) * 100);
 
   const startEdit = () => {
     const college = String(t.college_name ?? '');
@@ -209,6 +261,32 @@ export function TenantProfilePortalPage() {
           </div>
         )}
       </header>
+
+      {/* Profile Completion Status Bar */}
+      <div className="bg-card border border-border rounded-xl p-4 space-y-3 shadow-sm">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Profile Completion</span>
+          <span className="text-sm font-bold text-accent">{completionPercent}%</span>
+        </div>
+        <div className="w-full bg-secondary h-2.5 rounded-full overflow-hidden">
+          <div 
+            className="bg-accent h-full rounded-full transition-all duration-500 ease-out" 
+            style={{ width: `${completionPercent}%` }}
+          />
+        </div>
+        <div className="flex flex-wrap gap-x-2 gap-y-1 text-xs text-muted-foreground">
+          {completionPercent === 100 ? (
+            <span className="text-emerald-500 font-medium">✓ Your profile is 100% complete!</span>
+          ) : (
+            <>
+              <span className="text-amber-500 font-medium">⚠️ Missing fields:</span>
+              <span>
+                {profileFields.filter(f => !f.value || String(f.value).trim() === '').map(f => f.label).join(', ')}
+              </span>
+            </>
+          )}
+        </div>
+      </div>
 
       {/* 1 — Personal */}
       <ProfileSection title="Personal info">
@@ -482,28 +560,116 @@ export function TenantProfilePortalPage() {
           {docs.length === 0 && (
             <li className="text-sm text-muted-foreground">No documents uploaded yet.</li>
           )}
-          {docs.map((d) => (
-            <li key={String(d.id)} className="p-3 rounded-lg border border-border text-sm">
-              <div className="flex justify-between gap-2">
-                <span className="font-medium">{String(d.doc_type_label ?? d.doc_type)}</span>
-                <span
-                  className={`text-xs font-semibold ${
-                    d.document_status === 'VERIFIED' || d.is_verified
-                      ? 'text-emerald-600'
-                      : d.document_status === 'REJECTED'
-                        ? 'text-destructive'
-                        : 'text-amber-600'
-                  }`}
-                >
-                  {String(d.document_status ?? 'PENDING')}
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">Uploaded {fmtDate(String(d.uploaded_at))}</p>
-              {d.rejection_reason && (
-                <p className="text-xs text-destructive mt-1">Reason: {String(d.rejection_reason)}</p>
-              )}
-            </li>
-          ))}
+          {docs.map((d) => {
+            const docId = String(d.id);
+            const status = String(d.document_status ?? 'PENDING').toUpperCase();
+            
+            let chatMessages: { sender: string; sender_name: string; message: string; timestamp: string }[] = [];
+            try {
+              const reasonStr = String(d.rejection_reason || '');
+              if (reasonStr.startsWith('[') && reasonStr.endsWith(']')) {
+                chatMessages = JSON.parse(reasonStr);
+              } else if (reasonStr) {
+                chatMessages = [{ sender: 'owner', sender_name: 'Owner Query', message: reasonStr, timestamp: '' }];
+              }
+            } catch {
+              chatMessages = [];
+            }
+
+            const isChatExpanded = expandedChats[docId];
+
+            return (
+              <li key={docId} className="p-4 rounded-xl border border-border bg-card text-sm space-y-3">
+                <div className="flex justify-between items-center gap-2">
+                  <span className="font-semibold text-foreground">{String(d.doc_type_label ?? d.doc_type)}</span>
+                  <span
+                    className={`text-xs font-semibold px-2 py-0.5 rounded-full uppercase ${
+                      status === 'APPROVED' || d.is_verified
+                        ? 'bg-emerald-500/10 text-emerald-600'
+                        : status === 'REJECTED'
+                          ? 'bg-rose-500/10 text-rose-600'
+                          : 'bg-amber-500/10 text-amber-600'
+                    }`}
+                  >
+                    {status}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">Uploaded {fmtDate(String(d.uploaded_at || d.created_at))}</p>
+                
+                {/* Chat section for Document queries */}
+                <div className="mt-2 pt-2 border-t border-border/60 space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedChats(prev => ({ ...prev, [docId]: !prev[docId] }))}
+                    className="flex items-center justify-between w-full text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <MessageSquare className="w-3.5 h-3.5 text-accent" />
+                      {chatMessages.length > 0
+                        ? `Conversational Thread (${chatMessages.length})`
+                        : 'View / Start Verification Conversation'}
+                    </span>
+                    {isChatExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+
+                  {isChatExpanded && (
+                    <div className="space-y-3 pt-2">
+                      {chatMessages.length > 0 && (
+                        <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                          {chatMessages.map((msg, idx) => {
+                            const isOwner = msg.sender === 'owner';
+                            return (
+                              <div
+                                key={idx}
+                                className={`flex flex-col max-w-[85%] ${!isOwner ? 'ml-auto items-end' : 'mr-auto items-start'}`}
+                              >
+                                <span className="text-[9px] text-muted-foreground mb-0.5 px-1">
+                                  {msg.sender_name}
+                                </span>
+                                <div className={`p-2.5 rounded-2xl text-xs font-medium leading-relaxed ${
+                                  !isOwner
+                                    ? 'bg-accent text-accent-foreground rounded-tr-none'
+                                    : 'bg-secondary text-secondary-foreground rounded-tl-none'
+                                }`}>
+                                  {msg.message}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      <div className="flex gap-1.5">
+                        <input
+                          type="text"
+                          placeholder="Reply to owner or upload comment..."
+                          value={newMessages[docId] || ''}
+                          onChange={(e) => setNewMessages(prev => ({ ...prev, [docId]: e.target.value }))}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              const text = (newMessages[docId] || '').trim();
+                              if (text) messageMutation.mutate({ docId, message: text });
+                            }
+                          }}
+                          className="flex-1 px-3 py-2 rounded-xl border border-border bg-background text-xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const text = (newMessages[docId] || '').trim();
+                            if (text) messageMutation.mutate({ docId, message: text });
+                          }}
+                          className="p-2 rounded-xl bg-accent text-accent-foreground"
+                        >
+                          <Send className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </li>
+            );
+          })}
         </ul>
         <div className="flex flex-col gap-2">
           <select

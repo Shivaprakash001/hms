@@ -9,6 +9,7 @@ import { getLogger } from "../../../lib/logger";
 import { eventLog } from "../../../lib/services/event-log-service";
 import { imagekit } from "../../../lib/imagekit";
 import { tenantRepository } from "../../repositories/tenantRepository";
+import { assertCapability } from "../../../lib/services/move-out-service";
 
 const logger = getLogger("tenant-service");
 
@@ -217,6 +218,8 @@ export class TenantService {
     });
 
     if (!tenantCheck) throw new Error("NOT_FOUND: Tenant record not found");
+
+    await assertCapability(tenantCheck.id, "EDIT_PROFILE");
 
     // ── Enforce allow_tenant_edits preference ──
     if (tenantCheck.owner_id) {

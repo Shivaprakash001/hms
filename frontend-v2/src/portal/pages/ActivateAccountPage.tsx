@@ -5,6 +5,7 @@ import {
   ArrowRight,
   BadgeIndianRupee,
   Building2,
+  Camera,
   CheckCircle2,
   ClipboardCheck,
   DoorOpen,
@@ -191,6 +192,8 @@ export function ActivateAccountPage() {
 
   const [selectedCollege, setSelectedCollege] = useState<string>('');
   const [selectedCourse, setSelectedCourse] = useState<string>('');
+  const [profilePhotoFile, setProfilePhotoFile] = useState<File | null>(null);
+  const [profilePhotoPreview, setProfilePhotoPreview] = useState<string>('');
 
   const loadContext = async () => {
     if (!token) {
@@ -202,6 +205,9 @@ export function ActivateAccountPage() {
     try {
       const data = await tenantService.getActivationContext(token);
       setCtx(data);
+      if (data.tenant?.photo_url) {
+        setProfilePhotoPreview(data.tenant.photo_url);
+      }
       setInvalid(false);
       setInvalidCode('');
       setError('');
@@ -305,9 +311,47 @@ export function ActivateAccountPage() {
     submitStep('ACCOUNT', account);
   };
 
-  const profileSubmit = (e: FormEvent) => {
+  const handlePhotoChange = (file?: File) => {
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      setError('Image must be under 2MB');
+      return;
+    }
+    setProfilePhotoFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setProfilePhotoPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const profileSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    submitStep('PROFILE', profile);
+    if (!profilePhotoFile && !profilePhotoPreview) {
+      setError('Profile photo is required');
+      return;
+    }
+
+    setSubmitting(true);
+    setError('');
+
+    try {
+      let photoUrl = profilePhotoPreview;
+      if (profilePhotoFile) {
+        const uploadRes = await tenantService.uploadActivationPhoto(token, profilePhotoFile);
+        if (uploadRes?.photo_url) {
+          photoUrl = uploadRes.photo_url;
+        }
+      }
+      await submitStep('PROFILE', { ...profile, photo_url: photoUrl });
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.error?.message ||
+        err?.message ||
+        'Failed to save profile or upload photo';
+      setError(message);
+      setSubmitting(false);
+    }
   };
 
   const documentPending = ctx && !ctx.activation_state.documents_uploaded;
@@ -550,6 +594,38 @@ export function ActivateAccountPage() {
           {currentStep === 'PROFILE' && (
             <form onSubmit={profileSubmit} className="space-y-5">
               <SectionHeading icon={<ShieldCheck className="w-5 h-5" />} title="Complete required profile details" text="Tier 1 fields are required for activation. Other details improve hostel records and can be completed now or later." />
+              
+              {/* Profile Photo Upload */}
+              <label className="flex items-center gap-4 rounded-xl border border-border bg-background p-4 cursor-pointer">
+                <div className="w-16 h-16 rounded-full border border-border bg-muted overflow-hidden flex items-center justify-center relative group">
+                  {profilePhotoPreview ? (
+                    <img
+                      src={profilePhotoPreview}
+                      alt="Profile preview"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <Camera className="w-6 h-6 text-muted-foreground" />
+                  )}
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold text-foreground">
+                    Profile photo *
+                  </p>
+                  <p className="text-sm text-muted-foreground">JPG, PNG, or WEBP under 2MB</p>
+                  {profilePhotoFile && (
+                    <p className="text-xs text-accent mt-1">{profilePhotoFile.name}</p>
+                  )}
+                </div>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(e) => handlePhotoChange(e.target.files?.[0])}
+                />
+                <span className="text-sm font-semibold text-accent">Choose photo</span>
+              </label>
+
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Primary mobile" required value={profile.phone} onChange={(v) => setProfile({ ...profile, phone: phoneDigits(v) })} />
                 <Field label="Emergency contact (Mobile) *" required value={profile.emergency_phone} onChange={(v) => setProfile({ ...profile, emergency_phone: phoneDigits(v) })} />

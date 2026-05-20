@@ -251,8 +251,7 @@ export function CompleteProfilePage() {
     };
   }, [user]);
 
-  const inviteSummary = settings?.invite_summary;
-  const photoRequired = Boolean(settings?.require_profile_photo_onboarding);
+  const photoRequired = true;
 
   const progress = useMemo(() => Math.round((step / steps.length) * 100), [step]);
 
@@ -281,7 +280,7 @@ export function CompleteProfilePage() {
     }
 
     if (targetStep === 3 && photoRequired && !profilePhotoFile) {
-      return 'Profile photo is required by your hostel owner';
+      return 'Profile photo is required';
     }
 
     return null;

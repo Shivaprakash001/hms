@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { AlertCircle, AlertTriangle, Phone, CheckCircle, Building2, CreditCard, ChevronDown } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Phone, CheckCircle, Building2, CreditCard, ChevronDown, FileText } from 'lucide-react';
 import { ownerService } from '@features/owners/api';
 import { paymentService } from '@features/payments/api';
+import { tenantService } from '@features/tenants/api';
 import { queryKeys } from '@lib/queryKeys';
 import { RecordPaymentModal } from '../modals/RecordPaymentModal';
 
@@ -53,6 +55,18 @@ export function AlertsView() {
     refetchOnWindowFocus: true,
   });
 
+  const { data: pendingDocsData, isLoading: isDocsLoading } = useQuery({
+    queryKey: ['tenants', 'pending-documents', activeHostelId ?? 'none'],
+    queryFn: () => tenantService.getPendingDocuments(activeHostelId || ''),
+    enabled: !!activeHostelId,
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: true,
+  });
+
+  const pendingDocs: Record<string, unknown>[] = Array.isArray(pendingDocsData)
+    ? pendingDocsData
+    : [];
+
   const dues: Record<string, unknown>[] = Array.isArray(duesData)
     ? duesData
     : Array.isArray((duesData as Record<string, unknown>)?.dues)
@@ -82,11 +96,16 @@ export function AlertsView() {
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold text-foreground">Collections</h1>
+          <h1 className="text-2xl font-semibold text-foreground">Alerts & Verifications</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {isLoading ? 'Loading…' : dues.length > 0
-              ? `${fmt(totalOutstanding)} outstanding · ${overdueList.length} overdue`
-              : 'All dues cleared'}
+            {isLoading ? 'Loading…' : (
+              <>
+                {dues.length > 0 && `${fmt(totalOutstanding)} outstanding · ${overdueList.length} overdue`}
+                {dues.length > 0 && pendingDocs.length > 0 && ' · '}
+                {pendingDocs.length > 0 && `${pendingDocs.length} document verifications pending`}
+                {dues.length === 0 && pendingDocs.length === 0 && 'All clear'}
+              </>
+            )}
           </p>
         </div>
         {hostels.length > 1 && (
@@ -119,8 +138,8 @@ export function AlertsView() {
       </div>
 
       {/* Summary bar */}
-      {!isLoading && dues.length > 0 && (
-        <div className="grid grid-cols-2 gap-3">
+      {!isLoading && (dues.length > 0 || pendingDocs.length > 0) && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className={`rounded-xl p-3 min-w-0 ${
             overdueList.length > 0 ? 'bg-[#EF4444]/8 border border-[#EF4444]/25' : 'bg-card border border-border'
           }`}>
@@ -131,13 +150,23 @@ export function AlertsView() {
             <div className={`text-xl font-semibold ${overdueList.length > 0 ? 'text-[#EF4444]' : 'text-foreground'}`}>{overdueList.length}</div>
             <div className="text-[10px] text-muted-foreground mt-0.5 truncate">{fmt(overdueList.reduce((s, d) => s + Number(d.amount ?? d.outstanding ?? 0), 0))}</div>
           </div>
-          <div className="bg-card border border-[#F59E0B]/20 rounded-xl p-3 min-w-0">
+          <div className="bg-card border border-border rounded-xl p-3 min-w-0">
             <div className="flex items-center gap-1.5 mb-1.5">
               <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-[#F59E0B]" />
               <span className="text-xs text-muted-foreground">Upcoming</span>
             </div>
             <div className="text-xl font-semibold text-foreground">{pendingList.length}</div>
             <div className="text-[10px] text-muted-foreground mt-0.5 truncate">{fmt(pendingList.reduce((s, d) => s + Number(d.amount ?? d.outstanding ?? 0), 0))}</div>
+          </div>
+          <div className={`bg-card border rounded-xl p-3 min-w-0 ${
+            pendingDocs.length > 0 ? 'border-accent/35 bg-accent/5' : 'border-border'
+          }`}>
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <FileText className={`w-3.5 h-3.5 shrink-0 ${pendingDocs.length > 0 ? 'text-accent' : 'text-muted-foreground'}`} />
+              <span className="text-xs text-muted-foreground">Pending Docs</span>
+            </div>
+            <div className={`text-xl font-semibold ${pendingDocs.length > 0 ? 'text-accent' : 'text-foreground'}`}>{pendingDocs.length}</div>
+            <div className="text-[10px] text-muted-foreground mt-0.5 truncate">{pendingDocs.length > 0 ? 'Awaiting verification' : 'All verified'}</div>
           </div>
         </div>
       )}
@@ -161,14 +190,14 @@ export function AlertsView() {
       )}
 
       {/* Empty — all clear */}
-      {!isLoading && !isError && dues.length === 0 && (
+      {!isLoading && !isError && dues.length === 0 && pendingDocs.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 gap-3">
           <div className="w-14 h-14 bg-[#10B981]/10 rounded-full flex items-center justify-center">
             <CheckCircle className="w-7 h-7 text-[#10B981]" />
           </div>
           <div className="text-center">
-            <p className="font-medium text-foreground">All dues cleared</p>
-            <p className="text-sm text-muted-foreground mt-1">No outstanding payments for this hostel</p>
+            <p className="font-medium text-foreground">All clear</p>
+            <p className="text-sm text-muted-foreground mt-1">No outstanding payments or pending verifications</p>
           </div>
         </div>
       )}
@@ -234,6 +263,55 @@ export function AlertsView() {
               />
             );
           })}
+        </div>
+      )}
+
+      {/* Pending Documents Verification Section */}
+      {!isLoading && pendingDocs.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-accent uppercase tracking-wider">Verification Requests</span>
+            <span className="text-xs bg-accent/10 text-accent px-2 py-0.5 rounded-full font-medium">{pendingDocs.length}</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {pendingDocs.map((doc) => {
+              const docId = String(doc.id);
+              const tenantId = String(doc.tenant_id);
+              const hostelId = String(doc.hostel_id || activeHostelId || '');
+              const name = String(doc.tenant_name || 'Tenant');
+              const docType = String(doc.doc_type || 'Document');
+              const room = String(doc.room_no || 'N/A');
+              const uploadedAt = doc.uploaded_at ? new Date(String(doc.uploaded_at)) : null;
+
+              return (
+                <div key={docId} className="bg-card border border-border rounded-xl p-4 flex flex-col justify-between gap-3 shadow-sm">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-full bg-accent/10 flex items-center justify-center shrink-0">
+                      <span className="text-xs font-bold text-accent">{name.charAt(0).toUpperCase()}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-semibold text-foreground truncate">{name}</h4>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Room {room} · {docType}
+                      </p>
+                      {uploadedAt && (
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                          Uploaded {uploadedAt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <Link
+                    to={`/hostels/${hostelId}/tenants/${tenantId}?tab=documents`}
+                    className="w-full bg-accent text-accent-foreground py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-98 transition-all"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    Verify & Chat
+                  </Link>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

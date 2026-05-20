@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { notifyMoveOutTransition } from "@/lib/services/move-out-notifications";
+import { moveOutService } from "@/lib/services/move-out-service";
 
 /**
  * 🕐 CRON — Daily Move-Out Room Releases
@@ -54,29 +55,15 @@ export async function GET(req: NextRequest) {
         const exitDate = req.physical_exit_date || now;
 
         await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-          // Deactivate room allocation
-          await tx.roomAllocation.updateMany({
-            where: { tenant_id: req.tenant_id, is_active: true, end_date: null },
-            data: { is_active: false, end_date: exitDate },
-          });
-
-          // Mark room as released
-          await tx.move_out_requests.update({
-            where: { id: req.id },
-            data: { room_release_date: exitDate, updated_at: now },
-          });
-
-          // Update tenant status
-          await tx.tenants.update({
-            where: { id: req.tenant_id },
-            data: {
-              status: "LEFT",
-              exit_date: exitDate,
-              exit_reason: req.reason,
-              exit_notes: req.reason_text,
-              updated_at: now,
-            },
-          });
+          await moveOutService.executeCompletionSideEffects(
+            tx,
+            req.tenant_id,
+            req.id,
+            exitDate,
+            req.reason,
+            req.reason_text || null,
+            now
+          );
         });
 
         released++;
