@@ -172,6 +172,9 @@ export function CompleteProfilePage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
+  const [selectedCollege, setSelectedCollege] = useState<string>('');
+  const [selectedCourse, setSelectedCourse] = useState<string>('');
+
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
@@ -197,6 +200,21 @@ export function CompleteProfilePage() {
         if (!mounted) return;
         const defaults = data?.invited_defaults ?? {};
         setSettings(data);
+
+        const college = String(defaults.college_name || '');
+        if (college === 'Sreenidhi Institute of Science and Technology' || college === 'Sreenidhi University') {
+          setSelectedCollege(college);
+        } else if (college) {
+          setSelectedCollege('Other');
+        }
+
+        const course = String(defaults.course || '');
+        if (course === 'B.Tech') {
+          setSelectedCourse(course);
+        } else if (course) {
+          setSelectedCourse('Other');
+        }
+
         setForm((prev) => ({
           ...prev,
           name: prev.name || defaults.name || user.name || '',
@@ -207,9 +225,9 @@ export function CompleteProfilePage() {
           date_of_birth: prev.date_of_birth || defaults.date_of_birth || '',
           permanent_address: prev.permanent_address || defaults.permanent_address || '',
           profile_type: (prev.profile_type || defaults.profile_type || '') as ProfileType,
-          college_name: prev.college_name || defaults.college_name || '',
+          college_name: prev.college_name || college,
           roll_number: prev.roll_number || defaults.roll_number || '',
-          course: prev.course || defaults.course || '',
+          course: prev.course || course,
           year_of_study: prev.year_of_study || String(defaults.year_of_study || ''),
           section: prev.section || defaults.section || '',
           branch: prev.branch || defaults.branch || '',
@@ -561,12 +579,81 @@ export function CompleteProfilePage() {
 
               {form.profile_type === 'STUDENT' && (
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Field
-                    label="College name"
-                    value={form.college_name}
-                    required
-                    onChange={(value) => update('college_name', value)}
-                  />
+                  <label className="block">
+                    <span className="text-xs font-medium text-muted-foreground">College *</span>
+                    <select
+                      value={selectedCollege}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSelectedCollege(val);
+                        if (val !== 'Other') {
+                          update('college_name', val);
+                        } else {
+                          update('college_name', '');
+                        }
+                      }}
+                      className={`${fieldClass} mt-1.5`}
+                    >
+                      <option value="">Select College</option>
+                      <option value="Sreenidhi Institute of Science and Technology">Sreenidhi Institute of Science and Technology</option>
+                      <option value="Sreenidhi University">Sreenidhi University</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </label>
+
+                  {selectedCollege === 'Other' && (
+                    <Field
+                      label="Custom College Name"
+                      value={form.college_name}
+                      required
+                      onChange={(value) => update('college_name', value)}
+                    />
+                  )}
+
+                  <label className="block">
+                    <span className="text-xs font-medium text-muted-foreground">Course</span>
+                    <select
+                      value={selectedCourse}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSelectedCourse(val);
+                        if (val !== 'Other') {
+                          update('course', val);
+                        } else {
+                          update('course', '');
+                        }
+                      }}
+                      className={`${fieldClass} mt-1.5`}
+                    >
+                      <option value="">Select Course</option>
+                      <option value="B.Tech">B.Tech</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </label>
+
+                  {selectedCourse === 'Other' && (
+                    <Field
+                      label="Custom Course Name"
+                      value={form.course}
+                      onChange={(value) => update('course', value)}
+                    />
+                  )}
+
+                  <label className="block">
+                    <span className="text-xs font-medium text-muted-foreground">Year of study</span>
+                    <select
+                      value={form.year_of_study}
+                      onChange={(e) => update('year_of_study', e.target.value)}
+                      className={`${fieldClass} mt-1.5`}
+                    >
+                      <option value="">Select Year of study</option>
+                      <option value="1">1st Year</option>
+                      <option value="2">2nd Year</option>
+                      <option value="3">3rd Year</option>
+                      <option value="4">4th Year</option>
+                    </select>
+                  </label>
+
                   <Field
                     label="Roll number"
                     value={form.roll_number}
@@ -574,20 +661,9 @@ export function CompleteProfilePage() {
                     onChange={(value) => update('roll_number', value)}
                   />
                   <Field
-                    label="Course"
-                    value={form.course}
-                    onChange={(value) => update('course', value)}
-                  />
-                  <Field
                     label="Branch"
                     value={form.branch}
                     onChange={(value) => update('branch', value)}
-                  />
-                  <Field
-                    label="Year of study"
-                    value={form.year_of_study}
-                    type="number"
-                    onChange={(value) => update('year_of_study', value)}
                   />
                   <Field
                     label="Section"

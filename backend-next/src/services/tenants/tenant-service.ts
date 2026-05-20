@@ -770,6 +770,91 @@ export class TenantService {
     });
     return this.withLegacyTenantRelations(updated);
   }
+
+  async getIncrementYearPreview(hostelId: string, ownerId: string) {
+    const students = await prisma.tenants.findMany({
+      where: {
+        hostel_id: hostelId,
+        owner_id: ownerId,
+        status: "ACTIVE",
+        profile_type: "STUDENT",
+      },
+      include: {
+        profiles: {
+          select: {
+            name: true,
+          },
+        },
+        room_allocations: {
+          where: { is_active: true, end_date: null },
+          include: { room: true },
+        },
+      },
+    });
+
+    const toIncrement: any[] = [];
+    const violators: any[] = [];
+    const others: any[] = [];
+
+    for (const student of students) {
+      const roomNo = student.room_allocations?.[0]?.room?.room_no || "Unassigned";
+      const name = student.profiles?.name || "Unknown Tenant";
+      const year = student.year_of_study;
+
+      if (year === null || year === undefined) {
+        others.push({ id: student.id, name, roomNo, year: null });
+      } else if (year >= 1 && year < 4) {
+        toIncrement.push({ id: student.id, name, roomNo, currentYear: year, nextYear: year + 1 });
+      } else if (year >= 4) {
+        violators.push({ id: student.id, name, roomNo, year });
+      } else {
+        others.push({ id: student.id, name, roomNo, year });
+      }
+    }
+
+    return {
+      toIncrement,
+      violators,
+      others,
+    };
+  }
+
+  async executeIncrementYear(hostelId: string, ownerId: string) {
+    const preview = await this.getIncrementYearPreview(hostelId, ownerId);
+
+    if (preview.toIncrement.length === 0) {
+      return {
+        success: true,
+        message: "No students eligible for increment.",
+        updatedCount: 0,
+        skippedCount: preview.violators.length + preview.others.length,
+        skippedTenants: preview.violators,
+      };
+    }
+
+    const idsToIncrement = preview.toIncrement.map((s) => s.id);
+
+    await prisma.$transaction(
+      idsToIncrement.map((id) =>
+        prisma.tenants.update({
+          where: { id },
+          data: {
+            year_of_study: {
+              increment: 1,
+            },
+          },
+        })
+      )
+    );
+
+    return {
+      success: true,
+      message: `Successfully incremented the year of study for ${idsToIncrement.length} students.`,
+      updatedCount: idsToIncrement.length,
+      skippedCount: preview.violators.length + preview.others.length,
+      skippedTenants: preview.violators,
+    };
+  }
 }
 
 export const tenantService = new TenantService();

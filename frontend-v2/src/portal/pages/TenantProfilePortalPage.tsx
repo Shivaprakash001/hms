@@ -120,7 +120,28 @@ export function TenantProfilePortalPage() {
   const moveOut = data.move_out;
   const isStudent = String(t?.profile_type ?? 'STUDENT').toUpperCase() === 'STUDENT';
 
+  const [selectedCollege, setSelectedCollege] = useState<string>('');
+  const [selectedCourse, setSelectedCourse] = useState<string>('');
+
   const startEdit = () => {
+    const college = String(t.college_name ?? '');
+    if (college === 'Sreenidhi Institute of Science and Technology' || college === 'Sreenidhi University') {
+      setSelectedCollege(college);
+    } else if (college) {
+      setSelectedCollege('Other');
+    } else {
+      setSelectedCollege('');
+    }
+
+    const course = String(t.course ?? '');
+    if (course === 'B.Tech') {
+      setSelectedCourse(course);
+    } else if (course) {
+      setSelectedCourse('Other');
+    } else {
+      setSelectedCourse('');
+    }
+
     setForm({
       name: String(p.name ?? ''),
       gender: String(t.gender ?? ''),
@@ -128,8 +149,8 @@ export function TenantProfilePortalPage() {
       phone_1: String(contacts.tenant_phone?.value ?? t.phone_1 ?? ''),
       phone_2: String(contacts.guardian_phone?.value ?? t.phone_2 ?? ''),
       phone_3: String(contacts.emergency_phone?.value ?? t.phone_3 ?? ''),
-      college_name: String(t.college_name ?? ''),
-      course: String(t.course ?? ''),
+      college_name: college,
+      course: course,
       branch: String(t.branch ?? ''),
       year_of_study: t.year_of_study != null ? String(t.year_of_study) : '',
       section: String(t.section ?? ''),
@@ -302,10 +323,81 @@ export function TenantProfilePortalPage() {
         {isStudent ? (
           editing ? (
             <>
-              <Field label="College" value={form.college_name} onChange={(v) => setForm({ ...form, college_name: v })} />
-              <Field label="Course" value={form.course} onChange={(v) => setForm({ ...form, course: v })} />
+              <label className="block text-sm mb-3">
+                <span className="text-muted-foreground text-xs">College</span>
+                <select
+                  value={selectedCollege}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedCollege(val);
+                    if (val !== 'Other') {
+                      setForm({ ...form, college_name: val });
+                    } else {
+                      setForm({ ...form, college_name: '' });
+                    }
+                  }}
+                  className="mt-1 w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm"
+                >
+                  <option value="">Select College</option>
+                  <option value="Sreenidhi Institute of Science and Technology">Sreenidhi Institute of Science and Technology</option>
+                  <option value="Sreenidhi University">Sreenidhi University</option>
+                  <option value="Other">Other</option>
+                </select>
+              </label>
+
+              {selectedCollege === 'Other' && (
+                <Field
+                  label="Custom College Name"
+                  value={form.college_name}
+                  onChange={(v) => setForm({ ...form, college_name: v })}
+                />
+              )}
+
+              <label className="block text-sm mb-3">
+                <span className="text-muted-foreground text-xs">Course</span>
+                <select
+                  value={selectedCourse}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedCourse(val);
+                    if (val !== 'Other') {
+                      setForm({ ...form, course: val });
+                    } else {
+                      setForm({ ...form, course: '' });
+                    }
+                  }}
+                  className="mt-1 w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm"
+                >
+                  <option value="">Select Course</option>
+                  <option value="B.Tech">B.Tech</option>
+                  <option value="Other">Other</option>
+                </select>
+              </label>
+
+              {selectedCourse === 'Other' && (
+                <Field
+                  label="Custom Course Name"
+                  value={form.course}
+                  onChange={(v) => setForm({ ...form, course: v })}
+                />
+              )}
+
+              <label className="block text-sm mb-3">
+                <span className="text-muted-foreground text-xs">Year</span>
+                <select
+                  value={form.year_of_study}
+                  onChange={(e) => setForm({ ...form, year_of_study: e.target.value })}
+                  className="mt-1 w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm"
+                >
+                  <option value="">Select Year</option>
+                  <option value="1">1st Year</option>
+                  <option value="2">2nd Year</option>
+                  <option value="3">3rd Year</option>
+                  <option value="4">4th Year</option>
+                </select>
+              </label>
+
               <Field label="Branch" value={form.branch} onChange={(v) => setForm({ ...form, branch: v })} />
-              <Field label="Year" value={form.year_of_study} onChange={(v) => setForm({ ...form, year_of_study: v })} />
               <Field label="Section" value={form.section} onChange={(v) => setForm({ ...form, section: v })} />
               <Field label="Roll number" value={form.roll_number} onChange={(v) => setForm({ ...form, roll_number: v })} />
             </>

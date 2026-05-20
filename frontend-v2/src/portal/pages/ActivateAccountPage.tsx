@@ -189,6 +189,9 @@ export function ActivateAccountPage() {
     emergency_phone: '',
   });
 
+  const [selectedCollege, setSelectedCollege] = useState<string>('');
+  const [selectedCourse, setSelectedCourse] = useState<string>('');
+
   const loadContext = async () => {
     if (!token) {
       setInvalid(true);
@@ -206,6 +209,21 @@ export function ActivateAccountPage() {
         ...prev,
         phone: prev.phone || phoneDigits(data.tenant?.phone_1 || data.profile?.phone),
       }));
+
+      const college = String(data.tenant?.college_name || '');
+      if (college === 'Sreenidhi Institute of Science and Technology' || college === 'Sreenidhi University') {
+        setSelectedCollege(college);
+      } else if (college) {
+        setSelectedCollege('Other');
+      }
+
+      const course = String(data.tenant?.course || '');
+      if (course === 'B.Tech') {
+        setSelectedCourse(course);
+      } else if (course) {
+        setSelectedCourse('Other');
+      }
+
       setProfile((prev) => ({
         ...prev,
         phone: prev.phone || phoneDigits(data.tenant?.phone_1 || data.profile?.phone),
@@ -214,8 +232,8 @@ export function ActivateAccountPage() {
         permanent_address: prev.permanent_address || String(data.tenant?.permanent_address || ''),
         temporary_address: prev.temporary_address || String(data.tenant?.temporary_address || ''),
         profile_type: prev.profile_type || String(data.tenant?.profile_type || 'STUDENT'),
-        college_name: prev.college_name || String(data.tenant?.college_name || ''),
-        course: prev.course || String(data.tenant?.course || ''),
+        college_name: prev.college_name || college,
+        course: prev.course || course,
         year_of_study: prev.year_of_study || String(data.tenant?.year_of_study || ''),
         branch: prev.branch || String(data.tenant?.branch || ''),
         roll_number: prev.roll_number || String(data.tenant?.roll_number || ''),
@@ -525,9 +543,80 @@ export function ActivateAccountPage() {
 
               {profile.profile_type === 'STUDENT' ? (
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="College" value={profile.college_name} onChange={(v) => setProfile({ ...profile, college_name: v })} />
-                  <Field label="Course" value={profile.course} onChange={(v) => setProfile({ ...profile, course: v })} />
-                  <Field label="Year of study" value={profile.year_of_study} onChange={(v) => setProfile({ ...profile, year_of_study: v })} />
+                  <label className="block">
+                    <span className="text-xs font-semibold text-muted-foreground">College</span>
+                    <select
+                      value={selectedCollege}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSelectedCollege(val);
+                        if (val !== 'Other') {
+                          setProfile((prev) => ({ ...prev, college_name: val }));
+                        } else {
+                          setProfile((prev) => ({ ...prev, college_name: '' }));
+                        }
+                      }}
+                      className={fieldClass}
+                    >
+                      <option value="">Select College</option>
+                      <option value="Sreenidhi Institute of Science and Technology">Sreenidhi Institute of Science and Technology</option>
+                      <option value="Sreenidhi University">Sreenidhi University</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </label>
+
+                  {selectedCollege === 'Other' && (
+                    <Field
+                      label="Custom College Name"
+                      value={profile.college_name}
+                      onChange={(v) => setProfile({ ...profile, college_name: v })}
+                    />
+                  )}
+
+                  <label className="block">
+                    <span className="text-xs font-semibold text-muted-foreground">Course</span>
+                    <select
+                      value={selectedCourse}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSelectedCourse(val);
+                        if (val !== 'Other') {
+                          setProfile((prev) => ({ ...prev, course: val }));
+                        } else {
+                          setProfile((prev) => ({ ...prev, course: '' }));
+                        }
+                      }}
+                      className={fieldClass}
+                    >
+                      <option value="">Select Course</option>
+                      <option value="B.Tech">B.Tech</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </label>
+
+                  {selectedCourse === 'Other' && (
+                    <Field
+                      label="Custom Course Name"
+                      value={profile.course}
+                      onChange={(v) => setProfile({ ...profile, course: v })}
+                    />
+                  )}
+
+                  <label className="block">
+                    <span className="text-xs font-semibold text-muted-foreground">Year of study</span>
+                    <select
+                      value={profile.year_of_study}
+                      onChange={(e) => setProfile({ ...profile, year_of_study: e.target.value })}
+                      className={fieldClass}
+                    >
+                      <option value="">Select Year of study</option>
+                      <option value="1">1st Year</option>
+                      <option value="2">2nd Year</option>
+                      <option value="3">3rd Year</option>
+                      <option value="4">4th Year</option>
+                    </select>
+                  </label>
+
                   <Field label="Roll number" value={profile.roll_number} onChange={(v) => setProfile({ ...profile, roll_number: v })} />
                 </div>
               ) : (

@@ -18,6 +18,8 @@ const TenantProfile = () => {
     const [showSuccess, setShowSuccess] = useState(false);
     const [scoreData, setScoreData] = useState(null);
     const fileInputRef = useRef(null);
+    const [selectedCollege, setSelectedCollege] = useState('');
+    const [selectedCourse, setSelectedCourse] = useState('');
 
     // Local State for Form Data
     const [formData, setFormData] = useState({
@@ -68,6 +70,25 @@ const TenantProfile = () => {
                 const prof = Array.isArray(profRel) ? (profRel[0] || {}) : (profRel || {});
                 setTenantInfo(meData);
                 const inferredType = tenantRecord.profile_type === 'WORKING_PROFESSIONAL' ? 'work' : 'tenant';
+
+                const college = tenantRecord.college_name || '';
+                if (college === 'Sreenidhi Institute of Science and Technology' || college === 'Sreenidhi University') {
+                    setSelectedCollege(college);
+                } else if (college) {
+                    setSelectedCollege('Other');
+                } else {
+                    setSelectedCollege('');
+                }
+
+                const course = tenantRecord.course || '';
+                if (course === 'B.Tech') {
+                    setSelectedCourse(course);
+                } else if (course) {
+                    setSelectedCourse('Other');
+                } else {
+                    setSelectedCourse('');
+                }
+
                 setFormData({
                     name: prof.name || user?.name || '',
                     email: prof.email || user?.email || '',
@@ -78,9 +99,9 @@ const TenantProfile = () => {
                     phone_1: tenantRecord.phone_1 || '',
                     phone_2: tenantRecord.phone_2 || '',
                     phone_3: tenantRecord.phone_3 || '',
-                    college_name: tenantRecord.college_name || '',
+                    college_name: college,
                     roll_number: tenantRecord.roll_number || '',
-                    course: tenantRecord.course || '',
+                    course: course,
                     year_of_study: tenantRecord.year_of_study || '',
                     section: tenantRecord.section || '',
                     branch: tenantRecord.branch || '',
@@ -360,10 +381,71 @@ const TenantProfile = () => {
 
                 {formData.profile_type === 'tenant' ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <InfoField label="College" value={formData.college_name} icon={GraduationCap} isEditable={isEditing} onChange={(e) => setFormData({ ...formData, college_name: e.target.value })} />
+                        <InfoField
+                            label="College"
+                            value={selectedCollege}
+                            icon={GraduationCap}
+                            isEditable={isEditing}
+                            type="select"
+                            options={["Sreenidhi Institute of Science and Technology", "Sreenidhi University", "Other"]}
+                            selectPlaceholder="Select College"
+                            onChange={(e) => {
+                                const val = e.target.value;
+                                setSelectedCollege(val);
+                                if (val !== "Other") {
+                                    setFormData(prev => ({ ...prev, college_name: val }));
+                                } else {
+                                    setFormData(prev => ({ ...prev, college_name: "" }));
+                                }
+                            }}
+                        />
+                        {selectedCollege === "Other" && (
+                            <InfoField
+                                label="Custom College"
+                                value={formData.college_name}
+                                icon={GraduationCap}
+                                isEditable={isEditing}
+                                onChange={(e) => setFormData({ ...formData, college_name: e.target.value })}
+                            />
+                        )}
                         <InfoField label="Roll Number" value={formData.roll_number} icon={GraduationCap} isEditable={isEditing} onChange={(e) => setFormData({ ...formData, roll_number: e.target.value })} />
-                        <InfoField label="Course" value={formData.course} icon={GraduationCap} isEditable={isEditing} onChange={(e) => setFormData({ ...formData, course: e.target.value })} />
-                        <InfoField label="Year of Study" value={formData.year_of_study} icon={GraduationCap} isEditable={isEditing} type="number" onChange={(e) => setFormData({ ...formData, year_of_study: e.target.value })} />
+                        <InfoField
+                            label="Course"
+                            value={selectedCourse}
+                            icon={GraduationCap}
+                            isEditable={isEditing}
+                            type="select"
+                            options={["B.Tech", "Other"]}
+                            selectPlaceholder="Select Course"
+                            onChange={(e) => {
+                                const val = e.target.value;
+                                setSelectedCourse(val);
+                                if (val !== "Other") {
+                                    setFormData(prev => ({ ...prev, course: val }));
+                                } else {
+                                    setFormData(prev => ({ ...prev, course: "" }));
+                                }
+                            }}
+                        />
+                        {selectedCourse === "Other" && (
+                            <InfoField
+                                label="Custom Course"
+                                value={formData.course}
+                                icon={GraduationCap}
+                                isEditable={isEditing}
+                                onChange={(e) => setFormData({ ...formData, course: e.target.value })}
+                            />
+                        )}
+                        <InfoField
+                            label="Year of Study"
+                            value={isEditing ? formData.year_of_study : (formData.year_of_study === '1' ? '1st Year' : formData.year_of_study === '2' ? '2nd Year' : formData.year_of_study === '3' ? '3rd Year' : formData.year_of_study === '4' ? '4th Year' : formData.year_of_study || '')}
+                            icon={GraduationCap}
+                            isEditable={isEditing}
+                            type="select"
+                            options={["1", "2", "3", "4"]}
+                            selectPlaceholder="Select Year"
+                            onChange={(e) => setFormData({ ...formData, year_of_study: e.target.value })}
+                        />
                         <InfoField label="Section" value={formData.section} icon={GraduationCap} isEditable={isEditing} onChange={(e) => setFormData({ ...formData, section: e.target.value })} />
                         <InfoField label="Branch" value={formData.branch} icon={GraduationCap} isEditable={isEditing} onChange={(e) => setFormData({ ...formData, branch: e.target.value })} />
                     </div>
