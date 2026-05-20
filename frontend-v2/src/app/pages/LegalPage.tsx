@@ -6,7 +6,7 @@ export function LegalPage() {
   const { hash } = useLocation();
 
   useEffect(() => {
-    document.title = "Legal & Policies | Trishul Solutions";
+    document.title = "Legal & Policies | Sri Adithya Hostels";
     if (hash) {
       const element = document.getElementById(hash.replace('#', ''));
       if (element) {
@@ -25,7 +25,7 @@ export function LegalPage() {
       <header className="bg-card text-card-foreground border-b border-border">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-14 sm:py-20 text-center">
           <p className="text-accent text-xs font-bold uppercase tracking-[0.2em] mb-4">
-            Trishul Solutions
+            Sri Adithya Hostels
           </p>
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
             Legal & Policies

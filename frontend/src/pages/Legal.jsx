@@ -7,7 +7,7 @@ const navItems = legalSections.map((s) => ({ id: s.id, title: s.title }))
 
 export default function Legal() {
   useEffect(() => {
-    document.title = "Legal & Policies | Trishul Solutions"
+    document.title = "Legal & Policies | Sri Adithya Hostels"
 
     let canonical = document.querySelector('link[rel="canonical"]')
     if (!canonical) {
@@ -23,7 +23,7 @@ export default function Legal() {
       <header className="bg-slate-900 text-white">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-14 sm:py-20 text-center">
           <p className="text-indigo-400 text-xs font-bold uppercase tracking-[0.2em] mb-4">
-            Trishul Solutions
+            Sri Adithya Hostels
           </p>
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
             Legal &amp; Policies
@@ -60,7 +60,7 @@ export default function Legal() {
       <footer className="border-t border-slate-200 bg-slate-50">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-10 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-sm text-slate-500">
-            &copy; {new Date().getFullYear()} Trishul Solutions. All rights
+            &copy; {new Date().getFullYear()} Sri Adithya Hostels. All rights
             reserved.
           </p>
           <nav aria-label="Policy quick links" className="flex gap-5">
