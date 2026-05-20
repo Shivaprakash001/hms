@@ -152,7 +152,6 @@ export default function TenantProfileCard({ tenantId, onEdit, isOwner = true }) 
                     <div className="grid grid-cols-2 gap-4">
                         <InfoItem label="Full Name" value={profile.name} icon={User} />
                         <InfoItem label="Email" value={profile.email} icon={Mail} />
-                        <InfoItem label="Personal Email" value={tenant.personal_email} icon={Mail} />
                         <InfoItem label="Joined On" value={tenant.joined_on} icon={Calendar} />
                         <InfoItem label="Monthly Rent" value={tenant.monthly_rent ? formatCurrency(Number(tenant.monthly_rent), preferences) : null} icon={Building2} />
                     </div>
@@ -161,10 +160,8 @@ export default function TenantProfileCard({ tenantId, onEdit, isOwner = true }) 
                 {activeTab === 'contact' && (
                     <div className="grid grid-cols-2 gap-4">
                         <InfoItem label="Primary Phone" value={profile.phone || tenant.phone_1} icon={Phone} />
-                        <InfoItem label="Phone 1" value={tenant.phone_1} icon={Phone} />
-                        <InfoItem label="Phone 2 (Parent)" value={tenant.phone_2} icon={Phone} />
-                        <InfoItem label="Phone 3" value={tenant.phone_3} icon={Phone} />
-                        <InfoItem label="Emergency" value={profile.emergency_contact} icon={Phone} />
+                        <InfoItem label="Parent Phone" value={tenant.phone_2} icon={Phone} />
+                        <InfoItem label="Emergency Phone" value={tenant.phone_3 || profile.emergency_contact} icon={Phone} />
                     </div>
                 )}
 
@@ -189,8 +186,6 @@ export default function TenantProfileCard({ tenantId, onEdit, isOwner = true }) 
                 {activeTab === 'address' && (
                     <div className="space-y-4">
                         <InfoItem label="Permanent Address" value={tenant.permanent_address} icon={MapPin} fullWidth />
-                        <InfoItem label="Temporary Address" value={tenant.temporary_address} icon={MapPin} fullWidth />
-                        <InfoItem label="Profile Address" value={profile.address} icon={MapPin} fullWidth />
                     </div>
                 )}
 

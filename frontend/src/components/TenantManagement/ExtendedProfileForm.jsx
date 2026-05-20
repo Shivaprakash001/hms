@@ -175,7 +175,6 @@ export default function ExtendedProfileForm({ isOpen, onClose, tenant, onSave })
                                 </div>
                                 <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                                     <ReadOnlyInput label="Full Name" value={form.name} readOnly placeholder="Not Set" />
-                                    <ReadOnlyInput label="Personal Email" value={form.personal_email} readOnly icon={Lock} placeholder="Not Set" />
                                     <ReadOnlyInput label="Phone Number" value={form.phone_1} readOnly placeholder="Not Set" />
                                     <ReadOnlyInput label="Aadhaar Number" value={form.aadhaar_number} readOnly placeholder="XXXX XXXX XXXX" />
                                     <div className="sm:col-span-2">

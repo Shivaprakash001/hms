@@ -128,7 +128,6 @@ export function TenantProfilePortalPage() {
       phone_1: String(contacts.tenant_phone?.value ?? t.phone_1 ?? ''),
       phone_2: String(contacts.guardian_phone?.value ?? t.phone_2 ?? ''),
       phone_3: String(contacts.emergency_phone?.value ?? t.phone_3 ?? ''),
-      personal_email: String(t.personal_email ?? ''),
       college_name: String(t.college_name ?? ''),
       course: String(t.course ?? ''),
       branch: String(t.branch ?? ''),
@@ -139,7 +138,6 @@ export function TenantProfilePortalPage() {
       office_location: String(t.office_location ?? ''),
       job_role: String(t.job_role ?? ''),
       permanent_address: String(t.permanent_address ?? ''),
-      temporary_address: String(t.temporary_address ?? ''),
       city: String(p.city ?? ''),
       state: String(p.state ?? ''),
       pincode: String(p.pincode ?? ''),
@@ -293,17 +291,7 @@ export function TenantProfilePortalPage() {
 
       {/* 3 — Emails */}
       <ProfileSection title="Emails">
-        <ProfileRow label="Account email" value={p.account_email} />
-        {editing ? (
-          <Field
-            label="Personal email"
-            type="email"
-            value={form.personal_email}
-            onChange={(v) => setForm({ ...form, personal_email: v })}
-          />
-        ) : (
-          <ProfileRow label="Personal email" value={t.personal_email ?? '—'} />
-        )}
+        <ProfileRow label="Account email" value={p.account_email || p.email} />
         <p className="text-[10px] text-muted-foreground mt-2">
           Account email changes require OTP verification from hostel support.
         </p>
@@ -350,16 +338,14 @@ export function TenantProfilePortalPage() {
       <ProfileSection title="Address">
         {editing ? (
           <>
-            <Field label="Permanent address" value={form.permanent_address} onChange={(v) => setForm({ ...form, permanent_address: v })} />
-            <Field label="Temporary address" value={form.temporary_address} onChange={(v) => setForm({ ...form, temporary_address: v })} />
+            <Field label="Permanent address (Address, City, State, Pincode)" value={form.permanent_address} onChange={(v) => setForm({ ...form, permanent_address: v })} />
             <Field label="City" value={form.city} onChange={(v) => setForm({ ...form, city: v })} />
             <Field label="State" value={form.state} onChange={(v) => setForm({ ...form, state: v })} />
             <Field label="Pincode" value={form.pincode} onChange={(v) => setForm({ ...form, pincode: v })} />
           </>
         ) : (
           <>
-            <ProfileRow label="Permanent" value={t.permanent_address} />
-            <ProfileRow label="Temporary" value={t.temporary_address} />
+            <ProfileRow label="Permanent address" value={t.permanent_address} />
             <ProfileRow label="City" value={p.city} />
             <ProfileRow label="State" value={p.state} />
             <ProfileRow label="Pincode" value={p.pincode} />
@@ -374,7 +360,6 @@ export function TenantProfilePortalPage() {
             <ProfileRow label="Hostel" value={hostel.name} />
             <ProfileRow label="Room" value={room?.room_no ?? 'Assignment pending'} />
             <ProfileRow label="Floor" value={room?.floor} />
-            <ProfileRow label="Room type" value={room?.room_type} />
             <ProfileRow label="Joined" value={fmtDate(t.joined_on)} />
             <ProfileRow label="Billing start" value={fmtDate(t.billing_start_date)} />
             <ProfileRow label="Monthly rent" value={fmt(Number(t.monthly_rent ?? 0))} />

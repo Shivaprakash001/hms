@@ -21,11 +21,9 @@ type OnboardingForm = {
   name: string;
   phone: string;
   emergency_contact: string;
-  personal_email: string;
   gender: string;
   date_of_birth: string;
   permanent_address: string;
-  temporary_address: string;
   profile_type: ProfileType;
   college_name: string;
   roll_number: string;
@@ -48,7 +46,7 @@ type OnboardingSettings = {
     maintenance_charge?: number;
     maintenance_type?: string;
     joined_on?: string | null;
-    room?: { room_no?: string; room_type?: string | null; floor?: number | null } | null;
+    room?: { room_no?: string; floor?: number | null } | null;
   };
 };
 
@@ -56,11 +54,9 @@ const initialForm: OnboardingForm = {
   name: '',
   phone: '',
   emergency_contact: '',
-  personal_email: '',
   gender: '',
   date_of_birth: '',
   permanent_address: '',
-  temporary_address: '',
   profile_type: '',
   college_name: '',
   roll_number: '',
@@ -207,11 +203,9 @@ export function CompleteProfilePage() {
           phone: prev.phone || defaults.phone || '',
           emergency_contact:
             prev.emergency_contact || defaults.emergency_contact || '',
-          personal_email: prev.personal_email || defaults.personal_email || user.email || '',
           gender: prev.gender || defaults.gender || '',
           date_of_birth: prev.date_of_birth || defaults.date_of_birth || '',
           permanent_address: prev.permanent_address || defaults.permanent_address || '',
-          temporary_address: prev.temporary_address || defaults.temporary_address || '',
           profile_type: (prev.profile_type || defaults.profile_type || '') as ProfileType,
           college_name: prev.college_name || defaults.college_name || '',
           roll_number: prev.roll_number || defaults.roll_number || '',
@@ -281,9 +275,6 @@ export function CompleteProfilePage() {
       setError(message);
       return;
     }
-    if (step === 1 && !form.temporary_address.trim()) {
-      update('temporary_address', form.permanent_address);
-    }
     setError('');
     setStep((current) => Math.min(3, current + 1));
   };
@@ -323,11 +314,11 @@ export function CompleteProfilePage() {
           name: form.name.trim(),
           phone: normalizeIndianPhone(form.phone),
           emergency_contact: form.emergency_contact.trim(),
-          personal_email: form.personal_email.trim() || null,
+          personal_email: null,
           gender: form.gender,
           date_of_birth: form.date_of_birth || null,
           permanent_address: form.permanent_address.trim(),
-          temporary_address: form.temporary_address.trim() || form.permanent_address.trim(),
+          temporary_address: form.permanent_address.trim(),
           address: form.permanent_address.trim(),
           profile_type: form.profile_type,
           college_name: form.profile_type === 'STUDENT' ? form.college_name.trim() : null,
@@ -496,12 +487,6 @@ export function CompleteProfilePage() {
                   onChange={(value) => update('emergency_contact', value)}
                   placeholder="Parent or guardian phone"
                 />
-                <Field
-                  label="Personal email"
-                  value={form.personal_email}
-                  onChange={(value) => update('personal_email', value)}
-                  placeholder="you@example.com"
-                />
                 <label className="block">
                   <span className="text-xs font-medium text-muted-foreground">Gender *</span>
                   <select
@@ -524,19 +509,13 @@ export function CompleteProfilePage() {
                 />
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4">
                 <TextArea
-                  label="Permanent address"
+                  label="Permanent address (Address, City, State, Pincode)"
                   value={form.permanent_address}
                   required
                   onChange={(value) => update('permanent_address', value)}
-                  placeholder="House, street, city, state"
-                />
-                <TextArea
-                  label="Temporary address"
-                  value={form.temporary_address}
-                  onChange={(value) => update('temporary_address', value)}
-                  placeholder="Leave blank to use permanent address"
+                  placeholder="House, street, city, state, pincode"
                 />
               </div>
             </div>

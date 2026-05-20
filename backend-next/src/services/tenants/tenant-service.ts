@@ -360,7 +360,7 @@ export class TenantService {
       p.name, p.email, p.phone || tenant.phone_1,
       p.emergency_contact, tenant.college_name,
       tenant.roll_number, tenant.year_of_study, tenant.branch,
-      tenant.temporary_address || tenant.permanent_address,
+      tenant.permanent_address,
     ];
     return required.every(field => field !== null && field !== undefined && field !== "");
   }

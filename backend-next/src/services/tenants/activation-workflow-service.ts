@@ -284,6 +284,7 @@ export class ActivationWorkflowService {
     if (!(tenant.phone_1 || profile.phone)) missingTier1.push("phone");
     if (!tenant.gender) missingTier1.push("gender");
     if (!tenant.date_of_birth) missingTier1.push("date_of_birth");
+    if (!tenant.phone_3) missingTier1.push("emergency_phone");
 
     const profileCompleted = missingTier1.length === 0;
     const rulesAccepted = Boolean(latestAcceptance);
@@ -439,7 +440,6 @@ export class ActivationWorkflowService {
         hostel_name: hostel.name,
         room_number: room?.room_no ?? null,
         floor: room?.floor ?? null,
-        room_type: room?.room_type ?? null,
         capacity: room?.capacity ?? null,
         current_occupancy: room ? roommateCount + 1 : null,
         roommates_count: roommateCount,
@@ -554,12 +554,12 @@ export class ActivationWorkflowService {
     const guardianPhone = data?.guardian_phone || data?.phone_2
       ? normalizeIndianPhone(data?.guardian_phone || data?.phone_2)
       : null;
-    const emergencyPhone = data?.phone_3 || data?.emergency_phone
-      ? normalizeIndianPhone(data?.phone_3 || data?.emergency_phone)
+    const emergencyPhone = data?.phone_3 || data?.emergency_phone || data?.emergency_contact
+      ? normalizeIndianPhone(data?.phone_3 || data?.emergency_phone || data?.emergency_contact)
       : null;
     if (!phone) throw new Error("VALIDATION_ERROR: Valid primary phone is required");
     if (guardianPhone === null && (data?.guardian_phone || data?.phone_2)) throw new Error("VALIDATION_ERROR: Valid guardian phone is required");
-    if (emergencyPhone === null && (data?.phone_3 || data?.emergency_phone)) throw new Error("VALIDATION_ERROR: Valid emergency phone is required");
+    if (!emergencyPhone) throw new Error("VALIDATION_ERROR: Valid emergency contact phone is required");
     if (!["Male", "Female", "Other", "Prefer not to say"].includes(gender)) throw new Error("VALIDATION_ERROR: Gender is required");
     if (!dob) throw new Error("VALIDATION_ERROR: Valid date of birth is required");
 

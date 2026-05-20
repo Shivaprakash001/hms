@@ -499,6 +499,7 @@ export function ActivateAccountPage() {
               <SectionHeading icon={<ShieldCheck className="w-5 h-5" />} title="Complete required profile details" text="Tier 1 fields are required for activation. Other details improve hostel records and can be completed now or later." />
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Primary mobile" required value={profile.phone} onChange={(v) => setProfile({ ...profile, phone: phoneDigits(v) })} />
+                <Field label="Emergency contact (Mobile) *" required value={profile.emergency_phone} onChange={(v) => setProfile({ ...profile, emergency_phone: phoneDigits(v) })} />
                 <label className="block">
                   <span className="text-xs font-semibold text-muted-foreground">Gender *</span>
                   <select value={profile.gender} onChange={(e) => setProfile({ ...profile, gender: e.target.value })} className={fieldClass}>
@@ -517,8 +518,9 @@ export function ActivateAccountPage() {
                     <option value="WORKING_PROFESSIONAL">Working professional</option>
                   </select>
                 </label>
-                <TextArea label="Permanent address" value={profile.permanent_address} onChange={(v) => setProfile({ ...profile, permanent_address: v })} />
-                <TextArea label="Temporary address" value={profile.temporary_address} onChange={(v) => setProfile({ ...profile, temporary_address: v })} />
+              </div>
+              <div className="grid gap-4">
+                <TextArea label="Permanent address (Address, City, State, Pincode) *" required value={profile.permanent_address} onChange={(v) => setProfile({ ...profile, permanent_address: v })} />
               </div>
 
               {profile.profile_type === 'STUDENT' ? (

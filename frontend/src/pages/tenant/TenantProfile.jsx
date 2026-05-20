@@ -331,8 +331,6 @@ const TenantProfile = () => {
                         options={['Male', 'Female', 'Other']}
                         onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
                     />
-                    <InfoField label="Personal Email" value={formData.personal_email} icon={Mail} isEditable={isEditing} type="email" onChange={(e) => setFormData({ ...formData, personal_email: e.target.value })} />
-                    <InfoField label="Temporary Address" value={formData.temporary_address || formData.address} icon={MapPin} isEditable={isEditing} onChange={(e) => setFormData({ ...formData, temporary_address: e.target.value, address: e.target.value })} />
                     <div className="md:col-span-2">
                         <InfoField label="Permanent Address" value={formData.permanent_address} icon={MapPin} isEditable={isEditing} onChange={(e) => setFormData({ ...formData, permanent_address: e.target.value })} />
                     </div>
