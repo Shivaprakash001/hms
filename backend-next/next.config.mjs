@@ -32,19 +32,26 @@ const nextConfig = {
       process.env.FRONTEND_URL ||
       process.env.NEXT_PUBLIC_FRONTEND_URL ||
       "";
-    const frontendBase = rawFrontend.replace(/\/+$/, "");
+    let frontendBase = rawFrontend.replace(/\/+$/, "");
 
-    // Only redirect when a DIFFERENT frontend URL is explicitly configured.
-    // This prevents an infinite redirect loop when this server IS the frontend domain.
-    if (!frontendBase) return [];
+    if (!frontendBase || frontendBase.includes("api.sriadithyahostels.in")) {
+      frontendBase = "https://sriadithyahostels.in";
+    }
 
     // Next.js automatically preserves query strings (e.g. ?token=…) on
     // external redirects, so the activation token reaches the frontend.
-    return FRONTEND_SPA_ROUTES.map((route) => ({
-      source: route,
-      destination: `${frontendBase}${route}`,
-      permanent: false,
-    }));
+    return FRONTEND_SPA_ROUTES.flatMap((route) => [
+      {
+        source: route,
+        destination: `${frontendBase}${route}`,
+        permanent: false,
+      },
+      {
+        source: `${route}/:path*`,
+        destination: `${frontendBase}${route}/:path*`,
+        permanent: false,
+      },
+    ]);
   },
 };
 

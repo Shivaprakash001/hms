@@ -46,8 +46,13 @@ function joinUrl(base: string, path = "") {
 }
 
 export function getFrontendUrl() {
-  return normalizeUrl(process.env.NEXT_PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL) || PRODUCTION_FRONTEND_URL;
+  const resolved = normalizeUrl(process.env.NEXT_PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL) || PRODUCTION_FRONTEND_URL;
+  if (resolved.includes("api.sriadithyahostels.in")) {
+    return PRODUCTION_FRONTEND_URL;
+  }
+  return resolved;
 }
+
 
 export function getBackendUrl() {
   return normalizeUrl(
