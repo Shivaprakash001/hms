@@ -42,7 +42,7 @@ are derived from `process.env.*` grep across the codebase and from
 | Variable | Required | Purpose | Evidence |
 |---|---|---|---|
 | `RESEND_API_KEY` | recommended | Resend API token (without it email falls back to simulation-log mode) | `lib/services/email-service.ts:6, 33` |
-| `EMAIL_FROM` | optional | Default `From:` header (default `noreply@mail.sriadithyahostels.in`) | `email-service.ts:7` |
+| `EMAIL_FROM` | optional | Default `From:` header (default `Sri Adithya Hostels <noreply@notify.sriadithyahostels.in>`). A bare domain like `notify.sriadithyahostels.in` is normalized automatically. | `email-service.ts:7` |
 
 ### 1.5 Payments — PhonePe (only integrated provider)
 

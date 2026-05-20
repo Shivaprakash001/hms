@@ -5,7 +5,31 @@ import type { HostelPreferences } from "../preferences";
 import { frontendUrl } from "../config/domains";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const DEFAULT_FROM = process.env.EMAIL_FROM || "noreply@mail.sriadithyahostels.in";
+const DEFAULT_FROM_DOMAIN = "notify.sriadithyahostels.in";
+const DEFAULT_FROM_ADDRESS = `noreply@${DEFAULT_FROM_DOMAIN}`;
+const DEFAULT_FROM = `Sri Adithya Hostels <${DEFAULT_FROM_ADDRESS}>`;
+
+function resolveEmailFrom(value?: string | null) {
+  const raw = String(value || "").trim();
+  if (!raw) return DEFAULT_FROM;
+
+  // Resend requires either email@example.com or Name <email@example.com>.
+  if (/^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$/.test(raw) || /^.+<[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+>$/.test(raw)) {
+    return raw;
+  }
+
+  const domain = raw
+    .replace(/^https?:\/\//i, "")
+    .replace(/^mailto:/i, "")
+    .replace(/\/.*$/, "")
+    .trim();
+
+  if (/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(domain)) {
+    return `Sri Adithya Hostels <noreply@${domain}>`;
+  }
+
+  return DEFAULT_FROM;
+}
 
 export class EmailService {
   private static normalizeProviderError(error: unknown): string {
@@ -39,7 +63,7 @@ export class EmailService {
 
     try {
       const { data, error } = await resend.emails.send({
-        from: DEFAULT_FROM,
+        from: resolveEmailFrom(process.env.EMAIL_FROM),
         to: [to],
         subject,
         html,
