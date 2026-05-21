@@ -4,7 +4,9 @@ import { normalizeIndianPhone } from "@/lib/utils/phone-utils";
 const DOC_TYPE_LABELS: Record<string, string> = {
   AADHAAR: "Aadhaar",
   COLLEGE_ID: "College ID",
-  RENTAL_AGREEMENT: "Rental Agreement",
+  WORK_ID: "Work ID",
+  PASSPORT: "Passport",
+  PAN: "PAN",
   OTHER: "Other",
 };
 
@@ -35,6 +37,7 @@ export async function getTenantPortalProfile(profileId: string) {
           city: true,
           state: true,
           pincode: true,
+          logo_url: true,
           upi_id: true,
           preferences_config: true,
           owner_id: true,
@@ -177,6 +180,7 @@ export async function getTenantPortalProfile(profileId: string) {
       ? {
           id: hostel.id,
           name: hostel.name,
+          logo_url: hostel.logo_url,
           phone: hostel.phone,
           address: hostel.address,
           city: hostel.city,

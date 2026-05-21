@@ -11,10 +11,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
     const { id } = params;
 
-    const tenant = await prisma.tenants.findUnique({
+    const tenant = await prisma.tenants.findFirst({
       where: {
-        id: id,
-        owner_id: session.sub, // Enforce multi-tenant boundary!
+        id,
+        ...(session.role === "OWNER" ? { owner_id: session.sub } : {}),
       },
       include: {
         profiles: true,
@@ -31,7 +31,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         rent_obligations: {
           take: 5,
           orderBy: { due_date: "desc" },
-        }
+        },
+        identification_documents: {
+          where: { is_active: true },
+          orderBy: { created_at: "desc" },
+        },
       },
     });
 

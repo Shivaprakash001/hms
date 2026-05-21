@@ -15,14 +15,21 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const hostelId = searchParams.get("hostelId");
 
+    const ownerScopedTenant =
+      session.role === "ADMIN"
+        ? {
+            ...(hostelId ? { hostel_id: hostelId } : {}),
+          }
+        : {
+            owner_id: session.sub,
+            ...(hostelId ? { hostel_id: hostelId } : {}),
+          };
+
     const documents = await prisma.identificationDocument.findMany({
       where: {
         document_status: "PENDING",
         is_active: true,
-        tenant: {
-          owner_id: session.sub,
-          ...(hostelId ? { hostel_id: hostelId } : {}),
-        },
+        tenant: ownerScopedTenant,
       },
       include: {
         tenant: {
@@ -43,7 +50,7 @@ export async function GET(req: NextRequest) {
                 },
               },
             },
-            hostel: {
+            hostels: {
               select: {
                 name: true,
               },
@@ -62,12 +69,16 @@ export async function GET(req: NextRequest) {
         id: doc.id,
         tenant_id: doc.tenant_id,
         doc_type: doc.doc_type,
+        doc_number: doc.doc_number,
+        document_status: doc.document_status,
         file_url: doc.file_url,
+        mime_type: doc.mime_type,
+        file_size: doc.file_size,
         uploaded_at: doc.created_at,
         tenant_name: doc.tenant.profiles?.name || "Tenant",
         tenant_phone: doc.tenant.profiles?.phone || doc.tenant.phone_1 || "",
         room_no: activeAlloc?.room?.room_no || "N/A",
-        hostel_name: doc.tenant.hostel?.name || "Hostel",
+        hostel_name: doc.tenant.hostels?.name || "Hostel",
         hostel_id: doc.tenant.hostel_id,
       };
     });

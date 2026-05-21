@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { FileText, Check, X, Send, MessageSquare, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
+import { FileText, Check, X, Send, MessageSquare, ChevronDown, ChevronUp, ExternalLink, ShieldCheck } from 'lucide-react';
 import { tenantService } from '@features/tenants/api';
 import { queryKeys } from '@lib/queryKeys';
 
@@ -16,6 +16,8 @@ export function VerificationPanel({ hostelId, tenantId, documents, onUpdated }: 
   const qc = useQueryClient();
   const [newMessages, setNewMessages] = useState<Record<string, string>>({});
   const [expandedChats, setExpandedChats] = useState<Record<string, boolean>>({});
+  const [rejectingDocId, setRejectingDocId] = useState<string>('');
+  const [rejectReasons, setRejectReasons] = useState<Record<string, string>>({});
 
   const verifyMutation = useMutation({
     mutationFn: (docId: string) => tenantService.verifyDocument(tenantId, docId),
@@ -32,6 +34,7 @@ export function VerificationPanel({ hostelId, tenantId, documents, onUpdated }: 
       tenantService.rejectDocument(tenantId, docId, reason),
     onSuccess: () => {
       toast.success('Document query initiated');
+      setRejectingDocId('');
       qc.invalidateQueries({ queryKey: queryKeys.tenants.full(hostelId, tenantId) });
       onUpdated?.();
     },
@@ -47,6 +50,16 @@ export function VerificationPanel({ hostelId, tenantId, documents, onUpdated }: 
       onUpdated?.();
     },
     onError: () => toast.error('Failed to send message'),
+  });
+
+  const verifyAllMutation = useMutation({
+    mutationFn: () => tenantService.verifyAllDocuments(tenantId),
+    onSuccess: () => {
+      toast.success('All active documents approved');
+      qc.invalidateQueries({ queryKey: queryKeys.tenants.full(hostelId, tenantId) });
+      onUpdated?.();
+    },
+    onError: () => toast.error('Could not approve all documents'),
   });
 
   if (!documents?.length) {
@@ -68,12 +81,57 @@ export function VerificationPanel({ hostelId, tenantId, documents, onUpdated }: 
     setExpandedChats((prev) => ({ ...prev, [docId]: !prev[docId] }));
   };
 
+  const pendingCount = documents.filter((doc) => String(doc.document_status ?? doc.status ?? 'PENDING').toUpperCase() === 'PENDING').length;
+  const approvedCount = documents.filter((doc) => {
+    const status = String(doc.document_status ?? doc.status ?? '').toUpperCase();
+    return status === 'APPROVED' || doc.is_verified === true;
+  }).length;
+  const rejectedCount = documents.filter((doc) => String(doc.document_status ?? doc.status ?? '').toUpperCase() === 'REJECTED').length;
+  const unverifiedCount = documents.length - approvedCount;
+
   return (
     <div className="space-y-4">
+      <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Document verification</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Review active tenant submissions. Replacements archive the old file automatically.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={unverifiedCount === 0 || verifyAllMutation.isPending}
+            onClick={() => verifyAllMutation.mutate()}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            Approve all unverified
+          </button>
+        </div>
+        <div className="grid grid-cols-3 gap-2 mt-4 text-center">
+          <div className="rounded-xl bg-amber-500/10 px-3 py-2">
+            <p className="text-lg font-bold text-amber-600">{pendingCount}</p>
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Pending</p>
+          </div>
+          <div className="rounded-xl bg-emerald-500/10 px-3 py-2">
+            <p className="text-lg font-bold text-emerald-600">{approvedCount}</p>
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Approved</p>
+          </div>
+          <div className="rounded-xl bg-rose-500/10 px-3 py-2">
+            <p className="text-lg font-bold text-rose-600">{rejectedCount}</p>
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Queried</p>
+          </div>
+        </div>
+      </div>
+
       {documents.map((doc) => {
         const id = String(doc.id ?? '');
         const status = String(doc.document_status ?? doc.status ?? 'PENDING').toUpperCase();
         const fileUrl = String(doc.file_url ?? '');
+        const docNumber = String(doc.doc_number ?? '').trim();
+        const fileSize = Number(doc.file_size ?? 0);
+        const fileSizeLabel = fileSize > 0 ? `${(fileSize / 1024 / 1024).toFixed(1)} MB` : '';
         
         let chatMessages: { sender: string; sender_name: string; message: string; timestamp: string }[] = [];
         try {
@@ -102,6 +160,11 @@ export function VerificationPanel({ hostelId, tenantId, documents, onUpdated }: 
                   <p className="text-xs text-muted-foreground mt-0.5">
                     Uploaded on {new Date(String(doc.created_at)).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                   </p>
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                    {docNumber && <span>No. {docNumber}</span>}
+                    {doc.mime_type && <span>{String(doc.mime_type).replace('application/', '').replace('image/', '').toUpperCase()}</span>}
+                    {fileSizeLabel && <span>{fileSizeLabel}</span>}
+                  </div>
                 </div>
               </div>
               
@@ -130,7 +193,8 @@ export function VerificationPanel({ hostelId, tenantId, documents, onUpdated }: 
 
             {/* Verification action buttons for Owner */}
             {status === 'PENDING' && (
-              <div className="flex gap-2.5 mt-4 pt-4 border-t border-border/60">
+              <div className="mt-4 pt-4 border-t border-border/60 space-y-3">
+                <div className="flex gap-2.5">
                 <button
                   type="button"
                   disabled={verifyMutation.isPending}
@@ -142,15 +206,43 @@ export function VerificationPanel({ hostelId, tenantId, documents, onUpdated }: 
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    const reason = window.prompt('Specify reason/query for the tenant:');
-                    if (reason?.trim()) rejectMutation.mutate({ docId: id, reason: reason.trim() });
-                  }}
+                  onClick={() => setRejectingDocId(rejectingDocId === id ? '' : id)}
                   className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 active:scale-98 transition-all text-xs font-semibold border border-rose-500/20"
                 >
                   <X className="w-4 h-4" />
                   Reject / Query
                 </button>
+                </div>
+
+                {rejectingDocId === id && (
+                  <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 space-y-2">
+                    <textarea
+                      rows={3}
+                      maxLength={800}
+                      placeholder="Tell the tenant what needs to be corrected..."
+                      value={rejectReasons[id] || ''}
+                      onChange={(e) => setRejectReasons((prev) => ({ ...prev, [id]: e.target.value }))}
+                      className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-rose-500"
+                    />
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setRejectingDocId('')}
+                        className="rounded-lg border border-border px-3 py-2 text-xs font-medium"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={rejectMutation.isPending || !(rejectReasons[id] || '').trim()}
+                        onClick={() => rejectMutation.mutate({ docId: id, reason: (rejectReasons[id] || '').trim() })}
+                        className="rounded-lg bg-rose-500 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                      >
+                        Send query
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

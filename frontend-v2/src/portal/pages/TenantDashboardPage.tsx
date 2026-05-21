@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
+import { Building2, Loader2, MapPin } from 'lucide-react';
 import { useTenantDashboard } from '@features/tenant-portal/hooks/useTenantDashboard';
 import { TenantPriorityStrip } from '@/portal/components/TenantPriorityStrip';
 import { TenantScorePanel } from '@/portal/components/TenantScorePanel';
@@ -34,9 +34,13 @@ export function TenantDashboardPage() {
 
   const prof = profile?.profile as Record<string, unknown> | undefined;
   const tenant = profile?.tenant as Record<string, unknown> | undefined;
+  const hostel = profile?.hostel as Record<string, unknown> | undefined;
   const name = String(prof?.name ?? 'Tenant');
   const status = String(tenant?.status ?? profile?.status ?? 'ACTIVE');
   const roomNo = profile?.room?.room_no ?? profile?.room_no ?? null;
+  const hostelName = String(hostel?.name ?? 'Sri Adithya Hostels');
+  const hostelLogo = String(hostel?.logo_url ?? '');
+  const hostelLocation = [hostel?.city, hostel?.state].filter(Boolean).join(', ');
   const profileDocs = (profile?.documents ?? documents) as unknown[];
 
   const advanceBalance = Number(advance?.balance ?? 0);
@@ -52,18 +56,52 @@ export function TenantDashboardPage() {
 
   return (
     <div className="space-y-5">
-      <header>
-        <p className="text-sm text-muted-foreground">Welcome back</p>
-        <h1 className="text-xl font-bold text-foreground">Hi, {name.split(' ')[0]}</h1>
-        <div className="mt-2 flex items-center gap-2 flex-wrap">
-          <TenantStatusBadge status={status} size="md" />
-          {roomNo ? (
-            <span className="text-xs text-muted-foreground">Room {String(roomNo)}</span>
-          ) : (
-            <span className="text-xs text-amber-600 font-medium">
-              Room assignment pending from hostel
-            </span>
-          )}
+      <header className="overflow-hidden rounded-2xl border border-accent/20 bg-card shadow-sm">
+        <div className="bg-accent px-5 py-4 text-accent-foreground">
+          <div className="flex items-center gap-3">
+            <div className="h-12 w-12 shrink-0 overflow-hidden rounded-2xl bg-white/15 ring-1 ring-white/25">
+              {hostelLogo ? (
+                <img src={hostelLogo} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center">
+                  <Building2 className="h-6 w-6" />
+                </div>
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] opacity-80">
+                Tenant Home
+              </p>
+              <h1 className="truncate text-2xl font-bold leading-tight">{hostelName}</h1>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-5 py-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm text-muted-foreground">Welcome back,</p>
+              <p className="truncate text-xl font-bold text-foreground">{name.split(' ')[0]}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                {hostelLocation && (
+                  <span className="inline-flex items-center gap-1">
+                    <MapPin className="h-3.5 w-3.5 text-accent" />
+                    {hostelLocation}
+                  </span>
+                )}
+                {roomNo ? (
+                  <span className="rounded-full bg-accent/10 px-2.5 py-1 font-medium text-accent">
+                    Room {String(roomNo)}
+                  </span>
+                ) : (
+                  <span className="font-medium text-amber-600">
+                    Room assignment pending
+                  </span>
+                )}
+              </div>
+            </div>
+            <TenantStatusBadge status={status} size="md" />
+          </div>
         </div>
       </header>
 

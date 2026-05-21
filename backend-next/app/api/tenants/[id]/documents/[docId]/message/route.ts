@@ -23,6 +23,9 @@ export async function POST(
     if (!text) {
       return NextResponse.json({ error: { message: "Message cannot be empty" } }, { status: 400 });
     }
+    if (text.length > 800) {
+      return NextResponse.json({ error: { message: "Message must be under 800 characters" } }, { status: 400 });
+    }
 
     const doc = await prisma.identificationDocument.findUnique({
       where: { id: docId },
@@ -31,6 +34,9 @@ export async function POST(
 
     if (!doc || doc.tenant_id !== tenantId) {
       return NextResponse.json({ error: { message: "Document not found" } }, { status: 404 });
+    }
+    if (!doc.is_active) {
+      return NextResponse.json({ error: { message: "Archived document threads are read-only" } }, { status: 409 });
     }
 
     const tenant = doc.tenant;
@@ -45,7 +51,7 @@ export async function POST(
       sender = "tenant";
       senderName = tenant.profiles?.name || "Tenant";
     } else if (["OWNER", "ADMIN"].includes(session.role)) {
-      if (tenant.owner_id !== session.sub) {
+      if (session.role === "OWNER" && tenant.owner_id !== session.sub) {
         return NextResponse.json({ error: { message: "Forbidden" } }, { status: 403 });
       }
       sender = "owner";

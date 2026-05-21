@@ -14,7 +14,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
     const { id } = params;
 
-    // Owners see documents of their tenants, tenants can only see their own
+    // Owners see documents of their tenants, tenants can only see their own.
+    // Admin may inspect across owners.
     if (session.role === "TENANT") {
       const tenant = await prisma.tenants.findUnique({
         where: { profile_id: session.sub },
@@ -22,6 +23,16 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       if (!tenant || tenant.id !== id) {
         return NextResponse.json({ error: { message: "Forbidden" } }, { status: 403 });
       }
+    } else if (session.role === "OWNER") {
+      const tenant = await prisma.tenants.findFirst({
+        where: { id, owner_id: session.sub },
+        select: { id: true },
+      });
+      if (!tenant) {
+        return NextResponse.json({ error: { message: "Forbidden" } }, { status: 403 });
+      }
+    } else if (session.role !== "ADMIN") {
+      return NextResponse.json({ error: { message: "Forbidden" } }, { status: 403 });
     }
 
     const documents = await prisma.identificationDocument.findMany({

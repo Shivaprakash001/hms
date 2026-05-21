@@ -27,8 +27,9 @@ const fmtDate = (d?: string | null) =>
 const DOC_TYPES = [
   { value: 'AADHAAR', label: 'Aadhaar' },
   { value: 'COLLEGE_ID', label: 'College ID' },
-  { value: 'RENTAL_AGREEMENT', label: 'Rental Agreement' },
-  { value: 'OTHER', label: 'Other' },
+  { value: 'WORK_ID', label: 'Work ID' },
+  { value: 'PASSPORT', label: 'Passport' },
+  { value: 'PAN', label: 'PAN' },
 ] as const;
 
 function Field({
@@ -69,6 +70,7 @@ export function TenantProfilePortalPage() {
   const docRef = useRef<HTMLInputElement>(null);
   const [editing, setEditing] = useState(false);
   const [docType, setDocType] = useState<string>('AADHAAR');
+  const [docNumber, setDocNumber] = useState<string>('');
   const [form, setForm] = useState<Record<string, string>>({});
   const [selectedCollege, setSelectedCollege] = useState<string>('');
   const [selectedCourse, setSelectedCourse] = useState<string>('');
@@ -100,10 +102,12 @@ export function TenantProfilePortalPage() {
   });
 
   const docMutation = useMutation({
-    mutationFn: ({ file, type }: { file: File; type: string }) =>
-      tenantPortalApi.uploadMyDocument(type, file),
+    mutationFn: ({ file, type, number }: { file: File; type: string; number: string }) =>
+      tenantPortalApi.uploadMyDocument(type, file, number),
     onSuccess: () => {
       toast.success('Document uploaded for review');
+      setDocNumber('');
+      if (docRef.current) docRef.current.value = '';
       queryClient.invalidateQueries({ queryKey: ['tenant'] });
     },
     onError: () => toast.error('Document upload failed'),
@@ -556,6 +560,9 @@ export function TenantProfilePortalPage() {
 
       {/* 8 — Documents */}
       <ProfileSection id="documents" title="Documents & verification">
+        <div className="mb-4 rounded-xl border border-accent/20 bg-accent/5 p-3 text-xs text-muted-foreground">
+          Upload a clear PDF or image. Replacing a document archives the older copy and sends the new one to your owner for review.
+        </div>
         <ul className="space-y-2 mb-4">
           {docs.length === 0 && (
             <li className="text-sm text-muted-foreground">No documents uploaded yet.</li>
@@ -595,6 +602,9 @@ export function TenantProfilePortalPage() {
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground">Uploaded {fmtDate(String(d.uploaded_at || d.created_at))}</p>
+                {d.doc_number && (
+                  <p className="text-xs text-muted-foreground">Document no. {String(d.doc_number)}</p>
+                )}
                 
                 {/* Chat section for Document queries */}
                 <div className="mt-2 pt-2 border-t border-border/60 space-y-2">
@@ -684,13 +694,20 @@ export function TenantProfilePortalPage() {
             ))}
           </select>
           <input
+            type="text"
+            value={docNumber}
+            onChange={(e) => setDocNumber(e.target.value)}
+            placeholder="Document number (optional)"
+            className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm"
+          />
+          <input
             ref={docRef}
             type="file"
             accept="image/jpeg,image/png,image/webp,application/pdf"
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
-              if (f) docMutation.mutate({ file: f, type: docType });
+              if (f) docMutation.mutate({ file: f, type: docType, number: docNumber });
             }}
           />
           <button

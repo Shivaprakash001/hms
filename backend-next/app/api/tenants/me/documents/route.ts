@@ -7,7 +7,7 @@ import { prisma } from "@/lib/db";
 import { imagekit } from "@/lib/imagekit";
 import { eventLog } from "@/lib/services/event-log-service";
 
-const ALLOWED_TYPES = ["AADHAAR", "COLLEGE_ID", "RENTAL_AGREEMENT", "OTHER"] as const;
+const ALLOWED_TYPES = ["AADHAAR", "COLLEGE_ID", "WORK_ID", "PASSPORT", "PAN", "OTHER"] as const;
 const ALLOWED_MIME = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
 const MAX_SIZE = 5 * 1024 * 1024;
 
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
         data: { is_active: false },
       });
 
-      return tx.identificationDocument.create({
+      const document = await tx.identificationDocument.create({
         data: {
           tenant_id: tenant.id,
           doc_type: docType,
@@ -90,6 +90,13 @@ export async function POST(req: NextRequest) {
           uploaded_by: session.sub,
         },
       });
+
+      await tx.tenants.update({
+        where: { id: tenant.id },
+        data: { document_verified: false },
+      });
+
+      return document;
     });
 
     await eventLog.log("documents_uploaded", tenant.owner_id || null, {

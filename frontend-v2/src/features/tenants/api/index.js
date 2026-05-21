@@ -38,6 +38,10 @@ export const tenantService = {
         const response = await api.patch(`/tenants/${tenantId}/documents/${docId}/verify`);
         return unwrap(response);
     },
+    verifyAllDocuments: async (tenantId) => {
+        const response = await api.patch(`/tenants/${tenantId}/documents/bulk-verify`);
+        return unwrap(response);
+    },
     rejectDocument: async (tenantId, docId, reason) => {
         const response = await api.patch(`/tenants/${tenantId}/documents/${docId}/reject`, { reason });
         return unwrap(response);

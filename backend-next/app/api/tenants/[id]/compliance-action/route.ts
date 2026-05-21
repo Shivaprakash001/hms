@@ -54,7 +54,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       });
 
       const activationLink = frontendUrl(`/activate/${token}`);
-      const notification = await prisma.notification.create({
+      const notification = await prisma.notifications.create({
         data: {
           profile_id: tenant.profile_id,
           title: "Activation link updated",
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           ? `${tenant.hostels?.name || "Your hostel"} has requested that you review and acknowledge the hostel rules.`
           : `${tenant.hostels?.name || "Your hostel"} needs your identity documents for verification.`;
 
-      const notification = await prisma.notification.create({
+      const notification = await prisma.notifications.create({
         data: {
           profile_id: tenant.profile_id,
           title,

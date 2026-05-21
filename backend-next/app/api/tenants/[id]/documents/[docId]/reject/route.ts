@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { eventLog } from "@/lib/services/event-log-service";
 import crypto from "crypto";
 
 export async function PATCH(
@@ -18,7 +19,13 @@ export async function PATCH(
 
     const { id: tenantId, docId } = params;
     const body = await req.json().catch(() => ({}));
-    const reason = String(body.reason || "Verification failed").trim();
+    const reason = String(body.reason || "").trim();
+    if (!reason) {
+      return NextResponse.json({ error: { message: "Reason is required" } }, { status: 400 });
+    }
+    if (reason.length > 800) {
+      return NextResponse.json({ error: { message: "Reason must be under 800 characters" } }, { status: 400 });
+    }
 
     const doc = await prisma.identificationDocument.findUnique({
       where: { id: docId },
@@ -27,6 +34,12 @@ export async function PATCH(
 
     if (!doc || doc.tenant_id !== tenantId) {
       return NextResponse.json({ error: { message: "Document not found" } }, { status: 404 });
+    }
+    if (session.role === "OWNER" && doc.tenant.owner_id !== session.sub) {
+      return NextResponse.json({ error: { message: "Forbidden" } }, { status: 403 });
+    }
+    if (!doc.is_active) {
+      return NextResponse.json({ error: { message: "Archived documents cannot be rejected" } }, { status: 409 });
     }
 
     // Get owner's name
@@ -82,6 +95,13 @@ export async function PATCH(
       where: { id: tenantId },
       data: { document_verified: false },
     });
+
+    await eventLog.log("document_rejected", doc.tenant.owner_id || null, {
+      tenant_id: tenantId,
+      document_id: docId,
+      doc_type: doc.doc_type,
+      rejected_by: session.sub,
+    }, tenantId);
 
     return NextResponse.json({ success: true, data: updatedDoc });
   } catch (error) {

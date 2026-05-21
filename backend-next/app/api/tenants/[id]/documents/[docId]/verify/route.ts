@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { eventLog } from "@/lib/services/event-log-service";
 import crypto from "crypto";
 
 export async function PATCH(
@@ -25,6 +26,12 @@ export async function PATCH(
 
     if (!doc || doc.tenant_id !== tenantId) {
       return NextResponse.json({ error: { message: "Document not found" } }, { status: 404 });
+    }
+    if (session.role === "OWNER" && doc.tenant.owner_id !== session.sub) {
+      return NextResponse.json({ error: { message: "Forbidden" } }, { status: 403 });
+    }
+    if (!doc.is_active) {
+      return NextResponse.json({ error: { message: "Archived documents cannot be verified" } }, { status: 409 });
     }
 
     const updatedDoc = await prisma.identificationDocument.update({
@@ -59,6 +66,13 @@ export async function PATCH(
         data: { document_verified: true },
       });
     }
+
+    await eventLog.log("document_verified", doc.tenant.owner_id || null, {
+      tenant_id: tenantId,
+      document_id: docId,
+      doc_type: doc.doc_type,
+      approved_by: session.sub,
+    }, tenantId);
 
     return NextResponse.json({ success: true, data: updatedDoc });
   } catch (error) {

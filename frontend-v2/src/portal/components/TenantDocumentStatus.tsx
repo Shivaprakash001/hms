@@ -3,17 +3,20 @@ import { CheckCircle2, Clock, FileWarning } from 'lucide-react';
 
 interface Doc {
   id?: string;
+  doc_type?: string;
   document_type?: string;
   type?: string;
   document_verified?: boolean;
+  is_verified?: boolean;
   verified?: boolean;
   status?: string;
+  document_status?: string;
 }
 
 function docStatus(doc: Doc) {
-  const verified = doc.document_verified ?? doc.verified;
-  const status = String(doc.status ?? '').toUpperCase();
-  if (verified === true || status === 'VERIFIED') return 'verified';
+  const verified = doc.document_verified ?? doc.is_verified ?? doc.verified;
+  const status = String(doc.document_status ?? doc.status ?? '').toUpperCase();
+  if (verified === true || status === 'APPROVED' || status === 'VERIFIED') return 'verified';
   if (status === 'PENDING' || status === 'UPLOADED') return 'pending';
   return 'missing';
 }
@@ -40,9 +43,10 @@ export function TenantDocumentStatus({ documents }: { documents?: Doc[] | null }
   const docs = Array.isArray(documents) ? documents : [];
 
   const defaults = [
-    { type: 'AADHAAR', document_type: 'AADHAAR' },
-    { type: 'COLLEGE_ID', document_type: 'COLLEGE_ID' },
-    { type: 'RENTAL_AGREEMENT', document_type: 'RENTAL_AGREEMENT' },
+    { type: 'AADHAAR', doc_type: 'AADHAAR' },
+    { type: 'COLLEGE_ID', doc_type: 'COLLEGE_ID' },
+    { type: 'WORK_ID', doc_type: 'WORK_ID' },
+    { type: 'PAN', doc_type: 'PAN' },
   ];
 
   const display =
@@ -62,7 +66,7 @@ export function TenantDocumentStatus({ documents }: { documents?: Doc[] | null }
         {display.map((doc, i) => {
           const st = docStatus(doc);
           const Icon = icon[st];
-          const name = String(doc.document_type ?? doc.type ?? 'Document').replace(/_/g, ' ');
+          const name = String(doc.doc_type ?? doc.document_type ?? doc.type ?? 'Document').replace(/_/g, ' ');
           return (
             <li key={doc.id ?? i} className="flex items-center justify-between text-sm">
               <span className="text-foreground capitalize">{name}</span>
