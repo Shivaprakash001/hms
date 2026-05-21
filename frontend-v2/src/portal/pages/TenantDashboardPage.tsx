@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Building2, Loader2, MapPin } from 'lucide-react';
+import { Building2, DoorOpen, Loader2, MapPin } from 'lucide-react';
 import { useTenantDashboard } from '@features/tenant-portal/hooks/useTenantDashboard';
 import { TenantPriorityStrip } from '@/portal/components/TenantPriorityStrip';
 import { TenantScorePanel } from '@/portal/components/TenantScorePanel';
@@ -42,6 +42,8 @@ export function TenantDashboardPage() {
   const hostelLogo = String(hostel?.logo_url ?? '');
   const hostelLocation = [hostel?.city, hostel?.state].filter(Boolean).join(', ');
   const profileDocs = (profile?.documents ?? documents) as unknown[];
+  const activeMoveOut =
+    moveOut?.status && !['COMPLETED', 'CANCELLED', 'REJECTED'].includes(String(moveOut.status).toUpperCase());
 
   const advanceBalance = Number(advance?.balance ?? 0);
   const depositCredits = (advance?.entries ?? []).filter(
@@ -106,6 +108,24 @@ export function TenantDashboardPage() {
       </header>
 
       <TenantPriorityStrip dues={dues} payments={payments} moveOut={moveOut} />
+
+      {!activeMoveOut && status === 'ACTIVE' && (
+        <Link
+          to="/tenant/move-out"
+          className="flex items-center justify-between gap-3 rounded-2xl border border-accent/20 bg-accent/5 p-4 text-sm transition-colors hover:border-accent/40"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-accent-foreground">
+              <DoorOpen className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="font-semibold text-foreground">Planning to move out?</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">Send a request to start inspection and settlement.</p>
+            </div>
+          </div>
+          <span className="shrink-0 text-xs font-semibold text-accent">Start</span>
+        </Link>
+      )}
 
       {profileDocs.length === 0 && (
         <Link

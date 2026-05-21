@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Loader2 } from 'lucide-react';
+import { CalendarDays, DoorOpen, Loader2 } from 'lucide-react';
 import { moveOutService } from '@features/move-out/api';
 import { useTenantDashboard } from '@features/tenant-portal/hooks/useTenantDashboard';
 import { MoveOutStepper } from '@features/tenants/components/moveout/MoveOutStepper';
@@ -11,6 +11,7 @@ const fmt = (n: number) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
 export function TenantMoveOutPage() {
   const [plannedDate, setPlannedDate] = useState('');
   const [reason, setReason] = useState('PERSONAL_REASONS');
+  const [reasonText, setReasonText] = useState('');
   const { advance, dues } = useTenantDashboard();
 
   const { data: timeline, isLoading, refetch } = useQuery({
@@ -23,6 +24,7 @@ export function TenantMoveOutPage() {
       moveOutService.submitRequest({
         plannedExitDate: plannedDate,
         reason,
+        reasonText,
       }),
     onSuccess: () => {
       toast.success('Move-out request submitted');
@@ -32,13 +34,22 @@ export function TenantMoveOutPage() {
       toast.error(e?.response?.data?.error?.message ?? 'Failed to submit'),
   });
 
-  const request = (timeline as Record<string, unknown>)?.request ?? timeline;
-  const settlement = (timeline as Record<string, unknown>)?.settlement as
+  const timelineData = (timeline ?? {}) as Record<string, unknown>;
+  const active = Boolean(timelineData.active);
+  const requestFromTimeline = timelineData.request as Record<string, unknown> | undefined;
+  const request = requestFromTimeline ?? (active
+    ? {
+        id: timelineData.request_id,
+        status: timelineData.status,
+        planned_exit_date: timelineData.planned_exit_date,
+      }
+    : null);
+  const settlement = timelineData.settlement as
     | Record<string, unknown>
     | undefined;
 
   const cancelMutation = useMutation({
-    mutationFn: () => moveOutService.cancelRequest(request.id),
+    mutationFn: () => moveOutService.cancelRequest(String(request?.id ?? '')),
     onSuccess: () => {
       toast.success('Move-out request cancelled');
       refetch();
@@ -54,7 +65,7 @@ export function TenantMoveOutPage() {
 
   const disputeMutation = useMutation({
     mutationFn: () =>
-      moveOutService.dispute(request.id, {
+      moveOutService.dispute(String(request?.id ?? ''), {
         disputeType,
         description: disputeDescription,
         disputedAmount: Number(disputedAmount) || 0,
@@ -76,7 +87,7 @@ export function TenantMoveOutPage() {
     );
   }
 
-  if (request && typeof request === 'object') {
+  if (active && request && typeof request === 'object') {
     const deposit = Number(advance?.balance ?? settlement?.deposit_amount ?? 0);
     const pendingRent = Number(dues?.total_due ?? settlement?.pending_rent ?? 0);
     const damages = Number(settlement?.damages_amount ?? settlement?.damage_charges ?? 0);
@@ -223,39 +234,78 @@ export function TenantMoveOutPage() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-xl font-bold text-foreground">Request move-out</h1>
-      <p className="text-sm text-muted-foreground">
-        Submit your planned exit date. Your owner will schedule inspection and settlement.
-      </p>
-      <label className="block text-sm">
-        Planned exit date
-        <input
-          type="date"
-          value={plannedDate}
-          onChange={(e) => setPlannedDate(e.target.value)}
-          className="mt-1 w-full px-3 py-2.5 rounded-xl border border-border bg-background"
-        />
-      </label>
-      <label className="block text-sm">
-        Reason
-        <select
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          className="mt-1 w-full px-3 py-2.5 rounded-xl border border-border bg-background"
-        >
-          <option value="PERSONAL_REASONS">Personal reasons</option>
-          <option value="JOB_RELOCATION">Job relocation</option>
-          <option value="COURSE_COMPLETED">Course completed</option>
-          <option value="OTHER">Other</option>
-        </select>
-      </label>
+      <section className="overflow-hidden rounded-2xl border border-accent/20 bg-card shadow-sm">
+        <div className="bg-accent px-5 py-5 text-accent-foreground">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/25">
+              <DoorOpen className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] opacity-80">Exit workflow</p>
+              <h1 className="text-2xl font-bold leading-tight">Request move-out</h1>
+            </div>
+          </div>
+        </div>
+        <div className="px-5 py-4">
+          <p className="text-sm text-muted-foreground">
+            Submit your planned exit date. Your owner will be notified immediately and can schedule inspection and settlement.
+          </p>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-border bg-card p-4 space-y-4">
+        <label className="block text-sm font-medium text-foreground">
+          Planned exit date
+          <div className="relative mt-1">
+            <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="date"
+              value={plannedDate}
+              min={new Date().toISOString().slice(0, 10)}
+              onChange={(e) => setPlannedDate(e.target.value)}
+              className="w-full rounded-xl border border-border bg-background py-3 pl-10 pr-3 text-sm"
+            />
+          </div>
+        </label>
+        <label className="block text-sm font-medium text-foreground">
+          Reason
+          <select
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            className="mt-1 w-full px-3 py-3 rounded-xl border border-border bg-background text-sm"
+          >
+            <option value="PERSONAL_REASONS">Personal reasons</option>
+            <option value="JOB_RELOCATION">Job relocation</option>
+            <option value="COURSE_COMPLETED">Course completed</option>
+            <option value="TOO_EXPENSIVE">Too expensive</option>
+            <option value="POOR_MAINTENANCE">Maintenance concerns</option>
+            <option value="FOOD_QUALITY">Food quality</option>
+            <option value="ROOMMATE_ISSUES">Roommate issues</option>
+            <option value="BETTER_HOSTEL">Moving to another hostel</option>
+            <option value="SAFETY_CONCERNS">Safety concerns</option>
+            <option value="MOVING_CLOSER">Moving closer to college/work</option>
+            <option value="OTHER">Other</option>
+          </select>
+        </label>
+        <label className="block text-sm font-medium text-foreground">
+          Notes for owner <span className="font-normal text-muted-foreground">(optional)</span>
+          <textarea
+            rows={3}
+            value={reasonText}
+            onChange={(e) => setReasonText(e.target.value)}
+            placeholder="Share timing, inspection availability, or any special context..."
+            className="mt-1 w-full resize-none rounded-xl border border-border bg-background px-3 py-3 text-sm"
+          />
+        </label>
+      </section>
+
       <button
         type="button"
         disabled={!plannedDate || submitMutation.isPending}
         onClick={() => submitMutation.mutate()}
-        className="w-full py-3 rounded-xl bg-accent text-accent-foreground font-semibold disabled:opacity-50"
+        className="sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] w-full py-3.5 rounded-xl bg-accent text-accent-foreground font-semibold shadow-lg shadow-accent/20 disabled:opacity-50"
       >
-        Submit request
+        {submitMutation.isPending ? 'Submitting request...' : 'Send move-out request'}
       </button>
     </div>
   );

@@ -77,7 +77,7 @@ export class MoveOutService {
       return req;
     });
     logger.info("move_out.created", { id: request.id, tenant_id: tenantId, eviction: isEviction });
-    notifyMoveOutTransition(request.id, "REQUESTED");
+    await notifyMoveOutTransition(request.id, "REQUESTED");
     return { request, notice_period_violation: violation, notice_period_days: noticePeriodDays };
   }
 
