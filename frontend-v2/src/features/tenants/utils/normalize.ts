@@ -43,6 +43,7 @@ function activeAllocation(tenant: Record<string, unknown>) {
 
 export function normalizeTenant(s: Record<string, unknown>): NormalizedTenant {
   const profile = (s.profiles ?? s.profile) as Record<string, unknown> | undefined;
+  const tenant = (s.tenant ?? {}) as Record<string, unknown>;
   const alloc = activeAllocation(s);
   const room = alloc?.room as Record<string, unknown> | undefined;
   const summary = (s.payment_summary ?? {}) as Record<string, unknown>;
@@ -66,7 +67,7 @@ export function normalizeTenant(s: Record<string, unknown>): NormalizedTenant {
     paymentStatus: String(s.payment_status ?? summary.payment_status ?? 'UNKNOWN'),
     dueDate: s.due_date != null ? String(s.due_date) : null,
     obligationId: s.obligation_id != null ? String(s.obligation_id) : null,
-    photoUrl: s.photo_url != null ? String(s.photo_url) : null,
+    photoUrl: s.photo_url != null ? String(s.photo_url) : tenant.photo_url != null ? String(tenant.photo_url) : null,
     isProfileCompleted: Boolean(profile?.is_profile_completed ?? s.is_profile_completed),
     documentVerified: Boolean(s.document_verified ?? profile?.document_verified),
     raw: s,

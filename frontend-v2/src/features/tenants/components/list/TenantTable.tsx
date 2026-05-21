@@ -47,8 +47,12 @@ export function TenantTable({ tenants, hostelId, onReminder, onMoveOut, onResend
                     to={`/hostels/${hostelId}/tenants/${t.id}`}
                     className="flex items-center gap-2 min-w-0 group"
                   >
-                    <div className="w-8 h-8 rounded-full bg-accent/15 flex items-center justify-center text-xs font-semibold text-accent shrink-0">
-                      {getInitials(t.name)}
+                    <div className="w-8 h-8 rounded-full bg-accent/15 overflow-hidden flex items-center justify-center text-xs font-semibold text-accent shrink-0">
+                      {t.photoUrl ? (
+                        <img src={t.photoUrl} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        getInitials(t.name)
+                      )}
                     </div>
                     <div className="min-w-0">
                       <p className="font-medium text-foreground truncate group-hover:text-accent">

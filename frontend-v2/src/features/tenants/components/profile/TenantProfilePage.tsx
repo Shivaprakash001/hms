@@ -50,10 +50,13 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
     useTenantProfile(hostelId, tenantId, section);
   const actions = useTenantActions(hostelId);
 
-  const profile = (overview?.profile ?? overview?.profiles ?? full?.profiles) as Record<string, unknown> | undefined;
-  const tenant = (overview?.tenant ?? overview) as Record<string, unknown>;
+  const profile = (overview?.profile ?? overview?.profiles ?? full?.profiles ?? {}) as Record<string, unknown>;
+  const tenant = (overview?.tenant ?? overview ?? {}) as Record<string, unknown>;
   const name = String(profile?.name ?? tenant?.name ?? 'Tenant');
   const status = String(tenant?.status ?? overview?.status ?? 'ACTIVE');
+  const photoUrl = String(tenant?.photo_url ?? overview?.photo_url ?? '').trim();
+  const primaryPhone = String(profile?.phone ?? tenant?.phone_1 ?? overview?.phone ?? '').trim();
+  const email = String(profile?.email ?? overview?.email ?? '').trim();
 
   const obligations = Array.isArray(dues)
     ? dues
@@ -134,8 +137,12 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
       </button>
 
       <div className="flex items-start gap-4 mb-6">
-        <div className="w-14 h-14 rounded-2xl bg-accent/15 flex items-center justify-center text-lg font-bold text-accent shrink-0">
-          {getInitials(name)}
+        <div className="w-14 h-14 rounded-2xl bg-accent/15 overflow-hidden flex items-center justify-center text-lg font-bold text-accent shrink-0">
+          {photoUrl ? (
+            <img src={photoUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            getInitials(name)
+          )}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
@@ -143,20 +150,20 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
             <TenantStatusBadge status={status} size="md" />
           </div>
           <div className="flex flex-wrap gap-3 mt-2 text-sm text-muted-foreground">
-            {profile?.phone && (
+            {primaryPhone && (
               <button
                 type="button"
-                onClick={() => actions.callTenant(String(profile.phone))}
+                onClick={() => actions.callTenant(primaryPhone)}
                 className="inline-flex items-center gap-1 hover:text-foreground"
               >
                 <Phone className="w-3.5 h-3.5" />
-                {String(profile.phone)}
+                {primaryPhone}
               </button>
             )}
-            {profile?.email && (
+            {email && (
               <span className="inline-flex items-center gap-1">
                 <Mail className="w-3.5 h-3.5" />
-                {String(profile.email)}
+                {email}
               </span>
             )}
           </div>
@@ -186,8 +193,8 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
             <div className="p-3 rounded-xl border border-border bg-card">
               <p className="text-muted-foreground text-xs">Joined</p>
               <p className="font-medium">
-                {tenant?.joined_on
-                  ? new Date(String(tenant.joined_on)).toLocaleDateString('en-IN')
+                {tenant?.joined_on || overview?.joined_at
+                  ? new Date(String(tenant.joined_on ?? overview.joined_at)).toLocaleDateString('en-IN')
                   : '—'}
               </p>
             </div>
@@ -197,11 +204,11 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
             </div>
             <div className="p-3 rounded-xl border border-border bg-card">
               <p className="text-muted-foreground text-xs">Mobile verified</p>
-              <p className="font-medium">{profile?.phone_verified ? 'Yes' : 'No'}</p>
+              <p className="font-medium">{profile?.phone_verified || profile?.mobile_verified ? 'Yes' : 'No'}</p>
             </div>
             <div className="p-3 rounded-xl border border-border bg-card">
               <p className="text-muted-foreground text-xs">Documents</p>
-              <p className="font-medium">{tenant?.document_verified ? 'Verified' : 'Pending'}</p>
+              <p className="font-medium">{tenant?.document_verified || overview?.document_verified ? 'Verified' : 'Pending'}</p>
             </div>
           </div>
           <TenantFinancialSummary summary={paymentSummary} advance={advance as Record<string, unknown>} />
@@ -222,16 +229,16 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
           <div className="p-4 rounded-xl border border-border bg-card space-y-2 text-sm">
             <p>
               <span className="text-muted-foreground">Monthly rent:</span>{' '}
-              <strong>₹{Number(tenant?.monthly_rent ?? 0).toLocaleString('en-IN')}</strong>
+              <strong>₹{Number(tenant?.monthly_rent ?? overview?.rent ?? 0).toLocaleString('en-IN')}</strong>
             </p>
             <p>
               <span className="text-muted-foreground">Security deposit:</span>{' '}
-              <strong>₹{Number(tenant?.advance_amount ?? tenant?.security_deposit ?? 0).toLocaleString('en-IN')}</strong>
+              <strong>₹{Number(tenant?.advance_deposit ?? tenant?.advance_amount ?? tenant?.security_deposit ?? 0).toLocaleString('en-IN')}</strong>
             </p>
             <p>
               <span className="text-muted-foreground">Maintenance:</span>{' '}
               <strong>
-                ₹{Number(tenant?.maintenance_amount ?? 0).toLocaleString('en-IN')} (
+                ₹{Number(tenant?.maintenance_charge ?? tenant?.maintenance_amount ?? 0).toLocaleString('en-IN')} (
                 {String(tenant?.maintenance_type ?? 'MONTHLY')})
               </strong>
             </p>

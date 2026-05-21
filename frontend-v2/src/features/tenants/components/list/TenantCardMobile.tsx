@@ -28,8 +28,12 @@ export function TenantCardMobile({ tenants, hostelId, onSelect, onReminder, onCa
         const inner = (
           <>
             <div className="flex items-start gap-3">
-              <div className="w-11 h-11 rounded-full bg-accent/15 flex items-center justify-center text-sm font-semibold text-accent shrink-0">
-                {getInitials(t.name)}
+              <div className="w-11 h-11 rounded-full bg-accent/15 overflow-hidden flex items-center justify-center text-sm font-semibold text-accent shrink-0">
+                {t.photoUrl ? (
+                  <img src={t.photoUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  getInitials(t.name)
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2">
