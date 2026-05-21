@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { Home, CreditCard, Bell, BedDouble, Calendar, AlertCircle, User, ShieldAlert } from 'lucide-react';
+import { Home, CreditCard, Bell, BedDouble, Calendar, AlertCircle, User, ShieldAlert, DoorOpen } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useAppPreferences } from '../../context/AppPreferencesContext';
 import { paymentService, notificationService, tenantService } from '../../api/services';
@@ -144,9 +144,14 @@ const TenantDashboard = () => {
 
     const nextPayment = getNextPaymentDate();
 
+    const isMoveOutRequested = useMemo(() => {
+        const raw = (tenantProfile?.status || user?.tenant_status || '').toString().toUpperCase();
+        return raw === 'MOVE_OUT_REQUESTED';
+    }, [tenantProfile?.status, user?.tenant_status]);
+
     const normalizedStatus = useMemo(() => {
         const raw = (tenantProfile?.status || user?.tenant_status || '').toString().toUpperCase();
-        if (raw === 'ACTIVE')    return 'ACTIVE';
+        if (raw === 'ACTIVE' || raw === 'MOVE_OUT_REQUESTED')    return 'ACTIVE';
         if (raw === 'INVITED')   return 'INVITED';
         if (raw === 'CANCELLED') return 'CANCELLED';
         if (raw === 'EXPIRED')   return 'EXPIRED';
@@ -303,6 +308,25 @@ const TenantDashboard = () => {
     return (
         <div className="space-y-8">
             <TenantScoreCard scoreData={tenantScore} compact />
+
+            {isMoveOutRequested && (
+                <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        <AlertCircle size={20} className="text-amber-500 shrink-0" />
+                        <div>
+                            <p className="font-semibold text-sm">Move-Out Requested</p>
+                            <p className="text-xs text-amber-700">Your move-out request is currently in progress. Please track and complete your steps.</p>
+                        </div>
+                    </div>
+                    <button 
+                        onClick={() => navigate('/tenant/move-out')}
+                        className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors whitespace-nowrap"
+                    >
+                        Track Status
+                    </button>
+                </div>
+            )}
+
             {/* Welcome Section */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
@@ -310,6 +334,13 @@ const TenantDashboard = () => {
                     <p className="text-slate-500">Here's what's happening in your hostel today.</p>
                 </div>
                 <div className="flex gap-3">
+                    <button 
+                        onClick={() => navigate('/tenant/move-out')}
+                        className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-5 py-2.5 rounded-xl font-medium transition-all flex items-center gap-2"
+                    >
+                        <DoorOpen size={18} />
+                        {isMoveOutRequested ? 'Track Move-Out' : 'Request Move-Out'}
+                    </button>
                     <button 
                         onClick={() => navigate('/tenant/payments')}
                         className="bg-ops-accent hover:bg-ops-accent/700 text-white px-5 py-2.5 rounded-xl font-medium shadow-lg shadow-teal-500/20 transition-all flex items-center gap-2"

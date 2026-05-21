@@ -8,7 +8,7 @@ import {
     Home, BarChart2, Zap, RefreshCw, ShieldAlert, TrendingUp,
     TrendingDown, ChevronRight, Target, Activity, Wallet,
     CheckCircle2, Clock, LayoutDashboard, Sparkles, ArrowRight,
-    CreditCard, Loader2, Search
+    CreditCard, Loader2, Search, MessageSquare
 } from 'lucide-react';
 import { paymentService, reminderService, tenantService } from '@/api/services';
 import { useAppPreferences } from '@/context/AppPreferencesContext';
@@ -872,12 +872,5 @@ const TabBar = ({ active, onChange, badge }) => {
         </div>
     );
 };
-
-// Dummy component for missing icon
-const MessageSquare = ({ size, className }) => (
-    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-    </svg>
-);
 
 export default OwnerDashboard;
