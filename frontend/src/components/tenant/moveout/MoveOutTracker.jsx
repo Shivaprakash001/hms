@@ -165,6 +165,39 @@ export default function MoveOutTracker({ data, actions, refetch }) {
         </motion.div>
       )}
 
+      {/* ── Active & Past Tenant Concerns ── */}
+      {data.disputes && data.disputes.length > 0 && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
+          className="rounded-2xl bg-white border border-slate-200 shadow-sm p-5 space-y-4">
+          <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+            💬 Your Raised Concerns ({data.disputes.filter(d => d.status === 'OPEN').length} Open)
+          </h3>
+          <div className="space-y-3">
+            {data.disputes.map(dispute => {
+              const isOpen = dispute.status === 'OPEN';
+              return (
+                <div key={dispute.id} className={`p-3.5 rounded-xl border text-xs space-y-2 ${isOpen ? 'bg-amber-50/40 border-amber-100' : 'bg-slate-50 border-slate-200'}`}>
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold text-slate-700">{dispute.dispute_type?.replace('_', ' ') || 'CONCERN'}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${isOpen ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-500'}`}>
+                      {isOpen ? 'Under Review' : 'Resolved'}
+                    </span>
+                  </div>
+                  <p className="text-slate-600 leading-relaxed">{dispute.description}</p>
+                  
+                  {dispute.resolution_notes && (
+                    <div className="mt-2.5 p-2.5 rounded-lg bg-white border border-slate-100 text-slate-500 text-2xs leading-relaxed">
+                      <strong className="text-slate-700 block mb-0.5">Hostel Resolution:</strong>
+                      {dispute.resolution_notes}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </motion.div>
+      )}
+
       {/* ── Dispute Flow ── */}
       {showDispute && (
         <DisputeFlow requestId={data.request_id} actions={actions} onClose={() => { setShowDispute(false); refetch(); }} />

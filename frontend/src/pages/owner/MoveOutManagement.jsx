@@ -168,6 +168,26 @@ export default function MoveOutManagement() {
                   )}
                 </div>
 
+                {/* Room Inspection Summary (if already done) */}
+                {detail.inspection && (
+                  <div className="rounded-xl bg-white border border-slate-200 p-5 space-y-3">
+                    <h3 className="text-sm font-semibold text-slate-700">Room Inspection Summary</h3>
+                    <div className="grid grid-cols-2 gap-3 text-xs text-slate-600">
+                      <div>Condition: <span className="font-semibold text-slate-800">{detail.inspection.room_condition}</span></div>
+                      <div>Cleaning: <span className="font-semibold text-slate-800">{detail.inspection.cleaning_status?.replace('_', ' ') || 'GOOD'}</span></div>
+                      {Number(detail.inspection.damages_amount) > 0 && <div>Damages Fee: <span className="font-semibold text-slate-800">₹{Number(detail.inspection.damages_amount).toLocaleString('en-IN')}</span></div>}
+                      {Number(detail.inspection.cleaning_fee) > 0 && <div>Cleaning Fee: <span className="font-semibold text-slate-800">₹{Number(detail.inspection.cleaning_fee).toLocaleString('en-IN')}</span></div>}
+                      {Number(detail.inspection.missing_items_fee) > 0 && <div>Missing Items Fee: <span className="font-semibold text-slate-800">₹{Number(detail.inspection.missing_items_fee).toLocaleString('en-IN')}</span></div>}
+                      {Number(detail.inspection.other_deductions) > 0 && <div>Other Fee: <span className="font-semibold text-slate-800">₹{Number(detail.inspection.other_deductions).toLocaleString('en-IN')}</span></div>}
+                    </div>
+                    {detail.inspection.deduction_notes && (
+                      <p className="text-xs text-slate-500 bg-slate-50 p-2.5 rounded-lg mt-2">
+                        <strong className="text-slate-600">Deduction Notes:</strong> {detail.inspection.deduction_notes}
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {/* Inspection Form */}
                 {['REQUESTED', 'INSPECTION_PENDING'].includes(detail.status) && !detail.inspection && (
                   <div className="rounded-xl bg-white border border-slate-200 p-5">
@@ -176,14 +196,14 @@ export default function MoveOutManagement() {
                       <div>
                         <label className="text-xs text-slate-500 mb-1 block">Condition</label>
                         <select value={insp.roomCondition} onChange={e => setInsp(p => ({...p, roomCondition: e.target.value}))}
-                          className="w-full p-2.5 rounded-lg border border-slate-200 text-sm">
+                          className="w-full p-2.5 rounded-lg border border-slate-200 text-sm bg-white">
                           <option value="GOOD">Good</option><option value="ACCEPTABLE">Acceptable</option><option value="DAMAGED">Damaged</option>
                         </select>
                       </div>
                       <div>
                         <label className="text-xs text-slate-500 mb-1 block">Cleaning</label>
                         <select value={insp.cleaningStatus} onChange={e => setInsp(p => ({...p, cleaningStatus: e.target.value}))}
-                          className="w-full p-2.5 rounded-lg border border-slate-200 text-sm">
+                          className="w-full p-2.5 rounded-lg border border-slate-200 text-sm bg-white">
                           <option value="CLEAN">Clean</option><option value="NEEDS_CLEANING">Needs cleaning</option><option value="DEEP_CLEANING">Deep clean</option>
                         </select>
                       </div>
@@ -232,6 +252,52 @@ export default function MoveOutManagement() {
                   </div>
                 )}
 
+                {/* Tenant Disputes/Concerns (if raised) */}
+                {detail.disputes && detail.disputes.length > 0 && (
+                  <div className="rounded-xl bg-white border border-slate-200 p-5 space-y-4">
+                    <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+                      ⚠️ Tenant Concerns & Disputes ({detail.disputes.filter(d => d.status === 'OPEN').length} Open)
+                    </h3>
+                    <div className="space-y-3">
+                      {detail.disputes.map(dispute => {
+                        const isOpen = dispute.status === 'OPEN';
+                        return (
+                          <div key={dispute.id} className={`p-3 rounded-lg border text-xs space-y-2 ${isOpen ? 'bg-red-50/50 border-red-200' : 'bg-slate-50 border-slate-200'}`}>
+                            <div className="flex justify-between items-center">
+                              <span className="font-bold text-slate-700">{dispute.dispute_type?.replace('_', ' ') || 'CONCERN'}</span>
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${isOpen ? 'bg-red-100 text-red-700' : 'bg-slate-200 text-slate-600'}`}>
+                                {isOpen ? 'Open' : 'Resolved'}
+                              </span>
+                            </div>
+                            <p className="text-slate-600">{dispute.description}</p>
+                            {dispute.disputed_amount && <p className="font-semibold text-slate-700">Disputed Amount: ₹{dispute.disputed_amount}</p>}
+                            
+                            {isOpen ? (
+                              <DisputeResolutionForm 
+                                disputeId={dispute.id}
+                                onResolve={async (notes) => {
+                                  await act(() => api.post(`/move-out/requests/${selected}/dispute`, {
+                                    resolve: true,
+                                    disputeId: dispute.id,
+                                    resolutionNotes: notes
+                                  }));
+                                }}
+                                submitting={submitting}
+                              />
+                            ) : (
+                              dispute.resolution_notes && (
+                                <p className="text-xs text-slate-500 bg-white p-2 rounded border border-slate-100">
+                                  <strong className="text-slate-600">Resolution Note:</strong> {dispute.resolution_notes}
+                                </p>
+                              )
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {/* Complete Payment */}
                 {['PAYMENT_PENDING', 'DISPUTED'].includes(detail.status) && (
                   <div className="rounded-xl bg-white border border-slate-200 p-5">
@@ -245,7 +311,7 @@ export default function MoveOutManagement() {
                       <div>
                         <label className="text-xs text-slate-500 mb-1 block">Method</label>
                         <select value={pay.paymentMethod} onChange={e => setPay(p => ({...p, paymentMethod: e.target.value}))}
-                          className="w-full p-2.5 rounded-lg border border-slate-200 text-sm">
+                          className="w-full p-2.5 rounded-lg border border-slate-200 text-sm bg-white">
                           <option value="CASH">Cash</option><option value="UPI">UPI</option><option value="BANK_TRANSFER">Bank Transfer</option>
                         </select>
                       </div>
@@ -276,3 +342,41 @@ export default function MoveOutManagement() {
     </div>
   );
 }
+
+function DisputeResolutionForm({ disputeId, onResolve, submitting }) {
+  const [notes, setNotes] = useState('');
+  const [show, setShow] = useState(false);
+  
+  if (!show) {
+    return (
+      <button onClick={() => setShow(true)} className="text-[11px] text-ops-accent hover:underline font-semibold mt-1">
+        Resolve this concern
+      </button>
+    );
+  }
+  
+  return (
+    <div className="pt-2 border-t border-red-100/50 space-y-2">
+      <textarea
+        value={notes}
+        onChange={e => setNotes(e.target.value)}
+        placeholder="Enter resolution details..."
+        rows={2}
+        className="w-full p-2 border border-slate-200 rounded text-xs focus:ring-1 focus:ring-ops-accent outline-none bg-white"
+      />
+      <div className="flex gap-2 justify-end">
+        <button onClick={() => { setShow(false); setNotes(''); }} className="px-2 py-1 bg-slate-100 rounded text-[10px] text-slate-600 hover:bg-slate-200">
+          Cancel
+        </button>
+        <button
+          onClick={() => onResolve(notes)}
+          disabled={submitting || !notes.trim()}
+          className="px-2.5 py-1 bg-ops-accent text-white rounded text-[10px] font-semibold hover:bg-ops-accent/700 disabled:opacity-50"
+        >
+          {submitting ? 'Resolving...' : 'Confirm Resolution'}
+        </button>
+      </div>
+    </div>
+  );
+}
+

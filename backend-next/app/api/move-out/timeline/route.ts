@@ -62,6 +62,15 @@ export async function GET(req: NextRequest) {
         direction: request.settlement.settlement_direction,
         payment_status: request.settlement.payment_status,
       } : null,
+      disputes: request.disputes ? request.disputes.map(d => ({
+        id: d.id,
+        dispute_type: d.dispute_type,
+        description: d.description,
+        status: d.status,
+        resolution_notes: d.resolution_notes,
+        created_at: d.created_at,
+        resolved_at: d.resolved_at
+      })) : [],
     });
   } catch (error: any) {
     return apiError(error.message || "Failed to fetch timeline");
