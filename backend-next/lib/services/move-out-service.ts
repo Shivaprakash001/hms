@@ -6,6 +6,7 @@ import { financialService } from "../../src/services/payments/financial-service"
 import { tenantAdvanceService } from "../../src/services/payments/tenant-advance-service";
 import { assertTransition, assertCapability, checkCapability, getTenantSteps } from "./move-out-state-machine";
 import { notifyMoveOutTransition } from "./move-out-notifications";
+import { randomUUID } from "crypto";
 
 // Re-export capability guards for use by other services
 export { assertCapability, checkCapability } from "./move-out-state-machine";
@@ -146,22 +147,29 @@ export class MoveOutService {
     const req = await prisma.move_out_requests.findUnique({ where: { id: requestId }, include: { tenant: true, inspection: true } });
     if (!req) throw new Error("NOT_FOUND: Move-out request not found");
 
-    const securityDeposit = Number(req.tenant.advance_deposit || 0);
+    const configuredSecurityDeposit = Number(req.tenant.advance_deposit || 0);
     const advBal = await tenantAdvanceService.getBalance(req.tenant_id, req.owner_id);
-    const advanceBalance = advBal.balance;
+    const paidAdvanceBalance = Math.max(0, Number(advBal.balance || 0));
+    const paidSecurityDeposit = Math.min(paidAdvanceBalance, configuredSecurityDeposit);
+    const extraAdvanceBalance = Math.max(0, paidAdvanceBalance - paidSecurityDeposit);
     const dues = await financialService.getTenantDues(req.tenant_id, req.owner_id, req.hostel_id);
     const insp = req.inspection;
     const totalDeductions = Number(insp?.total_deductions || 0);
-    const totalDues = dues.rent_due + dues.late_fees_due;
-    const net = securityDeposit + advanceBalance - totalDues - totalDeductions;
+    const rentDue = Number(dues.rent_due || 0);
+    const lateFeesDue = Number(dues.late_fees_due || 0);
+    const maintenanceAndOtherDues = Math.max(0, Number(dues.total_due || 0) - rentDue - lateFeesDue);
+    const totalDues = Number(dues.total_due || 0);
+    const net = paidAdvanceBalance - totalDues - totalDeductions;
 
     return {
       request_id: requestId,
-      security_deposit_amount: round2(securityDeposit),
-      advance_balance: round2(advanceBalance),
-      pending_rent_dues: round2(dues.rent_due),
-      pending_late_fees: round2(dues.late_fees_due),
-      pending_utility_dues: 0,
+      configured_security_deposit_amount: round2(configuredSecurityDeposit),
+      security_deposit_amount: round2(paidSecurityDeposit),
+      advance_balance: round2(extraAdvanceBalance),
+      total_paid_advance_balance: round2(paidAdvanceBalance),
+      pending_rent_dues: round2(rentDue),
+      pending_late_fees: round2(lateFeesDue),
+      pending_utility_dues: round2(maintenanceAndOtherDues),
       damages_deduction: round2(Number(insp?.damages_amount || 0)),
       cleaning_deduction: round2(Number(insp?.cleaning_fee || 0)),
       missing_items_deduction: round2(Number(insp?.missing_items_fee || 0)),
@@ -198,6 +206,10 @@ export class MoveOutService {
       });
 
       if (nextStatus === "COMPLETED") {
+        const settlement = await tx.exit_settlement_transactions.findUnique({ where: { request_id: requestId }, select: { id: true } });
+        if (settlement) {
+          await applyAdvanceSettlementInTx(tx, settlement.id, approvedBy, new Date());
+        }
         await this.executeCompletionSideEffects(tx, req.tenant_id, requestId, req.planned_exit_date, req.reason, req.reason_text, new Date());
       }
       notifyMoveOutTransition(requestId, nextStatus);
@@ -219,6 +231,7 @@ export class MoveOutService {
           where: { id: req.settlement.id },
           data: { payment_status: "SETTLED", payment_method: params.paymentMethod || "CASH", payment_reference: params.paymentReference || null, payment_notes: params.paymentNotes || null, settled_at: now, settled_by: params.settledBy, confirmed_by_owner: true, updated_at: now },
         });
+        await applyAdvanceSettlementInTx(tx, req.settlement.id, params.settledBy, now);
       }
       // Resolve any open disputes
       await tx.exit_disputes.updateMany({ where: { request_id: params.requestId, status: "OPEN" }, data: { status: "RESOLVED", resolved_at: now, updated_at: now } });
@@ -394,6 +407,129 @@ export class MoveOutService {
 }
 
 function round2(n: number) { return Math.round(n * 100) / 100; }
+
+async function getAdvanceBalanceInTx(tx: Tx, tenantId: string): Promise<number> {
+  const [credits, debits] = await Promise.all([
+    tx.tenant_advance_ledger.aggregate({
+      where: { tenant_id: tenantId, type: "CREDIT" },
+      _sum: { amount: true },
+    }),
+    tx.tenant_advance_ledger.aggregate({
+      where: { tenant_id: tenantId, type: "DEBIT" },
+      _sum: { amount: true },
+    }),
+  ]);
+  return round2(Number(credits._sum.amount ?? 0) - Number(debits._sum.amount ?? 0));
+}
+
+async function createAdvanceDebitInTx(
+  tx: Tx,
+  params: {
+    tenantId: string;
+    ownerId: string;
+    hostelId: string;
+    actorId: string;
+    amount: number;
+    balanceAfter: number;
+    reason: "DEDUCTION" | "REFUND";
+    referenceId: string;
+    referenceType: string;
+    notes: string;
+    refundStatus?: "COMPLETED";
+  }
+) {
+  if (params.amount <= 0) return;
+  await tx.tenant_advance_ledger.create({
+    data: {
+      id: randomUUID(),
+      tenant_id: params.tenantId,
+      owner_id: params.ownerId,
+      hostel_id: params.hostelId,
+      type: "DEBIT",
+      reason: params.reason,
+      amount: round2(params.amount),
+      balance_after: round2(Math.max(0, params.balanceAfter)),
+      notes: params.notes,
+      reference_id: params.referenceId,
+      reference_type: params.referenceType,
+      refund_status: params.refundStatus ?? null,
+      created_by: params.actorId,
+    },
+  });
+}
+
+async function applyAdvanceSettlementInTx(tx: Tx, settlementId: string, actorId: string, now: Date) {
+  const settlement = await tx.exit_settlement_transactions.findUnique({
+    where: { id: settlementId },
+    select: {
+      id: true,
+      tenant_id: true,
+      owner_id: true,
+      hostel_id: true,
+      security_deposit_amount: true,
+      advance_balance: true,
+      net_settlement_amount: true,
+      settlement_direction: true,
+    },
+  });
+  if (!settlement) return;
+
+  const existing = await tx.tenant_advance_ledger.findFirst({
+    where: {
+      reference_id: settlement.id,
+      reference_type: { in: ["MOVE_OUT_ADVANCE_DEDUCTION", "MOVE_OUT_ADVANCE_REFUND"] },
+    },
+    select: { id: true },
+  });
+  if (existing) return;
+
+  await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${settlement.tenant_id}::uuid FOR UPDATE`;
+
+  const currentBalance = Math.max(0, await getAdvanceBalanceInTx(tx, settlement.tenant_id));
+  const settlementAdvance = round2(Number(settlement.security_deposit_amount || 0) + Number(settlement.advance_balance || 0));
+  const debitTotal = Math.min(currentBalance, settlementAdvance);
+  if (debitTotal <= 0) return;
+
+  const refundAmount = settlement.settlement_direction === "OWNER_OWES_TENANT"
+    ? Math.min(debitTotal, Math.max(0, Number(settlement.net_settlement_amount || 0)))
+    : 0;
+  const appliedAmount = round2(debitTotal - refundAmount);
+
+  let balanceAfter = currentBalance;
+  if (appliedAmount > 0) {
+    balanceAfter = round2(balanceAfter - appliedAmount);
+    await createAdvanceDebitInTx(tx, {
+      tenantId: settlement.tenant_id,
+      ownerId: settlement.owner_id,
+      hostelId: settlement.hostel_id,
+      actorId,
+      amount: appliedAmount,
+      balanceAfter,
+      reason: "DEDUCTION",
+      referenceId: settlement.id,
+      referenceType: "MOVE_OUT_ADVANCE_DEDUCTION",
+      notes: "Move-out settlement applied advance/deposit against dues and deductions",
+    });
+  }
+
+  if (refundAmount > 0) {
+    balanceAfter = round2(balanceAfter - refundAmount);
+    await createAdvanceDebitInTx(tx, {
+      tenantId: settlement.tenant_id,
+      ownerId: settlement.owner_id,
+      hostelId: settlement.hostel_id,
+      actorId,
+      amount: refundAmount,
+      balanceAfter,
+      reason: "REFUND",
+      referenceId: settlement.id,
+      referenceType: "MOVE_OUT_ADVANCE_REFUND",
+      notes: `Move-out settlement refund completed on ${now.toISOString()}`,
+      refundStatus: "COMPLETED",
+    });
+  }
+}
+
 function snapshotFromPreview(p: any) {
   return {
     security_deposit_amount: p.security_deposit_amount, advance_balance: p.advance_balance,

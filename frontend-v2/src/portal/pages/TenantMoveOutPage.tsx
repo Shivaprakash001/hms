@@ -88,41 +88,68 @@ export function TenantMoveOutPage() {
   }
 
   if (active && request && typeof request === 'object') {
-    const deposit = Number(advance?.balance ?? settlement?.deposit_amount ?? 0);
-    const pendingRent = Number(dues?.total_due ?? settlement?.pending_rent ?? 0);
-    const damages = Number(settlement?.damages_amount ?? settlement?.damage_charges ?? 0);
-    const refund = Number(
-      settlement?.refund_amount ?? Math.max(0, deposit - pendingRent - damages)
+    const paidDeposit = Number(settlement?.security_deposit_amount ?? advance?.balance ?? 0);
+    const extraAdvance = Number(settlement?.advance_balance ?? 0);
+    const pendingRent = Number(settlement?.pending_rent_dues ?? dues?.rent_due ?? dues?.total_due ?? 0);
+    const lateFees = Number(settlement?.pending_late_fees ?? 0);
+    const otherDues = Number(
+      settlement?.pending_utility_dues ??
+        Math.max(0, Number(dues?.total_due ?? 0) - pendingRent - lateFees)
     );
+    const deductions = Number(settlement?.total_deductions ?? settlement?.damages_amount ?? settlement?.damage_charges ?? 0);
+    const netAmount = Number(
+      settlement?.net_amount ??
+        settlement?.net_settlement_amount ??
+        paidDeposit + extraAdvance - pendingRent - lateFees - otherDues - deductions
+    );
+    const direction = String(settlement?.direction ?? settlement?.settlement_direction ?? '');
 
     return (
       <div className="space-y-5">
         <h1 className="text-xl font-bold text-foreground">Move-out</h1>
         <MoveOutStepper request={request as Record<string, unknown>} hostelId="" />
 
-        {(deposit > 0 || pendingRent > 0 || settlement) && (
+        {(paidDeposit > 0 || extraAdvance > 0 || pendingRent > 0 || lateFees > 0 || otherDues > 0 || settlement) && (
           <section className="rounded-xl border border-border bg-card p-4">
             <h2 className="text-sm font-semibold text-foreground mb-3">Settlement preview</h2>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Deposit</span>
-                <span>{fmt(deposit)}</span>
+                <span className="text-muted-foreground">Paid security deposit</span>
+                <span>{fmt(paidDeposit)}</span>
               </div>
+              {extraAdvance > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Extra advance balance</span>
+                  <span>{fmt(extraAdvance)}</span>
+                </div>
+              )}
               {pendingRent > 0 && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Pending rent</span>
                   <span className="text-destructive">−{fmt(pendingRent)}</span>
                 </div>
               )}
-              {damages > 0 && (
+              {lateFees > 0 && (
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Damages</span>
-                  <span className="text-destructive">−{fmt(damages)}</span>
+                  <span className="text-muted-foreground">Late fees</span>
+                  <span className="text-destructive">−{fmt(lateFees)}</span>
+                </div>
+              )}
+              {otherDues > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Maintenance / other dues</span>
+                  <span className="text-destructive">−{fmt(otherDues)}</span>
+                </div>
+              )}
+              {deductions > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Inspection deductions</span>
+                  <span className="text-destructive">−{fmt(deductions)}</span>
                 </div>
               )}
               <div className="flex justify-between pt-2 border-t border-border font-bold">
-                <span>Refund amount</span>
-                <span className="text-accent">{fmt(refund)}</span>
+                <span>{direction === 'TENANT_OWES_OWNER' || netAmount < 0 ? 'Amount to pay' : 'Refund amount'}</span>
+                <span className={netAmount < 0 ? 'text-destructive' : 'text-accent'}>{fmt(Math.abs(netAmount))}</span>
               </div>
             </div>
             <p className="text-xs text-muted-foreground mt-3">

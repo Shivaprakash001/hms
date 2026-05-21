@@ -256,10 +256,11 @@ export function MoveOutsView() {
                           <h3 className="text-sm font-semibold text-foreground">Payment settlement</h3>
                         </div>
                         <div className="space-y-2 text-sm">
-                          <MoneyRow label="Security deposit" value={settlement.security_deposit_amount} />
-                          <MoneyRow label="Advance balance" value={settlement.advance_balance} />
+                          <MoneyRow label="Paid security deposit" value={settlement.security_deposit_amount} />
+                          <MoneyRow label="Extra advance balance" value={settlement.advance_balance} />
                           <MoneyRow label="Pending rent" value={settlement.pending_rent_dues} negative />
                           <MoneyRow label="Late fees" value={settlement.pending_late_fees} negative />
+                          <MoneyRow label="Maintenance / other dues" value={settlement.pending_utility_dues} negative />
                           <MoneyRow label="Deductions" value={settlement.total_deductions} negative />
                           <div className="flex justify-between border-t border-border pt-3 font-bold">
                             <span>{direction === 'TENANT_OWES_OWNER' ? 'Tenant should pay' : direction === 'OWNER_OWES_TENANT' ? 'Refund to tenant' : 'Net settlement'}</span>
