@@ -12,7 +12,6 @@ import { AllocationHistoryTimeline } from '@features/tenants/components/allocati
 import { VerificationPanel } from '@features/tenants/components/documents/VerificationPanel';
 import { ActivityTimeline } from '@features/tenants/components/profile/ActivityTimeline';
 import { ExitWorkflowSection } from '@features/tenants/components/profile/ExitWorkflowSection';
-import { ComplaintsSection } from '@features/tenants/components/profile/ComplaintsSection';
 import { ReminderActionBar } from '@features/tenants/components/actions/ReminderActionBar';
 import { getInitials } from '@features/tenants/utils/normalize';
 import { RecordPaymentModal } from '@/app/components/modals/RecordPaymentModal';
@@ -25,7 +24,6 @@ const SECTIONS = [
   { id: 'documents', label: 'Documents' },
   { id: 'compliance', label: 'Compliance' },
   { id: 'activity', label: 'Activity' },
-  { id: 'complaints', label: 'Complaints' },
   { id: 'exit', label: 'Exit' },
 ] as const;
 
@@ -369,17 +367,9 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
                 <Download className="w-4 h-4 text-accent" />
                 Download acceptance
               </button>
-              <button
-                type="button"
-                onClick={() => runComplianceAction('MARK_DOCUMENTS_VERIFIED', 'Documents marked verified')}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-3 py-2.5 text-sm font-medium"
-              >
-                <FileCheck2 className="w-4 h-4 text-accent" />
-                Mark docs verified
-              </button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Document verification actions remain in the Documents tab.
+              Document approval and rejection happen only in the Documents tab.
             </p>
           </div>
         </div>
@@ -388,8 +378,6 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
       {section === 'activity' && (
         <ActivityTimeline hostelId={hostelId} tenantId={tenantId} tenantName={name} />
       )}
-
-      {section === 'complaints' && <ComplaintsSection />}
 
       {section === 'exit' && (
         <ExitWorkflowSection hostelId={hostelId} tenantId={tenantId} status={status} />

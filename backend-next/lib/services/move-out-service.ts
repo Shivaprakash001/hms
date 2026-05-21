@@ -329,7 +329,12 @@ export class MoveOutService {
     const [requests, total] = await Promise.all([
       prisma.move_out_requests.findMany({
         where, include: {
-          tenant: { include: { profiles: { select: { name: true } }, room_allocations: { where: { is_active: true }, include: { room: { select: { room_no: true } } }, take: 1 } } },
+          tenant: {
+            include: {
+              profiles: { select: { name: true, email: true, phone: true } },
+              room_allocations: { where: { is_active: true }, include: { room: { select: { room_no: true } } }, take: 1 },
+            },
+          },
           settlement: { select: { net_settlement_amount: true, payment_status: true, settlement_direction: true } },
         }, orderBy: { created_at: "desc" }, take: params.limit || 50, skip: params.offset || 0,
       }),
