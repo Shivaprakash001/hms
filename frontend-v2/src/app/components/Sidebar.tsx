@@ -3,10 +3,10 @@ import { Building2, Home, Bell, CreditCard, Settings, LogOut, Users } from 'luci
 import { useAuth } from '@context/AuthContext';
 
 const navItems = [
-  { to: '/dashboard', icon: Home, label: 'Portfolio' },
+  { to: '/dashboard', icon: Home, label: 'Home' },
   { to: '/tenants', icon: Users, label: 'Tenants' },
-  { to: '/alerts', icon: Bell, label: 'Alerts' },
   { to: '/billing', icon: CreditCard, label: 'Billing' },
+  { to: '/alerts', icon: Bell, label: 'Alerts' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 

@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom';
 import { BottomNav } from './components/BottomNav';
 import { Sidebar } from './components/Sidebar';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { OwnerQuickActions } from './components/OwnerQuickActions';
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
 
         {/* Mobile bottom nav */}
         <BottomNav />
+        <OwnerQuickActions />
       </div>
     </div>
   );

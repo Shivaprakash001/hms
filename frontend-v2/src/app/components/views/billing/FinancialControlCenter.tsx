@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { BarChart3, ChevronDown } from 'lucide-react';
 import { queryKeys } from '@lib/queryKeys';
 import { OwnerActionsBar } from './OwnerActionsBar';
 import { TodayPriorities } from './TodayPriorities';
@@ -24,6 +25,7 @@ interface Props {
 
 export function FinancialControlCenter({ hostelId, onRecordPayment, onAddExpense }: Props) {
   const [selectedObligationId, setSelectedObligationId] = useState<string | null>(null);
+  const [showAnalytics, setShowAnalytics] = useState(false);
 
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: queryKeys.dashboard.stats(hostelId),
@@ -76,31 +78,52 @@ export function FinancialControlCenter({ hostelId, onRecordPayment, onAddExpense
         <CashPosition stats={stats} />
       </div>
 
-      <CollectionPipeline
-        stats={stats}
-        cashflow={cashflow}
-        funnel={funnel}
-      />
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <CashflowForecast cashflow={cashflow} stats={stats} />
-        <CollectionAnalytics payments={payments} funnel={funnel} />
-      </div>
-
       <RiskZone intel={intel} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <RoomPerformance intel={intel} stats={stats} />
-        <ExpenseIntelligence intel={intel} stats={stats} />
-      </div>
+      <RoomPerformance intel={intel} stats={stats} />
 
-      {intel?.payment_attempts && (
-        <PaymentAttemptsIntelligence attempts={intel.payment_attempts} />
-      )}
+      <section className="rounded-xl border border-border bg-card p-4">
+        <button
+          type="button"
+          onClick={() => setShowAnalytics((value) => !value)}
+          className="flex w-full items-center justify-between gap-3 text-left"
+        >
+          <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <BarChart3 className="h-4 w-4 text-accent" />
+            Analytics and forecast
+          </span>
+          <span className="flex items-center gap-2 text-xs text-muted-foreground">
+            {showAnalytics ? 'Hide details' : 'View details'}
+            <ChevronDown className={`h-4 w-4 transition-transform ${showAnalytics ? 'rotate-180' : ''}`} />
+          </span>
+        </button>
 
-      {intel?.recent_activity?.length > 0 && (
-        <FinancialTimeline activity={intel.recent_activity} />
-      )}
+        {showAnalytics && (
+          <div className="mt-4 space-y-4">
+            <CollectionPipeline
+              stats={stats}
+              cashflow={cashflow}
+              funnel={funnel}
+            />
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <CashflowForecast cashflow={cashflow} stats={stats} />
+              <CollectionAnalytics payments={payments} funnel={funnel} />
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <ExpenseIntelligence intel={intel} stats={stats} />
+              {intel?.payment_attempts ? (
+                <PaymentAttemptsIntelligence attempts={intel.payment_attempts} />
+              ) : null}
+            </div>
+
+            {intel?.recent_activity?.length > 0 && (
+              <FinancialTimeline activity={intel.recent_activity} />
+            )}
+          </div>
+        )}
+      </section>
 
       <PaymentLedger
         hostelId={hostelId}

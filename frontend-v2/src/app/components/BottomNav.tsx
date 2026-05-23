@@ -2,10 +2,10 @@ import { NavLink } from 'react-router-dom';
 import { LayoutGrid, Bell, CreditCard, Users, Settings } from 'lucide-react';
 
 const navItems = [
-  { to: '/dashboard', icon: LayoutGrid, label: 'Portfolio' },
+  { to: '/dashboard', icon: LayoutGrid, label: 'Home' },
   { to: '/tenants', icon: Users, label: 'Tenants' },
-  { to: '/alerts', icon: Bell, label: 'Alerts' },
   { to: '/billing', icon: CreditCard, label: 'Billing' },
+  { to: '/alerts', icon: Bell, label: 'Alerts' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 

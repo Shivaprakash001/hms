@@ -95,7 +95,7 @@ export function TenantsHostelView() {
           <div className="px-4 py-3 border-b border-border flex items-center justify-between bg-muted/20">
             <div>
               <h3 className="text-sm font-semibold text-foreground">Academic Mix</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">Year of study distribution</p>
+              <p className="text-xs text-muted-foreground mt-0.5">For room planning and batch-wise communication</p>
             </div>
             <GraduationCap className="h-4 w-4 text-accent" />
           </div>
@@ -146,6 +146,9 @@ export function TenantsHostelView() {
                     </div>
                   ))}
                 </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Tip: use this to plan renewal conversations and group notices by academic year.
+                </p>
               </>
             ) : (
               <div className="text-xs text-muted-foreground text-center py-6 w-full">
