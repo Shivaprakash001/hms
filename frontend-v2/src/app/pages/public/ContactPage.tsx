@@ -9,7 +9,7 @@ export function ContactPage() {
     const desc = document.querySelector('meta[name="description"]');
     desc?.setAttribute('content', 'Contact Sri Adithya Boys Hostel for admission enquiries, fee details, room availability, and hostel visits. We\'re here to help.');
     const canonical = document.querySelector('link[rel="canonical"]');
-    canonical?.setAttribute('href', 'https://sriadithyahostels.in/contact');
+    canonical?.setAttribute('href', 'https://www.sriadithyahostels.in/contact');
   }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -29,14 +29,14 @@ export function ContactPage() {
               <div className="space-y-5">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: '#1e3a5f' }}>📞 Phone</p>
-                  <a href="tel:+919XXXXXXXXX" className="no-underline font-semibold text-slate-700 text-base hover:text-slate-900">
-                    +91 9XXXXXXXXX
+                  <a href="tel:+917901070333" className="no-underline font-semibold text-slate-700 text-base hover:text-slate-900">
+                    +91 79010 70333
                   </a>
                 </div>
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: '#1e3a5f' }}>📧 Email</p>
-                  <a href="mailto:contact@sriadithyahostels.in" className="no-underline text-slate-600 text-sm hover:text-slate-900">
-                    contact@sriadithyahostels.in
+                  <a href="mailto:sriadithyahostels@gmail.com" className="no-underline text-slate-600 text-sm hover:text-slate-900">
+                    sriadithyahostels@gmail.com
                   </a>
                 </div>
                 <div>
