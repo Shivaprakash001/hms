@@ -71,7 +71,7 @@ export function RulesPage() {
     const desc = document.querySelector('meta[name="description"]');
     desc?.setAttribute('content', 'Read the hostel rules and regulations at Sri Adithya Boys Hostel. Rules on entry timings, cleanliness, behaviour, visitors, and fees.');
     const canonical = document.querySelector('link[rel="canonical"]');
-    canonical?.setAttribute('href', 'https://sriadithyahostels.in/rules');
+    canonical?.setAttribute('href', 'https://www.sriadithyahostels.in/rules');
   }, []);
 
   return (

@@ -8,7 +8,7 @@ export function AboutPage() {
     const desc = document.querySelector('meta[name="description"]');
     desc?.setAttribute('content', 'Learn about Sri Adithya Boys Hostel — our story, mission, and commitment to safe, affordable student accommodation in Hyderabad.');
     const canonical = document.querySelector('link[rel="canonical"]');
-    canonical?.setAttribute('href', 'https://sriadithyahostels.in/about');
+    canonical?.setAttribute('href', 'https://www.sriadithyahostels.in/about');
   }, []);
 
   return (

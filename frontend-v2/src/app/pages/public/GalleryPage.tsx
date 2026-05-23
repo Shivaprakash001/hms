@@ -23,7 +23,7 @@ export function GalleryPage() {
     const desc = document.querySelector('meta[name="description"]');
     desc?.setAttribute('content', 'See photos of Sri Adithya Boys Hostel — rooms, dining hall, study areas, common spaces, and more.');
     const canonical = document.querySelector('link[rel="canonical"]');
-    canonical?.setAttribute('href', 'https://sriadithyahostels.in/gallery');
+    canonical?.setAttribute('href', 'https://www.sriadithyahostels.in/gallery');
   }, []);
 
   return (

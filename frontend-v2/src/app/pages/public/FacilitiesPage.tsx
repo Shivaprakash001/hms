@@ -23,7 +23,7 @@ export function FacilitiesPage() {
     const desc = document.querySelector('meta[name="description"]');
     desc?.setAttribute('content', 'Explore all facilities at Sri Adithya Boys Hostel — furnished rooms, meals, 24/7 security, Wi-Fi, study room, laundry, and more.');
     const canonical = document.querySelector('link[rel="canonical"]');
-    canonical?.setAttribute('href', 'https://sriadithyahostels.in/facilities');
+    canonical?.setAttribute('href', 'https://www.sriadithyahostels.in/facilities');
   }, []);
 
   return (

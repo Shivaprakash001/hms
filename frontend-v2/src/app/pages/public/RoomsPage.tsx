@@ -35,7 +35,7 @@ export function RoomsPage() {
     const desc = document.querySelector('meta[name="description"]');
     desc?.setAttribute('content', 'Explore room types at Sri Adithya Boys Hostel — single, double sharing, and triple sharing rooms. Affordable pricing with all amenities included.');
     const canonical = document.querySelector('link[rel="canonical"]');
-    canonical?.setAttribute('href', 'https://sriadithyahostels.in/rooms');
+    canonical?.setAttribute('href', 'https://www.sriadithyahostels.in/rooms');
   }, []);
 
   return (
