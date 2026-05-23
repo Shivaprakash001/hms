@@ -131,6 +131,28 @@ function fmt(amount: unknown): string {
   return `₹${n.toLocaleString('en-IN')}`;
 }
 
+function BedOccupancyBlocks({ occupied, capacity, hasDues = false }: { occupied: number; capacity: number; hasDues?: boolean }) {
+  const beds = Array.from({ length: Math.max(1, capacity || 1) });
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {beds.map((_, index) => {
+        const filled = index < occupied;
+        return (
+          <span
+            key={index}
+            className={[
+              'h-5 w-4 rounded-[4px] border',
+              filled && hasDues ? 'border-[#F59E0B] bg-[#F59E0B]' : '',
+              filled && !hasDues ? 'border-[#10B981] bg-[#10B981]' : '',
+              !filled ? 'border-border bg-background' : '',
+            ].join(' ')}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 function OverviewTab({ hostelId, stats, loading }: { hostelId: string; stats: Record<string, unknown> | undefined; loading: boolean }) {
   const navigate = useNavigate();
   const [fabOpen, setFabOpen] = useState(false);
@@ -1075,6 +1097,8 @@ function RoomsTab({ hostelId }: { hostelId: string }) {
                   const isOccupied = String(room.status) === 'occupied';
                   const occupied   = Number(room.occupied_count ?? 0);
                   const capacity   = Number(room.capacity ?? 0);
+                  const roomDues = Number(room.outstanding_dues ?? room.due_amount ?? room.pending_dues ?? 0);
+                  const vacantBeds = Math.max(0, capacity - occupied);
                   const tenants = Array.isArray(room.tenants) ? (room.tenants as Record<string, unknown>[]) : [];
                   const tenantNames = tenants
                     .map((tenant) => String(tenant.name ?? '').trim())
@@ -1082,18 +1106,31 @@ function RoomsTab({ hostelId }: { hostelId: string }) {
                   return (
                     <div
                       key={String(room.id)}
-                      className={`bg-card border rounded-xl p-3.5 min-w-0 ${ !isOccupied ? 'border-[#3B82F6]/15' : 'border-border' }`}
+                      className={`bg-card border rounded-xl p-3.5 min-w-0 ${
+                        roomDues > 0 ? 'border-[#F59E0B]/50'
+                        : !isOccupied ? 'border-[#3B82F6]/15'
+                        : 'border-border'
+                      }`}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0 cursor-pointer hover:opacity-80" onClick={() => setSelectedRoomOverviewId(String(room.id))}>
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-semibold text-foreground">{String(room.room_no)}</span>
                             <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
-                              occupied === 0        ? 'bg-[#3B82F6]/10 text-[#3B82F6]'
+                              roomDues > 0          ? 'bg-[#F59E0B]/10 text-[#B45309]'
+                              : occupied === 0      ? 'bg-[#3B82F6]/10 text-[#3B82F6]'
                               : occupied < capacity ? 'bg-[#F59E0B]/10 text-[#F59E0B]'
                               : 'bg-[#10B981]/10 text-[#10B981]'
-                            }`}>{occupied}/{capacity} beds</span>
+                            }`}>
+                              {occupied}/{capacity} beds{roomDues > 0 ? ' · dues pending' : ''}
+                            </span>
                           </div>
+                          <div className="mt-2">
+                            <BedOccupancyBlocks occupied={occupied} capacity={capacity} hasDues={roomDues > 0} />
+                          </div>
+                          {vacantBeds > 0 && (
+                            <div className="text-[11px] text-muted-foreground mt-1">{vacantBeds} vacant bed{vacantBeds === 1 ? '' : 's'}</div>
+                          )}
                           {isOccupied && tenantNames.length > 0 && (
                             <div className="mt-1 space-y-1">
                               {tenants.slice(0, 3).map((tenant, index) => (

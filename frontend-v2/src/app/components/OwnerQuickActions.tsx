@@ -63,7 +63,10 @@ export function OwnerQuickActions() {
                 className="flex items-center gap-3 rounded-xl border border-border px-3 py-3 text-left text-sm font-medium disabled:opacity-50"
               >
                 <IndianRupee className="h-4 w-4 text-accent" />
-                Record payment
+                <span>
+                  <span className="block">Quick collect</span>
+                  <span className="block text-xs font-normal text-muted-foreground">Tenant search, amount, cash or UPI</span>
+                </span>
               </button>
               <button
                 type="button"

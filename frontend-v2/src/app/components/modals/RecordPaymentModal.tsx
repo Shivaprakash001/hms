@@ -26,6 +26,7 @@ interface OfflinePaymentPayload {
 export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initialAmount = '' }: RecordPaymentModalProps) {
   const queryClient = useQueryClient();
   const [selectedDueId, setSelectedDueId] = useState(initialDueId);
+  const [dueSearch, setDueSearch] = useState('');
   const [amount, setAmount] = useState(initialAmount);
   const [paymentMode, setPaymentMode] = useState('cash');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
@@ -49,6 +50,17 @@ export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initi
     : [];
 
   const selectedDue = dues.find((d) => String(d.obligation_id ?? d.id) === selectedDueId);
+  const filteredDues = dues.filter((due) => {
+    const haystack = [
+      due.tenant_name,
+      due.name,
+      due.room_no,
+      due.room_number,
+      due.phone,
+      due.email,
+    ].join(' ').toLowerCase();
+    return haystack.includes(dueSearch.trim().toLowerCase());
+  });
 
   const mutation = useMutation({
     mutationFn: async (payload: OfflinePaymentPayload & { password: string }) => {
@@ -125,7 +137,10 @@ export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initi
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center">
       <div className="bg-background w-full max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl sm:max-w-lg">
         <div className="sticky top-0 bg-background border-b border-border px-4 py-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-foreground">Record Payment</h2>
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Quick collect</h2>
+            <p className="text-xs text-muted-foreground">Search tenant, confirm amount, record cash or UPI.</p>
+          </div>
           <button onClick={onClose} className="p-2 hover:bg-secondary rounded-lg transition-colors">
             <X className="w-5 h-5 text-foreground" />
           </button>
@@ -142,29 +157,46 @@ export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initi
             ) : dues.length === 0 ? (
               <div className="py-3 text-sm text-muted-foreground">No pending dues found for this hostel</div>
             ) : (
-              <select
-                required
-                value={selectedDueId}
-                onChange={(e) => {
-                  setSelectedDueId(e.target.value);
-                  const due = dues.find((d) => String(d.obligation_id ?? d.id) === e.target.value);
-                  if (due) setAmount(String(due.outstanding ?? due.amount ?? ''));
-                }}
-                className="w-full px-4 py-3 bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
-              >
-                <option value="">Choose tenant</option>
-                {dues.map((d) => {
-                  const id = String(d.obligation_id ?? d.id);
-                  const name = String(d.tenant_name ?? d.name ?? 'Tenant');
-                  const room = d.room_no ?? d.room_number ? ` - Room ${d.room_no ?? d.room_number}` : '';
-                  const outstanding = Number(d.outstanding ?? d.amount ?? 0);
-                  return (
-                    <option key={id} value={id}>
-                      {name}{room} — ₹{outstanding.toLocaleString('en-IN')}
-                    </option>
-                  );
-                })}
-              </select>
+              <div className="space-y-2">
+                <input
+                  type="search"
+                  value={dueSearch}
+                  onChange={(event) => setDueSearch(event.target.value)}
+                  className="w-full px-4 py-3 bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
+                  placeholder="Search tenant, room, phone..."
+                />
+                <div className="max-h-44 overflow-y-auto rounded-xl border border-border bg-card divide-y divide-border">
+                  {filteredDues.slice(0, 8).map((d) => {
+                    const id = String(d.obligation_id ?? d.id);
+                    const name = String(d.tenant_name ?? d.name ?? 'Tenant');
+                    const room = d.room_no ?? d.room_number ? `Room ${d.room_no ?? d.room_number}` : 'Room N/A';
+                    const outstanding = Number(d.outstanding ?? d.amount ?? 0);
+                    const selected = selectedDueId === id;
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedDueId(id);
+                          setAmount(String(d.outstanding ?? d.amount ?? ''));
+                        }}
+                        className={`flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm ${
+                          selected ? 'bg-accent/10 text-accent' : 'text-foreground hover:bg-secondary'
+                        }`}
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium">{name}</span>
+                          <span className="block text-xs text-muted-foreground">{room}</span>
+                        </span>
+                        <span className="shrink-0 font-semibold">₹{outstanding.toLocaleString('en-IN')}</span>
+                      </button>
+                    );
+                  })}
+                  {filteredDues.length === 0 && (
+                    <div className="px-3 py-4 text-sm text-muted-foreground">No matching tenant dues.</div>
+                  )}
+                </div>
+              </div>
             )}
             {selectedDue && outstandingForSelected > 0 && (
               <p className="text-xs text-[#F59E0B] mt-1.5">Outstanding: ₹{outstandingForSelected.toLocaleString('en-IN')}</p>
@@ -191,8 +223,8 @@ export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initi
           {/* Payment Mode */}
           <div>
             <label className="block text-xs text-muted-foreground mb-2">Payment Mode *</label>
-            <div className="grid grid-cols-3 gap-2">
-              {['cash', 'upi', 'bank'].map((mode) => (
+            <div className="grid grid-cols-2 gap-2">
+              {['cash', 'upi'].map((mode) => (
                 <button
                   key={mode}
                   type="button"
@@ -203,10 +235,21 @@ export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initi
                       : 'bg-card border border-border text-foreground'
                   }`}
                 >
-                  {mode.toUpperCase()}
+                  Record {mode.toUpperCase()}
                 </button>
               ))}
             </div>
+            <button
+              type="button"
+              onClick={() => setPaymentMode('bank')}
+              className={`mt-2 w-full py-2.5 px-4 rounded-lg text-sm font-medium transition-colors ${
+                paymentMode === 'bank'
+                  ? 'bg-accent text-accent-foreground'
+                  : 'bg-card border border-border text-foreground'
+              }`}
+            >
+              Bank transfer
+            </button>
           </div>
 
           {/* Reference Number */}

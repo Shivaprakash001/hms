@@ -15,7 +15,7 @@ export function useTenantProfile(hostelId: string, tenantId: string, section?: s
   const fullQuery = useQuery({
     queryKey: queryKeys.tenants.full(hostelId, tenantId),
     queryFn: () => tenantService.getFull(tenantId),
-    enabled: Boolean(hostelId && tenantId) && ['documents', 'payments'].includes(section ?? ''),
+    enabled: Boolean(hostelId && tenantId) && ['documents', 'payments', 'compliance'].includes(section ?? ''),
     staleTime: 60_000,
   });
 
@@ -50,6 +50,7 @@ export function useTenantProfile(hostelId: string, tenantId: string, section?: s
     isError: overviewQuery.isError,
     refetch: () => {
       overviewQuery.refetch();
+      fullQuery.refetch();
       allocationsQuery.refetch();
       duesQuery.refetch();
       advanceQuery.refetch();

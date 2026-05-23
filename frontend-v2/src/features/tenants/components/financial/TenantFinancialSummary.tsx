@@ -9,11 +9,11 @@ export function TenantFinancialSummary({ summary, advance }: Props) {
   const s = summary ?? {};
   const cards = [
     { label: 'Total paid', value: fmt(Number(s.total_paid ?? s.totalPaid ?? 0)) },
-    { label: 'Pending dues', value: fmt(Number(s.pending_amount ?? s.pendingAmount ?? s.outstanding ?? 0)) },
+    { label: 'Pending dues', value: fmt(Number(s.pending_amount ?? s.pendingAmount ?? s.outstanding ?? s.total_due ?? 0)) },
     { label: 'Overdue', value: fmt(Number(s.overdue_amount ?? s.overdueAmount ?? 0)) },
     {
       label: 'Deposit balance',
-      value: fmt(Number(advance?.balance ?? advance?.current_balance ?? 0)),
+      value: fmt(Number(advance?.balance ?? advance?.current_balance ?? s.deposit_balance ?? s.advance_balance ?? 0)),
     },
   ];
 

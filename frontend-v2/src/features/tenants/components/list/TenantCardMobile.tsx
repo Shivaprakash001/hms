@@ -12,9 +12,11 @@ interface Props {
   onReminder?: (t: NormalizedTenant) => void;
   onCall?: (phone: string) => void;
   onResend?: (t: NormalizedTenant) => void;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (tenantId: string) => void;
 }
 
-export function TenantCardMobile({ tenants, hostelId, onSelect, onReminder, onCall, onResend }: Props) {
+export function TenantCardMobile({ tenants, hostelId, onSelect, onReminder, onCall, onResend, selectedIds, onToggleSelect }: Props) {
   if (tenants.length === 0) {
     return (
       <p className="text-center text-sm text-muted-foreground py-12 md:hidden">No tenants found</p>
@@ -28,6 +30,19 @@ export function TenantCardMobile({ tenants, hostelId, onSelect, onReminder, onCa
         const inner = (
           <>
             <div className="flex items-start gap-3">
+              {onToggleSelect && (
+                <input
+                  type="checkbox"
+                  checked={selectedIds?.has(t.id) ?? false}
+                  onChange={(event) => {
+                    event.stopPropagation();
+                    onToggleSelect(t.id);
+                  }}
+                  onClick={(event) => event.stopPropagation()}
+                  className="mt-3 h-4 w-4 rounded border-border text-accent focus:ring-accent shrink-0"
+                  aria-label={`Select ${t.name}`}
+                />
+              )}
               <div className="w-11 h-11 rounded-full bg-accent/15 overflow-hidden flex items-center justify-center text-sm font-semibold text-accent shrink-0">
                 {t.photoUrl ? (
                   <img src={t.photoUrl} alt="" className="h-full w-full object-cover" />

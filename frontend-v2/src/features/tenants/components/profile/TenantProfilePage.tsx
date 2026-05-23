@@ -31,6 +31,19 @@ const SECTIONS = [
 
 type SectionId = (typeof SECTIONS)[number]['id'];
 
+const money = (value: unknown) => `₹${Number(value ?? 0).toLocaleString('en-IN')}`;
+const date = (value: unknown) => (value ? new Date(String(value)).toLocaleDateString('en-IN') : '—');
+const title = (value: unknown) => String(value ?? '—').replaceAll('_', ' ');
+
+function listFrom<T = Record<string, unknown>>(value: unknown, keys: string[] = []): T[] {
+  if (Array.isArray(value)) return value as T[];
+  const record = value as Record<string, unknown> | undefined;
+  for (const key of keys) {
+    if (Array.isArray(record?.[key])) return record[key] as T[];
+  }
+  return [];
+}
+
 interface TenantProfilePageProps {
   hostelIdProp?: string;
   tenantIdProp?: string;
@@ -81,12 +94,10 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
   const photoUrl = String(tenant?.photo_url ?? overview?.photo_url ?? '').trim();
   const primaryPhone = String(profile?.phone ?? tenant?.phone_1 ?? overview?.phone ?? '').trim();
   const email = String(profile?.email ?? overview?.email ?? '').trim();
+  const currentRoom = (tenant.current_room ?? overview?.current_room ?? null) as Record<string, unknown> | null;
 
-  const obligations = Array.isArray(dues)
-    ? dues
-    : Array.isArray((dues as Record<string, unknown>)?.obligations)
-      ? ((dues as Record<string, unknown>).obligations as Record<string, unknown>[])
-      : [];
+  const obligations = listFrom(dues, ['items', 'obligations']);
+  const fullPayments = listFrom(full?.payments);
 
   if (isLoading) {
     return (
@@ -111,10 +122,27 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
     );
   }
 
-  const paymentSummary = (overview.payment_summary ?? overview.financial_summary) as Record<string, unknown> | undefined;
+  const paymentSummary = (overview.payment_summary ??
+    overview.financial_summary ?? {
+      total_paid: overview.total_paid,
+      pending_amount: overview.outstanding ?? overview.total_due,
+      overdue_amount: overview.overdue_amount,
+      deposit_balance: overview.advance_balance,
+    }) as Record<string, unknown> | undefined;
   const compliance = (overview.compliance ?? {}) as Record<string, unknown>;
   const pendingBillingRequests = frequencyRequests.data?.requests ?? [];
   const timelineItems = billingTimeline.data?.items ?? [];
+  const requiredDocTypes = listFrom<string>(compliance.required_document_types ?? full?.required_document_types);
+  const uploadedDocTypes = listFrom<string>(compliance.document_types);
+  const recentPayments = listFrom<Record<string, unknown>>(overview.recent_payments).length
+    ? listFrom<Record<string, unknown>>(overview.recent_payments)
+    : fullPayments.map((payment) => ({
+        id: payment.id,
+        amount: payment.amount_paid,
+        date: payment.payment_date,
+        method: payment.payment_method,
+        reference_number: payment.reference_number,
+      }));
 
   const runComplianceAction = async (action: string, success: string) => {
     try {
@@ -218,23 +246,35 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
           <div className="grid grid-cols-2 gap-2 text-sm">
             <div className="p-3 rounded-xl border border-border bg-card">
               <p className="text-muted-foreground text-xs">Joined</p>
+              <p className="font-medium">{date(tenant.joined_on ?? overview.joined_at)}</p>
+            </div>
+            <div className="p-3 rounded-xl border border-border bg-card">
+              <p className="text-muted-foreground text-xs">Room</p>
               <p className="font-medium">
-                {tenant?.joined_on || overview?.joined_at
-                  ? new Date(String(tenant.joined_on ?? overview.joined_at)).toLocaleDateString('en-IN')
-                  : '—'}
+                {currentRoom?.room_no ?? tenant.room_number ?? overview.room_number ?? 'Not assigned'}
               </p>
             </div>
             <div className="p-3 rounded-xl border border-border bg-card">
               <p className="text-muted-foreground text-xs">Profile type</p>
-              <p className="font-medium">{String(tenant?.profile_type ?? '—')}</p>
-            </div>
-            <div className="p-3 rounded-xl border border-border bg-card">
-              <p className="text-muted-foreground text-xs">Mobile verified</p>
-              <p className="font-medium">{profile?.phone_verified || profile?.mobile_verified ? 'Yes' : 'No'}</p>
+              <p className="font-medium">{title(tenant.profile_type ?? overview.profile_type)}</p>
             </div>
             <div className="p-3 rounded-xl border border-border bg-card">
               <p className="text-muted-foreground text-xs">Documents</p>
-              <p className="font-medium">{tenant?.document_verified || overview?.document_verified ? 'Verified' : 'Pending'}</p>
+              <p className="font-medium">
+                {tenant.document_verified || overview.document_verified
+                  ? 'Verified'
+                  : `${uploadedDocTypes.length}/${requiredDocTypes.length || 2} uploaded`}
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+            <div className="p-3 rounded-xl border border-border bg-card">
+              <p className="text-muted-foreground text-xs">Primary phone</p>
+              <p className="font-medium">{primaryPhone || 'Not provided'}</p>
+            </div>
+            <div className="p-3 rounded-xl border border-border bg-card">
+              <p className="text-muted-foreground text-xs">Guardian / emergency</p>
+              <p className="font-medium">{String(tenant.guardian_phone ?? profile.emergency_contact ?? 'Not provided')}</p>
             </div>
           </div>
           <TenantFinancialSummary summary={paymentSummary} advance={advance as Record<string, unknown>} />
@@ -255,22 +295,33 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
           <div className="p-4 rounded-xl border border-border bg-card space-y-2 text-sm">
             <p>
               <span className="text-muted-foreground">Monthly rent:</span>{' '}
-              <strong>₹{Number(tenant?.monthly_rent ?? overview?.rent ?? 0).toLocaleString('en-IN')}</strong>
+              <strong>{money(tenant.monthly_rent ?? overview.rent)}</strong>
             </p>
             <p>
               <span className="text-muted-foreground">Security deposit:</span>{' '}
-              <strong>₹{Number(tenant?.advance_deposit ?? tenant?.advance_amount ?? tenant?.security_deposit ?? 0).toLocaleString('en-IN')}</strong>
+              <strong>{money(tenant.advance_deposit ?? tenant.advance_amount ?? tenant.security_deposit)}</strong>
             </p>
             <p>
               <span className="text-muted-foreground">Maintenance:</span>{' '}
               <strong>
-                ₹{Number(tenant?.maintenance_charge ?? tenant?.maintenance_amount ?? 0).toLocaleString('en-IN')} (
-                {String(tenant?.maintenance_type ?? 'MONTHLY')})
+                {money(tenant.maintenance_charge ?? tenant.maintenance_amount)} (
+                {String(tenant.maintenance_type ?? 'MONTHLY')})
+              </strong>
+            </p>
+            <p>
+              <span className="text-muted-foreground">Billing start:</span>{' '}
+              <strong>{date(tenant.billing_start_date)}</strong>
+            </p>
+            <p>
+              <span className="text-muted-foreground">Current room:</span>{' '}
+              <strong>
+                {currentRoom?.room_no ?? tenant.room_number ?? overview.room_number ?? 'Not assigned'}
+                {currentRoom?.floor != null || tenant.floor != null ? ` · Floor ${currentRoom?.floor ?? tenant.floor}` : ''}
               </strong>
             </p>
             <p>
               <span className="text-muted-foreground">Active billing frequency:</span>{' '}
-              <strong>{String(billingTimeline.data?.active_frequency ?? tenant?.payment_frequency ?? 'MONTHLY').replaceAll('_', ' ')}</strong>
+              <strong>{title(billingTimeline.data?.active_frequency ?? tenant.payment_frequency ?? 'MONTHLY')}</strong>
             </p>
           </div>
 
@@ -360,15 +411,42 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
           <RentObligationList
             obligations={obligations as never[]}
             onRecordPayment={(id) => setPayObligationId(id)}
+            onSetupBilling={() => setSection('billing')}
           />
         </div>
       )}
 
       {section === 'payments' && (
-        <RentObligationList
-          obligations={obligations as never[]}
-          onRecordPayment={(id) => setPayObligationId(id)}
-        />
+        <div className="space-y-4">
+          <div className="rounded-xl border border-border bg-card p-4">
+            <h2 className="text-sm font-semibold text-foreground">Recent payments</h2>
+            {recentPayments.length === 0 ? (
+              <p className="py-4 text-sm text-muted-foreground">No payment history recorded yet.</p>
+            ) : (
+              <div className="mt-3 divide-y divide-border">
+                {recentPayments.slice(0, 8).map((payment) => (
+                  <div key={String(payment.id)} className="flex items-center justify-between gap-3 py-3 text-sm">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-foreground">{money(payment.amount ?? payment.amount_paid)}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {date(payment.date ?? payment.payment_date)} · {title(payment.method ?? payment.payment_method)}
+                      </p>
+                    </div>
+                    {payment.reference_number && (
+                      <span className="shrink-0 rounded-full bg-secondary px-2 py-1 text-[10px] text-muted-foreground">
+                        {String(payment.reference_number)}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <RentObligationList
+            obligations={obligations as never[]}
+            onRecordPayment={(id) => setPayObligationId(id)}
+          />
+        </div>
       )}
 
       {section === 'documents' && (
@@ -416,7 +494,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
             />
             <ComplianceCard
               label="Documents uploaded"
-              value={String(compliance.documents_uploaded ?? 0)}
+              value={`${Number(compliance.documents_uploaded ?? uploadedDocTypes.length ?? 0)}/${requiredDocTypes.length || 2}`}
               good={Number(compliance.documents_uploaded ?? 0) > 0}
             />
             <ComplianceCard

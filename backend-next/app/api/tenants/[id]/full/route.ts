@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
+
+const requiredDocumentTypes = (profileType?: string | null) => {
+  const type = String(profileType || "STUDENT").toUpperCase();
+  return type === "WORKING_PROFESSIONAL" ? ["AADHAAR", "WORK_ID"] : ["AADHAAR", "COLLEGE_ID"];
+};
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -11,10 +17,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
     const { id } = params;
 
+    const ownerScope = session.role === "OWNER" ? resolveOwnerScope(session).owner_id : null;
     const tenant = await prisma.tenants.findFirst({
       where: {
         id,
-        ...(session.role === "OWNER" ? { owner_id: session.sub } : {}),
+        ...(ownerScope ? { owner_id: ownerScope } : {}),
       },
       include: {
         profiles: true,
@@ -43,7 +50,14 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       return NextResponse.json({ error: { message: "Tenant not found" } }, { status: 404 });
     }
 
-    return NextResponse.json(tenant);
+    const requiredDocuments = requiredDocumentTypes(tenant.profile_type);
+    return NextResponse.json({
+      ...tenant,
+      identification_documents: (tenant.identification_documents || []).filter((doc) =>
+        requiredDocuments.includes(doc.doc_type)
+      ),
+      required_document_types: requiredDocuments,
+    });
   } catch (error) {
     console.error("Full profile fetch error:", error);
     return NextResponse.json({ error: { message: "Internal server error" } }, { status: 500 });

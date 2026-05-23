@@ -9,15 +9,49 @@ interface Props {
   stats: any;
 }
 
-function OccupancyChip({ occupied, capacity }: { occupied: number; capacity: number }) {
-  const pct = capacity > 0 ? (occupied / capacity) : 0;
-  const color = pct === 1 ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' :
-    pct > 0 ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300' :
+function occupancyTone(occupied: number, capacity: number, outstanding: number) {
+  if (outstanding > 0) return 'amber';
+  if (capacity > 0 && occupied === capacity) return 'green';
+  if (occupied > 0) return 'partial';
+  return 'empty';
+}
+
+function OccupancyChip({ occupied, capacity, outstanding }: { occupied: number; capacity: number; outstanding: number }) {
+  const tone = occupancyTone(occupied, capacity, outstanding);
+  const color =
+    tone === 'green' ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' :
+    tone === 'amber' ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300' :
+    tone === 'partial' ? 'bg-blue-500/15 text-blue-700 dark:text-blue-300' :
     'bg-muted text-muted-foreground';
   return (
     <span className={cn('text-xs font-medium px-1.5 py-0.5 rounded', color)}>
       {occupied}/{capacity}
     </span>
+  );
+}
+
+function BedBlocks({ occupied, capacity, outstanding }: { occupied: number; capacity: number; outstanding: number }) {
+  const beds = Array.from({ length: Math.max(1, capacity || 1) });
+  const tone = occupancyTone(occupied, capacity, outstanding);
+  return (
+    <div className="flex flex-wrap gap-1.5 pt-1">
+      {beds.map((_, index) => {
+        const filled = index < occupied;
+        return (
+          <span
+            key={index}
+            className={cn(
+              'h-5 w-4 rounded-[4px] border',
+              filled && tone === 'amber' && 'border-amber-500 bg-amber-500',
+              filled && tone === 'green' && 'border-emerald-500 bg-emerald-500',
+              filled && tone === 'partial' && 'border-blue-500 bg-blue-500',
+              !filled && 'border-border bg-background'
+            )}
+            aria-label={filled ? 'Occupied bed' : 'Vacant bed'}
+          />
+        );
+      })}
+    </div>
   );
 }
 
@@ -67,29 +101,43 @@ export function RoomPerformance({ intel, stats }: Props) {
               const daysOverdue = Number(room.avg_delay ?? room.average_delay ?? 0);
               const outstanding = Number(room.outstanding_dues ?? 0);
               const revenue = Number(room.revenue ?? 0);
+              const vacantBeds = Math.max(0, capacity - occupied);
+              const tone = occupancyTone(occupied, capacity, outstanding);
 
               return (
                 <div
                   key={room.room_id ?? room.room_no ?? i}
-                  className="rounded-lg border border-border bg-muted/20 p-2.5 flex flex-col gap-1"
+                  className={cn(
+                    'rounded-lg border bg-muted/20 p-3 flex flex-col gap-1.5',
+                    tone === 'green' && 'border-emerald-500/35',
+                    tone === 'amber' && 'border-amber-500/50',
+                    tone === 'partial' && 'border-blue-500/35',
+                    tone === 'empty' && 'border-border'
+                  )}
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-foreground truncate max-w-[80px]">
                       {room.room_no ?? `Room ${i + 1}`}
                     </span>
-                    <OccupancyChip occupied={occupied} capacity={capacity} />
+                    <OccupancyChip occupied={occupied} capacity={capacity} outstanding={outstanding} />
                   </div>
+                  <BedBlocks occupied={occupied} capacity={capacity} outstanding={outstanding} />
                   {room.floor_name && (
                     <span className="text-xs text-muted-foreground">{room.floor_name}</span>
                   )}
-                  {revenue > 0 && (
-                    <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">{fmt(revenue)}</span>
-                  )}
-                  {outstanding > 0 && (
-                    <span className="text-xs text-red-500 font-medium">{fmt(outstanding)} due</span>
-                  )}
-                  {daysOverdue > 0 && (
-                    <span className="text-xs text-muted-foreground">{Math.round(daysOverdue)}d avg delay</span>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                    {revenue > 0 && (
+                      <span className="text-emerald-600 dark:text-emerald-400 font-medium">{fmt(revenue)} collected</span>
+                    )}
+                    {outstanding > 0 && (
+                      <span className="text-amber-600 dark:text-amber-400 font-medium">{fmt(outstanding)} due</span>
+                    )}
+                    {vacantBeds > 0 && (
+                      <span className="text-muted-foreground">{vacantBeds} vacant bed{vacantBeds === 1 ? '' : 's'}</span>
+                    )}
+                  </div>
+                  {daysOverdue > 0 && outstanding > 0 && (
+                    <span className="text-xs text-muted-foreground">{Math.round(daysOverdue)}d average delay</span>
                   )}
                 </div>
               );

@@ -31,11 +31,31 @@ const SECTIONS: { id: SectionId; label: string; icon: React.ElementType; descrip
   { id: 'access', label: 'Access & Receipts', icon: Shield, description: 'Permissions, receipts, regional', hostelScoped: true },
 ];
 
+const SECTION_BY_ID = Object.fromEntries(SECTIONS.map((section) => [section.id, section])) as Record<SectionId, (typeof SECTIONS)[number]>;
+
+const SETTINGS_GROUPS: { title: string; hint: string; sections: SectionId[] }[] = [
+  {
+    title: 'Set up your hostel',
+    hint: 'Identity, tenant defaults, and rent cycles in the order owners usually configure them.',
+    sections: ['hostel', 'tenant-defaults', 'billing'],
+  },
+  {
+    title: 'Configure payments',
+    hint: 'Collection methods, reminders, and recurring automation.',
+    sections: ['payments', 'automation', 'notifications'],
+  },
+  {
+    title: 'Manage access',
+    hint: 'Owner profile, permissions, receipts, and regional records.',
+    sections: ['profile', 'access'],
+  },
+];
+
 export function SettingsView() {
   const { logout } = useAuth();
-  const [activeSection, setActiveSection] = useState<SectionId>('billing');
+  const [activeSection, setActiveSection] = useState<SectionId>('hostel');
   const [selectedHostelId, setSelectedHostelId] = useState<string | null>(null);
-  const [mobileOpenSection, setMobileOpenSection] = useState<SectionId | null>('billing');
+  const [mobileOpenSection, setMobileOpenSection] = useState<SectionId | null>('hostel');
 
   const { data: hostelsRaw } = useQuery({
     queryKey: queryKeys.owner.hostels(),
@@ -100,26 +120,36 @@ export function SettingsView() {
       <div className="hidden md:flex h-[calc(100vh-53px)]">
         {/* Secondary sidebar */}
         <aside className="w-52 shrink-0 border-r border-border overflow-y-auto py-3">
-          {SECTIONS.map(s => (
-            <button
-              key={s.id}
-              onClick={() => setActiveSection(s.id)}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors rounded-lg mx-1.5 ${
-                activeSection === s.id
-                  ? 'bg-accent/10 text-accent font-medium'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
-              }`}
-            >
-              <s.icon className="w-4 h-4 shrink-0" />
-              <div className="min-w-0">
-                <div className="text-sm truncate">{s.label}</div>
+          {SETTINGS_GROUPS.map((group) => (
+            <div key={group.title} className="mb-4">
+              <div className="px-4 pb-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{group.title}</p>
               </div>
-            </button>
+              {group.sections.map((id) => {
+                const s = SECTION_BY_ID[id];
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => setActiveSection(s.id)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors rounded-lg mx-1.5 ${
+                      activeSection === s.id
+                        ? 'bg-accent/10 text-accent font-medium'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
+                    }`}
+                  >
+                    <s.icon className="w-4 h-4 shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-sm truncate">{s.label}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           ))}
           <div className="mx-3 mt-4 pt-3 border-t border-border">
             <button
               onClick={logout}
-              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition-colors"
             >
               <LogOut className="w-4 h-4" /> Log out
             </button>
@@ -136,35 +166,44 @@ export function SettingsView() {
 
       {/* ── Mobile layout: accordion sections ── */}
       <div className="md:hidden px-4 py-4 space-y-3 pb-24">
-        {SECTIONS.map(s => {
-          const isOpen = mobileOpenSection === s.id;
-          return (
-            <div key={s.id} className="bg-card border border-border rounded-xl overflow-hidden">
-              <button
-                onClick={() => setMobileOpenSection(isOpen ? null : s.id)}
-                className="w-full flex items-center gap-3 px-4 py-3.5"
-              >
-                <div className={`p-1.5 rounded-lg ${isOpen ? 'bg-accent/10' : 'bg-secondary'}`}>
-                  <s.icon className={`w-4 h-4 ${isOpen ? 'text-accent' : 'text-muted-foreground'}`} />
-                </div>
-                <div className="flex-1 text-left">
-                  <div className={`text-sm font-medium ${isOpen ? 'text-accent' : 'text-foreground'}`}>{s.label}</div>
-                  <div className="text-xs text-muted-foreground">{s.description}</div>
-                </div>
-                <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${isOpen ? 'rotate-90' : ''}`} />
-              </button>
-              {isOpen && (
-                <div className="border-t border-border">
-                  {renderSection(s.id)}
-                </div>
-              )}
+        {SETTINGS_GROUPS.map((group) => (
+          <div key={group.title} className="space-y-2">
+            <div className="px-1">
+              <p className="text-xs font-semibold text-foreground">{group.title}</p>
+              <p className="text-[11px] text-muted-foreground">{group.hint}</p>
             </div>
-          );
-        })}
+            {group.sections.map((id) => {
+              const s = SECTION_BY_ID[id];
+              const isOpen = mobileOpenSection === s.id;
+              return (
+                <div key={s.id} className="bg-card border border-border rounded-xl overflow-hidden">
+                  <button
+                    onClick={() => setMobileOpenSection(isOpen ? null : s.id)}
+                    className="w-full flex items-center gap-3 px-4 py-3.5"
+                  >
+                    <div className={`p-1.5 rounded-lg ${isOpen ? 'bg-accent/10' : 'bg-secondary'}`}>
+                      <s.icon className={`w-4 h-4 ${isOpen ? 'text-accent' : 'text-muted-foreground'}`} />
+                    </div>
+                    <div className="flex-1 text-left">
+                      <div className={`text-sm font-medium ${isOpen ? 'text-accent' : 'text-foreground'}`}>{s.label}</div>
+                      <div className="text-xs text-muted-foreground">{s.description}</div>
+                    </div>
+                    <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+                  </button>
+                  {isOpen && (
+                    <div className="border-t border-border">
+                      {renderSection(s.id)}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ))}
 
         <button
           onClick={logout}
-          className="w-full bg-destructive/10 text-destructive p-4 rounded-xl flex items-center justify-center gap-2"
+          className="w-full bg-secondary text-muted-foreground p-4 rounded-xl flex items-center justify-center gap-2"
         >
           <LogOut className="w-5 h-5" />
           <span className="font-medium">Log Out</span>

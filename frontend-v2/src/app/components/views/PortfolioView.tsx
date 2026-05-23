@@ -101,6 +101,8 @@ export function PortfolioView() {
   const overdueTenantCount = new Set(overdueRows.map((row) => row.tenant)).size;
   const overdueAmount = overdueRows.reduce((sum, row) => sum + row.amount, 0) || Number(portfolio.total_due ?? 0);
   const overdueHint = overdueAmount > 0;
+  const monthLabel = new Date().toLocaleString('en-IN', { month: 'long' });
+  const collectionRate = Number(portfolio.collection_rate ?? 0);
 
   return (
     <div className="px-4 py-5 space-y-5 min-w-0 max-w-5xl mx-auto pb-24 md:pb-8">
@@ -172,7 +174,7 @@ export function PortfolioView() {
               },
               {
                 label: 'Collection rate',
-                value: `${Number(portfolio.collection_rate ?? 0).toFixed(0)}%`,
+                value: `${collectionRate.toFixed(0)}%`,
                 icon: TrendingUp,
               },
               {
@@ -196,6 +198,32 @@ export function PortfolioView() {
               </div>
             ))}
           </div>
+
+          <section className="rounded-xl border border-border bg-card p-4">
+            <div className="flex items-start gap-3">
+              <div className="rounded-xl bg-accent/10 p-2 text-accent">
+                <Bell className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-foreground">{monthLabel} collection digest</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Collected {fmt(Number(portfolio.total_revenue ?? 0))} of expected rent
+                  {collectionRate > 0 ? ` (${collectionRate.toFixed(0)}%)` : ''}.
+                  {' '}
+                  {overdueTenantCount > 0
+                    ? `${overdueTenantCount} tenant${overdueTenantCount === 1 ? '' : 's'} still outstanding.`
+                    : 'No outstanding tenants in the current view.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate('/billing')}
+                className="shrink-0 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-foreground"
+              >
+                Review
+              </button>
+            </div>
+          </section>
 
           <div className="grid gap-2 sm:grid-cols-2">
             {firstHostelId && (

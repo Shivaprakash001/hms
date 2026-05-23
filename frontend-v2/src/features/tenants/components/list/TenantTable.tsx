@@ -11,9 +11,11 @@ interface Props {
   onReminder?: (t: NormalizedTenant) => void;
   onMoveOut?: (t: NormalizedTenant) => void;
   onResend?: (t: NormalizedTenant) => void;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (tenantId: string) => void;
 }
 
-export function TenantTable({ tenants, hostelId, onReminder, onMoveOut, onResend }: Props) {
+export function TenantTable({ tenants, hostelId, onReminder, onMoveOut, onResend, selectedIds, onToggleSelect }: Props) {
   if (tenants.length === 0) {
     return (
       <p className="text-center text-sm text-muted-foreground py-12">No tenants match your filters</p>
@@ -25,6 +27,7 @@ export function TenantTable({ tenants, hostelId, onReminder, onMoveOut, onResend
       <table className="w-full text-sm">
         <thead>
           <tr className="bg-secondary/50 text-left text-xs text-muted-foreground">
+            {onToggleSelect && <th className="px-4 py-3 w-10 font-medium">Pick</th>}
             <th className="px-4 py-3 font-medium">Tenant</th>
             <th className="px-4 py-3 font-medium">Room</th>
             <th className="px-4 py-3 font-medium">Rent</th>
@@ -42,6 +45,17 @@ export function TenantTable({ tenants, hostelId, onReminder, onMoveOut, onResend
               ['PENDING', 'PARTIAL'].includes(String(t.paymentStatus).toUpperCase());
             return (
               <tr key={t.id} className="border-t border-border hover:bg-secondary/30">
+                {onToggleSelect && (
+                  <td className="px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds?.has(t.id) ?? false}
+                      onChange={() => onToggleSelect(t.id)}
+                      className="h-4 w-4 rounded border-border text-accent focus:ring-accent"
+                      aria-label={`Select ${t.name}`}
+                    />
+                  </td>
+                )}
                 <td className="px-4 py-3">
                   <Link
                     to={`/hostels/${hostelId}/tenants/${t.id}`}

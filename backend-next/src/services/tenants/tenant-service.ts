@@ -523,6 +523,19 @@ export class TenantService {
     const totalPaid = Number(paymentAgg._sum.amount_paid || 0);
     const totalDue = dues.total_due;
     const outstanding = dues.total_due;
+    const overdueAmount = (dues.items || []).reduce((sum: number, item: any) => {
+      const dueDate = item.due_date ? new Date(item.due_date) : null;
+      if (!dueDate || dueDate.getTime() >= Date.now()) return sum;
+      return sum + Number(item.outstanding || 0);
+    }, 0);
+    const advanceEntries = await prisma.tenant_advance_ledger.findMany({
+      where: { tenant_id: tenantId, owner_id: ownerId },
+      orderBy: { created_at: "asc" },
+    });
+    const advanceBalance = advanceEntries.reduce((acc: number, entry: any) => {
+      const amount = Number(entry.amount || 0);
+      return entry.type === "CREDIT" ? acc + amount : acc - amount;
+    }, 0);
     const allPayments = await prisma.payments.findMany({
       where: { tenant_id: tenantId, owner_id: ownerId, hostel_id: legacyTenant.hostel_id },
       orderBy: { payment_date: "desc" },
@@ -587,7 +600,32 @@ export class TenantService {
       total_paid: totalPaid,
       total_due: totalDue,
       outstanding: outstanding,
+      overdue_amount: overdueAmount,
+      advance_balance: advanceBalance,
       recent_payments: recentPayments,
+      current_room: currentRoom
+        ? {
+            id: currentRoom.id,
+            room_no: currentRoom.room_no,
+            floor: currentRoom.floor,
+            capacity: currentRoom.capacity,
+            base_rent: currentRoom.base_rent,
+          }
+        : null,
+      payment_summary: {
+        total_paid: totalPaid,
+        pending_amount: outstanding,
+        outstanding,
+        overdue_amount: overdueAmount,
+        payment_status: outstanding <= 0 ? "PAID" : totalPaid > 0 ? "PARTIAL" : "PENDING",
+      },
+      financial_summary: {
+        total_paid: totalPaid,
+        pending_amount: outstanding,
+        outstanding,
+        overdue_amount: overdueAmount,
+        deposit_balance: advanceBalance,
+      },
       profile: {
         id: legacyTenant.profile.id,
         name: legacyTenant.profile.name,
@@ -627,9 +665,19 @@ export class TenantService {
         permanent_address: legacyTenant.permanent_address,
         temporary_address: legacyTenant.temporary_address,
         document_verified: legacyTenant.document_verified,
+        mobile_verified: legacyTenant.mobile_verified,
         profile_completed: legacyTenant.profile_completed,
         room_number: currentRoom?.room_no || null,
         floor,
+        current_room: currentRoom
+          ? {
+              id: currentRoom.id,
+              room_no: currentRoom.room_no,
+              floor: currentRoom.floor,
+              capacity: currentRoom.capacity,
+              base_rent: currentRoom.base_rent,
+            }
+          : null,
       },
       compliance: {
         profile_completed: Boolean(legacyTenant.profile_completed || legacyTenant.profile?.is_profile_completed),

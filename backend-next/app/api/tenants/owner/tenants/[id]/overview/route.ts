@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { tenantService } from "@/src/services/tenants/tenant-service";
+import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
 
 
 /**
@@ -20,7 +21,8 @@ export async function GET(
   }
 
   try {
-    const overview = await tenantService.getOwnerTenantOverview(params.id, session.sub);
+    const ownerId = session.role === "OWNER" ? resolveOwnerScope(session).owner_id : session.sub;
+    const overview = await tenantService.getOwnerTenantOverview(params.id, ownerId);
     return apiResponse(overview);
   } catch (error: any) {
     if (error.message.startsWith("NOT_FOUND")) return apiError(error.message.split(": ")[1], "NOT_FOUND", 404);
