@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { AlertCircle, AlertTriangle, Phone, CheckCircle, Building2, CreditCard, ChevronDown, FileText } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Phone, CheckCircle, Building2, CreditCard, ChevronDown, FileText, MessageSquare } from 'lucide-react';
 import { ownerService } from '@features/owners/api';
 import { paymentService } from '@features/payments/api';
 import { tenantService } from '@features/tenants/api';
