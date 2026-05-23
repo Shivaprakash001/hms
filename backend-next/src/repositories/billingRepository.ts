@@ -165,6 +165,11 @@ export class BillingRepository {
       hostel_id: string | null;
       allocation_id: string | null;
       rent_month: Date;
+      billing_period_start: Date | null;
+      billing_period_end: Date | null;
+      installment_label: string | null;
+      installment_sequence: number | null;
+      billing_plan_id: string | null;
       due_date: Date;
       amount: number;
       remaining_amount: number;
@@ -176,9 +181,14 @@ export class BillingRepository {
         o.id                                                AS obligation_id,
         o.tenant_id,
         o.owner_id,
-        r.hostel_id                                         AS hostel_id,
+        o.hostel_id                                         AS hostel_id,
         o.allocation_id,
         o.rent_month,
+        o.billing_period_start,
+        o.billing_period_end,
+        o.installment_label,
+        o.installment_sequence,
+        o.billing_plan_id,
         o.due_date,
         o.amount::float                                     AS amount,
         (o.amount - COALESCE(pay_agg.total_paid, 0))::float AS remaining_amount,
@@ -198,6 +208,7 @@ export class BillingRepository {
       WHERE o.status IN ('PENDING', 'PARTIAL')
         AND o.obligation_type = 'RENT'
         AND o.due_date < ${cutoff}::date
+        AND o.is_superseded = false
         AND t.status = 'ACTIVE'
         AND o.amount - COALESCE(pay_agg.total_paid, 0) > 0
         AND o.owner_id = ${ownerId}::uuid
@@ -245,6 +256,7 @@ export class BillingRepository {
         ...(ownerId ? { owner_id: ownerId } : {}),
         hostel_id: hostelId,
         status: { in: ["PENDING", "PARTIAL"] },
+        is_superseded: false,
       },
       include: {
         payments: { select: { amount_paid: true } },

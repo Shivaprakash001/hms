@@ -20,6 +20,7 @@ interface AuthContextValue {
   loading: boolean;
   login: (email: string, password: string) => Promise<AuthUser>;
   loginWithGoogle: (code: string, redirectUri: string) => Promise<AuthUser>;
+  updateUser: (patch: Partial<AuthUser>) => void;
   logout: () => void | Promise<void>;
 }
 
@@ -68,6 +69,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     queryClient.clear();
     clearSessionScopedStorage();
     navigate('/login', { replace: true });
+  };
+
+  const updateUser = (patch: Partial<AuthUser>) => {
+    setUser((current) => {
+      if (!current) return current;
+      const next = { ...current, ...patch };
+      const key =
+        normalizeRole(next.role) === 'owner' || normalizeRole(next.role) === 'admin'
+          ? 'ownerUser'
+          : 'tenantUser';
+      localStorage.setItem(key, JSON.stringify(next));
+      return next;
+    });
   };
 
   useEffect(() => {
@@ -208,7 +222,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, loginWithGoogle, logout, loading }}>
+    <AuthContext.Provider value={{ user, login, loginWithGoogle, updateUser, logout, loading }}>
       {children}
     </AuthContext.Provider>
   );

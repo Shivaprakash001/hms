@@ -189,6 +189,11 @@ export class FinancialService {
     hostel_id: string | null;
     allocation_id: string | null;
     rent_month: Date;
+    billing_period_start?: Date | null;
+    billing_period_end?: Date | null;
+    installment_label?: string | null;
+    installment_sequence?: number | null;
+    billing_plan_id?: string | null;
     due_date: Date;
     amount: number;
     remaining_amount: number;
@@ -205,6 +210,11 @@ export class FinancialService {
       hostel_id:        r.hostel_id ?? null,
       allocation_id:    r.allocation_id,
       rent_month:       r.rent_month,
+      billing_period_start: (r as any).billing_period_start ?? null,
+      billing_period_end: (r as any).billing_period_end ?? null,
+      installment_label: (r as any).installment_label ?? null,
+      installment_sequence: (r as any).installment_sequence ?? null,
+      billing_plan_id: (r as any).billing_plan_id ?? null,
       due_date:         r.due_date,
       amount:           Number(r.amount || 0),
       remaining_amount: Number(r.remaining_amount || 0),
@@ -257,6 +267,10 @@ export class FinancialService {
         obligation_id: ob.id,
         type: ob.obligation_type,
         rent_month: ob.rent_month,
+        billing_period_start: (ob as any).billing_period_start,
+        billing_period_end: (ob as any).billing_period_end,
+        installment_label: (ob as any).installment_label,
+        installment_sequence: (ob as any).installment_sequence,
         due_date: ob.due_date,
         amount: Number(ob.amount),
         paid,
@@ -332,6 +346,10 @@ export interface TenantDueItem {
   obligation_id: string;
   type: string;
   rent_month: Date;
+  billing_period_start?: Date | null;
+  billing_period_end?: Date | null;
+  installment_label?: string | null;
+  installment_sequence?: number | null;
   due_date: Date;
   amount: number;
   paid: number;

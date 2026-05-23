@@ -87,6 +87,14 @@ export interface HostelPolicy {
     maintenance: { type: string; amount: number };
     invite_defaults: { auto_fill_room_rent: boolean; allow_override: boolean };
     partial_payments: { enabled: boolean; minimum_amount: number };
+    payment_frequency: {
+      allowed_frequencies: string[];
+      academic_year_start_month: number;
+      academic_year_start_day: number;
+      academic_year_name_format: string;
+      frequency_change_cooldown_days: number;
+      minimum_commitment_months: Record<string, number>;
+    };
   };
   payments: { upi_id: string | null; phonepe_merchant_id: string | null; payment_instructions: string | null };
   reminders: {

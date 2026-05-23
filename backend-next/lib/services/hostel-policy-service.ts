@@ -3,6 +3,7 @@ import { eventLog } from "./event-log-service";
 
 export type MaintenanceType = "MONTHLY" | "ONE_TIME" | "NONE";
 export type RentCycle = "MONTHLY";
+export type PaymentFrequencySetting = "MONTHLY" | "QUARTERLY" | "HALF_YEARLY" | "ACADEMIC_YEARLY" | "CUSTOM_INSTALLMENTS";
 
 export type HostelPolicy = {
   policy_version: number;
@@ -40,6 +41,14 @@ export type HostelPolicy = {
     overflow: {
       enabled: boolean;
       strategy: string;
+    };
+    payment_frequency: {
+      allowed_frequencies: PaymentFrequencySetting[];
+      academic_year_start_month: number;
+      academic_year_start_day: number;
+      academic_year_name_format: string;
+      frequency_change_cooldown_days: number;
+      minimum_commitment_months: Record<string, number>;
     };
   };
   payments: {
@@ -218,6 +227,12 @@ function rentCycle(value: unknown): RentCycle {
   return normalized as RentCycle;
 }
 
+function paymentFrequencies(value: unknown): PaymentFrequencySetting[] {
+  const allowed = new Set(["MONTHLY", "QUARTERLY", "HALF_YEARLY", "ACADEMIC_YEARLY", "CUSTOM_INSTALLMENTS"]);
+  const values = asArray(value).map((item) => String(item).toUpperCase()).filter((item) => allowed.has(item));
+  return (values.length ? values : ["MONTHLY", "QUARTERLY"]) as PaymentFrequencySetting[];
+}
+
 function intArray(value: unknown, label: string) {
   const values = asArray(value).map((item) => Number(item));
   if (values.some((item) => !Number.isInteger(item) || item < -30 || item > 90)) {
@@ -246,6 +261,7 @@ export function normalizeHostelPolicy(hostel: any): HostelPolicy {
   const maintenance = asObject(billing.maintenance);
   const inviteDefaults = asObject(billing.invite_defaults);
   const partialPayments = asObject(billing.partial_payments);
+  const paymentFrequency = asObject(billing.payment_frequency ?? config.payment_frequency);
   const billingDefaults = asObject(config.billing_defaults);
   const reminders = asObject(config.reminders);
   const reminderChannels = asObject(reminders.channels);
@@ -306,6 +322,20 @@ export function normalizeHostelPolicy(hostel: any): HostelPolicy {
       overflow: {
         enabled: bool(asObject(billing.overflow).enabled, true),
         strategy: String(asObject(billing.overflow).strategy || "CARRY_FORWARD"),
+      },
+      payment_frequency: {
+        allowed_frequencies: paymentFrequencies(paymentFrequency.allowed_frequencies),
+        academic_year_start_month: compatibleNumber(paymentFrequency.academic_year_start_month, 6),
+        academic_year_start_day: compatibleNumber(paymentFrequency.academic_year_start_day, 1),
+        academic_year_name_format: String(paymentFrequency.academic_year_name_format || "YYYY-YYYY"),
+        frequency_change_cooldown_days: compatibleNumber(paymentFrequency.frequency_change_cooldown_days, 90),
+        minimum_commitment_months: {
+          MONTHLY: compatibleNumber(asObject(paymentFrequency.minimum_commitment_months).MONTHLY, 1),
+          QUARTERLY: compatibleNumber(asObject(paymentFrequency.minimum_commitment_months).QUARTERLY, 3),
+          HALF_YEARLY: compatibleNumber(asObject(paymentFrequency.minimum_commitment_months).HALF_YEARLY, 6),
+          ACADEMIC_YEARLY: compatibleNumber(asObject(paymentFrequency.minimum_commitment_months).ACADEMIC_YEARLY, 12),
+          CUSTOM_INSTALLMENTS: compatibleNumber(asObject(paymentFrequency.minimum_commitment_months).CUSTOM_INSTALLMENTS, 1),
+        },
       },
     },
     payments: {
@@ -437,6 +467,12 @@ export function toCompatibilityPreferences(policy: HostelPolicy): Record<string,
     },
     allow_partial_payments: policy.billing.partial_payments.enabled,
     min_payment_amount: policy.billing.partial_payments.minimum_amount,
+    allowed_frequencies: policy.billing.payment_frequency.allowed_frequencies,
+    academic_year_start_month: policy.billing.payment_frequency.academic_year_start_month,
+    academic_year_start_day: policy.billing.payment_frequency.academic_year_start_day,
+    academic_year_name_format: policy.billing.payment_frequency.academic_year_name_format,
+    frequency_change_cooldown_days: policy.billing.payment_frequency.frequency_change_cooldown_days,
+    minimum_commitment_months: policy.billing.payment_frequency.minimum_commitment_months,
     upi_id: policy.payments.upi_id || "",
     phonepe_merchant_id: policy.payments.phonepe_merchant_id || "",
     reminder_email: policy.reminders.channels.email,
@@ -490,6 +526,21 @@ export function compatibilityPreferencesToPolicyPatch(data: Record<string, any>)
         partial_payments: {
           ...(data.allow_partial_payments !== undefined && { enabled: data.allow_partial_payments }),
           ...(data.min_payment_amount !== undefined && { minimum_amount: data.min_payment_amount }),
+        },
+      }),
+      ...((data.allowed_frequencies !== undefined
+        || data.academic_year_start_month !== undefined
+        || data.academic_year_start_day !== undefined
+        || data.academic_year_name_format !== undefined
+        || data.frequency_change_cooldown_days !== undefined
+        || data.minimum_commitment_months !== undefined) && {
+        payment_frequency: {
+          ...(data.allowed_frequencies !== undefined && { allowed_frequencies: data.allowed_frequencies }),
+          ...(data.academic_year_start_month !== undefined && { academic_year_start_month: data.academic_year_start_month }),
+          ...(data.academic_year_start_day !== undefined && { academic_year_start_day: data.academic_year_start_day }),
+          ...(data.academic_year_name_format !== undefined && { academic_year_name_format: data.academic_year_name_format }),
+          ...(data.frequency_change_cooldown_days !== undefined && { frequency_change_cooldown_days: data.frequency_change_cooldown_days }),
+          ...(data.minimum_commitment_months !== undefined && { minimum_commitment_months: data.minimum_commitment_months }),
         },
       }),
     },
@@ -619,6 +670,12 @@ export function validateHostelPolicyForWrite(policy: HostelPolicy) {
   nonNegative(policy.billing.deposit.default_amount, 0, "Default advance deposit", 1000000);
   nonNegative(policy.billing.maintenance.amount, 0, "Maintenance amount", 50000);
   nonNegative(policy.billing.partial_payments.minimum_amount, 0, "Minimum payment amount", 1000000);
+  boundedNumber(policy.billing.payment_frequency.academic_year_start_month, 6, 1, 12, "Academic year start month");
+  boundedNumber(policy.billing.payment_frequency.academic_year_start_day, 1, 1, 31, "Academic year start day");
+  boundedNumber(policy.billing.payment_frequency.frequency_change_cooldown_days, 90, 0, 3650, "Frequency change cooldown");
+  for (const [frequency, months] of Object.entries(policy.billing.payment_frequency.minimum_commitment_months || {})) {
+    boundedNumber(months, 1, 0, 120, `${frequency} minimum commitment`);
+  }
   boundedNumber(policy.tenant_rules.invite_expiry_hours, 48, 1, 720, "Invite expiry hours");
   boundedNumber(policy.automation.auto_deactivate_days, 0, 0, 365, "Auto deactivate days");
   boundedNumber(policy.dashboard.occupancy_warning_threshold, 80, 0, 100, "Occupancy warning threshold");

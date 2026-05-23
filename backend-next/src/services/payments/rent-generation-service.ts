@@ -7,9 +7,9 @@ import { getCurrentDateInTimezone, getDayInTimezone } from "@/lib/timezone";
 import { rentGenerationLedgerService } from "@/lib/services/rent-generation-ledger-service";
 import {
   validateBillingPreferences,
-  computeDueDate,
   type BillingValidationError,
 } from "@/lib/services/billing-validation";
+import { billingScheduleService, type PaymentFrequency } from "@/lib/services/billing-schedule-service";
 import crypto from "crypto";
 
 /**
@@ -113,7 +113,15 @@ export class RentGenerationService {
         where: whereClause,
         include: {
           tenant: {
-            select: { id: true, monthly_rent: true, owner_id: true, maintenance_charge: true, maintenance_type: true }
+            select: {
+              id: true,
+              monthly_rent: true,
+              owner_id: true,
+              maintenance_charge: true,
+              maintenance_type: true,
+              payment_frequency: true,
+              payment_frequency_effective_from: true,
+            }
           },
           room: {
             select: { base_rent: true, hostel_id: true }
@@ -145,6 +153,21 @@ export class RentGenerationService {
       const existingSet = new Set(
         existingObligations.map(o => `${o.allocation_id}:${o.obligation_type ?? 'RENT'}`)
       );
+
+      const tenantIds = Array.from(new Set(allocations.map((a: any) => a.tenant?.id).filter(Boolean))) as string[];
+      const activePlans = await prisma.tenant_billing_plans.findMany({
+        where: {
+          tenant_id: { in: tenantIds },
+          status: "ACTIVE",
+          effective_from: { lte: rentMonth },
+          OR: [{ effective_to: null }, { effective_to: { gte: rentMonth } }],
+        },
+        orderBy: { effective_from: "desc" },
+      });
+      const activePlanMap = new Map<string, any>();
+      for (const plan of activePlans) {
+        if (!activePlanMap.has(plan.tenant_id)) activePlanMap.set(plan.tenant_id, plan);
+      }
 
       const rentRows:  any[] = [];
       const maintRows: any[] = [];
@@ -288,10 +311,8 @@ export class RentGenerationService {
           }
         }
 
-        // Phase 4: Use computeDueDate which applies the shift policy when due_day < auto_rent_day
         const autoRentDayVal = Number(config.auto_rent_day ?? 1);
         const dueDayVal = Number(config.due_day ?? 5);
-        const tenantDueDate = computeDueDate(rentMonth, autoRentDayVal, dueDayVal);
 
         const rentAmount = Number(alloc.tenant.monthly_rent) || Number(alloc.room.base_rent) || 0;
         if (rentAmount <= 0) {
@@ -299,6 +320,39 @@ export class RentGenerationService {
           skipped++;
           continue;
         }
+
+        const policy = billingScheduleService.normalizePolicy((prefs as any)?.preferences_config);
+        const effectiveFrom = (alloc.tenant as any).payment_frequency_effective_from
+          ? new Date((alloc.tenant as any).payment_frequency_effective_from)
+          : null;
+        const tenantFrequency = String((alloc.tenant as any).payment_frequency || "MONTHLY") as PaymentFrequency;
+        const frequency = effectiveFrom && effectiveFrom <= rentMonth ? tenantFrequency : "MONTHLY";
+        if (!billingScheduleService.isPeriodStart(rentMonth, frequency, policy)) {
+          skipped++;
+          logGenerationDecision({
+            owner_id: ownerId,
+            hostel_id: hostelId,
+            rent_month: rentMonth.toISOString(),
+            obligation_type: "RENT",
+            created: 0,
+            skipped: 1,
+            reason: "NOT_BILLING_PERIOD_START",
+            payment_frequency: frequency,
+            trigger_type: triggerType,
+          });
+          continue;
+        }
+        const installment = billingScheduleService.buildInstallment({
+          frequency,
+          anchorDate: rentMonth,
+          monthlyRent: rentAmount,
+          maintenanceAmount: Number((alloc.tenant as any).maintenance_charge) || 0,
+          dueDay: dueDayVal,
+          autoRentDay: autoRentDayVal,
+          policy,
+        });
+        const tenantDueDate = installment.due_date;
+        const activePlan = activePlanMap.get(alloc.tenant.id);
 
         // Collect RENT row if not already present
         const rentCompleted = await rentGenerationLedgerService.hasCompleted(ownerId, hostelId, rentMonth, "RENT");
@@ -323,9 +377,14 @@ export class RentGenerationService {
             rentRows.push({
               tenant_id: alloc.tenant.id, allocation_id: alloc.id,
               owner_id: alloc.tenant.owner_id, rent_month: rentMonth,
-              amount: rentAmount, total_amount: rentAmount,
+              amount: installment.amount, total_amount: installment.amount,
               due_date: tenantDueDate, status: "PENDING", obligation_type: "RENT",
               hostel_id: hostelId, // Phase 2: immutable hostel context at generation time
+              billing_period_start: installment.period_start,
+              billing_period_end: installment.period_end,
+              installment_label: installment.installment_label,
+              installment_sequence: installment.installment_sequence,
+              billing_plan_id: activePlan?.id || null,
             });
             stat.created++;
           } else {
@@ -360,9 +419,14 @@ export class RentGenerationService {
               maintRows.push({
                 tenant_id: alloc.tenant.id, allocation_id: alloc.id,
                 owner_id: alloc.tenant.owner_id, rent_month: rentMonth,
-                amount: maintAmount, total_amount: maintAmount,
+                amount: installment.maintenance_amount, total_amount: installment.maintenance_amount,
                 due_date: tenantDueDate, status: "PENDING", obligation_type: "MAINTENANCE",
                 hostel_id: hostelId, // Phase 2: immutable hostel context at generation time
+                billing_period_start: installment.period_start,
+                billing_period_end: installment.period_end,
+                installment_label: installment.installment_label,
+                installment_sequence: installment.installment_sequence,
+                billing_plan_id: activePlan?.id || null,
               });
               stat.created++;
             } else {

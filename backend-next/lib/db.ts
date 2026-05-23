@@ -35,6 +35,8 @@ const delegateAliases: Record<string, string> = {
   hostel: "hostels",
   room: "rooms",
   rentObligation: "rent_obligations",
+  tenantBillingPlan: "tenant_billing_plans",
+  paymentFrequencyChangeRequest: "payment_frequency_change_requests",
   reminderLog: "reminder_logs",
   payment: "payments",
   expense: "expenses",

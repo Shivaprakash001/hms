@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { CreditCard, Download, Loader2 } from 'lucide-react';
-import { useQueryClient } from '@tanstack/react-query';
+import { CalendarDays, CreditCard, Download, Loader2, Send, WalletCards } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useTenantDashboard } from '@features/tenant-portal/hooks/useTenantDashboard';
 import { tenantPortalApi } from '@features/tenant-portal/api';
@@ -20,6 +20,30 @@ export function TenantFinancialsPage() {
   const { dues, payments, advance, isLoading } = useTenantDashboard();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showPayModal, setShowPayModal] = useState(false);
+  const [requestedFrequency, setRequestedFrequency] = useState('QUARTERLY');
+  const [requestReason, setRequestReason] = useState('');
+  const billingContext = useQuery({
+    queryKey: ['tenant', 'billing-frequency'],
+    queryFn: () => tenantPortalApi.getMyBillingFrequency(),
+  });
+  const billingTimeline = useQuery({
+    queryKey: ['tenant', 'billing-timeline'],
+    queryFn: () => tenantPortalApi.getMyBillingTimeline(),
+  });
+  const frequencyMutation = useMutation({
+    mutationFn: () => tenantPortalApi.requestBillingFrequencyChange({
+      requested_frequency: requestedFrequency,
+      reason: requestReason,
+    }),
+    onSuccess: () => {
+      toast.success('Billing change request sent to owner');
+      setRequestReason('');
+      queryClient.invalidateQueries({ queryKey: ['tenant', 'billing-frequency'] });
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.error?.message || 'Could not submit request');
+    },
+  });
 
   const payableItems = useMemo(
     () => buildPayableObligations(dues, payments),
@@ -98,12 +122,97 @@ export function TenantFinancialsPage() {
   }
 
   const totalDue = Number(dues?.total_due ?? payments?.outstanding_balance ?? 0);
+  const timelineItems = billingTimeline.data?.items ?? [];
+  const allowedFrequencies = (billingContext.data?.allowed_frequencies ?? ['MONTHLY', 'QUARTERLY'])
+    .filter((f: string) => f !== billingContext.data?.active_frequency && f !== 'CUSTOM_INSTALLMENTS');
+  const pendingFrequencyRequest = (billingContext.data?.requests ?? []).find((r: any) => r.status === 'PENDING');
 
   return (
     <div className="space-y-5">
       <h1 className="text-xl font-bold text-foreground">Financials</h1>
 
       <TenantPriorityStrip dues={dues} payments={payments} />
+
+      <section className="rounded-xl border border-border bg-card p-4 space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-accent/10 text-accent flex items-center justify-center">
+              <WalletCards className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">Billing contract</h2>
+              <p className="text-xs text-muted-foreground mt-1">
+                Active plan: <span className="font-semibold text-foreground">{String(billingContext.data?.active_frequency ?? 'MONTHLY').replaceAll('_', ' ')}</span>
+              </p>
+            </div>
+          </div>
+          {pendingFrequencyRequest && (
+            <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 text-[11px] font-bold">
+              OWNER REVIEW
+            </span>
+          )}
+        </div>
+
+        {pendingFrequencyRequest ? (
+          <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-900">
+            Your request for {String(pendingFrequencyRequest.requested_frequency).replaceAll('_', ' ')} billing is waiting for owner approval.
+          </div>
+        ) : (
+          allowedFrequencies.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr_auto] gap-3">
+              <select
+                value={requestedFrequency}
+                onChange={(e) => setRequestedFrequency(e.target.value)}
+                className="px-3 py-3 rounded-xl border border-border bg-background text-sm"
+              >
+                {allowedFrequencies.map((frequency: string) => (
+                  <option key={frequency} value={frequency}>{frequency.replaceAll('_', ' ')}</option>
+                ))}
+              </select>
+              <input
+                value={requestReason}
+                onChange={(e) => setRequestReason(e.target.value)}
+                placeholder="Reason, e.g. parent salary cycle"
+                className="px-3 py-3 rounded-xl border border-border bg-background text-sm"
+              />
+              <button
+                type="button"
+                disabled={frequencyMutation.isPending}
+                onClick={() => frequencyMutation.mutate()}
+                className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-accent text-accent-foreground font-bold text-sm disabled:opacity-50"
+              >
+                {frequencyMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                Request
+              </button>
+            </div>
+          )
+        )}
+      </section>
+
+      {timelineItems.length > 0 && (
+        <section className="rounded-xl border border-border bg-card p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <CalendarDays className="w-4 h-4 text-accent" />
+            <h2 className="text-sm font-semibold text-foreground">Payment timeline</h2>
+          </div>
+          <div className="space-y-2">
+            {timelineItems.slice(0, 6).map((item: any) => (
+              <div key={item.obligation_id} className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">{item.label}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {item.type} · Due {fmtDate(item.due_date)}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-bold">{fmt(Number(item.remaining ?? item.amount ?? 0))}</p>
+                  <span className="text-[11px] font-bold uppercase text-muted-foreground">{String(item.state).replaceAll('_', ' ')}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {payableItems.length > 0 ? (
         <section className="rounded-xl border border-border bg-card p-4 space-y-3">
@@ -129,7 +238,7 @@ export function TenantFinancialsPage() {
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between gap-2">
-                      <span className="font-medium text-sm">Monthly stay</span>
+                      <span className="font-medium text-sm">{item.label || 'Rent installment'}</span>
                       <span className="font-bold text-sm">{fmt(item.amount)}</span>
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">

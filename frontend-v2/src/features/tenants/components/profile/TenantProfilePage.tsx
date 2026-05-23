@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Phone, Mail, Loader2, Bell, Download, FileCheck2, Send } from 'lucide-react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, Phone, Mail, Loader2, Bell, Download, FileCheck2, Send, CalendarDays, CheckCircle2, XCircle } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { tenantService } from '@features/tenants/api';
+import { ownerService } from '@features/owners/api';
 import { useTenantProfile } from '@features/tenants/hooks/useTenantProfile';
 import { useTenantActions } from '@features/tenants/hooks/useTenantActions';
 import { TenantStatusBadge } from '@features/tenants/components/badges/TenantStatusBadge';
@@ -36,6 +38,7 @@ interface TenantProfilePageProps {
 }
 
 export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: TenantProfilePageProps = {}) {
+  const queryClient = useQueryClient();
   const params = useParams();
   const hostelId = hostelIdProp ?? params.hostelId ?? '';
   const tenantId = tenantIdProp ?? params.tenantId ?? '';
@@ -47,6 +50,29 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
   const { overview, allocations, dues, advance, full, isLoading, isError, refetch } =
     useTenantProfile(hostelId, tenantId, section);
   const actions = useTenantActions(hostelId);
+  const billingTimeline = useQuery({
+    queryKey: ['tenant', tenantId, 'billing-timeline'],
+    queryFn: () => tenantService.getTenantBillingTimeline(tenantId),
+    enabled: Boolean(tenantId) && section === 'billing',
+  });
+  const frequencyRequests = useQuery({
+    queryKey: ['owner', 'billing-frequency-requests', tenantId],
+    queryFn: () => ownerService.getFrequencyChangeRequests({ tenantId, status: 'PENDING' }),
+    enabled: Boolean(tenantId) && section === 'billing',
+  });
+  const decisionMutation = useMutation({
+    mutationFn: ({ id, action }: { id: string; action: 'APPROVE' | 'REJECT' }) =>
+      ownerService.decideFrequencyChangeRequest(id, action),
+    onSuccess: () => {
+      toast.success('Billing request updated');
+      queryClient.invalidateQueries({ queryKey: ['owner', 'billing-frequency-requests', tenantId] });
+      queryClient.invalidateQueries({ queryKey: ['tenant', tenantId, 'billing-timeline'] });
+      refetch();
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.error?.message || 'Could not update billing request');
+    },
+  });
 
   const profile = (overview?.profile ?? overview?.profiles ?? full?.profiles ?? {}) as Record<string, unknown>;
   const tenant = (overview?.tenant ?? overview ?? {}) as Record<string, unknown>;
@@ -87,6 +113,8 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
 
   const paymentSummary = (overview.payment_summary ?? overview.financial_summary) as Record<string, unknown> | undefined;
   const compliance = (overview.compliance ?? {}) as Record<string, unknown>;
+  const pendingBillingRequests = frequencyRequests.data?.requests ?? [];
+  const timelineItems = billingTimeline.data?.items ?? [];
 
   const runComplianceAction = async (action: string, success: string) => {
     try {
@@ -240,7 +268,92 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
                 {String(tenant?.maintenance_type ?? 'MONTHLY')})
               </strong>
             </p>
+            <p>
+              <span className="text-muted-foreground">Active billing frequency:</span>{' '}
+              <strong>{String(billingTimeline.data?.active_frequency ?? tenant?.payment_frequency ?? 'MONTHLY').replaceAll('_', ' ')}</strong>
+            </p>
           </div>
+
+          {pendingBillingRequests.length > 0 && (
+            <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 space-y-3">
+              <p className="text-sm font-semibold text-amber-950">Pending billing frequency request</p>
+              {pendingBillingRequests.map((request: any) => (
+                <div key={request.id} className="rounded-lg bg-white/80 border border-amber-200 p-3 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">
+                        {String(request.current_frequency).replaceAll('_', ' ')} → {String(request.requested_frequency).replaceAll('_', ' ')}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Effective {request.effective_from ? new Date(request.effective_from).toLocaleDateString('en-IN') : 'next clean period'}
+                        {request.reason ? ` · ${request.reason}` : ''}
+                      </p>
+                    </div>
+                    <span className="text-[11px] font-bold px-2 py-1 rounded-full bg-amber-100 text-amber-700">
+                      {request.risk_snapshot?.risk_level ?? 'REVIEW'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-lg bg-background p-2">
+                      <p className="text-muted-foreground">Pending dues</p>
+                      <p className="font-bold">₹{Number(request.settlement_snapshot?.pending_dues ?? 0).toLocaleString('en-IN')}</p>
+                    </div>
+                    <div className="rounded-lg bg-background p-2">
+                      <p className="text-muted-foreground">Next expected</p>
+                      <p className="font-bold">
+                        {request.projection_snapshot?.expected_next_payment_date
+                          ? new Date(request.projection_snapshot.expected_next_payment_date).toLocaleDateString('en-IN')
+                          : '—'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={decisionMutation.isPending}
+                      onClick={() => decisionMutation.mutate({ id: request.id, action: 'APPROVE' })}
+                      className="inline-flex items-center gap-2 rounded-xl bg-accent text-accent-foreground px-3 py-2 text-xs font-bold disabled:opacity-50"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      disabled={decisionMutation.isPending}
+                      onClick={() => decisionMutation.mutate({ id: request.id, action: 'REJECT' })}
+                      className="inline-flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 text-xs font-bold disabled:opacity-50"
+                    >
+                      <XCircle className="w-4 h-4" />
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {timelineItems.length > 0 && (
+            <div className="p-4 rounded-xl border border-border bg-card">
+              <div className="flex items-center gap-2 mb-3">
+                <CalendarDays className="w-4 h-4 text-accent" />
+                <p className="text-sm font-semibold text-foreground">Billing timeline</p>
+              </div>
+              <div className="space-y-2">
+                {timelineItems.slice(0, 8).map((item: any) => (
+                  <div key={item.obligation_id} className="flex justify-between gap-3 rounded-lg border border-border p-3 text-sm">
+                    <div>
+                      <p className="font-semibold">{item.label}</p>
+                      <p className="text-xs text-muted-foreground">{item.type} · Due {new Date(item.due_date).toLocaleDateString('en-IN')}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold">₹{Number(item.remaining ?? item.amount ?? 0).toLocaleString('en-IN')}</p>
+                      <p className="text-[11px] font-bold uppercase text-muted-foreground">{String(item.state).replaceAll('_', ' ')}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <TenantFinancialSummary summary={paymentSummary} advance={advance as Record<string, unknown>} />
           <RentObligationList
             obligations={obligations as never[]}

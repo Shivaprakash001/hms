@@ -167,7 +167,7 @@ export class ReminderService {
                 });
 
                 if (!existingDailyFee) {
-                  let feeAmount = calculateSingleRuleFee(rule as any, Number(ob.amount));
+                  let feeAmount = calculateSingleRuleFee(rule as any, Number(ob.remaining_amount ?? ob.amount));
 
                   // Cap check
                   if (maxCap > 0 && accumulatedFees + feeAmount > maxCap) {
@@ -188,6 +188,11 @@ export class ReminderService {
                           status: "PENDING",
                           obligation_type: "LATE_FEE",
                           hostel_id: hostelId,
+                          billing_period_start: (ob as any).billing_period_start || ob.rent_month,
+                          billing_period_end: (ob as any).billing_period_end || ob.rent_month,
+                          installment_label: (ob as any).installment_label || null,
+                          installment_sequence: (ob as any).installment_sequence || null,
+                          billing_plan_id: (ob as any).billing_plan_id || null,
                         },
                       });
                       accumulatedFees += feeAmount;
@@ -216,7 +221,7 @@ export class ReminderService {
                   : existingOneTimeFees >= oneTimeRuleCount;
 
                 if (!hasThisRuleFee) {
-                  let feeAmount = calculateSingleRuleFee(rule as any, Number(ob.amount));
+                  let feeAmount = calculateSingleRuleFee(rule as any, Number(ob.remaining_amount ?? ob.amount));
 
                   // Cap check
                   if (maxCap > 0 && accumulatedFees + feeAmount > maxCap) {
@@ -237,6 +242,11 @@ export class ReminderService {
                           status: "PENDING",
                           obligation_type: "LATE_FEE",
                           hostel_id: hostelId,
+                          billing_period_start: (ob as any).billing_period_start || ob.rent_month,
+                          billing_period_end: (ob as any).billing_period_end || ob.rent_month,
+                          installment_label: (ob as any).installment_label || null,
+                          installment_sequence: (ob as any).installment_sequence || null,
+                          billing_plan_id: (ob as any).billing_plan_id || null,
                         },
                       });
                       accumulatedFees += feeAmount;

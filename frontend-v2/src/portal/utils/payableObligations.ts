@@ -6,6 +6,7 @@ export interface PayableObligation {
   late_fee?: number;
   due_date?: string;
   rent_month?: string;
+  label?: string;
   cycle?: string;
   status: string;
 }
@@ -22,6 +23,7 @@ export function normalizeObligation(raw: Record<string, unknown>): PayableObliga
     late_fee: Number(raw.late_fee ?? raw.late_fee_amount ?? 0),
     due_date: raw.due_date as string | undefined,
     rent_month: raw.rent_month as string | undefined,
+    label: (raw.installment_label ?? raw.label ?? raw.type) as string | undefined,
     cycle: (raw.rent_month ?? raw.due_date) as string | undefined,
     status: String(raw.status ?? 'pending').toLowerCase(),
   };
@@ -45,6 +47,7 @@ export function buildPayableObligations(
           rent_amount: i.amount,
           due_date: i.due_date,
           rent_month: i.rent_month,
+          installment_label: i.installment_label,
           status: i.status ?? 'pending',
           type: i.type,
         })

@@ -1,11 +1,17 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronUp, CalendarRange } from 'lucide-react';
 import { useUpdateHostelPolicy, HostelPolicy, LateFeeRule } from '@features/settings/settingsHooks';
 import { SectionShell, Field, inp, Sel, Toggle, FieldRow } from './shared';
 
 interface Local {
   rent_cycle: string; auto_rent_day: number; due_day: number; grace_days: number;
   late_fee_enabled: boolean; late_fee_rules: LateFeeRule[]; max_late_fee: number;
+  allowed_frequencies: string[];
+  academic_year_start_month: number;
+  academic_year_start_day: number;
+  academic_year_name_format: string;
+  frequency_change_cooldown_days: number;
+  minimum_commitment_months: Record<string, number>;
 }
 
 const CYCLE_OPTIONS = [
@@ -18,6 +24,13 @@ const RULE_TYPE_OPTIONS = [
   { value: 'PER_DAY', label: 'Per day (₹/day)' },
 ];
 
+const FREQUENCY_OPTIONS = [
+  { value: 'MONTHLY', label: 'Monthly', hint: 'Every month' },
+  { value: 'QUARTERLY', label: 'Quarterly', hint: '3-month grouped bills' },
+  { value: 'HALF_YEARLY', label: 'Half-yearly', hint: '6-month grouped bills' },
+  { value: 'ACADEMIC_YEARLY', label: 'Academic yearly', hint: 'One academic-cycle bill' },
+];
+
 const init = (p?: HostelPolicy): Local => ({
   rent_cycle: p?.billing.rent_cycle ?? 'MONTHLY',
   auto_rent_day: p?.billing.auto_rent_day ?? 1,
@@ -26,6 +39,18 @@ const init = (p?: HostelPolicy): Local => ({
   late_fee_enabled: p?.billing.late_fee.enabled ?? false,
   late_fee_rules: p?.billing.late_fee.rules ?? [],
   max_late_fee: p?.billing.late_fee.max_amount ?? 500,
+  allowed_frequencies: p?.billing.payment_frequency?.allowed_frequencies ?? ['MONTHLY', 'QUARTERLY'],
+  academic_year_start_month: p?.billing.payment_frequency?.academic_year_start_month ?? 6,
+  academic_year_start_day: p?.billing.payment_frequency?.academic_year_start_day ?? 1,
+  academic_year_name_format: p?.billing.payment_frequency?.academic_year_name_format ?? 'YYYY-YYYY',
+  frequency_change_cooldown_days: p?.billing.payment_frequency?.frequency_change_cooldown_days ?? 90,
+  minimum_commitment_months: p?.billing.payment_frequency?.minimum_commitment_months ?? {
+    MONTHLY: 1,
+    QUARTERLY: 3,
+    HALF_YEARLY: 6,
+    ACADEMIC_YEARLY: 12,
+    CUSTOM_INSTALLMENTS: 1,
+  },
 });
 
 // simple frontend preview — not authoritative, backend is source of truth
@@ -69,6 +94,14 @@ export function BillingSection({ hostelId, policy }: Props) {
         due_day: local.due_day,
         grace_days: local.grace_days,
         late_fee: { enabled: local.late_fee_enabled, rules: local.late_fee_rules, max_amount: local.max_late_fee },
+        payment_frequency: {
+          allowed_frequencies: local.allowed_frequencies,
+          academic_year_start_month: local.academic_year_start_month,
+          academic_year_start_day: local.academic_year_start_day,
+          academic_year_name_format: local.academic_year_name_format,
+          frequency_change_cooldown_days: local.frequency_change_cooldown_days,
+          minimum_commitment_months: local.minimum_commitment_months,
+        },
       },
     }, {
       onSuccess: () => { snap.current = local; },
@@ -87,6 +120,21 @@ export function BillingSection({ hostelId, policy }: Props) {
 
   const updateRule = (i: number, patch: Partial<LateFeeRule>) =>
     upd('late_fee_rules', local.late_fee_rules.map((r, idx) => idx === i ? { ...r, ...patch } : r));
+
+  const toggleFrequency = (frequency: string) => {
+    const exists = local.allowed_frequencies.includes(frequency);
+    const next = exists
+      ? local.allowed_frequencies.filter(f => f !== frequency)
+      : [...local.allowed_frequencies, frequency];
+    upd('allowed_frequencies', next.includes('MONTHLY') ? next : ['MONTHLY', ...next]);
+  };
+
+  const setCommitment = (frequency: string, value: number) => {
+    upd('minimum_commitment_months', {
+      ...local.minimum_commitment_months,
+      [frequency]: Math.max(0, Math.min(120, Number(value) || 0)),
+    });
+  };
 
   const previewFee = calcPreview(Number(previewRent) || 0, Number(previewDays) || 0, local);
   const dueDateLabel = `Day ${local.due_day}`;
@@ -119,6 +167,67 @@ export function BillingSection({ hostelId, policy }: Props) {
             value={local.grace_days}
             onChange={e => upd('grace_days', Math.min(30, Math.max(0, +e.target.value)))} />
         </Field>
+      </div>
+
+      <div className="rounded-xl border border-border bg-secondary/20 p-4 space-y-4">
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-lg bg-accent/10 text-accent flex items-center justify-center">
+            <CalendarRange className="w-4 h-4" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">Flexible rent contracts</h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              Tenants can request these billing frequencies. Owner approval is always required.
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {FREQUENCY_OPTIONS.map(option => (
+            <label key={option.value} className="flex items-center gap-3 rounded-lg border border-border bg-background px-3 py-3 text-sm">
+              <input
+                type="checkbox"
+                checked={local.allowed_frequencies.includes(option.value)}
+                disabled={option.value === 'MONTHLY'}
+                onChange={() => toggleFrequency(option.value)}
+                className="h-4 w-4 accent-accent"
+              />
+              <span className="flex-1">
+                <span className="font-medium text-foreground">{option.label}</span>
+                <span className="block text-xs text-muted-foreground">{option.hint}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <Field label="Academic start month">
+            <input type="number" min={1} max={12} className={inp}
+              value={local.academic_year_start_month}
+              onChange={e => upd('academic_year_start_month', Math.min(12, Math.max(1, +e.target.value)))} />
+          </Field>
+          <Field label="Academic start day">
+            <input type="number" min={1} max={31} className={inp}
+              value={local.academic_year_start_day}
+              onChange={e => upd('academic_year_start_day', Math.min(31, Math.max(1, +e.target.value)))} />
+          </Field>
+          <Field label="Cooldown days">
+            <input type="number" min={0} max={3650} className={inp}
+              value={local.frequency_change_cooldown_days}
+              onChange={e => upd('frequency_change_cooldown_days', Math.min(3650, Math.max(0, +e.target.value)))} />
+          </Field>
+          <Field label="Year label format">
+            <input className={inp} value={local.academic_year_name_format}
+              onChange={e => upd('academic_year_name_format', e.target.value)} />
+          </Field>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {FREQUENCY_OPTIONS.map(option => (
+            <Field key={option.value} label={`${option.label} lock (months)`}>
+              <input type="number" min={0} max={120} className={inp}
+                value={local.minimum_commitment_months[option.value] ?? 1}
+                onChange={e => setCommitment(option.value, +e.target.value)} />
+            </Field>
+          ))}
+        </div>
       </div>
 
       {/* Late fee toggle */}

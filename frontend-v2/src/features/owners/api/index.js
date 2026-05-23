@@ -81,6 +81,14 @@ export const ownerService = {
     updateHostelPolicy: async (hostelId, policyPatch) => {
         const response = await api.patch(`/hostels/${hostelId}/preferences`, { policy: policyPatch });
         return response.data;
+    },
+    getFrequencyChangeRequests: async (params = {}) => {
+        const response = await api.get('/owner/billing/frequency-requests', { params });
+        return response.data?.data ?? response.data;
+    },
+    decideFrequencyChangeRequest: async (requestId, action, rejection_reason = '') => {
+        const response = await api.post(`/owner/billing/frequency-requests/${requestId}/decision`, { action, rejection_reason });
+        return response.data?.data ?? response.data;
     }
 };
 

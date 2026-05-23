@@ -130,6 +130,22 @@ export const tenantService = {
         const response = await api.get('/tenants/me/advance');
         return response.data.success !== undefined ? (response.data.data !== undefined ? response.data.data : response.data) : response.data;
     },
+    getMyBillingFrequency: async () => {
+        const response = await api.get('/tenants/me/billing-frequency');
+        return unwrap(response);
+    },
+    requestBillingFrequencyChange: async (data) => {
+        const response = await api.post('/tenants/me/billing-frequency', data);
+        return unwrap(response);
+    },
+    getMyBillingTimeline: async () => {
+        const response = await api.get('/tenants/me/billing-timeline');
+        return unwrap(response);
+    },
+    getTenantBillingTimeline: async (tenantId) => {
+        const response = await api.get(`/tenants/${tenantId}/billing-timeline`);
+        return unwrap(response);
+    },
     create: async (data) => {
         const response = await api.post('/tenants', data);
         return response.data.success !== undefined ? (response.data.data !== undefined ? response.data.data : response.data) : response.data;

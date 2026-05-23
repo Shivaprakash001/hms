@@ -26,7 +26,12 @@ export class PropertyService {
         name: profile.name,
         email: profile.email,
         phone: profile.phone,
-        role: profile.role
+        role: profile.role,
+        address: profile.address,
+        city: profile.city,
+        state: profile.state,
+        pincode: profile.pincode,
+        emergency_contact: profile.emergency_contact,
       },
       hostels: profile.hostels.map((hostel: any) => ({
         id: hostel.id,
@@ -58,10 +63,45 @@ export class PropertyService {
     };
   }
 
-  async updateOwnerProfile(userId: string, data: { name?: string; phone?: string }) {
+  async updateOwnerProfile(userId: string, data: {
+    name?: string;
+    phone?: string;
+    address?: string | null;
+    city?: string | null;
+    state?: string | null;
+    pincode?: string | null;
+    emergency_contact?: string | null;
+  }) {
     const updateData: any = {};
-    if (data.name !== undefined) updateData.name = data.name;
-    if (data.phone !== undefined) updateData.phone = data.phone;
+    if (data.name !== undefined) {
+      const name = String(data.name).trim();
+      if (name.length < 2) throw new Error("VALIDATION: Name must be at least 2 characters");
+      updateData.name = name;
+    }
+    if (data.phone !== undefined) {
+      const phone = String(data.phone).trim();
+      if (phone && !/^\+?[0-9]{10,15}$/.test(phone)) {
+        throw new Error("VALIDATION: Phone must be 10 to 15 digits");
+      }
+      updateData.phone = phone || null;
+    }
+    if (data.address !== undefined) updateData.address = cleanNullable(data.address);
+    if (data.city !== undefined) updateData.city = cleanNullable(data.city);
+    if (data.state !== undefined) updateData.state = cleanNullable(data.state);
+    if (data.pincode !== undefined) {
+      const pincode = cleanNullable(data.pincode);
+      if (pincode && !/^[0-9]{4,10}$/.test(pincode)) {
+        throw new Error("VALIDATION: Pincode must be numeric");
+      }
+      updateData.pincode = pincode;
+    }
+    if (data.emergency_contact !== undefined) {
+      const emergencyContact = cleanNullable(data.emergency_contact);
+      if (emergencyContact && !/^\+?[0-9]{10,15}$/.test(emergencyContact)) {
+        throw new Error("VALIDATION: Emergency contact must be 10 to 15 digits");
+      }
+      updateData.emergency_contact = emergencyContact;
+    }
 
     if (Object.keys(updateData).length === 0) {
       throw new Error("VALIDATION: No valid fields to update");
@@ -520,6 +560,11 @@ export class PropertyService {
     });
   }
 
+}
+
+function cleanNullable(value: unknown) {
+  const cleaned = String(value ?? "").trim();
+  return cleaned || null;
 }
 
 export const propertyService = new PropertyService();
