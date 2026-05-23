@@ -65,7 +65,7 @@ export const allocationService = {
     },
     getTenantHistory: async (tenantId, hostelId) => {
         const response = await api.get(`/allocations/tenant/${tenantId}`);
-        return response.data;
+        return response.data.success ? response.data.data : response.data;
     },
     getAllActive: async (hostelId) => {
         const response = await api.get('/allocations', { params: { hostelId } });

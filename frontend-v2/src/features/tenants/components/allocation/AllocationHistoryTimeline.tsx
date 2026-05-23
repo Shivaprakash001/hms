@@ -10,15 +10,18 @@ interface Props {
   hostelId: string;
   tenantId: string;
   allocations: unknown;
+  currentRoom?: Record<string, unknown> | null;
   onChanged?: () => void;
 }
 
-export function AllocationHistoryTimeline({ hostelId, tenantId, allocations, onChanged }: Props) {
+export function AllocationHistoryTimeline({ hostelId, tenantId, allocations, currentRoom, onChanged }: Props) {
   const [showTransfer, setShowTransfer] = useState(false);
   const qc = useQueryClient();
 
   const list = Array.isArray(allocations)
     ? allocations
+    : Array.isArray((allocations as Record<string, unknown>)?.data)
+      ? ((allocations as Record<string, unknown>).data as Record<string, unknown>[])
     : Array.isArray((allocations as Record<string, unknown>)?.history)
       ? ((allocations as Record<string, unknown>).history as Record<string, unknown>[])
       : Array.isArray((allocations as Record<string, unknown>)?.allocations)
@@ -26,6 +29,8 @@ export function AllocationHistoryTimeline({ hostelId, tenantId, allocations, onC
         : [];
 
   const active = list.find((a) => a.is_active === true && !a.end_date);
+  const fallbackRoomNo = currentRoom?.room_no ?? currentRoom?.room_number ?? null;
+  const fallbackFloor = currentRoom?.floor ?? null;
 
   const endMutation = useMutation({
     mutationFn: (allocationId: string) => allocationService.end(allocationId, {}),
@@ -77,6 +82,21 @@ export function AllocationHistoryTimeline({ hostelId, tenantId, allocations, onC
                 Remove
               </button>
             </div>
+          </>
+        ) : fallbackRoomNo ? (
+          <>
+            <p className="text-lg font-bold">Room {String(fallbackRoomNo)}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Active room from tenant profile{fallbackFloor != null ? ` · Floor ${String(fallbackFloor)}` : ''}
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowTransfer(true)}
+              className="mt-4 flex w-full items-center justify-center gap-1.5 py-2.5 rounded-xl bg-accent text-accent-foreground text-sm font-semibold touch-manipulation"
+            >
+              <ArrowRightLeft className="w-4 h-4" />
+              Transfer
+            </button>
           </>
         ) : (
           <p className="text-sm text-muted-foreground">No active room assignment</p>

@@ -56,6 +56,10 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
     if (hostelId) setSelectedHostelId(hostelId);
   }, [hostelId]);
 
+  useEffect(() => {
+    if (preselectedRoomId) setRoomId(preselectedRoomId);
+  }, [preselectedRoomId]);
+
   // ── Available rooms (ACTIVE + has free beds) ─────────────────────────────
   const { data: roomsRaw = [] } = useQuery({
     queryKey: queryKeys.rooms.list(selectedHostelId),

@@ -286,6 +286,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
           hostelId={hostelId}
           tenantId={tenantId}
           allocations={allocations}
+          currentRoom={currentRoom}
           onChanged={refetch}
         />
       )}

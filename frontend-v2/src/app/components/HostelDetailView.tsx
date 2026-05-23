@@ -922,7 +922,7 @@ function RoomOverviewModal({ hostelId, roomId, onClose, onEditRoom, onTransferTe
 // ─── Rooms Tab ────────────────────────────────────────────────────────────────
 function RoomsTab({ hostelId }: { hostelId: string }) {
   const qc = useQueryClient();
-  const [showAddTenant, setShowAddTenant]     = useState(false);
+  const [assignTenantRoomId, setAssignTenantRoomId] = useState<string | null>(null);
   const [roomForm, setRoomForm]               = useState<{ room: Record<string, unknown> | null; floorId?: string } | null>(null);
   const [showAddFloor, setShowAddFloor]       = useState(false);
   const [floorMenu, setFloorMenu]             = useState<{ id: string; name: string } | null>(null);
@@ -1097,6 +1097,7 @@ function RoomsTab({ hostelId }: { hostelId: string }) {
                   const isOccupied = String(room.status) === 'occupied';
                   const occupied   = Number(room.occupied_count ?? 0);
                   const capacity   = Number(room.capacity ?? 0);
+                  const hasVacantBed = occupied < capacity;
                   const roomDues = Number(room.outstanding_dues ?? room.due_amount ?? room.pending_dues ?? 0);
                   const vacantBeds = Math.max(0, capacity - occupied);
                   const tenants = Array.isArray(room.tenants) ? (room.tenants as Record<string, unknown>[]) : [];
@@ -1165,12 +1166,13 @@ function RoomsTab({ hostelId }: { hostelId: string }) {
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                      {!isOccupied && (
+                      {hasVacantBed && (
                         <button
-                          onClick={() => setShowAddTenant(true)}
+                          onClick={() => setAssignTenantRoomId(String(room.id))}
                           className="mt-2.5 w-full flex items-center justify-center gap-1.5 py-2 bg-card border border-border rounded-lg text-xs font-medium text-accent active:scale-95 transition-transform touch-manipulation"
                         >
-                          <Plus className="w-3.5 h-3.5" /> Assign Tenant
+                          <Plus className="w-3.5 h-3.5" />
+                          {occupied === 0 ? 'Assign Tenant' : `Assign to ${vacantBeds} vacant bed${vacantBeds === 1 ? '' : 's'}`}
                         </button>
                       )}
                     </div>
@@ -1199,7 +1201,13 @@ function RoomsTab({ hostelId }: { hostelId: string }) {
       </button>
 
       {/* Modals */}
-      {showAddTenant && <AddTenantModal hostelId={hostelId} onClose={() => setShowAddTenant(false)} />}
+      {assignTenantRoomId && (
+        <AddTenantModal
+          hostelId={hostelId}
+          preselectedRoomId={assignTenantRoomId}
+          onClose={() => setAssignTenantRoomId(null)}
+        />
+      )}
 
       {showAddFloor && (
         <FloorNameModal
@@ -1601,10 +1609,23 @@ function ExpensesTab({ hostelId }: { hostelId: string }) {
             state={String(kpis.expense_ratio_health || 'healthy')}
           />
         </div>
+        <button
+          type="button"
+          onClick={() => setShowAddExpense(true)}
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-accent-foreground active:scale-[0.99] transition-transform"
+        >
+          <Plus className="h-4 w-4" />
+          Add expense
+        </button>
       </div>
 
       <section className="space-y-3">
-        <SectionTitle title="Expense Intelligence" sub="Where money is moving and what needs attention" />
+        <SectionTitle
+          title="Expense Intelligence"
+          sub="Where money is moving and what needs attention"
+          actionLabel="Add expense"
+          onAction={() => setShowAddExpense(true)}
+        />
         <div className="grid gap-3 md:grid-cols-2">
           <div className="bg-card border border-border rounded-xl p-4">
             <div className="flex items-center justify-between mb-4">
@@ -1612,7 +1633,11 @@ function ExpensesTab({ hostelId }: { hostelId: string }) {
               <span className="text-[10px] text-muted-foreground">This month</span>
             </div>
             {categories.length === 0 ? (
-              <EmptyMini text="Add expenses to reveal category leakage." />
+              <EmptyMini
+                text="Add your first expense to reveal category leakage."
+                actionLabel="Add expense"
+                onAction={() => setShowAddExpense(true)}
+              />
             ) : (
               <div className="space-y-3">
                 {categories.slice(0, 8).map((cat: any) => (
@@ -1700,7 +1725,12 @@ function ExpensesTab({ hostelId }: { hostelId: string }) {
       </section>
 
       <section className="space-y-3">
-        <SectionTitle title="Expense Ledger" sub={`${payload.total || expenses.length} records`} />
+        <SectionTitle
+          title="Expense Ledger"
+          sub={`${payload.total || expenses.length} records`}
+          actionLabel="Add expense"
+          onAction={() => setShowAddExpense(true)}
+        />
         <div className="sticky top-[260px] z-[9] -mx-4 px-4 py-3 bg-background/95 backdrop-blur border-y border-border space-y-3">
           <div className="flex gap-2 overflow-x-auto scrollbar-hide">
             {[
@@ -1774,15 +1804,6 @@ function ExpensesTab({ hostelId }: { hostelId: string }) {
         )}
       </section>
 
-      <button
-        type="button"
-        onClick={() => setShowAddExpense(true)}
-        className="fixed right-5 bottom-6 z-20 h-14 w-14 rounded-full bg-accent text-accent-foreground shadow-lg flex items-center justify-center active:scale-95"
-        aria-label="Add expense"
-      >
-        <Plus className="w-6 h-6" />
-      </button>
-
       {showAddExpense && (
         <AddExpenseModal
           categories={allCategories}
@@ -1812,11 +1833,32 @@ const EXPENSE_CATEGORIES = [
   'Miscellaneous',
 ];
 
-function SectionTitle({ title, sub }: { title: string; sub?: string }) {
+function SectionTitle({
+  title,
+  sub,
+  actionLabel,
+  onAction,
+}: {
+  title: string;
+  sub?: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
   return (
-    <div className="flex items-end justify-between gap-3">
-      <h2 className="text-base font-semibold text-foreground">{title}</h2>
-      {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
+    <div className="flex items-center justify-between gap-3">
+      <div className="min-w-0">
+        <h2 className="text-base font-semibold text-foreground">{title}</h2>
+        {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
+      </div>
+      {actionLabel && onAction && (
+        <button
+          type="button"
+          onClick={onAction}
+          className="shrink-0 rounded-xl bg-accent px-3 py-2 text-xs font-semibold text-accent-foreground"
+        >
+          {actionLabel}
+        </button>
+      )}
     </div>
   );
 }
@@ -1873,8 +1915,21 @@ function ImpactMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function EmptyMini({ text }: { text: string }) {
-  return <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">{text}</div>;
+function EmptyMini({ text, actionLabel, onAction }: { text: string; actionLabel?: string; onAction?: () => void }) {
+  return (
+    <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+      <p>{text}</p>
+      {actionLabel && onAction && (
+        <button
+          type="button"
+          onClick={onAction}
+          className="mt-3 rounded-lg border border-accent/30 px-3 py-2 text-xs font-semibold text-accent"
+        >
+          {actionLabel}
+        </button>
+      )}
+    </div>
+  );
 }
 
 function ExpenseEmptyState({ onAdd }: { onAdd: () => void }) {
