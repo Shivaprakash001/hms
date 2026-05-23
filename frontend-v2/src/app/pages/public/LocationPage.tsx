@@ -14,7 +14,7 @@ export function LocationPage() {
     const desc = document.querySelector('meta[name="description"]');
     desc?.setAttribute('content', 'Find Sri Adithya Boys Hostel in Hyderabad. Get directions, nearby landmarks, and transport options.');
     const canonical = document.querySelector('link[rel="canonical"]');
-    canonical?.setAttribute('href', 'https://sriadithyahostels.in/location');
+    canonical?.setAttribute('href', 'https://www.sriadithyahostels.in/location');
   }, []);
 
   return (
@@ -26,11 +26,12 @@ export function LocationPage() {
           <h2 className="font-extrabold text-slate-800 text-lg mb-5">📍 Our Address</h2>
           <address className="not-italic text-slate-600 leading-8 text-base">
             <strong>Sri Adithya Boys Hostel</strong><br />
-            Hyderabad, Telangana<br />
-            India — 500 000
+            FM37+P3V, Yamnampet<br />
+            Secunderabad, Telangana — 501301<br />
+            Near Sreenidhi Institute of Science and Technology (SNIST)
           </address>
           <a
-            href="https://maps.google.com"
+            href="https://www.google.com/maps/place/Sri+Adithya+Boys+Hostel/@17.4542729,78.6602748,17z/data=!3m1!4b1!4m6!3m5!1s0x3bcb770dd641583b:0xde3e95b9afb8c1b1!8m2!3d17.4542678!4d78.6628497"
             target="_blank"
             rel="noopener noreferrer"
             className="no-underline inline-block mt-6 font-bold text-sm px-6 py-2.5 rounded-lg hover:opacity-90 transition-opacity"
@@ -46,8 +47,8 @@ export function LocationPage() {
           style={{ height: 300, background: 'linear-gradient(135deg, #e2e8f0, #cbd5e1)' }}
         >
           <span className="text-5xl">🗺️</span>
-          <p className="font-semibold m-0">Interactive map coming soon</p>
-          <p className="text-sm m-0">Use the button above to open in Google Maps</p>
+          <p className="font-semibold m-0">Yamnampet, Secunderabad</p>
+          <p className="text-sm m-0">Near SNIST · 501301</p>
         </div>
 
         {/* Nearby landmarks */}
@@ -55,12 +56,12 @@ export function LocationPage() {
           <h2 className="font-bold text-slate-800 text-lg mb-5">🏫 Nearby Colleges & Landmarks</h2>
           <ul className="space-y-3 list-none p-0">
             {[
-              'Osmania University — ~5 km',
-              'Hyderabad Central University — ~8 km',
-              'JNTU Hyderabad — ~12 km',
-              'Gandhi Medical College — ~6 km',
-              'Secunderabad Railway Station — ~4 km',
-              'MGBS Bus Stand — ~5 km',
+              'Sreenidhi Institute of Science and Technology (SNIST) — ~0.5 km',
+              'Yamnampet Junction — ~1 km',
+              'Keesara / Ghatkesar — ~3 km',
+              'Uppal — ~8 km',
+              'Secunderabad Railway Station — ~20 km',
+              'Hyderabad Airport — ~35 km',
             ].map(item => (
               <li key={item} className="flex gap-3 text-sm text-slate-600 items-center">
                 <span className="font-bold" style={{ color: '#1e3a5f' }}>→</span>

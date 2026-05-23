@@ -17,7 +17,7 @@ export function HomePage() {
     const desc = document.querySelector('meta[name="description"]');
     desc?.setAttribute('content', 'Sri Adithya Boys Hostel offers safe, affordable student accommodation in Hyderabad with furnished rooms, meals, 24/7 security, and modern facilities.');
     const canonical = document.querySelector('link[rel="canonical"]');
-    canonical?.setAttribute('href', 'https://sriadithyahostels.in/');
+    canonical?.setAttribute('href', 'https://www.sriadithyahostels.in/');
   }, []);
 
   return (
@@ -64,7 +64,9 @@ export function HomePage() {
             Sri Adithya Boys Hostel
           </h1>
           <p className="text-slate-300 text-lg max-w-xl mx-auto mb-10 leading-relaxed">
-            Safe, affordable, and comfortable student accommodation in Hyderabad.
+            Safe, affordable student accommodation near{' '}
+            <span style={{ color: '#f59e0b' }}>Sreenidhi Institute of Science and Technology (SNIST)</span>,
+            Yamnampet, Secunderabad.
             Fully furnished rooms, home-cooked meals, and 24/7 security — so you can focus on what matters.
           </p>
           <div className="flex flex-wrap gap-4 justify-center">

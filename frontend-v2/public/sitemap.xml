@@ -6,49 +6,49 @@
 
   <!-- ── Core public pages ────────────────────────────────────────────── -->
   <url>
-    <loc>https://sriadithyahostels.in/</loc>
+    <loc>https://www.sriadithyahostels.in/</loc>
     <lastmod>2026-05-24</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://sriadithyahostels.in/about</loc>
+    <loc>https://www.sriadithyahostels.in/about</loc>
     <lastmod>2026-05-24</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://sriadithyahostels.in/facilities</loc>
+    <loc>https://www.sriadithyahostels.in/facilities</loc>
     <lastmod>2026-05-24</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://sriadithyahostels.in/rooms</loc>
+    <loc>https://www.sriadithyahostels.in/rooms</loc>
     <lastmod>2026-05-24</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://sriadithyahostels.in/gallery</loc>
+    <loc>https://www.sriadithyahostels.in/gallery</loc>
     <lastmod>2026-05-24</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://sriadithyahostels.in/location</loc>
+    <loc>https://www.sriadithyahostels.in/location</loc>
     <lastmod>2026-05-24</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://sriadithyahostels.in/contact</loc>
+    <loc>https://www.sriadithyahostels.in/contact</loc>
     <lastmod>2026-05-24</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://sriadithyahostels.in/rules</loc>
+    <loc>https://www.sriadithyahostels.in/rules</loc>
     <lastmod>2026-05-24</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.6</priority>
@@ -56,7 +56,7 @@
 
   <!-- ── Auth / utility ───────────────────────────────────────────────── -->
   <url>
-    <loc>https://sriadithyahostels.in/login</loc>
+    <loc>https://www.sriadithyahostels.in/login</loc>
     <lastmod>2026-05-24</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
@@ -64,19 +64,19 @@
 
   <!-- ── Legal pages ──────────────────────────────────────────────────── -->
   <url>
-    <loc>https://sriadithyahostels.in/legal</loc>
+    <loc>https://www.sriadithyahostels.in/legal</loc>
     <lastmod>2026-05-24</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.4</priority>
   </url>
   <url>
-    <loc>https://sriadithyahostels.in/legal#terms</loc>
+    <loc>https://www.sriadithyahostels.in/legal#terms</loc>
     <lastmod>2026-05-24</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>
   <url>
-    <loc>https://sriadithyahostels.in/legal#privacy</loc>
+    <loc>https://www.sriadithyahostels.in/legal#privacy</loc>
     <lastmod>2026-05-24</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
