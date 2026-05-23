@@ -153,29 +153,28 @@ export class RoomAllocationService {
       shiftData = await prisma.$transaction(async (tx: any) => {
         // 1. Find active allocation
         const active = await tx.roomAllocation.findFirst({
-          where: { tenant_id: tenantId, is_active: true, end_date: null },
+          where: {
+            tenant_id: tenantId,
+            is_active: true,
+            end_date: null,
+            tenant: { owner_id: ownerId },
+          },
           orderBy: { start_date: "desc" }
         });
 
         if (!active) {
           throw new Error("NOT_FOUND: No active allocation found for tenant");
         }
+        if (active.room_id === newRoomId) {
+          throw new Error("VALIDATION_ERROR: Tenant is already assigned to this room");
+        }
 
-        // 2. End old allocation first (same transaction, invariant-safe)
-        await tx.roomAllocation.update({
-          where: { id: active.id },
-          data: { 
-            end_date: new Date(shiftDate),
-            is_active: false
-          }
-        });
-
-        // 3. Check new room capacity
-        const room = await tx.rooms.findUnique({
-          where: { id: newRoomId },
+        // 2. Check new room ownership and capacity before closing the old allocation.
+        const room = await tx.rooms.findFirst({
+          where: { id: newRoomId, hostels: { owner_id: ownerId } },
           include: {
             room_allocations: {
-              where: { end_date: null }
+              where: { is_active: true, end_date: null }
             }
           }
         });
@@ -186,6 +185,15 @@ export class RoomAllocationService {
         if (room.room_allocations.length >= room.capacity) {
           throw new Error("VALIDATION_ERROR: Target room is at maximum capacity");
         }
+
+        // 3. End old allocation only after the target room is validated.
+        await tx.roomAllocation.update({
+          where: { id: active.id },
+          data: { 
+            end_date: new Date(shiftDate),
+            is_active: false
+          }
+        });
 
         // 4. Create new allocation with denormalized hostel_id (immutable snapshot)
         const newAllocation = await tx.roomAllocation.create({

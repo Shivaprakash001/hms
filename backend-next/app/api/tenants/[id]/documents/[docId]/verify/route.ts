@@ -7,6 +7,11 @@ import { getSession } from "@/lib/auth";
 import { eventLog } from "@/lib/services/event-log-service";
 import crypto from "crypto";
 
+const requiredDocumentTypes = (profileType?: string | null) =>
+  String(profileType || "STUDENT").toUpperCase() === "WORKING_PROFESSIONAL"
+    ? ["AADHAAR", "WORK_ID"]
+    : ["AADHAAR", "COLLEGE_ID"];
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string; docId: string } }
@@ -33,6 +38,9 @@ export async function PATCH(
     if (!doc.is_active) {
       return NextResponse.json({ error: { message: "Archived documents cannot be verified" } }, { status: 409 });
     }
+    if (!requiredDocumentTypes(doc.tenant.profile_type).includes(doc.doc_type)) {
+      return NextResponse.json({ error: { message: "This document type is not required for this tenant" } }, { status: 400 });
+    }
 
     const updatedDoc = await prisma.identificationDocument.update({
       where: { id: docId },
@@ -57,10 +65,10 @@ export async function PATCH(
 
     // Check if all active documents are verified, then set document_verified status
     const allDocs = await prisma.identificationDocument.findMany({
-      where: { tenant_id: tenantId, is_active: true },
+      where: { tenant_id: tenantId, is_active: true, doc_type: { in: requiredDocumentTypes(doc.tenant.profile_type) } },
     });
-    const allVerified = allDocs.every((d) => d.is_verified);
-    if (allVerified && allDocs.length > 0) {
+    const allVerified = allDocs.length === requiredDocumentTypes(doc.tenant.profile_type).length && allDocs.every((d) => d.is_verified);
+    if (allVerified) {
       await prisma.tenants.update({
         where: { id: tenantId },
         data: { document_verified: true },

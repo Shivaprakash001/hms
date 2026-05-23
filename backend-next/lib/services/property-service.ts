@@ -478,6 +478,8 @@ export class PropertyService {
         room_no: room.room_no,
         floor: floorNum,
         capacity: capacity,
+        base_rent: room.base_rent,
+        monthly_rent: room.base_rent,
         occupied: occupied,
         remaining_capacity: Math.max(capacity - occupied, 0),
         status: occupied === 0 ? "Vacant" : (occupied >= capacity ? "Full" : "Occupied")

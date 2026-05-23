@@ -549,7 +549,10 @@ export class TenantService {
 
     const floor = currentRoom?.floor ?? null;
     const latestRuleAcceptance = legacyTenant.rule_acceptances?.[0] ?? null;
-    const activeDocuments = legacyTenant.identification_documents ?? [];
+    const requiredDocumentTypes = String(legacyTenant.profile_type || "STUDENT").toUpperCase() === "WORKING_PROFESSIONAL"
+      ? ["AADHAAR", "WORK_ID"]
+      : ["AADHAAR", "COLLEGE_ID"];
+    const activeDocuments = (legacyTenant.identification_documents ?? []).filter((doc: any) => requiredDocumentTypes.includes(doc.doc_type));
 
     return {
       id: legacyTenant.id,
@@ -637,6 +640,7 @@ export class TenantService {
         rules_snapshot: latestRuleAcceptance?.rules_snapshot ?? latestRuleAcceptance?.rule_version?.content ?? latestRuleAcceptance?.rule_version?.content_snapshot ?? null,
         documents_uploaded: activeDocuments.length,
         document_types: activeDocuments.map((doc: any) => doc.doc_type),
+        required_document_types: requiredDocumentTypes,
         document_verification_status: legacyTenant.document_verified ? "VERIFIED" : "PENDING",
         activation_progress_percent: Math.round(([
           Boolean(legacyTenant.profile?.password_hash && (legacyTenant.phone_1 || legacyTenant.profile?.phone)),
@@ -650,7 +654,7 @@ export class TenantService {
         pending: {
           profile: !legacyTenant.profile_completed,
           rules: !latestRuleAcceptance,
-          documents: activeDocuments.length === 0 || !legacyTenant.document_verified,
+          documents: activeDocuments.length < requiredDocumentTypes.length || !legacyTenant.document_verified,
         },
       }
     };

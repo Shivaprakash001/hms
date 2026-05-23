@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -24,13 +24,18 @@ const fmt = (n: number) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
 const fmtDate = (d?: string | null) =>
   d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 
-const DOC_TYPES = [
-  { value: 'AADHAAR', label: 'Aadhaar' },
-  { value: 'COLLEGE_ID', label: 'College ID' },
-  { value: 'WORK_ID', label: 'Work ID' },
-  { value: 'PASSPORT', label: 'Passport' },
-  { value: 'PAN', label: 'PAN' },
-] as const;
+const documentTypesForProfile = (profileType?: string) => {
+  const type = String(profileType || 'STUDENT').toUpperCase();
+  return type === 'WORKING_PROFESSIONAL'
+    ? [
+        { value: 'AADHAAR', label: 'Aadhaar' },
+        { value: 'WORK_ID', label: 'Work ID' },
+      ]
+    : [
+        { value: 'AADHAAR', label: 'Aadhaar' },
+        { value: 'COLLEGE_ID', label: 'College ID' },
+      ];
+};
 
 function Field({
   label,
@@ -144,6 +149,13 @@ export function TenantProfilePortalPage() {
   const verification = data.verification ?? {};
   const moveOut = data.move_out;
   const isStudent = String(t?.profile_type ?? 'STUDENT').toUpperCase() === 'STUDENT';
+  const docTypes = documentTypesForProfile(t?.profile_type);
+
+  useEffect(() => {
+    if (!docTypes.some((type) => type.value === docType)) {
+      setDocType(docTypes[0]?.value ?? 'AADHAAR');
+    }
+  }, [docType, docTypes]);
 
   const profileFields = [
     { label: 'Full name', value: p.name },
@@ -561,7 +573,7 @@ export function TenantProfilePortalPage() {
       {/* 8 — Documents */}
       <ProfileSection id="documents" title="Documents & verification">
         <div className="mb-4 rounded-xl border border-accent/20 bg-accent/5 p-3 text-xs text-muted-foreground">
-          Upload a clear PDF or image. Replacing a document archives the older copy and sends the new one to your owner for review.
+          Upload Aadhaar and {isStudent ? 'College ID' : 'Work ID'} only. Replacing a document archives the older copy and sends the new one to your owner for review.
         </div>
         <ul className="space-y-2 mb-4">
           {docs.length === 0 && (
@@ -687,7 +699,7 @@ export function TenantProfilePortalPage() {
             onChange={(e) => setDocType(e.target.value)}
             className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm"
           >
-            {DOC_TYPES.map((d) => (
+            {docTypes.map((d) => (
               <option key={d.value} value={d.value}>
                 {d.label}
               </option>

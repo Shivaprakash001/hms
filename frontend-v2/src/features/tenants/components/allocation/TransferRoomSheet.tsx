@@ -32,7 +32,7 @@ export function TransferRoomSheet({ hostelId, tenantId, onClose, onSuccess }: Pr
       allocationService.shift(hostelId, {
         tenant_id: tenantId,
         new_room_id: roomId,
-        start_date: new Date().toISOString().split('T')[0],
+        shift_date: new Date().toISOString().split('T')[0],
       }),
     onSuccess: () => {
       toast.success('Room transferred');

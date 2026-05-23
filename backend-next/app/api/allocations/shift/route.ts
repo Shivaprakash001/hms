@@ -4,13 +4,27 @@ export const runtime = "nodejs";
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { roomAllocationService } from "@/src/services/rooms/room-allocation-service";
+import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
 import { z } from "zod";
 
 const ShiftSchema = z.object({
   tenant_id: z.string().uuid(),
   new_room_id: z.string().uuid(),
-  shift_date: z.string().or(z.date()).transform(val => new Date(val))
-});
+  shift_date: z.string().or(z.date()).optional(),
+  start_date: z.string().or(z.date()).optional(),
+}).superRefine((data, ctx) => {
+  if (!data.shift_date && !data.start_date) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["shift_date"],
+      message: "shift_date is required",
+    });
+  }
+}).transform((data) => ({
+  tenant_id: data.tenant_id,
+  new_room_id: data.new_room_id,
+  shift_date: new Date(data.shift_date ?? data.start_date!),
+}));
 
 export async function POST(req: NextRequest) {
   const session = await getSession(req);
@@ -23,17 +37,22 @@ export async function POST(req: NextRequest) {
     const validated = ShiftSchema.safeParse(body);
 
     if (!validated.success) {
-      return apiError("Validation error", "VALIDATION_ERROR", 400);
+      return apiError(
+        validated.error.errors[0]?.message || "Validation error",
+        "VALIDATION_ERROR",
+        400
+      );
     }
 
     const { tenant_id, new_room_id, shift_date } = validated.data;
+    const scope = resolveOwnerScope(session);
 
     // Delegate the complex transactional logic to our established roomAllocationService
     const newAllocation = await roomAllocationService.shiftRoom(
       tenant_id,
       new_room_id,
       shift_date.toISOString(),
-      session.sub
+      scope.owner_id
     );
 
     return apiResponse(newAllocation, 201);

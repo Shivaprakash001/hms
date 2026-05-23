@@ -13,6 +13,15 @@ import { buildPayableObligations } from '@/portal/utils/payableObligations';
 const fmt = (n: number) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
 const fmtDate = (d?: string) =>
   d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+const timelineTypeLabel = (type?: string) => {
+  const value = String(type || '').replace('PROJECTED_', '').replaceAll('_', ' ');
+  if (type === 'PAYMENT') return 'Payment';
+  return value || 'Installment';
+};
+const timelineAmount = (item: any) => {
+  if (item.type === 'PAYMENT') return Number(item.amount ?? 0);
+  return Number(item.remaining ?? item.amount ?? 0);
+};
 
 export function TenantFinancialsPage() {
   const queryClient = useQueryClient();
@@ -196,16 +205,25 @@ export function TenantFinancialsPage() {
             <h2 className="text-sm font-semibold text-foreground">Payment timeline</h2>
           </div>
           <div className="space-y-2">
-            {timelineItems.slice(0, 6).map((item: any) => (
-              <div key={item.obligation_id} className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
+            {timelineItems.slice(0, 12).map((item: any) => (
+              <div
+                key={item.timeline_id ?? item.obligation_id}
+                className={`flex items-center justify-between gap-3 rounded-xl border p-3 ${
+                  item.state === 'upcoming'
+                    ? 'border-dashed border-accent/30 bg-accent/5'
+                    : item.type === 'PAYMENT'
+                      ? 'border-emerald-200 bg-emerald-50/60'
+                      : 'border-border'
+                }`}
+              >
                 <div>
                   <p className="text-sm font-semibold text-foreground">{item.label}</p>
                   <p className="text-xs text-muted-foreground">
-                    {item.type} · Due {fmtDate(item.due_date)}
+                    {timelineTypeLabel(item.type)} · {item.type === 'PAYMENT' ? 'Paid' : 'Due'} {fmtDate(item.due_date)}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-bold">{fmt(Number(item.remaining ?? item.amount ?? 0))}</p>
+                  <p className="text-sm font-bold">{fmt(timelineAmount(item))}</p>
                   <span className="text-[11px] font-bold uppercase text-muted-foreground">{String(item.state).replaceAll('_', ' ')}</span>
                 </div>
               </div>

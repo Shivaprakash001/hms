@@ -213,8 +213,10 @@ export class BillingTransitionService {
   }
 
   private async validateCommitment(tenant: any, currentFrequency: PaymentFrequency, policy: any) {
+    const activePlan = tenant.tenant_billing_plans?.[0];
+    if (!activePlan) return;
     const commitmentMonths = Number(policy.minimum_commitment_months?.[currentFrequency] || 1);
-    const effectiveFrom = tenant.payment_frequency_effective_from || tenant.billing_start_date || tenant.joined_on || tenant.created_at;
+    const effectiveFrom = activePlan.effective_from;
     const minUntil = new Date(Date.UTC(
       effectiveFrom.getUTCFullYear(),
       effectiveFrom.getUTCMonth() + commitmentMonths,

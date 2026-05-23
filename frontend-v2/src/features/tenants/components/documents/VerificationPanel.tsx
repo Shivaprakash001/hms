@@ -9,10 +9,16 @@ interface Props {
   hostelId: string;
   tenantId: string;
   documents: Record<string, unknown>[];
+  profileType?: string;
   onUpdated?: () => void;
 }
 
-export function VerificationPanel({ hostelId, tenantId, documents, onUpdated }: Props) {
+const requiredDocumentTypes = (profileType?: string) =>
+  String(profileType || 'STUDENT').toUpperCase() === 'WORKING_PROFESSIONAL'
+    ? ['AADHAAR', 'WORK_ID']
+    : ['AADHAAR', 'COLLEGE_ID'];
+
+export function VerificationPanel({ hostelId, tenantId, documents, profileType, onUpdated }: Props) {
   const qc = useQueryClient();
   const [newMessages, setNewMessages] = useState<Record<string, string>>({});
   const [expandedChats, setExpandedChats] = useState<Record<string, boolean>>({});
@@ -62,11 +68,15 @@ export function VerificationPanel({ hostelId, tenantId, documents, onUpdated }: 
     onError: () => toast.error('Could not approve all documents'),
   });
 
-  if (!documents?.length) {
+  const visibleDocuments = (documents ?? []).filter((doc) =>
+    requiredDocumentTypes(profileType).includes(String(doc.doc_type ?? doc.type ?? '').toUpperCase())
+  );
+
+  if (!visibleDocuments.length) {
     return (
       <div className="p-6 rounded-xl border border-dashed border-border text-center text-sm text-muted-foreground bg-muted/20">
         <FileText className="w-8 h-8 mx-auto mb-2 opacity-50 text-muted-foreground" />
-        No identification documents on file. Upload may be handled during tenant onboarding.
+        No required identification documents on file. Tenant needs Aadhaar and {String(profileType).toUpperCase() === 'WORKING_PROFESSIONAL' ? 'Work ID' : 'College ID'}.
       </div>
     );
   }
@@ -81,13 +91,13 @@ export function VerificationPanel({ hostelId, tenantId, documents, onUpdated }: 
     setExpandedChats((prev) => ({ ...prev, [docId]: !prev[docId] }));
   };
 
-  const pendingCount = documents.filter((doc) => String(doc.document_status ?? doc.status ?? 'PENDING').toUpperCase() === 'PENDING').length;
-  const approvedCount = documents.filter((doc) => {
+  const pendingCount = visibleDocuments.filter((doc) => String(doc.document_status ?? doc.status ?? 'PENDING').toUpperCase() === 'PENDING').length;
+  const approvedCount = visibleDocuments.filter((doc) => {
     const status = String(doc.document_status ?? doc.status ?? '').toUpperCase();
     return status === 'APPROVED' || doc.is_verified === true;
   }).length;
-  const rejectedCount = documents.filter((doc) => String(doc.document_status ?? doc.status ?? '').toUpperCase() === 'REJECTED').length;
-  const unverifiedCount = documents.length - approvedCount;
+  const rejectedCount = visibleDocuments.filter((doc) => String(doc.document_status ?? doc.status ?? '').toUpperCase() === 'REJECTED').length;
+  const unverifiedCount = visibleDocuments.length - approvedCount;
 
   return (
     <div className="space-y-4">
@@ -125,7 +135,7 @@ export function VerificationPanel({ hostelId, tenantId, documents, onUpdated }: 
         </div>
       </div>
 
-      {documents.map((doc) => {
+      {visibleDocuments.map((doc) => {
         const id = String(doc.id ?? '');
         const status = String(doc.document_status ?? doc.status ?? 'PENDING').toUpperCase();
         const fileUrl = String(doc.file_url ?? '');

@@ -74,6 +74,14 @@ export async function GET(req: NextRequest) {
       const allocs = room.room_allocations ?? [];
       const occupiedCount = allocs.length;
       const firstTenant = allocs[0]?.tenant ?? null;
+      const tenants = allocs.map((allocation: any) => ({
+        allocation_id: allocation.id,
+        tenant_id: allocation.tenant?.id ?? null,
+        name: allocation.tenant?.profiles?.name ?? null,
+        phone: allocation.tenant?.profiles?.phone ?? null,
+        monthly_rent: Number(allocation.tenant?.monthly_rent ?? room.base_rent ?? 0),
+        joined_date: allocation.start_date,
+      }));
       const derivedStatus = occupiedCount === 0 ? "vacant" : "occupied";
       return {
         id: room.id,
@@ -94,6 +102,7 @@ export async function GET(req: NextRequest) {
         status: derivedStatus,
         occupied_count: occupiedCount,
         vacant_count: Math.max(0, room.capacity - occupiedCount),
+        tenants,
         tenant_name: firstTenant?.profiles?.name ?? null,
         tenant_id: firstTenant?.id ?? null,
         tenant_phone: firstTenant?.profiles?.phone ?? null,

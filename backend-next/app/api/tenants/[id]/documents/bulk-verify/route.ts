@@ -7,6 +7,11 @@ import { getSession } from "@/lib/auth";
 import { eventLog } from "@/lib/services/event-log-service";
 import crypto from "crypto";
 
+const requiredDocumentTypes = (profileType?: string | null) =>
+  String(profileType || "STUDENT").toUpperCase() === "WORKING_PROFESSIONAL"
+    ? ["AADHAAR", "WORK_ID"]
+    : ["AADHAAR", "COLLEGE_ID"];
+
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getSession(req);
@@ -27,8 +32,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
 
     const result = await prisma.$transaction(async (tx) => {
+      const requiredTypes = requiredDocumentTypes(tenant.profile_type);
       const activeDocs = await tx.identificationDocument.findMany({
-        where: { tenant_id: tenant.id, is_active: true },
+        where: { tenant_id: tenant.id, is_active: true, doc_type: { in: requiredTypes } },
         select: { id: true, doc_type: true, document_status: true, is_verified: true },
       });
 
@@ -38,7 +44,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       }
 
       await tx.identificationDocument.updateMany({
-        where: { tenant_id: tenant.id, is_active: true },
+        where: { tenant_id: tenant.id, is_active: true, doc_type: { in: requiredTypes } },
         data: {
           document_status: "APPROVED",
           is_verified: true,

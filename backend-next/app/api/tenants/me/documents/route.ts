@@ -7,7 +7,10 @@ import { prisma } from "@/lib/db";
 import { imagekit } from "@/lib/imagekit";
 import { eventLog } from "@/lib/services/event-log-service";
 
-const ALLOWED_TYPES = ["AADHAAR", "COLLEGE_ID", "WORK_ID", "PASSPORT", "PAN", "OTHER"] as const;
+const allowedTypesForProfile = (profileType?: string | null) => {
+  const type = String(profileType || "STUDENT").toUpperCase();
+  return type === "WORKING_PROFESSIONAL" ? ["AADHAAR", "WORK_ID"] : ["AADHAAR", "COLLEGE_ID"];
+};
 const ALLOWED_MIME = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
 const MAX_SIZE = 5 * 1024 * 1024;
 
@@ -19,16 +22,17 @@ export async function GET(req: NextRequest) {
 
   const tenant = await prisma.tenants.findUnique({
     where: { profile_id: session.sub },
-    select: { id: true },
+    select: { id: true, profile_type: true },
   });
   if (!tenant) return apiError("Tenant not found", "NOT_FOUND", 404);
 
+  const requiredDocuments = allowedTypesForProfile(tenant.profile_type);
   const documents = await prisma.identificationDocument.findMany({
-    where: { tenant_id: tenant.id, is_active: true },
+    where: { tenant_id: tenant.id, is_active: true, doc_type: { in: requiredDocuments } },
     orderBy: { created_at: "desc" },
   });
 
-  return apiResponse({ documents });
+  return apiResponse({ documents, required_documents: requiredDocuments });
 }
 
 export async function POST(req: NextRequest) {
@@ -40,7 +44,7 @@ export async function POST(req: NextRequest) {
   try {
     const tenant = await prisma.tenants.findUnique({
       where: { profile_id: session.sub },
-      select: { id: true, owner_id: true },
+      select: { id: true, owner_id: true, profile_type: true },
     });
     if (!tenant) return apiError("Tenant not found", "NOT_FOUND", 404);
 
@@ -50,8 +54,9 @@ export async function POST(req: NextRequest) {
     const docNumber = formData.get("doc_number") ? String(formData.get("doc_number")) : null;
 
     if (!file) return apiError("file is required", "VALIDATION_ERROR", 400);
-    if (!ALLOWED_TYPES.includes(docType as (typeof ALLOWED_TYPES)[number])) {
-      return apiError("Invalid doc_type", "VALIDATION_ERROR", 400);
+    const allowedTypes = allowedTypesForProfile(tenant.profile_type);
+    if (!allowedTypes.includes(docType)) {
+      return apiError(`Invalid doc_type. Upload only ${allowedTypes.join(" and ")}.`, "VALIDATION_ERROR", 400);
     }
     if (!ALLOWED_MIME.includes(file.type)) {
       return apiError("File must be JPG, PNG, WEBP, or PDF", "VALIDATION_ERROR", 400);

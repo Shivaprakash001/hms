@@ -339,14 +339,16 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
                 <p className="text-sm font-semibold text-foreground">Billing timeline</p>
               </div>
               <div className="space-y-2">
-                {timelineItems.slice(0, 8).map((item: any) => (
-                  <div key={item.obligation_id} className="flex justify-between gap-3 rounded-lg border border-border p-3 text-sm">
+                {timelineItems.slice(0, 12).map((item: any) => (
+                  <div key={item.timeline_id ?? item.obligation_id} className="flex justify-between gap-3 rounded-lg border border-border p-3 text-sm">
                     <div>
                       <p className="font-semibold">{item.label}</p>
-                      <p className="text-xs text-muted-foreground">{item.type} · Due {new Date(item.due_date).toLocaleDateString('en-IN')}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {String(item.type).replace('PROJECTED_', '').replaceAll('_', ' ')} · {item.type === 'PAYMENT' ? 'Paid' : 'Due'} {new Date(item.due_date).toLocaleDateString('en-IN')}
+                      </p>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold">₹{Number(item.remaining ?? item.amount ?? 0).toLocaleString('en-IN')}</p>
+                      <p className="font-bold">₹{Number(item.type === 'PAYMENT' ? item.amount : (item.remaining ?? item.amount ?? 0)).toLocaleString('en-IN')}</p>
                       <p className="text-[11px] font-bold uppercase text-muted-foreground">{String(item.state).replaceAll('_', ' ')}</p>
                     </div>
                   </div>
@@ -373,6 +375,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
         <VerificationPanel
           hostelId={hostelId}
           tenantId={tenantId}
+          profileType={String(tenant?.profile_type ?? 'STUDENT')}
           documents={
             (full?.identification_documents ?? full?.documents ?? []) as Record<string, unknown>[]
           }

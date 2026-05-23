@@ -289,7 +289,11 @@ export class ActivationWorkflowService {
 
     const profileCompleted = missingTier1.length === 0;
     const rulesAccepted = Boolean(latestAcceptance);
-    const documentsUploaded = (tenant.identification_documents || []).length > 0;
+    const requiredDocumentTypes = this.requiredDocumentTypes(tenant.profile_type);
+    const requiredDocuments = (tenant.identification_documents || []).filter((doc: any) =>
+      requiredDocumentTypes.includes(doc.doc_type)
+    );
+    const documentsUploaded = requiredDocuments.length > 0;
     const activationCompleted = tenant.status === "ACTIVE";
     const startedAt = tenant.activation_started_at || tenant.created_at || null;
     const completedAt = tenant.activation_completed_at || null;
@@ -457,12 +461,18 @@ export class ActivationWorkflowService {
       },
       rules: this.rulePayload(ruleVersion),
       documents: {
-        uploaded_count: tenant.identification_documents?.length || 0,
-        uploaded_types: (tenant.identification_documents || []).map((d: any) => d.doc_type),
+        uploaded_count: requiredDocuments.length,
+        uploaded_types: requiredDocuments.map((d: any) => d.doc_type),
         verification_status: tenant.document_verified ? "VERIFIED" : "PENDING",
-        required_after_activation: ["AADHAAR", "COLLEGE_ID", "WORK_ID", "PASSPORT", "PAN"],
+        required_after_activation: requiredDocumentTypes,
       },
     };
+  }
+
+  private requiredDocumentTypes(profileType?: string | null) {
+    return String(profileType || "STUDENT").toUpperCase() === "WORKING_PROFESSIONAL"
+      ? ["AADHAAR", "WORK_ID"]
+      : ["AADHAAR", "COLLEGE_ID"];
   }
 
   async mutate(token: string, step: ActivationStep, data: any, context: { ip: string; userAgent: string }) {
@@ -486,12 +496,15 @@ export class ActivationWorkflowService {
     }
     if (step === "ACTIVATE") {
       await this.activate(profile, tenant);
+      const requiredDocumentTypes = this.requiredDocumentTypes(tenant.profile_type);
       return {
         activation_state: {
           account_setup_completed: true,
           rules_accepted: true,
           profile_completed: true,
-          documents_uploaded: (tenant.identification_documents || []).length > 0,
+          documents_uploaded: (tenant.identification_documents || []).some((doc: any) =>
+            requiredDocumentTypes.includes(doc.doc_type)
+          ),
           activation_completed: true,
         },
         redirect_to: "/tenant/dashboard",

@@ -39,20 +39,26 @@ const tone = {
   missing: 'text-muted-foreground',
 };
 
-export function TenantDocumentStatus({ documents }: { documents?: Doc[] | null }) {
+export function getRequiredDocumentTypes(profileType?: string) {
+  const type = String(profileType || 'STUDENT').toUpperCase();
+  return type === 'WORKING_PROFESSIONAL' ? ['AADHAAR', 'WORK_ID'] : ['AADHAAR', 'COLLEGE_ID'];
+}
+
+export function hasRequiredDocuments(documents?: Doc[] | null, profileType?: string) {
+  const docs = Array.isArray(documents) ? documents : [];
+  const uploaded = new Set(docs.map((doc) => String(doc.doc_type ?? doc.document_type ?? doc.type ?? '').toUpperCase()));
+  return getRequiredDocumentTypes(profileType).every((type) => uploaded.has(type));
+}
+
+export function TenantDocumentStatus({ documents, profileType }: { documents?: Doc[] | null; profileType?: string }) {
   const docs = Array.isArray(documents) ? documents : [];
 
-  const defaults = [
-    { type: 'AADHAAR', doc_type: 'AADHAAR' },
-    { type: 'COLLEGE_ID', doc_type: 'COLLEGE_ID' },
-    { type: 'WORK_ID', doc_type: 'WORK_ID' },
-    { type: 'PAN', doc_type: 'PAN' },
-  ];
+  const requiredTypes = getRequiredDocumentTypes(profileType);
+  const docsByType = new Map(
+    docs.map((doc) => [String(doc.doc_type ?? doc.document_type ?? doc.type ?? '').toUpperCase(), doc])
+  );
 
-  const display =
-    docs.length > 0
-      ? docs.slice(0, 5)
-      : defaults.map((d) => ({ ...d, status: 'MISSING' as const }));
+  const display = requiredTypes.map((type) => docsByType.get(type) ?? { type, doc_type: type, status: 'MISSING' as const });
 
   return (
     <section className="rounded-xl border border-border bg-card p-4">

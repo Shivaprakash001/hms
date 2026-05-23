@@ -5,10 +5,13 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   AADHAAR: "Aadhaar",
   COLLEGE_ID: "College ID",
   WORK_ID: "Work ID",
-  PASSPORT: "Passport",
-  PAN: "PAN",
-  OTHER: "Other",
 };
+
+function requiredDocumentTypes(profileType?: string | null) {
+  return String(profileType || "STUDENT").toUpperCase() === "WORKING_PROFESSIONAL"
+    ? ["AADHAAR", "WORK_ID"]
+    : ["AADHAAR", "COLLEGE_ID"];
+}
 
 export async function getTenantPortalProfile(profileId: string) {
   const tenant = await prisma.tenants.findUnique({
@@ -107,7 +110,8 @@ export async function getTenantPortalProfile(profileId: string) {
     return e.type === "CREDIT" ? acc + amt : acc - amt;
   }, 0);
 
-  const documents = tenant.identification_documents.map((d) => ({
+  const requiredTypes = requiredDocumentTypes(tenant.profile_type);
+  const documents = tenant.identification_documents.filter((d) => requiredTypes.includes(d.doc_type)).map((d) => ({
     id: d.id,
     doc_type: d.doc_type,
     doc_type_label: DOC_TYPE_LABELS[d.doc_type] ?? d.doc_type,
@@ -217,6 +221,7 @@ export async function getTenantPortalProfile(profileId: string) {
       security_deposit: Number(tenant.advance_deposit ?? 0),
     },
     documents,
+    required_documents: requiredTypes,
     verification,
     move_out: moveOut
       ? {

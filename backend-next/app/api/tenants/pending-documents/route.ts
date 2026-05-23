@@ -64,6 +64,10 @@ export async function GET(req: NextRequest) {
     });
 
     const items = documents.map((doc) => {
+      const requiredTypes = String(doc.tenant.profile_type || "STUDENT").toUpperCase() === "WORKING_PROFESSIONAL"
+        ? ["AADHAAR", "WORK_ID"]
+        : ["AADHAAR", "COLLEGE_ID"];
+      if (!requiredTypes.includes(doc.doc_type)) return null;
       const activeAlloc = doc.tenant.room_allocations[0];
       return {
         id: doc.id,
@@ -81,7 +85,7 @@ export async function GET(req: NextRequest) {
         hostel_name: doc.tenant.hostels?.name || "Hostel",
         hostel_id: doc.tenant.hostel_id,
       };
-    });
+    }).filter(Boolean);
 
     return NextResponse.json({ success: true, data: items });
   } catch (error) {

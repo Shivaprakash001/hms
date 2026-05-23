@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/db";
+import { billingScheduleService, type PaymentFrequency } from "@/lib/services/billing-schedule-service";
+import { hostelPolicyService } from "@/lib/services/hostel-policy-service";
 
 function money(value: unknown) {
   return Math.round((Number(value) || 0) * 100) / 100;
@@ -22,6 +24,9 @@ export class BillingTimelineService {
         payment_frequency: true,
         payment_frequency_effective_from: true,
         payment_frequency_updated_at: true,
+        monthly_rent: true,
+        maintenance_charge: true,
+        maintenance_type: true,
         tenant_billing_plans: {
           orderBy: { effective_from: "desc" },
           take: 8,
@@ -34,6 +39,9 @@ export class BillingTimelineService {
     });
     if (!tenant) throw new Error("TENANT_NOT_FOUND");
 
+    const policyResponse = await hostelPolicyService.getHostelPolicy(tenant.hostel_id).catch(() => null);
+    const policy = billingScheduleService.normalizePolicy(policyResponse?.policy);
+
     const obligations = await prisma.rent_obligations.findMany({
       where: {
         tenant_id: tenantId,
@@ -45,9 +53,16 @@ export class BillingTimelineService {
       take: 120,
     });
 
+    const payments = await prisma.payments.findMany({
+      where: { tenant_id: tenantId },
+      orderBy: { payment_date: "desc" },
+      take: 20,
+    });
+
     const items = obligations.map((ob: any) => {
-      const paid = money((ob.payments || []).reduce((s: number, p: any) => s + Number(p.amount_paid || 0), 0));
       const amount = money(ob.amount);
+      const recordedPaid = money((ob.payments || []).reduce((s: number, p: any) => s + Number(p.amount_paid || 0), 0));
+      const paid = ob.status === "PAID" && recordedPaid <= 0 ? amount : recordedPaid;
       const remaining = money(Math.max(amount - paid, 0));
       const dueDate = new Date(ob.due_date);
       const delta = daysUntil(dueDate);
@@ -61,6 +76,7 @@ export class BillingTimelineService {
 
       return {
         obligation_id: ob.id,
+        timeline_id: `obligation:${ob.id}`,
         type: ob.obligation_type,
         billing_plan_id: ob.billing_plan_id,
         period_start: ob.billing_period_start || ob.rent_month,
@@ -77,14 +93,101 @@ export class BillingTimelineService {
       };
     });
 
+    const activeFrequency = (tenant.payment_frequency || "MONTHLY") as PaymentFrequency;
+    const nextStart = billingScheduleService.getNextCleanBillingPeriodDate(new Date(), activeFrequency, policy);
+    const futureSchedule = billingScheduleService.previewSchedule({
+      frequency: activeFrequency,
+      startDate: nextStart,
+      monthlyRent: money(tenant.monthly_rent),
+      maintenanceAmount: String(tenant.maintenance_type || "MONTHLY") === "MONTHLY" ? money(tenant.maintenance_charge) : 0,
+      periods: 6,
+      policy,
+    });
+    const existingPeriodKeys = new Set(
+      obligations.map((ob: any) => `${new Date(ob.billing_period_start || ob.rent_month).toISOString().slice(0, 10)}:${ob.obligation_type}`)
+    );
+    const projectedItems = futureSchedule.flatMap((slot) => {
+      const startKey = slot.period_start.toISOString().slice(0, 10);
+      const rows: any[] = [];
+      if (!existingPeriodKeys.has(`${startKey}:RENT`) && slot.amount > 0) {
+        rows.push({
+          obligation_id: null,
+          timeline_id: `projected:rent:${startKey}`,
+          type: "PROJECTED_RENT",
+          billing_plan_id: null,
+          period_start: slot.period_start,
+          period_end: slot.period_end,
+          rent_month: slot.period_start,
+          label: slot.installment_label,
+          installment_sequence: slot.installment_sequence,
+          amount: money(slot.amount),
+          paid: 0,
+          remaining: money(slot.amount),
+          due_date: slot.due_date,
+          status: "PROJECTED",
+          state: "upcoming",
+        });
+      }
+      if (!existingPeriodKeys.has(`${startKey}:MAINTENANCE`) && slot.maintenance_amount > 0) {
+        rows.push({
+          obligation_id: null,
+          timeline_id: `projected:maintenance:${startKey}`,
+          type: "PROJECTED_MAINTENANCE",
+          billing_plan_id: null,
+          period_start: slot.period_start,
+          period_end: slot.period_end,
+          rent_month: slot.period_start,
+          label: `${slot.installment_label} maintenance`,
+          installment_sequence: slot.installment_sequence,
+          amount: money(slot.maintenance_amount),
+          paid: 0,
+          remaining: money(slot.maintenance_amount),
+          due_date: slot.due_date,
+          status: "PROJECTED",
+          state: "upcoming",
+        });
+      }
+      return rows;
+    });
+
+    const paymentItems = payments.map((payment: any) => ({
+      obligation_id: payment.obligation_id,
+      timeline_id: `payment:${payment.id}`,
+      type: "PAYMENT",
+      billing_plan_id: null,
+      period_start: payment.payment_date,
+      period_end: payment.payment_date,
+      rent_month: payment.payment_date,
+      label: "Payment received",
+      installment_sequence: null,
+      amount: money(payment.amount_paid),
+      paid: money(payment.amount_paid),
+      remaining: 0,
+      due_date: payment.payment_date,
+      status: "PAID",
+      state: "paid",
+      payment_method: payment.payment_method,
+      reference_number: payment.reference_number,
+    }));
+
+    const timeline = [...items, ...paymentItems, ...projectedItems].sort((a: any, b: any) => {
+      const aDate = new Date(a.due_date || a.period_start || 0).getTime();
+      const bDate = new Date(b.due_date || b.period_start || 0).getTime();
+      if (aDate !== bDate) return aDate - bDate;
+      return String(a.timeline_id).localeCompare(String(b.timeline_id));
+    });
+
     return {
       tenant_id: tenant.id,
-      active_frequency: tenant.payment_frequency || "MONTHLY",
+      active_frequency: activeFrequency,
       effective_from: tenant.payment_frequency_effective_from,
       updated_at: tenant.payment_frequency_updated_at,
       plans: tenant.tenant_billing_plans,
       requests: tenant.payment_frequency_change_requests,
-      items,
+      items: timeline,
+      obligation_items: items,
+      payment_items: paymentItems,
+      projected_items: projectedItems,
     };
   }
 }

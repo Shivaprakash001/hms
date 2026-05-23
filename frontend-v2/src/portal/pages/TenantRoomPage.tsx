@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Eye, EyeOff, Loader2, MapPin, Phone, Wifi } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Wifi } from 'lucide-react';
 import { tenantService } from '@features/tenants/api';
 
 export function TenantRoomPage() {
@@ -114,18 +114,6 @@ export function TenantRoomPage() {
           </div>
         </section>
       )}
-
-      <section className="rounded-xl border border-border bg-card p-4">
-        <h2 className="text-sm font-semibold text-foreground mb-3">Hostel support</h2>
-        <p className="text-sm text-muted-foreground flex items-start gap-2">
-          <MapPin className="w-4 h-4 shrink-0 mt-0.5" />
-          Contact your hostel office for address, emergency numbers, and payment UPI details.
-        </p>
-        <p className="text-sm text-muted-foreground flex items-start gap-2 mt-2">
-          <Phone className="w-4 h-4 shrink-0 mt-0.5" />
-          Emergency contact is available in your profile.
-        </p>
-      </section>
     </div>
   );
 }

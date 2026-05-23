@@ -824,6 +824,9 @@ function RoomOverviewModal({ hostelId, roomId, onClose, onEditRoom, onTransferTe
                             <Phone className="w-3 h-3" />
                             <span>{t.phone || 'No phone'}</span>
                           </div>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            Rent: <span className="font-semibold text-foreground">{fmt(t.rent ?? room.base_rent ?? 0)}/mo</span>
+                          </p>
                         </div>
                       </div>
 
@@ -1072,6 +1075,10 @@ function RoomsTab({ hostelId }: { hostelId: string }) {
                   const isOccupied = String(room.status) === 'occupied';
                   const occupied   = Number(room.occupied_count ?? 0);
                   const capacity   = Number(room.capacity ?? 0);
+                  const tenants = Array.isArray(room.tenants) ? (room.tenants as Record<string, unknown>[]) : [];
+                  const tenantNames = tenants
+                    .map((tenant) => String(tenant.name ?? '').trim())
+                    .filter(Boolean);
                   return (
                     <div
                       key={String(room.id)}
@@ -1087,10 +1094,22 @@ function RoomsTab({ hostelId }: { hostelId: string }) {
                               : 'bg-[#10B981]/10 text-[#10B981]'
                             }`}>{occupied}/{capacity} beds</span>
                           </div>
-                          {isOccupied && room.tenant_name && (
-                            <div className="text-xs text-muted-foreground mt-0.5 truncate">{String(room.tenant_name)}</div>
+                          {isOccupied && tenantNames.length > 0 && (
+                            <div className="mt-1 space-y-1">
+                              {tenants.slice(0, 3).map((tenant, index) => (
+                                <div key={String(tenant.tenant_id ?? tenant.allocation_id ?? index)} className="flex items-center justify-between gap-2 text-xs">
+                                  <span className="text-muted-foreground truncate">{String(tenant.name ?? 'Tenant')}</span>
+                                  <span className="font-semibold text-foreground shrink-0">{fmt(tenant.monthly_rent ?? room.base_rent ?? 0)}/mo</span>
+                                </div>
+                              ))}
+                              {tenants.length > 3 && (
+                                <div className="text-[11px] text-muted-foreground">+{tenants.length - 3} more residents</div>
+                              )}
+                            </div>
                           )}
-                          <div className="text-xs text-muted-foreground mt-0.5">{fmt(room.monthly_rent ?? room.base_rent ?? 0)}/mo</div>
+                          {!isOccupied && (
+                            <div className="text-xs text-muted-foreground mt-0.5">{fmt(room.monthly_rent ?? room.base_rent ?? 0)}/mo base rent</div>
+                          )}
                           {room.notes && (
                             <div className="flex items-start gap-1 mt-1.5">
                               <FileText className="w-3 h-3 text-muted-foreground mt-0.5 shrink-0" />
