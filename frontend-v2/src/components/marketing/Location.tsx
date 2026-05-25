@@ -42,7 +42,7 @@ export function Location() {
 
             <div className="pt-4">
               <a
-                href="https://www.google.com/maps/place/Sri+Adithya+Boys+Hostel/@17.4542729,78.6602748,17z/data=!3m1!4b1!4m6!3m5!1s0x3bcb770dd641583b:0xde3e95b9afb8c1b1!8m2!3d17.4542678!4d78.6628497"
+                href="https://maps.app.goo.gl/8HdNTVcwywb2LXWB9"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center justify-center gap-2 w-full bg-[#1B2D5B] text-white py-3 rounded-lg hover:bg-[#152442] transition-colors"
