@@ -11,7 +11,7 @@ export function AppRouter() {
       {OwnerRoutes()}
       {TenantRoutes()}
       {AdminRoutes()}
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

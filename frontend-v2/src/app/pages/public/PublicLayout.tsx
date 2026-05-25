@@ -1,3 +1,4 @@
+import { Home, Phone, MapPin, MessageCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const NAV_LINKS = [
@@ -15,27 +16,57 @@ interface PublicLayoutProps {
   subtitle?: string;
 }
 
-/** Shared header/footer layout for all public hostel pages. */
+/** Shared header/footer layout for all public hostel sub-pages. */
 export function PublicLayout({ children, title, subtitle }: PublicLayoutProps) {
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50" style={{ fontFamily: 'Inter, sans-serif' }}>
+    <div className="min-h-screen flex flex-col" style={{ fontFamily: 'var(--font-body)', background: '#FFFDF5' }}>
+
+      {/* ── Top contact bar ────────────────────────────────────────────── */}
+      <div className="bg-[#1B2D5B] text-white py-2 px-4 text-sm">
+        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-center md:justify-between gap-4">
+          <div className="flex items-center gap-6">
+            <a href="tel:9392433422" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+              <Phone className="w-4 h-4" />
+              <span>9392433422</span>
+            </a>
+            <div className="flex items-center gap-2">
+              <MapPin className="w-4 h-4" />
+              <span>Yamnampet, Secunderabad</span>
+            </div>
+          </div>
+          <a
+            href="https://wa.me/919392433422"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+          >
+            <MessageCircle className="w-4 h-4" />
+            <span>WhatsApp Us</span>
+          </a>
+        </div>
+      </div>
 
       {/* ── Sticky Nav ─────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-50 shadow-lg" style={{ background: '#1e3a5f' }}>
-        <div className="max-w-6xl mx-auto px-6 flex items-center justify-between h-16">
-          <Link to="/" className="no-underline">
-            <span className="text-white font-extrabold text-xl tracking-tight">
-              Sri Adithya{' '}
-              <span style={{ color: '#f59e0b' }}>Boys Hostel</span>
+      <header className="bg-white shadow-sm sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-3 no-underline">
+            <div className="w-10 h-10 bg-[#F07B1D] rounded-full flex items-center justify-center">
+              <Home className="w-5 h-5 text-white" />
+            </div>
+            <span
+              className="text-lg font-semibold text-[#1B2D5B]"
+              style={{ fontFamily: 'var(--font-display)' }}
+            >
+              Sri Adithya Hostels
             </span>
           </Link>
 
-          <nav aria-label="Main navigation" className="hidden md:flex items-center gap-7">
+          <nav aria-label="Main navigation" className="hidden md:flex items-center gap-6">
             {NAV_LINKS.map(l => (
               <Link
                 key={l.to}
                 to={l.to}
-                className="text-slate-300 hover:text-amber-400 no-underline text-sm font-medium transition-colors"
+                className="text-[#2C2C2A] hover:text-[#F07B1D] no-underline text-sm font-medium transition-colors"
               >
                 {l.label}
               </Link>
@@ -44,8 +75,8 @@ export function PublicLayout({ children, title, subtitle }: PublicLayoutProps) {
 
           <Link
             to="/login"
-            className="no-underline font-bold text-sm px-5 py-2 rounded-lg transition-opacity hover:opacity-90"
-            style={{ background: '#f59e0b', color: '#1e3a5f' }}
+            className="no-underline font-semibold text-sm px-5 py-2 rounded-lg transition-colors hover:bg-[#d96e18]"
+            style={{ background: '#F07B1D', color: '#fff' }}
           >
             Tenant Login
           </Link>
@@ -56,15 +87,18 @@ export function PublicLayout({ children, title, subtitle }: PublicLayoutProps) {
       {(title || subtitle) && (
         <div
           className="text-white text-center py-14 px-6"
-          style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #2d5a96 100%)' }}
+          style={{ background: 'linear-gradient(135deg, #1B2D5B 0%, #2d5a96 100%)' }}
         >
           <div className="max-w-2xl mx-auto">
             {title && (
-              <h1 className="font-extrabold tracking-tight mb-3" style={{ fontSize: 'clamp(1.8rem, 4vw, 2.6rem)' }}>
+              <h1
+                className="font-bold tracking-tight mb-3"
+                style={{ fontSize: 'clamp(1.8rem, 4vw, 2.6rem)', fontFamily: 'var(--font-display)' }}
+              >
                 {title}
               </h1>
             )}
-            {subtitle && <p className="text-slate-300 text-lg m-0">{subtitle}</p>}
+            {subtitle && <p className="text-white/80 text-lg m-0">{subtitle}</p>}
           </div>
         </div>
       )}
@@ -73,19 +107,72 @@ export function PublicLayout({ children, title, subtitle }: PublicLayoutProps) {
       <main className="flex-1">{children}</main>
 
       {/* ── Footer ─────────────────────────────────────────────────────── */}
-      <footer style={{ background: '#0f172a', color: '#64748b' }} className="text-sm px-6 py-9">
-        <div className="max-w-6xl mx-auto flex flex-wrap justify-between items-center gap-4">
-          <p className="m-0">© {new Date().getFullYear()} Sri Adithya Boys Hostel. All rights reserved.</p>
-          <nav aria-label="Footer navigation" className="flex flex-wrap gap-5">
-            {NAV_LINKS.map(l => (
-              <Link key={l.to} to={l.to} className="text-slate-500 hover:text-slate-300 no-underline transition-colors">
-                {l.label}
-              </Link>
-            ))}
-            <Link to="/legal" className="text-slate-500 hover:text-slate-300 no-underline transition-colors">
-              Legal
+      <footer className="bg-[#1B2D5B] text-white py-12 px-4">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid md:grid-cols-3 gap-8 mb-8">
+            <div>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-[#F07B1D] rounded-full flex items-center justify-center">
+                  <Home className="w-5 h-5 text-white" />
+                </div>
+                <span className="text-lg font-semibold" style={{ fontFamily: 'var(--font-display)' }}>
+                  Sri Adithya Hostels
+                </span>
+              </div>
+              <p className="text-white/80 text-sm">
+                Your home away from home — comfortable, safe, and affordable accommodation for
+                students near SNIST.
+              </p>
+            </div>
+
+            <div>
+              <h4 className="font-semibold mb-4">Quick Links</h4>
+              <nav aria-label="Footer navigation" className="space-y-2">
+                {NAV_LINKS.map(l => (
+                  <Link
+                    key={l.to}
+                    to={l.to}
+                    className="block text-white/80 hover:text-white no-underline transition-colors text-sm"
+                  >
+                    {l.label}
+                  </Link>
+                ))}
+                <Link to="/legal" className="block text-white/80 hover:text-white no-underline transition-colors text-sm">
+                  Legal
+                </Link>
+              </nav>
+            </div>
+
+            <div>
+              <h4 className="font-semibold mb-4">Contact Us</h4>
+              <div className="space-y-3 text-sm">
+                <a href="tel:9392433422" className="flex items-center gap-2 text-white/80 hover:text-white transition-colors">
+                  <Phone className="w-4 h-4" />
+                  <span>9392433422</span>
+                </a>
+                <a
+                  href="https://wa.me/919392433422"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 text-white/80 hover:text-white transition-colors"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>WhatsApp</span>
+                </a>
+                <div className="flex items-start gap-2 text-white/80">
+                  <MapPin className="w-4 h-4 mt-1 flex-shrink-0" />
+                  <span>Yamnampet, Secunderabad, Telangana</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-white/20 pt-8 flex flex-wrap items-center justify-between gap-4 text-sm text-white/60">
+            <p className="m-0">&copy; {new Date().getFullYear()} Sri Adithya Hostels. All rights reserved.</p>
+            <Link to="/login" className="text-white/60 hover:text-white no-underline transition-colors">
+              Tenant Login
             </Link>
-          </nav>
+          </div>
         </div>
       </footer>
     </div>

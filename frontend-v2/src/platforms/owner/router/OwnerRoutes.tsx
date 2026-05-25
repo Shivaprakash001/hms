@@ -43,7 +43,6 @@ export function OwnerRoutes() {
       element={<OwnerBoundary />}
     >
       <Route element={<App />}>
-        <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<PortfolioView />} />
         <Route path="/hostels" element={<Navigate to="/dashboard" replace />} />
         <Route path="/hostels/:hostelId" element={<HostelDetailView />} />
