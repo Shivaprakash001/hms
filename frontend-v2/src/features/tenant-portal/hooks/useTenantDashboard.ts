@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import { tenantPortalApi } from '@features/tenant-portal/api';
 
 export const tenantQueryKeys = {
@@ -15,6 +16,7 @@ export const tenantQueryKeys = {
 };
 
 export function useTenantDashboard() {
+  const [loadSecondary, setLoadSecondary] = useState(false);
   const profileQ = useQuery({
     queryKey: tenantQueryKeys.profile(),
     queryFn: () => tenantPortalApi.getMyProfile(),
@@ -39,28 +41,45 @@ export function useTenantDashboard() {
     staleTime: 60_000,
   });
 
+  const criticalLoading =
+    profileQ.isLoading ||
+    duesQ.isLoading ||
+    paymentsQ.isLoading ||
+    roomQ.isLoading;
+
+  useEffect(() => {
+    if (!criticalLoading) {
+      const id = window.setTimeout(() => setLoadSecondary(true), 250);
+      return () => window.clearTimeout(id);
+    }
+  }, [criticalLoading]);
+
   const scoreQ = useQuery({
     queryKey: tenantQueryKeys.score(),
     queryFn: () => tenantPortalApi.getMyScore(),
     staleTime: 120_000,
+    enabled: loadSecondary,
   });
 
   const advanceQ = useQuery({
     queryKey: tenantQueryKeys.advance(),
     queryFn: () => tenantPortalApi.getAdvance(),
     staleTime: 60_000,
+    enabled: loadSecondary,
   });
 
   const moveOutQ = useQuery({
     queryKey: tenantQueryKeys.moveOut(),
     queryFn: () => tenantPortalApi.getMoveOutStatus(),
     staleTime: 30_000,
+    enabled: loadSecondary,
   });
 
   const notificationsQ = useQuery({
     queryKey: tenantQueryKeys.notifications(),
     queryFn: () => tenantPortalApi.getNotifications(),
     staleTime: 30_000,
+    enabled: loadSecondary,
   });
 
   const documentsQ = useQuery({
@@ -73,13 +92,8 @@ export function useTenantDashboard() {
       }
     },
     staleTime: 60_000,
+    enabled: loadSecondary,
   });
-
-  const isLoading =
-    profileQ.isLoading ||
-    duesQ.isLoading ||
-    paymentsQ.isLoading ||
-    roomQ.isLoading;
 
   const refetchAll = () => {
     profileQ.refetch();
@@ -103,7 +117,7 @@ export function useTenantDashboard() {
     moveOut: moveOutQ.data,
     notifications: notificationsQ.data,
     documents: documentsQ.data,
-    isLoading,
+    isLoading: criticalLoading,
     refetchAll,
   };
 }

@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { IndianRupee, Plus, Search, UserPlus, X } from 'lucide-react';
 import { ownerService } from '@features/owners/api';
 import { queryKeys } from '@lib/queryKeys';
-import { AddTenantModal } from './modals/AddTenantModal';
-import { RecordPaymentModal } from './modals/RecordPaymentModal';
+
+const AddTenantModal = lazy(() => import('./modals/AddTenantModal').then((m) => ({ default: m.AddTenantModal })));
+const RecordPaymentModal = lazy(() => import('./modals/RecordPaymentModal').then((m) => ({ default: m.RecordPaymentModal })));
 
 type Action = 'menu' | 'payment' | 'tenant' | null;
 
@@ -23,17 +24,17 @@ export function OwnerQuickActions() {
   const location = useLocation();
   const navigate = useNavigate();
   const [active, setActive] = useState<Action>(null);
+  const hidden =
+    location.pathname.startsWith('/settings') ||
+    location.pathname.startsWith('/login') ||
+    location.pathname.startsWith('/tenant');
 
   const { data } = useQuery({
     queryKey: queryKeys.owner.hostels(),
     queryFn: ownerService.getHostels,
     staleTime: 5 * 60_000,
+    enabled: !hidden && active !== null,
   });
-
-  const hidden =
-    location.pathname.startsWith('/settings') ||
-    location.pathname.startsWith('/login') ||
-    location.pathname.startsWith('/tenant');
 
   if (hidden) return null;
 
@@ -103,10 +104,14 @@ export function OwnerQuickActions() {
       </button>
 
       {active === 'payment' && hostelId && (
-        <RecordPaymentModal hostelId={hostelId} onClose={() => setActive(null)} />
+        <Suspense fallback={null}>
+          <RecordPaymentModal hostelId={hostelId} onClose={() => setActive(null)} />
+        </Suspense>
       )}
       {active === 'tenant' && hostelId && (
-        <AddTenantModal hostelId={hostelId} onClose={() => setActive(null)} />
+        <Suspense fallback={null}>
+          <AddTenantModal hostelId={hostelId} onClose={() => setActive(null)} />
+        </Suspense>
       )}
     </>
   );

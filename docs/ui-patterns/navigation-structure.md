@@ -20,8 +20,59 @@
 
 **How this works:**
 1. `PublicRoutes` returns public route elements.
-2. These routes do not require protected wrappers.
+2. Public pages lazy-load behind a lightweight `PublicShell`.
 3. Visitors can reach marketing, legal, and auth pages.
+
+## Route performance boundaries
+
+| Shell | Provider scope | Heavy code excluded from initial public load |
+|---|---|---|
+| Public | Browser router only | Auth, dashboards, tenant portal, billing, charts |
+| Auth | Query client, Google OAuth, auth context | Owner routes, tenant routes, analytics |
+| Owner | Query client, auth context, owner guard | Public marketing pages, tenant portal shell |
+| Tenant | Query client, auth context, tenant guard | Owner dashboards, owner billing analytics |
+
+Why this exists: route shells keep unrelated product areas out of each other’s JavaScript bundles.
+
+**How this works:**
+1. `RootProviders` only mounts the router at app startup.
+2. `AuthRouteShell`, `OwnerProviderShell`, and `TenantProviderShell` load through `React.lazy`.
+3. The browser downloads protected providers only after a matching route is visited.
+
+## Hostel detail feature islands
+
+| Island | Loads when | Main responsibility |
+|---|---|---|
+| Shell | Hostel route opens | Header, tab bar, hostel title, active tab routing |
+| Overview tab | Overview is active | Dashboard stats and command-center summaries |
+| Rooms tab | Rooms is active | Room list, floor actions, room forms, room overview |
+| Tenants tab | Tenants is active | Active tenants, invited tenants, payment action |
+| Financials tab | Financials is active | Billing control center and payment modal |
+| Expenses tab | Expenses is active | Expense KPIs, ledger, filters, add expense form |
+| Move-outs tab | Move-outs is active | Move-out request preview and workflow link |
+
+Why this exists: hostel operations are broad, so each tab becomes its own bundle and query boundary.
+
+**How this works:**
+1. `HostelDetailView` lazy-loads one active tab.
+2. Tab clicks update the route path for deep links.
+3. Room and expense modals load as nested async islands.
+4. Inactive tabs do not mount their queries, forms, or heavy UI.
+
+## Large List Rendering
+
+| Pattern | Used for |
+|---|---|
+| Virtual rows | Payments, tenants, rent obligations, expenses |
+| Fixed scroll container | Keeps long ledgers from expanding the whole page |
+| Overscan rows | Preserves smooth scrolling during fast swipes |
+
+Why this exists: hostel data can grow to hundreds or thousands of records per owner.
+
+**How this works:**
+1. List components pass row counts to TanStack Virtual.
+2. The virtualizer maps scroll position to a small row window.
+3. Filtering and searching update the row model without rendering every result.
 
 ## Owner routes
 
@@ -39,8 +90,8 @@
 | `/settings` | Settings |
 
 **How this works:**
-1. `OwnerRoutes` wraps screens in `ProtectedRoute`.
-2. Allowed roles are owner and admin.
+1. `OwnerRoutes` lazy-loads `OwnerProviderShell`.
+2. `OwnerProviderShell` wraps screens in `ProtectedRoute`.
 3. Hostel ID scopes workspace screens.
 
 ## Tenant routes
@@ -56,8 +107,8 @@
 | `/payment-return` | Payment return |
 
 **How this works:**
-1. `TenantRoutes` wraps tenant screens in `ProtectedTenantRoute`.
-2. `TenantPortalLayout` supplies tenant navigation.
+1. `TenantRoutes` lazy-loads `TenantProviderShell`.
+2. `TenantProviderShell` applies `ProtectedTenantRoute`.
 3. Tenant pages call `/tenants/me/*` endpoints.
 
 ## Admin routes
@@ -71,4 +122,3 @@ Backend admin pages exist under `backend-next/app/(dashboard)/admin`.
 3. A rebuild must choose one admin UI location.
 
 > **Needs clarification:** Admin navigation is split between `frontend-v2` and `backend-next`. Confirm final admin app ownership before client rebuild.
-

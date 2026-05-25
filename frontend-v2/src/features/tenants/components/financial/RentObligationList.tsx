@@ -1,3 +1,6 @@
+import { useMemo, useRef } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
+
 const fmt = (n: number) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
 
 const STATUS_COLORS: Record<string, string> = {
@@ -32,14 +35,32 @@ interface Props {
 }
 
 export function RentObligationList({ obligations, onRecordPayment, onSetupBilling }: Props) {
-  const grouped = obligations.reduce<Record<string, Obligation[]>>((acc, o) => {
-    const month = o.installment_label ?? o.billing_period_start ?? o.rent_month ?? 'Unknown';
-    if (!acc[month]) acc[month] = [];
-    acc[month].push(o);
-    return acc;
-  }, {});
-
-  const months = Object.keys(grouped).sort().reverse();
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const { months, rows } = useMemo(() => {
+    const byMonth = obligations.reduce<Record<string, Obligation[]>>((acc, o) => {
+      const month = o.installment_label ?? o.billing_period_start ?? o.rent_month ?? 'Unknown';
+      if (!acc[month]) acc[month] = [];
+      acc[month].push(o);
+      return acc;
+    }, {});
+    const sortedMonths = Object.keys(byMonth).sort().reverse();
+    const flatRows = sortedMonths.flatMap((month) => [
+      { kind: 'month' as const, month },
+      ...byMonth[month].map((obligation, index) => ({
+        kind: 'obligation' as const,
+        month,
+        obligation,
+        index,
+      })),
+    ]);
+    return { months: sortedMonths, rows: flatRows };
+  }, [obligations]);
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: (index) => rows[index]?.kind === 'month' ? 28 : 84,
+    overscan: 8,
+  });
 
   if (months.length === 0) {
     return (
@@ -62,21 +83,34 @@ export function RentObligationList({ obligations, onRecordPayment, onSetupBillin
   }
 
   return (
-    <div className="space-y-4">
-      {months.map((month) => (
-        <div key={month}>
-          <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2">{month}</h4>
-          <div className="space-y-2">
-            {grouped[month].map((o, i) => {
-              const status = String(o.status ?? 'PENDING').toUpperCase();
-              const id = o.id ?? o.obligation_id ?? `${month}-${i}`;
-              const paidAmount = Number(o.paid_amount ?? o.paid ?? 0);
-              const displayAmount = Number(o.outstanding ?? o.amount ?? 0);
-              return (
-                <div
-                  key={id}
-                  className="flex items-center justify-between gap-3 p-3 rounded-xl border border-border bg-card"
-                >
+    <div ref={scrollRef} className="max-h-[560px] overflow-auto">
+      <div className="relative" style={{ height: rowVirtualizer.getTotalSize() }}>
+        {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+          const item = rows[virtualRow.index];
+          if (item.kind === 'month') {
+            return (
+              <h4
+                key={item.month}
+                className="absolute left-0 right-0 text-xs font-semibold text-muted-foreground uppercase"
+                style={{ transform: `translateY(${virtualRow.start}px)` }}
+              >
+                {item.month}
+              </h4>
+            );
+          }
+
+          const o = item.obligation;
+          const i = item.index;
+          const status = String(o.status ?? 'PENDING').toUpperCase();
+          const id = o.id ?? o.obligation_id ?? `${item.month}-${i}`;
+          const paidAmount = Number(o.paid_amount ?? o.paid ?? 0);
+          const displayAmount = Number(o.outstanding ?? o.amount ?? 0);
+          return (
+            <div
+              key={id}
+              className="absolute left-0 right-0 flex items-center justify-between gap-3 p-3 rounded-xl border border-border bg-card"
+              style={{ transform: `translateY(${virtualRow.start}px)` }}
+            >
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-foreground">
                       {fmt(displayAmount)}
@@ -104,12 +138,10 @@ export function RentObligationList({ obligations, onRecordPayment, onSetupBillin
                       </button>
                     )}
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ))}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

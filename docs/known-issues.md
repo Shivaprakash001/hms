@@ -65,3 +65,13 @@ Examples include selected document nested routes, payment export, payment waive,
 2. UI code may compile while runtime calls fail.
 3. Endpoint verification is required before production handoff.
 
+## Remaining dashboard bundle hotspots
+
+The hostel detail route now loads as feature islands.
+The chart vendor chunk remains about 101 kB gzip after splitting.
+
+**How this works:**
+1. The route shell downloads first.
+2. Owner users download only the active hostel tab.
+3. Payment, tenant, rent obligation, and expense lists now use virtualization.
+4. Further gains require replacing or shrinking the chart vendor chunk.

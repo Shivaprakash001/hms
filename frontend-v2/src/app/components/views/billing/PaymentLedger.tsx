@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Search, Filter, ChevronDown } from 'lucide-react';
 import { cn } from '../../../components/ui/utils';
 
@@ -45,6 +46,7 @@ export function PaymentLedger({ payments, paymentsData, onRowClick }: Props) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [showFilters, setShowFilters] = useState(false);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const stats = paymentsData?.stats ?? {};
 
@@ -64,6 +66,12 @@ export function PaymentLedger({ payments, paymentsData, onRowClick }: Props) {
     }
     return list;
   }, [payments, search, statusFilter]);
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 72,
+    overscan: 8,
+  });
 
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden" id="ledger">
@@ -130,18 +138,22 @@ export function PaymentLedger({ payments, paymentsData, onRowClick }: Props) {
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/30">
-                <th className="text-left text-xs font-medium text-muted-foreground px-4 py-2.5">Tenant</th>
-                <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2.5 hidden sm:table-cell">Room</th>
-                <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2.5 hidden md:table-cell">Month</th>
-                <th className="text-left text-xs font-medium text-muted-foreground px-2 py-2.5">Status</th>
-                <th className="text-right text-xs font-medium text-muted-foreground px-4 py-2.5">Amount</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {rows.map((p: any, i: number) => {
+          <div className="min-w-[560px] text-sm">
+            <div className="grid grid-cols-[1.4fr_0.7fr_0.8fr_0.8fr_0.9fr] border-b border-border bg-muted/30">
+              <div className="text-left text-xs font-medium text-muted-foreground px-4 py-2.5">Tenant</div>
+              <div className="text-left text-xs font-medium text-muted-foreground px-2 py-2.5">Room</div>
+              <div className="text-left text-xs font-medium text-muted-foreground px-2 py-2.5">Month</div>
+              <div className="text-left text-xs font-medium text-muted-foreground px-2 py-2.5">Status</div>
+              <div className="text-right text-xs font-medium text-muted-foreground px-4 py-2.5">Amount</div>
+            </div>
+            <div ref={scrollRef} className="max-h-[560px] overflow-auto">
+              <div
+                className="relative w-full"
+                style={{ height: rowVirtualizer.getTotalSize() }}
+              >
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const p: any = rows[virtualRow.index];
+                const i = virtualRow.index;
                 const id = p.obligation_id ?? p.id;
                 const name = p.tenantName ?? p.tenant_name ?? 'Unknown';
                 const room = p.roomNo ?? p.room_no ?? '—';
@@ -153,39 +165,41 @@ export function PaymentLedger({ payments, paymentsData, onRowClick }: Props) {
                 const daysOverdue = Number(p.daysOverdue ?? p.days_overdue ?? 0);
 
                 return (
-                  <tr
+                  <button
                     key={id ?? i}
                     onClick={() => id && onRowClick(id)}
                     className={cn(
-                      'cursor-pointer hover:bg-muted/40 transition-colors',
+                      'absolute left-0 grid w-full grid-cols-[1.4fr_0.7fr_0.8fr_0.8fr_0.9fr] border-b border-border text-left hover:bg-muted/40 transition-colors',
                       daysOverdue > 0 && status !== 'PAID' ? 'bg-red-500/5' : '',
                     )}
+                    style={{ transform: `translateY(${virtualRow.start}px)` }}
                   >
-                    <td className="px-4 py-3">
+                    <div className="px-4 py-3">
                       <div className="font-medium text-foreground truncate max-w-[120px]">{name}</div>
                       {method && (
                         <div className="text-xs text-muted-foreground">{methodShort(method)}</div>
                       )}
-                    </td>
-                    <td className="px-2 py-3 text-xs text-muted-foreground hidden sm:table-cell">{room}</td>
-                    <td className="px-2 py-3 text-xs text-muted-foreground hidden md:table-cell">{month}</td>
-                    <td className="px-2 py-3">
+                    </div>
+                    <div className="px-2 py-3 text-xs text-muted-foreground">{room}</div>
+                    <div className="px-2 py-3 text-xs text-muted-foreground">{month}</div>
+                    <div className="px-2 py-3">
                       <StatusBadge status={status} />
                       {daysOverdue > 0 && status !== 'PAID' && (
                         <div className="text-xs text-red-500 mt-0.5">{daysOverdue}d late</div>
                       )}
-                    </td>
-                    <td className="px-4 py-3 text-right">
+                    </div>
+                    <div className="px-4 py-3 text-right">
                       <div className="font-semibold text-foreground">{fmt(total)}</div>
                       {outstanding > 0 && status !== 'PAID' && (
                         <div className="text-xs text-red-500">{fmt(outstanding)} due</div>
                       )}
-                    </td>
-                  </tr>
+                    </div>
+                  </button>
                 );
               })}
-            </tbody>
-          </table>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

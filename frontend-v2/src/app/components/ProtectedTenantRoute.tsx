@@ -1,7 +1,12 @@
+import type { ReactNode } from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '@context/AuthContext';
 
-export function ProtectedTenantRoute() {
+interface ProtectedTenantRouteProps {
+  children?: ReactNode;
+}
+
+export function ProtectedTenantRoute({ children }: ProtectedTenantRouteProps) {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -20,5 +25,5 @@ export function ProtectedTenantRoute() {
     return <Navigate to="/complete-profile" replace />;
   }
 
-  return <Outlet />;
+  return children ? <>{children}</> : <Outlet />;
 }

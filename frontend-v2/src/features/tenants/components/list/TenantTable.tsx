@@ -1,4 +1,6 @@
+import { useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Eye, Bell, LogOut, Send } from 'lucide-react';
 import { TenantStatusBadge } from '@features/tenants/components/badges/TenantStatusBadge';
 import { getInitials, type NormalizedTenant } from '@features/tenants/utils/normalize';
@@ -16,6 +18,14 @@ interface Props {
 }
 
 export function TenantTable({ tenants, hostelId, onReminder, onMoveOut, onResend, selectedIds, onToggleSelect }: Props) {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: tenants.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 72,
+    overscan: 10,
+  });
+
   if (tenants.length === 0) {
     return (
       <p className="text-center text-sm text-muted-foreground py-12">No tenants match your filters</p>
@@ -24,29 +34,33 @@ export function TenantTable({ tenants, hostelId, onReminder, onMoveOut, onResend
 
   return (
     <div className="hidden md:block overflow-x-auto rounded-xl border border-border">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="bg-secondary/50 text-left text-xs text-muted-foreground">
-            {onToggleSelect && <th className="px-4 py-3 w-10 font-medium">Pick</th>}
-            <th className="px-4 py-3 font-medium">Tenant</th>
-            <th className="px-4 py-3 font-medium">Room</th>
-            <th className="px-4 py-3 font-medium">Rent</th>
-            <th className="px-4 py-3 font-medium">Due</th>
-            <th className="px-4 py-3 font-medium">Status</th>
-            <th className="px-4 py-3 font-medium">Joined</th>
-            <th className="px-4 py-3 font-medium text-right">Outstanding</th>
-            <th className="px-4 py-3 w-10" />
-          </tr>
-        </thead>
-        <tbody>
-          {tenants.map((t) => {
+      <div className="min-w-[980px] text-sm">
+        <div className="grid grid-cols-[48px_1.6fr_0.7fr_0.8fr_0.8fr_0.8fr_1fr_1fr_80px] bg-secondary/50 text-left text-xs text-muted-foreground">
+          <div className="px-4 py-3 font-medium">{onToggleSelect ? 'Pick' : ''}</div>
+          <div className="px-4 py-3 font-medium">Tenant</div>
+          <div className="px-4 py-3 font-medium">Room</div>
+          <div className="px-4 py-3 font-medium">Rent</div>
+          <div className="px-4 py-3 font-medium">Due</div>
+          <div className="px-4 py-3 font-medium">Status</div>
+          <div className="px-4 py-3 font-medium">Joined</div>
+          <div className="px-4 py-3 font-medium text-right">Outstanding</div>
+          <div className="px-4 py-3" />
+        </div>
+        <div ref={scrollRef} className="max-h-[620px] overflow-auto">
+          <div className="relative w-full" style={{ height: rowVirtualizer.getTotalSize() }}>
+          {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+            const t = tenants[virtualRow.index];
             const overdue =
               t.outstandingAmount > 0 &&
               ['PENDING', 'PARTIAL'].includes(String(t.paymentStatus).toUpperCase());
             return (
-              <tr key={t.id} className="border-t border-border hover:bg-secondary/30">
-                {onToggleSelect && (
-                  <td className="px-4 py-3">
+              <div
+                key={t.id}
+                className="absolute left-0 grid w-full grid-cols-[48px_1.6fr_0.7fr_0.8fr_0.8fr_0.8fr_1fr_1fr_80px] border-t border-border hover:bg-secondary/30"
+                style={{ transform: `translateY(${virtualRow.start}px)` }}
+              >
+                <div className="px-4 py-3">
+                  {onToggleSelect && (
                     <input
                       type="checkbox"
                       checked={selectedIds?.has(t.id) ?? false}
@@ -54,9 +68,9 @@ export function TenantTable({ tenants, hostelId, onReminder, onMoveOut, onResend
                       className="h-4 w-4 rounded border-border text-accent focus:ring-accent"
                       aria-label={`Select ${t.name}`}
                     />
-                  </td>
-                )}
-                <td className="px-4 py-3">
+                  )}
+                </div>
+                <div className="px-4 py-3">
                   <Link
                     to={`/hostels/${hostelId}/tenants/${t.id}`}
                     className="flex items-center gap-2 min-w-0 group"
@@ -75,10 +89,10 @@ export function TenantTable({ tenants, hostelId, onReminder, onMoveOut, onResend
                       <p className="text-xs text-muted-foreground truncate">{t.phone}</p>
                     </div>
                   </Link>
-                </td>
-                <td className="px-4 py-3 text-foreground">{t.room}</td>
-                <td className="px-4 py-3">{fmt(t.rent)}/mo</td>
-                <td className="px-4 py-3">
+                </div>
+                <div className="px-4 py-3 text-foreground">{t.room}</div>
+                <div className="px-4 py-3">{fmt(t.rent)}/mo</div>
+                <div className="px-4 py-3">
                   <span
                     className={
                       overdue ? 'text-destructive font-medium' : 'text-muted-foreground'
@@ -86,21 +100,21 @@ export function TenantTable({ tenants, hostelId, onReminder, onMoveOut, onResend
                   >
                     {String(t.paymentStatus)}
                   </span>
-                </td>
-                <td className="px-4 py-3">
+                </div>
+                <div className="px-4 py-3">
                   <TenantStatusBadge status={t.status} />
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">
+                </div>
+                <div className="px-4 py-3 text-muted-foreground">
                   {t.joinDate ? new Date(t.joinDate).toLocaleDateString('en-IN') : '—'}
-                </td>
-                <td className="px-4 py-3 text-right font-medium">
+                </div>
+                <div className="px-4 py-3 text-right font-medium">
                   {t.outstandingAmount > 0 ? (
                     <span className="text-destructive">{fmt(t.outstandingAmount)}</span>
                   ) : (
                     <span className="text-emerald-600">Clear</span>
                   )}
-                </td>
-                <td className="px-4 py-3">
+                </div>
+                <div className="px-4 py-3">
                   <div className="flex items-center justify-end gap-1">
                     <Link
                       to={`/hostels/${hostelId}/tenants/${t.id}`}
@@ -140,12 +154,13 @@ export function TenantTable({ tenants, hostelId, onReminder, onMoveOut, onResend
                       </button>
                     )}
                   </div>
-                </td>
-              </tr>
+                </div>
+              </div>
             );
           })}
-        </tbody>
-      </table>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

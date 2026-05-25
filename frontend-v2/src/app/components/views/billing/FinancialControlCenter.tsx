@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { lazy, Suspense, useState, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { BarChart3, ChevronDown } from 'lucide-react';
 import { queryKeys } from '@lib/queryKeys';
@@ -6,21 +6,31 @@ import { OwnerActionsBar } from './OwnerActionsBar';
 import { TodayPriorities } from './TodayPriorities';
 import { HealthBar } from './HealthBar';
 import { CashPosition } from './CashPosition';
-import { CollectionPipeline } from './CollectionPipeline';
-import { CashflowForecast } from './CashflowForecast';
-import { CollectionAnalytics } from './CollectionAnalytics';
 import { RiskZone } from './RiskZone';
 import { RoomPerformance } from './RoomPerformance';
-import { ExpenseIntelligence } from './ExpenseIntelligence';
-import { PaymentAttemptsIntelligence } from './PaymentAttemptsIntelligence';
-import { FinancialTimeline } from './FinancialTimeline';
 import { PaymentLedger } from './PaymentLedger';
-import { PaymentDetailDrawer } from './PaymentDetailDrawer';
+
+const CollectionPipeline = lazy(() => import('./CollectionPipeline').then((m) => ({ default: m.CollectionPipeline })));
+const CashflowForecast = lazy(() => import('./CashflowForecast').then((m) => ({ default: m.CashflowForecast })));
+const CollectionAnalytics = lazy(() => import('./CollectionAnalytics').then((m) => ({ default: m.CollectionAnalytics })));
+const ExpenseIntelligence = lazy(() => import('./ExpenseIntelligence').then((m) => ({ default: m.ExpenseIntelligence })));
+const PaymentAttemptsIntelligence = lazy(() => import('./PaymentAttemptsIntelligence').then((m) => ({ default: m.PaymentAttemptsIntelligence })));
+const FinancialTimeline = lazy(() => import('./FinancialTimeline').then((m) => ({ default: m.FinancialTimeline })));
+const PaymentDetailDrawer = lazy(() => import('./PaymentDetailDrawer').then((m) => ({ default: m.PaymentDetailDrawer })));
 
 interface Props {
   hostelId: string;
   onRecordPayment?: () => void;
   onAddExpense?: () => void;
+}
+
+function AnalyticsFallback() {
+  return (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="h-44 rounded-xl bg-muted animate-pulse" />
+      <div className="h-44 rounded-xl bg-muted animate-pulse" />
+    </div>
+  );
 }
 
 export function FinancialControlCenter({ hostelId, onRecordPayment, onAddExpense }: Props) {
@@ -38,14 +48,14 @@ export function FinancialControlCenter({ hostelId, onRecordPayment, onAddExpense
     queryKey: queryKeys.dashboard.cashflow(hostelId),
     queryFn: () => import('@features/dashboard/api').then((m) => m.dashboardService.getCashflow(hostelId)),
     staleTime: 3 * 60 * 1000,
-    enabled: !!hostelId,
+    enabled: !!hostelId && showAnalytics,
   });
 
   const { data: funnel } = useQuery({
     queryKey: queryKeys.dashboard.funnel(hostelId),
     queryFn: () => import('@features/dashboard/api').then((m) => m.dashboardService.getFunnel(hostelId)),
     staleTime: 5 * 60 * 1000,
-    enabled: !!hostelId,
+    enabled: !!hostelId && showAnalytics,
   });
 
   const { data: paymentsData, refetch: refetchPayments } = useQuery({
@@ -100,27 +110,29 @@ export function FinancialControlCenter({ hostelId, onRecordPayment, onAddExpense
 
         {showAnalytics && (
           <div className="mt-4 space-y-4">
-            <CollectionPipeline
-              stats={stats}
-              cashflow={cashflow}
-              funnel={funnel}
-            />
+            <Suspense fallback={<AnalyticsFallback />}>
+              <CollectionPipeline
+                stats={stats}
+                cashflow={cashflow}
+                funnel={funnel}
+              />
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <CashflowForecast cashflow={cashflow} stats={stats} />
-              <CollectionAnalytics payments={payments} funnel={funnel} />
-            </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <CashflowForecast cashflow={cashflow} stats={stats} />
+                <CollectionAnalytics payments={payments} funnel={funnel} />
+              </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <ExpenseIntelligence intel={intel} stats={stats} />
-              {intel?.payment_attempts ? (
-                <PaymentAttemptsIntelligence attempts={intel.payment_attempts} />
-              ) : null}
-            </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <ExpenseIntelligence intel={intel} stats={stats} />
+                {intel?.payment_attempts ? (
+                  <PaymentAttemptsIntelligence attempts={intel.payment_attempts} />
+                ) : null}
+              </div>
 
-            {intel?.recent_activity?.length > 0 && (
-              <FinancialTimeline activity={intel.recent_activity} />
-            )}
+              {intel?.recent_activity?.length > 0 && (
+                <FinancialTimeline activity={intel.recent_activity} />
+              )}
+            </Suspense>
           </div>
         )}
       </section>
@@ -134,11 +146,13 @@ export function FinancialControlCenter({ hostelId, onRecordPayment, onAddExpense
       />
 
       {selectedObligationId && (
-        <PaymentDetailDrawer
-          obligationId={selectedObligationId}
-          hostelId={hostelId}
-          onClose={() => setSelectedObligationId(null)}
-        />
+        <Suspense fallback={null}>
+          <PaymentDetailDrawer
+            obligationId={selectedObligationId}
+            hostelId={hostelId}
+            onClose={() => setSelectedObligationId(null)}
+          />
+        </Suspense>
       )}
     </div>
   );
