@@ -74,6 +74,22 @@ Why this exists: hostel data can grow to hundreds or thousands of records per ow
 2. The virtualizer maps scroll position to a small row window.
 3. Filtering and searching update the row model without rendering every result.
 
+## Dashboard Stability Pattern
+
+| Pattern | Used for |
+|---|---|
+| Stable header height | Owner dashboard greeting |
+| Layout-matched skeleton | Owner dashboard loading state |
+| Lazy user-intent UI | Trends chart and owner modals |
+| Deferred filter text | Property search |
+
+Why this exists: mobile Core Web Vitals are sensitive to the first dashboard viewport.
+
+**How this works:**
+1. The first viewport reserves space before async data arrives.
+2. Below-fold chart code waits until the trend panel opens.
+3. Modal bundles wait until the related action is tapped.
+
 ## Owner routes
 
 | Route | Screen |

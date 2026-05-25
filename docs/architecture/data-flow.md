@@ -64,6 +64,41 @@ Why this exists: large hostel ledgers must scroll smoothly on low-end mobile and
 2. The list keeps total scroll height with a spacer container.
 3. Only visible rows render, so DOM size stays stable as data grows.
 
+## Owner dashboard first paint flow
+
+| Step | Code | Purpose |
+|---|---|---|
+| 1 | `PortfolioView` shell | Paints a stable greeting area immediately. |
+| 2 | Matched skeleton | Reserves the above-fold card stack while data loads. |
+| 3 | `portfolioService.getShell` | Fills risk, KPI, digest, and attention sections. |
+| 4 | Lazy extras | Loads chart and modal code only after user intent. |
+
+Why this exists: the dashboard greeting is the mobile LCP element, and top-card movement affects CLS.
+
+**How this works:**
+1. Header text uses a fixed minimum height.
+2. The shell endpoint returns portfolio stats and a small overdue preview.
+3. The screen avoids a second full dues request on first paint.
+4. Search filtering uses deferred input so typing does not block rendering.
+
+## Portfolio shell endpoint flow
+
+| Step | Code | What happens |
+|---|---|---|
+| 1 | `/api/dashboard/portfolio-shell` | Authenticates the owner session. |
+| 2 | `portfolioPerformanceService` | Loads portfolio stats, trends, and rankings. |
+| 3 | Raw overdue preview query | Selects only four overdue obligations for the focus hostel. |
+| 4 | Database indexes | Use owner, hostel, status, due date, and obligation lookup paths. |
+| 5 | `PortfolioView` | Renders collection risk without calling the full dues endpoint. |
+
+Why this exists: mobile dashboards should not download every obligation to render four attention rows.
+
+**How this works:**
+1. The frontend sends one dashboard shell request.
+2. The backend shapes a first-paint payload for the owner home screen.
+3. The preview query reads only the fields needed above the fold.
+4. Billing and alerts still use the full dues endpoint when users open those workflows.
+
 ## Hostel detail tab flow
 
 | Step | Code | What happens |

@@ -84,10 +84,38 @@ export class PaymentRepository {
                 ...(rentMonth && { rent_month: rentMonth }),
                 ...(status ? { status: status as any } : {})
             },
-            include: {
-                tenants: { include: { profiles: true } },
-                room_allocations: { include: { room: true } },
-                payments: true
+            select: {
+                id: true,
+                tenant_id: true,
+                rent_month: true,
+                due_date: true,
+                amount: true,
+                status: true,
+                tenants: {
+                    select: {
+                        profiles: {
+                            select: {
+                                name: true,
+                                email: true,
+                                phone: true
+                            }
+                        }
+                    }
+                },
+                room_allocations: {
+                    select: {
+                        room: {
+                            select: {
+                                room_no: true
+                            }
+                        }
+                    }
+                },
+                payments: {
+                    select: {
+                        amount_paid: true
+                    }
+                }
             },
             orderBy: { rent_month: "desc" }
         });

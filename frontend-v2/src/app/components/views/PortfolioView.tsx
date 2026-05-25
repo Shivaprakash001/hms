@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { lazy, Suspense, useDeferredValue, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -19,15 +19,16 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@context/AuthContext';
 import { portfolioService } from '@features/dashboard/api';
-import { paymentService } from '@features/payments/api';
 import { queryKeys } from '@lib/queryKeys';
-import { PortfolioRevenueChart } from '@/app/components/portfolio/PortfolioRevenueChart';
 import { HostelPerformanceCard } from '@/app/components/portfolio/HostelPerformanceCard';
-import { AddHostelModal } from '@/app/components/modals/AddHostelModal';
-import { AddTenantModal } from '@/app/components/modals/AddTenantModal';
-import { FilterModal, FilterOptions } from '@/app/components/modals/FilterModal';
-import { EditHostelSheet } from '@/app/components/modals/EditHostelSheet';
-import { RecordPaymentModal } from '@/app/components/modals/RecordPaymentModal';
+import type { FilterOptions } from '@/app/components/modals/FilterModal';
+
+const PortfolioRevenueChart = lazy(() => import('@/app/components/portfolio/PortfolioRevenueChart').then((m) => ({ default: m.PortfolioRevenueChart })));
+const AddHostelModal = lazy(() => import('@/app/components/modals/AddHostelModal').then((m) => ({ default: m.AddHostelModal })));
+const AddTenantModal = lazy(() => import('@/app/components/modals/AddTenantModal').then((m) => ({ default: m.AddTenantModal })));
+const FilterModal = lazy(() => import('@/app/components/modals/FilterModal').then((m) => ({ default: m.FilterModal })));
+const EditHostelSheet = lazy(() => import('@/app/components/modals/EditHostelSheet').then((m) => ({ default: m.EditHostelSheet })));
+const RecordPaymentModal = lazy(() => import('@/app/components/modals/RecordPaymentModal').then((m) => ({ default: m.RecordPaymentModal })));
 
 const fmt = (n: number) => {
   const v = Number(n || 0);
@@ -36,10 +37,30 @@ const fmt = (n: number) => {
   return `₹${v.toLocaleString('en-IN')}`;
 };
 
+function PortfolioLoadingSkeleton() {
+  return (
+    <div className="space-y-5" aria-hidden="true">
+      <div className="h-[147px] rounded-2xl border border-border bg-card animate-pulse" />
+      <div className="grid grid-cols-3 gap-3">
+        <div className="h-[82px] rounded-xl border border-border bg-card animate-pulse" />
+        <div className="h-[82px] rounded-xl border border-border bg-card animate-pulse" />
+        <div className="h-[82px] rounded-xl border border-border bg-card animate-pulse" />
+      </div>
+      <div className="h-[90px] rounded-xl border border-border bg-card animate-pulse" />
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div className="h-12 rounded-xl bg-card border border-border animate-pulse" />
+        <div className="h-12 rounded-xl bg-card border border-border animate-pulse" />
+      </div>
+      <div className="h-[214px] rounded-xl border border-border bg-card animate-pulse" />
+    </div>
+  );
+}
+
 export function PortfolioView() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [showAddHostel, setShowAddHostel] = useState(false);
   const [showAddTenant, setShowAddTenant] = useState(false);
   const [showRecordPayment, setShowRecordPayment] = useState(false);
@@ -49,26 +70,20 @@ export function PortfolioView() {
   const [filters, setFilters] = useState<FilterOptions>({ occupancy: [], revenue: [], alerts: [] });
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: queryKeys.portfolio.performance(6),
-    queryFn: () => portfolioService.getPerformance(6),
+    queryKey: queryKeys.portfolio.shell(6),
+    queryFn: () => portfolioService.getShell(6),
     staleTime: 2 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
 
   const portfolio = data?.portfolio ?? {};
   const monthlyTrends = data?.monthly_trends ?? [];
   const rankings = data?.hostel_rankings ?? [];
   const topPerformer = rankings.find((h: { is_top_performer?: boolean }) => h.is_top_performer);
-  const firstHostelId = rankings[0]?.hostel_id;
-
-  const { data: duesData } = useQuery({
-    queryKey: queryKeys.payments.dues(firstHostelId ?? ''),
-    queryFn: () => paymentService.getAllDues(firstHostelId),
-    enabled: Boolean(firstHostelId),
-    staleTime: 60 * 1000,
-  });
+  const firstHostelId = data?.focus_hostel_id ?? rankings[0]?.hostel_id;
 
   const filteredRankings = rankings.filter((h: { hostel_name: string; city?: string | null }) => {
-    const q = searchQuery.toLowerCase();
+    const q = deferredSearchQuery.toLowerCase();
     if (!q) return true;
     return (
       h.hostel_name.toLowerCase().includes(q) ||
@@ -80,24 +95,15 @@ export function PortfolioView() {
     ? rankings.find((h: { hostel_id: string }) => h.hostel_id === editingHostelId)
     : null;
 
-  const dues = Array.isArray(duesData)
-    ? duesData
-    : Array.isArray((duesData as Record<string, unknown> | undefined)?.dues)
-      ? ((duesData as Record<string, unknown>).dues as Record<string, unknown>[])
-      : [];
-  const overdueRows = dues
-    .filter((due) => {
-      const dueDate = due.due_date ? new Date(String(due.due_date)).getTime() : 0;
-      return Number(due.outstanding ?? due.amount ?? 0) > 0 && dueDate > 0 && dueDate < Date.now();
-    })
-    .map((due) => ({
+  const overdueRows = Array.isArray(data?.overdue_preview)
+    ? data.overdue_preview.map((due: Record<string, unknown>) => ({
       id: String(due.obligation_id ?? due.id),
-      tenant: String(due.tenant_name ?? due.name ?? 'Tenant'),
-      room: String(due.room_no ?? due.room_number ?? ''),
+      tenant: String(due.tenant_name ?? due.tenant ?? 'Tenant'),
+      room: String(due.room_no ?? due.room ?? ''),
       amount: Number(due.outstanding ?? due.amount ?? 0),
-      days: Math.max(1, Math.floor((Date.now() - new Date(String(due.due_date)).getTime()) / 86_400_000)),
+      days: Number(due.days ?? 1),
     }))
-    .sort((a, b) => b.amount - a.amount);
+    : [];
   const overdueTenantCount = new Set(overdueRows.map((row) => row.tenant)).size;
   const overdueAmount = overdueRows.reduce((sum, row) => sum + row.amount, 0) || Number(portfolio.total_due ?? 0);
   const overdueHint = overdueAmount > 0;
@@ -106,12 +112,12 @@ export function PortfolioView() {
 
   return (
     <div className="px-4 py-5 space-y-5 min-w-0 max-w-5xl mx-auto pb-24 md:pb-8">
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex min-h-[64px] items-start justify-between gap-2">
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold text-foreground">
+          <h1 className="min-h-7 truncate text-2xl font-semibold leading-7 text-foreground">
             {user?.name ? `Good morning, ${user.name.split(' ')[0]}` : 'Owner home'}
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
+          <p className="mt-0.5 min-h-10 text-sm text-muted-foreground">
             What needs attention across {rankings.length} propert{rankings.length === 1 ? 'y' : 'ies'} today
           </p>
         </div>
@@ -128,12 +134,7 @@ export function PortfolioView() {
       </div>
 
       {isLoading ? (
-        <div className="space-y-4">
-          <div className="h-72 bg-card border border-border rounded-xl animate-pulse" />
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-28 bg-card border border-border rounded-xl animate-pulse" />
-          ))}
-        </div>
+        <PortfolioLoadingSkeleton />
       ) : isError ? (
         <div className="text-center py-16">
           <p className="text-sm text-muted-foreground">Failed to load portfolio data</p>
@@ -302,11 +303,13 @@ export function PortfolioView() {
             </button>
             {showTrends && (
               <div className="mt-3">
-                <PortfolioRevenueChart
-                  monthlyTrends={monthlyTrends}
-                  topPerformerId={data?.top_performer_hostel_id}
-                  topPerformerName={topPerformer?.hostel_name}
-                />
+                <Suspense fallback={<div className="h-56 rounded-xl bg-muted animate-pulse" />}>
+                  <PortfolioRevenueChart
+                    monthlyTrends={monthlyTrends}
+                    topPerformerId={data?.top_performer_hostel_id}
+                    topPerformerName={topPerformer?.hostel_name}
+                  />
+                </Suspense>
               </div>
             )}
           </section>
@@ -368,20 +371,34 @@ export function PortfolioView() {
         </>
       )}
 
-      {showAddHostel && <AddHostelModal onClose={() => { setShowAddHostel(false); refetch(); }} />}
-      {showAddTenant && <AddTenantModal onClose={() => { setShowAddTenant(false); refetch(); }} />}
+      {showAddHostel && (
+        <Suspense fallback={null}>
+          <AddHostelModal onClose={() => { setShowAddHostel(false); refetch(); }} />
+        </Suspense>
+      )}
+      {showAddTenant && (
+        <Suspense fallback={null}>
+          <AddTenantModal onClose={() => { setShowAddTenant(false); refetch(); }} />
+        </Suspense>
+      )}
       {showRecordPayment && firstHostelId && (
-        <RecordPaymentModal hostelId={firstHostelId} onClose={() => setShowRecordPayment(false)} />
+        <Suspense fallback={null}>
+          <RecordPaymentModal hostelId={firstHostelId} onClose={() => setShowRecordPayment(false)} />
+        </Suspense>
       )}
       {showFilter && (
-        <FilterModal onClose={() => setShowFilter(false)} onApply={setFilters} currentFilters={filters} />
+        <Suspense fallback={null}>
+          <FilterModal onClose={() => setShowFilter(false)} onApply={setFilters} currentFilters={filters} />
+        </Suspense>
       )}
       {editingHostelId && editingHostel && (
-        <EditHostelSheet
-          hostelId={editingHostelId}
-          hostelName={editingHostel.hostel_name}
-          onClose={() => setEditingHostelId(null)}
-        />
+        <Suspense fallback={null}>
+          <EditHostelSheet
+            hostelId={editingHostelId}
+            hostelName={editingHostel.hostel_name}
+            onClose={() => setEditingHostelId(null)}
+          />
+        </Suspense>
       )}
     </div>
   );

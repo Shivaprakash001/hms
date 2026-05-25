@@ -17,6 +17,7 @@ export const queryKeys = {
   portfolio: {
     all: () => ownerKey('portfolio'),
     summary: () => ownerKey('portfolio', 'summary'),
+    shell: (months?: number) => ownerKey('portfolio', 'shell', months ?? 6),
     performance: (months?: number) => ownerKey('portfolio', 'performance', months ?? 6),
   },
 

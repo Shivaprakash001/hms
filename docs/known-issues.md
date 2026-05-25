@@ -69,9 +69,11 @@ Examples include selected document nested routes, payment export, payment waive,
 
 The hostel detail route now loads as feature islands.
 The chart vendor chunk remains about 101 kB gzip after splitting.
+The owner dashboard first paint now uses a shell endpoint instead of a full dues waterfall.
 
 **How this works:**
 1. The route shell downloads first.
 2. Owner users download only the active hostel tab.
 3. Payment, tenant, rent obligation, and expense lists now use virtualization.
-4. Further gains require replacing or shrinking the chart vendor chunk.
+4. Portfolio risk uses a four-row overdue preview for mobile first paint.
+5. Further gains require replacing or shrinking the chart vendor chunk.

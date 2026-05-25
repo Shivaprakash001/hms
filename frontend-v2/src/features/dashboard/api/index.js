@@ -45,6 +45,12 @@ export const portfolioService = {
         const response = await requestWithRetry(() => api.get('/owner/portfolio/summary'));
         return response.data?.data ?? response.data;
     },
+    getShell: async (months = 6) => {
+        const response = await requestWithRetry(() =>
+            api.get('/dashboard/portfolio-shell', { params: { months } })
+        );
+        return response.data?.data ?? response.data;
+    },
     getPerformance: async (months = 6) => {
         const response = await requestWithRetry(() =>
             api.get('/dashboard/portfolio-performance', { params: { months } })
