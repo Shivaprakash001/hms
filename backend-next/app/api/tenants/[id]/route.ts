@@ -8,7 +8,8 @@ import { ApiError } from "@/src/lib/api-error";
 import { tenantService } from "@/src/services/tenants/tenant-service";
 import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
 import { invitationService } from "@/src/services/tenants/invitation-service";
-import { InvitationUpdateSchema } from "@/lib/validators";
+import { InvitationUpdateSchema, TenantProfileUpdateSchema } from "@/lib/validators";
+import { assertBodySize } from "@/lib/security/api-guard";
 
 
 /**
@@ -53,11 +54,12 @@ export async function PUT(
   }
 
   try {
+    const sizeError = assertBodySize(req);
+    if (sizeError) return sizeError;
+
     const scope = resolveOwnerScope(session);
     const body = await req.json().catch(() => ({}));
-    
-    console.log(`[tenants.id.PUT] Updating tenant ${params.id} for owner ${scope.owner_id}`, body);
-    
+
     if (body?.invitation_edit === true) {
       const validated = InvitationUpdateSchema.safeParse(body);
       if (!validated.success) {
@@ -70,7 +72,13 @@ export async function PUT(
       return ApiResponse.success(result, undefined, result?.email_sent === false ? { status: 202 } : undefined);
     }
 
-    const updated = await tenantService.updateTenant(params.id, body, scope.owner_id);
+    // Validate profile fields with schema (prevents mass-assignment of arbitrary fields)
+    const validated = TenantProfileUpdateSchema.safeParse(body);
+    if (!validated.success) {
+      return ApiResponse.error(ApiError.validationError("Validation failed", { issues: validated.error.errors }));
+    }
+
+    const updated = await tenantService.updateTenant(params.id, validated.data, scope.owner_id);
     
     console.log(`[tenants.id.PUT] Tenant ${params.id} updated successfully`);
     return ApiResponse.success(updated);

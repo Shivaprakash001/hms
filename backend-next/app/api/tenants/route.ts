@@ -8,6 +8,7 @@ import { ApiError } from "@/src/lib/api-error";
 import { tenantService } from "@/src/services/tenants/tenant-service";
 import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
 import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
+import { safePagination, assertBodySize } from "@/lib/security/api-guard";
 
 
 /**
@@ -27,10 +28,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status") || undefined;
     const search = searchParams.get("search") || undefined;
-    const parsedLimit = parseInt(searchParams.get("limit") || "50", 10);
-    const limit = Number.isNaN(parsedLimit) ? 50 : parsedLimit;
-    const parsedOffset = parseInt(searchParams.get("offset") || "0", 10);
-    const offset = Number.isNaN(parsedOffset) ? 0 : parsedOffset;
+    const { limit, offset } = safePagination(searchParams.get("limit"), searchParams.get("offset"));
 
     const hostelId = searchParams.get("hostelId") || undefined;
     
@@ -63,9 +61,10 @@ export async function POST(req: NextRequest) {
 
   try {
     const scope = resolveOwnerScope(session);
+    const sizeError = assertBodySize(req);
+    if (sizeError) return sizeError;
+
     const body = await req.json().catch(() => ({}));
-    
-    console.log(`[tenants.POST] Creating tenant for owner ${scope.owner_id}`, body);
 
     if (!body.profile_id) {
       return ApiResponse.error(ApiError.validationError("profile_id is required"));

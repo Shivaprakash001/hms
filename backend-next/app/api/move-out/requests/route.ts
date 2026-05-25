@@ -7,6 +7,7 @@ import { moveOutService } from "@/lib/services/move-out-service";
 import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
 import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
 import { MoveOutReason } from "@prisma/client";
+import { safePagination, assertBodySize } from "@/lib/security/api-guard";
 
 /**
  * Move-Out Requests — List & Create
@@ -27,8 +28,7 @@ export async function GET(req: NextRequest) {
     await requireHostelBelongsToOwner(scope.owner_id, hostelId);
 
     const status = searchParams.get("status") || undefined;
-    const limit = parseInt(searchParams.get("limit") || "50", 10) || 50;
-    const offset = parseInt(searchParams.get("offset") || "0", 10) || 0;
+    const { limit, offset } = safePagination(searchParams.get("limit"), searchParams.get("offset"));
 
     const result = await moveOutService.listRequests({
       ownerId: scope.owner_id,
@@ -51,8 +51,15 @@ export async function POST(req: NextRequest) {
   if (!session) return apiError("Unauthorized", "UNAUTHORIZED", 401);
 
   try {
-    const body = await req.json();
+    const sizeError = assertBodySize(req);
+    if (sizeError) return sizeError;
+
+    const body = await req.json().catch(() => ({}));
     const { hostelId, tenantId, reason, reasonText, plannedExitDate } = body;
+
+    if (reasonText && typeof reasonText === "string" && reasonText.length > 1000) {
+      return apiError("reasonText must be under 1000 characters", "VALIDATION_ERROR", 400);
+    }
 
     if (!plannedExitDate) return apiError("plannedExitDate is required", "VALIDATION_ERROR", 400);
     if (!reason || !VALID_REASONS.includes(reason)) {

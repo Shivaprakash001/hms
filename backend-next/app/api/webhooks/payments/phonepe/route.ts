@@ -159,8 +159,8 @@ export async function POST(req: Request) {
 
 
 export async function GET() {
-  return NextResponse.json(
-    { success: true, message: "PhonePe webhook endpoint is active and listening for POST requests." },
-    { status: 200 }
-  );
+  return new Response(null, {
+    status: 405,
+    headers: { Allow: "POST" },
+  });
 }

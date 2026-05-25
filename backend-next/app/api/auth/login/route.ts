@@ -5,26 +5,50 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiResponse, apiError } from "@/lib/auth";
 import { authService } from "@/lib/services/auth-service";
 import { LoginSchema } from "@/lib/validators";
+import { rateLimitService } from "@/lib/services/rate-limit-service";
+import { getClientIp } from "@/lib/security/api-guard";
 
 
 /**
  * 🔐 AUTH LOGIN (Production Secure)
- * Now sets a secure, HTTP-only cookie for session management.
+ * Rate-limited per identifier (email) + IP.
+ * Sets secure, HTTP-only cookies for session management.
  */
 export async function POST(req: NextRequest) {
+  const ip = getClientIp(req) ?? undefined;
+
   try {
     const body = await req.json().catch(() => ({}));
-    console.log(`[auth.login] Attempting login for email: ${body?.email}`);
-    
+
     const validated = LoginSchema.safeParse(body);
-    
+
     if (!validated.success) {
-      console.warn(`[auth.login] Validation failed for ${body?.email}`);
       return apiError("Validation error", "VALIDATION_ERROR", 400);
     }
 
     const { email, password } = validated.data;
-    const loginResult = await authService.login(email, password);
+
+    // ── Rate limit check (per email identifier + IP) ───────────────────────
+    const rlResult = await rateLimitService.checkRateLimit(email, "REGULAR", ip);
+    if (!rlResult.allowed) {
+      return apiError(
+        `Too many login attempts. Please wait ${Math.ceil((rlResult.retryAfterSeconds ?? 900) / 60)} minutes.`,
+        "RATE_LIMITED",
+        429,
+      );
+    }
+
+    let loginResult: Awaited<ReturnType<typeof authService.login>>;
+    try {
+      loginResult = await authService.login(email, password);
+    } catch (loginErr: any) {
+      // Record failed attempt before re-throwing
+      await rateLimitService.recordAttempt(email, "REGULAR", false, ip, req.headers.get("user-agent") ?? undefined, loginErr?.message);
+      throw loginErr;
+    }
+
+    // Record successful attempt
+    await rateLimitService.recordAttempt(email, "REGULAR", true, ip);
     
     // We don't want to return the raw refresh token in the JSON response
     const { refresh_token, ...jsonResponse } = loginResult;

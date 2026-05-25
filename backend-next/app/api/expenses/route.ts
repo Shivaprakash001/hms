@@ -4,6 +4,7 @@ import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
 import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
 import { expenseService } from "@/lib/services/expense-service";
 import { imagekit } from "@/lib/imagekit";
+import { safePagination, assertBodySize } from "@/lib/security/api-guard";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -66,6 +67,7 @@ export async function GET(req: NextRequest) {
     await requireHostelBelongsToOwner(scope.owner_id, hostelId);
     if (!hostelId) return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
     const categories = req.nextUrl.searchParams.get("categories");
+    const { limit, offset } = safePagination(req.nextUrl.searchParams.get("limit"), req.nextUrl.searchParams.get("offset"));
     const expenses = await expenseService.getAllExpenses(scope.owner_id, hostelId, {
       range: req.nextUrl.searchParams.get("range") || undefined,
       startDate: req.nextUrl.searchParams.get("startDate") || undefined,
@@ -74,8 +76,8 @@ export async function GET(req: NextRequest) {
       status: req.nextUrl.searchParams.get("status") || undefined,
       sort: req.nextUrl.searchParams.get("sort") || undefined,
       search: req.nextUrl.searchParams.get("search") || undefined,
-      limit: Number(req.nextUrl.searchParams.get("limit") || 30),
-      offset: Number(req.nextUrl.searchParams.get("offset") || 0),
+      limit,
+      offset,
     });
     return apiResponse(expenses);
   } catch (error: any) {

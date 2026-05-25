@@ -7,17 +7,23 @@ import { authService } from "@/lib/services/auth-service";
 import { apiError } from "@/lib/utils/api-utils";
 import { prisma } from "@/lib/db";
 import { getLogger } from "@/lib/logger";
+import { assertBodySize, parseObligationIds } from "@/lib/security/api-guard";
 
 const logger = getLogger("create-intent");
 
+const MAX_ADVANCE_AMOUNT = 1_000_000; // ₹10 Lakhs cap
+
 export async function POST(req: Request) {
   try {
+    const sizeError = assertBodySize(req);
+    if (sizeError) return sizeError;
+
     const user = await authService.getCurrentUser(req);
     if (!user) {
       return apiError("Unauthorized", "UNAUTHORIZED", 401);
     }
 
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const { obligation_ids, payment_type = "RENT", amount } = body;
 
     // Resolve tenant record (needed for both paths)
@@ -35,6 +41,9 @@ export async function POST(req: Request) {
     if (payment_type === "ADVANCE") {
       if (!amount || typeof amount !== "number" || amount <= 0) {
         return apiError("amount is required and must be positive for ADVANCE payments", "VALIDATION_ERROR", 400);
+      }
+      if (amount > MAX_ADVANCE_AMOUNT) {
+        return apiError(`amount cannot exceed ₹${MAX_ADVANCE_AMOUNT.toLocaleString("en-IN")}`, "VALIDATION_ERROR", 400);
       }
       if (!tenantId) {
         return apiError("Only tenants can initiate advance payments", "FORBIDDEN", 403);
@@ -55,10 +64,9 @@ export async function POST(req: Request) {
     }
 
     // ── RENT / MAINTENANCE intent (obligation-based) ──────────────────────
-    if (!Array.isArray(obligation_ids) || obligation_ids.length === 0) {
-      return apiError("obligation_ids must be a non-empty array", "VALIDATION_ERROR", 400);
-    }
-    const ids: string[] = obligation_ids.map((id: any) => String(id)).filter(Boolean);
+    // Validate + cap + UUID-check the ids array
+    const { ids, error: idsError } = parseObligationIds(obligation_ids, 20);
+    if (idsError) return idsError;
 
     logger.info("create_intent_called", {
       userId: user.id,
