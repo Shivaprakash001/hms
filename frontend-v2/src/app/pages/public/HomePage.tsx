@@ -9,6 +9,7 @@ import { RoomPricing } from '@/components/marketing/RoomPricing';
 import { Location } from '@/components/marketing/Location';
 import { EnquiryForm } from '@/components/marketing/EnquiryForm';
 import { Footer } from '@/components/marketing/Footer';
+import { ScrollReveal } from '@/components/marketing/ScrollReveal';
 
 export function HomePage() {
   useEffect(() => {
@@ -26,14 +27,30 @@ export function HomePage() {
     <div className="min-h-screen" style={{ fontFamily: 'var(--font-body)' }}>
       <TopBar />
       <Navbar />
-      <Hero />
-      <StatsStrip />
-      <WhyChooseUs />
-      <Facilities />
-      <RoomPricing />
-      <Location />
-      <EnquiryForm />
-      <Footer />
+      <ScrollReveal delay={100}>
+        <Hero />
+      </ScrollReveal>
+      <ScrollReveal>
+        <StatsStrip />
+      </ScrollReveal>
+      <ScrollReveal>
+        <WhyChooseUs />
+      </ScrollReveal>
+      <ScrollReveal>
+        <Facilities />
+      </ScrollReveal>
+      <ScrollReveal>
+        <RoomPricing />
+      </ScrollReveal>
+      <ScrollReveal>
+        <Location />
+      </ScrollReveal>
+      <ScrollReveal>
+        <EnquiryForm />
+      </ScrollReveal>
+      <ScrollReveal>
+        <Footer />
+      </ScrollReveal>
     </div>
   );
 }
