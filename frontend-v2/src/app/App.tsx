@@ -3,6 +3,9 @@ import { BottomNav } from './components/BottomNav';
 import { Sidebar } from './components/Sidebar';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { OwnerQuickActions } from './components/OwnerQuickActions';
+import { SwipeNavContainer } from '@/shared/ui/SwipeNavContainer';
+
+const OWNER_SWIPE_ROUTES = ['/dashboard', '/tenants', '/billing', '/alerts', '/settings'];
 
 export default function App() {
   return (
@@ -13,11 +16,11 @@ export default function App() {
       {/* Main content area */}
       <div className="flex-1 flex flex-col md:ml-60 min-w-0 overflow-x-hidden">
         <main className="flex-1 overflow-y-auto overflow-x-hidden pb-[calc(4rem+env(safe-area-inset-bottom,0px))] md:pb-0">
-          <div className="w-full max-w-5xl mx-auto min-w-0">
+          <SwipeNavContainer routes={OWNER_SWIPE_ROUTES} className="w-full max-w-5xl mx-auto min-w-0">
             <ErrorBoundary>
               <Outlet />
             </ErrorBoundary>
-          </div>
+          </SwipeNavContainer>
         </main>
 
         {/* Mobile bottom nav */}

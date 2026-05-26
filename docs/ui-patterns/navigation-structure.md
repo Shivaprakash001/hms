@@ -106,7 +106,7 @@ Why this exists: mobile Core Web Vitals are sensitive to the first dashboard vie
 | Expense tab | Ledger before intelligence | Users can inspect records before analytics panels render. |
 | Room tab | Memoized floor grouping | Room cards avoid regrouping work on unrelated state changes. |
 | Marketing reveal | Mobile transform-only animation | Below-fold sections keep motion without blur paint cost. |
-| Bottom navigation | Direct route switch | Dashboard sections change without swipe gestures or icon scale animation. |
+| Swipe navigation | Compositor drag feedback | Owner and tenant sections shift by swipe without route transition animations. |
 
 Why this exists: low-end Android devices feel slow when hidden work competes with visible content.
 
@@ -114,7 +114,7 @@ Why this exists: low-end Android devices feel slow when hidden work competes wit
 1. Critical text and controls render first.
 2. Lists and ledgers cap mounted rows.
 3. Charts, intelligence panels, and secondary widgets wait for idle time.
-4. Mobile dashboard navigation uses immediate route changes instead of slide gestures.
+4. Mobile dashboard navigation uses `translate3d` drag feedback and immediate route changes.
 
 ## Owner routes
 
