@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { Building2, Home, IndianRupee, DoorOpen, User } from 'lucide-react';
+import { SwipeNavContainer } from '@/shared/ui/SwipeNavContainer';
 
 const nav = [
   { to: '/tenant/dashboard', icon: Home, label: 'Home' },
@@ -9,12 +10,14 @@ const nav = [
   { to: '/tenant/profile', icon: User, label: 'Profile' },
 ];
 
+const SWIPE_ROUTES = nav.map((n) => n.to);
+
 export function TenantPortalLayout() {
   return (
     <div className="min-h-screen bg-background pb-[calc(4rem+env(safe-area-inset-bottom))]">
-      <main className="max-w-lg mx-auto px-4 py-5">
+      <SwipeNavContainer routes={SWIPE_ROUTES} className="max-w-lg mx-auto px-4 py-5">
         <Outlet />
-      </main>
+      </SwipeNavContainer>
       <nav
         className="fixed bottom-0 left-0 right-0 bg-card/98 backdrop-blur-lg border-t border-border z-40"
         aria-label="Tenant navigation"
