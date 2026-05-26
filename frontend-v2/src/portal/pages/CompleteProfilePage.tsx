@@ -252,6 +252,7 @@ export function CompleteProfilePage() {
   }, [user]);
 
   const photoRequired = true;
+  const inviteSummary = settings?.invite_summary;
 
   const progress = useMemo(() => Math.round((step / steps.length) * 100), [step]);
 
@@ -391,23 +392,35 @@ export function CompleteProfilePage() {
   return (
     <div className="min-h-screen bg-background px-4 py-6 sm:py-8">
       <main className="mx-auto grid w-full max-w-5xl gap-5 lg:grid-cols-[340px_1fr]">
-        <aside className="rounded-2xl border border-border bg-card p-5 h-fit">
-          <div className="flex items-start gap-3">
-            <div className="w-11 h-11 rounded-xl bg-accent/10 text-accent flex items-center justify-center">
-              <ShieldCheck className="w-5 h-5" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-foreground">Complete your profile</h1>
-              <p className="text-sm text-muted-foreground mt-1">
-                Confirm your hostel record before entering the tenant portal.
-              </p>
+        <aside className="rounded-2xl overflow-hidden border border-border shadow-sm h-fit">
+          <div
+            className="px-5 py-4 relative overflow-hidden"
+            style={{ background: 'linear-gradient(135deg, #1B2D5B 0%, #243A72 100%)' }}
+          >
+            <div
+              className="absolute inset-0 opacity-10"
+              style={{ backgroundImage: 'radial-gradient(circle at 80% 20%, #F07B1D 0%, transparent 60%)' }}
+            />
+            <div className="relative flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-white/15 ring-1 ring-white/20 flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-5 h-5 text-white/90" />
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-white/60">Onboarding</p>
+                <h1
+                  className="text-lg font-bold text-white leading-tight"
+                  style={{ fontFamily: 'var(--font-display)' }}
+                >
+                  Complete your profile
+                </h1>
+              </div>
             </div>
           </div>
 
-          <div className="mt-5">
+          <div className="bg-card p-5">
             <div className="h-2 rounded-full bg-muted overflow-hidden">
               <div
-                className="h-full bg-accent transition-all"
+                className="h-full bg-accent transition-all duration-500"
                 style={{ width: `${progress}%` }}
               />
             </div>
@@ -423,25 +436,29 @@ export function CompleteProfilePage() {
                     onClick={() => {
                       if (item.id < step) setStep(item.id);
                     }}
-                    className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm ${
+                    className={`w-full flex items-center gap-3 rounded-2xl px-3 py-2.5 text-left text-sm transition-colors ${
                       active
-                        ? 'bg-accent text-accent-foreground'
+                        ? 'bg-accent text-accent-foreground shadow-sm'
                         : done
-                        ? 'bg-accent/10 text-accent'
-                        : 'bg-muted/50 text-muted-foreground'
+                        ? 'bg-success/10 text-success'
+                        : 'bg-secondary/60 text-muted-foreground'
                     }`}
                   >
-                    <Icon className="w-4 h-4" />
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                      active ? 'bg-white/20' : done ? 'bg-success/20' : 'bg-muted'
+                    }`}>
+                      {done ? '✓' : item.id}
+                    </div>
+                    <Icon className="w-4 h-4 shrink-0" />
                     <span className="font-medium">{item.title}</span>
                   </button>
                 );
               })}
             </div>
-          </div>
 
           {inviteSummary && (
-            <div className="mt-5 rounded-xl border border-border bg-background p-4 text-sm">
-              <p className="font-semibold text-foreground">Invitation details</p>
+            <div className="mt-5 rounded-2xl border border-border bg-secondary/40 p-4 text-sm">
+              <p className="font-bold text-foreground">Invitation details</p>
               <dl className="mt-3 space-y-2 text-muted-foreground">
                 <div className="flex justify-between gap-3">
                   <dt>Room</dt>
@@ -464,12 +481,14 @@ export function CompleteProfilePage() {
               </dl>
             </div>
           )}
+          </div>
         </aside>
 
-        <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+        <section className="rounded-2xl border border-border bg-card p-5 sm:p-6 shadow-sm">
           {error && (
-            <div className="mb-5 rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              {error}
+            <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-start gap-2.5">
+              <span className="text-amber-600 shrink-0 mt-0.5 font-bold">!</span>
+              <p className="text-sm text-amber-800">{error}</p>
             </div>
           )}
 
@@ -541,7 +560,12 @@ export function CompleteProfilePage() {
           {step === 2 && (
             <div className="space-y-5">
               <div>
-                <h2 className="text-lg font-bold text-foreground">Education or work</h2>
+                <h2
+                  className="text-lg font-bold text-foreground"
+                  style={{ fontFamily: 'var(--font-display)' }}
+                >
+                  Education or work
+                </h2>
                 <p className="text-sm text-muted-foreground mt-1">
                   This helps your hostel maintain complete operational records.
                 </p>
@@ -551,28 +575,36 @@ export function CompleteProfilePage() {
                 <button
                   type="button"
                   onClick={() => update('profile_type', 'STUDENT')}
-                  className={`rounded-xl border p-4 text-left transition ${
+                  className={`rounded-2xl border-2 p-4 text-left transition-all active:scale-[0.98] ${
                     form.profile_type === 'STUDENT'
-                      ? 'border-accent bg-accent/10'
-                      : 'border-border bg-background'
+                      ? 'border-accent bg-accent/10 shadow-sm'
+                      : 'border-border bg-card hover:border-accent/40'
                   }`}
                 >
-                  <GraduationCap className="w-6 h-6 text-accent" />
-                  <p className="mt-3 font-semibold text-foreground">Student</p>
-                  <p className="text-sm text-muted-foreground">College and course details</p>
+                  <div className={`w-10 h-10 rounded-2xl flex items-center justify-center mb-3 ${
+                    form.profile_type === 'STUDENT' ? 'bg-accent text-accent-foreground' : 'bg-accent/10 text-accent'
+                  }`}>
+                    <GraduationCap className="w-5 h-5" />
+                  </div>
+                  <p className="font-bold text-foreground">Student</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">College and course details</p>
                 </button>
                 <button
                   type="button"
                   onClick={() => update('profile_type', 'WORKING_PROFESSIONAL')}
-                  className={`rounded-xl border p-4 text-left transition ${
+                  className={`rounded-2xl border-2 p-4 text-left transition-all active:scale-[0.98] ${
                     form.profile_type === 'WORKING_PROFESSIONAL'
-                      ? 'border-accent bg-accent/10'
-                      : 'border-border bg-background'
+                      ? 'border-primary bg-primary/10 shadow-sm'
+                      : 'border-border bg-card hover:border-primary/40'
                   }`}
                 >
-                  <BriefcaseBusiness className="w-6 h-6 text-info" />
-                  <p className="mt-3 font-semibold text-foreground">Working professional</p>
-                  <p className="text-sm text-muted-foreground">Company and role details</p>
+                  <div className={`w-10 h-10 rounded-2xl flex items-center justify-center mb-3 ${
+                    form.profile_type === 'WORKING_PROFESSIONAL' ? 'bg-primary text-primary-foreground' : 'bg-primary/10 text-primary'
+                  }`}>
+                    <BriefcaseBusiness className="w-5 h-5" />
+                  </div>
+                  <p className="font-bold text-foreground">Working professional</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Company and role details</p>
                 </button>
               </div>
 
@@ -698,14 +730,21 @@ export function CompleteProfilePage() {
           {step === 3 && (
             <div className="space-y-5">
               <div>
-                <h2 className="text-lg font-bold text-foreground">Review and submit</h2>
+                <h2
+                  className="text-lg font-bold text-foreground"
+                  style={{ fontFamily: 'var(--font-display)' }}
+                >
+                  Review and submit
+                </h2>
                 <p className="text-sm text-muted-foreground mt-1">
                   You can edit these details later from your tenant profile.
                 </p>
               </div>
 
-              <label className="flex items-center gap-4 rounded-xl border border-border bg-background p-4 cursor-pointer">
-                <div className="w-16 h-16 rounded-full border border-border bg-muted overflow-hidden flex items-center justify-center">
+              <label className="flex items-center gap-4 rounded-2xl border-2 border-dashed border-accent/30 bg-accent/5 p-4 cursor-pointer hover:border-accent transition-colors">
+                <div className={`w-16 h-16 rounded-full overflow-hidden bg-secondary flex items-center justify-center shrink-0 ${
+                  profilePhotoPreview ? 'ring-2 ring-accent ring-offset-2' : 'ring-1 ring-border'
+                }`}>
                   {profilePhotoPreview ? (
                     <img
                       src={profilePhotoPreview}
@@ -713,16 +752,16 @@ export function CompleteProfilePage() {
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <Camera className="w-6 h-6 text-muted-foreground" />
+                    <Camera className="w-6 h-6 text-accent" />
                   )}
                 </div>
-                <div className="flex-1">
-                  <p className="font-semibold text-foreground">
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-foreground text-sm">
                     Profile photo {photoRequired ? '*' : '(optional)'}
                   </p>
-                  <p className="text-sm text-muted-foreground">JPG, PNG, or WEBP under 2MB</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">JPG, PNG, or WEBP under 2MB</p>
                   {profilePhotoFile && (
-                    <p className="text-xs text-accent mt-1">{profilePhotoFile.name}</p>
+                    <p className="text-xs text-accent font-medium mt-1 truncate">{profilePhotoFile.name}</p>
                   )}
                 </div>
                 <input
@@ -731,7 +770,7 @@ export function CompleteProfilePage() {
                   className="hidden"
                   onChange={(e) => handlePhotoChange(e.target.files?.[0])}
                 />
-                <span className="text-sm font-semibold text-accent">Choose</span>
+                <span className="text-sm font-semibold text-accent shrink-0">Choose</span>
               </label>
 
               <div className="grid gap-3 sm:grid-cols-2">
@@ -741,9 +780,9 @@ export function CompleteProfilePage() {
                   ['Emergency', form.emergency_contact],
                   ['Type', form.profile_type === 'STUDENT' ? 'Student' : 'Working professional'],
                 ].map(([label, value]) => (
-                  <div key={label} className="rounded-xl border border-border bg-background p-4">
+                  <div key={label} className="rounded-2xl border border-border bg-secondary/40 p-4">
                     <p className="text-xs text-muted-foreground">{label}</p>
-                    <p className="mt-1 text-sm font-medium text-foreground">{value || 'Not provided'}</p>
+                    <p className="mt-1 text-sm font-bold text-foreground">{value || 'Not provided'}</p>
                   </div>
                 ))}
               </div>
@@ -766,7 +805,7 @@ export function CompleteProfilePage() {
                 setError('');
                 setStep((current) => Math.max(1, current - 1));
               }}
-              className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold text-foreground disabled:opacity-40"
+              className="inline-flex items-center gap-2 rounded-2xl border border-border px-4 py-2.5 text-sm font-semibold text-foreground disabled:opacity-40 active:scale-[0.98] transition-transform"
             >
               <ArrowLeft className="w-4 h-4" />
               Back
@@ -775,7 +814,7 @@ export function CompleteProfilePage() {
               <button
                 type="button"
                 onClick={goNext}
-                className="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground"
+                className="inline-flex items-center gap-2 rounded-2xl bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground active:scale-[0.98] transition-transform shadow-sm"
               >
                 Continue
                 <ArrowRight className="w-4 h-4" />
@@ -785,10 +824,10 @@ export function CompleteProfilePage() {
                 type="button"
                 disabled={submitting}
                 onClick={submit}
-                className="inline-flex min-w-36 items-center justify-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground disabled:opacity-60"
+                className="inline-flex min-w-36 items-center justify-center gap-2 rounded-2xl bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground disabled:opacity-60 active:scale-[0.98] transition-transform shadow-sm"
               >
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                Complete profile
+                {submitting ? 'Saving…' : 'Complete profile'}
               </button>
             )}
           </div>

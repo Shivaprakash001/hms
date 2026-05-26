@@ -134,19 +134,41 @@ function Progress({ ctx }: { ctx: ActivationContext }) {
   const completed = new Set(ctx.completed_steps ?? ctx.activation_state.completed_steps ?? []);
   const current = ctx.current_step ?? ctx.activation_state.current_step;
   return (
-    <div className="grid grid-cols-4 gap-2">
-      {steps.map((step) => {
-        const done = completed.has(step.id);
-        const active = current === step.id;
-        return (
-          <div key={step.id} className="min-w-0">
-            <div className={`h-1.5 rounded-full ${done || active ? 'bg-accent' : 'bg-muted'}`} />
-            <p className={`mt-1 text-[11px] font-medium truncate ${active ? 'text-accent' : 'text-muted-foreground'}`}>
-              {step.label}
-            </p>
-          </div>
-        );
-      })}
+    <div className="space-y-2">
+      <div className="flex items-center gap-0">
+        {steps.map((step, i) => {
+          const done = completed.has(step.id);
+          const active = current === step.id;
+          return (
+            <div key={step.id} className="flex-1 flex items-center">
+              <div className={`h-1.5 rounded-full flex-1 transition-colors duration-300 ${
+                done || active ? 'bg-accent' : 'bg-muted'
+              }`} />
+              {i < steps.length - 1 && <div className="w-1" />}
+            </div>
+          );
+        })}
+      </div>
+      <div className="grid grid-cols-4">
+        {steps.map((step, i) => {
+          const done = completed.has(step.id);
+          const active = current === step.id;
+          return (
+            <div key={step.id} className="min-w-0 flex flex-col items-center gap-1">
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                done ? 'bg-success text-white' : active ? 'bg-accent text-white' : 'bg-muted text-muted-foreground'
+              }`}>
+                {done ? '✓' : i + 1}
+              </div>
+              <p className={`text-[10px] font-medium truncate ${
+                active ? 'text-accent' : done ? 'text-success' : 'text-muted-foreground'
+              }`}>
+                {step.label}
+              </p>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -406,27 +428,40 @@ export function ActivateAccountPage() {
   return (
     <div className="min-h-screen bg-background px-4 py-5 sm:py-8">
       <main className="mx-auto grid w-full max-w-6xl gap-5 lg:grid-cols-[360px_1fr]">
-        <aside className="h-fit rounded-2xl border border-border bg-card p-5">
-          <div className="flex items-center gap-3">
-            <div className="w-14 h-14 rounded-2xl bg-accent/10 flex items-center justify-center overflow-hidden">
-              {ctx.hostel.logo_url ? (
-                <img src={ctx.hostel.logo_url} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <Building2 className="w-7 h-7 text-accent" />
-              )}
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-accent">Tenant admission</p>
-              <h1 className="text-xl font-bold text-foreground truncate">{ctx.hostel.name}</h1>
+        <aside className="h-fit rounded-2xl overflow-hidden border border-border shadow-sm">
+          <div
+            className="px-5 py-4 relative overflow-hidden"
+            style={{ background: 'linear-gradient(135deg, #1B2D5B 0%, #243A72 100%)' }}
+          >
+            <div
+              className="absolute inset-0 opacity-10"
+              style={{ backgroundImage: 'radial-gradient(circle at 80% 20%, #F07B1D 0%, transparent 60%)' }}
+            />
+            <div className="relative flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-white/15 ring-1 ring-white/20 flex items-center justify-center overflow-hidden shrink-0">
+                {ctx.hostel.logo_url ? (
+                  <img src={ctx.hostel.logo_url} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <Building2 className="w-6 h-6 text-white/80" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-white/60">Tenant admission</p>
+                <h1
+                  className="text-lg font-bold text-white truncate leading-tight"
+                  style={{ fontFamily: 'var(--font-display)' }}
+                >
+                  {ctx.hostel.name}
+                </h1>
+              </div>
             </div>
           </div>
 
-          <div className="mt-5">
+          <div className="bg-card p-5">
             <Progress ctx={ctx} />
-          </div>
 
-          <div className="mt-5 rounded-xl border border-border bg-background p-4 text-sm">
-            <p className="font-semibold text-foreground">Stay summary</p>
+          <div className="mt-5 rounded-2xl border border-border bg-secondary/40 p-4 text-sm">
+            <p className="font-bold text-foreground">Stay summary</p>
             <dl className="mt-3 space-y-2 text-muted-foreground">
               <div className="flex justify-between gap-3">
                 <dt>Room</dt>
@@ -448,12 +483,14 @@ export function ActivateAccountPage() {
               </div>
             </dl>
           </div>
+          </div>
         </aside>
 
-        <section className="rounded-2xl border border-border bg-card p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:p-6">
+        <section className="rounded-2xl border border-border bg-card p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:p-6 shadow-sm">
           {error && (
-            <div className="mb-5 rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              {error}
+            <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <p className="text-sm text-amber-800">{error}</p>
             </div>
           )}
 
@@ -476,7 +513,7 @@ export function ActivateAccountPage() {
               <button
                 type="button"
                 onClick={() => setShowWelcome(false)}
-                className="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-accent-foreground"
+                className="inline-flex items-center gap-2 rounded-2xl bg-accent px-5 py-3.5 text-sm font-semibold text-accent-foreground active:scale-[0.98] transition-transform shadow-sm"
               >
                 Start setup
                 <ArrowRight className="w-4 h-4" />
@@ -583,7 +620,7 @@ export function ActivateAccountPage() {
                 type="button"
                 disabled={!allAcksChecked || submitting}
                 onClick={() => submitStep('RULES', { acknowledgements: acks, typed_signature_name: ctx.profile.name })}
-                className="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-accent-foreground disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-2xl bg-accent px-5 py-3.5 text-sm font-semibold text-accent-foreground disabled:opacity-50 active:scale-[0.98] transition-transform shadow-sm"
               >
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                 Accept rules
@@ -596,8 +633,10 @@ export function ActivateAccountPage() {
               <SectionHeading icon={<ShieldCheck className="w-5 h-5" />} title="Complete required profile details" text="Tier 1 fields are required for activation. Other details improve hostel records and can be completed now or later." />
               
               {/* Profile Photo Upload */}
-              <label className="flex items-center gap-4 rounded-xl border border-border bg-background p-4 cursor-pointer">
-                <div className="w-16 h-16 rounded-full border border-border bg-muted overflow-hidden flex items-center justify-center relative group">
+              <label className="flex items-center gap-4 rounded-2xl border-2 border-dashed border-accent/30 bg-accent/5 p-4 cursor-pointer hover:border-accent hover:bg-accent/8 transition-colors">
+                <div className={`w-16 h-16 rounded-full overflow-hidden bg-secondary flex items-center justify-center shrink-0 ${
+                  profilePhotoPreview ? 'ring-2 ring-accent ring-offset-2' : 'ring-1 ring-border'
+                }`}>
                   {profilePhotoPreview ? (
                     <img
                       src={profilePhotoPreview}
@@ -605,16 +644,14 @@ export function ActivateAccountPage() {
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <Camera className="w-6 h-6 text-muted-foreground" />
+                    <Camera className="w-6 h-6 text-accent" />
                   )}
                 </div>
-                <div className="flex-1">
-                  <p className="font-semibold text-foreground">
-                    Profile photo *
-                  </p>
-                  <p className="text-sm text-muted-foreground">JPG, PNG, or WEBP under 2MB</p>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-foreground text-sm">Profile photo *</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">JPG, PNG, or WEBP under 2MB</p>
                   {profilePhotoFile && (
-                    <p className="text-xs text-accent mt-1">{profilePhotoFile.name}</p>
+                    <p className="text-xs text-accent font-medium mt-1 truncate">{profilePhotoFile.name}</p>
                   )}
                 </div>
                 <input
@@ -623,7 +660,7 @@ export function ActivateAccountPage() {
                   className="hidden"
                   onChange={(e) => handlePhotoChange(e.target.files?.[0])}
                 />
-                <span className="text-sm font-semibold text-accent">Choose photo</span>
+                <span className="text-sm font-semibold text-accent shrink-0">Choose</span>
               </label>
 
               <div className="grid gap-4 sm:grid-cols-2">
@@ -760,7 +797,7 @@ export function ActivateAccountPage() {
                 type="button"
                 onClick={() => submitStep('ACTIVATE', {})}
                 disabled={submitting}
-                className="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-accent-foreground disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3.5 text-sm font-semibold text-primary-foreground disabled:opacity-50 active:scale-[0.98] transition-transform shadow-sm"
               >
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                 Activate account
@@ -776,9 +813,14 @@ export function ActivateAccountPage() {
 function SectionHeading({ icon, title, text }: { icon: ReactNode; title: string; text: string }) {
   return (
     <div className="flex items-start gap-3">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/10 text-accent">{icon}</div>
+      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-accent/10 text-accent shrink-0">{icon}</div>
       <div>
-        <h2 className="text-lg font-bold text-foreground">{title}</h2>
+        <h2
+          className="text-lg font-bold text-foreground"
+          style={{ fontFamily: 'var(--font-display)' }}
+        >
+          {title}
+        </h2>
         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{text}</p>
       </div>
     </div>
@@ -787,12 +829,14 @@ function SectionHeading({ icon, title, text }: { icon: ReactNode; title: string;
 
 function Metric({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-border bg-background p-4">
-      <div className="flex items-center gap-2 text-muted-foreground">
-        {icon}
-        <p className="text-xs font-semibold">{label}</p>
+    <div className="rounded-2xl border border-border bg-card p-4 hover:shadow-sm transition-shadow">
+      <div className="flex items-center gap-2 mb-2">
+        <div className="w-7 h-7 rounded-xl bg-accent/10 flex items-center justify-center text-accent shrink-0">
+          {icon}
+        </div>
+        <p className="text-xs font-semibold text-muted-foreground">{label}</p>
       </div>
-      <p className="mt-2 text-sm font-bold text-foreground">{value}</p>
+      <p className="text-sm font-bold text-foreground">{value}</p>
     </div>
   );
 }
@@ -802,7 +846,7 @@ function PrimaryButton({ loading, children }: { loading: boolean; children: Reac
     <button
       type="submit"
       disabled={loading}
-      className="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-accent-foreground disabled:opacity-50"
+      className="inline-flex items-center gap-2 rounded-2xl bg-accent px-5 py-3.5 text-sm font-semibold text-accent-foreground disabled:opacity-50 active:scale-[0.98] transition-transform shadow-sm"
     >
       {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
       {children}

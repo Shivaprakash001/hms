@@ -16,13 +16,15 @@ export function ProfileSection({
   return (
     <section
       id={id}
-      className={`rounded-xl border p-4 ${readOnly ? 'border-border bg-muted/30' : 'border-border bg-card'}`}
+      className={`rounded-2xl border p-4 ${readOnly ? 'border-border bg-secondary/40' : 'border-border bg-card'}`}
     >
-      <div className="mb-3">
-        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-        {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-bold text-foreground">{title}</h2>
+          {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
+        </div>
         {readOnly && (
-          <span className="inline-block mt-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70 shrink-0">
             Read only
           </span>
         )}

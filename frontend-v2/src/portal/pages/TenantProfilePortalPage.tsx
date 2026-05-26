@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
+  AlertTriangle,
   Copy,
   Loader2,
   LogOut,
@@ -82,7 +83,7 @@ export function TenantProfilePortalPage() {
   const [newMessages, setNewMessages] = useState<Record<string, string>>({});
   const [expandedChats, setExpandedChats] = useState<Record<string, boolean>>({});
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['tenant', 'portal-profile'],
     queryFn: () => tenantPortalApi.getMyProfile(),
   });
@@ -131,10 +132,38 @@ export function TenantProfilePortalPage() {
     onError: () => toast.error('Failed to send message'),
   });
 
-  if (isLoading || !data) {
+  // Compute before early return — Rules of Hooks requires unconditional hook calls
+  const docTypes = data ? documentTypesForProfile((data.tenant ?? data)?.profile_type) : [];
+
+  useEffect(() => {
+    if (docTypes.length && !docTypes.some((type) => type.value === docType)) {
+      setDocType(docTypes[0]?.value ?? 'AADHAAR');
+    }
+  }, [docType, docTypes]);
+
+  if (isLoading) {
     return (
-      <div className="flex justify-center py-20">
+      <div className="flex justify-center py-24">
         <Loader2 className="w-8 h-8 animate-spin text-accent" />
+      </div>
+    );
+  }
+
+  if (isError || !data) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-center px-6">
+        <div className="w-12 h-12 rounded-2xl bg-destructive/10 flex items-center justify-center mb-4">
+          <AlertTriangle className="w-6 h-6 text-destructive" />
+        </div>
+        <p className="text-base font-bold text-foreground">Could not load your profile</p>
+        <p className="text-sm text-muted-foreground mt-1">Check your connection and try again.</p>
+        <button
+          type="button"
+          onClick={() => refetch()}
+          className="mt-4 px-5 py-2.5 rounded-2xl bg-accent text-accent-foreground text-sm font-semibold"
+        >
+          Retry
+        </button>
       </div>
     );
   }
@@ -149,13 +178,6 @@ export function TenantProfilePortalPage() {
   const verification = data.verification ?? {};
   const moveOut = data.move_out;
   const isStudent = String(t?.profile_type ?? 'STUDENT').toUpperCase() === 'STUDENT';
-  const docTypes = documentTypesForProfile(t?.profile_type);
-
-  useEffect(() => {
-    if (!docTypes.some((type) => type.value === docType)) {
-      setDocType(docTypes[0]?.value ?? 'AADHAAR');
-    }
-  }, [docType, docTypes]);
 
   const profileFields = [
     { label: 'Full name', value: p.name },
@@ -244,75 +266,106 @@ export function TenantProfilePortalPage() {
 
   return (
     <div className="space-y-5 pb-24">
-      <header className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-foreground">Profile</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Your identity & hostel records</p>
-        </div>
-        {!editing ? (
-          <button
-            type="button"
-            onClick={startEdit}
-            className="text-sm font-semibold text-accent px-3 py-2 rounded-lg border border-accent/30"
-          >
-            Edit
-          </button>
-        ) : (
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setEditing(false)}
-              className="text-sm px-3 py-2 rounded-lg border border-border"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={saveMutation.isPending}
-              onClick={() => saveMutation.mutate()}
-              className="text-sm font-semibold px-3 py-2 rounded-lg bg-accent text-accent-foreground"
-            >
-              Save
-            </button>
-          </div>
-        )}
-      </header>
-
-      {/* Profile Completion Status Bar */}
-      <div className="bg-card border border-border rounded-xl p-4 space-y-3 shadow-sm">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Profile Completion</span>
-          <span className="text-sm font-bold text-accent">{completionPercent}%</span>
-        </div>
-        <div className="w-full bg-secondary h-2.5 rounded-full overflow-hidden">
-          <div 
-            className="bg-accent h-full rounded-full transition-all duration-500 ease-out" 
-            style={{ width: `${completionPercent}%` }}
+      <header className="overflow-hidden rounded-2xl shadow-sm">
+        <div
+          className="px-5 py-4 relative overflow-hidden"
+          style={{ background: 'linear-gradient(135deg, #1B2D5B 0%, #243A72 100%)' }}
+        >
+          <div
+            className="absolute inset-0 opacity-10"
+            style={{ backgroundImage: 'radial-gradient(circle at 80% 20%, #F07B1D 0%, transparent 60%)' }}
           />
+          <div className="relative flex items-center gap-4">
+            <div className="w-14 h-14 rounded-full overflow-hidden bg-white/15 ring-2 ring-white/20 shrink-0">
+              {t.photo_url ? (
+                <img src={String(t.photo_url)} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <span className="text-xl font-bold text-white">
+                    {String(p.name ?? 'T').charAt(0).toUpperCase()}
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-white/60">Tenant Profile</p>
+              <h1
+                className="text-xl font-bold text-white truncate leading-tight"
+                style={{ fontFamily: 'var(--font-display)' }}
+              >
+                {String(p.name ?? t.name ?? 'Your Profile')}
+              </h1>
+              <div className="mt-1.5">
+                <TenantStatusBadge status={String(t.status)} size="sm" />
+              </div>
+            </div>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-x-2 gap-y-1 text-xs text-muted-foreground">
-          {completionPercent === 100 ? (
-            <span className="text-emerald-500 font-medium">✓ Your profile is 100% complete!</span>
+        <div className="bg-card border border-t-0 border-border rounded-b-2xl px-5 py-3 flex items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground">Identity &amp; hostel records</p>
+          {!editing ? (
+            <button
+              type="button"
+              onClick={startEdit}
+              className="text-sm font-semibold text-accent px-3 py-2 rounded-xl border border-accent/30 hover:bg-accent/5 transition-colors"
+            >
+              Edit profile
+            </button>
           ) : (
-            <>
-              <span className="text-amber-500 font-medium">⚠️ Missing fields:</span>
-              <span>
-                {profileFields.filter(f => !f.value || String(f.value).trim() === '').map(f => f.label).join(', ')}
-              </span>
-            </>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                className="text-sm px-3 py-2 rounded-xl border border-border"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={saveMutation.isPending}
+                onClick={() => saveMutation.mutate()}
+                className="text-sm font-semibold px-4 py-2 rounded-xl bg-accent text-accent-foreground active:scale-[0.98] transition-transform"
+              >
+                {saveMutation.isPending ? 'Saving…' : 'Save'}
+              </button>
+            </div>
           )}
         </div>
+      </header>
+
+      <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold text-foreground">Profile completeness</span>
+          <span className="text-sm font-bold text-accent">{completionPercent}%</span>
+        </div>
+        <div className="w-full bg-secondary h-2 rounded-full overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-500 ease-out"
+            style={{ width: `${completionPercent}%`, background: completionPercent === 100 ? 'var(--success)' : 'var(--accent)' }}
+          />
+        </div>
+        {completionPercent === 100 ? (
+          <div className="flex items-center gap-2 text-xs font-medium text-success">
+            <span className="w-1.5 h-1.5 rounded-full bg-success shrink-0" />
+            Profile is 100% complete
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            <span className="font-semibold text-amber-700">Missing: </span>
+            {profileFields.filter(f => !f.value || String(f.value).trim() === '').map(f => f.label).join(', ')}
+          </p>
+        )}
       </div>
 
       {/* 1 — Personal */}
       <ProfileSection title="Personal info">
-        <div className="flex items-center gap-4 mb-4">
-          <div className="w-16 h-16 rounded-full bg-muted overflow-hidden border border-border">
+        <div className="flex items-center gap-4 mb-5">
+          <div className={`w-16 h-16 rounded-full overflow-hidden bg-accent/10 shrink-0 ${editing ? 'ring-2 ring-accent ring-offset-2' : 'ring-1 ring-border'}`}>
             {t.photo_url ? (
               <img src={String(t.photo_url)} alt="" className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">
-                No photo
+              <div className="w-full h-full flex items-center justify-center">
+                <span className="text-xl font-bold text-accent">{String(p.name ?? 'T').charAt(0).toUpperCase()}</span>
               </div>
             )}
           </div>
@@ -331,9 +384,9 @@ export function TenantProfilePortalPage() {
               <button
                 type="button"
                 onClick={() => photoRef.current?.click()}
-                className="text-sm font-medium text-accent flex items-center gap-1"
+                className="flex items-center gap-2 px-3 py-2 rounded-xl border border-accent/30 text-sm font-semibold text-accent hover:bg-accent/5 transition-colors"
               >
-                <Upload className="w-4 h-4" />
+                <Upload className="w-3.5 h-3.5" />
                 Change photo
               </button>
             </>
@@ -726,10 +779,10 @@ export function TenantProfilePortalPage() {
             type="button"
             onClick={() => docRef.current?.click()}
             disabled={docMutation.isPending}
-            className="w-full py-3 rounded-xl border border-dashed border-accent text-accent font-semibold text-sm flex items-center justify-center gap-2"
+            className="w-full py-3.5 rounded-2xl border-2 border-dashed border-accent/40 bg-accent/5 text-accent font-semibold text-sm flex items-center justify-center gap-2 hover:border-accent hover:bg-accent/8 transition-colors disabled:opacity-50"
           >
             <Upload className="w-4 h-4" />
-            Upload document
+            {docMutation.isPending ? 'Uploading…' : 'Upload document'}
           </button>
         </div>
       </ProfileSection>
@@ -751,9 +804,9 @@ export function TenantProfilePortalPage() {
               {ownerPhone && (
                 <a
                   href={`tel:${owner?.owner_phone ?? hostel?.phone}`}
-                  className="flex flex-col items-center gap-1 py-3 rounded-xl border border-border text-sm font-medium"
+                  className="flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-primary text-primary-foreground text-xs font-semibold"
                 >
-                  <Phone className="w-4 h-4 text-accent" />
+                  <Phone className="w-4 h-4" />
                   Call
                 </a>
               )}
@@ -762,16 +815,16 @@ export function TenantProfilePortalPage() {
                   href={`https://wa.me/${waPhone}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex flex-col items-center gap-1 py-3 rounded-xl border border-border text-sm font-medium"
+                  className="flex flex-col items-center gap-1.5 py-3 rounded-2xl border border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-700"
                 >
-                  <MessageCircle className="w-4 h-4 text-emerald-600" />
+                  <MessageCircle className="w-4 h-4" />
                   WhatsApp
                 </a>
               )}
               <button
                 type="button"
                 onClick={() => copyPhone(String(owner?.owner_phone ?? hostel?.phone))}
-                className="flex flex-col items-center gap-1 py-3 rounded-xl border border-border text-sm font-medium"
+                className="flex flex-col items-center gap-1.5 py-3 rounded-2xl border border-border bg-secondary text-xs font-semibold text-foreground"
               >
                 <Copy className="w-4 h-4" />
                 Copy
@@ -810,10 +863,10 @@ export function TenantProfilePortalPage() {
       <button
         type="button"
         onClick={() => logout()}
-        className="w-full flex items-center justify-center gap-2 py-4 rounded-xl border-2 border-destructive/50 text-destructive font-bold text-sm bg-destructive/5 touch-manipulation"
+        className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl border border-destructive/30 text-destructive font-semibold text-sm bg-destructive/5 hover:bg-destructive/10 transition-colors active:scale-[0.98] touch-manipulation"
       >
-        <LogOut className="w-5 h-5" />
-        Log out
+        <LogOut className="w-4 h-4" />
+        Sign out
       </button>
     </div>
   );
