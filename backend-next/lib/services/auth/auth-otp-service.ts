@@ -5,6 +5,8 @@ import { getLogger } from "@/lib/logger";
 import { incrementOtpMetric } from "@/lib/metrics";
 import { maskWhatsAppPhone } from "@/lib/services/notifications/providers/whatsapp";
 import { WhatsAppAuthProvider } from "./whatsapp-auth-provider";
+import { redisKeys } from "@/lib/redis/keys";
+import { checkFixedWindowLimit, setOneTimeLock } from "@/lib/redis/rate-limit";
 
 const logger = getLogger("auth.otp-service");
 
@@ -121,6 +123,11 @@ export class AuthOtpService {
 
   async verifyPhoneOtp(input: VerifyOtpInput) {
     incrementOtpMetric("verifications_total");
+    const lockAcquired = await setOneTimeLock(redisKeys.otpVerifyLock(input.phone, input.purpose), 30);
+    if (!lockAcquired) {
+      incrementOtpMetric("verification_failures");
+      throw new OtpServiceError("OTP verification already in progress", "OTP_REPLAY_BLOCKED", 409);
+    }
 
     const record = await (prisma as any).phoneVerificationOtp.findFirst({
       where: {
@@ -173,7 +180,7 @@ export class AuthOtpService {
     }
 
     const profilePhones = profilePhoneCandidates(input.phone);
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       const verified = await (tx as any).phoneVerificationOtp.updateMany({
         where: { id: record.id, status: "PENDING" },
         data: {
@@ -214,6 +221,51 @@ export class AuthOtpService {
   }
 
   private async enforceSendRateLimits(phone: string, requestIp: string | null, now: Date) {
+    const redisPhoneLimit = await checkFixedWindowLimit({
+      scope: "otp:phone",
+      identifier: phone,
+      maxAttempts: PHONE_SEND_LIMIT,
+      windowSeconds: PHONE_SEND_WINDOW_MS / 1000,
+    });
+
+    if (redisPhoneLimit.available) {
+      if (!redisPhoneLimit.allowed) {
+        incrementOtpMetric("rate_limit_hits");
+        logger.warn("otp.rate_limited", {
+          scope: "phone",
+          phone: maskWhatsAppPhone(phone),
+          source: "redis",
+        });
+        throw new OtpServiceError("Too many OTP requests for this phone", "OTP_RATE_LIMITED", 429);
+      }
+
+      if (requestIp) {
+        const redisIpLimit = await checkFixedWindowLimit({
+          scope: "otp:ip",
+          identifier: requestIp,
+          maxAttempts: IP_SEND_LIMIT,
+          windowSeconds: IP_SEND_WINDOW_MS / 1000,
+        });
+        if (redisIpLimit.available && !redisIpLimit.allowed) {
+          incrementOtpMetric("rate_limit_hits");
+          logger.warn("otp.rate_limited", {
+            scope: "ip",
+            request_ip: requestIp,
+            source: "redis",
+          });
+          throw new OtpServiceError("Too many OTP requests", "OTP_RATE_LIMITED", 429);
+        }
+        if (redisIpLimit.available) return;
+      } else {
+        return;
+      }
+    } else {
+      logger.warn("redis.rate_limit_unavailable", {
+        flow: "otp",
+        fallback: "database",
+      });
+    }
+
     const phoneWindow = new Date(now.getTime() - PHONE_SEND_WINDOW_MS);
     const phoneCount = await (prisma as any).phoneVerificationOtp.count({
       where: { phone, created_at: { gte: phoneWindow } },

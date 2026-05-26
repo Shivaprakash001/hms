@@ -7,6 +7,8 @@ import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
 import { assertHostelBelongsToOwner } from "@/lib/security/scoped-query";
 import { analyticsService, getDateRange } from "@/lib/services/analytics-service";
 import { timed } from "@/lib/perf";
+import { getCachedDashboard, setDashboardCache } from "@/lib/cache/dashboard-cache";
+import { hashKey, redisKeys } from "@/lib/redis/keys";
 
 export async function GET(req: NextRequest) {
   const session = await getSession(req);
@@ -24,11 +26,20 @@ export async function GET(req: NextRequest) {
   try {
     const scope = resolveOwnerScope(session);
     await assertHostelBelongsToOwner(scope.owner_id, hostelId);
+    const rangeHash = hashKey({ start: start.toISOString(), end: end.toISOString() });
+    const cacheKey = redisKeys.analytics.funnel(scope.owner_id, hostelId, rangeHash);
+    const cached = await getCachedDashboard(cacheKey);
+    if (cached) return apiResponse(cached);
+
     const data = await timed(
       "analytics.funnel",
       () => analyticsService.getReminderFunnelDashboard(scope.owner_id, start, end, hostelId),
       { owner_id: scope.owner_id, slow_ms: 1_500 }
     );
+    await setDashboardCache(cacheKey, data, 180, [
+      redisKeys.tag.ownerDashboard(scope.owner_id),
+      redisKeys.tag.hostelDashboard(hostelId),
+    ]);
     return apiResponse(data);
   } catch (error: any) {
     return apiError(error.message || "Failed to fetch reminder funnel data");

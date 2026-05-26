@@ -5,6 +5,7 @@ import { Plus, Search, CalendarDays, Repeat2, Zap, Sparkles, TrendingUp, Trendin
 import { queryKeys } from '@lib/queryKeys';
 import { fmt } from '../shared/format';
 import { TabError, TabSkeleton } from '../shared/TabStates';
+import { IdleRender } from '@/shared/performance';
 
 const AddExpenseModal = lazy(() => import('./expenses/AddExpenseModal').then((m) => ({ default: m.AddExpenseModal }))); 
 
@@ -68,10 +69,16 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
   const monthlyTrend = Array.isArray(payload.monthly_trend) ? payload.monthly_trend : [];
   const occupancy = payload.occupancy_impact || {};
   const allCategories: string[] = payload.meta?.categories || EXPENSE_CATEGORIES;
-  const maxCategory = Math.max(...categories.map((c: any) => Number(c.amount || 0)), 1);
-  const maxTrend = Math.max(
-    ...monthlyTrend.map((m: any) => Math.max(Number(m.revenue || 0), Number(m.expenses || 0), Number(m.profit || 0))),
-    1,
+  const maxCategory = useMemo(
+    () => Math.max(...categories.map((c: any) => Number(c.amount || 0)), 1),
+    [categories],
+  );
+  const maxTrend = useMemo(
+    () => Math.max(
+      ...monthlyTrend.map((m: any) => Math.max(Number(m.revenue || 0), Number(m.expenses || 0), Number(m.profit || 0))),
+      1,
+    ),
+    [monthlyTrend],
   );
   const expenseVirtualizer = useVirtualizer({
     count: expenses.length,
@@ -125,111 +132,6 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
           Add expense
         </button>
       </div>
-
-      <section className="space-y-3">
-        <SectionTitle
-          title="Expense Intelligence"
-          sub="Where money is moving and what needs attention"
-          actionLabel="Add expense"
-          onAction={() => setShowAddExpense(true)}
-        />
-        <div className="grid gap-3 md:grid-cols-2">
-          <div className="bg-card border border-border rounded-xl p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-foreground">Category Breakdown</h3>
-              <span className="text-[10px] text-muted-foreground">This month</span>
-            </div>
-            {categories.length === 0 ? (
-              <EmptyMini
-                text="Add your first expense to reveal category leakage."
-                actionLabel="Add expense"
-                onAction={() => setShowAddExpense(true)}
-              />
-            ) : (
-              <div className="space-y-3">
-                {categories.slice(0, 8).map((cat: any) => (
-                  <div key={String(cat.category)}>
-                    <div className="flex items-center justify-between gap-3 text-xs mb-1.5">
-                      <span className="font-medium text-foreground">{cat.category}</span>
-                      <span className="text-muted-foreground">
-                        {fmt(cat.amount)} · {Number(cat.percentage || 0).toFixed(0)}%
-                      </span>
-                    </div>
-                    <div className="h-2.5 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className={`h-full ${categoryTone(cat.category).bar}`}
-                        style={{ width: `${Math.max(4, (Number(cat.amount || 0) / maxCategory) * 100)}%` }}
-                      />
-                    </div>
-                    {cat.anomaly && (
-                      <div className="mt-1 text-[10px] font-medium text-warning">{cat.anomaly}</div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="bg-card border border-border rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-4">
-              <Sparkles className="w-4 h-4 text-accent" />
-              <h3 className="text-sm font-semibold text-foreground">Health Insights</h3>
-            </div>
-            <div className="space-y-2">
-              {insights.map((insight: any, i: number) => (
-                <div key={`${insight.title}-${i}`} className="rounded-lg border border-border bg-background p-3">
-                  <div className="flex items-start gap-2">
-                    <span className={`mt-1 h-2 w-2 rounded-full ${severityDot(insight.severity)}`} />
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{insight.title}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{insight.detail}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="grid gap-3 md:grid-cols-2">
-          <div className="bg-card border border-border rounded-xl p-4">
-            <h3 className="text-sm font-semibold text-foreground mb-4">Revenue · Expense · Profit</h3>
-            <div className="space-y-3">
-              {monthlyTrend.map((m: any) => (
-                <div key={String(m.month)} className="space-y-1.5">
-                  <div className="flex justify-between text-[10px] text-muted-foreground">
-                    <span>{String(m.month)}</span>
-                    <span>{fmt(m.profit)} profit</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-1 h-8 items-end">
-                    <TrendBar value={Number(m.revenue || 0)} max={maxTrend} className="bg-success" />
-                    <TrendBar value={Number(m.expenses || 0)} max={maxTrend} className="bg-destructive" />
-                    <TrendBar value={Math.max(0, Number(m.profit || 0))} max={maxTrend} className="bg-accent" />
-                  </div>
-                </div>
-              ))}
-              <div className="flex gap-3 text-[10px] text-muted-foreground pt-1">
-                <span className="inline-flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-success" />Revenue</span>
-                <span className="inline-flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-destructive" />Expenses</span>
-                <span className="inline-flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-accent" />Profit</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-card border border-border rounded-xl p-4">
-            <h3 className="text-sm font-semibold text-foreground mb-4">Occupancy Impact</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <ImpactMetric label="Occupancy" value={`${Number(occupancy.occupancy_rate || 0).toFixed(0)}%`} />
-              <ImpactMetric label="Expense / Bed" value={fmt(occupancy.expense_per_occupied_bed)} />
-              <ImpactMetric label="Vacancy Loss" value={fmt(occupancy.vacancy_loss_estimate)} />
-              <ImpactMetric label="Fixed Cost" value={`${Number(occupancy.fixed_cost_pressure || 0).toFixed(0)}%`} />
-            </div>
-            <div className="mt-4 rounded-lg bg-warning/10 border border-warning/20 p-3 text-xs text-foreground">
-              {occupancy.message || 'Occupancy and cost pressure will appear as snapshots build.'}
-            </div>
-          </div>
-        </div>
-      </section>
 
       <section className="space-y-3">
         <SectionTitle
@@ -321,6 +223,18 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
         )}
       </section>
 
+      <IdleRender>
+        <ExpenseIntelligence
+          categories={categories}
+          insights={insights}
+          maxCategory={maxCategory}
+          maxTrend={maxTrend}
+          monthlyTrend={monthlyTrend}
+          occupancy={occupancy}
+          onAddExpense={() => setShowAddExpense(true)}
+        />
+      </IdleRender>
+
       {showAddExpense && (
         <Suspense fallback={null}>
           <AddExpenseModal
@@ -351,6 +265,138 @@ const EXPENSE_CATEGORIES = [
   'Transport',
   'Miscellaneous',
 ];
+
+function ExpenseIntelligence({
+  categories,
+  insights,
+  maxCategory,
+  maxTrend,
+  monthlyTrend,
+  occupancy,
+  onAddExpense,
+}: {
+  categories: Record<string, any>[];
+  insights: Record<string, any>[];
+  maxCategory: number;
+  maxTrend: number;
+  monthlyTrend: Record<string, any>[];
+  occupancy: Record<string, any>;
+  onAddExpense: () => void;
+}) {
+  return (
+    <section className="space-y-3">
+      <SectionTitle
+        title="Expense Intelligence"
+        sub="Where money is moving and what needs attention"
+        actionLabel="Add expense"
+        onAction={onAddExpense}
+      />
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="bg-card border border-border rounded-xl p-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-foreground">Category Breakdown</h3>
+            <span className="text-[10px] text-muted-foreground">This month</span>
+          </div>
+          {categories.length === 0 ? (
+            <EmptyMini
+              text="Add your first expense to reveal category leakage."
+              actionLabel="Add expense"
+              onAction={onAddExpense}
+            />
+          ) : (
+            <div className="space-y-3">
+              {categories.slice(0, 8).map((cat) => (
+                <div key={String(cat.category)}>
+                  <div className="flex items-center justify-between gap-3 text-xs mb-1.5">
+                    <span className="font-medium text-foreground">{cat.category}</span>
+                    <span className="text-muted-foreground">
+                      {fmt(cat.amount)} · {Number(cat.percentage || 0).toFixed(0)}%
+                    </span>
+                  </div>
+                  <div className="h-2.5 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className={`h-full ${categoryTone(cat.category).bar}`}
+                      style={{ width: `${Math.max(4, (Number(cat.amount || 0) / maxCategory) * 100)}%` }}
+                    />
+                  </div>
+                  {cat.anomaly && <div className="mt-1 text-[10px] font-medium text-warning">{cat.anomaly}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-card border border-border rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-4">
+            <Sparkles className="w-4 h-4 text-accent" />
+            <h3 className="text-sm font-semibold text-foreground">Health Insights</h3>
+          </div>
+          <div className="space-y-2">
+            {insights.map((insight, i) => (
+              <div key={`${insight.title}-${i}`} className="rounded-lg border border-border bg-background p-3">
+                <div className="flex items-start gap-2">
+                  <span className={`mt-1 h-2 w-2 rounded-full ${severityDot(insight.severity)}`} />
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">{insight.title}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{insight.detail}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="bg-card border border-border rounded-xl p-4">
+          <h3 className="text-sm font-semibold text-foreground mb-4">Revenue · Expense · Profit</h3>
+          <div className="space-y-3">
+            {monthlyTrend.map((m) => (
+              <div key={String(m.month)} className="space-y-1.5">
+                <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <span>{String(m.month)}</span>
+                  <span>{fmt(m.profit)} profit</span>
+                </div>
+                <div className="grid grid-cols-3 gap-1 h-8 items-end">
+                  <TrendBar value={Number(m.revenue || 0)} max={maxTrend} className="bg-success" />
+                  <TrendBar value={Number(m.expenses || 0)} max={maxTrend} className="bg-destructive" />
+                  <TrendBar value={Math.max(0, Number(m.profit || 0))} max={maxTrend} className="bg-accent" />
+                </div>
+              </div>
+            ))}
+            <div className="flex gap-3 text-[10px] text-muted-foreground pt-1">
+              <span className="inline-flex items-center gap-1">
+                <i className="w-2 h-2 rounded-full bg-success" />
+                Revenue
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <i className="w-2 h-2 rounded-full bg-destructive" />
+                Expenses
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <i className="w-2 h-2 rounded-full bg-accent" />
+                Profit
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-card border border-border rounded-xl p-4">
+          <h3 className="text-sm font-semibold text-foreground mb-4">Occupancy Impact</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <ImpactMetric label="Occupancy" value={`${Number(occupancy.occupancy_rate || 0).toFixed(0)}%`} />
+            <ImpactMetric label="Expense / Bed" value={fmt(occupancy.expense_per_occupied_bed)} />
+            <ImpactMetric label="Vacancy Loss" value={fmt(occupancy.vacancy_loss_estimate)} />
+            <ImpactMetric label="Fixed Cost" value={`${Number(occupancy.fixed_cost_pressure || 0).toFixed(0)}%`} />
+          </div>
+          <div className="mt-4 rounded-lg bg-warning/10 border border-warning/20 p-3 text-xs text-foreground">
+            {occupancy.message || 'Occupancy and cost pressure will appear as snapshots build.'}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 function SectionTitle({
   title,

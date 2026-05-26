@@ -5,6 +5,8 @@ import { NextRequest } from "next/server";
 import { apiError, apiResponse, getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { portfolioPerformanceService } from "@/lib/services/portfolio-performance-service";
+import { getCachedDashboard, setDashboardCache } from "@/lib/cache/dashboard-cache";
+import { redisKeys } from "@/lib/redis/keys";
 
 type OverduePreviewRow = {
   obligation_id: string;
@@ -73,17 +75,26 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const parsed = parseInt(searchParams.get("months") || "6", 10);
     const months = Number.isNaN(parsed) ? 6 : parsed;
+    const cacheKey = redisKeys.portfolio.shell(session.sub, months);
+    const cached = await getCachedDashboard(cacheKey);
+    if (cached) return apiResponse(cached);
+
     const performance = await portfolioPerformanceService.getPortfolioPerformance(session.sub, months);
     const focusHostelId = performance.hostel_rankings?.[0]?.hostel_id ?? null;
     const overduePreview = focusHostelId
       ? await getOverduePreview(session.sub, focusHostelId)
       : [];
 
-    return apiResponse({
+    const response = {
       ...performance,
       focus_hostel_id: focusHostelId,
       overdue_preview: overduePreview,
-    });
+    };
+    await setDashboardCache(cacheKey, response, 60, [
+      redisKeys.tag.ownerDashboard(session.sub),
+      ...(focusHostelId ? [redisKeys.tag.hostelDashboard(focusHostelId)] : []),
+    ]);
+    return apiResponse(response);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Failed to fetch portfolio shell";
     return apiError(message);

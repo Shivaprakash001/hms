@@ -70,10 +70,32 @@ Examples include selected document nested routes, payment export, payment waive,
 The hostel detail route now loads as feature islands.
 The chart vendor chunk remains about 101 kB gzip after splitting.
 The owner dashboard first paint now uses a shell endpoint instead of a full dues waterfall.
+The tenant route loads its academic mix chart after idle time, but Recharts still remains the largest async visual vendor.
 
 **How this works:**
 1. The route shell downloads first.
 2. Owner users download only the active hostel tab.
 3. Payment, tenant, rent obligation, and expense lists now use virtualization.
 4. Portfolio risk uses a four-row overdue preview for mobile first paint.
-5. Further gains require replacing or shrinking the chart vendor chunk.
+5. Tenant dashboard secondary widgets and expense intelligence now wait behind idle render boundaries.
+6. Further gains require replacing or shrinking the chart vendor chunk.
+
+## Frontend runtime work still needs field tracing
+
+The latest pass removes full-screen auth gating and reduces above-the-fold mount work.
+Real device traces are still needed after deployment.
+
+**How this works:**
+1. Local builds confirm chunk isolation and type safety.
+2. Chrome field traces confirm whether LCP render delay moved.
+3. INP traces identify remaining event-handler or layout hot paths.
+
+## Redis queue adoption is partial
+
+Redis queue primitives exist for reminders, emails, receipts, rent generation, and late-fee work.
+Existing business services still execute most jobs directly.
+
+**How this works:**
+1. The queue layer can enqueue, claim, retry, and dead-letter jobs.
+2. Current cron services still own business correctness.
+3. Move one job type at a time after idempotency tests exist.

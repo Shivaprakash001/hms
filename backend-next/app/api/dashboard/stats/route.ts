@@ -6,6 +6,8 @@ import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { dashboardService } from "@/lib/services/dashboard-service";
 import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
 import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
+import { getCachedDashboard, setDashboardCache } from "@/lib/cache/dashboard-cache";
+import { redisKeys } from "@/lib/redis/keys";
 
 
 /**
@@ -31,7 +33,15 @@ export async function GET(req: NextRequest) {
       return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
     }
     
+    const cacheKey = redisKeys.dashboard.stats(scope.owner_id, hostelId);
+    const cached = await getCachedDashboard(cacheKey);
+    if (cached) return apiResponse(cached);
+
     const stats = await dashboardService.getOwnerStats(scope.owner_id, hostelId);
+    await setDashboardCache(cacheKey, stats, 45, [
+      redisKeys.tag.ownerDashboard(scope.owner_id),
+      redisKeys.tag.hostelDashboard(hostelId),
+    ]);
     return apiResponse(stats);
   } catch (error: any) {
     console.error("Detailed API Error [dashboard.stats]:", error);

@@ -44,6 +44,7 @@ export async function POST(req: NextRequest) {
       snapshot_monthly_hit_rate_pct: beforeReset.snapshot_monthly_hit_rate_pct,
       snapshot_recomputes:           beforeReset.snapshot.recomputes,
       snapshot_lock_contentions:     beforeReset.snapshot.lock_contentions,
+      redis:                         beforeReset.redis,
     },
   }, {
     status: 200,

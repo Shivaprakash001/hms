@@ -78,8 +78,25 @@ Why this exists: the dashboard greeting is the mobile LCP element, and top-card 
 **How this works:**
 1. Header text uses a fixed minimum height.
 2. The shell endpoint returns portfolio stats and a small overdue preview.
-3. The screen avoids a second full dues request on first paint.
-4. Search filtering uses deferred input so typing does not block rendering.
+3. Redis can serve the shaped shell response for a short TTL.
+4. The screen avoids a second full dues request on first paint.
+5. Search filtering uses deferred input so typing does not block rendering.
+
+## Redis read cache flow
+
+| Step | Code | What happens |
+|---|---|---|
+| 1 | Route auth and scoping | Verifies session and ownership before cache access. |
+| 2 | Redis cache helper | Reads a short-lived shaped response by key. |
+| 3 | Backend service | Runs only on cache miss or Redis outage. |
+| 4 | Cache tags | Store owner, hostel, or tenant invalidation membership. |
+
+Why this exists: mobile users revisit dashboard views often, and repeated aggregates should not hit Postgres every time.
+
+**How this works:**
+1. Authorization still uses PostgreSQL-backed logic.
+2. Redis caches only safe read responses.
+3. Mutations delete tagged keys and TTLs provide a fallback.
 
 ## Portfolio shell endpoint flow
 
@@ -141,9 +158,30 @@ Why this exists: rooms, tenants, expenses, move-outs, and billing should not exe
 | Logout | `/auth/logout` | Clears server and client session state. |
 
 **How this works:**
-1. Axios attaches the access token from `ownerUser` or `tenantUser`.
-2. A 401 response triggers a refresh request.
-3. Refresh failure clears local storage and redirects to `/login`.
+1. `AuthProvider` reads `ownerUser` or `tenantUser` from local storage during initialization.
+2. Protected shells can paint immediately with the stored user.
+3. `/auth/me` validates the token in the background.
+4. Axios attaches the access token from `ownerUser` or `tenantUser`.
+5. A 401 response triggers a refresh request.
+6. Refresh failure clears local storage and redirects to `/login`.
+
+## Frontend render performance flow
+
+| Boundary | Source | Purpose |
+|---|---|---|
+| Auth bootstrap | `frontend-v2/src/context/AuthContext.tsx` | Paints protected shells before background validation completes. |
+| Public hero | `frontend-v2/src/app/pages/public/HomePage.tsx` | Keeps LCP text outside reveal animation. |
+| Tenant chart | `frontend-v2/src/app/components/views/tenants/AcademicMixChart.tsx` | Moves Recharts work into an idle async chunk. |
+| Mobile tenants | `frontend-v2/src/features/tenants/components/list/TenantCardMobile.tsx` | Renders only the visible tenant card window. |
+| Tenant dashboard | `frontend-v2/src/portal/pages/TenantDashboardPage.tsx` | Paints header and dues area before secondary widgets. |
+| Expenses tab | `frontend-v2/src/app/components/hostel-detail/tabs/ExpensesTab.tsx` | Renders ledger before idle intelligence panels. |
+
+Why this exists: after backend caching, mobile paint delay comes mostly from React mount and main-thread work.
+
+**How this works:**
+1. First-viewport content avoids animation and full-screen auth gates.
+2. Heavy widgets mount through idle or lazy boundaries.
+3. Long lists render a small visible window instead of every card.
 
 ## Payment flow
 

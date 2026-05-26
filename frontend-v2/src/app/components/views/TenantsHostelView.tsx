@@ -1,9 +1,8 @@
-import { useState, useMemo } from 'react';
+import { lazy, Suspense, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Bell, CheckSquare, GraduationCap, UserPlus, X } from 'lucide-react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { useTenantsList } from '@features/tenants/hooks/useTenantsList';
 import { useTenantActions } from '@features/tenants/hooks/useTenantActions';
 import { useTenantStore } from '@features/tenants/store/tenantStore';
@@ -12,13 +11,14 @@ import { TenantsDashboard } from '@features/tenants/components/dashboard/Tenants
 import { TenantFilters } from '@features/tenants/components/list/TenantFilters';
 import { TenantTable } from '@features/tenants/components/list/TenantTable';
 import { TenantCardMobile } from '@features/tenants/components/list/TenantCardMobile';
-import { TenantProfileDrawer } from '@features/tenants/components/profile/TenantProfileDrawer';
-import { AddTenantModal } from '@/app/components/modals/AddTenantModal';
 import { reminderService } from '@features/notifications/api';
 import { useIsMobile } from '@/app/components/ui/use-mobile';
+import { IdleRender } from '@/shared/performance';
 import type { NormalizedTenant } from '@features/tenants/utils/normalize';
 
-const YEAR_COLORS = ['hsl(var(--primary))', '#10b981', '#f59e0b', '#8b5cf6', '#94a3b8'];
+const AcademicMixChart = lazy(() => import('./tenants/AcademicMixChart').then((m) => ({ default: m.AcademicMixChart })));
+const AddTenantModal = lazy(() => import('@/app/components/modals/AddTenantModal').then((m) => ({ default: m.AddTenantModal })));
+const TenantProfileDrawer = lazy(() => import('@features/tenants/components/profile/TenantProfileDrawer').then((m) => ({ default: m.TenantProfileDrawer })));
 
 export function TenantsHostelView() {
   const { hostelId = '' } = useParams();
@@ -139,61 +139,14 @@ export function TenantsHostelView() {
             <GraduationCap className="h-4 w-4 text-accent" />
           </div>
           <div className="p-4 flex items-center gap-3">
-            {yearDistribution.length > 0 ? (
-              <>
-                <div className="h-28 w-28 shrink-0">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={yearDistribution}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={28}
-                        outerRadius={48}
-                        dataKey="value"
-                        strokeWidth={0}
-                      >
-                        {yearDistribution.map((_, i) => (
-                          <Cell key={i} fill={YEAR_COLORS[i % YEAR_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        formatter={(v: number) => [v, 'Tenants']}
-                        contentStyle={{
-                          background: 'hsl(var(--card))',
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '8px',
-                          fontSize: '11px',
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="flex-1 space-y-1.5 min-w-0">
-                  {yearDistribution.map((item, i) => (
-                    <div key={item.name} className="flex items-center gap-2">
-                      <div
-                        className="h-2.5 w-2.5 rounded-full shrink-0"
-                        style={{ background: YEAR_COLORS[i % YEAR_COLORS.length] }}
-                      />
-                      <span className="text-xs text-foreground flex-1 min-w-0 truncate">
-                        {item.name}
-                      </span>
-                      <span className="text-xs font-semibold text-muted-foreground shrink-0">
-                        {item.value} ({activeStudentCount > 0 ? Math.round((item.value / activeStudentCount) * 100) : 0}%)
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                <p className="text-[10px] text-muted-foreground">
-                  Tip: use this to plan renewal conversations and group notices by academic year.
-                </p>
-              </>
-            ) : (
-              <div className="text-xs text-muted-foreground text-center py-6 w-full">
-                No active students matching academic year range (1 to 4)
-              </div>
-            )}
+            <IdleRender fallback={<div className="h-28 w-full rounded-xl bg-secondary animate-pulse" />}>
+              <Suspense fallback={<div className="h-28 w-full rounded-xl bg-secondary animate-pulse" />}>
+                <AcademicMixChart
+                  distribution={yearDistribution}
+                  activeStudentCount={activeStudentCount}
+                />
+              </Suspense>
+            </IdleRender>
           </div>
         </div>
       </div>
@@ -261,16 +214,20 @@ export function TenantsHostelView() {
     </TenantsLayout>
 
     {showInvite && (
-      <AddTenantModal hostelId={hostelId} onClose={() => { setShowInvite(false); refetch(); }} />
+      <Suspense fallback={null}>
+        <AddTenantModal hostelId={hostelId} onClose={() => { setShowInvite(false); refetch(); }} />
+      </Suspense>
     )}
 
     {drawerTenant && (
-      <TenantProfileDrawer
-        open={!!drawerTenant}
-        hostelId={hostelId}
-        tenantId={drawerTenant.id}
-        onClose={() => setDrawerTenant(null)}
-      />
+      <Suspense fallback={null}>
+        <TenantProfileDrawer
+          open={!!drawerTenant}
+          hostelId={hostelId}
+          tenantId={drawerTenant.id}
+          onClose={() => setDrawerTenant(null)}
+        />
+      </Suspense>
     )}
   </>
   );

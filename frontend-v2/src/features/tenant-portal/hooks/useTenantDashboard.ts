@@ -41,11 +41,7 @@ export function useTenantDashboard() {
     staleTime: 60_000,
   });
 
-  const criticalLoading =
-    profileQ.isLoading ||
-    duesQ.isLoading ||
-    paymentsQ.isLoading ||
-    roomQ.isLoading;
+  const criticalLoading = profileQ.isLoading;
 
   useEffect(() => {
     if (!criticalLoading) {

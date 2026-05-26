@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Users, BedDouble, Receipt, AlertCircle, Plus, CreditCard, Phone, Wifi, FileText, Eye, EyeOff, Copy, Check, Pencil, Layers, ChevronDown, ChevronRight, X, Trash2, MoreVertical, TrendingUp, TrendingDown, Sparkles, Search, CalendarDays, Repeat2, Upload, Zap, Activity, AlertTriangle, BellRing, ClipboardCheck, Flame, Home, IndianRupee, Megaphone, UserPlus, Send, Loader2 } from 'lucide-react';
 import { queryKeys } from '@lib/queryKeys';
@@ -150,24 +150,30 @@ export function RoomsTab({ hostelId }: { hostelId: string }) {
   const rooms: Record<string, unknown>[] = Array.isArray(roomsData) ? roomsData : [];
   const floors: Record<string, unknown>[] = Array.isArray(floorsData) ? floorsData : [];
 
-  const floorGroups: Map<string, { id: string; name: string; sort: number; rooms: Record<string, unknown>[] }> = new Map();
-  rooms.forEach((room) => {
-    const fid   = String(room.floor_id ?? '__none');
-    const fname = String(room.floor_name ?? (room.floor_id ? 'Floor' : 'Unassigned'));
-    const fsort = Number(room.floor_sort_order ?? 999);
-    if (!floorGroups.has(fid)) floorGroups.set(fid, { id: fid, name: fname, sort: fsort, rooms: [] });
-    floorGroups.get(fid)!.rooms.push(room);
-  });
-  floors.forEach((f) => {
-    const fid = String(f.id);
-    if (!floorGroups.has(fid))
-      floorGroups.set(fid, { id: fid, name: String(f.name), sort: Number(f.sort_order ?? 0), rooms: [] });
-  });
+  const roomSummary = useMemo(() => {
+    const floorGroups: Map<string, { id: string; name: string; sort: number; rooms: Record<string, unknown>[] }> = new Map();
+    rooms.forEach((room) => {
+      const fid   = String(room.floor_id ?? '__none');
+      const fname = String(room.floor_name ?? (room.floor_id ? 'Floor' : 'Unassigned'));
+      const fsort = Number(room.floor_sort_order ?? 999);
+      if (!floorGroups.has(fid)) floorGroups.set(fid, { id: fid, name: fname, sort: fsort, rooms: [] });
+      floorGroups.get(fid)!.rooms.push(room);
+    });
+    floors.forEach((f) => {
+      const fid = String(f.id);
+      if (!floorGroups.has(fid))
+        floorGroups.set(fid, { id: fid, name: String(f.name), sort: Number(f.sort_order ?? 0), rooms: [] });
+    });
 
-  const groups     = Array.from(floorGroups.values()).sort((a, b) => a.sort - b.sort);
-  const totalBeds  = rooms.reduce((s, r) => s + Number(r.capacity ?? 0), 0);
-  const totalOccupied = rooms.reduce((s, r) => s + Number(r.occupied_count ?? 0), 0);
-  const totalVacant   = rooms.filter((r) => String(r.status) === 'vacant').length;
+    return {
+      groups: Array.from(floorGroups.values()).sort((a, b) => a.sort - b.sort),
+      totalBeds: rooms.reduce((s, r) => s + Number(r.capacity ?? 0), 0),
+      totalOccupied: rooms.reduce((s, r) => s + Number(r.occupied_count ?? 0), 0),
+      totalVacant: rooms.filter((r) => String(r.status) === 'vacant').length,
+    };
+  }, [floors, rooms]);
+
+  const { groups, totalBeds, totalOccupied, totalVacant } = roomSummary;
 
   const toggleCollapse = (id: string) =>
     setCollapsed((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });

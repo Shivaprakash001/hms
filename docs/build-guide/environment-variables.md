@@ -40,6 +40,10 @@ Use the examples as shapes only.
 | `HMS_FINANCIAL_OWNER_ID` | payment | `uuid` | Platform financial owner. |
 | `CRON_SECRET` | production | `long-random-string` | Cron route authorization. |
 | `RENT_CRON_BATCH_SIZE` | no | `100` | Rent cron batch size. |
+| `REDIS_ENABLED` | no | `true` or `false` | Enables optional Redis acceleration. |
+| `REDIS_KEY_PREFIX` | no | `hms:prod` | Prefixes Redis keys per environment. |
+| `UPSTASH_REDIS_REST_URL` | redis | `https://...upstash.io` | Upstash Redis REST endpoint. |
+| `UPSTASH_REDIS_REST_TOKEN` | redis | `AX...` | Upstash Redis REST token. |
 | `WHATSAPP_TOKEN` | no | `EA...` | WhatsApp API. |
 | `PHONE_NUMBER_ID` | no | `123456` | WhatsApp sender number. |
 | `WHATSAPP_API` | no | `https://graph.facebook.com` | WhatsApp base URL. |
@@ -49,7 +53,8 @@ Use the examples as shapes only.
 **How this works:**
 1. Backend routes read `process.env`.
 2. Config helpers normalize domains and URLs.
-3. Provider services fail or simulate when credentials are missing.
+3. Redis helpers no-op when Redis is disabled or missing.
+4. Provider services fail or simulate when credentials are missing.
 
 ## Frontend variables
 
@@ -63,4 +68,3 @@ Use the examples as shapes only.
 3. New clients must replace the hardcoded API URL or add env-based config.
 
 > **Needs clarification:** `scripts/validate_env.sh` references Razorpay and SMTP variables, but current payment code uses PhonePe and Resend. Treat the script as stale until updated.
-

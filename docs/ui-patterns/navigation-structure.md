@@ -82,6 +82,10 @@ Why this exists: hostel data can grow to hundreds or thousands of records per ow
 | Layout-matched skeleton | Owner dashboard loading state |
 | Lazy user-intent UI | Trends chart and owner modals |
 | Deferred filter text | Property search |
+| Background auth validation | Protected shell first paint |
+| Idle secondary widgets | Tenant dashboard and expense intelligence |
+| Non-animated hero LCP | Public homepage first viewport |
+| Mobile no-blur reveal | Below-fold marketing sections |
 
 Why this exists: mobile Core Web Vitals are sensitive to the first dashboard viewport.
 
@@ -89,6 +93,26 @@ Why this exists: mobile Core Web Vitals are sensitive to the first dashboard vie
 1. The first viewport reserves space before async data arrives.
 2. Below-fold chart code waits until the trend panel opens.
 3. Modal bundles wait until the related action is tapped.
+4. Stored auth state lets the protected shell render while `/auth/me` validates.
+5. Public hero content skips reveal wrappers so LCP text paints immediately.
+
+## Mobile Runtime Boundaries
+
+| Area | Boundary | Result |
+|---|---|---|
+| Tenant list | Window virtualizer | Large tenant sets do not mount every card. |
+| Tenant dashboard | Progressive secondary data | Dues and payment action appear before documents and announcements. |
+| Tenant chart | `IdleRender` plus lazy import | Recharts does not block route mount. |
+| Expense tab | Ledger before intelligence | Users can inspect records before analytics panels render. |
+| Room tab | Memoized floor grouping | Room cards avoid regrouping work on unrelated state changes. |
+| Marketing reveal | Mobile transform-only animation | Below-fold sections keep motion without blur paint cost. |
+
+Why this exists: low-end Android devices feel slow when hidden work competes with visible content.
+
+**How this works:**
+1. Critical text and controls render first.
+2. Lists and ledgers cap mounted rows.
+3. Charts, intelligence panels, and secondary widgets wait for idle time.
 
 ## Owner routes
 

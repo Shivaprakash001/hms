@@ -7,7 +7,8 @@ import { authService } from "@/lib/services/auth-service";
 import { apiError } from "@/lib/utils/api-utils";
 import { prisma } from "@/lib/db";
 import { getLogger } from "@/lib/logger";
-import { assertBodySize, parseObligationIds } from "@/lib/security/api-guard";
+import { assertBodySize, getClientIp, parseObligationIds } from "@/lib/security/api-guard";
+import { rateLimitService } from "@/lib/services/rate-limit-service";
 
 const logger = getLogger("create-intent");
 
@@ -21,6 +22,21 @@ export async function POST(req: Request) {
     const user = await authService.getCurrentUser(req);
     if (!user) {
       return apiError("Unauthorized", "UNAUTHORIZED", 401);
+    }
+
+    const ip = getClientIp(req) || "unknown";
+    const paymentLimit = await rateLimitService.checkStatelessLimit({
+      scope: "payment:create-intent",
+      identifier: `${user.id}:${ip}`,
+      maxAttempts: 10,
+      windowSeconds: 5 * 60,
+    });
+    if (!paymentLimit.allowed) {
+      return apiError(
+        "Too many payment attempts. Please wait a few minutes and try again.",
+        "RATE_LIMITED",
+        429,
+      );
     }
 
     const body = await req.json().catch(() => ({}));

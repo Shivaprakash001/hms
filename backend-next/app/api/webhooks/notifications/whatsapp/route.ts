@@ -5,6 +5,8 @@ import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getLogger } from "@/lib/logger";
 import { whatsappWebhookEventService } from "@/lib/services/notifications/whatsapp-webhook-event-service";
+import { getClientIp } from "@/lib/security/api-guard";
+import { rateLimitService } from "@/lib/services/rate-limit-service";
 
 const logger = getLogger("webhook.whatsapp");
 
@@ -44,6 +46,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
   const requestId = req.headers.get("x-request-id") || crypto.randomUUID();
+  const requestIp = getClientIp(req) || "unknown";
   let webhookEventId: string | null = null;
 
   try {
@@ -66,17 +69,27 @@ export async function POST(req: NextRequest) {
     webhookEventId = eventRecord.event.id;
 
     if (!signatureResult.verified) {
+      const abuseLimit = await rateLimitService.checkStatelessLimit({
+        scope: "webhook:whatsapp:signature-failed",
+        identifier: requestIp,
+        maxAttempts: 30,
+        windowSeconds: 10 * 60,
+      });
       logger.warn("webhook.whatsapp.signature_invalid", {
         request_id: requestId,
         webhook_event_id: webhookEventId,
         reason: signatureResult.failureReason,
+        ip: requestIp,
+        rate_limited: !abuseLimit.allowed,
       });
       await whatsappWebhookEventService.markFailed(
         webhookEventId,
         signatureResult.failureReason || "signature verification failed",
         "FAILED"
       );
-      return new Response("Unauthorized", { status: 401 });
+      return new Response(abuseLimit.allowed ? "Unauthorized" : "Too Many Requests", {
+        status: abuseLimit.allowed ? 401 : 429,
+      });
     }
 
     if (eventRecord.duplicate && eventRecord.event.processing_status === "PROCESSED") {

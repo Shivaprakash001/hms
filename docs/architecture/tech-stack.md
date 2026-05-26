@@ -27,6 +27,7 @@
 | Next.js 14 App Router | Hosts API routes, cron endpoints, and admin pages. |
 | Prisma 5 | Maps Postgres tables to typed models. |
 | Postgres | Stores owners, tenants, rooms, payments, ledgers, and logs. |
+| Upstash Redis REST | Accelerates safe reads, distributed rate limits, and queue coordination. |
 | Supabase client | Accesses Supabase services with server credentials. |
 | Zod | Validates request bodies in selected routes and services. |
 | jose and jsonwebtoken | Handle JWT verification and token flows. |
@@ -38,7 +39,22 @@
 **How this works:**
 1. Route handlers accept HTTP requests.
 2. Service modules validate and execute business rules.
-3. Prisma persists the result and returns normalized data.
+3. Redis serves optional acceleration paths when data is safe to cache.
+4. Prisma persists source-of-truth records and returns normalized data.
+
+## Redis acceleration
+
+| Use | Why it exists |
+|---|---|
+| Rate limiting | Shares login, OTP, payment, and webhook abuse counters across serverless instances. |
+| Dashboard cache | Reuses short-lived owner, hostel, tenant, and analytics read responses. |
+| Queue primitives | Coordinates future reminder, receipt, rent, and late-fee background work. |
+| OTP replay lock | Prevents simultaneous verification attempts for the same OTP. |
+
+**How this works:**
+1. Backend code uses centralized helpers in `lib/redis`.
+2. Redis failures log warnings and fall back to slower safe behavior.
+3. PostgreSQL remains the source of truth for financial and authorization data.
 
 ## Provider integrations
 
@@ -66,4 +82,3 @@
 1. Tests exercise isolated service rules.
 2. Scripts verify production invariants before deployment.
 3. Cron endpoints repeat operational tasks on schedule.
-

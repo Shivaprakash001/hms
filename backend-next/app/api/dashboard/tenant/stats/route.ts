@@ -4,6 +4,8 @@ export const runtime = "nodejs";
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { dashboardService } from "@/lib/services/dashboard-service";
+import { getCachedDashboard, setDashboardCache } from "@/lib/cache/dashboard-cache";
+import { redisKeys } from "@/lib/redis/keys";
 
 
 /**
@@ -17,7 +19,14 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const cacheKey = redisKeys.dashboard.tenantStats(session.sub);
+    const cached = await getCachedDashboard(cacheKey);
+    if (cached) return apiResponse(cached);
+
     const stats = await dashboardService.getTenantStats(session.sub);
+    await setDashboardCache(cacheKey, stats, 30, [
+      redisKeys.tag.tenantDashboard(session.sub),
+    ]);
     return apiResponse(stats);
   } catch (error: any) {
     if (error.message.startsWith("NOT_FOUND"))

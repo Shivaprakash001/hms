@@ -52,6 +52,17 @@ export async function GET() {
     snapshot_recomputes:           m.snapshot.recomputes,
     snapshot_lock_contentions:     m.snapshot.lock_contentions,
 
+    // ── Redis Acceleration ──────────────────────────────────────
+    redis_hits:                    m.redis.hit,
+    redis_misses:                  m.redis.miss,
+    redis_sets:                    m.redis.set,
+    redis_deletes:                 m.redis.delete,
+    redis_errors:                  m.redis.error,
+    redis_fallbacks:               m.redis.fallback,
+    redis_rate_limit_blocks:       m.redis.rate_limit_blocked,
+    redis_queue_claimed:           m.redis.queue_claimed,
+    redis_queue_failed:            m.redis.queue_failed,
+
     // ── Per-operation Timing (count / avg_ms / max_ms) ───────────
     // Keyed by operation name from timed() calls.
     // Only populated after first execution of each operation.

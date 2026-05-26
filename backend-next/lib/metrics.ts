@@ -4,6 +4,8 @@
  * Values are best-effort for operational visibility, not billing-critical.
  */
 
+import { getRedisMetrics, resetRedisMetrics } from "./redis/metrics";
+
 // ── Per-operation timing registry ──────────────────────────────────────────────
 interface OperationStats {
   count:    number;
@@ -201,6 +203,7 @@ export function getMetrics() {
 
   return {
     ...metrics,
+    redis: getRedisMetrics(),
     webhook_success_rate: metrics.webhooks.total > 0
       ? (metrics.webhooks.success / metrics.webhooks.total) * 100
       : 100,
@@ -265,5 +268,6 @@ export function resetMetrics() {
   metrics.pdf_renders.puppeteer = 0;
   metrics.pdf_renders.invoice = 0;
   metrics.lastReset = new Date().toISOString();
+  resetRedisMetrics();
   resetTimingStats();
 }

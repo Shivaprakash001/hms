@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Building2, Loader2, MapPin } from 'lucide-react';
+import { Building2, MapPin } from 'lucide-react';
 import { useTenantDashboard } from '@features/tenant-portal/hooks/useTenantDashboard';
 import { TenantPriorityStrip } from '@/portal/components/TenantPriorityStrip';
 import { TenantScorePanel } from '@/portal/components/TenantScorePanel';
@@ -8,6 +8,7 @@ import { TenantAnnouncements } from '@/portal/components/TenantAnnouncements';
 import { TenantDocumentStatus, hasRequiredDocuments } from '@/portal/components/TenantDocumentStatus';
 import { TenantStatusBadge } from '@features/tenants/components/badges/TenantStatusBadge';
 import { tenantService } from '@features/tenants/api';
+import { IdleRender } from '@/shared/performance';
 
 const fmt = (n: number) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
 
@@ -21,16 +22,7 @@ export function TenantDashboardPage() {
     moveOut,
     notifications,
     documents,
-    isLoading,
   } = useTenantDashboard();
-
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-20">
-        <Loader2 className="w-8 h-8 animate-spin text-accent" />
-      </div>
-    );
-  }
 
   const prof = profile?.profile as Record<string, unknown> | undefined;
   const tenant = profile?.tenant as Record<string, unknown> | undefined;
@@ -41,7 +33,7 @@ export function TenantDashboardPage() {
   const hostelName = String(hostel?.name ?? 'Sri Adithya Hostels');
   const hostelLogo = String(hostel?.logo_url ?? '');
   const hostelLocation = [hostel?.city, hostel?.state].filter(Boolean).join(', ');
-  const profileDocs = (profile?.documents ?? documents) as unknown[];
+  const profileDocs = (profile?.documents ?? documents) as unknown[] | undefined;
   const profileType = String(tenant?.profile_type ?? profile?.profile_type ?? 'STUDENT');
   const advanceBalance = Number(advance?.balance ?? 0);
   const depositCredits = (advance?.entries ?? []).filter(
@@ -121,9 +113,13 @@ export function TenantDashboardPage() {
         </div>
       </header>
 
-      <TenantPriorityStrip dues={dues} payments={payments} moveOut={moveOut} />
+      {dues ? (
+        <TenantPriorityStrip dues={dues} payments={payments} moveOut={moveOut} />
+      ) : (
+        <TenantPrioritySkeleton />
+      )}
 
-      {!hasRequiredDocuments(profileDocs as never[], profileType) && (
+      {Array.isArray(profileDocs) && !hasRequiredDocuments(profileDocs as never[], profileType) && (
         <Link
           to="/tenant/profile#documents"
           className="block rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5 hover:border-amber-300 transition-colors"
@@ -138,47 +134,51 @@ export function TenantDashboardPage() {
         </Link>
       )}
 
-      <TenantScorePanel score={score} />
+      <IdleRender>
+        <TenantScorePanel score={score} />
+      </IdleRender>
 
-      {advance && (
-        <Link
-          to="/tenant/financials"
-          className="block rounded-2xl border border-border bg-card p-4 hover:border-accent/40 hover:shadow-sm transition-all"
-        >
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Security deposit</p>
-            <span className="text-xs text-accent font-semibold">&rarr; View details</span>
-          </div>
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <div className="rounded-xl bg-secondary py-2.5 px-2">
-              <p className="text-muted-foreground text-[10px] mb-0.5">Paid</p>
-              <p className="text-sm font-bold text-foreground">{fmt(depositTotal || advanceBalance)}</p>
+      <IdleRender>
+        {advance && (
+          <Link
+            to="/tenant/financials"
+            className="block rounded-2xl border border-border bg-card p-4 hover:border-accent/40 hover:shadow-sm transition-all"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Security deposit</p>
+              <span className="text-xs text-accent font-semibold">&rarr; View details</span>
             </div>
-            {adjustments > 0 && (
+            <div className="grid grid-cols-3 gap-2 text-center">
               <div className="rounded-xl bg-secondary py-2.5 px-2">
-                <p className="text-muted-foreground text-[10px] mb-0.5">Used</p>
-                <p className="text-sm font-bold text-foreground">{fmt(adjustments)}</p>
+                <p className="text-muted-foreground text-[10px] mb-0.5">Paid</p>
+                <p className="text-sm font-bold text-foreground">{fmt(depositTotal || advanceBalance)}</p>
               </div>
-            )}
-            <div className="rounded-xl bg-accent/8 border border-accent/15 py-2.5 px-2">
-              <p className="text-accent/70 text-[10px] mb-0.5">Refundable</p>
-              <p className="text-sm font-bold text-accent">{fmt(advanceBalance)}</p>
+              {adjustments > 0 && (
+                <div className="rounded-xl bg-secondary py-2.5 px-2">
+                  <p className="text-muted-foreground text-[10px] mb-0.5">Used</p>
+                  <p className="text-sm font-bold text-foreground">{fmt(adjustments)}</p>
+                </div>
+              )}
+              <div className="rounded-xl bg-accent/8 border border-accent/15 py-2.5 px-2">
+                <p className="text-accent/70 text-[10px] mb-0.5">Refundable</p>
+                <p className="text-sm font-bold text-accent">{fmt(advanceBalance)}</p>
+              </div>
             </div>
-          </div>
-        </Link>
-      )}
+          </Link>
+        )}
 
-      <TenantDocumentStatus documents={profileDocs as never[]} profileType={profileType} />
+        <TenantDocumentStatus documents={profileDocs as never[]} profileType={profileType} />
 
-      <TenantAnnouncements
-        items={
-          Array.isArray(notifications)
-            ? notifications
-            : (notifications as { notifications?: unknown[] })?.notifications
-        }
-      />
+        <TenantAnnouncements
+          items={
+            Array.isArray(notifications)
+              ? notifications
+              : (notifications as { notifications?: unknown[] })?.notifications
+          }
+        />
 
-      <TenantActionCenter />
+        <TenantActionCenter />
+      </IdleRender>
 
       {status === 'LEFT' && (
         <button
@@ -189,6 +189,16 @@ export function TenantDashboardPage() {
           Request reactivation
         </button>
       )}
+    </div>
+  );
+}
+
+function TenantPrioritySkeleton() {
+  return (
+    <div className="rounded-xl border border-border bg-card p-4">
+      <div className="h-3 w-24 rounded bg-muted animate-pulse" />
+      <div className="mt-3 h-6 w-36 rounded bg-muted animate-pulse" />
+      <div className="mt-4 h-11 rounded-xl bg-muted animate-pulse" />
     </div>
   );
 }

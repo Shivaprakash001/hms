@@ -4,6 +4,8 @@ export const runtime = "nodejs";
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { portfolioPerformanceService } from "@/lib/services/portfolio-performance-service";
+import { getCachedDashboard, setDashboardCache } from "@/lib/cache/dashboard-cache";
+import { redisKeys } from "@/lib/redis/keys";
 
 /**
  * GET /api/dashboard/portfolio-performance
@@ -19,7 +21,14 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const parsed = parseInt(searchParams.get("months") || "6", 10);
     const months = Number.isNaN(parsed) ? 6 : parsed;
+    const cacheKey = redisKeys.portfolio.performance(session.sub, months);
+    const cached = await getCachedDashboard(cacheKey);
+    if (cached) return apiResponse(cached);
+
     const data = await portfolioPerformanceService.getPortfolioPerformance(session.sub, months);
+    await setDashboardCache(cacheKey, data, 120, [
+      redisKeys.tag.ownerDashboard(session.sub),
+    ]);
     return apiResponse(data);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Failed to fetch portfolio performance";

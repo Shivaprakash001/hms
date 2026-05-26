@@ -27,9 +27,7 @@ export function HomePage() {
     <div className="min-h-screen" style={{ fontFamily: 'var(--font-body)' }}>
       <TopBar />
       <Navbar />
-      <ScrollReveal delay={100}>
-        <Hero />
-      </ScrollReveal>
+      <Hero />
       <ScrollReveal>
         <StatsStrip />
       </ScrollReveal>

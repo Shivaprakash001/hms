@@ -1,5 +1,6 @@
 import { prisma } from "../db";
 import { getLogger } from "../logger";
+import { checkFixedWindowLimit } from "@/lib/redis/rate-limit";
 
 const logger = getLogger("rate-limit-service");
 
@@ -44,6 +45,89 @@ export class RateLimitService {
     ipAddress?: string
   ): Promise<RateLimitResult> {
     const config = DEFAULT_CONFIGS[`${attemptType}_LOGIN`];
+    const redisResult = await this.checkRedisLoginLimit(identifier, attemptType, ipAddress, config);
+    if (redisResult) return redisResult;
+
+    return this.checkDatabaseRateLimit(identifier, attemptType, ipAddress, config);
+  }
+
+  private async checkRedisLoginLimit(
+    identifier: string,
+    attemptType: "ONBOARDING" | "REGULAR",
+    ipAddress: string | undefined,
+    config: RateLimitConfig,
+  ): Promise<RateLimitResult | null> {
+    const identifierLimit = await checkFixedWindowLimit({
+      scope: `login:${attemptType.toLowerCase()}:identifier`,
+      identifier,
+      maxAttempts: config.maxAttempts,
+      windowSeconds: config.windowMinutes * 60,
+    });
+
+    if (!identifierLimit.available) {
+      logger.warn("redis.rate_limit_unavailable", {
+        flow: "login",
+        attemptType,
+        fallback: "database",
+      });
+      return null;
+    }
+
+    if (!identifierLimit.allowed) {
+      const lockoutMinutes = config.lockoutMinutes || config.windowMinutes;
+      logger.warn(`Rate limit exceeded for identifier: ${identifier}`, {
+        identifier,
+        attemptType,
+        attempts: identifierLimit.attempts,
+        maxAttempts: config.maxAttempts,
+        source: "redis",
+      });
+
+      return {
+        allowed: false,
+        attemptsRemaining: 0,
+        retryAfterSeconds: identifierLimit.retryAfterSeconds || lockoutMinutes * 60,
+        lockoutUntil: new Date(Date.now() + (identifierLimit.retryAfterSeconds || lockoutMinutes * 60) * 1000),
+      };
+    }
+
+    if (ipAddress) {
+      const ipConfig = DEFAULT_CONFIGS.IP_ADDRESS;
+      const ipLimit = await checkFixedWindowLimit({
+        scope: "login:ip",
+        identifier: ipAddress,
+        maxAttempts: ipConfig.maxAttempts,
+        windowSeconds: ipConfig.windowMinutes * 60,
+      });
+
+      if (!ipLimit.available) return null;
+      if (!ipLimit.allowed) {
+        logger.warn(`IP rate limit exceeded: ${ipAddress}`, {
+          ipAddress,
+          attempts: ipLimit.attempts,
+          maxAttempts: ipConfig.maxAttempts,
+          source: "redis",
+        });
+        return {
+          allowed: false,
+          attemptsRemaining: 0,
+          retryAfterSeconds: ipLimit.retryAfterSeconds,
+        };
+      }
+    }
+
+    return {
+      allowed: true,
+      attemptsRemaining: identifierLimit.attemptsRemaining,
+    };
+  }
+
+  private async checkDatabaseRateLimit(
+    identifier: string,
+    attemptType: "ONBOARDING" | "REGULAR",
+    ipAddress: string | undefined,
+    config: RateLimitConfig,
+  ): Promise<RateLimitResult> {
     const windowStart = new Date(Date.now() - config.windowMinutes * 60 * 1000);
 
     const identifierAttempts = await prisma.login_attempts.count({
@@ -103,6 +187,32 @@ export class RateLimitService {
     return {
       allowed: true,
       attemptsRemaining: remaining,
+    };
+  }
+
+  async checkStatelessLimit(params: {
+    scope: string;
+    identifier: string;
+    maxAttempts: number;
+    windowSeconds: number;
+    failOpen?: boolean;
+  }): Promise<RateLimitResult> {
+    const result = await checkFixedWindowLimit(params);
+    if (!result.available) {
+      logger.warn("redis.rate_limit_unavailable", {
+        flow: params.scope,
+        fallback: params.failOpen === false ? "closed" : "open",
+      });
+      return {
+        allowed: params.failOpen === false ? false : true,
+        attemptsRemaining: params.maxAttempts,
+        retryAfterSeconds: params.windowSeconds,
+      };
+    }
+    return {
+      allowed: result.allowed,
+      attemptsRemaining: result.attemptsRemaining,
+      retryAfterSeconds: result.retryAfterSeconds,
     };
   }
 

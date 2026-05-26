@@ -8,6 +8,7 @@ import { activityService } from "@/lib/services/activity-service";
 import { getCachedDashboard, setDashboardCache } from "@/lib/cache/dashboard-cache";
 import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
 import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
+import { redisKeys } from "@/lib/redis/keys";
 
 export async function GET(req: NextRequest) {
   const session = await getSession(req);
@@ -29,9 +30,9 @@ export async function GET(req: NextRequest) {
     return apiError(error.message || "Forbidden", error.code || "FORBIDDEN", error.code === "UNAUTHORIZED" ? 401 : 403);
   }
 
-  const cacheKey = `${scope.owner_id}_${months}_${hostelId}`;
+  const cacheKey = redisKeys.dashboard.owner(scope.owner_id, hostelId, months);
 
-  const cachedResult = getCachedDashboard(cacheKey);
+  const cachedResult = await getCachedDashboard(cacheKey);
   if (cachedResult) {
     return apiResponse(cachedResult);
   }
@@ -50,7 +51,10 @@ export async function GET(req: NextRequest) {
       recentActivity: activityRes?.items || []
     };
 
-    setDashboardCache(cacheKey, finalResponse);
+    await setDashboardCache(cacheKey, finalResponse, 45, [
+      redisKeys.tag.ownerDashboard(scope.owner_id),
+      redisKeys.tag.hostelDashboard(hostelId),
+    ]);
 
     return apiResponse(finalResponse);
   } catch (error: any) {

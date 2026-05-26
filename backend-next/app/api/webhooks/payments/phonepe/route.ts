@@ -8,6 +8,8 @@ import { incrementWebhook } from "@/lib/metrics";
 import { randomUUID } from "crypto";
 import { paymentWebhookEventService } from "@/lib/services/payment-webhook-event-service";
 import { paymentOperationalAnomalyService } from "@/lib/services/payment-operational-anomaly-service";
+import { getClientIp } from "@/lib/security/api-guard";
+import { rateLimitService } from "@/lib/services/rate-limit-service";
 
 const logger = getLogger("webhook.phonepe");
 
@@ -26,6 +28,7 @@ export async function POST(req: Request) {
   let statusCode = 200;
   let merchantOrderId = "unknown";
   const requestId = req.headers.get("x-request-id") || randomUUID();
+  const requestIp = getClientIp(req) || "unknown";
   let webhookEventId: string | null = null;
 
   try {
@@ -77,10 +80,17 @@ export async function POST(req: Request) {
     }
 
     if (!signatureVerified) {
+      const abuseLimit = await rateLimitService.checkStatelessLimit({
+        scope: "webhook:phonepe:auth-failed",
+        identifier: requestIp,
+        maxAttempts: 30,
+        windowSeconds: 10 * 60,
+      });
       logger.warn("webhook.phonepe.auth_invalid", {
         request_id: requestId,
-        ip: req.headers.get("x-forwarded-for") || "unknown",
+        ip: requestIp,
         reason: signatureFailureReason,
+        rate_limited: !abuseLimit.allowed,
       });
       if (webhookEventId) {
         await paymentWebhookEventService.markFailed(webhookEventId, signatureFailureReason || "signature verification failed", "FAILED");
@@ -91,7 +101,9 @@ export async function POST(req: Request) {
         webhookEventId: webhookEventId || null,
         metadata: { reason: signatureFailureReason, provider: "PHONEPE" },
       });
-      return new Response("Unauthorized", { status: 401 });
+      return new Response(abuseLimit.allowed ? "Unauthorized" : "Too Many Requests", {
+        status: abuseLimit.allowed ? 401 : 429,
+      });
     }
 
     const body = JSON.parse(rawBody);

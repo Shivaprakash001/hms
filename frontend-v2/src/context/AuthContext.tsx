@@ -53,9 +53,24 @@ const clearSessionScopedStorage = () => {
   sessionStorage.clear();
 };
 
+const readStoredUser = (): AuthUser | null => {
+  try {
+    const storedOwner = localStorage.getItem('ownerUser');
+    const storedTenant = localStorage.getItem('tenantUser');
+    return storedOwner
+      ? JSON.parse(storedOwner)
+      : storedTenant
+      ? JSON.parse(storedTenant)
+      : null;
+  } catch {
+    clearSessionScopedStorage();
+    return null;
+  }
+};
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<AuthUser | null>(() => readStoredUser());
+  const [loading, setLoading] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -96,13 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const initAuth = async () => {
-      const storedOwner = localStorage.getItem('ownerUser');
-      const storedTenant = localStorage.getItem('tenantUser');
-      const storedData: AuthUser | null = storedOwner
-        ? JSON.parse(storedOwner)
-        : storedTenant
-        ? JSON.parse(storedTenant)
-        : null;
+      const storedData = readStoredUser();
 
       if (storedData?.token) {
         try {
@@ -132,6 +141,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setUser(storedData);
           }
         }
+      } else {
+        setUser(null);
       }
       setLoading(false);
     };
