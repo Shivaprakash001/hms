@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { X, IndianRupee, Calendar, Loader2 } from 'lucide-react';
+import { hmsToast } from '@lib/toast';
+import { ErrorCard } from '@/shared/ui/error/ErrorCard';
+import { getHmsError } from '@lib/errors';
+import { X, IndianRupee, Calendar, Loader2, CheckCircle2 } from 'lucide-react';
 import { paymentService } from '@features/payments/api';
 import { identityService } from '@features/auth/api';
 import { queryKeys } from '@lib/queryKeys';
@@ -33,7 +36,7 @@ export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initi
   const [referenceNumber, setReferenceNumber] = useState('');
   const [note, setNote] = useState('');
   const [password, setPassword] = useState('');
-  const [apiError, setApiError] = useState<string | null>(null);
+  const [apiError, setApiError] = useState<unknown>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [successSummary, setSuccessSummary] = useState<Record<string, unknown> | null>(null);
 
@@ -82,17 +85,13 @@ export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initi
       queryClient.invalidateQueries({ queryKey: queryKeys.payments.all(hostelId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.payments.dues(hostelId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.stats(hostelId) });
-      toast.success('Payment recorded successfully');
-      setSuccessSummary(result?.payment ?? result);
+      const recorded = result?.payment ?? result;
+      hmsToast.paymentSuccess(Number((recorded as Record<string, unknown>)?.amount_paid ?? amount));
+      setSuccessSummary(recorded);
     },
     onError: (error: unknown) => {
-      const msg =
-        (error as { response?: { data?: { message?: string; error?: { message?: string } } } })?.response?.data?.message ||
-        (error as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ||
-        (error as { message?: string })?.message ||
-        'Failed to record payment';
-      setApiError(msg);
-      toast.error(msg);
+      setApiError(error);
+      hmsToast.error(error, 'Record payment');
     },
   });
 
@@ -294,11 +293,21 @@ export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initi
           </div>
 
           {apiError && (
-            <div className="bg-destructive/10 text-destructive text-sm px-4 py-3 rounded-lg">{apiError}</div>
+            <ErrorCard
+              error={getHmsError(apiError, 'Record payment')}
+              compact
+              onRetry={() => setApiError(null)}
+              retryLabel="Dismiss"
+            />
           )}
 
           {fieldError && (
-            <div className="bg-destructive/10 text-destructive text-sm px-4 py-3 rounded-lg">{fieldError}</div>
+            <ErrorCard
+              title="Please check the form"
+              description={fieldError}
+              action="Correct the field above and try again."
+              compact
+            />
           )}
 
           <div>
@@ -316,10 +325,15 @@ export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initi
           </div>
 
           {successSummary && (
-            <div className="bg-emerald-500/10 text-emerald-600 text-sm px-4 py-3 rounded-lg space-y-1">
-              <div className="font-medium">Payment recorded</div>
-              <div>Amount: ₹{Number((successSummary as any).amount_paid ?? amount).toLocaleString('en-IN')}</div>
-              <div>Method: {String((successSummary as any).payment_method ?? paymentMode.toUpperCase())}</div>
+            <div className="flex items-start gap-3 px-4 py-4 rounded-xl border border-emerald-200 bg-emerald-50" role="status">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-bold text-emerald-800">Payment recorded successfully</p>
+                <p className="text-xs text-emerald-700 mt-0.5">
+                  {`₹${Number((successSummary as Record<string, unknown>).amount_paid ?? amount).toLocaleString('en-IN')} via ${String((successSummary as Record<string, unknown>).payment_method ?? paymentMode.toUpperCase())}`}
+                </p>
+                <p className="text-xs text-emerald-600 mt-1">→ The tenant\'s balance has been updated.</p>
+              </div>
             </div>
           )}
 

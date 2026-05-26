@@ -13,7 +13,7 @@ export function AuthShellProviders({ children }: PropsWithChildren) {
       <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
         <AuthProvider>
           {children}
-          <Toaster position="top-center" richColors closeButton />
+          <Toaster position="top-right" expand visibleToasts={4} closeButton richColors />
         </AuthProvider>
       </GoogleOAuthProvider>
     </QueryClientProvider>

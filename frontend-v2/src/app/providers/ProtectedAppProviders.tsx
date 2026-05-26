@@ -9,7 +9,7 @@ export function ProtectedAppProviders({ children }: PropsWithChildren) {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         {children}
-        <Toaster position="top-center" richColors closeButton />
+        <Toaster position="top-right" expand visibleToasts={4} closeButton richColors />
       </AuthProvider>
     </QueryClientProvider>
   );

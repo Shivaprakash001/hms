@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { hmsToast } from '@lib/toast';
 import { tenantService } from '@features/tenants/api';
 import { queryKeys } from '@lib/queryKeys';
 
@@ -18,8 +19,7 @@ export function useTenantActions(hostelId: string) {
       toast.success('Invitation updated');
       invalidate();
     },
-    onError: (e: Error & { response?: { data?: { error?: { message?: string } } } }) =>
-      toast.error(e?.response?.data?.error?.message ?? 'Failed to update invitation'),
+    onError: (e: unknown) => hmsToast.error(e, 'Update invitation'),
   });
 
   const cancelInvite = useMutation({
@@ -28,8 +28,7 @@ export function useTenantActions(hostelId: string) {
       toast.success('Invitation cancelled');
       invalidate();
     },
-    onError: (e: Error & { response?: { data?: { error?: { message?: string } } } }) =>
-      toast.error(e?.response?.data?.error?.message ?? 'Failed to cancel'),
+    onError: (e: unknown) => hmsToast.error(e, 'Cancel invitation'),
   });
 
   const resendInvite = useMutation({
@@ -38,8 +37,7 @@ export function useTenantActions(hostelId: string) {
       toast.success('Invitation resent');
       invalidate();
     },
-    onError: (e: Error & { response?: { data?: { error?: { message?: string } } } }) =>
-      toast.error(e?.response?.data?.error?.message ?? 'Failed to resend'),
+    onError: (e: unknown) => hmsToast.error(e, 'Resend invitation'),
   });
 
   const reactivate = useMutation({
@@ -49,8 +47,7 @@ export function useTenantActions(hostelId: string) {
       toast.success('Tenant reactivated');
       invalidate();
     },
-    onError: (e: Error & { response?: { data?: { error?: { message?: string } } } }) =>
-      toast.error(e?.response?.data?.error?.message ?? 'Failed to reactivate'),
+    onError: (e: unknown) => hmsToast.error(e, 'Reactivate tenant'),
   });
 
   const markLeft = useMutation({
@@ -59,17 +56,19 @@ export function useTenantActions(hostelId: string) {
       toast.success('Tenant marked as LEFT');
       invalidate();
     },
-    onError: (e: Error & { response?: { data?: { error?: { message?: string } } } }) =>
-      toast.error(e?.response?.data?.error?.message ?? 'Cannot remove tenant'),
+    onError: (e: unknown) => hmsToast.error(e, 'Mark tenant as left'),
   });
 
   const blockDirectLeft = () => {
-    toast.error('Use the Move-Out workflow to process departures and settlements.');
+    hmsToast.warning(
+      'Use the Move-Out workflow',
+      'Departures must go through the Move-Out process to settle dues and deposit correctly.',
+    );
   };
 
   const callTenant = async (phone: string) => {
     if (!phone || phone === 'N/A') {
-      toast.error('Phone number unavailable');
+      hmsToast.warning('Phone number unavailable', 'No phone number is saved for this tenant.');
       return;
     }
     try {
