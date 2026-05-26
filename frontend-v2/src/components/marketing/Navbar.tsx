@@ -1,4 +1,3 @@
-import { Home } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export function Navbar() {
@@ -11,17 +10,20 @@ export function Navbar() {
 
   return (
     <nav className="bg-white shadow-sm sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 py-4">
+      <div className="max-w-7xl mx-auto px-4 py-3">
         <div className="flex items-center justify-between">
           <Link to="/" className="flex items-center gap-3 no-underline">
-            <div className="w-12 h-12 bg-[#F07B1D] rounded-full flex items-center justify-center">
-              <Home className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <span className="text-xl font-semibold text-[#1B2D5B]" style={{ fontFamily: 'var(--font-display)' }}>
-                Sri Adithya Hostels
-              </span>
-            </div>
+            <img
+              src="/android-chrome-512x512.png"
+              alt="Adithya Boys Hostel"
+              className="h-16 w-auto object-contain"
+            />
+            <span
+              className="text-lg font-bold text-[#1B2D5B] leading-tight hidden sm:block"
+              style={{ fontFamily: 'var(--font-display)' }}
+            >
+              Sri Adithya<br />Hostels
+            </span>
           </Link>
 
           <div className="hidden md:flex items-center gap-6">

@@ -1,4 +1,4 @@
-import { Home, Phone, MapPin, MessageCircle } from 'lucide-react';
+import { Phone, MapPin, MessageCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export function Footer() {
@@ -15,17 +15,17 @@ export function Footer() {
         <div className="grid md:grid-cols-3 gap-8 mb-8">
           <div>
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 bg-[#F07B1D] rounded-full flex items-center justify-center">
-                <Home className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h3
-                  className="text-xl font-semibold"
-                  style={{ fontFamily: 'var(--font-display)' }}
-                >
-                  Sri Adithya Hostels
-                </h3>
-              </div>
+              <img
+                src="/android-chrome-512x512.png"
+                alt="Adithya Boys Hostel"
+                className="h-[72px] w-auto object-contain brightness-0 invert"
+              />
+              <span
+                className="text-lg font-bold text-white leading-tight"
+                style={{ fontFamily: 'var(--font-display)' }}
+              >
+                Sri Adithya<br />Hostels
+              </span>
             </div>
             <p className="text-white/80 text-sm">
               Your home away from home — providing comfortable, safe, and affordable accommodation
