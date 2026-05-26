@@ -1,5 +1,5 @@
-import { NavLink, useNavigate } from 'react-router-dom';
-import { Building2, Home, Bell, CreditCard, Settings, LogOut, Users } from 'lucide-react';
+import { NavLink } from 'react-router-dom';
+import { Home, Bell, CreditCard, Settings, LogOut, Users } from 'lucide-react';
 import { useAuth } from '@context/AuthContext';
 
 const navItems = [
@@ -18,28 +18,37 @@ export function Sidebar() {
     : '?';
 
   return (
-    <aside className="hidden md:flex flex-col w-60 min-h-screen bg-card border-r border-border fixed left-0 top-0 bottom-0 z-40">
-      {/* Logo */}
-      <div className="px-6 py-5 border-b border-border">
+    <aside className="hidden md:flex flex-col w-60 min-h-screen bg-sidebar fixed left-0 top-0 bottom-0 z-40 shadow-[4px_0_24px_rgba(0,0,0,0.12)]">
+      {/* Brand logo */}
+      <div className="px-5 py-5 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-accent rounded-lg flex items-center justify-center">
-            <Building2 className="w-4 h-4 text-accent-foreground" />
+          <img
+            src="/android-chrome-512x512.png"
+            alt="Sri Adithya Hostels"
+            className="h-9 w-auto object-contain"
+          />
+          <div className="min-w-0">
+            <span className="block text-sm font-bold text-white leading-tight truncate">
+              Sri Adithya
+            </span>
+            <span className="block text-[10px] text-sidebar-foreground/60 leading-tight">
+              Hostels — Owner
+            </span>
           </div>
-          <span className="font-semibold text-foreground text-sm">Sri Adithya</span>
         </div>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-1">
+      <nav className="flex-1 px-3 py-5 space-y-0.5" aria-label="Main navigation">
         {navItems.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
             to={to}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              `flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
                 isActive
-                  ? 'bg-accent text-accent-foreground'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
+                  ? 'bg-sidebar-primary text-white shadow-sm'
+                  : 'text-sidebar-foreground/70 hover:text-white hover:bg-sidebar-accent'
               }`
             }
           >
@@ -49,23 +58,23 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* User + logout */}
-      <div className="px-3 py-4 border-t border-border space-y-1">
-        <div className="flex items-center gap-3 px-3 py-2">
-          <div className="w-7 h-7 bg-accent rounded-full flex items-center justify-center shrink-0">
-            <span className="text-[10px] font-semibold text-accent-foreground">{initials}</span>
+      {/* User profile + logout */}
+      <div className="px-3 py-4 border-t border-sidebar-border space-y-0.5">
+        <div className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl">
+          <div className="w-8 h-8 bg-sidebar-primary rounded-full flex items-center justify-center shrink-0 shadow-sm">
+            <span className="text-xs font-bold text-white">{initials}</span>
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-xs font-medium text-foreground truncate">{user?.name || 'Owner'}</div>
-            <div className="text-[10px] text-muted-foreground truncate">{user?.email || ''}</div>
+            <div className="text-xs font-semibold text-white truncate">{user?.name || 'Owner'}</div>
+            <div className="text-[10px] text-sidebar-foreground/50 truncate">{user?.email || ''}</div>
           </div>
         </div>
         <button
           onClick={logout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+          className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-sidebar-foreground/60 hover:text-white hover:bg-sidebar-accent transition-all duration-150"
         >
           <LogOut className="w-4 h-4 shrink-0" />
-          Log out
+          Sign out
         </button>
       </div>
     </aside>

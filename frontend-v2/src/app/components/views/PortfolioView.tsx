@@ -114,7 +114,10 @@ export function PortfolioView() {
     <div className="px-4 py-5 space-y-5 min-w-0 max-w-5xl mx-auto pb-24 md:pb-8">
       <div className="flex min-h-[64px] items-start justify-between gap-2">
         <div className="min-w-0">
-          <h1 className="min-h-7 truncate text-2xl font-semibold leading-7 text-foreground">
+          <h1
+            className="min-h-7 truncate text-2xl font-bold leading-7 text-foreground"
+            style={{ fontFamily: 'var(--font-display)' }}
+          >
             {user?.name ? `Good morning, ${user.name.split(' ')[0]}` : 'Owner home'}
           </h1>
           <p className="mt-0.5 min-h-10 text-sm text-muted-foreground">
@@ -125,7 +128,7 @@ export function PortfolioView() {
           <button
             type="button"
             onClick={() => navigate('/alerts')}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-destructive/10 border border-destructive/20 text-destructive rounded-lg text-xs font-semibold shrink-0"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl text-xs font-semibold shrink-0"
           >
             <Bell className="w-3.5 h-3.5" />
             Action needed
@@ -174,52 +177,48 @@ export function PortfolioView() {
                 icon: IndianRupee,
               },
               {
-                label: 'Collection rate',
+                label: 'Collection',
                 value: `${collectionRate.toFixed(0)}%`,
                 icon: TrendingUp,
               },
               {
-                label: 'Active tenants',
+                label: 'Tenants',
                 value: String(portfolio.active_tenants ?? 0),
-                sub: `${Number(portfolio.occupancy_rate ?? 0).toFixed(0)}% occupancy`,
+                sub: `${Number(portfolio.occupancy_rate ?? 0).toFixed(0)}% occ.`,
                 icon: Users,
               },
-            ].map(({ label, value, sub, icon: Icon, warn }) => (
-              <div key={label} className="bg-card border border-border rounded-xl p-3 min-w-0">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground truncate">
-                    {label}
-                  </span>
-                  <Icon className={`w-3.5 h-3.5 shrink-0 ${warn ? 'text-destructive' : 'text-accent'}`} />
+            ].map(({ label, value, sub, icon: Icon }) => (
+              <div key={label} className="bg-card border border-border rounded-2xl p-3 min-w-0 hover:shadow-sm transition-shadow">
+                <div className="w-7 h-7 rounded-xl bg-accent/10 flex items-center justify-center mb-2">
+                  <Icon className="w-3.5 h-3.5 text-accent" />
                 </div>
-                <p className={`text-lg font-bold truncate ${warn ? 'text-destructive' : 'text-foreground'}`}>
+                <p className="text-lg font-bold truncate leading-tight text-foreground">
                   {value}
                 </p>
-                {sub && <p className="text-[10px] text-muted-foreground mt-0.5">{sub}</p>}
+                <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{sub ?? label}</p>
               </div>
             ))}
           </div>
 
-          <section className="rounded-xl border border-border bg-card p-4">
+          <section className="rounded-2xl border border-border bg-card p-4">
             <div className="flex items-start gap-3">
-              <div className="rounded-xl bg-accent/10 p-2 text-accent">
+              <div className="rounded-xl bg-accent/10 p-2.5 text-accent shrink-0">
                 <Bell className="h-4 w-4" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-foreground">{monthLabel} collection digest</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Collected {fmt(Number(portfolio.total_revenue ?? 0))} of expected rent
-                  {collectionRate > 0 ? ` (${collectionRate.toFixed(0)}%)` : ''}.
+                <p className="text-sm font-bold text-foreground">{monthLabel} digest</p>
+                <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">
+                  Collected {fmt(Number(portfolio.total_revenue ?? 0))}{collectionRate > 0 ? ` (${collectionRate.toFixed(0)}%)` : ''}.
                   {' '}
                   {overdueTenantCount > 0
                     ? `${overdueTenantCount} tenant${overdueTenantCount === 1 ? '' : 's'} still outstanding.`
-                    : 'No outstanding tenants in the current view.'}
+                    : 'All clear — no outstanding tenants.'}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => navigate('/billing')}
-                className="shrink-0 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-foreground"
+                className="shrink-0 rounded-xl border border-border bg-secondary px-3 py-2 text-xs font-semibold text-foreground hover:border-accent/40 transition-colors"
               >
                 Review
               </button>
@@ -232,36 +231,41 @@ export function PortfolioView() {
                 <button
                   type="button"
                   onClick={() => setShowRecordPayment(true)}
-                  className="flex items-center justify-center gap-2 rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-accent-foreground"
+                  className="flex items-center justify-center gap-2 rounded-2xl bg-accent px-4 py-3.5 text-sm font-semibold text-accent-foreground active:scale-[0.98] transition-transform shadow-sm"
                 >
-                  <CreditCard className="w-3.5 h-3.5" />
+                  <CreditCard className="w-4 h-4" />
                   Record payment
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowAddTenant(true)}
-                  className="flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-sm font-semibold"
+                  className="flex items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3.5 text-sm font-semibold text-primary-foreground active:scale-[0.98] transition-transform shadow-sm"
                 >
-                  <UserPlus className="w-3.5 h-3.5" />
-                  Add Tenant
+                  <UserPlus className="w-4 h-4" />
+                  Add tenant
                 </button>
               </>
             )}
           </div>
 
-          <section className="rounded-xl border border-border bg-card p-4">
+          <section className="rounded-2xl border border-border bg-card p-4">
             <div className="mb-3 flex items-center justify-between">
               <div>
-                <h2 className="text-sm font-semibold text-foreground">Needs attention</h2>
-                <p className="text-xs text-muted-foreground">Top overdue tenants from your active hostel</p>
+                <h2 className="text-sm font-bold text-foreground">Needs attention</h2>
+                <p className="text-xs text-muted-foreground">Top overdue tenants</p>
               </div>
-              <button type="button" onClick={() => navigate('/alerts')} className="text-xs font-semibold text-accent">
+              <button
+                type="button"
+                onClick={() => navigate('/alerts')}
+                className="text-xs font-semibold text-accent hover:underline"
+              >
                 View all
               </button>
             </div>
             {overdueRows.length === 0 ? (
-              <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm text-emerald-700">
-                No overdue rent found. You are clear for now.
+              <div className="rounded-xl border border-success/20 bg-success/8 px-4 py-3 flex items-center gap-2.5">
+                <span className="w-2 h-2 rounded-full bg-success shrink-0" />
+                <p className="text-sm text-success font-medium">All clear — no overdue rent.</p>
               </div>
             ) : (
               <div className="divide-y divide-border">
@@ -278,7 +282,7 @@ export function PortfolioView() {
                       <button
                         type="button"
                         onClick={() => navigate('/alerts')}
-                        className="rounded-lg border border-amber-500/30 px-2.5 py-1.5 text-xs font-semibold text-amber-600"
+                        className="rounded-lg bg-amber-50 border border-amber-200 px-2.5 py-1.5 text-xs font-semibold text-amber-700"
                       >
                         Remind
                       </button>
@@ -335,10 +339,10 @@ export function PortfolioView() {
           </div>
 
           <section>
-            <h2 className="text-sm font-semibold text-foreground mb-3">
-              Property performance
-              <span className="text-muted-foreground font-normal ml-1">(tap a property to manage rooms, tenants, billing)</span>
-            </h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-bold text-foreground">Properties</h2>
+              <span className="text-xs text-muted-foreground">Tap to manage</span>
+            </div>
             {filteredRankings.length === 0 ? (
               <div className="text-center py-16 space-y-4 border border-dashed border-border rounded-xl">
                 <Building2 className="w-10 h-10 text-muted-foreground mx-auto opacity-50" />

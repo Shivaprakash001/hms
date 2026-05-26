@@ -56,32 +56,48 @@ export function TenantDashboardPage() {
 
   return (
     <div className="space-y-5">
-      <header className="overflow-hidden rounded-2xl border border-accent/20 bg-card shadow-sm">
-        <div className="bg-accent px-5 py-4 text-accent-foreground">
-          <div className="flex items-center gap-3">
-            <div className="h-12 w-12 shrink-0 overflow-hidden rounded-2xl bg-white/15 ring-1 ring-white/25">
+      <header className="overflow-hidden rounded-2xl shadow-sm">
+        <div
+          className="px-5 py-4 text-white relative overflow-hidden"
+          style={{ background: 'linear-gradient(135deg, #1B2D5B 0%, #243A72 100%)' }}
+        >
+          <div className="absolute inset-0 opacity-10"
+            style={{ backgroundImage: 'radial-gradient(circle at 80% 20%, #F07B1D 0%, transparent 60%)' }}
+          />
+          <div className="relative flex items-center gap-3">
+            <div className="h-12 w-12 shrink-0 overflow-hidden rounded-2xl bg-white/15 ring-1 ring-white/20">
               {hostelLogo ? (
                 <img src={hostelLogo} alt="" className="h-full w-full object-cover" />
               ) : (
                 <div className="flex h-full w-full items-center justify-center">
-                  <Building2 className="h-6 w-6" />
+                  <Building2 className="h-6 w-6 text-white/80" />
                 </div>
               )}
             </div>
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] opacity-80">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/60">
                 Tenant Home
               </p>
-              <h1 className="truncate text-2xl font-bold leading-tight">{hostelName}</h1>
+              <h1
+                className="truncate text-xl font-bold leading-tight text-white"
+                style={{ fontFamily: 'var(--font-display)' }}
+              >
+                {hostelName}
+              </h1>
             </div>
           </div>
         </div>
 
-        <div className="px-5 py-4">
+        <div className="px-5 py-4 bg-card border border-t-0 border-border rounded-b-2xl">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-sm text-muted-foreground">Welcome back,</p>
-              <p className="truncate text-xl font-bold text-foreground">{name.split(' ')[0]}</p>
+              <p className="text-xs text-muted-foreground">Welcome back,</p>
+              <p
+                className="truncate text-xl font-bold text-foreground"
+                style={{ fontFamily: 'var(--font-display)' }}
+              >
+                {name.split(' ')[0]}
+              </p>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 {hostelLocation && (
                   <span className="inline-flex items-center gap-1">
@@ -90,12 +106,12 @@ export function TenantDashboardPage() {
                   </span>
                 )}
                 {roomNo ? (
-                  <span className="rounded-full bg-accent/10 px-2.5 py-1 font-medium text-accent">
+                  <span className="rounded-full bg-primary/8 border border-primary/15 px-2.5 py-1 font-semibold text-primary text-[11px]">
                     Room {String(roomNo)}
                   </span>
                 ) : (
-                  <span className="font-medium text-amber-600">
-                    Room assignment pending
+                  <span className="rounded-full bg-amber-50 border border-amber-200 px-2.5 py-1 font-semibold text-amber-700 text-[11px]">
+                    Room pending
                   </span>
                 )}
               </div>
@@ -110,10 +126,15 @@ export function TenantDashboardPage() {
       {!hasRequiredDocuments(profileDocs as never[], profileType) && (
         <Link
           to="/tenant/profile#documents"
-          className="block rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+          className="block rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5 hover:border-amber-300 transition-colors"
         >
-          <p className="font-semibold">Identity documents pending</p>
-          <p className="mt-1 text-xs">Upload your documents after activation so the hostel can complete verification.</p>
+          <div className="flex items-start gap-3">
+            <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0 mt-1.5" />
+            <div>
+              <p className="text-sm font-semibold text-amber-800">Identity documents pending</p>
+              <p className="mt-0.5 text-xs text-amber-700 leading-relaxed">Upload your documents so the hostel can complete verification. &rarr; Tap to add now.</p>
+            </div>
+          </div>
         </Link>
       )}
 
@@ -122,23 +143,26 @@ export function TenantDashboardPage() {
       {advance && (
         <Link
           to="/tenant/financials"
-          className="block rounded-xl border border-border bg-card p-4 hover:border-accent/40 transition-colors"
+          className="block rounded-2xl border border-border bg-card p-4 hover:border-accent/40 hover:shadow-sm transition-all"
         >
-          <p className="text-xs text-muted-foreground uppercase font-semibold">Security deposit</p>
-          <div className="mt-2 grid grid-cols-3 gap-2 text-center text-sm">
-            <div>
-              <p className="text-muted-foreground text-[10px]">Deposited</p>
-              <p className="font-bold">{fmt(depositTotal || advanceBalance)}</p>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Security deposit</p>
+            <span className="text-xs text-accent font-semibold">&rarr; View details</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-xl bg-secondary py-2.5 px-2">
+              <p className="text-muted-foreground text-[10px] mb-0.5">Paid</p>
+              <p className="text-sm font-bold text-foreground">{fmt(depositTotal || advanceBalance)}</p>
             </div>
             {adjustments > 0 && (
-              <div>
-                <p className="text-muted-foreground text-[10px]">Adjustments</p>
-                <p className="font-bold">{fmt(adjustments)}</p>
+              <div className="rounded-xl bg-secondary py-2.5 px-2">
+                <p className="text-muted-foreground text-[10px] mb-0.5">Used</p>
+                <p className="text-sm font-bold text-foreground">{fmt(adjustments)}</p>
               </div>
             )}
-            <div>
-              <p className="text-muted-foreground text-[10px]">Refundable</p>
-              <p className="font-bold text-accent">{fmt(advanceBalance)}</p>
+            <div className="rounded-xl bg-accent/8 border border-accent/15 py-2.5 px-2">
+              <p className="text-accent/70 text-[10px] mb-0.5">Refundable</p>
+              <p className="text-sm font-bold text-accent">{fmt(advanceBalance)}</p>
             </div>
           </div>
         </Link>
@@ -160,7 +184,7 @@ export function TenantDashboardPage() {
         <button
           type="button"
           onClick={() => tenantService.requestReactivation()}
-          className="w-full py-3 rounded-xl border border-accent text-accent font-semibold text-sm"
+          className="w-full py-3.5 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm active:scale-[0.98] transition-transform shadow-sm"
         >
           Request reactivation
         </button>
