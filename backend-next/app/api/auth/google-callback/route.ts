@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/auth";
 import { authService } from "@/lib/services/auth-service";
+import { ACCESS_TOKEN_MAX_AGE_SECONDS, getSessionCookieOptions, TENANT_REFRESH_DAYS } from "@/lib/services/session-lifecycle-service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,27 +18,20 @@ export async function POST(req: NextRequest) {
       return apiError("Missing authorization code", "VALIDATION_ERROR", 400);
     }
 
-    const loginResult = await authService.googleLogin(code, redirect_uri);
+    const loginResult = await authService.googleLogin(code, redirect_uri, {
+      ipAddress: req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip"),
+      userAgent: req.headers.get("user-agent"),
+    });
 
     const { refresh_token, ...jsonResponse } = loginResult;
     const response = NextResponse.json(jsonResponse, { status: 200 });
 
-    const isProd = process.env.NODE_ENV === "production";
-
     response.cookies.set("hms_session", loginResult.access_token, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: isProd ? "none" : "lax",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-      path: "/",
+      ...getSessionCookieOptions(ACCESS_TOKEN_MAX_AGE_SECONDS),
     });
 
     response.cookies.set("hms_refresh_token", refresh_token, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: isProd ? "none" : "lax",
-      maxAge: 60 * 60 * 24 * 30, // 30 days
-      path: "/",
+      ...getSessionCookieOptions(60 * 60 * 24 * TENANT_REFRESH_DAYS),
     });
 
     return response;

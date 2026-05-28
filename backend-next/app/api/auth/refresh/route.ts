@@ -2,115 +2,112 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import { randomUUID } from "crypto";
-import { apiResponse, apiError } from "@/lib/auth";
+import { apiError, generateToken } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { generateToken, generateRefreshToken, hashToken } from "@/lib/auth";
+import {
+  ACCESS_TOKEN_MAX_AGE_SECONDS,
+  getSessionCookieOptions,
+  sessionLifecycleService,
+  TENANT_REFRESH_DAYS,
+} from "@/lib/services/session-lifecycle-service";
+import { getClientIp } from "@/lib/security/api-guard";
+
+function sessionError(reason: string) {
+  if (reason === "inactive") {
+    return apiError(
+      "You were signed out because your account was inactive for more than 30 minutes.",
+      "SESSION_INACTIVE",
+      401,
+    );
+  }
+  if (reason === "absolute_expired") {
+    return apiError(
+      "Your secure session reached its maximum duration. Please sign in again.",
+      "SESSION_MAX_AGE_REACHED",
+      401,
+    );
+  }
+  if (reason === "reused") {
+    return apiError(
+      "We detected unusual session activity. Please sign in again to protect your account.",
+      "SESSION_REUSE_DETECTED",
+      403,
+    );
+  }
+  if (reason === "disabled") {
+    return apiError("Account is disabled", "FORBIDDEN", 403);
+  }
+  return apiError("Your secure session has expired. Please sign in again.", "UNAUTHORIZED", 401);
+}
 
 export async function POST(req: NextRequest) {
   try {
     const refreshToken = req.cookies.get("hms_refresh_token")?.value;
 
     if (!refreshToken) {
-      return apiError("No refresh token provided", "UNAUTHORIZED", 401);
+      return apiError("Your secure session has expired. Please sign in again.", "UNAUTHORIZED", 401);
     }
 
-    const tokenHash = hashToken(refreshToken);
-
-    const tokenRecord = await prisma.refresh_tokens.findUnique({
-      where: { token_hash: tokenHash },
-      include: { profiles: true },
+    const rotation = await sessionLifecycleService.rotateRefreshToken(refreshToken, {
+      ipAddress: getClientIp(req),
+      userAgent: req.headers.get("user-agent"),
     });
 
-    if (!tokenRecord) {
-      return apiError("Invalid refresh token", "UNAUTHORIZED", 401);
+    if (!rotation.ok) {
+      const response = sessionError(rotation.reason);
+      response.cookies.set("hms_session", "", { httpOnly: true, expires: new Date(0), path: "/" });
+      response.cookies.set("hms_refresh_token", "", { httpOnly: true, expires: new Date(0), path: "/" });
+      return response;
     }
 
-    // SECURITY: Refresh Token Reuse Detection
-    // We mark consumed tokens by setting their expires_at to 1970-01-01T00:00:00.000Z.
-    // If someone tries to use a consumed token, we assume compromise.
-    if (tokenRecord.expires_at.getTime() === 0) {
-      console.warn(`[SECURITY] Refresh token reuse detected for user ${tokenRecord.profiles.id}`);
-      await prisma.refresh_tokens.deleteMany({ where: { user_id: tokenRecord.profiles.id } });
-      return apiError("Session compromised. Please log in again.", "FORBIDDEN", 403);
-    }
-
-    if (new Date() > tokenRecord.expires_at) {
-      // Delete normally expired token
-      await prisma.refresh_tokens.delete({ where: { id: tokenRecord.id } });
-      return apiError("Refresh token expired", "UNAUTHORIZED", 401);
-    }
-
-    if (!tokenRecord.profiles.is_active) {
-      return apiError("Account is disabled", "FORBIDDEN", 403);
-    }
-
-    let effectiveOwnerId = tokenRecord.profiles.owner_id;
-    if (tokenRecord.profiles.role === "OWNER" && (!effectiveOwnerId || effectiveOwnerId.trim() === "")) {
-      console.warn("[auth.refresh] repairing missing owner_id for OWNER", { user_id: tokenRecord.profiles.id });
+    let effectiveOwnerId = rotation.profile.owner_id;
+    if (rotation.profile.role === "OWNER" && (!effectiveOwnerId || effectiveOwnerId.trim() === "")) {
+      console.warn("[auth.refresh] repairing missing owner_id for OWNER", { user_id: rotation.profile.id });
       const updated = await prisma.profile.update({
-        where: { id: tokenRecord.profiles.id },
-        data: { owner_id: tokenRecord.profiles.id },
+        where: { id: rotation.profile.id },
+        data: { owner_id: rotation.profile.id },
         select: { owner_id: true },
       });
       effectiveOwnerId = updated.owner_id;
     }
 
-    if (tokenRecord.profiles.role === "OWNER" && !effectiveOwnerId) {
+    if (rotation.profile.role === "OWNER" && !effectiveOwnerId) {
       return apiError("Invalid OWNER: missing owner_id", "UNAUTHORIZED", 401);
     }
 
-    // Generate new tokens (Rotation)
+    let tenantId: string | null = null;
+    if (rotation.profile.role === "TENANT") {
+      const tenant = await prisma.tenants.findUnique({
+        where: { profile_id: rotation.profile.id },
+        select: { id: true },
+      });
+      tenantId = tenant?.id || null;
+    }
+
     const newAccessToken = await generateToken({
-      sub: tokenRecord.profiles.id,
-      role: tokenRecord.profiles.role,
-      email: tokenRecord.profiles.email,
+      sub: rotation.profile.id,
+      role: rotation.profile.role,
+      email: rotation.profile.email,
       owner_id: effectiveOwnerId || null,
+      tenant_id: tenantId,
+      sid: rotation.sessionId,
     });
 
-    const newRefreshToken = generateRefreshToken();
-    const newRefreshTokenHash = hashToken(newRefreshToken);
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30); // 30 days expiry
-
-    // Consume old token (set to epoch) and create new one
-    await prisma.$transaction([
-      prisma.refresh_tokens.update({
-        where: { id: tokenRecord.id },
-        data: { expires_at: new Date(0) }
-      }),
-      prisma.refresh_tokens.create({
-        data: {
-          id: randomUUID(),
-          user_id: tokenRecord.profiles.id,
-          token_hash: newRefreshTokenHash,
-          expires_at: expiresAt,
-        },
-      }),
-    ]);
-
-    const response = NextResponse.json({ access_token: newAccessToken }, { status: 200 });
-
-    const isProd = process.env.NODE_ENV === "production";
+    const response = NextResponse.json({
+      access_token: newAccessToken,
+      refreshed_at: new Date().toISOString(),
+    }, { status: 200 });
 
     response.cookies.set("hms_session", newAccessToken, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: isProd ? "none" : "lax",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-      path: "/",
+      ...getSessionCookieOptions(ACCESS_TOKEN_MAX_AGE_SECONDS),
     });
 
-    response.cookies.set("hms_refresh_token", newRefreshToken, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: isProd ? "none" : "lax",
-      maxAge: 60 * 60 * 24 * 30, // 30 days
-      path: "/",
+    response.cookies.set("hms_refresh_token", rotation.refreshToken, {
+      ...getSessionCookieOptions(60 * 60 * 24 * TENANT_REFRESH_DAYS),
     });
 
     return response;
   } catch (error: any) {
-    return apiError(error.message || "Failed to refresh token", "INTERNAL_ERROR", 500);
+    return apiError(error.message || "Failed to refresh secure session", "INTERNAL_ERROR", 500);
   }
 }

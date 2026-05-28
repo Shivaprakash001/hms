@@ -154,16 +154,39 @@ Why this exists: rooms, tenants, expenses, move-outs, and billing should not exe
 |---|---|---|
 | Login | `/auth/login` | Returns access token and sets refresh cookie. |
 | Current user | `/auth/me` | Restores user session on load. |
-| Refresh | `/auth/refresh` | Rotates access token after 401. |
+| Activity | `/auth/activity` | Updates server-side last activity for active sessions. |
+| Refresh | `/auth/refresh` | Rotates refresh token and issues a short access token. |
 | Logout | `/auth/logout` | Clears server and client session state. |
+| Logout all | `/auth/logout-all` | Revokes every session for the current user. |
 
 **How this works:**
 1. `AuthProvider` reads `ownerUser` or `tenantUser` from local storage during initialization.
 2. Protected shells can paint immediately with the stored user.
 3. `/auth/me` validates the token in the background.
-4. Axios attaches the access token from `ownerUser` or `tenantUser`.
-5. A 401 response triggers a refresh request.
-6. Refresh failure clears local storage and redirects to `/login`.
+4. The browser sends httpOnly session cookies with API requests.
+5. Axios stores access tokens only in memory after login or refresh.
+6. A 401 response triggers a refresh request.
+7. Refresh failure clears local storage and shows session-expiry UX.
+
+## Session lifecycle flow
+
+| Rule | Code | Behavior |
+|---|---|---|
+| Access token | `generateToken` | Expires after 20 minutes. |
+| Refresh token | `refresh_tokens.token_hash` | Stored hashed in PostgreSQL only. |
+| Refresh cookie | `hms_refresh_token` | Stored as secure httpOnly `SameSite=Lax` cookie. |
+| Inactivity | `last_activity_at` | Ends session after 30 minutes idle. |
+| Owner maximum | `absolute_expires_at` | Ends owner and admin sessions after 12 hours. |
+| Replay detection | `revoked_at` and `rotated_at` | Revokes session when a used refresh token returns. |
+
+Why this exists: hostel financial data needs revocable server-side sessions, not only frontend timers.
+
+**How this works:**
+1. Login creates a refresh-token row with `session_id`, device, IP, and activity time.
+2. Refresh validates idle time, absolute expiry, revocation, and account status.
+3. Refresh rotates the cookie token and revokes the previous token row.
+4. Suspicious reuse revokes the session and asks the user to sign in again.
+5. Frontend activity pings keep active sessions alive without blocking first paint.
 
 ## Frontend render performance flow
 

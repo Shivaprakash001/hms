@@ -99,3 +99,13 @@ Existing business services still execute most jobs directly.
 1. The queue layer can enqueue, claim, retry, and dead-letter jobs.
 2. Current cron services still own business correctness.
 3. Move one job type at a time after idempotency tests exist.
+
+## Session hardening rollout requires migration
+
+Session lifecycle fields now extend `refresh_tokens`.
+Production must apply the migration before deploying the auth routes.
+
+**How this works:**
+1. New logins write `session_id`, `last_activity_at`, `absolute_expires_at`, and revocation metadata.
+2. Old refresh-token rows remain readable because new fields are nullable.
+3. Full protection applies after users rotate into new sessions.

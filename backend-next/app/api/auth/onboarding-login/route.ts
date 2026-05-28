@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiResponse, apiError } from "@/lib/auth";
 import { authService } from "@/lib/services/auth-service";
 import { rateLimitService } from "@/lib/services/rate-limit-service";
+import { ACCESS_TOKEN_MAX_AGE_SECONDS, getSessionCookieOptions, TENANT_REFRESH_DAYS } from "@/lib/services/session-lifecycle-service";
 import { z } from "zod";
 
 const OnboardingLoginSchema = z.object({
@@ -56,7 +57,10 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      const loginResult = await authService.loginWithPhone(phone, password);
+      const loginResult = await authService.loginWithPhone(phone, password, {
+        ipAddress,
+        userAgent,
+      });
 
       await rateLimitService.recordAttempt(
         phone,
@@ -70,22 +74,12 @@ export async function POST(req: NextRequest) {
 
       const response = NextResponse.json(jsonResponse, { status: 200 });
 
-      const isProd = process.env.NODE_ENV === "production";
-
       response.cookies.set("hms_session", jsonResponse.access_token, {
-        httpOnly: true,
-        secure: isProd,
-        sameSite: isProd ? "none" : "lax",
-        maxAge: 60 * 60 * 24 * 7,
-        path: "/",
+        ...getSessionCookieOptions(ACCESS_TOKEN_MAX_AGE_SECONDS),
       });
 
       response.cookies.set("hms_refresh_token", refresh_token, {
-        httpOnly: true,
-        secure: isProd,
-        sameSite: isProd ? "none" : "lax",
-        maxAge: 60 * 60 * 24 * 30,
-        path: "/",
+        ...getSessionCookieOptions(60 * 60 * 24 * TENANT_REFRESH_DAYS),
       });
 
       return response;

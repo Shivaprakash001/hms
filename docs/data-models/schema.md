@@ -1117,8 +1117,15 @@ refresh_tokens represents a persisted HMS domain record.
 |---|---|---|---|
 | id | String | yes | Primary identifier. |
 | user_id | String | yes | Foreign key or scoped identifier. |
+| session_id | String? | no | Groups rotated refresh tokens into one login session. |
 | token_hash | String | yes | Domain field persisted by the application. |
 | expires_at | DateTime | yes | Domain field persisted by the application. |
+| absolute_expires_at | DateTime? | no | Maximum allowed session end time. |
+| last_activity_at | DateTime | no | Last trusted server-side activity time. Has a database default. |
+| revoked_at | DateTime? | no | Timestamp when this refresh token or session was revoked. |
+| rotated_at | DateTime? | no | Timestamp when this refresh token was exchanged for a new token. |
+| device_info | String? | no | User-agent snapshot for session review and audit. |
+| ip_address | String? | no | IP snapshot captured when the session token was issued. |
 | created_at | DateTime | no | Creation timestamp. Has a database default. |
 | profiles | profile | yes | Domain field persisted by the application. Prisma relation field. |
 
@@ -1126,9 +1133,9 @@ refresh_tokens represents a persisted HMS domain record.
 - relates to profile through profiles.
 
 **How this works:**
-1. The database stores this record with the fields listed above.
-2. Backend services apply business rules before creating or changing it.
-3. UI screens receive normalized versions through API routes.
+1. Login creates a session group and stores only a hashed refresh token.
+2. Refresh rotates the token by revoking the old row and creating a new row.
+3. Inactivity, absolute expiry, and suspicious reuse revoke the session server-side.
 
 ## reminder_logs
 
@@ -2242,4 +2249,3 @@ TenantPolicyAcceptance represents a persisted HMS domain record.
 1. The database stores this record with the fields listed above.
 2. Backend services apply business rules before creating or changing it.
 3. UI screens receive normalized versions through API routes.
-

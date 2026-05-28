@@ -7,6 +7,7 @@ import { authService } from "@/lib/services/auth-service";
 import { LoginSchema } from "@/lib/validators";
 import { rateLimitService } from "@/lib/services/rate-limit-service";
 import { getClientIp } from "@/lib/security/api-guard";
+import { ACCESS_TOKEN_MAX_AGE_SECONDS, getSessionCookieOptions, TENANT_REFRESH_DAYS } from "@/lib/services/session-lifecycle-service";
 
 
 /**
@@ -40,7 +41,10 @@ export async function POST(req: NextRequest) {
 
     let loginResult: Awaited<ReturnType<typeof authService.login>>;
     try {
-      loginResult = await authService.login(email, password);
+      loginResult = await authService.login(email, password, {
+        ipAddress: ip,
+        userAgent: req.headers.get("user-agent"),
+      });
     } catch (loginErr: any) {
       // Record failed attempt before re-throwing
       await rateLimitService.recordAttempt(email, "REGULAR", false, ip, req.headers.get("user-agent") ?? undefined, loginErr?.message);
@@ -58,23 +62,13 @@ export async function POST(req: NextRequest) {
       ...jsonResponse
     }, { status: 200 });
 
-    const isProd = process.env.NODE_ENV === "production";
-
     response.cookies.set("hms_session", jsonResponse.access_token, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: isProd ? "none" : "lax",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-      path: "/",
+      ...getSessionCookieOptions(ACCESS_TOKEN_MAX_AGE_SECONDS),
     });
 
     // Set HTTP-only Cookie for refresh token (Prevents XSS)
     response.cookies.set("hms_refresh_token", refresh_token, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: isProd ? "none" : "lax",
-      maxAge: 60 * 60 * 24 * 30, // 30 days
-      path: "/",
+      ...getSessionCookieOptions(60 * 60 * 24 * TENANT_REFRESH_DAYS),
     });
 
     console.log(`[auth.login] Login successful for ${email}`);

@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@lib/auth";
 import { prisma } from "@lib/db";
+import { sessionLifecycleService } from "@/lib/services/session-lifecycle-service";
 
 
 export async function GET(req: NextRequest) {
@@ -11,6 +12,17 @@ export async function GET(req: NextRequest) {
   if (!session) return apiError("Unauthorized", "UNAUTHORIZED", 401);
 
   try {
+    if (session.sid) {
+      const touched = await sessionLifecycleService.touchSession(session.sid, session.sub);
+      if (!touched) {
+        return apiError(
+          "Your secure session has expired. Please sign in again.",
+          "SESSION_EXPIRED",
+          401,
+        );
+      }
+    }
+
     const profile = await prisma.profile.findUnique({
       where: { id: session.sub },
       select: {

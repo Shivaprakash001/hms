@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { hashToken } from "@/lib/auth";
+import { sessionLifecycleService } from "@/lib/services/session-lifecycle-service";
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,9 +13,13 @@ export async function POST(req: NextRequest) {
     if (refreshToken) {
       console.log("[auth.logout] Clearing refresh token session");
       const tokenHash = hashToken(refreshToken);
-      await prisma.refresh_tokens.deleteMany({
-        where: { token_hash: tokenHash }
+      const tokenRecord = await prisma.refresh_tokens.findUnique({
+        where: { token_hash: tokenHash },
+        select: { session_id: true, user_id: true },
       });
+      if (tokenRecord) {
+        await sessionLifecycleService.revokeSession(tokenRecord.session_id || undefined, tokenRecord.user_id);
+      }
     }
 
     const response = NextResponse.json({ success: true });

@@ -1,6 +1,6 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import api from '@lib/api-client';
+import api, { clearAccessToken, setAccessToken } from '@lib/api-client';
 import { queryClient } from '@lib/queryClient';
 
 export interface AuthUser {
@@ -21,7 +21,7 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<AuthUser>;
   loginWithGoogle: (code: string, redirectUri: string) => Promise<AuthUser>;
   updateUser: (patch: Partial<AuthUser>) => void;
-  logout: () => void | Promise<void>;
+  logout: (redirect?: boolean) => void | Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -46,11 +46,27 @@ const getApiErrorMessage = (error: unknown): string | null => {
 };
 
 const clearSessionScopedStorage = () => {
+  clearAccessToken();
   localStorage.removeItem('tenantUser');
   localStorage.removeItem('ownerUser');
   localStorage.removeItem('hms_onboarding_step');
   localStorage.removeItem('sri_adithya_onboarding_complete');
   sessionStorage.clear();
+};
+
+const SESSION_WARNING_MS = 25 * 60 * 1000;
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
+const ACTIVITY_PING_MS = 4 * 60 * 1000;
+
+const persistUser = (user: AuthUser) => {
+  const safeUser = { ...user };
+  delete safeUser.token;
+  const key =
+    normalizeRole(safeUser.role) === 'owner' || normalizeRole(safeUser.role) === 'admin'
+      ? 'ownerUser'
+      : 'tenantUser';
+  localStorage.setItem(key, JSON.stringify(safeUser));
+  localStorage.removeItem(key === 'ownerUser' ? 'tenantUser' : 'ownerUser');
 };
 
 const readStoredUser = (): AuthUser | null => {
@@ -71,10 +87,13 @@ const readStoredUser = (): AuthUser | null => {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => readStoredUser());
   const [loading, setLoading] = useState(false);
+  const [showIdleWarning, setShowIdleWarning] = useState(false);
+  const [expiredMessage, setExpiredMessage] = useState<string | null>(null);
+  const idleWarningRef = useRef(false);
   const location = useLocation();
   const navigate = useNavigate();
 
-  const logout = async () => {
+  const logout = async (redirect = true) => {
     try {
       await api.post('/auth/logout');
     } catch {
@@ -83,18 +102,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     queryClient.clear();
     clearSessionScopedStorage();
-    navigate('/login', { replace: true });
+    if (redirect) navigate('/login', { replace: true });
   };
+
+  useEffect(() => {
+    idleWarningRef.current = showIdleWarning;
+  }, [showIdleWarning]);
 
   const updateUser = (patch: Partial<AuthUser>) => {
     setUser((current) => {
       if (!current) return current;
       const next = { ...current, ...patch };
-      const key =
-        normalizeRole(next.role) === 'owner' || normalizeRole(next.role) === 'admin'
-          ? 'ownerUser'
-          : 'tenantUser';
-      localStorage.setItem(key, JSON.stringify(next));
+      persistUser(next);
       return next;
     });
   };
@@ -113,7 +132,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const initAuth = async () => {
       const storedData = readStoredUser();
 
-      if (storedData?.token) {
+      if (storedData) {
         try {
           const response = await api.get('/auth/me');
           const updatedUser: AuthUser = {
@@ -127,12 +146,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             is_profile_completed: response.data.is_profile_completed,
           };
           setUser(updatedUser);
-          const key =
-            normalizeRole(updatedUser.role) === 'owner' ||
-            normalizeRole(updatedUser.role) === 'admin'
-              ? 'ownerUser'
-              : 'tenantUser';
-          localStorage.setItem(key, JSON.stringify(updatedUser));
+          persistUser(updatedUser);
         } catch (error: unknown) {
           const status = (error as { response?: { status?: number } })?.response?.status;
           if (status === 401) {
@@ -162,6 +176,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { access_token, role, name, user_id, owner_id, tenant_id, hostel_id, is_profile_completed } =
         response.data;
       const normalizedRole = normalizeRole(role);
+      setAccessToken(access_token);
       const userData: AuthUser = {
         email: normalizedEmail,
         role: normalizedRole,
@@ -171,17 +186,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         tenant_id,
         hostel_id,
         is_profile_completed,
-        token: access_token,
       };
       setUser(userData);
-
-      if (normalizedRole === 'owner' || normalizedRole === 'admin') {
-        localStorage.setItem('ownerUser', JSON.stringify(userData));
-        localStorage.removeItem('tenantUser');
-      } else {
-        localStorage.setItem('tenantUser', JSON.stringify(userData));
-        localStorage.removeItem('ownerUser');
-      }
+      persistUser(userData);
 
       return userData;
     } catch (error: unknown) {
@@ -205,6 +212,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { access_token, role, name, user_id, owner_id, tenant_id, hostel_id, is_profile_completed } =
         response.data;
       const normalizedRole = normalizeRole(role);
+      setAccessToken(access_token);
       const userData: AuthUser = {
         role: normalizedRole,
         name,
@@ -213,17 +221,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         tenant_id,
         hostel_id,
         is_profile_completed,
-        token: access_token,
       };
       setUser(userData);
-
-      if (normalizedRole === 'owner' || normalizedRole === 'admin') {
-        localStorage.setItem('ownerUser', JSON.stringify(userData));
-        localStorage.removeItem('tenantUser');
-      } else {
-        localStorage.setItem('tenantUser', JSON.stringify(userData));
-        localStorage.removeItem('ownerUser');
-      }
+      persistUser(userData);
 
       return userData;
     } catch (error: unknown) {
@@ -232,10 +232,173 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  useEffect(() => {
+    if (!user) return;
+
+    let warningTimer: number | undefined;
+    let logoutTimer: number | undefined;
+    let lastPing = 0;
+    let lastReset = 0;
+
+    const clearTimers = () => {
+      window.clearTimeout(warningTimer);
+      window.clearTimeout(logoutTimer);
+    };
+
+    const pingActivity = () => {
+      const now = Date.now();
+      if (now - lastPing < ACTIVITY_PING_MS) return;
+      lastPing = now;
+      api.post('/auth/activity').catch(() => {
+        /* response interceptor handles expired sessions */
+      });
+    };
+
+    const resetTimers = () => {
+      setShowIdleWarning(false);
+      clearTimers();
+      warningTimer = window.setTimeout(() => setShowIdleWarning(true), SESSION_WARNING_MS);
+      logoutTimer = window.setTimeout(() => {
+        setExpiredMessage(
+          'You were signed out because your account was inactive for more than 30 minutes.',
+        );
+        logout(false);
+      }, SESSION_TIMEOUT_MS);
+      pingActivity();
+    };
+
+    const onActivity = () => {
+      const now = Date.now();
+      if (!idleWarningRef.current && now - lastReset < 10_000) {
+        pingActivity();
+        return;
+      }
+      lastReset = now;
+      resetTimers();
+    };
+    const onExpired = (event: Event) => {
+      const detail = (event as CustomEvent<{ message?: string }>).detail;
+      setExpiredMessage(
+        detail?.message ||
+          'You were signed out because your secure session ended. Please sign in again.',
+      );
+      setUser(null);
+      queryClient.clear();
+      clearSessionScopedStorage();
+    };
+
+    const events = ['mousemove', 'keydown', 'touchstart', 'pointerdown', 'visibilitychange'];
+    events.forEach((eventName) => window.addEventListener(eventName, onActivity, { passive: true }));
+    window.addEventListener('hms:session-expired', onExpired);
+    resetTimers();
+
+    return () => {
+      clearTimers();
+      events.forEach((eventName) => window.removeEventListener(eventName, onActivity));
+      window.removeEventListener('hms:session-expired', onExpired);
+    };
+  }, [user, location.pathname]);
+
+  const staySignedIn = async () => {
+    setShowIdleWarning(false);
+    try {
+      await api.post('/auth/activity');
+    } catch {
+      /* response interceptor handles expired sessions */
+    }
+  };
+
   return (
     <AuthContext.Provider value={{ user, login, loginWithGoogle, updateUser, logout, loading }}>
       {children}
+      {showIdleWarning && user && (
+        <SessionSecurityModal
+          title="You’ll be signed out soon"
+          message="You have been inactive for a while. For your security, this session will end in 5 minutes."
+          details={[
+            'This helps protect payment information.',
+            'Tenant records stay protected on shared devices.',
+            'Financial activity requires an active session.',
+          ]}
+          primaryLabel="Stay signed in"
+          secondaryLabel="Sign out"
+          onPrimary={staySignedIn}
+          onSecondary={() => logout()}
+        />
+      )}
+      {expiredMessage && !user && (
+        <SessionSecurityModal
+          title="Session expired for your security"
+          message={expiredMessage}
+          details={[
+            'This helps protect payment information.',
+            'Tenant records stay private.',
+            'Financial activity stays secure.',
+          ]}
+          primaryLabel="Sign in again"
+          secondaryLabel="Return to homepage"
+          onPrimary={() => {
+            setExpiredMessage(null);
+            navigate('/login', { replace: true, state: { sessionExpired: true } });
+          }}
+          onSecondary={() => {
+            setExpiredMessage(null);
+            navigate('/', { replace: true });
+          }}
+        />
+      )}
     </AuthContext.Provider>
+  );
+}
+
+function SessionSecurityModal({
+  title,
+  message,
+  details,
+  primaryLabel,
+  secondaryLabel,
+  onPrimary,
+  onSecondary,
+}: {
+  title: string;
+  message: string;
+  details: string[];
+  primaryLabel: string;
+  secondaryLabel: string;
+  onPrimary: () => void;
+  onSecondary: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 px-4 pb-4 sm:items-center sm:pb-0">
+      <div className="w-full max-w-md rounded-2xl border border-border bg-card p-5 shadow-xl">
+        <h2 className="text-lg font-bold text-foreground">{title}</h2>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">{message}</p>
+        <div className="mt-4 space-y-2 rounded-xl bg-muted/40 p-3">
+          {details.map((detail) => (
+            <div key={detail} className="flex gap-2 text-xs text-foreground">
+              <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
+              <span>{detail}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-5 grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={onSecondary}
+            className="rounded-xl border border-border px-4 py-3 text-sm font-semibold text-foreground"
+          >
+            {secondaryLabel}
+          </button>
+          <button
+            type="button"
+            onClick={onPrimary}
+            className="rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-accent-foreground"
+          >
+            {primaryLabel}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -1,9 +1,15 @@
 import { prisma, supabase } from "../db";
-import { verifyPassword, hashPassword, generateToken, generateRefreshToken, hashToken } from "../auth";
+import { verifyPassword, hashPassword, generateToken } from "../auth";
 import { z } from "zod";
 import { LoginSchema } from "../validators";
 import { randomUUID } from "crypto";
 import { getGoogleRedirectUri } from "../config/domains";
+import { sessionLifecycleService } from "./session-lifecycle-service";
+
+type AuthSessionMeta = {
+  ipAddress?: string | null;
+  userAgent?: string | null;
+};
 
 export class AuthService {
   private getGoogleCodeRedirectUri(redirectUri?: string) {
@@ -35,7 +41,7 @@ export class AuthService {
     }
   }
 
-  async login(email: string, password: string) {
+  async login(email: string, password: string, meta: AuthSessionMeta = {}) {
     const normalizedEmail = email.trim().toLowerCase();
 
     const profile = await prisma.profile.findUnique({
@@ -88,31 +94,20 @@ export class AuthService {
       throw new Error("UNAUTHORIZED: Invalid OWNER: missing owner_id");
     }
 
+    const session = await sessionLifecycleService.createSession(profile, meta);
+
     const token = await generateToken({
       sub: profile.id,
       role: profile.role,
       email: profile.email,
       owner_id: effectiveOwnerId || null,
       tenant_id: tenantId,
-    });
-
-    const refreshToken = generateRefreshToken();
-    const refreshTokenHash = hashToken(refreshToken);
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30); // 30 days expiry
-
-    await prisma.refresh_tokens.create({
-      data: {
-        id: randomUUID(),
-        user_id: profile.id,
-        token_hash: refreshTokenHash,
-        expires_at: expiresAt,
-      },
+      sid: session.sessionId,
     });
 
     return {
       access_token: token,
-      refresh_token: refreshToken,
+      refresh_token: session.refreshToken,
       token_type: "bearer",
       role: profile.role,
       name: profile.name,
@@ -123,7 +118,7 @@ export class AuthService {
     };
   }
 
-  async loginWithPhone(phone: string, password: string) {
+  async loginWithPhone(phone: string, password: string, meta: AuthSessionMeta = {}) {
     const normalizedPhone = phone.trim();
 
     const profile = await prisma.profile.findFirst({
@@ -167,31 +162,20 @@ export class AuthService {
       throw new Error("FORBIDDEN: Account is not active");
     }
 
+    const session = await sessionLifecycleService.createSession(profile, meta);
+
     const token = await generateToken({
       sub: profile.id,
       role: profile.role,
       email: profile.email,
       owner_id: profile.owner_id || null,
       tenant_id: tenant.id,
-    });
-
-    const refreshToken = generateRefreshToken();
-    const refreshTokenHash = hashToken(refreshToken);
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30);
-
-    await prisma.refresh_tokens.create({
-      data: {
-        id: randomUUID(),
-        user_id: profile.id,
-        token_hash: refreshTokenHash,
-        expires_at: expiresAt,
-      },
+      sid: session.sessionId,
     });
 
     return {
       access_token: token,
-      refresh_token: refreshToken,
+      refresh_token: session.refreshToken,
       token_type: "bearer",
       role: profile.role,
       name: profile.name,
@@ -391,7 +375,7 @@ export class AuthService {
       owner_id: session.owner_id
     };
   }
-  async googleLogin(code: string, redirectUri?: string) {
+  async googleLogin(code: string, redirectUri?: string, meta: AuthSessionMeta = {}) {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
     const effectiveRedirectUri = this.getGoogleCodeRedirectUri(redirectUri);
@@ -559,6 +543,8 @@ export class AuthService {
       throw new Error("UNAUTHORIZED: Invalid OWNER: missing owner_id");
     }
 
+    const session = await sessionLifecycleService.createSession(profile, meta);
+
     // 4. Create local JWT
     const token = await generateToken({
       sub: profile.id,
@@ -566,26 +552,12 @@ export class AuthService {
       email: profile.email,
       owner_id: effectiveOwnerId || null,
       tenant_id: tenantId,
-    });
-
-    // 5. Create refresh token (same as email login)
-    const refreshToken = generateRefreshToken();
-    const refreshTokenHash = hashToken(refreshToken);
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30);
-
-    await prisma.refresh_tokens.create({
-      data: {
-        id: randomUUID(),
-        user_id: profile.id,
-        token_hash: refreshTokenHash,
-        expires_at: expiresAt,
-      },
+      sid: session.sessionId,
     });
 
     return {
       access_token: token,
-      refresh_token: refreshToken,
+      refresh_token: session.refreshToken,
       token_type: "bearer",
       role: profile.role,
       name: profile.name,

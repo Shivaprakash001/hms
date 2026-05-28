@@ -14,6 +14,7 @@ export interface AuthPayload {
   role: string;
   owner_id?: string | null;
   tenant_id?: string | null;
+  sid?: string | null;
 }
 
 function assertOwnerPayload(payload: AuthPayload) {
@@ -27,7 +28,7 @@ export async function generateToken(payload: AuthPayload) {
   return new SignJWT(payload as any)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("1h")
+    .setExpirationTime("20m")
     .sign(JWT_SECRET);
 }
 
@@ -74,6 +75,7 @@ export async function getSession(req: NextRequest): Promise<AuthPayload | null> 
     email: userEmail || "",
     owner_id: ownerId,
     tenant_id: tenantId,
+    sid: req.headers.get("x-session-id"),
   };
 }
 

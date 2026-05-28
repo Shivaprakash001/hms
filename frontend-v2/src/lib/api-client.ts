@@ -13,17 +13,35 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+let inMemoryAccessToken: string | null = null;
+
+export const setAccessToken = (token: string | null) => {
+  inMemoryAccessToken = token;
+};
+
+export const clearAccessToken = () => {
+  inMemoryAccessToken = null;
+};
+
+const notifySessionExpired = (message?: string) => {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(
+    new CustomEvent('hms:session-expired', {
+      detail: {
+        message:
+          message ||
+          'You were signed out because your secure session ended. Please sign in again.',
+      },
+    }),
+  );
+};
+
 api.interceptors.request.use(
   (config) => {
     if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
       if (config.headers) delete config.headers['Content-Type'];
     }
-    const ownerData = localStorage.getItem('ownerUser');
-    const tenantData = localStorage.getItem('tenantUser');
-    let token: string | null = null;
-    if (ownerData) token = JSON.parse(ownerData).token;
-    else if (tenantData) token = JSON.parse(tenantData).token;
-    if (token) config.headers.Authorization = `Bearer ${token}`;
+    if (inMemoryAccessToken) config.headers.Authorization = `Bearer ${inMemoryAccessToken}`;
     return config;
   },
   (error) => Promise.reject(error),
@@ -56,24 +74,18 @@ api.interceptors.response.use(
         );
         const newAccessToken: string = refreshResponse.data.access_token;
 
-        const ownerRaw = localStorage.getItem('ownerUser');
-        const tenantRaw = localStorage.getItem('tenantUser');
-        if (ownerRaw) {
-          const parsed = JSON.parse(ownerRaw);
-          parsed.token = newAccessToken;
-          localStorage.setItem('ownerUser', JSON.stringify(parsed));
-        } else if (tenantRaw) {
-          const parsed = JSON.parse(tenantRaw);
-          parsed.token = newAccessToken;
-          localStorage.setItem('tenantUser', JSON.stringify(parsed));
-        }
+        setAccessToken(newAccessToken);
 
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
         return api(originalRequest);
-      } catch {
+      } catch (refreshError: any) {
+        clearAccessToken();
         localStorage.removeItem('ownerUser');
         localStorage.removeItem('tenantUser');
-        window.location.href = '/login';
+        notifySessionExpired(
+          refreshError?.response?.data?.error?.message ||
+            refreshError?.response?.data?.message,
+        );
         return Promise.reject(error);
       }
     }

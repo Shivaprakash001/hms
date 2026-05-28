@@ -87,6 +87,7 @@ export async function middleware(req: NextRequest) {
   requestHeaders.set("x-user-email", payload.email || "");
   if (payload.owner_id) requestHeaders.set("x-owner-id", payload.owner_id);
   if (payload.tenant_id) requestHeaders.set("x-tenant-id", payload.tenant_id);
+  if (payload.sid) requestHeaders.set("x-session-id", payload.sid);
 
   const response = NextResponse.next({
     request: { headers: requestHeaders },
