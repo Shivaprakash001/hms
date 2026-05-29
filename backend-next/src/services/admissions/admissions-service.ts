@@ -169,9 +169,10 @@ export class AdmissionsService {
         .map((room: any) => room.pricing.monthly_rent)
         .filter((value: number) => value > 0)
         .sort((a: number, b: number) => a - b)[0] || null;
+      const currentVacancyCount = safeRooms.reduce((sum: number, room: any) => sum + Number(room.available_beds || 0), 0);
 
       const siblingHostels = await prisma.hostels.findMany({
-        where: { owner_id: hostel.owner_id, is_active: true, id: { not: hostel.id } },
+        where: { owner_id: hostel.owner_id, is_active: true, admissions_enabled: true, id: { not: hostel.id } },
         include: {
           rooms: {
             where: { is_active: true },
@@ -181,7 +182,6 @@ export class AdmissionsService {
             },
           },
         },
-        take: 6,
       });
 
       const otherHostels = await Promise.all(siblingHostels.map(async (h: any) => {
@@ -204,6 +204,18 @@ export class AdmissionsService {
           distance: null,
         };
       }));
+      const ownerHostels = [
+        {
+          id: hostel.id,
+          public_slug: hostel.public_slug,
+          name: hostel.name,
+          vacancy_count: currentVacancyCount,
+          starting_price: currentStartingPrice,
+          distance: null,
+          is_current: true,
+        },
+        ...otherHostels.map((h: any) => ({ ...h, is_current: false })),
+      ];
 
       return {
         hostel: {
@@ -228,6 +240,7 @@ export class AdmissionsService {
           nearby_colleges: [],
         },
         rooms: safeRooms,
+        owner_hostels: ownerHostels,
         other_hostels: otherHostels,
       };
     }, [redisKeys.admissions.publicHostelTag(slug)]);

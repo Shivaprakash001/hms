@@ -6,14 +6,18 @@ Admissions CRM turns QR visitors into trackable leads, then into tenant invitati
 ## Screen breakdown
 - QR visit page: lets visitors explore a hostel, submit quick details, view rooms, and express interest.
 - Hostel explorer: shows availability, pricing, safety, food, rules, and other hostels by the same owner.
+- Owner hostel selector: lets visitors switch between all active hostels from the same owner.
 - Admissions CRM: shows owner lead columns by status.
+- Admission QR links: show printable QR codes for each admissions-enabled hostel.
 - Lead detail: shows parent details, activity timeline, notes, status actions, reservation action, and invitation conversion.
 
 ## Data it needs
 - Public hostel data from `GET /api/visit/:hostelSlug`.
+- Owner hostel options from the same public visit response.
 - Lead capture from `POST /api/visit/:hostelSlug/leads`.
 - Owner lead lists from `GET /api/admissions/leads`.
 - Lead detail and notes from `/api/leads/:id`.
+- Owner hostel slugs from `GET /api/owner/hostels`.
 - Room options from existing `/api/rooms`.
 
 ## Data it produces
@@ -26,6 +30,7 @@ Admissions CRM turns QR visitors into trackable leads, then into tenant invitati
 ## Key components
 - `VisitPage`: renders the public QR admission journey.
 - `AdmissionsView`: renders the owner CRM board and detail workspace.
+- `AdmissionQrPanel`: renders QR codes and visit links for hostel reception use.
 - `LeadCard`: renders a compact lead card for Kanban columns.
 - `LeadDetail`: renders parent, activity, note, reservation, and conversion actions.
 
@@ -40,15 +45,17 @@ Admissions CRM turns QR visitors into trackable leads, then into tenant invitati
 
 ## How this works (step by step)
 1. Visitor scans `/visit/:hostelSlug`.
-2. The public route fetches safe hostel and room data.
-3. Visitor submits student details without account creation.
-4. Backend creates or updates an active lead for the same hostel and phone.
-5. Visitor room actions create lead activity and update lead score.
-6. Owner opens `/admissions` and reviews leads by status.
-7. Owner adds follow-up notes or marks parent follow-up.
-8. Owner adds email and selected room before conversion.
-9. Backend calls the existing invitation service.
-10. Tenant activation later marks the connected lead as joined.
+2. The public route fetches safe hostel, room, and owner-hostel options.
+3. Visitor can switch to another hostel from the same owner.
+4. Visitor submits student details without account creation.
+5. Backend creates or updates an active lead for the selected hostel and phone.
+6. Visitor room actions create lead activity and update lead score.
+7. Owner opens `/admissions` and copies or prints the hostel QR.
+8. Owner reviews leads by status.
+9. Owner adds follow-up notes or marks parent follow-up.
+10. Owner adds email and selected room before conversion.
+11. Backend calls the existing invitation service.
+12. Tenant activation later marks the connected lead as joined.
 
 ## How to reuse this for a new client
 - Keep the lead, activity, note, and reservation models.

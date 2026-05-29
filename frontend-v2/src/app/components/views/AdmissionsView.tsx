@@ -5,6 +5,8 @@ import {
   BedDouble,
   CheckCircle2,
   ClipboardList,
+  Copy,
+  ExternalLink,
   Flame,
   Mail,
   MessageSquareText,
@@ -16,8 +18,10 @@ import {
   X,
 } from 'lucide-react';
 import { admissionsService } from '@features/admissions/api';
+import { ownerService } from '@features/owners/api';
 import { roomService } from '@features/rooms/api';
 import { queryKeys } from '@lib/queryKeys';
+import { QrCodeImage } from '@/portal/components/QrCodeImage';
 import { toast } from 'sonner';
 
 const statuses = [
@@ -86,6 +90,93 @@ function LeadCard({ lead, active, onClick }: { lead: any; active: boolean; onCli
         </p>
       )}
     </button>
+  );
+}
+
+function readHostels(payload: any) {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data?.hostels)) return payload.data.hostels;
+  if (Array.isArray(payload?.hostels)) return payload.hostels;
+  return [];
+}
+
+function AdmissionQrPanel() {
+  const { data, isLoading } = useQuery({
+    queryKey: queryKeys.owner.hostels(),
+    queryFn: ownerService.getHostels,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const hostels = readHostels(data).filter((hostel: any) => hostel.admissions_enabled !== false);
+
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+
+  const copyLink = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success('Admission QR link copied');
+    } catch {
+      toast.error('Could not copy link');
+    }
+  };
+
+  if (isLoading) {
+    return <div className="mt-4 h-28 rounded-2xl bg-muted animate-pulse" />;
+  }
+
+  if (!hostels.length) {
+    return (
+      <section className="mt-4 rounded-2xl border border-dashed border-border bg-card p-4">
+        <h2 className="text-sm font-bold">Admission QR links</h2>
+        <p className="mt-1 text-xs text-muted-foreground">Enable admissions on a hostel to generate QR links.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="mt-4 rounded-2xl border border-border bg-card p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-bold">Admission QR links</h2>
+          <p className="mt-1 text-xs text-muted-foreground">Print this QR at reception or share the visit link with parents.</p>
+        </div>
+      </div>
+      <div className="mt-3 flex gap-3 overflow-x-auto pb-1">
+        {hostels.map((hostel: any) => {
+          const slug = hostel.public_slug;
+          const url = slug ? `${origin}/visit/${slug}` : '';
+          return (
+            <div key={hostel.id} className="w-44 shrink-0 rounded-xl border border-border bg-background p-3">
+              <div className="mx-auto w-28">
+                <QrCodeImage value={url} size={180} alt={`${hostel.name} admission QR`} />
+              </div>
+              <h3 className="mt-2 truncate text-sm font-bold">{hostel.name}</h3>
+              <p className="truncate text-[11px] text-muted-foreground">{slug ? `/visit/${slug}` : 'Slug missing'}</p>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => copyLink(url)}
+                  disabled={!url}
+                  className="grid h-9 flex-1 place-items-center rounded-lg border border-border disabled:opacity-50"
+                  title="Copy QR link"
+                >
+                  <Copy className="h-4 w-4" />
+                </button>
+                <a
+                  href={url || '#'}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={`grid h-9 flex-1 place-items-center rounded-lg border border-border ${!url ? 'pointer-events-none opacity-50' : ''}`}
+                  title="Open visit page"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                </a>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -324,6 +415,8 @@ export function AdmissionsView() {
         </div>
         <p className="text-sm text-muted-foreground">Track students, parent decision makers, follow-ups, reservations, and invitation readiness.</p>
       </header>
+
+      <AdmissionQrPanel />
 
       <section className="mt-4 grid grid-cols-3 gap-2">
         {[

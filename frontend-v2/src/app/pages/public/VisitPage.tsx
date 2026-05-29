@@ -138,6 +138,20 @@ export function VisitPage() {
     () => rooms.reduce((sum: number, room: any) => sum + Number(room.available_beds || 0), 0),
     [rooms],
   );
+  const ownerHostels = useMemo(() => {
+    if (Array.isArray(data?.owner_hostels) && data.owner_hostels.length > 0) return data.owner_hostels;
+    return [
+      {
+        id: data?.hostel?.id,
+        public_slug: data?.hostel?.public_slug,
+        name: data?.hostel?.name,
+        vacancy_count: availableCount,
+        starting_price: data?.hostel?.starting_price,
+        is_current: true,
+      },
+      ...(data?.other_hostels || []).map((hostel: any) => ({ ...hostel, is_current: false })),
+    ].filter((hostel: any) => hostel.id);
+  }, [availableCount, data]);
   const heroPhoto = data?.hostel?.photos?.[0] || data?.hostel?.logo_url || fallbackPhoto;
 
   const onAction = (type: string, metadata?: any) => {
@@ -204,6 +218,47 @@ export function VisitPage() {
           </div>
         </div>
       </section>
+
+      {ownerHostels.length > 1 && (
+        <section className="mx-auto max-w-5xl px-5 py-5">
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+            <div className="flex items-center gap-2">
+              <MapPin className="h-5 w-5 text-accent" />
+              <div>
+                <h2 className="font-bold">Choose a hostel to view</h2>
+                <p className="text-xs text-muted-foreground">Compare all active hostels from this owner before sharing your details.</p>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              {ownerHostels.map((hostel: any) => {
+                const isCurrent = hostel.public_slug === data.hostel.public_slug || hostel.is_current;
+                return (
+                  <a
+                    key={hostel.id}
+                    href={isCurrent ? '#visitor-details' : `/visit/${hostel.public_slug}`}
+                    aria-current={isCurrent ? 'page' : undefined}
+                    className={`rounded-xl border p-3 active:scale-[0.99] ${
+                      isCurrent ? 'border-accent bg-accent/5' : 'border-border bg-background'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <b className="truncate">{hostel.name}</b>
+                      {isCurrent ? (
+                        <span className="rounded-full bg-accent px-2 py-1 text-[10px] font-bold text-accent-foreground">Viewing</span>
+                      ) : (
+                        <ArrowRight className="h-4 w-4 shrink-0" />
+                      )}
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {Number(hostel.vacancy_count || 0)} beds open · From {rupee(hostel.starting_price)}
+                    </p>
+                  </a>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
 
       <section id="visitor-details" className="mx-auto max-w-5xl px-5 py-6">
         <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
@@ -282,7 +337,7 @@ export function VisitPage() {
           <section className="rounded-2xl border border-border bg-card p-4">
             <div className="flex items-center gap-2">
               <MapPin className="h-5 w-5 text-accent" />
-              <h2 className="font-bold">Explore other hostels by this owner</h2>
+              <h2 className="font-bold">Other hostels by this owner</h2>
             </div>
             <div className="mt-3 grid gap-3 md:grid-cols-2">
               {data.other_hostels.map((hostel: any) => (

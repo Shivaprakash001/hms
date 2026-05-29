@@ -33,6 +33,8 @@ export async function GET(req: NextRequest) {
         state: true,
         pincode: true,
         upi_id: true,
+        public_slug: true,
+        admissions_enabled: true,
         is_active: true,
         created_at: true,
         rooms: {
@@ -65,6 +67,8 @@ export async function GET(req: NextRequest) {
         state: hostel.state,
         pincode: hostel.pincode,
         upi_id: hostel.upi_id,
+        public_slug: hostel.public_slug,
+        admissions_enabled: hostel.admissions_enabled,
         is_active: hostel.is_active,
         created_at: hostel.created_at,
         stats: {
