@@ -29,7 +29,7 @@
 
 | Shell | Provider scope | Heavy code excluded from initial public load |
 |---|---|---|
-| Public | Browser router only | Auth, dashboards, tenant portal, billing, charts |
+| Public | Browser router and public query client | Auth, dashboards, tenant portal, billing, charts |
 | Auth | Query client, Google OAuth, auth context | Owner routes, tenant routes, analytics |
 | Owner | Query client, auth context, owner guard | Public marketing pages, tenant portal shell |
 | Tenant | Query client, auth context, tenant guard | Owner dashboards, owner billing analytics |
@@ -38,8 +38,9 @@ Why this exists: route shells keep unrelated product areas out of each other’s
 
 **How this works:**
 1. `RootProviders` only mounts the router at app startup.
-2. `AuthRouteShell`, `OwnerProviderShell`, and `TenantProviderShell` load through `React.lazy`.
-3. The browser downloads protected providers only after a matching route is visited.
+2. `PublicShell` mounts a lightweight query client for public visit data.
+3. `AuthRouteShell`, `OwnerProviderShell`, and `TenantProviderShell` load through `React.lazy`.
+4. The browser downloads protected providers only after a matching route is visited.
 
 ## Hostel detail feature islands
 

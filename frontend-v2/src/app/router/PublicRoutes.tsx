@@ -1,5 +1,7 @@
 import { lazy, Suspense } from 'react';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { Outlet, Route } from 'react-router-dom';
+import { queryClient } from '@lib/queryClient';
 
 const HomePage = lazy(() => import('@/app/pages/public/HomePage').then((m) => ({ default: m.HomePage })));
 const AboutPage = lazy(() => import('@/app/pages/public/AboutPage').then((m) => ({ default: m.AboutPage })));
@@ -23,9 +25,11 @@ function PublicRouteFallback() {
 
 function PublicShell() {
   return (
-    <Suspense fallback={<PublicRouteFallback />}>
-      <Outlet />
-    </Suspense>
+    <QueryClientProvider client={queryClient}>
+      <Suspense fallback={<PublicRouteFallback />}>
+        <Outlet />
+      </Suspense>
+    </QueryClientProvider>
   );
 }
 
