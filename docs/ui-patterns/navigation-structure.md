@@ -139,7 +139,8 @@ Why this exists: low-end Android devices feel slow when hidden work competes wit
 1. `OwnerRoutes` lazy-loads `OwnerProviderShell`.
 2. `OwnerProviderShell` wraps screens in `ProtectedRoute`.
 3. Hostel ID scopes workspace screens.
-4. Admissions leads use owner scope and can link back to hostel rooms.
+4. Admissions opens dashboard, pipeline, QR generator, and lead profile screens inside one route.
+5. Admissions leads use owner scope and can link back to hostel rooms.
 
 ## Tenant routes
 

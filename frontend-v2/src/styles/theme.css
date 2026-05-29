@@ -11,6 +11,17 @@
   --warm-ivory: #FFFDF5;
   --golden: #FBB040;
   --charcoal: #2C2C2A;
+  --brand-saffron: var(--saffron);
+  --brand-navy: var(--navy);
+  --pure-white: #FFFFFF;
+  --success-green: #2E7D32;
+  --alert-amber: var(--golden);
+  --danger-red: #C62828;
+  --neutral-gray: #6B6259;
+  --deep-charcoal: #1C1917;
+  --font-hero: var(--font-display);
+  --font-sans: var(--font-body);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   /* ─────────────────────────────────────────────────────────────────── */
 
   /* ── Dashboard Design Tokens (brand-aligned) ─────────────────────── */

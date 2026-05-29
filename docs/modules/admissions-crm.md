@@ -5,11 +5,14 @@ Admissions CRM turns QR visitors into trackable leads, then into tenant invitati
 
 ## Screen breakdown
 - QR visit page: lets visitors explore a hostel, submit quick details, view rooms, and express interest.
-- Hostel explorer: shows availability, pricing, safety, food, rules, and other hostels by the same owner.
+- Hostel explorer: shows availability, pricing, safety, food, facilities, rooms, and other hostels by the same owner.
+- Room detail: shows room photos, rent, included facilities, and privacy-safe roommate preview.
+- Interest confirmation: confirms room interest and offers parent sharing.
 - Owner hostel selector: lets visitors switch between all active hostels from the same owner.
-- Admissions CRM: shows owner lead columns by status.
-- Admission QR links: show printable QR codes for each admissions-enabled hostel.
-- Lead detail: shows parent details, activity timeline, notes, status actions, reservation action, and invitation conversion.
+- Owner admissions dashboard: shows KPIs, funnel bars, recent activity, quick actions, and compact QR cards.
+- Lead pipeline: shows desktop Kanban columns and mobile status tabs.
+- QR generator: shows configurable QR preview, copy action, and print action.
+- Lead profile: shows parent details, activity timeline, notes, status actions, reservation action, and invitation conversion.
 
 ## Data it needs
 - Public hostel data from `GET /api/visit/:hostelSlug`.
@@ -28,11 +31,11 @@ Admissions CRM turns QR visitors into trackable leads, then into tenant invitati
 - Tenant invitations through the existing invitation service.
 
 ## Key components
-- `VisitPage`: renders the public QR admission journey.
-- `AdmissionsView`: renders the owner CRM board and detail workspace.
+- `VisitPage`: renders the public QR admission journey, room detail, confirmation, and parent sharing screens.
+- `AdmissionsView`: renders the owner dashboard, pipeline, QR generator, and lead profile screens.
 - `AdmissionQrPanel`: renders QR codes and visit links for hostel reception use.
 - `LeadCard`: renders a compact lead card for Kanban columns.
-- `LeadDetail`: renders parent, activity, note, reservation, and conversion actions.
+- `LeadProfile`: renders parent, activity, note, reservation, and conversion actions.
 
 ## Business logic in this module
 - Student name and phone are required for lead capture.
