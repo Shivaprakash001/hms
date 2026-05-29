@@ -34,6 +34,7 @@ Admissions CRM turns QR visitors into trackable leads, then into tenant invitati
 - Email is optional during capture and required before invitation conversion.
 - Parent name, parent phone, decision maker, and parent follow-up flags are first-class CRM data.
 - Room reservations never allocate a bed.
+- Admissions reservation expiry runs once daily on Vercel Hobby.
 - Lead conversion calls the existing tenant invitation flow.
 - Lost reasons use structured categories for analytics.
 

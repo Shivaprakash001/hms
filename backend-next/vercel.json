@@ -34,7 +34,7 @@
     },
     {
       "path": "/api/cron/admissions",
-      "schedule": "*/30 * * * *"
+      "schedule": "45 18 * * *"
     }
   ]
 }
