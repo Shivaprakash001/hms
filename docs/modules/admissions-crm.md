@@ -4,8 +4,10 @@
 Admissions CRM turns QR visitors into trackable leads, then into tenant invitations. Owners can see student interest, parent decision context, activity, notes, reservations, and conversion readiness without retyping lead data.
 
 ## Screen breakdown
-- QR visit page: lets visitors explore a hostel, submit quick details, view rooms, and express interest.
-- Hostel explorer: shows availability, pricing, safety, food, facilities, rooms, and other hostels by the same owner.
+- QR welcome page: shows the hostel identity, hero photo, trust badges, and a low-friction explore CTA.
+- Quick registration sheet: collects student and parent details before the visitor enters the explorer.
+- Hostel explorer: shows availability, pricing, safety, food, facilities, gallery, rules, location, and other hostels by the same owner.
+- Room explorer: shows filterable room cards with availability, price, amenities, and interest actions.
 - Room detail: shows room photos, rent, included facilities, and privacy-safe roommate preview.
 - Interest confirmation: confirms room interest and offers parent sharing.
 - Owner hostel selector: lets visitors switch between all active hostels from the same owner.
@@ -38,9 +40,10 @@ Admissions CRM turns QR visitors into trackable leads, then into tenant invitati
 - `LeadProfile`: renders parent, activity, note, reservation, and conversion actions.
 
 **How this works:**
-1. Mobile admissions screens use smaller square tiles for KPI and status filters.
-2. Lead cards keep call and WhatsApp actions visible without tall spacing.
-3. Owners can scan the pipeline quickly on narrow phones.
+1. Visitor admissions uses separate welcome, registration, hostel explorer, room explorer, room detail, confirmation, and parent-share screens.
+2. Owner admissions screens use smaller square tiles for KPI and status filters.
+3. Lead cards keep call and WhatsApp actions visible without tall spacing.
+4. Owners can scan the pipeline quickly on narrow phones.
 
 ## Business logic in this module
 - Student name and phone are required for lead capture.
@@ -53,17 +56,18 @@ Admissions CRM turns QR visitors into trackable leads, then into tenant invitati
 
 ## How this works (step by step)
 1. Visitor scans `/visit/:hostelSlug`.
-2. The public route fetches safe hostel, room, and owner-hostel options.
-3. Visitor can switch to another hostel from the same owner.
-4. Visitor submits student details without account creation.
-5. Backend creates or updates an active lead for the selected hostel and phone.
-6. Visitor room actions create lead activity and update lead score.
-7. Owner opens `/admissions` and copies or prints the hostel QR.
-8. Owner reviews leads by status.
-9. Owner adds follow-up notes or marks parent follow-up.
-10. Owner adds email and selected room before conversion.
-11. Backend calls the existing invitation service.
-12. Tenant activation later marks the connected lead as joined.
+2. The welcome screen fetches safe hostel, room, and owner-hostel options.
+3. Visitor submits student details without account creation.
+4. Backend creates or updates an active lead for the selected hostel and phone.
+5. Visitor reviews hostel content and can switch to another hostel from the same owner.
+6. Visitor opens the room explorer and filters available rooms.
+7. Visitor room actions create lead activity and update lead score.
+8. Owner opens `/admissions` and copies or downloads the hostel QR.
+9. Owner reviews leads by status.
+10. Owner adds follow-up notes or marks parent follow-up.
+11. Owner adds email and selected room before conversion.
+12. Backend calls the existing invitation service.
+13. Tenant activation later marks the connected lead as joined.
 
 ## How to reuse this for a new client
 - Keep the lead, activity, note, and reservation models.
