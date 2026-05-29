@@ -110,6 +110,7 @@ Why this exists: mobile Core Web Vitals are sensitive to the first dashboard vie
 | Room tab | Memoized floor grouping | Room cards avoid regrouping work on unrelated state changes. |
 | Marketing reveal | Mobile transform-only animation | Below-fold sections keep motion without blur paint cost. |
 | Bottom navigation | Direct route taps | Owner and tenant sections change without swipe handlers or drag transforms. |
+| Admissions CRM | Compact KPI and status tiles | Owner admissions stays scannable without oversized mobile cards. |
 
 Why this exists: low-end Android devices feel slow when hidden work competes with visible content.
 

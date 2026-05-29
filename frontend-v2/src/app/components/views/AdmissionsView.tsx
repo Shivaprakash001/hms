@@ -18,7 +18,6 @@ import {
   MapPin,
   MessageCircle,
   Phone,
-  Printer,
   QrCode,
   RefreshCw,
   Search,
@@ -38,13 +37,13 @@ import { toast } from 'sonner';
 type AdmissionsScreen = 'dashboard' | 'pipeline' | 'qr';
 
 const stages = [
-  { status: 'NEW', label: 'NEW', color: 'var(--neutral-gray)' },
-  { status: 'INTERESTED', label: 'INTERESTED', color: 'var(--brand-saffron)' },
-  { status: 'FOLLOW_UP', label: 'FOLLOW UP', color: 'var(--alert-amber)' },
-  { status: 'READY_TO_JOIN', label: 'READY TO JOIN', color: 'var(--success-green)' },
-  { status: 'INVITED', label: 'INVITED', color: 'var(--brand-navy)' },
-  { status: 'JOINED', label: 'JOINED', color: 'var(--success-green)' },
-  { status: 'LOST', label: 'LOST', color: 'var(--danger-red)' },
+  { status: 'NEW', label: 'NEW', shortLabel: 'New', color: 'var(--neutral-gray)' },
+  { status: 'INTERESTED', label: 'INTERESTED', shortLabel: 'Int', color: 'var(--brand-saffron)' },
+  { status: 'FOLLOW_UP', label: 'FOLLOW UP', shortLabel: 'Follow', color: 'var(--alert-amber)' },
+  { status: 'READY_TO_JOIN', label: 'READY TO JOIN', shortLabel: 'Ready', color: 'var(--success-green)' },
+  { status: 'INVITED', label: 'INVITED', shortLabel: 'Inv', color: 'var(--brand-navy)' },
+  { status: 'JOINED', label: 'JOINED', shortLabel: 'Join', color: 'var(--success-green)' },
+  { status: 'LOST', label: 'LOST', shortLabel: 'Lost', color: 'var(--danger-red)' },
 ];
 
 const lostReasons = [
@@ -103,11 +102,42 @@ function whatsAppHref(phone?: string | null, message?: string) {
   return digits ? `https://wa.me/${digits}${text}` : '#';
 }
 
+function downloadBlob(blob: Blob, filename: string) {
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = objectUrl;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
+async function downloadAdmissionQr(value: string, hostelName?: string | null) {
+  if (!value) {
+    toast.error('QR link is not ready yet');
+    return;
+  }
+
+  const safeName = String(hostelName || 'admission-qr')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '') || 'admission-qr';
+
+  try {
+    const blob = await admissionsService.downloadQrImage(value);
+    downloadBlob(blob, `${safeName}-admission-qr.png`);
+    toast.success('Admission QR downloaded');
+  } catch {
+    toast.error('Could not download QR');
+  }
+}
+
 function LeadCard({ lead, onOpen }: { lead: any; onOpen: () => void }) {
   const interestedRooms = (lead.reservations || []).map((reservation: any) => reservation.room?.room_no).filter(Boolean);
   return (
-    <button type="button" onClick={onOpen} className="w-full rounded-xl bg-white p-4 text-left shadow-sm ring-1 ring-black/5 active:scale-[0.98]">
-      <div className="mb-3">
+    <button type="button" onClick={onOpen} className="w-full rounded-2xl bg-white p-3 text-left shadow-sm ring-1 ring-black/5 active:scale-[0.98] md:p-4">
+      <div className="mb-2 md:mb-3">
         <div className="flex items-start justify-between gap-3">
           <h4 className="truncate font-semibold text-[var(--deep-charcoal)]">{lead.student_name}</h4>
           <span className="rounded-full px-2 py-1 text-[10px] font-bold text-white" style={{ backgroundColor: statusColor(lead.status) }}>
@@ -117,29 +147,33 @@ function LeadCard({ lead, onOpen }: { lead: any; onOpen: () => void }) {
         <p className="mt-1 font-mono text-xs text-[var(--neutral-gray)]">{lead.student_phone}</p>
       </div>
 
-      <div className="mb-3 space-y-1 text-xs">
+      <div className="mb-2 grid grid-cols-2 gap-2 text-xs md:mb-3 md:block md:space-y-1">
         <div className="flex items-center gap-2 text-[var(--neutral-gray)]">
           <Eye className="h-3 w-3" />
           <span>{lead._count?.activities || lead.activities?.length || 0} activities</span>
         </div>
+        <div className="flex items-center gap-2 text-[var(--neutral-gray)] md:hidden">
+          <Calendar className="h-3 w-3" />
+          <span>{timeAgo(lead.last_activity_at)}</span>
+        </div>
         {interestedRooms.length > 0 && (
-          <div className="flex items-center gap-2 font-medium text-[var(--brand-saffron)]">
+          <div className="col-span-2 flex items-center gap-2 font-medium text-[var(--brand-saffron)]">
             <Heart className="h-3 w-3" />
             <span>Reserved: {interestedRooms.join(', ')}</span>
           </div>
         )}
       </div>
 
-      <div className="mb-3 flex items-center gap-2 text-xs text-[var(--neutral-gray)]">
+      <div className="mb-3 hidden items-center gap-2 text-xs text-[var(--neutral-gray)] md:flex">
         <Calendar className="h-3 w-3" />
         <span>{timeAgo(lead.last_activity_at)}</span>
       </div>
 
       <div className="flex gap-2">
-        <a href={phoneHref(lead.student_phone)} onClick={(event) => event.stopPropagation()} className="flex h-8 flex-1 items-center justify-center rounded-lg border border-[var(--border)] text-xs font-medium">
+        <a href={phoneHref(lead.student_phone)} onClick={(event) => event.stopPropagation()} className="flex h-8 flex-1 items-center justify-center rounded-xl border border-[var(--border)] text-xs font-medium">
           <Phone className="mr-1 h-3 w-3" /> Call
         </a>
-        <a href={whatsAppHref(lead.student_phone)} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="flex h-8 flex-1 items-center justify-center rounded-lg border border-[var(--border)] text-xs font-medium">
+        <a href={whatsAppHref(lead.student_phone)} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="flex h-8 flex-1 items-center justify-center rounded-xl border border-[var(--border)] text-xs font-medium">
           <MessageCircle className="mr-1 h-3 w-3" /> WhatsApp
         </a>
       </div>
@@ -185,7 +219,7 @@ function AdmissionQrPanel({ compact = false }: { compact?: boolean }) {
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="font-semibold text-[var(--brand-navy)]">Admission QR</h2>
-            <p className="mt-1 text-sm text-[var(--neutral-gray)]">Print or share the visit link.</p>
+            <p className="mt-1 text-sm text-[var(--neutral-gray)]">Download or share the visit link.</p>
           </div>
           <QrCode className="h-5 w-5 text-[var(--brand-saffron)]" />
         </div>
@@ -198,9 +232,14 @@ function AdmissionQrPanel({ compact = false }: { compact?: boolean }) {
                   <QrCodeImage value={itemUrl} size={160} alt={`${hostel.name} admission QR`} />
                 </div>
                 <h3 className="mt-2 truncate text-sm font-bold text-[var(--deep-charcoal)]">{hostel.name}</h3>
-                <button type="button" onClick={() => copyLink(itemUrl)} className="mt-2 h-9 w-full rounded-lg border border-[var(--border)] text-xs font-medium">
-                  Copy link
-                </button>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => copyLink(itemUrl)} className="h-9 rounded-lg border border-[var(--border)] text-xs font-medium">
+                    Copy
+                  </button>
+                  <button type="button" onClick={() => downloadAdmissionQr(itemUrl, hostel.name)} className="h-9 rounded-lg border border-[var(--border)] text-xs font-medium">
+                    Save
+                  </button>
+                </div>
               </div>
             );
           })}
@@ -228,10 +267,10 @@ function AdmissionQrPanel({ compact = false }: { compact?: boolean }) {
           <code className="block break-all rounded-lg border border-[var(--border)] bg-[var(--warm-ivory)] p-3 text-sm text-[var(--brand-navy)]">{url || 'Slug missing'}</code>
           <div className="mt-6 space-y-3">
             <button type="button" onClick={() => copyLink(url)} disabled={!url} className="flex h-12 w-full items-center justify-start rounded-xl bg-[var(--brand-saffron)] px-4 font-semibold text-white disabled:opacity-50">
-              <Download className="mr-3 h-5 w-5" /> Copy QR Link
+              <Copy className="mr-3 h-5 w-5" /> Copy QR Link
             </button>
-            <button type="button" onClick={() => window.print()} className="flex h-12 w-full items-center justify-start rounded-xl border-2 border-[var(--border)] px-4 font-semibold">
-              <Printer className="mr-3 h-5 w-5" /> Print page
+            <button type="button" onClick={() => downloadAdmissionQr(url, selected?.name)} disabled={!url} className="flex h-12 w-full items-center justify-start rounded-xl border-2 border-[var(--border)] px-4 font-semibold disabled:opacity-50">
+              <Download className="mr-3 h-5 w-5" /> Download QR
             </button>
           </div>
         </section>
@@ -282,11 +321,11 @@ function DashboardOverview({
 
   return (
     <div className="min-h-screen bg-[#F5F5F7]">
-      <div className="bg-[var(--brand-navy)] px-6 py-6 text-white">
+      <div className="bg-[var(--brand-navy)] px-5 py-5 text-white md:px-6 md:py-6">
         <div className="mx-auto max-w-7xl">
-          <div className="mb-6 flex items-center justify-between gap-4">
+          <div className="flex items-center justify-between gap-4 md:mb-6">
             <div>
-              <h1 className="text-2xl font-bold">Admissions Dashboard</h1>
+              <h1 className="text-2xl font-bold leading-tight">Admissions Dashboard</h1>
               <p className="mt-1 text-sm text-white/70">Visitor-to-tenant pipeline for Sri Adithya HMS.</p>
             </div>
             <button type="button" className="hidden rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white md:flex">
@@ -295,25 +334,25 @@ function DashboardOverview({
           </div>
         </div>
       </div>
-      <div className="mx-auto max-w-7xl px-6 py-6">
-        <div className="mb-6 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="mx-auto max-w-7xl px-5 py-5 md:px-6 md:py-6">
+        <div className="mb-5 grid grid-cols-2 gap-3 md:mb-6 md:grid-cols-2 md:gap-4 lg:grid-cols-4">
           {kpis.map((kpi) => {
             const Icon = kpi.icon;
             return (
-              <div key={kpi.label} className="rounded-2xl border-l-4 bg-white p-4 shadow-sm ring-1 ring-black/5" style={{ borderLeftColor: kpi.color }}>
-                <div className="mb-2 flex items-start justify-between">
-                  <span className="text-sm text-[var(--neutral-gray)]">{kpi.label}</span>
-                  <Icon className="h-5 w-5" style={{ color: kpi.color }} />
+              <div key={kpi.label} className="aspect-square rounded-2xl border-l-4 bg-white p-3 shadow-sm ring-1 ring-black/5 md:aspect-auto md:p-4" style={{ borderLeftColor: kpi.color }}>
+                <div className="mb-2 flex items-start justify-between gap-2">
+                  <span className="text-xs leading-snug text-[var(--neutral-gray)] md:text-sm">{kpi.label}</span>
+                  <Icon className="h-4 w-4 shrink-0 md:h-5 md:w-5" style={{ color: kpi.color }} />
                 </div>
-                <div className="text-3xl font-bold" style={{ color: kpi.color, fontFamily: 'var(--font-mono)' }}>{kpi.value}</div>
+                <div className="text-3xl font-bold md:text-3xl" style={{ color: kpi.color, fontFamily: 'var(--font-mono)' }}>{kpi.value}</div>
               </div>
             );
           })}
         </div>
 
-        <section className="mb-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5">
-          <h2 className="mb-4 text-lg font-semibold text-[var(--brand-navy)]">Admission Funnel</h2>
-          <div className="space-y-3">
+        <section className="mb-5 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5 md:mb-6 md:p-6">
+          <h2 className="mb-3 text-lg font-semibold text-[var(--brand-navy)] md:mb-4">Admission Funnel</h2>
+          <div className="space-y-2.5 md:space-y-3">
             {funnelStages.map((stage) => {
               const width = Math.max((stage.count / maxCount) * 100, stage.count > 0 ? 8 : 0);
               return (
@@ -322,7 +361,7 @@ function DashboardOverview({
                     <span className="font-medium text-[var(--deep-charcoal)]">{stage.stage}</span>
                     <span className="font-mono font-semibold" style={{ color: stage.color }}>{stage.count}</span>
                   </div>
-                  <div className="h-8 overflow-hidden rounded-lg bg-gray-100">
+                  <div className="h-6 overflow-hidden rounded-lg bg-gray-100 md:h-8">
                     <div className="flex h-full items-center justify-end pr-3 text-xs font-semibold text-white" style={{ width: `${width}%`, backgroundColor: stage.color }}>
                       {stage.count > 0 && `${Math.round((stage.count / maxCount) * 100)}%`}
                     </div>
@@ -333,8 +372,8 @@ function DashboardOverview({
           </div>
         </section>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+        <div className="grid gap-5 lg:grid-cols-2 lg:gap-6">
+          <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5 md:p-6">
             <h2 className="mb-4 text-lg font-semibold text-[var(--brand-navy)]">Recent Activity</h2>
             <div className="max-h-96 space-y-3 overflow-y-auto">
               {recent.map((lead) => (
@@ -350,7 +389,7 @@ function DashboardOverview({
               {recent.length === 0 && <p className="rounded-xl border border-dashed border-[var(--border)] p-4 text-center text-sm text-[var(--neutral-gray)]">No admissions activity yet.</p>}
             </div>
           </section>
-          <section className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+          <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5 md:p-6">
             <h2 className="mb-4 text-lg font-semibold text-[var(--brand-navy)]">Quick Actions</h2>
             <div className="space-y-3">
               <button type="button" onClick={onViewPipeline} className="flex h-12 w-full items-center justify-start rounded-xl bg-[var(--brand-saffron)] px-4 font-semibold text-white">
@@ -607,15 +646,15 @@ function LeadPipeline({
 
   return (
     <div className="min-h-screen bg-[#F5F5F7] pb-20 lg:pb-6">
-      <div className="bg-[var(--brand-navy)] px-6 py-6 text-white">
+      <div className="bg-[var(--brand-navy)] px-5 py-5 text-white md:px-6 md:py-6">
         <div className="mx-auto max-w-7xl">
-          <h1 className="text-2xl font-bold">Lead Pipeline</h1>
+          <h1 className="text-2xl font-bold leading-tight">Lead Pipeline</h1>
           <p className="mt-1 text-sm text-white/70">Track and manage all admissions leads.</p>
         </div>
       </div>
 
-      <div className="mx-auto max-w-7xl px-6 py-5">
-        <div className="mb-4 flex items-center gap-2 rounded-xl bg-white px-3 py-2 shadow-sm ring-1 ring-black/5">
+      <div className="mx-auto max-w-7xl px-5 py-4 md:px-6 md:py-5">
+        <div className="flex items-center gap-2 rounded-2xl bg-white px-3 py-2 shadow-sm ring-1 ring-black/5">
           <Search className="h-4 w-4 text-[var(--neutral-gray)]" />
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, phone, email" className="h-9 flex-1 bg-transparent text-sm outline-none" />
         </div>
@@ -643,19 +682,23 @@ function LeadPipeline({
 
       <div className="lg:hidden">
         <div className="sticky top-0 z-10 overflow-x-auto border-b border-[var(--border)] bg-white scrollbar-hide">
-          <div className="flex gap-2 px-6 py-3">
-            <button type="button" onClick={() => setActiveStatus('')} className={`rounded-full px-4 py-2 text-sm font-medium ${!activeStatus ? 'bg-[var(--brand-saffron)] text-white' : 'bg-gray-100 text-[var(--neutral-gray)]'}`}>ALL ({leads.length})</button>
+          <div className="flex gap-2 px-5 py-3">
+            <button type="button" onClick={() => setActiveStatus('')} className={`grid h-12 w-14 shrink-0 place-items-center rounded-2xl text-[11px] font-bold leading-tight ${!activeStatus ? 'bg-[var(--brand-saffron)] text-white' : 'bg-gray-100 text-[var(--neutral-gray)]'}`}>
+              <span>All</span>
+              <span>({leads.length})</span>
+            </button>
             {stages.map((stage) => {
               const count = grouped.get(stage.status)?.length || 0;
               return (
-                <button key={stage.status} type="button" onClick={() => setActiveStatus(stage.status)} className="whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium" style={{ backgroundColor: activeStatus === stage.status ? stage.color : '#f3f4f6', color: activeStatus === stage.status ? '#fff' : 'var(--neutral-gray)' }}>
-                  {stage.label} ({count})
+                <button key={stage.status} type="button" onClick={() => setActiveStatus(stage.status)} className="grid h-12 w-16 shrink-0 place-items-center rounded-2xl text-[11px] font-bold leading-tight" style={{ backgroundColor: activeStatus === stage.status ? stage.color : '#f3f4f6', color: activeStatus === stage.status ? '#fff' : 'var(--neutral-gray)' }}>
+                  <span>{stage.shortLabel}</span>
+                  <span>({count})</span>
                 </button>
               );
             })}
           </div>
         </div>
-        <div className="space-y-3 px-6 py-4">
+        <div className="space-y-3 px-5 py-4">
           {activeLeads.map((lead) => <LeadCard key={lead.id} lead={lead} onOpen={() => onViewLead(lead.id)} />)}
           {!isLoading && activeLeads.length === 0 && <p className="rounded-xl border border-dashed border-[var(--border)] bg-white p-4 text-center text-sm text-[var(--neutral-gray)]">No leads here yet.</p>}
         </div>
@@ -690,8 +733,8 @@ export function AdmissionsView() {
 
   return (
     <div>
-      <div className="sticky top-0 z-20 border-b border-[var(--border)] bg-white/95 px-4 py-3 backdrop-blur md:px-6">
-        <div className="mx-auto flex max-w-7xl items-center gap-2 overflow-x-auto scrollbar-hide">
+      <div className="sticky top-0 z-20 border-b border-[var(--border)] bg-white/95 px-3 py-3 backdrop-blur md:px-6">
+        <div className="mx-auto grid max-w-7xl grid-cols-[1fr_1fr_1fr_auto] items-center gap-2 md:flex md:overflow-x-auto md:scrollbar-hide">
           {[
             ['dashboard', 'Dashboard', Users],
             ['pipeline', 'Pipeline', ClipboardList],
@@ -701,12 +744,12 @@ export function AdmissionsView() {
               key={key}
               type="button"
               onClick={() => setScreen(key)}
-              className={`flex h-10 shrink-0 items-center gap-2 rounded-xl px-4 text-sm font-semibold ${screen === key ? 'bg-[var(--brand-saffron)] text-white' : 'bg-[var(--warm-ivory)] text-[var(--brand-navy)]'}`}
+              className={`flex h-9 min-w-0 items-center justify-center gap-1 rounded-2xl px-2 text-xs font-semibold md:h-10 md:shrink-0 md:gap-2 md:px-4 md:text-sm ${screen === key ? 'bg-[var(--brand-saffron)] text-white' : 'bg-[var(--warm-ivory)] text-[var(--brand-navy)]'}`}
             >
-              <Icon className="h-4 w-4" /> {label}
+              <Icon className="h-4 w-4 shrink-0" /> <span className="truncate">{key === 'qr' ? 'QR' : label}</span>
             </button>
           ))}
-          <button type="button" onClick={() => refetch()} className="ml-auto grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[var(--border)]">
+          <button type="button" onClick={() => refetch()} className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl border border-[var(--border)] md:ml-auto md:h-10 md:w-10">
             <RefreshCw className="h-4 w-4" />
           </button>
         </div>

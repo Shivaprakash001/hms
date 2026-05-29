@@ -2,6 +2,9 @@ import api from '@lib/api-client';
 
 const unwrap = (response) => response.data?.data ?? response.data;
 
+export const admissionQrImageUrl = (value, size = 512) =>
+  `/admissions/qr-code?size=${size}&data=${encodeURIComponent(value)}`;
+
 export const admissionsPublicService = {
   getVisitHostel: async (slug) => unwrap(await api.get(`/visit/${slug}`)),
   createLead: async (slug, payload) => unwrap(await api.post(`/visit/${slug}/leads`, payload)),
@@ -18,4 +21,8 @@ export const admissionsService = {
     unwrap(await api.patch(`/leads/${id}/reservations/${reservationId}/cancel`)),
   convertToInvitation: async (id, payload) => unwrap(await api.post(`/leads/${id}/convert-to-invitation`, payload)),
   analytics: async (params = {}) => unwrap(await api.get('/admissions/leads/analytics', { params })),
+  downloadQrImage: async (value) => {
+    const response = await api.get(admissionQrImageUrl(value), { responseType: 'blob', transformResponse: [(data) => data] });
+    return response.data;
+  },
 };
