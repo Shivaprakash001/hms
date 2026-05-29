@@ -141,7 +141,7 @@ Why this exists: rooms, tenants, expenses, move-outs, and billing should not exe
 | 2 | `GET /api/visit/:hostelSlug` | Backend returns safe hostel, room, and other-hostel data. |
 | 3 | `POST /api/visit/:hostelSlug/leads` | Backend creates or updates a lead by hostel and phone. |
 | 4 | Lead activity | Room views and interest actions increase score and update status. |
-| 5 | `/admissions` | Owner reviews leads by status and temperature. |
+| 5 | `/api/admissions/leads` | Owner reviews leads by status and temperature. |
 | 6 | Conversion API | Owner sends the lead into the existing invitation flow. |
 | 7 | Activation | Existing tenant activation marks the lead as joined. |
 

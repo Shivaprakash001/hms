@@ -12,7 +12,7 @@ Admissions CRM turns QR visitors into trackable leads, then into tenant invitati
 ## Data it needs
 - Public hostel data from `GET /api/visit/:hostelSlug`.
 - Lead capture from `POST /api/visit/:hostelSlug/leads`.
-- Owner lead lists from `GET /api/leads`.
+- Owner lead lists from `GET /api/admissions/leads`.
 - Lead detail and notes from `/api/leads/:id`.
 - Room options from existing `/api/rooms`.
 

@@ -12,6 +12,7 @@ const PUBLIC_ROUTES = [
   "/api/auth/refresh",
   "/api/auth/google-callback",
   "/api/tenants/activate",
+  "/api/visit",
   "/api/webhooks/payments/phonepe",
   "/api/webhooks/notifications/whatsapp",
   "/api/plans",
