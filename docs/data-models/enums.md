@@ -198,6 +198,11 @@ This file documents exact Prisma enum values from `backend-next/prisma/schema.pr
 | Notifications | Read and delivery status strings | `notifications`, `reminder_logs` |
 | Reconciliation | Open and resolved style strings | Financial reconciliation models |
 | Expenses | `paid` and other payment status strings | `expenses.status` |
+| Admissions leads | `NEW`, `INTERESTED`, `FOLLOW_UP`, `READY_TO_JOIN`, `INVITED`, `JOINED`, `LOST` | `visitor_leads.status` |
+| Decision maker | `STUDENT`, `PARENT`, `BOTH` | `visitor_leads.decision_maker_type` |
+| Lead activity | `VIEW_HOSTEL`, `VIEW_ROOM`, `VIEW_PRICING`, `VIEW_RULES`, `VIEW_FACILITIES`, `VIEW_FOOD`, `MARK_INTEREST`, `SHARE_LINK`, `REQUEST_JOIN`, `RESERVE_ROOM` | `lead_activities.activity_type` |
+| Lost reason | `TOO_EXPENSIVE`, `NO_VACANCY`, `FOOD_CONCERN`, `LOCATION`, `PARENT_REJECTED`, `JOINED_OTHER_HOSTEL`, `NO_RESPONSE`, `COLLEGE_CHANGED`, `OTHER` | `visitor_leads.lost_reason` |
+| Room reservation | `ACTIVE`, `EXPIRED`, `CANCELLED`, `CONVERTED` | `room_reservations.status` |
 
 **How this works:**
 1. Some statuses are plain strings instead of Prisma enums.

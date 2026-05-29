@@ -158,6 +158,125 @@ expenses represents a persisted HMS domain record.
 | receipt_uploaded_at | DateTime? | no | Domain field persisted by the application. |
 | is_recurring | Boolean | no | Boolean flag. Has a database default. |
 | recurring_frequency | String? | no | Domain field persisted by the application. |
+
+## VisitorLead
+
+VisitorLead represents a hostel admissions prospect before they become a tenant invitation.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| id | string | yes | Unique lead identifier. |
+| hostel_id | string | yes | Hostel the visitor scanned or explored. |
+| owner_id | string | yes | Owner who manages the lead. |
+| student_name | string | yes | Student name entered by the visitor. |
+| student_phone | string | yes | Normalized student phone number. |
+| student_email | string | no | Optional during capture, required for invitation conversion. |
+| parent_name | string | no | Parent or guardian name. |
+| parent_phone | string | no | Parent or guardian phone number. |
+| decision_maker_type | string | yes | STUDENT, PARENT, or BOTH. |
+| source | string | yes | QR, DIRECT, or WALKIN. |
+| status | string | yes | Current admissions stage. |
+| notes | string | no | General lead notes. |
+| lead_score | number | yes | Score derived from activity. |
+| first_visited_at | DateTime | yes | First capture timestamp. |
+| last_activity_at | DateTime | yes | Latest visitor or owner activity. |
+| parent_contacted_at | DateTime | no | Last parent contact timestamp. |
+| parent_follow_up_required | boolean | yes | Whether parent follow-up is pending. |
+| converted_at | DateTime | no | Time the lead entered invitation flow. |
+| converted_tenant_id | string | no | Tenant created by the existing invitation service. |
+| lost_reason | string | no | Structured lost reason. |
+| lost_note | string | no | Optional custom lost note. |
+
+**Relationships:**
+- belongs to hostels via hostel_id.
+- belongs to profile via owner_id.
+- has many LeadActivity via lead_id.
+- has many LeadNote via lead_id.
+- has many RoomReservation via lead_id.
+- may connect to tenants via converted_tenant_id.
+
+**Status values (if applicable):**
+| Value | Meaning |
+|---|---|
+| NEW | Visitor submitted basic details. |
+| INTERESTED | Visitor expressed interest. |
+| FOLLOW_UP | Owner needs to follow up. |
+| READY_TO_JOIN | Visitor requested admission or is ready. |
+| INVITED | Existing invitation flow has started. |
+| JOINED | Tenant activation completed. |
+| LOST | Lead did not convert. |
+
+**How this works:**
+1. Lead capture creates a prospect without profile or tenant records.
+2. Owner conversion calls the existing invitation service.
+3. Activation updates the connected lead to JOINED.
+
+## LeadActivity
+
+LeadActivity records visitor behavior and owner-visible engagement.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| id | string | yes | Unique activity identifier. |
+| lead_id | string | yes | Lead that performed the activity. |
+| activity_type | string | yes | Visitor action type. |
+| metadata | Json | no | Room id or context for the activity. |
+| created_at | DateTime | yes | Activity timestamp. |
+
+**Relationships:**
+- belongs to VisitorLead via lead_id.
+
+**How this works:**
+1. Public actions write activity records.
+2. Scored actions increment VisitorLead.lead_score.
+3. Owner screens use the timeline to prioritize follow-up.
+
+## RoomReservation
+
+RoomReservation represents admission intent, not a room allocation.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| id | string | yes | Unique reservation identifier. |
+| lead_id | string | yes | Lead that requested the reservation. |
+| room_id | string | yes | Room being held as intent. |
+| hostel_id | string | yes | Hostel context for the room. |
+| reserved_until | DateTime | yes | Expiry timestamp. |
+| status | string | yes | ACTIVE, EXPIRED, CANCELLED, or CONVERTED. |
+| approved_by | string | no | Owner who created the hold. |
+| converted_at | DateTime | no | Time reservation converted into invitation. |
+
+**Relationships:**
+- belongs to VisitorLead via lead_id.
+- belongs to rooms via room_id.
+- belongs to hostels via hostel_id.
+- belongs to profile via approved_by.
+
+**How this works:**
+1. Reservation checks existing allocations and active reservations.
+2. It never writes RoomAllocation.
+3. Invitation conversion may mark the reservation CONVERTED.
+
+## LeadNote
+
+LeadNote stores owner follow-up context.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| id | string | yes | Unique note identifier. |
+| lead_id | string | yes | Lead being discussed. |
+| owner_id | string | yes | Owner who wrote the note. |
+| note | string | yes | Follow-up note text. |
+| created_at | DateTime | yes | Note timestamp. |
+
+**Relationships:**
+- belongs to VisitorLead via lead_id.
+- belongs to profile via owner_id.
+
+**How this works:**
+1. Owners record parent calls and concerns.
+2. Notes stay attached to the lead workspace.
+3. Future developers can rebuild follow-up history from this table.
 | created_by | String? | no | Domain field persisted by the application. |
 | approved_by | String? | no | Domain field persisted by the application. |
 | expense_type | String | no | Domain field persisted by the application. Has a database default. |

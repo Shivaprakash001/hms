@@ -11,6 +11,7 @@ const ContactPage = lazy(() => import('@/app/pages/public/ContactPage').then((m)
 const RulesPage = lazy(() => import('@/app/pages/public/RulesPage').then((m) => ({ default: m.RulesPage })));
 const LegalPage = lazy(() => import('@/app/pages/LegalPage').then((m) => ({ default: m.LegalPage })));
 const PricingPage = lazy(() => import('@/app/pages/PricingPage').then((m) => ({ default: m.PricingPage })));
+const VisitPage = lazy(() => import('@/app/pages/public/VisitPage').then((m) => ({ default: m.VisitPage })));
 const LoginPage = lazy(() => import('@/app/pages/LoginPage').then((m) => ({ default: m.LoginPage })));
 const ActivateAccountPage = lazy(() => import('@/portal/pages/ActivateAccountPage').then((m) => ({ default: m.ActivateAccountPage })));
 const CompleteProfilePage = lazy(() => import('@/portal/pages/CompleteProfilePage').then((m) => ({ default: m.CompleteProfilePage })));
@@ -53,6 +54,7 @@ export function PublicRoutes() {
         <Route path="/terms" element={<LegalPage />} />
         <Route path="/privacy" element={<LegalPage />} />
         <Route path="/pricing" element={<PricingPage />} />
+        <Route path="/visit/:hostelSlug" element={<VisitPage />} />
       </Route>
 
       {/* ── Auth & utility ───────────────────────────────────────────── */}

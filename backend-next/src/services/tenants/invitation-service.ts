@@ -285,6 +285,13 @@ export class InvitationService {
         error: String(err?.message || err),
       });
     });
+    const { admissionsService } = await import("@/src/services/admissions/admissions-service");
+    await admissionsService.markJoinedForTenant(tenant.id).catch((err: any) => {
+      logger.warn("admissions_mark_joined_failed", {
+        tenant_id: tenant.id,
+        error: String(err?.message || err),
+      });
+    });
     
     logger.info(`Successfully activated account for email: ${profile.email}`);
 

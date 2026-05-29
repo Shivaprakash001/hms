@@ -13,6 +13,7 @@
 | `/contact` | Contact |
 | `/rules` | Rules |
 | `/pricing` | Pricing |
+| `/visit/:hostelSlug` | QR admissions visitor flow |
 | `/legal`, `/terms`, `/privacy` | Legal |
 | `/login` | Login |
 | `/activate`, `/activate/:token` | Tenant activation |
@@ -22,6 +23,7 @@
 1. `PublicRoutes` returns public route elements.
 2. Public pages lazy-load behind a lightweight `PublicShell`.
 3. Visitors can reach marketing, legal, and auth pages.
+4. QR visitors can reach admissions without loading owner dashboard code.
 
 ## Route performance boundaries
 
@@ -129,12 +131,14 @@ Why this exists: low-end Android devices feel slow when hidden work competes wit
 | `/hostels/:hostelId/move-outs` | Move-outs |
 | `/alerts` | Alerts |
 | `/billing` | Billing |
+| `/admissions` | Admissions CRM |
 | `/settings` | Settings |
 
 **How this works:**
 1. `OwnerRoutes` lazy-loads `OwnerProviderShell`.
 2. `OwnerProviderShell` wraps screens in `ProtectedRoute`.
 3. Hostel ID scopes workspace screens.
+4. Admissions leads use owner scope and can link back to hostel rooms.
 
 ## Tenant routes
 

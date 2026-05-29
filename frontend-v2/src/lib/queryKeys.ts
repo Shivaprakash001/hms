@@ -99,4 +99,12 @@ export const queryKeys = {
     list: (hostelId: string, params?: object) =>
       hostelKey(hostelId, 'activity', 'list', params ?? {}),
   },
+
+  admissions: {
+    all: () => ownerKey('admissions'),
+    list: (filters?: object) => ownerKey('admissions', 'list', filters ?? {}),
+    detail: (id: string) => ownerKey('admissions', 'detail', id),
+    analytics: (filters?: object) => ownerKey('admissions', 'analytics', filters ?? {}),
+    visit: (slug: string) => ['public', 'visit', slug],
+  },
 };

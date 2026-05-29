@@ -5,7 +5,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { OwnerQuickActions } from './components/OwnerQuickActions';
 import { SwipeNavContainer } from '@/shared/ui/SwipeNavContainer';
 
-const OWNER_SWIPE_ROUTES = ['/dashboard', '/tenants', '/billing', '/alerts', '/settings'];
+const OWNER_SWIPE_ROUTES = ['/dashboard', '/tenants', '/admissions', '/billing', '/alerts', '/settings'];
 
 export default function App() {
   return (

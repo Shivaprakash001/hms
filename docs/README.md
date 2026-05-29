@@ -51,6 +51,7 @@ If no docs update is needed, the change must explicitly state why.
 - [Public site](modules/public-site.md)
 - [Admin finance ops](modules/admin-finance-ops.md)
 - [Bulk import](modules/bulk-import.md)
+- [Admissions CRM](modules/admissions-crm.md)
 
 ## Domain reference
 

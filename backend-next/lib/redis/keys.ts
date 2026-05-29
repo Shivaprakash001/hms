@@ -43,6 +43,13 @@ export const redisKeys = {
     operations: (ownerId: string, hostelId: string, rangeHash: string) =>
       redisKey("analytics", "operations", ownerId, hostelId, rangeHash),
   },
+  admissions: {
+    publicHostel: (slug: string) => redisKey("admissions", "public-hostel", slug),
+    publicHostelTag: (slug: string) => redisKey("tag", "admissions", "public-hostel", slug),
+    owner: (ownerId: string) => redisKey("tag", "owner", ownerId, "admissions"),
+    analytics: (ownerId: string, hostelId: string) =>
+      redisKey("admissions", "analytics", ownerId, "hostel", hostelId),
+  },
   rateLimit: (scope: string, identifier: string) => redisKey("rate-limit", scope, identifier),
   otpVerifyLock: (phone: string, purpose: string) => redisKey("otp", "verify-lock", phone, purpose),
   queue: {
@@ -54,4 +61,3 @@ export const redisKeys = {
     lock: (name: string) => redisKey("queue", name, "lock"),
   },
 };
-

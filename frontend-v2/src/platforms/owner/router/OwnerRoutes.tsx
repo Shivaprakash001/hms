@@ -10,6 +10,7 @@ const TenantProfileRoute = lazy(() => import('@/app/components/views/TenantProfi
 const MoveOutsView = lazy(() => import('@/app/components/views/MoveOutsView').then((m) => ({ default: m.MoveOutsView })));
 const AlertsView = lazy(() => import('@/app/components/views/AlertsView').then((m) => ({ default: m.AlertsView })));
 const BillingView = lazy(() => import('@/app/components/views/BillingView').then((m) => ({ default: m.BillingView })));
+const AdmissionsView = lazy(() => import('@/app/components/views/AdmissionsView').then((m) => ({ default: m.AdmissionsView })));
 const SettingsView = lazy(() => import('@/app/components/views/SettingsView').then((m) => ({ default: m.SettingsView })));
 const OwnerProviderShell = lazy(() => import('./OwnerProviderShell').then((m) => ({ default: m.OwnerProviderShell })));
 
@@ -53,6 +54,7 @@ export function OwnerRoutes() {
         <Route path="/hostels/:hostelId/move-outs" element={<MoveOutsView />} />
         <Route path="/alerts" element={<AlertsView />} />
         <Route path="/billing" element={<BillingView />} />
+        <Route path="/admissions" element={<AdmissionsView />} />
         <Route path="/settings" element={<SettingsView />} />
       </Route>
     </Route>

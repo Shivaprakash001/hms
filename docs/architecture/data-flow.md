@@ -133,6 +133,26 @@ Why this exists: rooms, tenants, expenses, move-outs, and billing should not exe
 2. `/hostels/:hostelId/:tab` loads the matching tab island.
 3. Query invalidation remains scoped to existing query keys.
 
+## Admissions CRM flow
+
+| Step | Code | What happens |
+|---|---|---|
+| 1 | `/visit/:hostelSlug` | Visitor opens the QR admission page. |
+| 2 | `GET /api/visit/:hostelSlug` | Backend returns safe hostel, room, and other-hostel data. |
+| 3 | `POST /api/visit/:hostelSlug/leads` | Backend creates or updates a lead by hostel and phone. |
+| 4 | Lead activity | Room views and interest actions increase score and update status. |
+| 5 | `/admissions` | Owner reviews leads by status and temperature. |
+| 6 | Conversion API | Owner sends the lead into the existing invitation flow. |
+| 7 | Activation | Existing tenant activation marks the lead as joined. |
+
+Why this exists: admissions must reuse tenant onboarding while capturing parent-led hostel decisions.
+
+**How this works:**
+1. Visitor capture stores lightweight lead data without creating a profile.
+2. Owner conversion adds required invitation data, including email and room.
+3. Existing invitation code creates profile, tenant, allocation, and obligations.
+4. The CRM stores conversion state without becoming a second tenant lifecycle.
+
 ## Standard mutation flow
 
 | Step | Example | What happens |
