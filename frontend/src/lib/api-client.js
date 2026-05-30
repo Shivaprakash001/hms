@@ -23,6 +23,25 @@ const api = axios.create({
 });
 
 
+const CSRF_COOKIE_NAME = 'hms_csrf';
+
+const getCookieValue = (name) => {
+    if (typeof document === 'undefined') return null;
+    const match = document.cookie
+        .split('; ')
+        .find((part) => part.startsWith(`${name}=`));
+    return match ? decodeURIComponent(match.split('=').slice(1).join('=')) : null;
+};
+
+const isUnsafeMethod = (method) =>
+    ['post', 'put', 'patch', 'delete'].includes(String(method || 'get').toLowerCase());
+
+const attachCsrfHeader = (headers, method) => {
+    if (!isUnsafeMethod(method)) return;
+    const csrfToken = getCookieValue(CSRF_COOKIE_NAME);
+    if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+};
+
 // Add a request interceptor to include the auth token
 api.interceptors.request.use(
     (config) => {
@@ -47,6 +66,10 @@ api.interceptors.request.use(
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
         }
+
+        // Attach CSRF token for state-mutating requests
+        if (config.headers) attachCsrfHeader(config.headers, config.method);
+
         return config;
     },
     (error) => {
@@ -95,6 +118,7 @@ api.interceptors.response.use(
 
                 // Update the authorization header and retry the original request
                 originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+                attachCsrfHeader(originalRequest.headers, originalRequest.method);
                 return api(originalRequest);
             } catch (refreshError) {
                 // Refresh failed (e.g. refresh token expired or invalid)
