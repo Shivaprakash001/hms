@@ -14,5 +14,6 @@ export async function POST(req: NextRequest) {
   const response = NextResponse.json({ success: true });
   response.cookies.set("hms_session", "", { httpOnly: true, expires: new Date(0), path: "/" });
   response.cookies.set("hms_refresh_token", "", { httpOnly: true, expires: new Date(0), path: "/" });
+  response.cookies.set("hms_csrf", "", { expires: new Date(0), path: "/" });
   return response;
 }

@@ -8,6 +8,7 @@ import { LoginSchema } from "@/lib/validators";
 import { rateLimitService } from "@/lib/services/rate-limit-service";
 import { getClientIp } from "@/lib/security/api-guard";
 import { ACCESS_TOKEN_MAX_AGE_SECONDS, getSessionCookieOptions, TENANT_REFRESH_DAYS } from "@/lib/services/session-lifecycle-service";
+import { setCsrfCookie } from "@/lib/security/csrf";
 
 
 /**
@@ -70,6 +71,7 @@ export async function POST(req: NextRequest) {
     response.cookies.set("hms_refresh_token", refresh_token, {
       ...getSessionCookieOptions(60 * 60 * 24 * TENANT_REFRESH_DAYS),
     });
+    setCsrfCookie(response, 60 * 60 * 24 * TENANT_REFRESH_DAYS);
 
     console.log(`[auth.login] Login successful for ${email}`);
     return response;

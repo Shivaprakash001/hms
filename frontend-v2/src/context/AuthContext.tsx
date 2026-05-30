@@ -85,8 +85,9 @@ const readStoredUser = (): AuthUser | null => {
 };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(() => readStoredUser());
-  const [loading, setLoading] = useState(false);
+  const [initialStoredUser] = useState<AuthUser | null>(() => readStoredUser());
+  const [user, setUser] = useState<AuthUser | null>(initialStoredUser);
+  const [loading, setLoading] = useState(() => Boolean(initialStoredUser));
   const [showIdleWarning, setShowIdleWarning] = useState(false);
   const [expiredMessage, setExpiredMessage] = useState<string | null>(null);
   const idleWarningRef = useRef(false);
@@ -147,13 +148,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           };
           setUser(updatedUser);
           persistUser(updatedUser);
-        } catch (error: unknown) {
-          const status = (error as { response?: { status?: number } })?.response?.status;
-          if (status === 401) {
-            clearSessionScopedStorage();
-          } else {
-            setUser(storedData);
-          }
+        } catch {
+          clearSessionScopedStorage();
+          setUser(null);
         }
       } else {
         setUser(null);

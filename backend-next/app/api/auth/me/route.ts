@@ -4,7 +4,8 @@ export const runtime = "nodejs";
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@lib/auth";
 import { prisma } from "@lib/db";
-import { sessionLifecycleService } from "@/lib/services/session-lifecycle-service";
+import { sessionLifecycleService, TENANT_REFRESH_DAYS } from "@/lib/services/session-lifecycle-service";
+import { setCsrfCookie } from "@/lib/security/csrf";
 
 
 export async function GET(req: NextRequest) {
@@ -69,7 +70,7 @@ export async function GET(req: NextRequest) {
       extra.is_profile_completed = profile.is_profile_completed;
     }
 
-    return apiResponse({
+    const response = apiResponse({
       user_id: profile.id,
       owner_id: profile.role === "OWNER" ? profile.id : profile.owner_id,
       email: profile.email,
@@ -80,6 +81,10 @@ export async function GET(req: NextRequest) {
       is_tenant: profile.role === "TENANT",
       ...extra
     });
+    if (!req.cookies.get("hms_csrf")?.value) {
+      setCsrfCookie(response, 60 * 60 * 24 * TENANT_REFRESH_DAYS);
+    }
+    return response;
   } catch (error) {
     return apiError("Internal server error");
   }

@@ -14,6 +14,24 @@ const api = axios.create({
 });
 
 let inMemoryAccessToken: string | null = null;
+const CSRF_COOKIE_NAME = 'hms_csrf';
+
+const getCookieValue = (name: string) => {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie
+    .split('; ')
+    .find((part) => part.startsWith(`${name}=`));
+  return match ? decodeURIComponent(match.split('=').slice(1).join('=')) : null;
+};
+
+const isUnsafeMethod = (method?: string) =>
+  ['post', 'put', 'patch', 'delete'].includes(String(method || 'get').toLowerCase());
+
+const attachCsrfHeader = (headers: any, method?: string) => {
+  if (!isUnsafeMethod(method)) return;
+  const csrfToken = getCookieValue(CSRF_COOKIE_NAME);
+  if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+};
 
 export const setAccessToken = (token: string | null) => {
   inMemoryAccessToken = token;
@@ -42,6 +60,7 @@ api.interceptors.request.use(
       if (config.headers) delete config.headers['Content-Type'];
     }
     if (inMemoryAccessToken) config.headers.Authorization = `Bearer ${inMemoryAccessToken}`;
+    if (config.headers) attachCsrfHeader(config.headers, config.method);
     return config;
   },
   (error) => Promise.reject(error),
@@ -77,6 +96,7 @@ api.interceptors.response.use(
         setAccessToken(newAccessToken);
 
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+        attachCsrfHeader(originalRequest.headers, originalRequest.method);
         return api(originalRequest);
       } catch (refreshError: any) {
         clearAccessToken();

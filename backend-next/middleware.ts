@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyToken } from "./lib/auth-edge";
 import { getCorsAllowOrigin } from "./lib/config/domains";
+import { checkSessionRevocationEdge, touchSessionActivityEdge } from "./lib/redis/session-revocation-edge";
+
+const CSRF_COOKIE_NAME = "hms_csrf";
+const CSRF_HEADER_NAME = "x-csrf-token";
+const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 const PUBLIC_ROUTES = [
   "/api/health",
@@ -21,6 +26,12 @@ const PUBLIC_ROUTES = [
   // itself (see app/api/cron/*/route.ts), so middleware must step aside.
   "/api/cron",
 ];
+
+function isValidCsrfPair(cookieToken?: string | null, headerToken?: string | null) {
+  if (!cookieToken || !headerToken) return false;
+  if (cookieToken.length < 32 || headerToken.length < 32) return false;
+  return cookieToken === headerToken;
+}
 
 /**
  * 🔐 PRODUCTION CORS & SECURITY AUDIT
@@ -81,6 +92,31 @@ export async function middleware(req: NextRequest) {
     );
   }
 
+  try {
+    const revocation = await checkSessionRevocationEdge(payload);
+    if (!revocation.ok) {
+      return NextResponse.json(
+        { error: { message: "Your secure session has expired. Please sign in again.", code: "SESSION_REVOKED" } },
+        { status: 401, headers: corsHeaders }
+      );
+    }
+  } catch (error) {
+    console.warn("[middleware] session revocation check unavailable", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  if (UNSAFE_METHODS.has(req.method)) {
+    const csrfCookie = req.cookies.get(CSRF_COOKIE_NAME)?.value;
+    const csrfHeader = req.headers.get(CSRF_HEADER_NAME);
+    if (!isValidCsrfPair(csrfCookie, csrfHeader)) {
+      return NextResponse.json(
+        { error: { message: "Security check failed. Refresh the page and try again.", code: "CSRF_VALIDATION_FAILED" } },
+        { status: 403, headers: corsHeaders }
+      );
+    }
+  }
+
   // 5. Attach Context & Return with CORS
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set("x-user-id", payload.sub);
@@ -93,6 +129,13 @@ export async function middleware(req: NextRequest) {
   const response = NextResponse.next({
     request: { headers: requestHeaders },
   });
+  if (payload.sid) {
+    touchSessionActivityEdge(payload.sid).catch((error) => {
+      console.warn("[middleware] session activity touch failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
   
   Object.entries(corsHeaders).forEach(([k, v]) => response.headers.set(k, v));
   return response;

@@ -15,6 +15,7 @@ export interface AuthPayload {
   owner_id?: string | null;
   tenant_id?: string | null;
   sid?: string | null;
+  iat?: number;
 }
 
 function assertOwnerPayload(payload: AuthPayload) {

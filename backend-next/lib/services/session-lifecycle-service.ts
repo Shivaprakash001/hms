@@ -1,6 +1,12 @@
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/db";
 import { generateRefreshToken, hashToken } from "@/lib/auth";
+import {
+  getSessionActivity,
+  markSessionRevoked,
+  markUserSessionsRevokedAfter,
+  touchSessionActivity,
+} from "@/lib/redis/session-revocation";
 
 export const ACCESS_TOKEN_MAX_AGE_SECONDS = 20 * 60;
 export const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000;
@@ -18,6 +24,16 @@ type SessionUser = {
 type SessionMeta = {
   ipAddress?: string | null;
   userAgent?: string | null;
+};
+
+type SessionLifecycleDeps = {
+  prismaClient?: typeof prisma;
+  generateRefreshTokenFn?: () => string;
+  hashTokenFn?: (token: string) => string;
+  getSessionActivityFn?: typeof getSessionActivity;
+  touchSessionActivityFn?: typeof touchSessionActivity;
+  markSessionRevokedFn?: typeof markSessionRevoked;
+  markUserSessionsRevokedAfterFn?: typeof markUserSessionsRevokedAfter;
 };
 
 function addDays(date: Date, days: number) {
@@ -49,19 +65,38 @@ export function getSessionCookieOptions(maxAge: number) {
 }
 
 export class SessionLifecycleService {
+  private readonly db: typeof prisma;
+  private readonly generateRefreshTokenValue: () => string;
+  private readonly hashTokenValue: (token: string) => string;
+  private readonly getSessionActivityValue: typeof getSessionActivity;
+  private readonly touchSessionActivityValue: typeof touchSessionActivity;
+  private readonly markSessionRevokedValue: typeof markSessionRevoked;
+  private readonly markUserSessionsRevokedAfterValue: typeof markUserSessionsRevokedAfter;
+
+  constructor(deps: SessionLifecycleDeps = {}) {
+    this.db = deps.prismaClient || prisma;
+    this.generateRefreshTokenValue = deps.generateRefreshTokenFn || generateRefreshToken;
+    this.hashTokenValue = deps.hashTokenFn || hashToken;
+    this.getSessionActivityValue = deps.getSessionActivityFn || getSessionActivity;
+    this.touchSessionActivityValue = deps.touchSessionActivityFn || touchSessionActivity;
+    this.markSessionRevokedValue = deps.markSessionRevokedFn || markSessionRevoked;
+    this.markUserSessionsRevokedAfterValue =
+      deps.markUserSessionsRevokedAfterFn || markUserSessionsRevokedAfter;
+  }
+
   async createSession(user: SessionUser, meta: SessionMeta = {}) {
     const now = new Date();
-    const refreshToken = generateRefreshToken();
+    const refreshToken = this.generateRefreshTokenValue();
     const sessionId = randomUUID();
     const expiresAt = addDays(now, TENANT_REFRESH_DAYS);
     const absoluteExpiresAt = absoluteExpiryFor(user.role, now);
 
-    await prisma.refresh_tokens.create({
+    await this.db.refresh_tokens.create({
       data: {
         id: randomUUID(),
         user_id: user.id,
         session_id: sessionId,
-        token_hash: hashToken(refreshToken),
+        token_hash: this.hashTokenValue(refreshToken),
         expires_at: expiresAt,
         absolute_expires_at: absoluteExpiresAt,
         last_activity_at: now,
@@ -69,14 +104,15 @@ export class SessionLifecycleService {
         ip_address: meta.ipAddress || null,
       },
     });
+    await this.touchSessionActivityValue(sessionId);
 
     return { refreshToken, sessionId, expiresAt, absoluteExpiresAt };
   }
 
   async rotateRefreshToken(refreshToken: string, meta: SessionMeta = {}) {
     const now = new Date();
-    const tokenHash = hashToken(refreshToken);
-    const tokenRecord = await prisma.refresh_tokens.findUnique({
+    const tokenHash = this.hashTokenValue(refreshToken);
+    const tokenRecord = await this.db.refresh_tokens.findUnique({
       where: { token_hash: tokenHash },
       include: { profiles: true },
     });
@@ -88,13 +124,7 @@ export class SessionLifecycleService {
     const sessionId = tokenRecord.session_id || tokenRecord.id;
 
     if (tokenRecord.revoked_at || isEpochRevoked(tokenRecord.expires_at)) {
-      await prisma.refresh_tokens.updateMany({
-        where: {
-          user_id: tokenRecord.user_id,
-          OR: [{ id: tokenRecord.id }, ...(tokenRecord.session_id ? [{ session_id: tokenRecord.session_id }] : [])],
-        },
-        data: { revoked_at: now },
-      });
+      await this.revokeAllUserSessions(tokenRecord.user_id);
       return { ok: false as const, reason: "reused" as const };
     }
 
@@ -108,7 +138,13 @@ export class SessionLifecycleService {
       return { ok: false as const, reason: "absolute_expired" as const };
     }
 
-    if (now.getTime() - tokenRecord.last_activity_at.getTime() > INACTIVITY_TIMEOUT_MS) {
+    const redisActivityMs = await this.getSessionActivityValue(sessionId);
+    const effectiveLastActivityMs = Math.max(
+      tokenRecord.last_activity_at.getTime(),
+      Number(redisActivityMs || 0),
+    );
+
+    if (now.getTime() - effectiveLastActivityMs > INACTIVITY_TIMEOUT_MS) {
       await this.revokeTokenFamily(tokenRecord.id, tokenRecord.session_id, tokenRecord.user_id);
       return { ok: false as const, reason: "inactive" as const };
     }
@@ -118,33 +154,49 @@ export class SessionLifecycleService {
       return { ok: false as const, reason: "disabled" as const };
     }
 
-    const newRefreshToken = generateRefreshToken();
+    const newRefreshToken = this.generateRefreshTokenValue();
     const expiresAt = addDays(now, TENANT_REFRESH_DAYS);
     const absoluteExpiresAt = tokenRecord.absolute_expires_at || absoluteExpiryFor(tokenRecord.profiles.role, now);
 
-    await prisma.$transaction([
-      prisma.refresh_tokens.update({
-        where: { id: tokenRecord.id },
+    const rotated = await this.db.$transaction(async (tx) => {
+      const rotateResult = await tx.refresh_tokens.updateMany({
+        where: {
+          id: tokenRecord.id,
+          token_hash: tokenHash,
+          revoked_at: null,
+          expires_at: { gt: now },
+        },
         data: {
           revoked_at: now,
           rotated_at: now,
           expires_at: new Date(0),
         },
-      }),
-      prisma.refresh_tokens.create({
+      });
+
+      if (rotateResult.count !== 1) return false;
+
+      await tx.refresh_tokens.create({
         data: {
           id: randomUUID(),
           user_id: tokenRecord.user_id,
           session_id: sessionId,
-          token_hash: hashToken(newRefreshToken),
+          token_hash: this.hashTokenValue(newRefreshToken),
           expires_at: expiresAt,
           absolute_expires_at: absoluteExpiresAt,
           last_activity_at: now,
           device_info: meta.userAgent || tokenRecord.device_info,
           ip_address: meta.ipAddress || tokenRecord.ip_address,
         },
-      }),
-    ]);
+      });
+
+      return true;
+    });
+
+    if (!rotated) {
+      await this.revokeAllUserSessions(tokenRecord.user_id);
+      return { ok: false as const, reason: "reused" as const };
+    }
+    await this.touchSessionActivityValue(sessionId);
 
     return {
       ok: true as const,
@@ -158,7 +210,8 @@ export class SessionLifecycleService {
   async touchSession(sessionId: string | null | undefined, userId: string) {
     if (!sessionId) return false;
     const now = new Date();
-    const result = await prisma.refresh_tokens.updateMany({
+    await this.touchSessionActivityValue(sessionId);
+    const result = await this.db.refresh_tokens.updateMany({
       where: {
         session_id: sessionId,
         user_id: userId,
@@ -172,7 +225,8 @@ export class SessionLifecycleService {
 
   async revokeSession(sessionId: string | null | undefined, userId?: string) {
     if (!sessionId && !userId) return;
-    await prisma.refresh_tokens.updateMany({
+    const revokedAt = Date.now();
+    await this.db.refresh_tokens.updateMany({
       where: {
         ...(sessionId ? { session_id: sessionId } : {}),
         ...(userId ? { user_id: userId } : {}),
@@ -183,10 +237,12 @@ export class SessionLifecycleService {
         expires_at: new Date(0),
       },
     });
+    if (sessionId) await this.markSessionRevokedValue(sessionId);
+    if (!sessionId && userId) await this.markUserSessionsRevokedAfterValue(userId, revokedAt);
   }
 
   private async revokeTokenFamily(tokenId: string, sessionId: string | null, userId: string) {
-    await prisma.refresh_tokens.updateMany({
+    await this.db.refresh_tokens.updateMany({
       where: {
         user_id: userId,
         OR: [{ id: tokenId }, ...(sessionId ? [{ session_id: sessionId }] : [])],
@@ -197,6 +253,22 @@ export class SessionLifecycleService {
         expires_at: new Date(0),
       },
     });
+    if (sessionId) await this.markSessionRevokedValue(sessionId);
+  }
+
+  private async revokeAllUserSessions(userId: string) {
+    const revokedAt = Date.now();
+    await this.db.refresh_tokens.updateMany({
+      where: {
+        user_id: userId,
+        revoked_at: null,
+      },
+      data: {
+        revoked_at: new Date(revokedAt),
+        expires_at: new Date(0),
+      },
+    });
+    await this.markUserSessionsRevokedAfterValue(userId, revokedAt);
   }
 }
 

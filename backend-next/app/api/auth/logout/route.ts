@@ -35,6 +35,10 @@ export async function POST(req: NextRequest) {
       expires: new Date(0),
       path: "/",
     });
+    response.cookies.set("hms_csrf", "", {
+      expires: new Date(0),
+      path: "/",
+    });
 
     return response;
   } catch (error: any) {
@@ -49,6 +53,7 @@ export async function POST(req: NextRequest) {
     
     response.cookies.set("hms_session", "", { httpOnly: true, expires: new Date(0), path: "/" });
     response.cookies.set("hms_refresh_token", "", { httpOnly: true, expires: new Date(0), path: "/" });
+    response.cookies.set("hms_csrf", "", { expires: new Date(0), path: "/" });
     
     return response;
   }

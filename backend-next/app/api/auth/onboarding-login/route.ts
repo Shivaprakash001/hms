@@ -6,6 +6,7 @@ import { apiResponse, apiError } from "@/lib/auth";
 import { authService } from "@/lib/services/auth-service";
 import { rateLimitService } from "@/lib/services/rate-limit-service";
 import { ACCESS_TOKEN_MAX_AGE_SECONDS, getSessionCookieOptions, TENANT_REFRESH_DAYS } from "@/lib/services/session-lifecycle-service";
+import { setCsrfCookie } from "@/lib/security/csrf";
 import { z } from "zod";
 
 const OnboardingLoginSchema = z.object({
@@ -81,6 +82,7 @@ export async function POST(req: NextRequest) {
       response.cookies.set("hms_refresh_token", refresh_token, {
         ...getSessionCookieOptions(60 * 60 * 24 * TENANT_REFRESH_DAYS),
       });
+      setCsrfCookie(response, 60 * 60 * 24 * TENANT_REFRESH_DAYS);
 
       return response;
     } catch (authError: any) {

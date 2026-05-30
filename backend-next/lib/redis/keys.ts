@@ -51,6 +51,11 @@ export const redisKeys = {
       redisKey("admissions", "analytics", ownerId, "hostel", hostelId),
   },
   rateLimit: (scope: string, identifier: string) => redisKey("rate-limit", scope, identifier),
+  session: {
+    revoked: (sessionId: string) => redisKey("session", "revoked", sessionId),
+    userRevokedAfter: (userId: string) => redisKey("session", "user-revoked-after", userId),
+    activity: (sessionId: string) => redisKey("session", "activity", sessionId),
+  },
   otpVerifyLock: (phone: string, purpose: string) => redisKey("otp", "verify-lock", phone, purpose),
   queue: {
     pending: (name: string) => redisKey("queue", name, "pending"),
