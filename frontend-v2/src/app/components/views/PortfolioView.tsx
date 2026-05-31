@@ -12,6 +12,7 @@ import {
   Bell,
   ChevronDown,
   CreditCard,
+  Phone,
   UserPlus,
   IndianRupee,
   TrendingUp,
@@ -35,6 +36,11 @@ const fmt = (n: number) => {
   if (v >= 100000) return `₹${(v / 100000).toFixed(1)}L`;
   if (v >= 1000) return `₹${(v / 1000).toFixed(0)}K`;
   return `₹${v.toLocaleString('en-IN')}`;
+};
+
+const toTelHref = (phone: unknown) => {
+  const digits = String(phone || '').replace(/[^\d+]/g, '');
+  return digits ? `tel:${digits}` : null;
 };
 
 function PortfolioLoadingSkeleton() {
@@ -99,6 +105,7 @@ export function PortfolioView() {
     ? data.overdue_preview.map((due: Record<string, unknown>) => ({
       id: String(due.obligation_id ?? due.id),
       tenant: String(due.tenant_name ?? due.tenant ?? 'Tenant'),
+      phone: String(due.tenant_phone ?? due.phone ?? due.tenantPhone ?? ''),
       room: String(due.room_no ?? due.room ?? ''),
       amount: Number(due.outstanding ?? due.amount ?? 0),
       days: Number(due.days ?? 1),
@@ -269,26 +276,39 @@ export function PortfolioView() {
               </div>
             ) : (
               <div className="divide-y divide-border">
-                {overdueRows.slice(0, 4).map((row) => (
-                  <div key={row.id} className="flex items-center justify-between gap-3 py-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-foreground">{row.tenant}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {row.days}d overdue{row.room ? ` · Room ${row.room}` : ''}
-                      </p>
+                {overdueRows.slice(0, 4).map((row) => {
+                  const telHref = toTelHref(row.phone);
+                  return (
+                    <div key={row.id} className="flex items-center justify-between gap-3 py-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-foreground">{row.tenant}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {row.days}d overdue{row.room ? ` · Room ${row.room}` : ''}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="text-sm font-bold text-destructive">{fmt(row.amount)}</span>
+                        {telHref && (
+                          <a
+                            href={telHref}
+                            aria-label={`Call ${row.tenant}`}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700"
+                          >
+                            <Phone className="h-3.5 w-3.5" />
+                          </a>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => navigate('/alerts')}
+                          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 text-xs font-semibold text-amber-700"
+                        >
+                          <Bell className="h-3.5 w-3.5" />
+                          Remind
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <span className="text-sm font-bold text-destructive">{fmt(row.amount)}</span>
-                      <button
-                        type="button"
-                        onClick={() => navigate('/alerts')}
-                        className="rounded-lg bg-amber-50 border border-amber-200 px-2.5 py-1.5 text-xs font-semibold text-amber-700"
-                      >
-                        Remind
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </section>

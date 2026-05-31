@@ -51,8 +51,12 @@ export function HostelPerformanceCard({ hostel, rank, onEdit }: Props) {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const [expanded, setExpanded] = useState(false);
+  const detailHostelId = String(hostel.hostel_id || (hostel as unknown as { id?: string }).id || '');
 
-  const openDetail = () => navigate(`/hostels/${hostel.hostel_id}`);
+  const openDetail = () => {
+    if (!detailHostelId) return;
+    navigate(`/hostels/${detailHostelId}`);
+  };
 
   const metrics = (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm mt-3 pt-3 border-t border-border">
@@ -84,6 +88,7 @@ export function HostelPerformanceCard({ hostel, rank, onEdit }: Props) {
           type="button"
           onClick={() => setExpanded((e) => !e)}
           className="w-full p-4 text-left touch-manipulation"
+          aria-expanded={expanded}
         >
           <div className="flex items-start gap-3">
             <span className="w-6 h-6 rounded-lg bg-secondary text-xs font-bold flex items-center justify-center shrink-0">
@@ -106,30 +111,32 @@ export function HostelPerformanceCard({ hostel, rank, onEdit }: Props) {
               className={`w-5 h-5 text-muted-foreground shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`}
             />
           </div>
-          {expanded && (
-            <div onClick={(e) => e.stopPropagation()}>
-              {metrics}
-              <div className="flex gap-2 mt-3">
+        </button>
+        {expanded && (
+          <div className="px-4 pb-4">
+            {metrics}
+            <div className="flex gap-2 mt-3">
+              <button
+                type="button"
+                onClick={openDetail}
+                disabled={!detailHostelId}
+                className="flex-1 py-2.5 rounded-xl bg-accent text-accent-foreground text-sm font-semibold"
+              >
+                Manage property
+              </button>
+              {onEdit && (
                 <button
                   type="button"
-                  onClick={openDetail}
-                  className="flex-1 py-2.5 rounded-xl bg-accent text-accent-foreground text-sm font-semibold"
+                  onClick={() => detailHostelId && onEdit(detailHostelId)}
+                  disabled={!detailHostelId}
+                  className="px-4 py-2.5 rounded-xl border border-border text-sm font-medium"
                 >
-                  Manage property
+                  Edit
                 </button>
-                {onEdit && (
-                  <button
-                    type="button"
-                    onClick={() => onEdit(hostel.hostel_id)}
-                    className="px-4 py-2.5 rounded-xl border border-border text-sm font-medium"
-                  >
-                    Edit
-                  </button>
-                )}
-              </div>
+              )}
             </div>
-          )}
-        </button>
+          </div>
+        )}
       </div>
     );
   }
@@ -138,6 +145,7 @@ export function HostelPerformanceCard({ hostel, rank, onEdit }: Props) {
     <button
       type="button"
       onClick={openDetail}
+      disabled={!detailHostelId}
       className="w-full text-left bg-card border border-border rounded-xl p-4 hover:border-accent/40 transition-colors group"
     >
       <div className="flex items-start gap-3">

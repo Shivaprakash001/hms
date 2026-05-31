@@ -12,6 +12,7 @@ type OverduePreviewRow = {
   obligation_id: string;
   tenant_id: string;
   tenant_name: string | null;
+  tenant_phone: string | null;
   room_no: string | null;
   due_date: Date;
   amount: number;
@@ -25,6 +26,7 @@ async function getOverduePreview(ownerId: string, hostelId: string) {
       ro.id::text AS obligation_id,
       ro.tenant_id::text AS tenant_id,
       p.name AS tenant_name,
+      COALESCE(t.phone_1, p.phone) AS tenant_phone,
       r.room_no AS room_no,
       ro.due_date AS due_date,
       ro.amount::float AS amount,
@@ -40,7 +42,7 @@ async function getOverduePreview(ownerId: string, hostelId: string) {
       AND ro.hostel_id = ${hostelId}::uuid
       AND ro.status IN ('PENDING', 'PARTIAL')
       AND ro.due_date < CURRENT_DATE
-    GROUP BY ro.id, ro.tenant_id, p.name, r.room_no, ro.due_date, ro.amount
+    GROUP BY ro.id, ro.tenant_id, p.name, t.phone_1, p.phone, r.room_no, ro.due_date, ro.amount
     HAVING GREATEST(0, (ro.amount - COALESCE(SUM(pay.amount_paid), 0))) > 0
     ORDER BY outstanding DESC, ro.due_date ASC
     LIMIT 4
@@ -52,6 +54,7 @@ async function getOverduePreview(ownerId: string, hostelId: string) {
     tenant_id: row.tenant_id,
     tenant: row.tenant_name || "Tenant",
     tenant_name: row.tenant_name || "Tenant",
+    tenant_phone: row.tenant_phone || null,
     room: row.room_no || "",
     room_no: row.room_no || "",
     due_date: row.due_date,

@@ -73,14 +73,61 @@ export const clearAccessToken = () => {
   inMemoryCsrfToken = null;
 };
 
-const notifySessionExpired = (message?: string) => {
+type SessionExpiryReason = 'inactive' | 'max_age' | 'reuse' | 'expired';
+
+type SessionExpiryNotice = {
+  message: string;
+  reason: SessionExpiryReason;
+};
+
+const getSessionExpiryNotice = (data?: any): SessionExpiryNotice => {
+  const error = data?.error || {};
+  const code = String(error.code || data?.code || '').toUpperCase();
+  const serverMessage = String(error.message || data?.message || '');
+
+  if (code === 'SESSION_INACTIVE' || /inactive|30 minutes/i.test(serverMessage)) {
+    return {
+      reason: 'inactive',
+      message: 'You were signed out because your account was inactive for more than 30 minutes.',
+    };
+  }
+
+  if (code === 'SESSION_MAX_AGE_REACHED') {
+    return {
+      reason: 'max_age',
+      message: 'You were signed out because this secure session reached its maximum duration.',
+    };
+  }
+
+  if (code === 'SESSION_REUSE_DETECTED') {
+    return {
+      reason: 'reuse',
+      message:
+        'You were signed out because we detected unusual session activity. Please sign in again.',
+    };
+  }
+
+  return {
+    reason: 'expired',
+    message:
+      serverMessage ||
+      'You were signed out because your secure session ended. Please sign in again.',
+  };
+};
+
+const notifySessionExpired = (notice?: Partial<SessionExpiryNotice> | string) => {
   if (typeof window === 'undefined') return;
+  const normalizedNotice =
+    typeof notice === 'string'
+      ? { message: notice, reason: 'expired' as SessionExpiryReason }
+      : notice;
   window.dispatchEvent(
     new CustomEvent('hms:session-expired', {
       detail: {
         message:
-          message ||
+          normalizedNotice?.message ||
           'You were signed out because your secure session ended. Please sign in again.',
+        reason: normalizedNotice?.reason || 'expired',
       },
     }),
   );
@@ -140,10 +187,7 @@ api.interceptors.response.use(
         clearAccessToken();
         localStorage.removeItem('ownerUser');
         localStorage.removeItem('tenantUser');
-        notifySessionExpired(
-          refreshError?.response?.data?.error?.message ||
-            refreshError?.response?.data?.message,
-        );
+        notifySessionExpired(getSessionExpiryNotice(refreshError?.response?.data));
         return Promise.reject(error);
       }
     }

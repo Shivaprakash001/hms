@@ -21,8 +21,14 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<AuthUser>;
   loginWithGoogle: (code: string, redirectUri: string) => Promise<AuthUser>;
   updateUser: (patch: Partial<AuthUser>) => void;
-  logout: (redirect?: boolean) => void | Promise<void>;
+  logout: (redirect?: boolean, options?: LogoutOptions) => void | Promise<void>;
 }
+
+type LogoutOptions = {
+  preserveSessionNotice?: boolean;
+};
+
+type SessionExpiryReason = 'inactive' | 'max_age' | 'reuse' | 'expired';
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -45,13 +51,35 @@ const getApiErrorMessage = (error: unknown): string | null => {
   return null;
 };
 
-const clearSessionScopedStorage = () => {
+const SESSION_EXPIRY_NOTICE_KEY = 'hms_session_expiry_notice';
+const INACTIVITY_EXPIRED_MESSAGE =
+  'You were signed out because your account was inactive for more than 30 minutes.';
+
+const persistSessionExpiryNotice = (
+  message: string,
+  reason: SessionExpiryReason = 'expired',
+) => {
+  try {
+    sessionStorage.setItem(
+      SESSION_EXPIRY_NOTICE_KEY,
+      JSON.stringify({ message, reason }),
+    );
+  } catch {
+    /* sessionStorage may be unavailable in strict privacy modes */
+  }
+};
+
+const clearSessionScopedStorage = (options: LogoutOptions = {}) => {
+  const preservedNotice = options.preserveSessionNotice
+    ? sessionStorage.getItem(SESSION_EXPIRY_NOTICE_KEY)
+    : null;
   clearAccessToken();
   localStorage.removeItem('tenantUser');
   localStorage.removeItem('ownerUser');
   localStorage.removeItem('hms_onboarding_step');
   localStorage.removeItem('sri_adithya_onboarding_complete');
   sessionStorage.clear();
+  if (preservedNotice) sessionStorage.setItem(SESSION_EXPIRY_NOTICE_KEY, preservedNotice);
 };
 
 const SESSION_WARNING_MS = 25 * 60 * 1000;
@@ -94,7 +122,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const logout = async (redirect = true) => {
+  const logout = async (redirect = true, options: LogoutOptions = {}) => {
     try {
       await api.post('/auth/logout');
     } catch {
@@ -102,7 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     setUser(null);
     queryClient.clear();
-    clearSessionScopedStorage();
+    clearSessionScopedStorage(options);
     if (redirect) navigate('/', { replace: true });
   };
 
@@ -256,10 +284,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       clearTimers();
       warningTimer = window.setTimeout(() => setShowIdleWarning(true), SESSION_WARNING_MS);
       logoutTimer = window.setTimeout(() => {
-        setExpiredMessage(
-          'You were signed out because your account was inactive for more than 30 minutes.',
-        );
-        logout(false);
+        setExpiredMessage(INACTIVITY_EXPIRED_MESSAGE);
+        persistSessionExpiryNotice(INACTIVITY_EXPIRED_MESSAGE, 'inactive');
+        logout(false, { preserveSessionNotice: true });
       }, SESSION_TIMEOUT_MS);
       pingActivity();
     };
@@ -274,14 +301,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       resetTimers();
     };
     const onExpired = (event: Event) => {
-      const detail = (event as CustomEvent<{ message?: string }>).detail;
-      setExpiredMessage(
+      const detail = (event as CustomEvent<{ message?: string; reason?: SessionExpiryReason }>).detail;
+      const message =
         detail?.message ||
-          'You were signed out because your secure session ended. Please sign in again.',
-      );
+        'You were signed out because your secure session ended. Please sign in again.';
+      setExpiredMessage(message);
+      persistSessionExpiryNotice(message, detail?.reason || 'expired');
       setUser(null);
       queryClient.clear();
-      clearSessionScopedStorage();
+      clearSessionScopedStorage({ preserveSessionNotice: true });
     };
 
     const events = ['mousemove', 'keydown', 'touchstart', 'pointerdown', 'visibilitychange'];
@@ -336,7 +364,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           secondaryLabel="Return to homepage"
           onPrimary={() => {
             setExpiredMessage(null);
-            navigate('/login?signin=1', { replace: true, state: { sessionExpired: true } });
+            navigate('/login?signin=1', {
+              replace: true,
+              state: { sessionExpired: true, sessionMessage: expiredMessage },
+            });
           }}
           onSecondary={() => {
             setExpiredMessage(null);

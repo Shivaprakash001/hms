@@ -4,6 +4,19 @@ import { Eye, EyeOff, Loader2, Chrome, MapPin, UtensilsCrossed, Shield, AlertCir
 import { useGoogleLogin } from '@react-oauth/google';
 import { useAuth } from '@context/AuthContext';
 
+const SESSION_EXPIRY_NOTICE_KEY = 'hms_session_expiry_notice';
+
+const readSessionExpiryNotice = (): { message?: string } | null => {
+  try {
+    const raw = sessionStorage.getItem(SESSION_EXPIRY_NOTICE_KEY);
+    if (!raw) return null;
+    sessionStorage.removeItem(SESSION_EXPIRY_NOTICE_KEY);
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
+
 const getErrorDetails = (error: string) => {
   if (error.includes('Incorrect email') || error.includes('incorrect') || error.includes('password')) {
     return {
@@ -59,7 +72,16 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const loginSearch = new URLSearchParams(location.search);
-  const sessionExpired = Boolean((location.state as { sessionExpired?: boolean } | null)?.sessionExpired);
+  const [storedSessionNotice] = useState(() => readSessionExpiryNotice());
+  const locationState = location.state as {
+    sessionExpired?: boolean;
+    sessionMessage?: string;
+  } | null;
+  const sessionExpired = Boolean(locationState?.sessionExpired || storedSessionNotice);
+  const sessionExpiredMessage =
+    locationState?.sessionMessage ||
+    storedSessionNotice?.message ||
+    'You were signed out because your account was inactive for more than 30 minutes.';
   const isIntentionalSignIn = loginSearch.get('signin') === '1' || sessionExpired;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -232,8 +254,9 @@ export function LoginPage() {
                 <Shield className="mt-0.5 h-5 w-5 shrink-0" />
                 <div>
                   <p className="font-semibold">Session expired for your security</p>
+                  <p className="mt-1 leading-5">{sessionExpiredMessage}</p>
                   <p className="mt-1 leading-5">
-                    You were signed out to protect payment information, tenant records, and financial activity.
+                    This helps protect payment information, tenant records, and financial activity.
                   </p>
                 </div>
               </div>
