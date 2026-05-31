@@ -398,6 +398,11 @@ export class ActivationWorkflowService {
       : 0;
 
     const state = this.computeState(profile, tenant, ruleVersion);
+    const requiredDocumentTypes = this.requiredDocumentTypes(tenant.profile_type);
+    const requiredDocuments = (tenant.identification_documents || []).filter((doc: any) =>
+      requiredDocumentTypes.includes(doc.doc_type)
+    );
+
     return {
       token_status: "VALID",
       activation_state: state,
