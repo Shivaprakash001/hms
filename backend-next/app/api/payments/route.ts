@@ -27,7 +27,6 @@ export async function GET(req: NextRequest) {
     const method = searchParams.get("method") || undefined;
     const month = searchParams.get("month") || undefined;
     const hostelId = searchParams.get("hostelId") || undefined;
-    await requireHostelBelongsToOwner(scope.owner_id, hostelId);
     if (!hostelId) return ApiResponse.error(ApiError.badRequest("hostelId is required"));
 
     const result = await paymentService.getAllPayments(
@@ -41,6 +40,7 @@ export async function GET(req: NextRequest) {
     return ApiResponse.success(result);
   } catch (error: any) {
     console.error("Error fetching payments:", error);
+    if (error?.code === "FORBIDDEN") return ApiResponse.error(ApiError.forbidden(error.message));
     return ApiResponse.error(ApiError.internal("Failed to fetch payments", error));
   }
 }

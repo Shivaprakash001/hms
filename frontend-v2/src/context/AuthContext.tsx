@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
+import React, { createContext, useState, useContext, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api, { clearAccessToken, setAccessToken } from '@lib/api-client';
 import { queryClient } from '@lib/queryClient';
@@ -119,6 +119,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [showIdleWarning, setShowIdleWarning] = useState(false);
   const [expiredMessage, setExpiredMessage] = useState<string | null>(null);
   const idleWarningRef = useRef(false);
+  const lastActivityPingRef = useRef(0);
+  const lastTimerResetRef = useRef(0);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -163,6 +165,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (storedData) {
         try {
+          const refreshResponse = await api.post('/auth/refresh');
+          if (refreshResponse.data?.access_token) {
+            setAccessToken(refreshResponse.data.access_token);
+          }
           const response = await api.get('/auth/me');
           const updatedUser: AuthUser = {
             ...storedData,
@@ -257,26 +263,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const pingActivity = useCallback((force = false) => {
+    if (!user) return;
+    const now = Date.now();
+    if (!force && now - lastActivityPingRef.current < ACTIVITY_PING_MS) return;
+    lastActivityPingRef.current = now;
+
+    const send = () => {
+      api.post('/auth/activity').catch(() => {
+        /* response interceptor handles expired sessions */
+      });
+    };
+
+    if ('requestIdleCallback' in window) {
+      window.requestIdleCallback(send, { timeout: 3000 });
+    } else {
+      window.setTimeout(send, 0);
+    }
+  }, [user]);
+
   useEffect(() => {
     if (!user) return;
 
     let warningTimer: number | undefined;
     let logoutTimer: number | undefined;
-    let lastPing = 0;
-    let lastReset = 0;
+    let heartbeatTimer: number | undefined;
 
     const clearTimers = () => {
       window.clearTimeout(warningTimer);
       window.clearTimeout(logoutTimer);
-    };
-
-    const pingActivity = () => {
-      const now = Date.now();
-      if (now - lastPing < ACTIVITY_PING_MS) return;
-      lastPing = now;
-      api.post('/auth/activity').catch(() => {
-        /* response interceptor handles expired sessions */
-      });
     };
 
     const resetTimers = () => {
@@ -288,17 +303,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         persistSessionExpiryNotice(INACTIVITY_EXPIRED_MESSAGE, 'inactive');
         logout(false, { preserveSessionNotice: true });
       }, SESSION_TIMEOUT_MS);
-      pingActivity();
     };
 
     const onActivity = () => {
       const now = Date.now();
-      if (!idleWarningRef.current && now - lastReset < 10_000) {
+      if (!idleWarningRef.current && now - lastTimerResetRef.current < 10_000) {
         pingActivity();
         return;
       }
-      lastReset = now;
+      lastTimerResetRef.current = now;
       resetTimers();
+      pingActivity();
     };
     const onExpired = (event: Event) => {
       const detail = (event as CustomEvent<{ message?: string; reason?: SessionExpiryReason }>).detail;
@@ -316,18 +331,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     events.forEach((eventName) => window.addEventListener(eventName, onActivity, { passive: true }));
     window.addEventListener('hms:session-expired', onExpired);
     resetTimers();
+    heartbeatTimer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') pingActivity();
+    }, ACTIVITY_PING_MS);
 
     return () => {
       clearTimers();
+      window.clearInterval(heartbeatTimer);
       events.forEach((eventName) => window.removeEventListener(eventName, onActivity));
       window.removeEventListener('hms:session-expired', onExpired);
     };
-  }, [user, location.pathname]);
+  }, [user, pingActivity]);
 
   const staySignedIn = async () => {
     setShowIdleWarning(false);
     try {
-      await api.post('/auth/activity');
+      pingActivity(true);
     } catch {
       /* response interceptor handles expired sessions */
     }

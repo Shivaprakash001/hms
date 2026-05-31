@@ -95,8 +95,8 @@ npm install
 npm run dev                  # Vite dev server on :5173
 ```
 
-Note: in any non-`localhost` hostname the SPA ignores `VITE_API_URL` and uses
-the hard-coded production URL. See `docs/TASKS.md:T-009`.
+Note: in any non-`localhost` hostname the SPA uses the Vercel production API at
+`https://api.sriadithyahostels.in`.
 
 ### Legacy Python backend (`backend/`)
 

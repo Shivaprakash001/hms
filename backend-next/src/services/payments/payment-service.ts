@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { Prisma } from "@prisma/client";
 import { eventSystem } from "@/lib/events";
 import { PaymentProviderFactory } from "./provider-factory";
 import crypto from "crypto";
@@ -2493,106 +2494,241 @@ export class PaymentService {
       month?: string;
     }
   ) {
-    const obligations = await paymentRepository.getObligationsWithPayments(ownerId, hostelId, filters);
-
     const now = new Date();
     const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
-
-    const entries = obligations.map((ob: any) => {
-      const payments = ob.payments || [];
-      const paidAmount = payments.reduce((sum: number, p: any) => sum + Number(p.amount_paid), 0);
-      const rentAmount = Number(ob.amount || 0);
-      const balance = Math.max(0, rentAmount - paidAmount);
-      const latestPayment = payments[0] || null;
-
-      let computedStatus: "paid" | "pending" | "partial" | "overdue" | "waived" = "pending";
-      if (ob.status === "WAIVED") {
-        computedStatus = "waived";
-      } else if (balance <= 0 || ob.status === "PAID") {
-        computedStatus = "paid";
-      } else if (ob.due_date && ob.due_date < todayUTC) {
-        computedStatus = "overdue";
-      } else if (ob.status === "PARTIAL") {
-        computedStatus = "partial";
-      }
-
-      const row = {
-        id: ob.id,
-        obligationId: ob.id,
-        tenantId: ob.tenant_id,
-        tenantName: ob.tenants?.profiles?.name || "Unknown",
-        tenant_name: ob.tenants?.profiles?.name || "Unknown",
-        tenantPhone: ob.tenants?.profiles?.phone || null,
-        tenantEmail: ob.tenants?.profiles?.email || null,
-        room: ob.room_allocations?.room?.room_no || "N/A",
-        room_no: ob.room_allocations?.room?.room_no || "N/A",
-        month: ob.rent_month,
-        dueDate: ob.due_date,
-        rentAmount,
-        paidAmount,
-        amount_paid: paidAmount,
-        balance,
-        status: computedStatus,
-        statusRaw: String(ob.status || "").toUpperCase(),
-        paymentMethod: latestPayment?.payment_method || null,
-        paymentMethods: Array.from(new Set(payments.map((p: any) => p.payment_method).filter(Boolean))),
-        latestPaymentId: latestPayment?.id || null,
-        reference_number: latestPayment?.reference_number || null,
-        preferred_app: latestPayment?.preferred_app || null,
-        createdAt: latestPayment?.created_at || null,
-        paymentDate: latestPayment?.payment_date || null,
-        payment_date: latestPayment?.payment_date || null,
-        isReceiptAvailable: Boolean(latestPayment?.id),
-        entityType: "ledger",
-        amount: balance > 0 ? balance : paidAmount || rentAmount,
-      };
-
-      return { row, payments };
-    });
-
     const statusFilter = (filters?.status || "").toUpperCase();
-    const filteredEntries = entries.filter(({ row }) => {
-      if (!statusFilter || statusFilter === "ALL") return true;
-      if (statusFilter === "PAID") return row.status === "paid";
-      if (statusFilter === "PENDING") return row.status === "pending" || row.status === "partial";
-      if (statusFilter === "OVERDUE") return row.status === "overdue";
-      if (statusFilter === "PARTIAL") return row.status === "partial";
-      if (statusFilter === "WAIVED") return row.status === "waived";
-      return row.status.toUpperCase() === statusFilter;
-    });
 
-    const total = filteredEntries.length;
-    const paginatedEntries = filteredEntries.slice(offset, offset + limit);
-    const paginatedRows = paginatedEntries.map((entry) => entry.row);
+    const methodFilter = filters?.method
+      ? Prisma.sql`AND p.payment_method = ${filters.method}`
+      : Prisma.empty;
+    const monthFilter = typeof filters?.month === "string" && /^\d{4}-\d{2}$/.test(filters.month)
+      ? Prisma.sql`AND o.rent_month >= ${new Date(`${filters.month}-01T00:00:00.000Z`)}::date
+          AND o.rent_month < ${new Date(Date.UTC(Number(filters.month.slice(0, 4)), Number(filters.month.slice(5, 7)), 1, 0, 0, 0, 0))}::date`
+      : Prisma.empty;
+    const tenantFilter = filters?.tenantId
+      ? Prisma.sql`AND o.tenant_id = ${filters.tenantId}::uuid`
+      : Prisma.empty;
 
-    const pendingEntries = filteredEntries.filter((entry) => ["pending", "partial", "overdue"].includes(entry.row.status));
-    const overdueEntries = filteredEntries.filter((entry) => entry.row.status === "overdue");
+    const statusWhere =
+      !statusFilter || statusFilter === "ALL"
+        ? Prisma.sql`TRUE`
+        : statusFilter === "PAID"
+          ? Prisma.sql`computed_status = 'paid'`
+          : statusFilter === "PENDING"
+            ? Prisma.sql`computed_status IN ('pending', 'partial')`
+            : statusFilter === "OVERDUE"
+              ? Prisma.sql`computed_status = 'overdue'`
+              : statusFilter === "PARTIAL"
+                ? Prisma.sql`computed_status = 'partial'`
+                : statusFilter === "WAIVED"
+                  ? Prisma.sql`computed_status = 'waived'`
+                  : Prisma.sql`UPPER(computed_status) = ${statusFilter}`;
 
-    const operationalDues = await financialService.getOperationalDues(ownerId, hostelId);
+    const rows = await prisma.$queryRaw<any[]>`
+      WITH hostel_scope AS (
+        SELECT EXISTS (
+          SELECT 1
+          FROM hostels h
+          WHERE h.id = ${hostelId}::uuid
+            AND h.owner_id = ${ownerId}::uuid
+            AND h.is_active = true
+        ) AS allowed
+      ),
+      base AS (
+        SELECT
+          o.id,
+          o.tenant_id,
+          o.rent_month,
+          o.due_date,
+          o.amount::float AS rent_amount,
+          o.status::text AS status_raw,
+          COALESCE(pay.total_paid, 0)::float AS paid_amount,
+          GREATEST(0, o.amount::float - COALESCE(pay.total_paid, 0))::float AS balance,
+          COALESCE(pay.payment_methods, '[]'::jsonb) AS payment_methods,
+          prof.name AS tenant_name,
+          prof.phone AS tenant_phone,
+          prof.email AS tenant_email,
+          r.room_no,
+          latest.id AS latest_payment_id,
+          latest.payment_method AS latest_payment_method,
+          latest.reference_number AS latest_reference_number,
+          latest.created_at AS latest_created_at,
+          latest.payment_date AS latest_payment_date,
+          CASE
+            WHEN o.status::text = 'WAIVED' THEN 'waived'
+            WHEN o.status::text = 'PAID' OR o.amount::float - COALESCE(pay.total_paid, 0) <= 0 THEN 'paid'
+            WHEN o.due_date < ${todayUTC}::date THEN 'overdue'
+            WHEN o.status::text = 'PARTIAL' THEN 'partial'
+            ELSE 'pending'
+          END AS computed_status
+        FROM rent_obligations o
+        JOIN hostel_scope hs ON hs.allowed
+        LEFT JOIN tenants t ON t.id = o.tenant_id
+        LEFT JOIN profiles prof ON prof.id = t.profile_id
+        LEFT JOIN room_allocations ra ON ra.id = o.allocation_id
+        LEFT JOIN rooms r ON r.id = ra.room_id
+        LEFT JOIN LATERAL (
+          SELECT
+            SUM(p.amount_paid)::float AS total_paid,
+            COALESCE(jsonb_agg(DISTINCT p.payment_method) FILTER (WHERE p.payment_method IS NOT NULL), '[]'::jsonb) AS payment_methods
+          FROM payments p
+          WHERE p.obligation_id = o.id
+          ${methodFilter}
+        ) pay ON true
+        LEFT JOIN LATERAL (
+          SELECT p.id, p.payment_method, p.reference_number, p.created_at, p.payment_date
+          FROM payments p
+          WHERE p.obligation_id = o.id
+          ${methodFilter}
+          ORDER BY p.payment_date DESC, p.created_at DESC
+          LIMIT 1
+        ) latest ON true
+        WHERE o.owner_id = ${ownerId}::uuid
+          AND o.hostel_id = ${hostelId}::uuid
+          ${tenantFilter}
+          ${monthFilter}
+      ),
+      filtered AS (
+        SELECT *
+        FROM base
+        WHERE ${statusWhere}
+      ),
+      paged AS (
+        SELECT *
+        FROM filtered
+        ORDER BY rent_month DESC NULLS LAST, due_date DESC NULLS LAST
+        LIMIT ${limit}
+        OFFSET ${offset}
+      ),
+      stats AS (
+        SELECT
+          COUNT(*)::int AS total,
+          COALESCE(SUM(paid_amount), 0)::float AS total_collected,
+          COUNT(*) FILTER (WHERE computed_status IN ('pending', 'partial', 'overdue'))::int AS pending_rows,
+          COUNT(*) FILTER (WHERE computed_status = 'overdue')::int AS overdue_rows
+        FROM filtered
+      ),
+      operational_dues AS (
+        SELECT
+          COALESCE(SUM(
+            o.amount - COALESCE(pay_agg.total_paid, 0)
+          ), 0)::float AS pending_total,
+          COALESCE(SUM(
+            CASE WHEN o.due_date < ${todayUTC}::date
+              THEN o.amount - COALESCE(pay_agg.total_paid, 0)
+              ELSE 0
+            END
+          ), 0)::float AS overdue_total
+        FROM rent_obligations o
+        JOIN hostel_scope hs ON hs.allowed
+        JOIN tenants t ON t.id = o.tenant_id
+        LEFT JOIN (
+          SELECT obligation_id, SUM(amount_paid)::float AS total_paid
+          FROM payments
+          GROUP BY obligation_id
+        ) pay_agg ON pay_agg.obligation_id = o.id
+        WHERE o.owner_id = ${ownerId}::uuid
+          AND o.hostel_id = ${hostelId}::uuid
+          AND o.status IN ('PENDING', 'PARTIAL')
+          AND t.status = 'ACTIVE'
+          AND o.amount - COALESCE(pay_agg.total_paid, 0) > 0
+      ),
+      active_tenants AS (
+        SELECT COUNT(*)::int AS active_tenants
+        FROM tenants t
+        WHERE t.owner_id = ${ownerId}::uuid
+          AND t.hostel_id = ${hostelId}::uuid
+          AND t.status = 'ACTIVE'
+      ),
+      payment_records AS (
+        SELECT COALESCE(jsonb_agg(jsonb_build_object(
+          'id', p.id,
+          'obligationId', f.id,
+          'tenantId', f.tenant_id,
+          'tenantName', COALESCE(f.tenant_name, 'Unknown'),
+          'amount', p.amount_paid::float,
+          'month', f.rent_month,
+          'date', p.payment_date,
+          'paymentDate', p.payment_date,
+          'createdAt', p.created_at,
+          'method', p.payment_method,
+          'status', 'paid'
+        ) ORDER BY p.payment_date DESC, p.created_at DESC), '[]'::jsonb) AS rows
+        FROM filtered f
+        JOIN payments p ON p.obligation_id = f.id
+        ${filters?.method ? Prisma.sql`WHERE p.payment_method = ${filters.method}` : Prisma.empty}
+      ),
+      page_rows AS (
+        SELECT COALESCE(jsonb_agg(jsonb_build_object(
+          'id', id,
+          'obligationId', id,
+          'tenantId', tenant_id,
+          'tenantName', COALESCE(tenant_name, 'Unknown'),
+          'tenant_name', COALESCE(tenant_name, 'Unknown'),
+          'tenantPhone', tenant_phone,
+          'tenantEmail', tenant_email,
+          'room', COALESCE(room_no, 'N/A'),
+          'room_no', COALESCE(room_no, 'N/A'),
+          'month', rent_month,
+          'dueDate', due_date,
+          'rentAmount', rent_amount,
+          'paidAmount', paid_amount,
+          'amount_paid', paid_amount,
+          'balance', balance,
+          'outstanding', balance,
+          'status', computed_status,
+          'statusRaw', UPPER(status_raw),
+          'paymentMethod', latest_payment_method,
+          'paymentMethods', payment_methods,
+          'latestPaymentId', latest_payment_id,
+          'reference_number', latest_reference_number,
+          'preferred_app', null,
+          'createdAt', latest_created_at,
+          'paymentDate', latest_payment_date,
+          'payment_date', latest_payment_date,
+          'isReceiptAvailable', latest_payment_id IS NOT NULL,
+          'entityType', 'ledger',
+          'amount', CASE WHEN balance > 0 THEN balance ELSE COALESCE(NULLIF(paid_amount, 0), rent_amount) END
+        ) ORDER BY rent_month DESC NULLS LAST, due_date DESC NULLS LAST), '[]'::jsonb) AS rows
+        FROM paged
+      )
+      SELECT
+        hs.allowed,
+        s.total,
+        s.total_collected,
+        od.pending_total AS pending_dues,
+        od.overdue_total AS overdue_amount,
+        s.pending_rows,
+        s.overdue_rows,
+        a.active_tenants,
+        pr.rows AS payment_records,
+        page.rows AS payments
+      FROM hostel_scope hs
+      CROSS JOIN stats s
+      CROSS JOIN operational_dues od
+      CROSS JOIN active_tenants a
+      CROSS JOIN payment_records pr
+      CROSS JOIN page_rows page
+    `;
+
+    const row = rows[0] || {};
+    if (!row.allowed) {
+      const error = new Error("Hostel is not owned by the authenticated owner.");
+      (error as any).code = "FORBIDDEN";
+      throw error;
+    }
+
+    const paginatedRows = Array.isArray(row.payments) ? row.payments : [];
+    const paymentRecords = Array.isArray(row.payment_records) ? row.payment_records : [];
+    const total = Number(row.total || 0);
     const stats = {
-      total_collected: Number(filteredEntries.reduce((sum, entry) => sum + Number(entry.row.paidAmount || 0), 0).toFixed(2)),
-      pending_dues: Number((operationalDues.pending_total || 0).toFixed(2)),
-      overdue_amount: Number((operationalDues.overdue_total || 0).toFixed(2)),
-      active_tenants: await prisma.tenants.count({ where: { owner_id: ownerId, hostel_id: hostelId, status: "ACTIVE" } }),
-      pending_rows: pendingEntries.length,
-      overdue_rows: overdueEntries.length,
+      total_collected: Number(Number(row.total_collected || 0).toFixed(2)),
+      pending_dues: Number(Number(row.pending_dues || 0).toFixed(2)),
+      overdue_amount: Number(Number(row.overdue_amount || 0).toFixed(2)),
+      active_tenants: Number(row.active_tenants || 0),
+      pending_rows: Number(row.pending_rows || 0),
+      overdue_rows: Number(row.overdue_rows || 0),
     };
-
-    const paymentRecords = filteredEntries.flatMap((entry) =>
-      entry.payments.map((payment: any) => ({
-        id: payment.id,
-        obligationId: entry.row.obligationId,
-        tenantId: entry.row.tenantId,
-        tenantName: entry.row.tenantName,
-        amount: Number(payment.amount_paid || 0),
-        month: entry.row.month,
-        date: payment.payment_date,
-        paymentDate: payment.payment_date,
-        createdAt: payment.created_at,
-        method: payment.payment_method,
-        status: "paid",
-      }))
-    );
 
     return {
       stats,

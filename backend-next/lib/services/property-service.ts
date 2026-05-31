@@ -261,28 +261,48 @@ export class PropertyService {
   }
 
   async getFloors(ownerId: string, hostelId: string) {
-    const floors = await prisma.floors.findMany({
-      where: { hostel_id: hostelId, hostel: { owner_id: ownerId } },
-      include: {
-        rooms: {
-          where: { is_active: true },
-          select: {
-            id: true,
-            room_allocations: { where: { is_active: true, end_date: null }, select: { id: true } },
-          },
-        },
-      },
-      orderBy: { sort_order: "asc" },
-    });
+    const rows = await prisma.$queryRaw<any[]>`
+      WITH hostel_scope AS (
+        SELECT EXISTS (
+          SELECT 1
+          FROM hostels h
+          WHERE h.id = ${hostelId}::uuid
+            AND h.owner_id = ${ownerId}::uuid
+            AND h.is_active = true
+        ) AS allowed
+      ),
+      floor_rows AS (
+        SELECT
+          f.id,
+          f.hostel_id,
+          f.name,
+          f.sort_order,
+          COUNT(DISTINCT r.id)::int AS room_count,
+          COUNT(ra.id)::int AS occupied_count
+        FROM floors f
+        JOIN hostel_scope hs ON hs.allowed
+        LEFT JOIN rooms r ON r.floor_id = f.id AND r.is_active = true
+        LEFT JOIN room_allocations ra ON ra.room_id = r.id AND ra.is_active = true AND ra.end_date IS NULL
+        WHERE f.hostel_id = ${hostelId}::uuid
+        GROUP BY f.id, f.hostel_id, f.name, f.sort_order
+        ORDER BY f.sort_order ASC
+      )
+      SELECT
+        hs.allowed,
+        COALESCE(jsonb_agg(to_jsonb(floor_rows) ORDER BY floor_rows.sort_order ASC) FILTER (WHERE floor_rows.id IS NOT NULL), '[]'::jsonb) AS floors
+      FROM hostel_scope hs
+      LEFT JOIN floor_rows ON true
+      GROUP BY hs.allowed
+    `;
 
-    return floors.map((f: any) => ({
-      id: f.id,
-      hostel_id: f.hostel_id,
-      name: f.name,
-      sort_order: f.sort_order,
-      room_count: f.rooms.length,
-      occupied_count: f.rooms.reduce((s: number, r: any) => s + r.room_allocations.length, 0),
-    }));
+    const row = rows[0];
+    if (!row?.allowed) {
+      const error: any = new Error("Hostel is not owned by the authenticated owner");
+      error.code = "FORBIDDEN";
+      throw error;
+    }
+
+    return Array.isArray(row.floors) ? row.floors : [];
   }
 
   async createFloor(ownerId: string, hostelId: string, data: { name: string; sort_order?: number }) {

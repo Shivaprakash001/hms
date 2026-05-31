@@ -25,12 +25,12 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const hostelId = searchParams.get("hostelId") || undefined;
 
-    await requireHostelBelongsToOwner(scope.owner_id, hostelId);
     if (!hostelId) return ApiResponse.error(ApiError.badRequest("hostelId is required"));
 
     const floors = await propertyService.getFloors(scope.owner_id, hostelId);
     return ApiResponse.success(floors);
   } catch (error: any) {
+    if (error?.code === "FORBIDDEN") return ApiResponse.error(ApiError.forbidden(error.message));
     return ApiResponse.error(ApiError.internal("Failed to fetch floors", error));
   }
 }

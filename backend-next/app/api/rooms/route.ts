@@ -11,7 +11,7 @@ import { roomRepository } from "@/src/repositories/roomRepository";
 import { prisma } from "@/lib/db";
 import { propertyService } from "@/lib/services/property-service";
 import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
-import { assertHostelBelongsToOwner, requireHostelBelongsToOwner, scopedRoomWhere } from "@/lib/security/scoped-query";
+import { assertHostelBelongsToOwner, requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
 
 
 /**
@@ -34,53 +34,89 @@ export async function GET(req: NextRequest) {
     
     console.log(`[rooms.GET] Fetching rooms for owner ${scope.owner_id}, hostel ${hostelId}, grouped=${grouped}`);
     
-    await requireHostelBelongsToOwner(scope.owner_id, hostelId);
     if (!hostelId) {
       console.warn("[rooms.GET] Missing hostelId context");
       return ApiResponse.error(ApiError.badRequest("hostelId is required"));
     }
 
     if (grouped) {
+      await requireHostelBelongsToOwner(scope.owner_id, hostelId);
       const floors = await propertyService.getFloorsWithRooms(scope.owner_id, hostelId);
       return ApiResponse.success(floors);
     }
 
-    // Flat list — includes active allocations so the UI can derive occupancy from source of truth
-    const rawRooms = await prisma.rooms.findMany({
-      where: {
-        hostel_id: hostelId,
-        hostels: { owner_id: scope.owner_id },
-        is_active: true,
-      },
-      include: {
-        floor_ref: { select: { id: true, name: true, sort_order: true } },
-        room_allocations: {
-          where: { is_active: true, end_date: null },
-          include: {
-            tenant: {
-              select: {
-                id: true,
-                monthly_rent: true,
-                profiles: { select: { name: true, phone: true } },
-              },
-            },
-          },
-        },
-      },
-      orderBy: { room_no: "asc" },
-    });
+    const [roomResult] = await prisma.$queryRaw<any[]>`
+      WITH hostel_scope AS (
+        SELECT EXISTS (
+          SELECT 1
+          FROM hostels h
+          WHERE h.id = ${hostelId}::uuid
+            AND h.owner_id = ${scope.owner_id}::uuid
+            AND h.is_active = true
+        ) AS allowed
+      ),
+      room_rows AS (
+        SELECT
+          r.id,
+          r.room_no,
+          r.capacity,
+          r.floor,
+          r.floor_id,
+          f.name AS floor_name,
+          COALESCE(f.sort_order, 999) AS floor_sort_order,
+          r.base_rent,
+          r.wifi_name,
+          r.notes,
+          r.hostel_id,
+          r.is_active,
+          COALESCE(alloc.tenants, '[]'::jsonb) AS tenants
+        FROM rooms r
+        JOIN hostel_scope hs ON hs.allowed
+        LEFT JOIN floors f ON f.id = r.floor_id
+        LEFT JOIN LATERAL (
+          SELECT jsonb_agg(jsonb_build_object(
+            'allocation_id', ra.id,
+            'tenant_id', t.id,
+            'name', p.name,
+            'phone', p.phone,
+            'monthly_rent', COALESCE(t.monthly_rent, r.base_rent, 0),
+            'joined_date', ra.start_date
+          ) ORDER BY ra.start_date ASC) AS tenants
+          FROM room_allocations ra
+          LEFT JOIN tenants t ON t.id = ra.tenant_id
+          LEFT JOIN profiles p ON p.id = t.profile_id
+          WHERE ra.room_id = r.id
+            AND ra.is_active = true
+            AND ra.end_date IS NULL
+        ) alloc ON true
+        WHERE r.hostel_id = ${hostelId}::uuid
+          AND r.is_active = true
+        ORDER BY r.room_no ASC
+      )
+      SELECT
+        hs.allowed,
+        COALESCE(jsonb_agg(to_jsonb(room_rows) ORDER BY room_rows.room_no ASC) FILTER (WHERE room_rows.id IS NOT NULL), '[]'::jsonb) AS rooms
+      FROM hostel_scope hs
+      LEFT JOIN room_rows ON true
+      GROUP BY hs.allowed
+    `;
 
+    if (!roomResult?.allowed) {
+      return ApiResponse.error(ApiError.forbidden("Hostel is not owned by the authenticated owner"));
+    }
+
+    const rawRooms = Array.isArray(roomResult.rooms) ? roomResult.rooms : [];
     const rooms = rawRooms.map((room: any) => {
-      const allocs = room.room_allocations ?? [];
+      const allocs = Array.isArray(room.tenants) ? room.tenants : [];
       const occupiedCount = allocs.length;
-      const firstTenant = allocs[0]?.tenant ?? null;
+      const firstTenant = allocs[0] ?? null;
       const tenants = allocs.map((allocation: any) => ({
-        allocation_id: allocation.id,
-        tenant_id: allocation.tenant?.id ?? null,
-        name: allocation.tenant?.profiles?.name ?? null,
-        phone: allocation.tenant?.profiles?.phone ?? null,
-        monthly_rent: Number(allocation.tenant?.monthly_rent ?? room.base_rent ?? 0),
-        joined_date: allocation.start_date,
+        allocation_id: allocation.allocation_id,
+        tenant_id: allocation.tenant_id ?? null,
+        name: allocation.name ?? null,
+        phone: allocation.phone ?? null,
+        monthly_rent: Number(allocation.monthly_rent ?? room.base_rent ?? 0),
+        joined_date: allocation.joined_date,
       }));
       const derivedStatus = occupiedCount === 0 ? "vacant" : "occupied";
       return {
@@ -90,8 +126,8 @@ export async function GET(req: NextRequest) {
         capacity: room.capacity,
         floor: room.floor,
         floor_id: room.floor_id ?? null,
-        floor_name: room.floor_ref?.name ?? null,
-        floor_sort_order: room.floor_ref?.sort_order ?? 999,
+        floor_name: room.floor_name ?? null,
+        floor_sort_order: room.floor_sort_order ?? 999,
         base_rent: room.base_rent,
         monthly_rent: room.base_rent,
         rent: room.base_rent,
@@ -103,9 +139,9 @@ export async function GET(req: NextRequest) {
         occupied_count: occupiedCount,
         vacant_count: Math.max(0, room.capacity - occupiedCount),
         tenants,
-        tenant_name: firstTenant?.profiles?.name ?? null,
-        tenant_id: firstTenant?.id ?? null,
-        tenant_phone: firstTenant?.profiles?.phone ?? null,
+        tenant_name: firstTenant?.name ?? null,
+        tenant_id: firstTenant?.tenant_id ?? null,
+        tenant_phone: firstTenant?.phone ?? null,
         tenant_rent: firstTenant ? Number(firstTenant.monthly_rent ?? room.base_rent) : null,
       };
     });

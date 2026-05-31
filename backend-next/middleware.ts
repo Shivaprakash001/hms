@@ -15,6 +15,7 @@ const PUBLIC_ROUTES = [
   "/api/auth/send-phone-otp",
   "/api/auth/verify-phone-otp",
   "/api/auth/refresh",
+  "/api/auth/csrf",
   "/api/auth/google-callback",
   "/api/tenants/activate",
   "/api/visit",

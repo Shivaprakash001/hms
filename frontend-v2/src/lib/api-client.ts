@@ -1,27 +1,13 @@
 import axios from 'axios';
 
-const configuredApiUrl = import.meta.env.VITE_API_URL;
-const DEFAULT_PRODUCTION_API_URL = 'https://trishul-solutions1.onrender.com';
+const DEFAULT_PRODUCTION_API_URL = 'https://api.sriadithyahostels.in';
 const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
 const isLocalDev =
   typeof window !== 'undefined' && LOCAL_HOSTNAMES.has(window.location.hostname);
 
-const normalizeApiUrl = (value?: string) => {
-  const trimmed = typeof value === 'string' ? value.trim().replace(/\/$/, '') : '';
-  if (!trimmed) return DEFAULT_PRODUCTION_API_URL;
-
-  try {
-    new URL(trimmed);
-  } catch {
-    return DEFAULT_PRODUCTION_API_URL;
-  }
-
-  return trimmed;
-};
-
 const baseURL = isLocalDev
   ? '/api'
-  : normalizeApiUrl(configuredApiUrl);
+  : DEFAULT_PRODUCTION_API_URL;
 
 const api = axios.create({
   baseURL,
@@ -52,6 +38,20 @@ const attachCsrfHeader = (headers: any, method?: string) => {
   if (csrfToken) headers[CSRF_HEADER_NAME] = csrfToken;
 };
 
+const isPublicAuthRequest = (url?: string) =>
+  [
+    '/auth/login',
+    '/auth/onboarding-login',
+    '/auth/google-callback',
+    '/auth/register',
+    '/auth/send-otp',
+    '/auth/verify-otp',
+    '/auth/send-phone-otp',
+    '/auth/verify-phone-otp',
+    '/auth/refresh',
+    '/auth/csrf',
+  ].some((path) => String(url || '').includes(path));
+
 const rememberCsrfToken = (headers?: any) => {
   const token =
     headers?.[CSRF_HEADER_NAME] ||
@@ -67,10 +67,7 @@ const ensureCsrfToken = async () => {
   if (existing) return existing;
   if (!csrfBootstrapPromise) {
     csrfBootstrapPromise = axios
-      .get(`${baseURL}/auth/me`, {
-        withCredentials: true,
-        headers: inMemoryAccessToken ? { Authorization: `Bearer ${inMemoryAccessToken}` } : undefined,
-      })
+      .get(`${baseURL}/auth/csrf`, { withCredentials: true })
       .then((response) => rememberCsrfToken(response.headers) || getCookieValue(CSRF_COOKIE_NAME))
       .catch(() => null)
       .finally(() => {
@@ -155,7 +152,7 @@ api.interceptors.request.use(
       if (config.headers) delete config.headers['Content-Type'];
     }
     if (inMemoryAccessToken) config.headers.Authorization = `Bearer ${inMemoryAccessToken}`;
-    if (isUnsafeMethod(config.method)) await ensureCsrfToken();
+    if (isUnsafeMethod(config.method) && !isPublicAuthRequest(config.url)) await ensureCsrfToken();
     if (config.headers) attachCsrfHeader(config.headers, config.method);
     return config;
   },
@@ -170,13 +167,7 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     const requestUrl: string = originalRequest?.url || '';
-    const isPublicAuthFlow = [
-      '/auth/login',
-      '/auth/register',
-      '/auth/send-otp',
-      '/auth/verify-otp',
-      '/auth/refresh',
-    ].some((path) => requestUrl.includes(path));
+    const isPublicAuthFlow = isPublicAuthRequest(requestUrl);
 
     if (
       error.response?.status === 401 &&
