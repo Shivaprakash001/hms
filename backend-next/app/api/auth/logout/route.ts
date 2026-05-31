@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { hashToken } from "@/lib/auth";
 import { sessionLifecycleService } from "@/lib/services/session-lifecycle-service";
+import { clearCsrfCookie } from "@/lib/security/csrf";
 
 export async function POST(req: NextRequest) {
   try {
@@ -35,10 +36,7 @@ export async function POST(req: NextRequest) {
       expires: new Date(0),
       path: "/",
     });
-    response.cookies.set("hms_csrf", "", {
-      expires: new Date(0),
-      path: "/",
-    });
+    clearCsrfCookie(response);
 
     return response;
   } catch (error: any) {
@@ -53,7 +51,7 @@ export async function POST(req: NextRequest) {
     
     response.cookies.set("hms_session", "", { httpOnly: true, expires: new Date(0), path: "/" });
     response.cookies.set("hms_refresh_token", "", { httpOnly: true, expires: new Date(0), path: "/" });
-    response.cookies.set("hms_csrf", "", { expires: new Date(0), path: "/" });
+    clearCsrfCookie(response);
     
     return response;
   }

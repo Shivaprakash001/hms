@@ -24,7 +24,7 @@ export function ReminderActionBar({ tenantId, className }: Props) {
   return (
     <div
       className={cn(
-        'p-3 rounded-xl border border-border bg-card/95 backdrop-blur-md shadow-lg',
+        'rounded-xl border border-border bg-card p-3 shadow-sm',
         className
       )}
     >
@@ -32,7 +32,7 @@ export function ReminderActionBar({ tenantId, className }: Props) {
         type="button"
         onClick={() => mutation.mutate()}
         disabled={mutation.isPending}
-        className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-accent text-accent-foreground font-semibold text-sm touch-manipulation disabled:opacity-50"
+        className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-accent text-accent-foreground font-semibold text-sm touch-manipulation disabled:opacity-50 active:scale-[0.98] transition-transform"
       >
         <Bell className="w-4 h-4" />
         {mutation.isPending ? 'Sending…' : 'Send payment reminder'}

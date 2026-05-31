@@ -2,6 +2,7 @@ import { lazy, Suspense, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Search, CalendarDays, Repeat2, Zap, Sparkles, TrendingUp, TrendingDown } from 'lucide-react';
+import { toast } from 'sonner';
 import { queryKeys } from '@lib/queryKeys';
 import { fmt } from '../shared/format';
 import { TabError, TabSkeleton } from '../shared/TabStates';
@@ -41,9 +42,13 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
     mutationFn: (body: Record<string, unknown>) =>
       import('@features/expenses/api').then((m) => m.expenseService.create(hostelId, body)),
     onSuccess: () => {
+      toast.success('Expense added');
       queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all(hostelId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
       setShowAddExpense(false);
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.error?.message || error?.message || 'Could not add expense');
     },
   });
 
@@ -250,19 +255,15 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
 }
 
 const EXPENSE_CATEGORIES = [
-  'Food',
+  'Food & Groceries',
+  'Staff Salary',
   'Electricity',
   'Water',
+  'Gas Cylinder',
   'Internet',
-  'Staff Salary',
-  'Maintenance',
   'Repairs',
   'Cleaning',
-  'Security',
-  'Furniture',
-  'Kitchen',
-  'Marketing',
-  'Transport',
+  'Asset Purchase',
   'Miscellaneous',
 ];
 

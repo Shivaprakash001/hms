@@ -93,6 +93,12 @@ export function useTenantsList(hostelId: string | undefined, options?: { enabled
 
   const total = Number((listQuery.data as Record<string, unknown>)?.total ?? filtered.length);
   const stats = statsQuery.data as Record<string, unknown> | undefined;
+  const loadedOverdueTenants = allNormalized.filter(
+    (t) =>
+      t.status === 'ACTIVE' &&
+      t.outstandingAmount > 0 &&
+      ['PENDING', 'PARTIAL'].includes(String(t.paymentStatus).toUpperCase())
+  ).length;
 
   const dashboard = {
     total: Number(stats?.total_tenants ?? stats?.totalTenants ?? total),
@@ -109,7 +115,13 @@ export function useTenantsList(hostelId: string | undefined, options?: { enabled
     ),
     occupancyRate: Number(stats?.occupancy_rate ?? stats?.occupancyRate ?? 0),
     pendingDues: Number(stats?.pending_dues ?? stats?.pendingDues ?? 0),
-    overdueTenants: Number(stats?.overdue_tenants ?? stats?.overdueTenants ?? 0),
+    overdueTenants: Number(
+      stats?.overdue_tenants ??
+        stats?.overdueTenants ??
+        stats?.overdue_count ??
+        stats?.overdueCount ??
+        loadedOverdueTenants
+    ),
   };
 
   return {

@@ -3,24 +3,19 @@ import { prisma } from "../db";
 import { eventSystem } from "../events";
 
 const EXPENSE_CATEGORIES = [
-  "Food",
+  "Food & Groceries",
+  "Staff Salary",
   "Electricity",
   "Water",
+  "Gas Cylinder",
   "Internet",
-  "Staff Salary",
-  "Salary",
-  "Maintenance",
   "Repairs",
   "Cleaning",
-  "Security",
-  "Furniture",
-  "Kitchen",
-  "Marketing",
-  "Transport",
+  "Asset Purchase",
   "Miscellaneous",
 ];
 
-const FIXED_CATEGORIES = new Set(["Internet", "Security", "Staff Salary", "Salary"]);
+const FIXED_CATEGORIES = new Set(["Staff Salary", "Electricity", "Water", "Gas Cylinder", "Internet"]);
 
 type ExpenseFilters = {
   range?: string;
@@ -87,6 +82,10 @@ function normalizeCategory(category: string) {
   if (!category) return "Miscellaneous";
   const lower = category.toLowerCase();
   if (lower === "salary") return "Staff Salary";
+  if (["food", "grocery", "groceries", "kitchen"].includes(lower)) return "Food & Groceries";
+  if (["gas", "lpg", "cylinder"].includes(lower)) return "Gas Cylinder";
+  if (["furniture", "asset", "assets", "asset purchase"].includes(lower)) return "Asset Purchase";
+  if (lower === "maintenance") return "Repairs";
   const found = EXPENSE_CATEGORIES.find((c) => c.toLowerCase() === lower);
   return found || category;
 }
@@ -94,12 +93,14 @@ function normalizeCategory(category: string) {
 function suggestedCategory(title: string) {
   const text = title.toLowerCase();
   if (/(electric|power|eb|current|bescom|bill)/.test(text)) return "Electricity";
-  if (/(food|rice|milk|grocery|vegetable|kitchen|meal)/.test(text)) return "Food";
+  if (/(food|rice|milk|grocery|vegetable|kitchen|meal|dal|oil)/.test(text)) return "Food & Groceries";
+  if (/(gas|cylinder|lpg)/.test(text)) return "Gas Cylinder";
   if (/(wifi|internet|broadband|router|airtel|jio)/.test(text)) return "Internet";
   if (/(repair|plumb|paint|fix|carpenter)/.test(text)) return "Repairs";
   if (/(clean|housekeep|sanit)/.test(text)) return "Cleaning";
   if (/(salary|staff|warden|watchman)/.test(text)) return "Staff Salary";
   if (/(water|tanker)/.test(text)) return "Water";
+  if (/(asset|washing machine|machine|bed|mattress|furniture|fridge|geyser|fan|cctv)/.test(text)) return "Asset Purchase";
   return "Miscellaneous";
 }
 

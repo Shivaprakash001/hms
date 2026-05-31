@@ -81,9 +81,7 @@ export async function GET(req: NextRequest) {
       is_tenant: profile.role === "TENANT",
       ...extra
     });
-    if (!req.cookies.get("hms_csrf")?.value) {
-      setCsrfCookie(response, 60 * 60 * 24 * TENANT_REFRESH_DAYS);
-    }
+    setCsrfCookie(response, 60 * 60 * 24 * TENANT_REFRESH_DAYS);
     return response;
   } catch (error) {
     return apiError("Internal server error");

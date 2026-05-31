@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { apiError, getSession } from "@/lib/auth";
 import { sessionLifecycleService } from "@/lib/services/session-lifecycle-service";
+import { clearCsrfCookie } from "@/lib/security/csrf";
 
 export async function POST(req: NextRequest) {
   const session = await getSession(req);
@@ -14,6 +15,6 @@ export async function POST(req: NextRequest) {
   const response = NextResponse.json({ success: true });
   response.cookies.set("hms_session", "", { httpOnly: true, expires: new Date(0), path: "/" });
   response.cookies.set("hms_refresh_token", "", { httpOnly: true, expires: new Date(0), path: "/" });
-  response.cookies.set("hms_csrf", "", { expires: new Date(0), path: "/" });
+  clearCsrfCookie(response);
   return response;
 }

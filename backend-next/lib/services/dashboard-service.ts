@@ -510,6 +510,7 @@ export class DashboardService {
       pending_dues: pendingTotal,
       overdue_amount: overdueTotal,
       overdue_count: overdueCount,
+      overdue_tenants: overdueCount,
       unpaid_tenant_count: unpaidTenantCount,
       expected_revenue: expectedRevenue,
       collection_rate: collectionRate,

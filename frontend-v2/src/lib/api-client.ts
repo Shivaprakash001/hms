@@ -14,7 +14,10 @@ const api = axios.create({
 });
 
 let inMemoryAccessToken: string | null = null;
+let inMemoryCsrfToken: string | null = null;
+let csrfBootstrapPromise: Promise<string | null> | null = null;
 const CSRF_COOKIE_NAME = 'hms_csrf';
+const CSRF_HEADER_NAME = 'X-CSRF-Token';
 
 const getCookieValue = (name: string) => {
   if (typeof document === 'undefined') return null;
@@ -29,8 +32,36 @@ const isUnsafeMethod = (method?: string) =>
 
 const attachCsrfHeader = (headers: any, method?: string) => {
   if (!isUnsafeMethod(method)) return;
-  const csrfToken = getCookieValue(CSRF_COOKIE_NAME);
-  if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+  const csrfToken = getCookieValue(CSRF_COOKIE_NAME) || inMemoryCsrfToken;
+  if (csrfToken) headers[CSRF_HEADER_NAME] = csrfToken;
+};
+
+const rememberCsrfToken = (headers?: any) => {
+  const token =
+    headers?.[CSRF_HEADER_NAME] ||
+    headers?.[CSRF_HEADER_NAME.toLowerCase()] ||
+    headers?.get?.(CSRF_HEADER_NAME) ||
+    headers?.get?.(CSRF_HEADER_NAME.toLowerCase());
+  if (token) inMemoryCsrfToken = String(token);
+  return inMemoryCsrfToken;
+};
+
+const ensureCsrfToken = async () => {
+  const existing = getCookieValue(CSRF_COOKIE_NAME) || inMemoryCsrfToken;
+  if (existing) return existing;
+  if (!csrfBootstrapPromise) {
+    csrfBootstrapPromise = axios
+      .get(`${baseURL}/auth/me`, {
+        withCredentials: true,
+        headers: inMemoryAccessToken ? { Authorization: `Bearer ${inMemoryAccessToken}` } : undefined,
+      })
+      .then((response) => rememberCsrfToken(response.headers) || getCookieValue(CSRF_COOKIE_NAME))
+      .catch(() => null)
+      .finally(() => {
+        csrfBootstrapPromise = null;
+      });
+  }
+  return csrfBootstrapPromise;
 };
 
 export const setAccessToken = (token: string | null) => {
@@ -39,6 +70,7 @@ export const setAccessToken = (token: string | null) => {
 
 export const clearAccessToken = () => {
   inMemoryAccessToken = null;
+  inMemoryCsrfToken = null;
 };
 
 const notifySessionExpired = (message?: string) => {
@@ -55,11 +87,12 @@ const notifySessionExpired = (message?: string) => {
 };
 
 api.interceptors.request.use(
-  (config) => {
+  async (config) => {
     if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
       if (config.headers) delete config.headers['Content-Type'];
     }
     if (inMemoryAccessToken) config.headers.Authorization = `Bearer ${inMemoryAccessToken}`;
+    if (isUnsafeMethod(config.method)) await ensureCsrfToken();
     if (config.headers) attachCsrfHeader(config.headers, config.method);
     return config;
   },
@@ -67,7 +100,10 @@ api.interceptors.request.use(
 );
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    rememberCsrfToken(response.headers);
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
     const requestUrl: string = originalRequest?.url || '';
@@ -94,8 +130,10 @@ api.interceptors.response.use(
         const newAccessToken: string = refreshResponse.data.access_token;
 
         setAccessToken(newAccessToken);
+        rememberCsrfToken(refreshResponse.headers);
 
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+        await ensureCsrfToken();
         attachCsrfHeader(originalRequest.headers, originalRequest.method);
         return api(originalRequest);
       } catch (refreshError: any) {

@@ -388,9 +388,11 @@ function DueCard({ due, isOverdue, urgencyLabel, urgencyColor, cardBorder, onRec
         {phone && (
           <a
             href={`tel:${phone}`}
-            className="px-3 bg-card border border-border text-foreground py-2.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1 active:scale-95 transition-transform touch-manipulation"
+            aria-label={`Call ${tenantName}`}
+            className="min-w-[88px] bg-card border border-border text-foreground py-2.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 active:scale-95 transition-transform touch-manipulation"
           >
             <Phone className="w-3.5 h-3.5" />
+            Call
           </a>
         )}
       </div>

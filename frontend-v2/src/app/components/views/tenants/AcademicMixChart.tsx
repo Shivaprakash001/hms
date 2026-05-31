@@ -17,55 +17,57 @@ export function AcademicMixChart({ distribution, activeStudentCount }: Props) {
   }
 
   return (
-    <>
-      <div className="h-28 w-28 shrink-0">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={distribution}
-              cx="50%"
-              cy="50%"
-              innerRadius={28}
-              outerRadius={48}
-              dataKey="value"
-              strokeWidth={0}
-              isAnimationActive={false}
-            >
-              {distribution.map((_, i) => (
-                <Cell key={i} fill={YEAR_COLORS[i % YEAR_COLORS.length]} />
-              ))}
-            </Pie>
-            <Tooltip
-              formatter={(v: number) => [v, 'Tenants']}
-              contentStyle={{
-                background: 'hsl(var(--card))',
-                border: '1px solid hsl(var(--border))',
-                borderRadius: '8px',
-                fontSize: '11px',
-              }}
-            />
-          </PieChart>
-        </ResponsiveContainer>
+    <div className="w-full space-y-3">
+      <div className="flex items-center gap-3">
+        <div className="h-28 w-28 shrink-0">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={distribution}
+                cx="50%"
+                cy="50%"
+                innerRadius={28}
+                outerRadius={48}
+                dataKey="value"
+                strokeWidth={0}
+                isAnimationActive={false}
+              >
+                {distribution.map((_, i) => (
+                  <Cell key={i} fill={YEAR_COLORS[i % YEAR_COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip
+                formatter={(v: number) => [v, 'Tenants']}
+                contentStyle={{
+                  background: 'hsl(var(--card))',
+                  border: '1px solid hsl(var(--border))',
+                  borderRadius: '8px',
+                  fontSize: '11px',
+                }}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="flex-1 space-y-1.5 min-w-0">
+          {distribution.map((item, i) => (
+            <div key={item.name} className="flex items-center gap-2">
+              <div
+                className="h-2.5 w-2.5 rounded-full shrink-0"
+                style={{ background: YEAR_COLORS[i % YEAR_COLORS.length] }}
+              />
+              <span className="text-xs text-foreground flex-1 min-w-0 truncate">
+                {item.name}
+              </span>
+              <span className="text-xs font-semibold text-muted-foreground shrink-0">
+                {item.value} ({activeStudentCount > 0 ? Math.round((item.value / activeStudentCount) * 100) : 0}%)
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
-      <div className="flex-1 space-y-1.5 min-w-0">
-        {distribution.map((item, i) => (
-          <div key={item.name} className="flex items-center gap-2">
-            <div
-              className="h-2.5 w-2.5 rounded-full shrink-0"
-              style={{ background: YEAR_COLORS[i % YEAR_COLORS.length] }}
-            />
-            <span className="text-xs text-foreground flex-1 min-w-0 truncate">
-              {item.name}
-            </span>
-            <span className="text-xs font-semibold text-muted-foreground shrink-0">
-              {item.value} ({activeStudentCount > 0 ? Math.round((item.value / activeStudentCount) * 100) : 0}%)
-            </span>
-          </div>
-        ))}
-      </div>
-      <p className="text-[10px] text-muted-foreground">
+      <p className="rounded-lg bg-muted/40 px-3 py-2 text-[10px] leading-relaxed text-muted-foreground">
         Tip: use this to plan renewal conversations and group notices by academic year.
       </p>
-    </>
+    </div>
   );
 }

@@ -180,7 +180,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
   };
 
   return (
-    <div className="px-4 py-5 max-w-3xl mx-auto pb-28 md:pb-8 min-w-0">
+    <div className="px-4 py-5 max-w-3xl mx-auto pb-8 min-w-0">
       <button
         type="button"
         onClick={() => (onBack ? onBack() : navigate(`/hostels/${hostelId}/tenants`))}
@@ -579,7 +579,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
       )}
 
       {status === 'ACTIVE' && (
-        <ReminderActionBar hostelId={hostelId} tenantId={tenantId} className="fixed bottom-20 left-0 right-0 px-4 md:static md:mt-6 md:px-0" />
+        <ReminderActionBar hostelId={hostelId} tenantId={tenantId} className="mt-5 mb-2" />
       )}
 
       {payObligationId && (

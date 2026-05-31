@@ -11,7 +11,7 @@ import {
   TENANT_REFRESH_DAYS,
 } from "@/lib/services/session-lifecycle-service";
 import { getClientIp } from "@/lib/security/api-guard";
-import { setCsrfCookie } from "@/lib/security/csrf";
+import { clearCsrfCookie, setCsrfCookie } from "@/lib/security/csrf";
 
 function sessionError(reason: string) {
   if (reason === "inactive") {
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
       const response = sessionError(rotation.reason);
       response.cookies.set("hms_session", "", { httpOnly: true, expires: new Date(0), path: "/" });
       response.cookies.set("hms_refresh_token", "", { httpOnly: true, expires: new Date(0), path: "/" });
-      response.cookies.set("hms_csrf", "", { expires: new Date(0), path: "/" });
+      clearCsrfCookie(response);
       return response;
     }
 
