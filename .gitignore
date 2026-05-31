@@ -35,3 +35,6 @@ backups/
 *_backup_*.sql
 *_ledger_*.csv
 *_obligations_*.csv
+
+# Added by ggshield
+.cache_ggshield

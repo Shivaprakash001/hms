@@ -1,6 +1,8 @@
 import { Redis } from "@upstash/redis";
 
 let edgeRedisClient: Redis | null | undefined;
+const SESSION_ACTIVITY_THROTTLE_SECONDS = 5 * 60;
+const localActivityTouchMs = new Map<string, number>();
 
 function clean(value: string | number | null | undefined) {
   return encodeURIComponent(String(value ?? "none"));
@@ -15,6 +17,7 @@ const edgeSessionKeys = {
   revoked: (sessionId: string) => edgeRedisKey("session", "revoked", sessionId),
   userRevokedAfter: (userId: string) => edgeRedisKey("session", "user-revoked-after", userId),
   activity: (sessionId: string) => edgeRedisKey("session", "activity", sessionId),
+  activityThrottle: (sessionId: string) => edgeRedisKey("session", "activity-throttle", sessionId),
 };
 
 function getEdgeRedisClient() {
@@ -67,7 +70,20 @@ export async function checkSessionRevocationEdge(payload: {
 
 export async function touchSessionActivityEdge(sessionId: string | null | undefined) {
   if (!sessionId) return;
+  const now = Date.now();
+  const lastLocalTouch = localActivityTouchMs.get(sessionId) || 0;
+  if (now - lastLocalTouch < SESSION_ACTIVITY_THROTTLE_SECONDS * 1000) return;
+
   const redis = getEdgeRedisClient();
   if (!redis) return;
-  await redis.set(edgeSessionKeys.activity(sessionId), Date.now(), { ex: 60 * 60 * 24 * 30 });
+  const throttle = await redis.set(edgeSessionKeys.activityThrottle(sessionId), "1", {
+    nx: true,
+    ex: SESSION_ACTIVITY_THROTTLE_SECONDS,
+  });
+  if (throttle !== "OK") {
+    localActivityTouchMs.set(sessionId, now);
+    return;
+  }
+  await redis.set(edgeSessionKeys.activity(sessionId), now, { ex: 60 * 60 * 24 * 30 });
+  localActivityTouchMs.set(sessionId, now);
 }

@@ -4,11 +4,20 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { backendUrl } from "@/lib/config/domains";
 
 const requiredDocumentTypes = (profileType?: string | null) => {
   const type = String(profileType || "STUDENT").toUpperCase();
   return type === "WORKING_PROFESSIONAL" ? ["AADHAAR", "WORK_ID"] : ["AADHAAR", "COLLEGE_ID"];
 };
+
+function publicDocument(doc: any, tenantId: string) {
+  const { file_url, file_path, file_id, ...safeDoc } = doc;
+  return {
+    ...safeDoc,
+    download_url: backendUrl(`/api/tenants/${tenantId}/documents/${doc.id}/download`),
+  };
+}
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -62,7 +71,13 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       },
     });
 
-    return NextResponse.json({ success: true, data: { documents, required_documents: requiredDocuments } });
+    return NextResponse.json({
+      success: true,
+      data: {
+        documents: documents.map((doc) => publicDocument(doc, id)),
+        required_documents: requiredDocuments,
+      },
+    });
   } catch (error) {
     console.error("Fetch documents error:", error);
     return NextResponse.json({ error: { message: "Internal server error" } }, { status: 500 });

@@ -55,6 +55,7 @@ export const redisKeys = {
     revoked: (sessionId: string) => redisKey("session", "revoked", sessionId),
     userRevokedAfter: (userId: string) => redisKey("session", "user-revoked-after", userId),
     activity: (sessionId: string) => redisKey("session", "activity", sessionId),
+    activityThrottle: (sessionId: string) => redisKey("session", "activity-throttle", sessionId),
   },
   otpVerifyLock: (phone: string, purpose: string) => redisKey("otp", "verify-lock", phone, purpose),
   queue: {

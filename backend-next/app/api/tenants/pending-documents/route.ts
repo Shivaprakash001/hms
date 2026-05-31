@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { backendUrl } from "@/lib/config/domains";
 
 export async function GET(req: NextRequest) {
   try {
@@ -75,7 +76,7 @@ export async function GET(req: NextRequest) {
         doc_type: doc.doc_type,
         doc_number: doc.doc_number,
         document_status: doc.document_status,
-        file_url: doc.file_url,
+        download_url: backendUrl(`/api/tenants/${doc.tenant_id}/documents/${doc.id}/download`),
         mime_type: doc.mime_type,
         file_size: doc.file_size,
         uploaded_at: doc.created_at,

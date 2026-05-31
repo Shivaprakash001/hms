@@ -6,6 +6,7 @@ import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { imagekit } from "@/lib/imagekit";
 import { eventLog } from "@/lib/services/event-log-service";
+import { backendUrl } from "@/lib/config/domains";
 
 const allowedTypesForProfile = (profileType?: string | null) => {
   const type = String(profileType || "STUDENT").toUpperCase();
@@ -13,6 +14,14 @@ const allowedTypesForProfile = (profileType?: string | null) => {
 };
 const ALLOWED_MIME = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
 const MAX_SIZE = 5 * 1024 * 1024;
+
+function publicDocument(doc: any, tenantId: string) {
+  const { file_url, file_path, file_id, ...safeDoc } = doc;
+  return {
+    ...safeDoc,
+    download_url: backendUrl(`/api/tenants/${tenantId}/documents/${doc.id}/download`),
+  };
+}
 
 export async function GET(req: NextRequest) {
   const session = await getSession(req);
@@ -32,7 +41,10 @@ export async function GET(req: NextRequest) {
     orderBy: { created_at: "desc" },
   });
 
-  return apiResponse({ documents, required_documents: requiredDocuments });
+  return apiResponse({
+    documents: documents.map((doc) => publicDocument(doc, tenant.id)),
+    required_documents: requiredDocuments,
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -110,7 +122,7 @@ export async function POST(req: NextRequest) {
       document_id: created.id,
     }, tenant.id);
 
-    return apiResponse(created, 201);
+    return apiResponse(publicDocument(created, tenant.id), 201);
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
     return apiError(msg || "Failed to upload document");

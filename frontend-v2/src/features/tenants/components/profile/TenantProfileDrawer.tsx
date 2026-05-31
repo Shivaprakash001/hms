@@ -9,7 +9,7 @@ interface Props {
 }
 
 /** Mobile drawer wrapper — profile route content in a bottom sheet */
-export function TenantProfileDrawer({ open, onClose }: Props) {
+export function TenantProfileDrawer({ open, onClose, hostelId, tenantId }: Props) {
   return (
     <Drawer.Root open={open} onOpenChange={(v) => !v && onClose()}>
       <Drawer.Portal>

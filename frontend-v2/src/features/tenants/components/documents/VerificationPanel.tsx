@@ -138,7 +138,7 @@ export function VerificationPanel({ hostelId, tenantId, documents, profileType, 
       {visibleDocuments.map((doc) => {
         const id = String(doc.id ?? '');
         const status = String(doc.document_status ?? doc.status ?? 'PENDING').toUpperCase();
-        const fileUrl = String(doc.file_url ?? '');
+        const fileUrl = String(doc.download_url ?? '');
         const docNumber = String(doc.doc_number ?? '').trim();
         const fileSize = Number(doc.file_size ?? 0);
         const fileSizeLabel = fileSize > 0 ? `${(fileSize / 1024 / 1024).toFixed(1)} MB` : '';

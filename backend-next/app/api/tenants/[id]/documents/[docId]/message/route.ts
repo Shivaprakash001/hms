@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { backendUrl } from "@/lib/config/domains";
 import crypto from "crypto";
 
 export async function POST(
@@ -122,7 +123,14 @@ export async function POST(
       });
     }
 
-    return NextResponse.json({ success: true, data: updatedDoc });
+    const { file_url, file_path, file_id, ...safeDoc } = updatedDoc;
+    return NextResponse.json({
+      success: true,
+      data: {
+        ...safeDoc,
+        download_url: backendUrl(`/api/tenants/${tenantId}/documents/${docId}/download`),
+      },
+    });
   } catch (error) {
     console.error("Post document message error:", error);
     return NextResponse.json({ error: { message: "Internal server error" } }, { status: 500 });

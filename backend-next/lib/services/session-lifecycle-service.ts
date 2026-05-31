@@ -210,7 +210,10 @@ export class SessionLifecycleService {
   async touchSession(sessionId: string | null | undefined, userId: string) {
     if (!sessionId) return false;
     const now = new Date();
-    await this.touchSessionActivityValue(sessionId);
+    const activityTouch = await this.touchSessionActivityValue(sessionId);
+    if (activityTouch.available && !activityTouch.touched) {
+      return true;
+    }
     const result = await this.db.refresh_tokens.updateMany({
       where: {
         session_id: sessionId,

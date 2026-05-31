@@ -34,6 +34,7 @@ Admissions CRM turns QR visitors into trackable leads, then into tenant invitati
 
 ## Key components
 - `VisitPage`: renders the public QR admission journey, room detail, confirmation, and parent sharing screens.
+- `features/admissions/components/visitor`: owns the visitor welcome, registration, hostel explorer, room explorer, room detail, confirmation, and parent-share screens copied from the admissions design.
 - `AdmissionsView`: renders the owner dashboard, pipeline, QR generator, and lead profile screens.
 - `AdmissionQrPanel`: renders QR codes and visit links for hostel reception use.
 - `LeadCard`: renders a compact lead card for Kanban columns.

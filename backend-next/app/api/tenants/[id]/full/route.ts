@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
+import { backendUrl } from "@/lib/config/domains";
 
 const requiredDocumentTypes = (profileType?: string | null) => {
   const type = String(profileType || "STUDENT").toUpperCase();
@@ -53,9 +54,15 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const requiredDocuments = requiredDocumentTypes(tenant.profile_type);
     return NextResponse.json({
       ...tenant,
-      identification_documents: (tenant.identification_documents || []).filter((doc) =>
-        requiredDocuments.includes(doc.doc_type)
-      ),
+      identification_documents: (tenant.identification_documents || [])
+        .filter((doc) => requiredDocuments.includes(doc.doc_type))
+        .map((doc) => {
+          const { file_url, file_path, file_id, ...safeDoc } = doc;
+          return {
+            ...safeDoc,
+            download_url: backendUrl(`/api/tenants/${tenant.id}/documents/${doc.id}/download`),
+          };
+        }),
       required_document_types: requiredDocuments,
     });
   } catch (error) {

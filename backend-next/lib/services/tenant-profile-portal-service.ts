@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { normalizeIndianPhone } from "@/lib/utils/phone-utils";
+import { backendUrl } from "@/lib/config/domains";
 
 const DOC_TYPE_LABELS: Record<string, string> = {
   AADHAAR: "Aadhaar",
@@ -116,7 +117,7 @@ export async function getTenantPortalProfile(profileId: string) {
     doc_type: d.doc_type,
     doc_type_label: DOC_TYPE_LABELS[d.doc_type] ?? d.doc_type,
     doc_number: d.doc_number,
-    file_url: d.file_url,
+    download_url: backendUrl(`/api/tenants/${tenant.id}/documents/${d.id}/download`),
     mime_type: d.mime_type,
     document_status: d.document_status,
     is_verified: d.is_verified,

@@ -126,7 +126,7 @@ function createService(db: ReturnType<typeof createFakeDb>, tokens: string[] = [
     getSessionActivityFn: async () => null,
     touchSessionActivityFn: async (sessionId) => {
       if (sessionId) touchedSessions.push(sessionId);
-      return true;
+      return { available: true, touched: true };
     },
     markSessionRevokedFn: async (sessionId) => {
       if (sessionId) revokedSessions.push(sessionId);
@@ -139,6 +139,18 @@ function createService(db: ReturnType<typeof createFakeDb>, tokens: string[] = [
   });
 
   return { service, revokedSessions, userRevocations, touchedSessions };
+}
+
+function createThrottledService(db: ReturnType<typeof createFakeDb>) {
+  return new SessionLifecycleService({
+    prismaClient: db as any,
+    hashTokenFn: hash,
+    generateRefreshTokenFn: () => "refresh-2",
+    getSessionActivityFn: async () => null,
+    touchSessionActivityFn: async () => ({ available: true, touched: false }),
+    markSessionRevokedFn: async () => true,
+    markUserSessionsRevokedAfterFn: async () => true,
+  });
 }
 
 async function testRevokedTokensFailInstantly() {
@@ -201,11 +213,31 @@ async function testInactivityTimeoutDoesNotNeedFrontend() {
   assert.deepEqual(revokedSessions, ["session-1"]);
 }
 
+async function testSessionActivityThrottlingSkipsDbWrite() {
+  const originalActivity = new Date(Date.now() - 10 * 60 * 1000);
+  const db = createFakeDb([
+    createRecord({
+      last_activity_at: originalActivity,
+    }),
+  ]);
+  const service = createThrottledService(db);
+
+  const touched = await service.touchSession("session-1", "user-1");
+
+  assert.equal(touched, true);
+  assert.equal(
+    db.records[0].last_activity_at.getTime(),
+    originalActivity.getTime(),
+    "throttled activity check should not update DB last_activity_at",
+  );
+}
+
 async function main() {
   await testRevokedTokensFailInstantly();
   await testConcurrentRefreshCannotCreateTwoValidSessions();
   await testReplayDestroysAllSessions();
   await testInactivityTimeoutDoesNotNeedFrontend();
+  await testSessionActivityThrottlingSkipsDbWrite();
   console.log("session lifecycle verification passed");
 }
 
@@ -213,4 +245,3 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
-

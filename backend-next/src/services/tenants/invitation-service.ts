@@ -11,6 +11,10 @@ import { frontendUrl } from "../../../lib/config/domains";
 
 const logger = getLogger("invitation-service");
 
+function tokenFingerprint(token: string) {
+  return crypto.createHash("sha256").update(String(token || "")).digest("hex").slice(0, 12);
+}
+
 function mapAllocationConstraintError(err: any): Error {
   const msg = String(err?.message || err || "");
   if (err?.code === "P2002" || msg.includes("idx_room_allocations_active_tenant_unique")) {
@@ -234,7 +238,7 @@ export class InvitationService {
   }
 
   async activateTenant(token: string, password: string) {
-    logger.info(`Attempting to activate account with token: ${token}`);
+    logger.info("Attempting to activate account", { token_fingerprint: tokenFingerprint(token) });
     // 1. Resolve tenant by invitation token
     const profile = await prisma.profile.findFirst({
       where: {
@@ -244,7 +248,9 @@ export class InvitationService {
     });
 
     if (!profile) {
-      logger.warn(`Invalid or expired token received: ${token}`);
+      logger.warn("Invalid or expired activation token received", {
+        token_fingerprint: tokenFingerprint(token),
+      });
       throw new Error("INVALID: Token expired or invalid");
     }
 
