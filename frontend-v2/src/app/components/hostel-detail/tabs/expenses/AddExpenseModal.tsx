@@ -12,6 +12,14 @@ const QUICK_CATEGORIES = [
   'Cleaning',
 ];
 const QUICK_METHODS = ['Cash', 'UPI', 'Bank Transfer', 'Debit Card', 'Credit Card', 'Cheque'];
+const QUICK_TEMPLATES = [
+  { label: 'Electricity Bill', category: 'Electricity', method: 'UPI', title: 'Electricity bill' },
+  { label: 'Water Bill', category: 'Water', method: 'UPI', title: 'Water bill' },
+  { label: 'Internet Bill', category: 'Internet', method: 'UPI', title: 'Internet bill' },
+  { label: 'Staff Salary', category: 'Staff Salary', method: 'Bank Transfer', title: 'Staff salary' },
+  { label: 'Gas Cylinder', category: 'Gas Cylinder', method: 'UPI', title: 'Gas cylinder' },
+  { label: 'Food Purchase', category: 'Food & Groceries', method: 'UPI', title: 'Food purchase' },
+];
 
 export function AddExpenseModal({
   categories,
@@ -42,7 +50,13 @@ export function AddExpenseModal({
   const suggestion = form.title ? suggestExpenseCategory(form.title) : '';
   const categoryOptions = Array.from(new Set([...QUICK_CATEGORIES, ...categories, 'Asset Purchase', 'Miscellaneous']));
   const amountValue = Number(form.amount);
-  const canSave = Number.isFinite(amountValue) && amountValue > 0 && Boolean(form.category) && Boolean(form.date);
+  const canSave =
+    Number.isFinite(amountValue) &&
+    amountValue > 0 &&
+    Boolean(form.category) &&
+    Boolean(form.payment_method) &&
+    Boolean(form.vendor_name.trim()) &&
+    Boolean(form.date);
   const generatedTitle = form.title.trim() || [form.vendor_name.trim(), form.category].filter(Boolean).join(' · ') || `${form.category} expense`;
 
   const submit = () => {
@@ -77,6 +91,32 @@ export function AddExpenseModal({
         </div>
 
         <div className="space-y-4 overflow-y-auto px-4 pb-4">
+          <div>
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Quick templates
+            </label>
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              {QUICK_TEMPLATES.map((template) => (
+                <button
+                  key={template.label}
+                  type="button"
+                  onClick={() =>
+                    setForm((f) => ({
+                      ...f,
+                      title: template.title,
+                      category: template.category,
+                      payment_method: template.method,
+                      expense_type: template.category === 'Asset Purchase' ? 'CAPITAL' : 'OPERATIONAL',
+                    }))
+                  }
+                  className="shrink-0 rounded-full border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground"
+                >
+                  {template.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div>
             <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Amount paid
@@ -156,6 +196,13 @@ export function AddExpenseModal({
           </div>
 
           <input
+            value={form.vendor_name}
+            onChange={(e) => setForm((f) => ({ ...f, vendor_name: e.target.value }))}
+            placeholder="Vendor, e.g. milk supplier, electrician, owner"
+            className="w-full px-3 py-3 rounded-xl border border-border bg-background text-sm outline-none"
+          />
+
+          <input
             value={form.title}
             onChange={(e) => {
               const title = e.target.value;
@@ -198,7 +245,7 @@ export function AddExpenseModal({
                   key={method}
                   type="button"
                   onClick={() => setForm((f) => ({ ...f, payment_method: method }))}
-                  className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold ${
+              className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold ${
                     form.payment_method === method
                       ? 'border-accent bg-accent text-accent-foreground'
                       : 'border-border bg-background text-muted-foreground'
@@ -221,12 +268,6 @@ export function AddExpenseModal({
 
           {showMore && (
             <div className="space-y-3 rounded-xl border border-border bg-muted/20 p-3">
-              <input
-                value={form.vendor_name}
-                onChange={(e) => setForm((f) => ({ ...f, vendor_name: e.target.value }))}
-                placeholder="Vendor name"
-                className="w-full px-3 py-3 rounded-xl border border-border bg-background text-sm outline-none"
-              />
               <textarea
                 value={form.notes}
                 onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
@@ -275,7 +316,13 @@ export function AddExpenseModal({
             disabled={loading || !canSave}
             className="w-full py-3.5 rounded-xl bg-accent text-accent-foreground text-sm font-semibold disabled:opacity-50 active:scale-[0.99] transition-transform"
           >
-            {loading ? 'Saving...' : `Save ${amountValue > 0 ? `₹${amountValue.toLocaleString('en-IN')}` : 'expense'}`}
+            {loading
+              ? 'Saving...'
+              : !form.vendor_name.trim()
+                ? 'Add vendor to save'
+                : !form.payment_method
+                  ? 'Choose payment method'
+                  : `Save ${amountValue > 0 ? `₹${amountValue.toLocaleString('en-IN')}` : 'expense'}`}
           </button>
         </div>
       </div>
