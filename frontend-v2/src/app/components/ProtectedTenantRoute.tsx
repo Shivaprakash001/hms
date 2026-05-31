@@ -18,7 +18,7 @@ export function ProtectedTenantRoute({ children }: ProtectedTenantRouteProps) {
   }
 
   if (!user || user.role?.toLowerCase() !== 'tenant') {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/" replace />;
   }
 
   if (!user.is_profile_completed) {

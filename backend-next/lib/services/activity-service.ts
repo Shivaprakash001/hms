@@ -5,6 +5,7 @@ export class ActivityService {
   async getOwnerActivity(params: {
     userId: string;
     hostelId: string;
+    tenantId?: string;
     search?: string;
     type?: string;
     limit?: number;
@@ -12,7 +13,7 @@ export class ActivityService {
     start_date?: string;
     end_date?: string;
   }) {
-    const { userId, hostelId, search, type, limit = 20, offset = 0, start_date, end_date } = params;
+    const { userId, hostelId, tenantId, search, type, limit = 20, offset = 0, start_date, end_date } = params;
 
     if (!hostelId) throw new Error("HOSTEL_CONTEXT_REQUIRED: hostelId is required for activity queries");
 
@@ -25,19 +26,21 @@ export class ActivityService {
         where: {
           owner_id: userId,
           hostel_id: hostelId,
+          ...(tenantId ? { tenant_id: tenantId } : {}),
           ...(Object.keys(dateFilter).length > 0 ? { payment_date: dateFilter } : {}),
         },
-        include: { tenant: { include: { profile: true } } },
+        include: { tenants: { include: { profiles: true } } },
         orderBy: { payment_date: "desc" },
         take: 200,
       }),
       prisma.roomAllocation.findMany({
         where: {
           hostel_id: hostelId,
+          ...(tenantId ? { tenant_id: tenantId } : {}),
           tenant: { owner_id: userId },
           ...(Object.keys(dateFilter).length > 0 ? { start_date: dateFilter } : {}),
         },
-        include: { tenant: { include: { profile: true } }, room: true },
+        include: { tenant: { include: { profiles: true } }, room: true },
         orderBy: { start_date: "desc" },
         take: 200,
       }),
@@ -47,38 +50,47 @@ export class ActivityService {
 
     // Map payments
     payments.forEach(p => {
+      const tenantName = p.tenants?.profiles?.name || "Tenant";
       events.push({
         id: `payment_${p.id}`,
+        tenant_id: p.tenant_id,
         event_type: "PAYMENT_RECEIVED",
         title: "Payment Received",
         detail: `Received ${formatCurrency(Number(p.amount_paid))} via ${p.payment_method}`,
-        tenant_name: p.tenant.profile.name,
+        tenant_name: tenantName,
         amount: Number(p.amount_paid),
-        event_at: p.payment_date
+        event_at: p.payment_date,
+        created_at: p.created_at,
       });
     });
 
     // Map allocations
     allocations.forEach(a => {
+      const tenantName = a.tenant?.profiles?.name || "Tenant";
+      const roomNo = a.room?.room_no || "";
       events.push({
         id: `join_${a.id}`,
+        tenant_id: a.tenant_id,
         event_type: "TENANT_JOINED",
         title: "Tenant Joined",
-        detail: `${a.tenant.profile.name} moved into Room ${a.room.room_no}`,
-        tenant_name: a.tenant.profile.name,
-        room_no: a.room.room_no,
-        event_at: a.start_date
+        detail: `${tenantName} moved into Room ${roomNo}`.trim(),
+        tenant_name: tenantName,
+        room_no: roomNo,
+        event_at: a.start_date,
+        created_at: a.created_at,
       });
 
       if (a.end_date) {
         events.push({
           id: `left_${a.id}`,
+          tenant_id: a.tenant_id,
           event_type: "TENANT_LEFT",
           title: "Tenant Left",
-          detail: `${a.tenant.profile.name} left Room ${a.room.room_no}`,
-          tenant_name: a.tenant.profile.name,
-          room_no: a.room.room_no,
-          event_at: a.end_date
+          detail: `${tenantName} left Room ${roomNo}`.trim(),
+          tenant_name: tenantName,
+          room_no: roomNo,
+          event_at: a.end_date,
+          created_at: a.updated_at || a.end_date,
         });
       }
     });

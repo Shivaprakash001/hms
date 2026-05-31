@@ -12,7 +12,7 @@ interface Props {
 export function ActivityTimeline({ hostelId, tenantId, tenantName }: Props) {
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.tenants.activity(hostelId, tenantId),
-    queryFn: () => activityListService.getList(hostelId, { limit: 50 }),
+    queryFn: () => activityListService.getList(hostelId, { tenantId, limit: 50 }),
     staleTime: 60_000,
   });
 

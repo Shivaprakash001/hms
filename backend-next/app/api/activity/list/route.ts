@@ -3,6 +3,7 @@ export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
+import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
 import { activityService } from "@/lib/services/activity-service";
 import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
 
@@ -23,22 +24,25 @@ export async function GET(req: NextRequest) {
     return apiError("hostelId query parameter is required", "BAD_REQUEST", 400);
   }
 
-  // Validate hostel ownership
   try {
-    await requireHostelBelongsToOwner(session.sub, hostelId);
+    const scope = resolveOwnerScope(session);
+    await requireHostelBelongsToOwner(scope.owner_id, hostelId);
   } catch (error: any) {
     return apiError(error.message, error.code || "FORBIDDEN", 403);
   }
 
+  const scope = resolveOwnerScope(session);
   const search = searchParams.get("search") || undefined;
   const type = searchParams.get("type") || undefined;
+  const tenantId = searchParams.get("tenantId") || undefined;
   const offset = parseInt(searchParams.get("offset") || "0");
   const limit = Math.min(parseInt(searchParams.get("limit") || "20"), 100);
 
   try {
     const activity = await activityService.getOwnerActivity({
-      userId: session.sub,
+      userId: scope.owner_id,
       hostelId,
+      tenantId,
       search,
       type,
       offset,
@@ -47,6 +51,7 @@ export async function GET(req: NextRequest) {
 
     return apiResponse(activity);
   } catch (error: any) {
-    return apiError("Failed to fetch activity logs");
+    console.error("[activity.list] Failed to fetch activity logs", error);
+    return apiError(error.message || "Failed to fetch activity logs");
   }
 }

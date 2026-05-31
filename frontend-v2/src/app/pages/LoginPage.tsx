@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Loader2, Chrome, MapPin, UtensilsCrossed, Shield, AlertCircle } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
@@ -58,11 +58,20 @@ export function LoginPage() {
   const { login, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const loginSearch = new URLSearchParams(location.search);
+  const sessionExpired = Boolean((location.state as { sessionExpired?: boolean } | null)?.sessionExpired);
+  const isIntentionalSignIn = loginSearch.get('signin') === '1' || sessionExpired;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!isIntentionalSignIn) {
+      navigate('/', { replace: true });
+    }
+  }, [isIntentionalSignIn, navigate]);
 
   const navigateForUser = (user: any) => {
     const role = (user?.role || '').toLowerCase();
@@ -215,7 +224,7 @@ export function LoginPage() {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-5">
-            {(location.state as { sessionExpired?: boolean } | null)?.sessionExpired && !error && (
+            {sessionExpired && !error && (
               <div
                 className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm"
                 style={{ color: '#92400E' }}

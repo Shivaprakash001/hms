@@ -108,7 +108,7 @@ export function Footer() {
             <Link to="/legal" className="text-white/60 hover:text-white transition-colors no-underline">
               Legal
             </Link>
-            <Link to="/login" className="text-white/60 hover:text-white transition-colors no-underline">
+            <Link to="/login?signin=1" className="text-white/60 hover:text-white transition-colors no-underline">
               Tenant Login
             </Link>
           </div>

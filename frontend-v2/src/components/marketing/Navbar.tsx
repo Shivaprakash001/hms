@@ -43,7 +43,7 @@ export function Navbar() {
               Contact
             </button>
             <Link
-              to="/login"
+              to="/login?signin=1"
               className="text-[#1B2D5B] hover:text-[#F07B1D] font-medium transition-colors no-underline text-sm"
             >
               Login
@@ -58,7 +58,7 @@ export function Navbar() {
 
           <div className="flex items-center gap-2 md:hidden">
             <Link
-              to="/login"
+              to="/login?signin=1"
               className="text-[#1B2D5B] font-semibold text-sm no-underline border border-[#1B2D5B] px-4 py-2 rounded-lg hover:bg-[#1B2D5B] hover:text-white transition-colors"
             >
               Login

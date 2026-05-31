@@ -310,11 +310,11 @@ export function ActivateAccountPage() {
             navigate('/tenant/dashboard', { replace: true });
             return;
           } catch {
-            navigate('/login', { replace: true });
+            navigate('/login?signin=1', { replace: true });
             return;
           }
         }
-        navigate(result?.redirect_to || '/login', { replace: true });
+        navigate(result?.redirect_to || '/login?signin=1', { replace: true });
         return;
       }
       setCtx(result as ActivationContext);
@@ -417,7 +417,7 @@ export function ActivateAccountPage() {
           <button type="button" onClick={loadContext} className="rounded-xl border border-border px-4 py-2 text-sm font-semibold">
             Retry
           </button>
-          <Link to="/login" className="rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground">
+          <Link to="/login?signin=1" className="rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground">
             Go to login
           </Link>
         </div>

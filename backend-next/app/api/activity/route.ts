@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
+import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
 import { activityService } from "@/lib/services/activity-service";
 import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
 
@@ -26,18 +27,21 @@ export async function GET(req: NextRequest) {
       return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
     }
 
-    await requireHostelBelongsToOwner(session.sub, hostelId);
+    const scope = resolveOwnerScope(session);
+    await requireHostelBelongsToOwner(scope.owner_id, hostelId);
 
     const search     = searchParams.get("search")     || undefined;
     const type       = searchParams.get("event_type") || undefined;
+    const tenantId   = searchParams.get("tenantId")   || undefined;
     const start_date = searchParams.get("start_date") || undefined;
     const end_date   = searchParams.get("end_date")   || undefined;
     const limit      = Math.max(1, Math.min(100, parseInt(searchParams.get("limit")  || "20")));
     const offset     = Math.max(0, parseInt(searchParams.get("offset") || "0"));
 
     const activity = await activityService.getOwnerActivity({
-      userId: session.sub,
+      userId: scope.owner_id,
       hostelId,
+      tenantId,
       search,
       type,
       limit,

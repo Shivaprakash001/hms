@@ -103,7 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     queryClient.clear();
     clearSessionScopedStorage();
-    if (redirect) navigate('/login', { replace: true });
+    if (redirect) navigate('/', { replace: true });
   };
 
   useEffect(() => {
@@ -336,7 +336,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           secondaryLabel="Return to homepage"
           onPrimary={() => {
             setExpiredMessage(null);
-            navigate('/login', { replace: true, state: { sessionExpired: true } });
+            navigate('/login?signin=1', { replace: true, state: { sessionExpired: true } });
           }}
           onSecondary={() => {
             setExpiredMessage(null);

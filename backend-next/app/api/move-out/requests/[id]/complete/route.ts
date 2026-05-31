@@ -22,6 +22,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       paymentMethod: body.paymentMethod,
       paymentReference: body.paymentReference,
       paymentNotes: body.paymentNotes,
+      physicalExitDate: body.physicalExitDate,
     });
     return apiResponse(result);
   } catch (error: any) {

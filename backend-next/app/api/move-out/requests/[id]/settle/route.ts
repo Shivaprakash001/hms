@@ -16,7 +16,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   try {
     const body = await req.json().catch(() => ({}));
-    const result = await moveOutService.approveSettlement(params.id, session.sub, body.reviewNotes);
+    const result = await moveOutService.approveSettlement(
+      params.id,
+      session.sub,
+      body.reviewNotes,
+      body.confirmedSettlementAmount != null || body.settlementDirection
+        ? {
+            amount: Number(body.confirmedSettlementAmount ?? 0),
+            direction: body.settlementDirection,
+          }
+        : undefined,
+    );
     return apiResponse(result);
   } catch (error: any) {
     const msg = error.message || "Failed to approve settlement";

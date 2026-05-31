@@ -27,7 +27,8 @@ export function OwnerQuickActions() {
   const hidden =
     location.pathname.startsWith('/settings') ||
     location.pathname.startsWith('/login') ||
-    location.pathname.startsWith('/tenant');
+    location.pathname.startsWith('/tenant') ||
+    location.pathname.startsWith('/hostels/');
 
   const { data } = useQuery({
     queryKey: queryKeys.owner.hostels(),

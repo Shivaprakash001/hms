@@ -178,7 +178,7 @@ export function CompleteProfilePage() {
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
-      navigate('/login', { replace: true });
+      navigate('/', { replace: true });
       return;
     }
     if (user.role?.toLowerCase() !== 'tenant') {

@@ -182,10 +182,18 @@ export class MoveOutService {
   }
 
   // ── Approve Settlement → PAYMENT_PENDING ────────────────────
-  async approveSettlement(requestId: string, approvedBy: string, reviewNotes?: string) {
+  async approveSettlement(
+    requestId: string,
+    approvedBy: string,
+    reviewNotes?: string,
+    confirmedSettlement?: { amount?: number; direction?: string },
+  ) {
     const req = await prisma.move_out_requests.findUnique({ where: { id: requestId } });
     if (!req) throw new Error("NOT_FOUND");
-    const preview = await this.calculateSettlementPreview(requestId);
+    const preview = applyConfirmedSettlement(
+      await this.calculateSettlementPreview(requestId),
+      confirmedSettlement,
+    );
     const nextStatus: MoveOutStatus = preview.settlement_direction === "SETTLED" ? "COMPLETED" : "PAYMENT_PENDING";
     assertTransition(req.status as MoveOutStatus, nextStatus);
 
@@ -201,7 +209,7 @@ export class MoveOutService {
         data: {
           status: nextStatus, reviewed_by: approvedBy, reviewed_at: new Date(),
           review_notes: reviewNotes || null, updated_at: new Date(),
-          ...(nextStatus === "COMPLETED" ? { financial_completion_date: new Date(), completed_at: new Date() } : {}),
+          ...(nextStatus === "COMPLETED" ? { financial_completion_date: new Date(), physical_exit_date: req.planned_exit_date, completed_at: new Date() } : {}),
         },
       });
 
@@ -238,7 +246,7 @@ export class MoveOutService {
 
       await tx.move_out_requests.update({
         where: { id: params.requestId },
-        data: { status: "COMPLETED", financial_completion_date: now, physical_exit_date: physicalDate, completed_at: now, updated_at: now },
+        data: { status: "COMPLETED", financial_completion_date: now, physical_exit_date: physicalDate, actual_exit_date: physicalDate, completed_at: now, updated_at: now },
       });
       // Room release and tenant update
       await this.executeCompletionSideEffects(tx, req.tenant_id, params.requestId, physicalDate, req.reason, req.reason_text, now);
@@ -407,6 +415,28 @@ export class MoveOutService {
 }
 
 function round2(n: number) { return Math.round(n * 100) / 100; }
+
+function applyConfirmedSettlement(
+  preview: any,
+  confirmed?: { amount?: number; direction?: string },
+) {
+  if (!confirmed || confirmed.amount == null || !confirmed.direction) return preview;
+
+  const amount = round2(Math.max(0, Number(confirmed.amount)));
+  if (!Number.isFinite(amount)) throw new Error("VALIDATION: Settlement amount must be a valid number");
+
+  const direction = String(confirmed.direction).toUpperCase();
+  if (!["OWNER_OWES_TENANT", "TENANT_OWES_OWNER", "SETTLED"].includes(direction)) {
+    throw new Error("VALIDATION: Invalid settlement direction");
+  }
+
+  const net = direction === "OWNER_OWES_TENANT" ? amount : direction === "TENANT_OWES_OWNER" ? -amount : 0;
+  return {
+    ...preview,
+    net_settlement_amount: round2(net),
+    settlement_direction: direction,
+  };
+}
 
 async function getAdvanceBalanceInTx(tx: Tx, tenantId: string): Promise<number> {
   const [credits, debits] = await Promise.all([

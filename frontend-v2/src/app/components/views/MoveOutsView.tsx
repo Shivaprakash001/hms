@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -48,6 +48,9 @@ export function MoveOutsView() {
   const [paymentMethod, setPaymentMethod] = useState('UPI');
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentNotes, setPaymentNotes] = useState('');
+  const [settlementDirection, setSettlementDirection] = useState('SETTLED');
+  const [settlementAmount, setSettlementAmount] = useState('0');
+  const [physicalExitDate, setPhysicalExitDate] = useState('');
 
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.moveOut.list(hostelId),
@@ -76,6 +79,15 @@ export function MoveOutsView() {
   const direction = String(settlement.settlement_direction ?? settlement.direction ?? 'NONE');
   const netAmount = Number(settlement.net_settlement_amount ?? settlement.net_amount ?? 0);
 
+  useEffect(() => {
+    if (!active) return;
+    const nextDirection = direction === 'OWNER_OWES_TENANT' || direction === 'TENANT_OWES_OWNER' ? direction : 'SETTLED';
+    setSettlementDirection(nextDirection);
+    setSettlementAmount(String(Math.abs(netAmount || 0)));
+    const exitDate = String(active.physical_exit_date ?? active.planned_exit_date ?? '').slice(0, 10);
+    setPhysicalExitDate(exitDate);
+  }, [active?.id, active?.planned_exit_date, active?.physical_exit_date, direction, netAmount]);
+
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: queryKeys.moveOut.all(hostelId) });
   };
@@ -100,7 +112,10 @@ export function MoveOutsView() {
   });
 
   const settleMutation = useMutation({
-    mutationFn: () => moveOutService.settle(effectiveSelectedId!),
+    mutationFn: () => moveOutService.settle(effectiveSelectedId!, {
+      settlementDirection,
+      confirmedSettlementAmount: Number(settlementAmount) || 0,
+    }),
     onSuccess: () => {
       toast.success('Settlement approved');
       invalidate();
@@ -114,6 +129,7 @@ export function MoveOutsView() {
         paymentMethod,
         paymentReference,
         paymentNotes,
+        physicalExitDate,
       }),
     onSuccess: () => {
       toast.success('Move-out completed');
@@ -332,14 +348,48 @@ export function MoveOutsView() {
                       )}
 
                       {String(active.status) === 'INSPECTION_DONE' && (
-                        <button
-                          type="button"
-                          disabled={settleMutation.isPending}
-                          onClick={() => settleMutation.mutate()}
-                          className="w-full rounded-xl bg-accent py-3 text-sm font-semibold text-accent-foreground disabled:opacity-50"
-                        >
-                          {settleMutation.isPending ? 'Approving settlement...' : 'Approve settlement'}
-                        </button>
+                        <div className="rounded-2xl border border-border bg-background p-4 space-y-3">
+                          <div className="flex items-center gap-2">
+                            <BadgeIndianRupee className="h-4 w-4 text-accent" />
+                            <h3 className="text-sm font-semibold text-foreground">Confirm final settlement</h3>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Confirm the final amount before this moves to payment or completion.
+                          </p>
+                          <div className="grid gap-2 sm:grid-cols-[1fr_10rem]">
+                            <label className="text-xs text-muted-foreground">
+                              Settlement result
+                              <select
+                                value={settlementDirection}
+                                onChange={(e) => setSettlementDirection(e.target.value)}
+                                className="mt-1 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground"
+                              >
+                                <option value="OWNER_OWES_TENANT">Refund to tenant</option>
+                                <option value="TENANT_OWES_OWNER">Tenant should pay</option>
+                                <option value="SETTLED">No payment needed</option>
+                              </select>
+                            </label>
+                            <label className="text-xs text-muted-foreground">
+                              Amount
+                              <input
+                                type="number"
+                                min="0"
+                                value={settlementAmount}
+                                disabled={settlementDirection === 'SETTLED'}
+                                onChange={(e) => setSettlementAmount(e.target.value)}
+                                className="mt-1 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground disabled:opacity-60"
+                              />
+                            </label>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={settleMutation.isPending}
+                            onClick={() => settleMutation.mutate()}
+                            className="w-full rounded-xl bg-accent py-3 text-sm font-semibold text-accent-foreground disabled:opacity-50"
+                          >
+                            {settleMutation.isPending ? 'Confirming settlement...' : 'Confirm settlement amount'}
+                          </button>
+                        </div>
                       )}
 
                       {String(active.status) === 'PAYMENT_PENDING' && (
@@ -367,6 +417,15 @@ export function MoveOutsView() {
                                 value={paymentReference}
                                 onChange={(e) => setPaymentReference(e.target.value)}
                                 placeholder="Txn/ref no."
+                                className="mt-1 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground"
+                              />
+                            </label>
+                            <label className="text-xs text-muted-foreground">
+                              Move-out date
+                              <input
+                                type="date"
+                                value={physicalExitDate}
+                                onChange={(e) => setPhysicalExitDate(e.target.value)}
                                 className="mt-1 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground"
                               />
                             </label>

@@ -74,7 +74,7 @@ export function PublicLayout({ children, title, subtitle }: PublicLayoutProps) {
           </nav>
 
           <Link
-            to="/login"
+            to="/login?signin=1"
             className="no-underline font-semibold text-sm px-5 py-2 rounded-lg transition-colors hover:bg-[#d96e18]"
             style={{ background: '#F07B1D', color: '#fff' }}
           >
@@ -169,7 +169,7 @@ export function PublicLayout({ children, title, subtitle }: PublicLayoutProps) {
 
           <div className="border-t border-white/20 pt-8 flex flex-wrap items-center justify-between gap-4 text-sm text-white/60">
             <p className="m-0">&copy; {new Date().getFullYear()} Sri Adithya Hostels. All rights reserved.</p>
-            <Link to="/login" className="text-white/60 hover:text-white no-underline transition-colors">
+            <Link to="/login?signin=1" className="text-white/60 hover:text-white no-underline transition-colors">
               Tenant Login
             </Link>
           </div>
