@@ -84,7 +84,7 @@ export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initi
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.payments.all(hostelId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.payments.dues(hostelId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.stats(hostelId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
       const recorded = result?.payment ?? result;
       hmsToast.paymentSuccess(Number((recorded as Record<string, unknown>)?.amount_paid ?? amount));
       setSuccessSummary(recorded);

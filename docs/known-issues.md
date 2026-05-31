@@ -69,7 +69,7 @@ Examples include selected document nested routes, payment export, payment waive,
 
 The hostel detail route now loads as feature islands.
 The chart vendor chunk remains about 101 kB gzip after splitting.
-The owner dashboard first paint now uses a shell endpoint instead of a full dues waterfall.
+The owner dashboard and hostel finance first paint now use shell endpoints instead of full aggregate waterfalls.
 The tenant route loads its academic mix chart after idle time, but Recharts still remains the largest async visual vendor.
 
 **How this works:**
@@ -77,8 +77,9 @@ The tenant route loads its academic mix chart after idle time, but Recharts stil
 2. Owner users download only the active hostel tab.
 3. Payment, tenant, rent obligation, and expense lists now use virtualization.
 4. Portfolio risk uses a four-row overdue preview for mobile first paint.
-5. Tenant dashboard secondary widgets and expense intelligence now wait behind idle render boundaries.
-6. Further gains require replacing or shrinking the chart vendor chunk.
+5. Hostel finance KPIs use `/api/dashboard/stats-shell`; activity and analytics load through deferred endpoints.
+6. Tenant dashboard secondary widgets and expense intelligence now wait behind idle render boundaries.
+7. Further gains require replacing or shrinking the chart vendor chunk.
 
 ## Frontend runtime work still needs field tracing
 

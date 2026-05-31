@@ -3,18 +3,12 @@ export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
+import { dashboardService } from "@/lib/services/dashboard-service";
 import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
 import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
-import { dashboardService } from "@/lib/services/dashboard-service";
 import { getCachedDashboard, setDashboardCache } from "@/lib/cache/dashboard-cache";
 import { redisKeys } from "@/lib/redis/keys";
 
-
-/**
- * 📊 DASHBOARD SUMMARY / STATS
- * GET — Owner/Admin dashboard statistics
- * Frontend calls both /dashboard/summary and /dashboard/stats — both return the same data.
- */
 export async function GET(req: NextRequest) {
   const session = await getSession(req);
   if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
@@ -26,17 +20,20 @@ export async function GET(req: NextRequest) {
     const hostelId = req.nextUrl.searchParams.get("hostelId") || undefined;
     await requireHostelBelongsToOwner(scope.owner_id, hostelId);
     if (!hostelId) return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
-    const cacheKey = redisKeys.dashboard.statsShell(scope.owner_id, hostelId);
+
+    const cacheKey = redisKeys.dashboard.statsAnalytics(scope.owner_id, hostelId);
     const cached = await getCachedDashboard(cacheKey);
     if (cached) return apiResponse(cached);
 
-    const stats = await dashboardService.getOwnerStatsShell(scope.owner_id, hostelId);
-    await setDashboardCache(cacheKey, stats, 45, [
+    const analytics = await dashboardService.getOwnerStatsAnalytics(scope.owner_id, hostelId);
+    await setDashboardCache(cacheKey, analytics, 180, [
       redisKeys.tag.ownerDashboard(scope.owner_id),
       redisKeys.tag.hostelDashboard(hostelId),
     ]);
-    return apiResponse(stats);
+
+    return apiResponse(analytics);
   } catch (error: any) {
-    return apiError(error.message || "Failed to fetch dashboard stats");
+    console.error("Detailed API Error [dashboard.stats-analytics]:", error);
+    return apiError(error.message || "Failed to fetch dashboard stats analytics");
   }
 }

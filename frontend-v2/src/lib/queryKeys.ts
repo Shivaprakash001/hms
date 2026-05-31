@@ -28,6 +28,9 @@ export const queryKeys = {
   dashboard: {
     all: (hostelId: string) => hostelKey(hostelId, 'dashboard'),
     stats: (hostelId: string) => hostelKey(hostelId, 'dashboard', 'stats'),
+    statsShell: (hostelId: string) => hostelKey(hostelId, 'dashboard', 'stats-shell'),
+    statsActivity: (hostelId: string) => hostelKey(hostelId, 'dashboard', 'stats-activity'),
+    statsAnalytics: (hostelId: string) => hostelKey(hostelId, 'dashboard', 'stats-analytics'),
     summary: (hostelId: string) => hostelKey(hostelId, 'dashboard', 'summary'),
     monthly: (hostelId: string, months?: number) =>
       hostelKey(hostelId, 'dashboard', 'monthly', months ?? 6),

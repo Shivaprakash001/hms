@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
   try {
     // Run everything in parallel! The real secret to production performance
     const [summary, monthlyStats, activityRes] = await Promise.all([
-      dashboardService.getOwnerStats(scope.owner_id, hostelId),
+      dashboardService.getOwnerStatsShell(scope.owner_id, hostelId),
       dashboardService.getMonthlyStats(scope.owner_id, hostelId, months),
       activityService.getOwnerActivity({ userId: scope.owner_id, hostelId, limit: 5, offset: 0 }).catch(() => ({ items: [], total: 0 }))
     ]);

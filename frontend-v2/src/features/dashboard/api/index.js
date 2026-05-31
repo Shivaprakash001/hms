@@ -13,6 +13,18 @@ export const dashboardService = {
         const response = await requestWithRetry(() => api.get('/dashboard/stats', { params: { hostelId } }));
         return response.data;
     },
+    getStatsShell: async (hostelId) => {
+        const response = await requestWithRetry(() => api.get('/dashboard/stats-shell', { params: { hostelId } }));
+        return response.data?.data ?? response.data;
+    },
+    getStatsActivity: async (hostelId) => {
+        const response = await requestWithRetry(() => api.get('/dashboard/stats-activity', { params: { hostelId } }));
+        return response.data?.data ?? response.data;
+    },
+    getStatsAnalytics: async (hostelId) => {
+        const response = await requestWithRetry(() => api.get('/dashboard/stats-analytics', { params: { hostelId } }));
+        return response.data?.data ?? response.data;
+    },
     getMonthlyStats: async (hostelId, months = 6) => {
         const response = await requestWithRetry(() => api.get('/dashboard/monthly-stats', { params: { months, hostelId } }));
         return response.data;

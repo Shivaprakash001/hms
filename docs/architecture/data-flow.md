@@ -116,6 +116,22 @@ Why this exists: mobile dashboards should not download every obligation to rende
 3. The preview query reads only the fields needed above the fold.
 4. Billing and alerts still use the full dues endpoint when users open those workflows.
 
+## Hostel stats split flow
+
+| Endpoint | Purpose | First-paint role |
+|---|---|---|
+| `/api/dashboard/stats-shell` | Returns occupancy, revenue, expenses, profit, dues, alerts, and health score. | Critical |
+| `/api/dashboard/stats-activity` | Returns recent payments, expenses, move-outs, and allocations. | Deferred |
+| `/api/dashboard/stats-analytics` | Returns trend, reminder, payment-attempt, and snapshot analytics. | Deferred |
+
+Why this exists: Postgres executes dashboard aggregates quickly, but each Prisma or pooler round trip adds hundreds of milliseconds.
+
+**How this works:**
+1. The first-paint shell uses one grouped SQL query instead of many small Prisma aggregates.
+2. Billing and overview screens render KPIs from the shell response.
+3. Activity and analytics load only after user intent or lower-priority rendering.
+4. Redis caches each shaped response with a short TTL and dashboard cache tags.
+
 ## Hostel detail tab flow
 
 | Step | Code | What happens |

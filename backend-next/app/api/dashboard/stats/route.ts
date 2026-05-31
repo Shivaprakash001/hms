@@ -33,11 +33,11 @@ export async function GET(req: NextRequest) {
       return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
     }
     
-    const cacheKey = redisKeys.dashboard.stats(scope.owner_id, hostelId);
+    const cacheKey = redisKeys.dashboard.statsShell(scope.owner_id, hostelId);
     const cached = await getCachedDashboard(cacheKey);
     if (cached) return apiResponse(cached);
 
-    const stats = await dashboardService.getOwnerStats(scope.owner_id, hostelId);
+    const stats = await dashboardService.getOwnerStatsShell(scope.owner_id, hostelId);
     await setDashboardCache(cacheKey, stats, 45, [
       redisKeys.tag.ownerDashboard(scope.owner_id),
       redisKeys.tag.hostelDashboard(hostelId),

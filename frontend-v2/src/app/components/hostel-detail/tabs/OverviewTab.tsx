@@ -10,8 +10,8 @@ import { TabSkeleton } from '../shared/TabStates';
 
 export function OverviewTab({ hostelId }: { hostelId: string }) {
   const { data: stats, isLoading: loading } = useQuery({
-    queryKey: queryKeys.dashboard.stats(hostelId),
-    queryFn: () => dashboardService.getStats(hostelId),
+    queryKey: queryKeys.dashboard.statsShell(hostelId),
+    queryFn: () => dashboardService.getStatsShell(hostelId),
     enabled: !!hostelId,
     staleTime: 2 * 60 * 1000,
   });
@@ -24,7 +24,7 @@ export function OverviewTab({ hostelId }: { hostelId: string }) {
   const kpis = intel.kpis ?? {};
   const hostel = s.hostel ?? {};
   const health = intel.health ?? {};
-  const revenueTrend = intel.revenue?.trend ?? [];
+  const revenueTrend = Array.isArray(intel.revenue?.trend) ? intel.revenue.trend : [];
   const roomUtilization = intel.occupancy?.room_utilization ?? [];
   const floorOccupancy = intel.occupancy?.floor_occupancy ?? [];
   const highRiskTenants = intel.dues?.high_risk_tenants ?? [];
@@ -316,4 +316,3 @@ function SmartList({ items, empty }: { items: { title: string; right: string; su
 }
 
 // ─── WiFi reveal cell ────────────────────────────────────────────────────────
-

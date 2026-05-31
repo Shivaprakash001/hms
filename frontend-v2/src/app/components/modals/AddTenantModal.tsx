@@ -111,7 +111,7 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
     onSuccess: (res: any) => {
       qc.invalidateQueries({ queryKey: queryKeys.tenants.all(selectedHostelId) });
       qc.invalidateQueries({ queryKey: queryKeys.rooms.list(selectedHostelId) });
-      qc.invalidateQueries({ queryKey: queryKeys.dashboard.stats(selectedHostelId) });
+      qc.invalidateQueries({ queryKey: queryKeys.dashboard.all(selectedHostelId) });
       qc.invalidateQueries({ queryKey: queryKeys.portfolio.performance(6) });
       setLink(res?.activation_link ?? '');
       setSuccess(true);

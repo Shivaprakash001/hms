@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useCallback } from 'react';
+import { lazy, Suspense, useState, useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { BarChart3, ChevronDown } from 'lucide-react';
 import { queryKeys } from '@lib/queryKeys';
@@ -37,11 +37,25 @@ export function FinancialControlCenter({ hostelId, onRecordPayment, onAddExpense
   const [selectedObligationId, setSelectedObligationId] = useState<string | null>(null);
   const [showAnalytics, setShowAnalytics] = useState(false);
 
-  const { data: stats, isLoading: statsLoading } = useQuery({
-    queryKey: queryKeys.dashboard.stats(hostelId),
-    queryFn: () => import('@features/dashboard/api').then((m) => m.dashboardService.getStats(hostelId)),
+  const { data: statsShell, isLoading: statsLoading } = useQuery({
+    queryKey: queryKeys.dashboard.statsShell(hostelId),
+    queryFn: () => import('@features/dashboard/api').then((m) => m.dashboardService.getStatsShell(hostelId)),
     staleTime: 2 * 60 * 1000,
     enabled: !!hostelId,
+  });
+
+  const { data: statsAnalytics } = useQuery({
+    queryKey: queryKeys.dashboard.statsAnalytics(hostelId),
+    queryFn: () => import('@features/dashboard/api').then((m) => m.dashboardService.getStatsAnalytics(hostelId)),
+    staleTime: 3 * 60 * 1000,
+    enabled: !!hostelId && showAnalytics,
+  });
+
+  const { data: statsActivity } = useQuery({
+    queryKey: queryKeys.dashboard.statsActivity(hostelId),
+    queryFn: () => import('@features/dashboard/api').then((m) => m.dashboardService.getStatsActivity(hostelId)),
+    staleTime: 60 * 1000,
+    enabled: !!hostelId && showAnalytics,
   });
 
   const { data: cashflow } = useQuery({
@@ -66,6 +80,35 @@ export function FinancialControlCenter({ hostelId, onRecordPayment, onAddExpense
   });
 
   const handleRowClick = useCallback((id: string) => setSelectedObligationId(id), []);
+
+  const stats = useMemo(() => {
+    if (!statsShell) return statsShell;
+    const shellIntel = statsShell.intelligence ?? {};
+    const analytics = statsAnalytics ?? {};
+    const activity = statsActivity ?? {};
+
+    return {
+      ...statsShell,
+      intelligence: {
+        ...shellIntel,
+        revenue: {
+          ...(shellIntel.revenue ?? {}),
+          ...(analytics.revenue ?? {}),
+        },
+        occupancy: {
+          ...(shellIntel.occupancy ?? {}),
+          ...(analytics.occupancy ?? {}),
+        },
+        dues: {
+          ...(shellIntel.dues ?? {}),
+          ...(analytics.dues ?? {}),
+          reminder_conversion: analytics.dues?.reminder_conversion ?? shellIntel.dues?.reminder_conversion,
+        },
+        payment_attempts: analytics.payment_attempts ?? shellIntel.payment_attempts,
+        recent_activity: activity.recent_activity ?? shellIntel.recent_activity ?? [],
+      },
+    };
+  }, [statsShell, statsAnalytics, statsActivity]);
 
   const intel = stats?.intelligence;
   const payments: any[] = Array.isArray(paymentsData?.payments) ? paymentsData.payments : Array.isArray(paymentsData) ? paymentsData : [];

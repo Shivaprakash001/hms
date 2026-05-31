@@ -27,6 +27,12 @@ export const redisKeys = {
       redisKey("dashboard", "owner", ownerId, "hostel", hostelId, "months", months),
     stats: (ownerId: string, hostelId: string) =>
       redisKey("dashboard", "stats", ownerId, hostelId),
+    statsShell: (ownerId: string, hostelId: string) =>
+      redisKey("dashboard", "stats-shell", ownerId, hostelId),
+    statsActivity: (ownerId: string, hostelId: string) =>
+      redisKey("dashboard", "stats-activity", ownerId, hostelId),
+    statsAnalytics: (ownerId: string, hostelId: string) =>
+      redisKey("dashboard", "stats-analytics", ownerId, hostelId),
     monthly: (ownerId: string, hostelId: string, months: number) =>
       redisKey("dashboard", "monthly", ownerId, hostelId, months),
     tenantStats: (profileId: string) => redisKey("tenant", "dashboard", profileId),

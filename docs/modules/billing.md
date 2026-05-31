@@ -23,7 +23,7 @@ The billing module helps owners understand dues, collections, payment attempts, 
 - `paymentService.recordOfflinePayment(data)` from `/payments/record-offline`.
 - `paymentService.createIntent(data)` from `/payments/create-intent`.
 - `paymentService.downloadReceipt(paymentId)` from `/payments/:id/receipt`.
-- Dashboard finance endpoints for stats, cash flow, funnel, and operations.
+- Dashboard finance endpoints for stats shell, deferred activity, deferred analytics, cash flow, funnel, and operations.
 - `expenseService.getAll()` from `/expenses` for business-wide expenses.
 
 ## Data it produces
@@ -78,11 +78,12 @@ Expenses track Sri Adithya Hostels business spending, not hostel-wise accounting
 ## How this works (step by step)
 
 1. The owner opens `/billing` or a hostel finance surface.
-2. The UI fetches dashboard stats, dues, and payment ledger data.
-3. The owner records offline payment or reviews online attempts.
-4. Backend services update obligations, payments, attempts, and receipts.
-5. Finance query keys refresh and the dashboard totals change.
-6. Expense changes refresh business expense, dashboard, and portfolio caches.
+2. The UI fetches the lightweight stats shell and payment ledger data.
+3. Activity and analytics endpoints load after the critical finance cards.
+4. The owner records offline payment or reviews online attempts.
+5. Backend services update obligations, payments, attempts, and receipts.
+6. Finance query keys refresh and the dashboard totals change.
+7. Expense changes refresh business expense, dashboard, and portfolio caches.
 
 ## How to reuse this for a new client
 

@@ -93,7 +93,7 @@ export function HealthBar({ stats, loading }: Props) {
   const d = stats?.data ?? stats ?? {};
   const intel = d?.intelligence ?? {};
 
-  const revenueTrend = intel?.revenue?.trend;
+  const revenueTrend = Number(intel?.kpis?.revenue?.trend ?? 0);
   const expectedRevenue = d?.expected_revenue ?? 0;
   const collected = d?.revenue ?? 0;
   const outstanding = d?.pending_dues ?? 0;

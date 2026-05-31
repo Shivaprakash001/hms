@@ -26,6 +26,786 @@ import { operationalPendingInvariantHolds } from "./financial-invariants";
  */
 
 export class DashboardService {
+  async getOwnerStatsShell(userId: string, hostelId: string) {
+    const now = new Date();
+    const utcYear = now.getUTCFullYear();
+    const utcMonth = now.getUTCMonth();
+    const today = new Date(Date.UTC(utcYear, utcMonth, now.getUTCDate()));
+    const monthStart = new Date(Date.UTC(utcYear, utcMonth, 1, 0, 0, 0, 0));
+    const nextMonthStart = new Date(Date.UTC(utcYear, utcMonth + 1, 1, 0, 0, 0, 0));
+    const previousMonthStart = new Date(Date.UTC(utcYear, utcMonth - 1, 1, 0, 0, 0, 0));
+    const weekEnd = new Date(today);
+    weekEnd.setUTCDate(today.getUTCDate() + 7);
+
+    const rows = await prisma.$queryRaw<Array<{
+      hostel_id: string | null;
+      hostel_name: string | null;
+      city: string | null;
+      address: string | null;
+      phone: string | null;
+      is_active: boolean | null;
+      total_tenants: number;
+      active_tenants: number;
+      pending_invites: number;
+      inactive_invites: number;
+      joins_this_month: number;
+      exits_this_month: number;
+      total_rooms: number;
+      total_capacity: number;
+      occupied_rooms: number;
+      current_revenue: number;
+      previous_revenue: number;
+      monthly_expenses: number;
+      previous_expenses: number;
+      expected_revenue: number;
+      previous_expected_revenue: number;
+      pending_total: number;
+      overdue_total: number;
+      overdue_count: number;
+      unpaid_tenant_count: number;
+      overdue_tenant_count: number;
+      oldest_unpaid_due: Date | null;
+      overdue_30_plus_count: number;
+      due_today: number;
+      due_this_week: number;
+      move_out_open: number;
+      category_expenses: Array<{ category: string; amount: number; percentage: number; trend: number }> | null;
+      room_utilization: Array<{
+        id: string;
+        room_no: string;
+        floor: string;
+        floor_name: string;
+        room_type: string;
+        capacity: number;
+        occupied: number;
+        vacant: number;
+        state: string;
+      }> | null;
+      floor_occupancy: Array<{ floor: string; capacity: number; occupied: number; occupancy_rate: number }> | null;
+    }>>`
+      WITH selected_hostel AS (
+        SELECT id, name, city, address, phone, is_active
+        FROM hostels
+        WHERE id = ${hostelId}::uuid
+          AND owner_id = ${userId}::uuid
+          AND is_active = true
+        LIMIT 1
+      ),
+      tenant_counts AS (
+        SELECT
+          COUNT(*)::int AS total_tenants,
+          COUNT(*) FILTER (WHERE status = 'ACTIVE')::int AS active_tenants,
+          COUNT(*) FILTER (WHERE status = 'INVITED')::int AS pending_invites,
+          COUNT(*) FILTER (WHERE status IN ('EXPIRED', 'CANCELLED'))::int AS inactive_invites,
+          COUNT(*) FILTER (WHERE status = 'ACTIVE' AND joined_on >= ${monthStart}::date AND joined_on < ${nextMonthStart}::date)::int AS joins_this_month,
+          COUNT(*) FILTER (WHERE status = 'LEFT' AND exit_date >= ${monthStart}::date AND exit_date < ${nextMonthStart}::date)::int AS exits_this_month
+        FROM tenants
+        WHERE owner_id = ${userId}::uuid
+          AND hostel_id = ${hostelId}::uuid
+      ),
+      room_utilization_rows AS (
+        SELECT
+          r.id,
+          r.room_no,
+          COALESCE(f.name, CASE WHEN r.floor IS NOT NULL THEN 'Floor ' || r.floor::text ELSE 'Unassigned' END) AS floor,
+          COALESCE(f.name, CASE WHEN r.floor IS NOT NULL THEN 'Floor ' || r.floor::text ELSE 'Unassigned' END) AS floor_name,
+          COALESCE(r.room_type, 'Standard') AS room_type,
+          COALESCE(r.capacity, 0)::int AS capacity,
+          COUNT(ra.id)::int AS occupied
+        FROM rooms r
+        LEFT JOIN floors f ON f.id = r.floor_id
+        LEFT JOIN room_allocations ra
+          ON ra.room_id = r.id
+         AND ra.is_active = true
+         AND ra.end_date IS NULL
+        WHERE r.hostel_id = ${hostelId}::uuid
+          AND r.is_active = true
+        GROUP BY r.id, r.room_no, r.floor, f.name, r.room_type, r.capacity
+      ),
+      room_summary AS (
+        SELECT
+          COUNT(*)::int AS total_rooms,
+          COALESCE(SUM(capacity), 0)::int AS total_capacity,
+          COUNT(*) FILTER (WHERE occupied > 0)::int AS occupied_rooms
+        FROM room_utilization_rows
+      ),
+      floor_summary AS (
+        SELECT
+          floor,
+          COALESCE(SUM(capacity), 0)::int AS capacity,
+          COALESCE(SUM(occupied), 0)::int AS occupied,
+          CASE WHEN COALESCE(SUM(capacity), 0) > 0
+            THEN ROUND((SUM(occupied)::numeric / SUM(capacity)::numeric) * 100)::int
+            ELSE 0
+          END AS occupancy_rate
+        FROM room_utilization_rows
+        GROUP BY floor
+      ),
+      payment_month AS (
+        SELECT
+          COALESCE(SUM(amount_paid) FILTER (WHERE payment_date >= ${monthStart}::date AND payment_date < ${nextMonthStart}::date), 0)::float AS current_revenue,
+          COALESCE(SUM(amount_paid) FILTER (WHERE payment_date >= ${previousMonthStart}::date AND payment_date < ${monthStart}::date), 0)::float AS previous_revenue
+        FROM payments
+        WHERE owner_id = ${userId}::uuid
+          AND hostel_id = ${hostelId}::uuid
+          AND payment_date >= ${previousMonthStart}::date
+          AND payment_date < ${nextMonthStart}::date
+      ),
+      expense_month AS (
+        SELECT
+          COALESCE(SUM(amount) FILTER (WHERE date >= ${monthStart}::date AND date < ${nextMonthStart}::date), 0)::float AS monthly_expenses,
+          COALESCE(SUM(amount) FILTER (WHERE date >= ${previousMonthStart}::date AND date < ${monthStart}::date), 0)::float AS previous_expenses
+        FROM expenses
+        WHERE owner_id = ${userId}::uuid
+          AND hostel_id = ${hostelId}::uuid
+          AND date >= ${previousMonthStart}::date
+          AND date < ${nextMonthStart}::date
+      ),
+      payment_by_obligation AS (
+        SELECT obligation_id, COALESCE(SUM(amount_paid), 0)::float AS total_paid
+        FROM payments
+        WHERE owner_id = ${userId}::uuid
+          AND hostel_id = ${hostelId}::uuid
+        GROUP BY obligation_id
+      ),
+      expected_month AS (
+        SELECT
+          COALESCE(SUM(o.amount) FILTER (WHERE o.rent_month >= ${monthStart}::date AND o.rent_month < ${nextMonthStart}::date), 0)::float AS expected_revenue,
+          COALESCE(SUM(o.amount) FILTER (WHERE o.rent_month >= ${previousMonthStart}::date AND o.rent_month < ${monthStart}::date), 0)::float AS previous_expected_revenue
+        FROM rent_obligations o
+        JOIN tenants t ON t.id = o.tenant_id
+        WHERE o.owner_id = ${userId}::uuid
+          AND o.hostel_id = ${hostelId}::uuid
+          AND o.status <> 'WAIVED'
+          AND t.status = 'ACTIVE'
+          AND o.rent_month >= ${previousMonthStart}::date
+          AND o.rent_month < ${nextMonthStart}::date
+      ),
+      open_dues AS (
+        SELECT
+          o.id,
+          o.tenant_id,
+          o.due_date,
+          GREATEST(o.amount::float - COALESCE(pbo.total_paid, 0), 0)::float AS remaining
+        FROM rent_obligations o
+        JOIN tenants t ON t.id = o.tenant_id
+        LEFT JOIN payment_by_obligation pbo ON pbo.obligation_id = o.id
+        WHERE o.owner_id = ${userId}::uuid
+          AND o.hostel_id = ${hostelId}::uuid
+          AND o.status IN ('PENDING', 'PARTIAL')
+          AND t.status = 'ACTIVE'
+          AND GREATEST(o.amount::float - COALESCE(pbo.total_paid, 0), 0) > 0
+      ),
+      dues_summary AS (
+        SELECT
+          COALESCE(SUM(remaining), 0)::float AS pending_total,
+          COALESCE(SUM(remaining) FILTER (WHERE due_date < ${today}::date), 0)::float AS overdue_total,
+          COUNT(*) FILTER (WHERE due_date < ${today}::date)::int AS overdue_count,
+          COUNT(DISTINCT tenant_id)::int AS unpaid_tenant_count,
+          COUNT(DISTINCT tenant_id) FILTER (WHERE due_date < ${today}::date)::int AS overdue_tenant_count,
+          MIN(due_date) FILTER (WHERE remaining > 0) AS oldest_unpaid_due,
+          COUNT(*) FILTER (WHERE due_date < (${today}::date - INTERVAL '30 days'))::int AS overdue_30_plus_count,
+          COALESCE(SUM(remaining) FILTER (WHERE due_date = ${today}::date), 0)::float AS due_today,
+          COALESCE(SUM(remaining) FILTER (WHERE due_date >= ${today}::date AND due_date <= ${weekEnd}::date), 0)::float AS due_this_week
+        FROM open_dues
+      ),
+      move_out_summary AS (
+        SELECT COUNT(*)::int AS move_out_open
+        FROM move_out_requests
+        WHERE owner_id = ${userId}::uuid
+          AND hostel_id = ${hostelId}::uuid
+          AND status NOT IN ('COMPLETED', 'CANCELLED')
+      ),
+      category_current AS (
+        SELECT category, COALESCE(SUM(amount), 0)::float AS amount
+        FROM expenses
+        WHERE owner_id = ${userId}::uuid
+          AND hostel_id = ${hostelId}::uuid
+          AND date >= ${monthStart}::date
+          AND date < ${nextMonthStart}::date
+        GROUP BY category
+      ),
+      category_previous AS (
+        SELECT category, COALESCE(SUM(amount), 0)::float AS amount
+        FROM expenses
+        WHERE owner_id = ${userId}::uuid
+          AND hostel_id = ${hostelId}::uuid
+          AND date >= ${previousMonthStart}::date
+          AND date < ${monthStart}::date
+        GROUP BY category
+      ),
+      category_rows AS (
+        SELECT
+          c.category,
+          c.amount,
+          CASE WHEN (SELECT monthly_expenses FROM expense_month) > 0
+            THEN ROUND((c.amount / (SELECT monthly_expenses FROM expense_month)) * 100)::int
+            ELSE 0
+          END AS percentage,
+          CASE WHEN COALESCE(p.amount, 0) > 0
+            THEN ROUND(((c.amount - p.amount) / p.amount) * 100)::int
+            WHEN c.amount > 0 THEN 100
+            ELSE 0
+          END AS trend
+        FROM category_current c
+        LEFT JOIN category_previous p ON p.category = c.category
+        ORDER BY c.amount DESC
+      )
+      SELECT
+        sh.id AS hostel_id,
+        sh.name AS hostel_name,
+        sh.city,
+        sh.address,
+        sh.phone,
+        sh.is_active,
+        COALESCE(tc.total_tenants, 0)::int AS total_tenants,
+        COALESCE(tc.active_tenants, 0)::int AS active_tenants,
+        COALESCE(tc.pending_invites, 0)::int AS pending_invites,
+        COALESCE(tc.inactive_invites, 0)::int AS inactive_invites,
+        COALESCE(tc.joins_this_month, 0)::int AS joins_this_month,
+        COALESCE(tc.exits_this_month, 0)::int AS exits_this_month,
+        COALESCE(rs.total_rooms, 0)::int AS total_rooms,
+        COALESCE(rs.total_capacity, 0)::int AS total_capacity,
+        COALESCE(rs.occupied_rooms, 0)::int AS occupied_rooms,
+        COALESCE(pm.current_revenue, 0)::float AS current_revenue,
+        COALESCE(pm.previous_revenue, 0)::float AS previous_revenue,
+        COALESCE(em.monthly_expenses, 0)::float AS monthly_expenses,
+        COALESCE(em.previous_expenses, 0)::float AS previous_expenses,
+        COALESCE(ex.expected_revenue, 0)::float AS expected_revenue,
+        COALESCE(ex.previous_expected_revenue, 0)::float AS previous_expected_revenue,
+        COALESCE(ds.pending_total, 0)::float AS pending_total,
+        COALESCE(ds.overdue_total, 0)::float AS overdue_total,
+        COALESCE(ds.overdue_count, 0)::int AS overdue_count,
+        COALESCE(ds.unpaid_tenant_count, 0)::int AS unpaid_tenant_count,
+        COALESCE(ds.overdue_tenant_count, 0)::int AS overdue_tenant_count,
+        ds.oldest_unpaid_due,
+        COALESCE(ds.overdue_30_plus_count, 0)::int AS overdue_30_plus_count,
+        COALESCE(ds.due_today, 0)::float AS due_today,
+        COALESCE(ds.due_this_week, 0)::float AS due_this_week,
+        COALESCE(mo.move_out_open, 0)::int AS move_out_open,
+        COALESCE((SELECT jsonb_agg(to_jsonb(cr)) FROM category_rows cr), '[]'::jsonb) AS category_expenses,
+        COALESCE((
+          SELECT jsonb_agg(
+            jsonb_build_object(
+              'id', rur.id,
+              'room_no', rur.room_no,
+              'floor', rur.floor,
+              'floor_name', rur.floor_name,
+              'room_type', rur.room_type,
+              'capacity', rur.capacity,
+              'occupied', rur.occupied,
+              'vacant', GREATEST(rur.capacity - rur.occupied, 0),
+              'state', CASE WHEN rur.occupied >= rur.capacity THEN 'full' WHEN rur.occupied = 0 THEN 'vacant' ELSE 'partial' END
+            )
+            ORDER BY rur.floor, rur.room_no
+          )
+          FROM room_utilization_rows rur
+        ), '[]'::jsonb) AS room_utilization,
+        COALESCE((SELECT jsonb_agg(to_jsonb(fs) ORDER BY fs.floor) FROM floor_summary fs), '[]'::jsonb) AS floor_occupancy
+      FROM selected_hostel sh
+      CROSS JOIN tenant_counts tc
+      CROSS JOIN room_summary rs
+      CROSS JOIN payment_month pm
+      CROSS JOIN expense_month em
+      CROSS JOIN expected_month ex
+      CROSS JOIN dues_summary ds
+      CROSS JOIN move_out_summary mo
+      LIMIT 1
+    `;
+
+    const row = rows[0];
+    if (!row) {
+      throw new Error("HOSTEL_NOT_FOUND");
+    }
+
+    const totalTenants = Number(row.total_tenants || 0);
+    const activeTenants = Number(row.active_tenants || 0);
+    const totalCapacity = Number(row.total_capacity || 0);
+    const currentRevenue = Number(row.current_revenue || 0);
+    const previousRevenue = Number(row.previous_revenue || 0);
+    const monthlyExpenses = Number(row.monthly_expenses || 0);
+    const previousExpenses = Number(row.previous_expenses || 0);
+    const expectedRevenue = Number(row.expected_revenue || 0);
+    const previousExpectedRevenue = Number(row.previous_expected_revenue || 0);
+    const pendingTotal = Number(row.pending_total || 0);
+    const overdueTotal = Number(row.overdue_total || 0);
+    const overdueCount = Number(row.overdue_tenant_count || row.overdue_count || 0);
+    const unpaidTenantCount = operationalPendingInvariantHolds(pendingTotal, Number(row.unpaid_tenant_count || 0))
+      ? Number(row.unpaid_tenant_count || 0)
+      : 0;
+    const occupancyRate = totalCapacity > 0 ? Math.round((activeTenants / totalCapacity) * 100) : 0;
+    const netProfit = currentRevenue - monthlyExpenses;
+    const previousProfit = previousRevenue - previousExpenses;
+    const profitMargin = currentRevenue > 0 ? Math.round((netProfit / currentRevenue) * 100) : 0;
+    const collectionRate = expectedRevenue > 0 ? Math.round((currentRevenue / expectedRevenue) * 100) : 0;
+    const previousCollectionRate = previousExpectedRevenue > 0 ? Math.round((previousRevenue / previousExpectedRevenue) * 100) : 0;
+    const expenseRatio = currentRevenue > 0 ? Math.round((monthlyExpenses / currentRevenue) * 100) : 0;
+    const expensePerTenant = activeTenants > 0 ? Math.round(monthlyExpenses / activeTenants) : 0;
+    const revenuePerOccupiedBed = activeTenants > 0 ? Math.round(currentRevenue / activeTenants) : 0;
+    const avgBedRevenue = activeTenants > 0 ? currentRevenue / activeTenants : 0;
+    const vacancyLossEstimate = Math.round(Math.max(totalCapacity - activeTenants, 0) * avgBedRevenue);
+    const revenueTrend = previousRevenue > 0 ? Math.round(((currentRevenue - previousRevenue) / previousRevenue) * 100) : currentRevenue > 0 ? 100 : 0;
+    const profitTrend = previousProfit !== 0 ? Math.round(((netProfit - previousProfit) / Math.abs(previousProfit)) * 100) : netProfit > 0 ? 100 : 0;
+    const expenseGrowth = previousExpenses > 0 ? Math.round(((monthlyExpenses - previousExpenses) / previousExpenses) * 100) : monthlyExpenses > 0 ? 100 : 0;
+    const tenantChurnRate = activeTenants > 0 ? Math.round((Number(row.exits_this_month || 0) / activeTenants) * 100) : 0;
+    const topExpenseCategory = row.category_expenses?.[0] || null;
+    const fixedCategories = new Set(["Internet", "Security", "Staff Salary", "Salary"]);
+    const fixedExpenses = (row.category_expenses || []).filter((c) => fixedCategories.has(c.category)).reduce((sum, c) => sum + Number(c.amount || 0), 0);
+    const fixedCostRatio = monthlyExpenses > 0 ? Math.round((fixedExpenses / monthlyExpenses) * 100) : 0;
+
+    let operationalScore = 100;
+    operationalScore -= Math.max(0, 90 - occupancyRate) * 0.5;
+    operationalScore -= Math.max(0, 95 - collectionRate) * 0.35;
+    operationalScore -= Math.max(0, expenseRatio - 35) * 0.45;
+    operationalScore -= Math.max(0, 20 - profitMargin) * 0.6;
+    operationalScore -= Math.min(20, overdueCount * 4);
+    operationalScore -= Math.min(12, tenantChurnRate * 1.5);
+    operationalScore = Math.max(0, Math.min(100, Math.round(operationalScore)));
+    const operationalState = operationalScore >= 85 ? "Excellent" : operationalScore >= 70 ? "Healthy" : operationalScore >= 45 ? "At Risk" : "Critical";
+    const profitabilityStatus = profitMargin >= 30 && pendingTotal < currentRevenue * 0.15 && occupancyRate >= 85 && expenseRatio <= 35
+      ? "Highly Profitable"
+      : profitMargin >= 18 && occupancyRate >= 70
+        ? "Stable"
+        : profitMargin >= 0 && operationalScore >= 45
+          ? "Attention Needed"
+          : "Critical";
+
+    const duesAging = {
+      total_dues: pendingTotal,
+      overdue_dues: overdueTotal,
+      due_today: Number(row.due_today || 0),
+      due_this_week: Number(row.due_this_week || 0),
+      oldest_unpaid_due: row.oldest_unpaid_due || null,
+      overdue_30_plus_count: Number(row.overdue_30_plus_count || 0),
+    };
+
+    const alerts = [
+      ...(overdueTotal > 0 ? [{
+        severity: overdueCount > 2 || duesAging.overdue_30_plus_count > 0 ? "critical" : "warning",
+        title: `${overdueCount} tenant${overdueCount === 1 ? "" : "s"} overdue`,
+        impact: `${overdueTotal.toLocaleString("en-IN")} pending collection risk`,
+        action: "Collect or send reminder today",
+        cta: "Review dues",
+      }] : []),
+      ...(occupancyRate < 70 ? [{
+        severity: occupancyRate < 60 ? "critical" : "warning",
+        title: "Low occupancy pressure",
+        impact: `${Math.max(totalCapacity - activeTenants, 0)} vacant beds may cost ₹${vacancyLossEstimate.toLocaleString("en-IN")}`,
+        action: "Push room filling or adjust pricing",
+        cta: "Open rooms",
+      }] : []),
+      ...(expenseRatio > 45 ? [{
+        severity: expenseRatio > 60 ? "critical" : "warning",
+        title: "Expenses consuming revenue",
+        impact: `${expenseRatio}% of collections are going to operations`,
+        action: "Check top expense categories",
+        cta: "Open expenses",
+      }] : []),
+      ...(Number(row.pending_invites || 0) > 0 ? [{
+        severity: "info",
+        title: `${row.pending_invites} onboarding pending`,
+        impact: "Invited tenants have not completed activation",
+        action: "Follow up before rooms stay vacant",
+        cta: "Open tenants",
+      }] : []),
+      ...(Number(row.move_out_open || 0) > 0 ? [{
+        severity: "warning",
+        title: `${row.move_out_open} move-out request${Number(row.move_out_open) === 1 ? "" : "s"} open`,
+        impact: "Upcoming vacancy or settlement work",
+        action: "Resolve inspection and replacement plan",
+        cta: "Open move-outs",
+      }] : []),
+    ].slice(0, 6);
+
+    return {
+      hostel: {
+        id: row.hostel_id || hostelId,
+        name: row.hostel_name || "Hostel",
+        location: row.city || row.address || "",
+        phone: row.phone || null,
+        status: row.is_active ? "Active" : "Inactive",
+      },
+      total_rooms: Number(row.total_rooms || 0),
+      occupied_rooms: Number(row.occupied_rooms || 0),
+      total_tenants: totalTenants,
+      active_tenants: activeTenants,
+      total_capacity: totalCapacity,
+      vacant_beds: Math.max(totalCapacity - activeTenants, 0),
+      occupancy_rate: occupancyRate,
+      revenue: currentRevenue,
+      total_revenue: currentRevenue,
+      monthly_revenue: currentRevenue,
+      monthly_expenses: monthlyExpenses,
+      expenses_this_month: monthlyExpenses,
+      rent_collected_this_month: currentRevenue,
+      pending_dues: pendingTotal,
+      overdue_amount: overdueTotal,
+      overdue_count: overdueCount,
+      overdue_tenants: overdueCount,
+      unpaid_tenant_count: unpaidTenantCount,
+      expected_revenue: expectedRevenue,
+      collection_rate: collectionRate,
+      net_profit: netProfit,
+      profit_margin: profitMargin,
+      expense_revenue_ratio: expenseRatio,
+      expense_per_tenant: expensePerTenant,
+      revenue_per_occupied_bed: revenuePerOccupiedBed,
+      vacancy_loss_estimate: vacancyLossEstimate,
+      tenant_churn_rate: tenantChurnRate,
+      reminder_conversion_rate: 0,
+      operational_score: operationalScore,
+      operational_state: operationalState,
+      profitability_status: profitabilityStatus,
+      intelligence: {
+        health: {
+          score: operationalScore,
+          state: operationalState,
+          profitability_status: profitabilityStatus,
+          occupancy_state: occupancyRate >= 90 ? "Healthy" : occupancyRate >= 60 ? "Moderate" : "Dangerous",
+          profit_state: netProfit < 0 ? "loss" : profitMargin >= 20 ? "healthy" : "unstable",
+        },
+        kpis: {
+          occupancy: {
+            value: occupancyRate,
+            occupied_beds: activeTenants,
+            vacant_beds: Math.max(totalCapacity - activeTenants, 0),
+            trend: 0,
+            insight: `${Math.max(totalCapacity - activeTenants, 0)} vacant beds need filling`,
+          },
+          revenue: {
+            collected: currentRevenue,
+            expected: expectedRevenue,
+            collection_rate: collectionRate,
+            trend: revenueTrend,
+            insight: `₹${pendingTotal.toLocaleString("en-IN")} pending from ${unpaidTenantCount} tenants`,
+          },
+          profit: {
+            amount: netProfit,
+            margin: profitMargin,
+            trend: profitTrend,
+            insight: profitTrend < 0 ? `Profit trend down ${Math.abs(profitTrend)}%` : `Profit trend up ${profitTrend}%`,
+          },
+          dues: {
+            pending: pendingTotal,
+            overdue_tenants: overdueCount,
+            oldest_unpaid_due: row.oldest_unpaid_due || null,
+            insight: `${duesAging.overdue_30_plus_count} tenants overdue beyond 30 days`,
+          },
+          expenses: {
+            amount: monthlyExpenses,
+            ratio: expenseRatio,
+            top_category: topExpenseCategory,
+            insight: topExpenseCategory?.trend > 30 ? `${topExpenseCategory.category} increased ${topExpenseCategory.trend}%` : "Expenses are within tracked range",
+          },
+          tenant_stability: {
+            move_out_requests: Number(row.move_out_open || 0),
+            new_joins: Number(row.joins_this_month || 0),
+            exits: Number(row.exits_this_month || 0),
+            churn_rate: tenantChurnRate,
+            insight: tenantChurnRate > 10 ? "High tenant churn detected" : "Tenant movement looks stable",
+          },
+        },
+        revenue: {
+          trend: revenueTrend,
+          collection_efficiency: {
+            collection_rate: collectionRate,
+            trend: collectionRate - previousCollectionRate,
+            average_payment_delay_days: 0,
+            late_fee_collected: 0,
+            pending_amount: pendingTotal,
+          },
+          revenue_per_occupied_bed: revenuePerOccupiedBed,
+        },
+        occupancy: {
+          room_utilization: row.room_utilization || [],
+          summary: {
+            full_rooms: (row.room_utilization || []).filter((r) => r.state === "full").length,
+            partial_rooms: (row.room_utilization || []).filter((r) => r.state === "partial").length,
+            vacant_rooms: (row.room_utilization || []).filter((r) => r.state === "vacant").length,
+          },
+          floor_occupancy: row.floor_occupancy || [],
+          vacancy_risk: {
+            vacant_beds: Math.max(totalCapacity - activeTenants, 0),
+            vacancy_loss_estimate: vacancyLossEstimate,
+            insight: occupancyRate < 70 ? "Occupancy is dragging profitability" : "Occupancy is supporting revenue",
+          },
+          occupancy_vs_profit: [],
+        },
+        dues: {
+          summary: duesAging,
+          high_risk_tenants: [],
+          reminder_conversion: {
+            sent: 0,
+            conversions: 0,
+            conversion_rate: 0,
+            best_channel: null,
+          },
+          low_behavior_scores: [],
+        },
+        expenses: {
+          categories: (row.category_expenses || []).slice(0, 6),
+          growth: expenseGrowth,
+          fixed_variable_ratio: fixedCostRatio,
+          expense_per_tenant: expensePerTenant,
+          anomalies: (row.category_expenses || []).filter((c) => c.trend > 35).slice(0, 3),
+        },
+        tenant_movement: {
+          recent_joins: Number(row.joins_this_month || 0),
+          move_out_requests: Number(row.move_out_open || 0),
+          exits_this_month: Number(row.exits_this_month || 0),
+          pending_onboarding: Number(row.pending_invites || 0),
+          inactive_invitations: Number(row.inactive_invites || 0),
+        },
+        payment_attempts: {
+          total: 0,
+          success: 0,
+          failed: 0,
+          pending_verification: 0,
+          abandoned: 0,
+          upi_failure_rate: 0,
+        },
+        alerts,
+        recent_activity: [],
+      },
+    };
+  }
+
+  async getOwnerStatsActivity(userId: string, hostelId: string) {
+    const rows = await prisma.$queryRaw<Array<{ activity: any[] }>>`
+      WITH recent_payments AS (
+        SELECT
+          'payment' AS type,
+          (COALESCE(pr.name, 'Tenant') || ' paid ₹' || ROUND(p.amount_paid)::text) AS title,
+          p.payment_method AS detail,
+          p.payment_date::timestamptz AS date
+        FROM payments p
+        LEFT JOIN tenants t ON t.id = p.tenant_id
+        LEFT JOIN profiles pr ON pr.id = t.profile_id
+        WHERE p.owner_id = ${userId}::uuid AND p.hostel_id = ${hostelId}::uuid
+        ORDER BY p.payment_date DESC
+        LIMIT 5
+      ),
+      recent_expenses AS (
+        SELECT
+          'expense' AS type,
+          (category || ' expense added') AS title,
+          (title || ' · ₹' || ROUND(amount)::text) AS detail,
+          date::timestamptz AS date
+        FROM expenses
+        WHERE owner_id = ${userId}::uuid AND hostel_id = ${hostelId}::uuid
+        ORDER BY date DESC
+        LIMIT 5
+      ),
+      recent_moveouts AS (
+        SELECT
+          'moveout' AS type,
+          (COALESCE(pr.name, 'Tenant') || ' move-out ' || lower(m.status::text)) AS title,
+          COALESCE(m.reason_text, m.reason::text, 'Move-out request') AS detail,
+          m.created_at AS date
+        FROM move_out_requests m
+        LEFT JOIN tenants t ON t.id = m.tenant_id
+        LEFT JOIN profiles pr ON pr.id = t.profile_id
+        WHERE m.owner_id = ${userId}::uuid AND m.hostel_id = ${hostelId}::uuid
+        ORDER BY m.created_at DESC
+        LIMIT 5
+      ),
+      recent_allocations AS (
+        SELECT
+          'allocation' AS type,
+          trim(COALESCE(pr.name, 'Tenant') || ' allocated room ' || COALESCE(r.room_no, '')) AS title,
+          'Room allocation' AS detail,
+          ra.created_at AS date
+        FROM room_allocations ra
+        LEFT JOIN rooms r ON r.id = ra.room_id
+        LEFT JOIN tenants t ON t.id = ra.tenant_id
+        LEFT JOIN profiles pr ON pr.id = t.profile_id
+        WHERE ra.hostel_id = ${hostelId}::uuid
+        ORDER BY ra.created_at DESC
+        LIMIT 5
+      ),
+      unioned AS (
+        SELECT * FROM recent_payments
+        UNION ALL SELECT * FROM recent_expenses
+        UNION ALL SELECT * FROM recent_moveouts
+        UNION ALL SELECT * FROM recent_allocations
+      )
+      SELECT COALESCE(jsonb_agg(to_jsonb(unioned) ORDER BY date DESC), '[]'::jsonb) AS activity
+      FROM (SELECT * FROM unioned ORDER BY date DESC LIMIT 12) unioned
+    `;
+
+    return {
+      recent_activity: rows[0]?.activity || [],
+    };
+  }
+
+  async getOwnerStatsAnalytics(userId: string, hostelId: string) {
+    const now = new Date();
+    const utcYear = now.getUTCFullYear();
+    const utcMonth = now.getUTCMonth();
+    const monthStart = new Date(Date.UTC(utcYear, utcMonth, 1, 0, 0, 0, 0));
+    const nextMonthStart = new Date(Date.UTC(utcYear, utcMonth + 1, 1, 0, 0, 0, 0));
+    const sixMonthStart = new Date(Date.UTC(utcYear, utcMonth - 5, 1, 0, 0, 0, 0));
+
+    const rows = await prisma.$queryRaw<Array<{
+      monthly_trend: Array<{ month: string; expected: number; collected: number; expenses: number; profit: number }> | null;
+      occupancy_vs_profit: Array<{ date: Date; occupancy: number; profit: number }> | null;
+      reminder_sent: number;
+      reminder_conversions: number;
+      best_channel: string | null;
+      attempt_total: number;
+      attempt_success: number;
+      attempt_failed: number;
+      attempt_pending_verification: number;
+      attempt_abandoned: number;
+    }>>`
+      WITH months AS (
+        SELECT generate_series(date_trunc('month', ${sixMonthStart}::date), date_trunc('month', ${monthStart}::date), interval '1 month')::date AS month_start
+      ),
+      expected AS (
+        SELECT date_trunc('month', rent_month)::date AS month_start, COALESCE(SUM(amount), 0)::float AS amount
+        FROM rent_obligations o
+        JOIN tenants t ON t.id = o.tenant_id
+        WHERE o.owner_id = ${userId}::uuid
+          AND o.hostel_id = ${hostelId}::uuid
+          AND o.status <> 'WAIVED'
+          AND t.status = 'ACTIVE'
+          AND o.rent_month >= ${sixMonthStart}::date
+        GROUP BY 1
+      ),
+      collected AS (
+        SELECT date_trunc('month', payment_date)::date AS month_start, COALESCE(SUM(amount_paid), 0)::float AS amount
+        FROM payments
+        WHERE owner_id = ${userId}::uuid
+          AND hostel_id = ${hostelId}::uuid
+          AND payment_date >= ${sixMonthStart}::date
+        GROUP BY 1
+      ),
+      spent AS (
+        SELECT date_trunc('month', date)::date AS month_start, COALESCE(SUM(amount), 0)::float AS amount
+        FROM expenses
+        WHERE owner_id = ${userId}::uuid
+          AND hostel_id = ${hostelId}::uuid
+          AND date >= ${sixMonthStart}::date
+        GROUP BY 1
+      ),
+      trend_rows AS (
+        SELECT
+          to_char(m.month_start, 'Mon') AS month,
+          COALESCE(e.amount, 0)::float AS expected,
+          COALESCE(c.amount, 0)::float AS collected,
+          COALESCE(s.amount, 0)::float AS expenses,
+          (COALESCE(c.amount, 0) - COALESCE(s.amount, 0))::float AS profit,
+          m.month_start
+        FROM months m
+        LEFT JOIN expected e ON e.month_start = m.month_start
+        LEFT JOIN collected c ON c.month_start = m.month_start
+        LEFT JOIN spent s ON s.month_start = m.month_start
+      ),
+      reminder_summary AS (
+        SELECT
+          COUNT(*)::int AS sent,
+          COUNT(*) FILTER (WHERE converted_to_payment = true)::int AS conversions
+        FROM reminder_logs
+        WHERE hostel_id = ${hostelId}::uuid
+          AND sent_at >= ${monthStart}::date
+          AND sent_at < ${nextMonthStart}::date
+      ),
+      reminder_channel AS (
+        SELECT channel
+        FROM reminder_logs
+        WHERE hostel_id = ${hostelId}::uuid
+          AND sent_at >= ${monthStart}::date
+          AND sent_at < ${nextMonthStart}::date
+        GROUP BY channel
+        ORDER BY COUNT(*) DESC
+        LIMIT 1
+      ),
+      attempt_summary AS (
+        SELECT
+          COUNT(*)::int AS total,
+          COUNT(*) FILTER (WHERE status = 'SUCCESS')::int AS success,
+          COUNT(*) FILTER (WHERE status = 'FAILED')::int AS failed,
+          COUNT(*) FILTER (WHERE status IN ('PENDING_VERIFICATION', 'PENDING_MANUAL_CONFIRMATION'))::int AS pending_verification,
+          COUNT(*) FILTER (WHERE status = 'EXPIRED')::int AS abandoned
+        FROM payment_attempts
+        WHERE owner_id = ${userId}::uuid
+          AND hostel_id = ${hostelId}::uuid
+          AND created_at >= ${monthStart}::date
+          AND created_at < ${nextMonthStart}::date
+      )
+      SELECT
+        COALESCE((
+          SELECT jsonb_agg(jsonb_build_object(
+            'month', month,
+            'expected', expected,
+            'collected', collected,
+            'expenses', expenses,
+            'profit', profit
+          ) ORDER BY month_start)
+          FROM trend_rows
+        ), '[]'::jsonb) AS monthly_trend,
+        COALESCE((
+          SELECT jsonb_agg(jsonb_build_object(
+            'date', snapshot_date,
+            'occupancy', COALESCE(occupancy_rate, 0),
+            'profit', COALESCE(profit, 0)
+          ) ORDER BY snapshot_date)
+          FROM (
+            SELECT snapshot_date, occupancy_rate, profit
+            FROM hostel_daily_snapshots
+            WHERE hostel_id = ${hostelId}::uuid
+              AND snapshot_date >= ${sixMonthStart}::date
+            ORDER BY snapshot_date ASC
+            LIMIT 180
+          ) snapshots
+        ), '[]'::jsonb) AS occupancy_vs_profit,
+        COALESCE(rs.sent, 0)::int AS reminder_sent,
+        COALESCE(rs.conversions, 0)::int AS reminder_conversions,
+        rc.channel AS best_channel,
+        COALESCE(ats.total, 0)::int AS attempt_total,
+        COALESCE(ats.success, 0)::int AS attempt_success,
+        COALESCE(ats.failed, 0)::int AS attempt_failed,
+        COALESCE(ats.pending_verification, 0)::int AS attempt_pending_verification,
+        COALESCE(ats.abandoned, 0)::int AS attempt_abandoned
+      FROM reminder_summary rs
+      CROSS JOIN attempt_summary ats
+      LEFT JOIN reminder_channel rc ON true
+      LIMIT 1
+    `;
+
+    const row = rows[0];
+    const reminderSent = Number(row?.reminder_sent || 0);
+    const reminderConversions = Number(row?.reminder_conversions || 0);
+    const attemptsTotal = Number(row?.attempt_total || 0);
+    const decisiveAttempts = attemptsTotal - Number(row?.attempt_pending_verification || 0);
+    const upiFailureRate = decisiveAttempts > 0 ? Math.round((Number(row?.attempt_failed || 0) / decisiveAttempts) * 100) : 0;
+
+    return {
+      revenue: {
+        trend: row?.monthly_trend || [],
+      },
+      occupancy: {
+        occupancy_vs_profit: row?.occupancy_vs_profit || [],
+      },
+      dues: {
+        reminder_conversion: {
+          sent: reminderSent,
+          conversions: reminderConversions,
+          conversion_rate: reminderSent > 0 ? Math.round((reminderConversions / reminderSent) * 100) : 0,
+          best_channel: row?.best_channel || null,
+        },
+      },
+      payment_attempts: {
+        total: attemptsTotal,
+        success: Number(row?.attempt_success || 0),
+        failed: Number(row?.attempt_failed || 0),
+        pending_verification: Number(row?.attempt_pending_verification || 0),
+        abandoned: Number(row?.attempt_abandoned || 0),
+        upi_failure_rate: upiFailureRate,
+      },
+    };
+  }
+
   async getOwnerStats(userId: string, hostelId: string) {
     // Use UTC month boundaries for DATE column filtering.
     //
