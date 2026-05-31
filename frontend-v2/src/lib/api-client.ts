@@ -1,22 +1,17 @@
 import axios from 'axios';
 
 const configuredApiUrl = import.meta.env.VITE_API_URL;
-const DEFAULT_PRODUCTION_API_URL = 'https://api.sriadithyahostels.in/api';
+const DEFAULT_PRODUCTION_API_URL = 'https://trishul-solutions1.onrender.com';
 const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
 const isLocalDev =
   typeof window !== 'undefined' && LOCAL_HOSTNAMES.has(window.location.hostname);
-const isSriAdithyaProduction =
-  typeof window !== 'undefined' &&
-  ['sriadithyahostels.in', 'www.sriadithyahostels.in'].includes(window.location.hostname);
 
 const normalizeApiUrl = (value?: string) => {
   const trimmed = typeof value === 'string' ? value.trim().replace(/\/$/, '') : '';
   if (!trimmed) return DEFAULT_PRODUCTION_API_URL;
-  if (/\/api$/i.test(trimmed)) return trimmed;
 
   try {
-    const parsed = new URL(trimmed);
-    if (!parsed.pathname || parsed.pathname === '/') return `${parsed.origin}/api`;
+    new URL(trimmed);
   } catch {
     return DEFAULT_PRODUCTION_API_URL;
   }
@@ -26,9 +21,7 @@ const normalizeApiUrl = (value?: string) => {
 
 const baseURL = isLocalDev
   ? '/api'
-  : isSriAdithyaProduction
-    ? DEFAULT_PRODUCTION_API_URL
-    : normalizeApiUrl(configuredApiUrl);
+  : normalizeApiUrl(configuredApiUrl);
 
 const api = axios.create({
   baseURL,
