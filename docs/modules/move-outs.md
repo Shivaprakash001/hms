@@ -48,6 +48,8 @@ The move-out module manages tenant exit from request to inspection, settlement, 
 - Completion stores the physical move-out date.
 - If the move-out date is today or past, room release and tenant `LEFT` status happen immediately.
 - If the move-out date is future, the cron release job completes the room and tenant status on that date.
+- Legacy completed move-outs without `physical_exit_date` fall back to `actual_exit_date` or `planned_exit_date`.
+- The backfill migration releases already-completed historical move-outs whose exit date has passed.
 
 ## How this works (step by step)
 
@@ -59,6 +61,7 @@ The move-out module manages tenant exit from request to inspection, settlement, 
 6. If payment is needed, the owner records payment and move-out date.
 7. The state machine validates each transition.
 8. Completion releases or closes operational records on the move-out date.
+9. The release cron also repairs old completed records that missed the physical exit date.
 
 ## How to reuse this for a new client
 

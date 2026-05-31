@@ -12,7 +12,7 @@ import { moveOutService } from "@/lib/services/move-out-service";
  * GET /api/cron/move-out-releases
  *
  * Runs daily at midnight. Processes COMPLETED move-outs where:
- *   - physical_exit_date has passed
+ *   - physical_exit_date, actual_exit_date, or planned_exit_date has passed
  *   - room has NOT been released yet (room_release_date is null)
  *
  * Actions:
@@ -37,14 +37,28 @@ export async function GET(req: NextRequest) {
   try {
     const now = new Date();
 
-    // Find COMPLETED move-outs with past physical exit dates that haven't released rooms
+    // Find COMPLETED move-outs with past exit dates that haven't released rooms.
+    // Legacy completed rows may not have physical_exit_date, so fall back to
+    // actual_exit_date and planned_exit_date.
     const pending = await prisma.move_out_requests.findMany({
       where: {
         status: "COMPLETED",
         room_release_date: null,
-        physical_exit_date: { lte: now },
+        OR: [
+          { physical_exit_date: { lte: now } },
+          { physical_exit_date: null, actual_exit_date: { lte: now } },
+          { physical_exit_date: null, actual_exit_date: null, planned_exit_date: { lte: now } },
+        ],
       },
-      select: { id: true, tenant_id: true, physical_exit_date: true, reason: true, reason_text: true },
+      select: {
+        id: true,
+        tenant_id: true,
+        physical_exit_date: true,
+        actual_exit_date: true,
+        planned_exit_date: true,
+        reason: true,
+        reason_text: true,
+      },
     });
 
     let released = 0;
@@ -52,9 +66,17 @@ export async function GET(req: NextRequest) {
 
     for (const req of pending) {
       try {
-        const exitDate = req.physical_exit_date || now;
+        const exitDate = req.physical_exit_date || req.actual_exit_date || req.planned_exit_date || now;
 
         await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+          await tx.move_out_requests.update({
+            where: { id: req.id },
+            data: {
+              physical_exit_date: req.physical_exit_date || exitDate,
+              actual_exit_date: req.actual_exit_date || exitDate,
+              updated_at: now,
+            },
+          });
           await moveOutService.executeCompletionSideEffects(
             tx,
             req.tenant_id,

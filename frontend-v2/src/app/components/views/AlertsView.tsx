@@ -341,7 +341,9 @@ function DueCard({ due, isOverdue, urgencyLabel, urgencyColor, cardBorder, onRec
   const amount = Number(due.amount ?? due.outstanding ?? 0);
   const tenantName = String(due.tenant_name ?? due.name ?? 'Tenant');
   const room = due.room_no ?? due.room_number;
-  const phone = due.phone ? String(due.phone) : null;
+  const rawPhone = due.phone ?? due.tenant_phone ?? due.tenantPhone;
+  const phone = rawPhone ? String(rawPhone).trim() : null;
+  const telPhone = phone ? phone.replace(/[^\d+]/g, '') : null;
   const dueDate = due.due_date ? new Date(String(due.due_date)) : null;
 
   return (
@@ -385,9 +387,9 @@ function DueCard({ due, isOverdue, urgencyLabel, urgencyColor, cardBorder, onRec
           <CreditCard className="w-3.5 h-3.5 shrink-0" />
           Record Payment
         </button>
-        {phone && (
+        {telPhone && (
           <a
-            href={`tel:${phone}`}
+            href={`tel:${telPhone}`}
             aria-label={`Call ${tenantName}`}
             className="min-w-[88px] bg-card border border-border text-foreground py-2.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 active:scale-95 transition-transform touch-manipulation"
           >

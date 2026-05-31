@@ -274,16 +274,11 @@ export class MoveOutService {
     if (exitDate <= now) {
       await tx.roomAllocation.updateMany({ where: { tenant_id: tenantId, is_active: true, end_date: null }, data: { is_active: false, end_date: exitDate } });
       await tx.move_out_requests.update({ where: { id: requestId }, data: { room_release_date: exitDate } });
-      // Reset payment summary so they don't show pending dues in the LEFT state
-      const tenant = await tx.tenants.findUnique({ where: { id: tenantId }, select: { payment_summary: true } });
-      let paymentSummary = typeof tenant?.payment_summary === 'object' ? tenant.payment_summary : {};
-      paymentSummary = { ...paymentSummary, pending_amount: 0, payment_status: 'PAID' };
-      
       await tx.tenants.update({
         where: { id: tenantId },
         data: {
           status: "LEFT", exit_date: exitDate, exit_reason: reason, exit_notes: reasonText,
-          payment_summary: paymentSummary, updated_at: now
+          updated_at: now
         }
       });
       // Optionally waive all pending obligations so they don't appear in historical debt unless explicitly wanted
