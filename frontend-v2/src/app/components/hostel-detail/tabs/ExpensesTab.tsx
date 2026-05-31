@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { lazy, Suspense, memo, useDeferredValue, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { CalendarDays, Eye, Paperclip, Plus, Repeat2, Search, Sparkles, UserRound, X, Zap } from 'lucide-react';
 import { toast } from 'sonner';
@@ -14,7 +14,6 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
   const [range, setRange] = useState('month');
   const [status, setStatus] = useState('all');
   const [sort, setSort] = useState('recent');
-  const [search, setSearch] = useState('');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -28,11 +27,10 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
       endDate: range === 'custom' ? customEnd : undefined,
       status,
       sort,
-      search,
       categories: selectedCategories.join(','),
       limit: 40,
     }),
-    [customEnd, customStart, range, search, selectedCategories, sort, status],
+    [customEnd, customStart, range, selectedCategories, sort, status],
   );
 
   const { data, isLoading, isError, refetch } = useQuery({
@@ -184,49 +182,15 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
       </section>
 
       <section className="space-y-3">
-        <SectionTitle
-          title="Recent expenses"
-          sub={`${payload.total || expenses.length} entries`}
+        <RecentExpensesSection
+          expenses={expenses}
+          total={Number(payload.total || expenses.length)}
+          status={status}
+          sort={sort}
+          onStatusChange={setStatus}
+          onSortChange={setSort}
+          onSelectExpense={setSelectedExpense}
         />
-        <div className="space-y-3 rounded-2xl border border-border bg-card p-3">
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide">
-            <select value={status} onChange={(e) => setStatus(e.target.value)} className="shrink-0 px-3 py-2 rounded-full text-xs border border-border bg-card">
-              <option value="all">All Status</option>
-              <option value="paid">Paid</option>
-              <option value="pending">Pending</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-            <select value={sort} onChange={(e) => setSort(e.target.value)} className="shrink-0 px-3 py-2 rounded-full text-xs border border-border bg-card">
-              <option value="recent">Recent</option>
-              <option value="highest">Highest Amount</option>
-              <option value="oldest">Oldest</option>
-              <option value="category">Category</option>
-            </select>
-          </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search title, vendor, notes"
-              className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-border bg-card text-sm outline-none focus:ring-2 focus:ring-accent/20"
-            />
-          </div>
-        </div>
-
-        {expenses.length === 0 ? (
-          <ExpenseEmptyState />
-        ) : (
-          <div className="space-y-2">
-            {expenses.map((expense) => (
-              <ExpenseCard
-                key={String(expense.id)}
-                expense={expense}
-                onView={() => setSelectedExpense(expense)}
-              />
-            ))}
-          </div>
-        )}
       </section>
 
       <MonthlyExpenseBreakdown categories={categories} maxCategory={maxCategory} />
@@ -533,6 +497,96 @@ function ExpenseEmptyState() {
     </div>
   );
 }
+
+const RecentExpensesSection = memo(function RecentExpensesSection({
+  expenses,
+  total,
+  status,
+  sort,
+  onStatusChange,
+  onSortChange,
+  onSelectExpense,
+}: {
+  expenses: Record<string, any>[];
+  total: number;
+  status: string;
+  sort: string;
+  onStatusChange: (value: string) => void;
+  onSortChange: (value: string) => void;
+  onSelectExpense: (expense: Record<string, any>) => void;
+}) {
+  const [search, setSearch] = useState('');
+  const deferredSearch = useDeferredValue(search);
+  const filteredExpenses = useMemo(() => {
+    const term = deferredSearch.trim().toLowerCase();
+    if (!term) return expenses;
+    return expenses.filter((expense) =>
+      [
+        expense.title,
+        expense.vendor_name,
+        expense.notes,
+        expense.category,
+        expense.payment_method,
+        expense.amount,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(term),
+    );
+  }, [deferredSearch, expenses]);
+
+  const subtitle = search.trim()
+    ? `${filteredExpenses.length} matching ${total} entries`
+    : `${total} entries`;
+
+  return (
+    <>
+      <SectionTitle title="Recent expenses" sub={subtitle} />
+      <div className="space-y-3 rounded-2xl border border-border bg-card p-3">
+        <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+          <select value={status} onChange={(e) => onStatusChange(e.target.value)} className="shrink-0 px-3 py-2 rounded-full text-xs border border-border bg-card">
+            <option value="all">All Status</option>
+            <option value="paid">Paid</option>
+            <option value="pending">Pending</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+          <select value={sort} onChange={(e) => onSortChange(e.target.value)} className="shrink-0 px-3 py-2 rounded-full text-xs border border-border bg-card">
+            <option value="recent">Recent</option>
+            <option value="highest">Highest Amount</option>
+            <option value="oldest">Oldest</option>
+            <option value="category">Category</option>
+          </select>
+        </div>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search title, vendor, notes"
+            className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-border bg-card text-sm outline-none focus:ring-2 focus:ring-accent/20"
+          />
+        </div>
+      </div>
+
+      {expenses.length === 0 ? (
+        <ExpenseEmptyState />
+      ) : filteredExpenses.length === 0 ? (
+        <EmptyMini text="No expenses match this search." />
+      ) : (
+        <div className="space-y-2">
+          {filteredExpenses.map((expense) => (
+            <ExpenseCard
+              key={String(expense.id)}
+              expense={expense}
+              onView={() => onSelectExpense(expense)}
+            />
+          ))}
+        </div>
+      )}
+    </>
+  );
+});
 
 function ExpenseCard({
   expense,

@@ -1,14 +1,29 @@
 import { lazy, Suspense, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { IndianRupee, Plus, Search, UserPlus, X } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { IndianRupee, Plus, Receipt, Search, UserPlus, X } from 'lucide-react';
+import { toast } from 'sonner';
 import { ownerService } from '@features/owners/api';
 import { queryKeys } from '@lib/queryKeys';
 
 const AddTenantModal = lazy(() => import('./modals/AddTenantModal').then((m) => ({ default: m.AddTenantModal })));
 const RecordPaymentModal = lazy(() => import('./modals/RecordPaymentModal').then((m) => ({ default: m.RecordPaymentModal })));
+const AddExpenseModal = lazy(() => import('./hostel-detail/tabs/expenses/AddExpenseModal').then((m) => ({ default: m.AddExpenseModal })));
 
-type Action = 'menu' | 'payment' | 'tenant' | null;
+type Action = 'menu' | 'payment' | 'tenant' | 'expense' | null;
+
+const EXPENSE_CATEGORIES = [
+  'Food & Groceries',
+  'Staff Salary',
+  'Electricity',
+  'Water',
+  'Gas Cylinder',
+  'Internet',
+  'Repairs',
+  'Cleaning',
+  'Asset Purchase',
+  'Miscellaneous',
+];
 
 function unwrapHostels(raw: unknown): Record<string, unknown>[] {
   if (Array.isArray(raw)) return raw as Record<string, unknown>[];
@@ -23,6 +38,7 @@ function unwrapHostels(raw: unknown): Record<string, unknown>[] {
 export function OwnerQuickActions() {
   const location = useLocation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [active, setActive] = useState<Action>(null);
   const hidden =
     location.pathname.startsWith('/settings') ||
@@ -42,6 +58,20 @@ export function OwnerQuickActions() {
   const hostels = unwrapHostels(data);
   const hostelId = String(hostels[0]?.id ?? '');
   const canUseHostelActions = Boolean(hostelId);
+
+  const createExpenseMutation = useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      import('@features/expenses/api').then((m) => m.expenseService.create(hostelId, body)),
+    onSuccess: () => {
+      toast.success('Expense added');
+      queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all(hostelId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
+      setActive(null);
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.error?.message || error?.message || 'Could not add expense');
+    },
+  });
 
   return (
     <>
@@ -81,6 +111,15 @@ export function OwnerQuickActions() {
               </button>
               <button
                 type="button"
+                disabled={!canUseHostelActions}
+                onClick={() => setActive('expense')}
+                className="flex items-center gap-3 rounded-xl border border-border px-3 py-3 text-left text-sm font-medium disabled:opacity-50"
+              >
+                <Receipt className="h-4 w-4 text-accent" />
+                Add expense
+              </button>
+              <button
+                type="button"
                 onClick={() => {
                   setActive(null);
                   navigate('/tenants');
@@ -112,6 +151,16 @@ export function OwnerQuickActions() {
       {active === 'tenant' && hostelId && (
         <Suspense fallback={null}>
           <AddTenantModal hostelId={hostelId} onClose={() => setActive(null)} />
+        </Suspense>
+      )}
+      {active === 'expense' && hostelId && (
+        <Suspense fallback={null}>
+          <AddExpenseModal
+            categories={EXPENSE_CATEGORIES}
+            loading={createExpenseMutation.isPending}
+            onClose={() => setActive(null)}
+            onSubmit={(body) => createExpenseMutation.mutate(body)}
+          />
         </Suspense>
       )}
     </>
