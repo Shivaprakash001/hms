@@ -1,6 +1,10 @@
 import axios from 'axios';
 
-const PRODUCTION_API_URL = 'https://api.sriadithyahostels.in/api';
+const configuredApiUrl = import.meta.env.VITE_API_URL;
+const PRODUCTION_API_URL =
+  typeof configuredApiUrl === 'string' && configuredApiUrl.trim()
+    ? configuredApiUrl.trim().replace(/\/$/, '')
+    : 'https://api.sriadithyahostels.in/api';
 const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
 const isLocalDev =
   typeof window !== 'undefined' && LOCAL_HOSTNAMES.has(window.location.hostname);

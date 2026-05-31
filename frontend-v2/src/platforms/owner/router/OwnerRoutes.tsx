@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { Navigate, Route } from 'react-router-dom';
+import { ErrorBoundary } from '@/app/components/ErrorBoundary';
 
 const App = lazy(() => import('@/app/App'));
 const PortfolioView = lazy(() => import('@/app/components/views/PortfolioView').then((m) => ({ default: m.PortfolioView })));
@@ -31,9 +32,11 @@ function OwnerRouteFallback() {
 
 function OwnerBoundary() {
   return (
-    <Suspense fallback={<OwnerRouteFallback />}>
-      <OwnerProviderShell />
-    </Suspense>
+    <ErrorBoundary context="owner-routes">
+      <Suspense fallback={<OwnerRouteFallback />}>
+        <OwnerProviderShell />
+      </Suspense>
+    </ErrorBoundary>
   );
 }
 
