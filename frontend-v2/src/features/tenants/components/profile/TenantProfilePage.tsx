@@ -35,6 +35,31 @@ const money = (value: unknown) => `₹${Number(value ?? 0).toLocaleString('en-IN
 const date = (value: unknown) => (value ? new Date(String(value)).toLocaleDateString('en-IN') : '—');
 const title = (value: unknown) => String(value ?? '—').replaceAll('_', ' ');
 
+const positiveAmount = (value: unknown) => {
+  const amount = Number(value ?? 0);
+  return Number.isFinite(amount) && amount > 0 ? amount : null;
+};
+
+function firstPositiveAmount(...values: unknown[]) {
+  for (const value of values) {
+    const amount = positiveAmount(value);
+    if (amount !== null) return amount;
+  }
+  return 0;
+}
+
+function findSecurityDepositFromObligations(obligations: Record<string, unknown>[]) {
+  const deposit = obligations.find((item) => {
+    const type = String(
+      item.obligation_type ?? item.type ?? item.category ?? item.label ?? '',
+    ).toUpperCase();
+    return type.includes('ADVANCE') || type.includes('DEPOSIT');
+  });
+  return positiveAmount(
+    deposit?.amount ?? deposit?.original_amount ?? deposit?.remaining ?? deposit?.outstanding,
+  );
+}
+
 function listFrom<T = Record<string, unknown>>(value: unknown, keys: string[] = []): T[] {
   if (Array.isArray(value)) return value as T[];
   const record = value as Record<string, unknown> | undefined;
@@ -98,6 +123,14 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
 
   const obligations = listFrom(dues, ['items', 'obligations']);
   const fullPayments = listFrom(full?.payments);
+  const securityDepositAmount = firstPositiveAmount(
+    tenant.security_deposit,
+    overview.security_deposit,
+    tenant.advance_deposit,
+    overview.advance_deposit,
+    (advance as Record<string, unknown> | undefined)?.security_deposit,
+    findSecurityDepositFromObligations(obligations as Record<string, unknown>[]),
+  );
 
   if (isLoading) {
     return (
@@ -300,7 +333,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
             </p>
             <p>
               <span className="text-muted-foreground">Security deposit:</span>{' '}
-              <strong>{money(tenant.advance_deposit ?? tenant.advance_amount ?? tenant.security_deposit)}</strong>
+              <strong>{money(securityDepositAmount)}</strong>
             </p>
             <p>
               <span className="text-muted-foreground">Maintenance:</span>{' '}

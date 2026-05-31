@@ -1,4 +1,4 @@
-import { lazy, Suspense, useDeferredValue, useState } from 'react';
+import { lazy, Suspense, useDeferredValue, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -88,20 +88,20 @@ export function PortfolioView() {
   const topPerformer = rankings.find((h: { is_top_performer?: boolean }) => h.is_top_performer);
   const firstHostelId = data?.focus_hostel_id ?? rankings[0]?.hostel_id;
 
-  const filteredRankings = rankings.filter((h: { hostel_name: string; city?: string | null }) => {
+  const filteredRankings = useMemo(() => rankings.filter((h: { hostel_name: string; city?: string | null }) => {
     const q = deferredSearchQuery.toLowerCase();
     if (!q) return true;
     return (
       h.hostel_name.toLowerCase().includes(q) ||
       String(h.city ?? '').toLowerCase().includes(q)
     );
-  });
+  }), [rankings, deferredSearchQuery]);
 
   const editingHostel = editingHostelId
     ? rankings.find((h: { hostel_id: string }) => h.hostel_id === editingHostelId)
     : null;
 
-  const overdueRows = Array.isArray(data?.overdue_preview)
+  const overdueRows = useMemo(() => (Array.isArray(data?.overdue_preview)
     ? data.overdue_preview.map((due: Record<string, unknown>) => ({
       id: String(due.obligation_id ?? due.id),
       tenant: String(due.tenant_name ?? due.tenant ?? 'Tenant'),
@@ -110,7 +110,7 @@ export function PortfolioView() {
       amount: Number(due.outstanding ?? due.amount ?? 0),
       days: Number(due.days ?? 1),
     }))
-    : [];
+    : []), [data?.overdue_preview]);
   const overdueTenantCount = new Set(overdueRows.map((row) => row.tenant)).size;
   const overdueAmount = overdueRows.reduce((sum, row) => sum + row.amount, 0) || Number(portfolio.total_due ?? 0);
   const overdueHint = overdueAmount > 0;

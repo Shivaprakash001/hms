@@ -33,12 +33,14 @@ export function useTenantDashboard() {
     queryKey: tenantQueryKeys.payments(),
     queryFn: () => tenantPortalApi.getMyPaymentHistory(),
     staleTime: 30_000,
+    enabled: loadSecondary,
   });
 
   const roomQ = useQuery({
     queryKey: tenantQueryKeys.room(),
     queryFn: () => tenantPortalApi.getMyRoom(),
     staleTime: 60_000,
+    enabled: loadSecondary,
   });
 
   const criticalLoading = profileQ.isLoading;

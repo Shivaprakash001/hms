@@ -7,7 +7,7 @@ interface DuesData {
   total_due?: number;
   rent_due?: number;
   late_fees_due?: number;
-  items?: { type?: string; outstanding?: number }[];
+  items?: { type?: string; outstanding?: number; due_date?: string; dueDate?: string }[];
 }
 
 interface Props {
@@ -33,7 +33,10 @@ export function TenantPriorityStrip({ dues, payments, moveOut }: Props) {
     .filter((i) => String(i.type).toUpperCase() === 'MAINTENANCE')
     .reduce((s, i) => s + Number(i.outstanding ?? 0), 0);
 
-  const nextDue = payments?.next_due_date;
+  const nextDue = payments?.next_due_date ?? dues?.items
+    ?.map((item) => item.due_date ?? item.dueDate)
+    .filter(Boolean)
+    .sort((a, b) => new Date(String(a)).getTime() - new Date(String(b)).getTime())[0];
   const days = daysUntil(nextDue);
   const isOverdue = days != null && days < 0;
   const isPaid = totalDue <= 0;

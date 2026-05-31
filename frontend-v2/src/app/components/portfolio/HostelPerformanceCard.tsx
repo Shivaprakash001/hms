@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronRight, Trophy, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { useIsMobile } from '@/app/components/ui/use-mobile';
@@ -47,7 +47,7 @@ function TrendBadge({ pct }: { pct: number }) {
   );
 }
 
-export function HostelPerformanceCard({ hostel, rank, onEdit }: Props) {
+function HostelPerformanceCardComponent({ hostel, rank, onEdit }: Props) {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const [expanded, setExpanded] = useState(false);
@@ -172,3 +172,5 @@ export function HostelPerformanceCard({ hostel, rank, onEdit }: Props) {
     </button>
   );
 }
+
+export const HostelPerformanceCard = memo(HostelPerformanceCardComponent);

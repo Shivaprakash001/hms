@@ -1,7 +1,6 @@
 import { prisma } from "../db";
+import { Prisma } from "@prisma/client";
 import { formatShortMonth } from "../format";
-import { financialService } from "@/src/services/payments/financial-service";
-import { dashboardSnapshotService } from "./dashboard-snapshot-service";
 
 export interface PortfolioPerformanceHostelMonth {
   hostel_id: string;
@@ -65,65 +64,136 @@ function trendPct(current: number, previous: number): number {
 export class PortfolioPerformanceService {
   async getPortfolioPerformance(ownerId: string, months = 6): Promise<PortfolioPerformanceResponse> {
     const boundedMonths = Math.max(1, Math.min(12, months));
-
-    const hostels = await prisma.hostels.findMany({
-      where: { owner_id: ownerId, is_active: true },
-      select: { id: true, name: true, city: true },
-      orderBy: { name: "asc" },
-    });
-
     const ranges = monthRanges(boundedMonths);
 
-    const capacityByHostel = await Promise.all(
-      hostels.map(async (h) => {
-        const [capacityRow, activeTenants] = await Promise.all([
-          prisma.$queryRaw<{ total_capacity: number }[]>`
-            SELECT COALESCE(SUM(r.capacity), 0)::int AS total_capacity
-            FROM rooms r
-            WHERE r.hostel_id = ${h.id}::uuid AND r.is_active = true
-          `,
-          prisma.tenants.count({
-            where: { owner_id: ownerId, hostel_id: h.id, status: "ACTIVE" },
-          }),
-        ]);
-        const capacity = Number(capacityRow[0]?.total_capacity ?? 0);
-        const occupancy =
-          capacity > 0 ? Math.round((activeTenants / capacity) * 1000) / 10 : 0;
-        return { hostelId: h.id, activeTenants, occupancy };
-      })
+    const rangeValues = Prisma.join(
+      ranges.map((range) => Prisma.sql`
+        (${range.monthKey}, ${range.label}, ${range.start}::date, ${range.end}::date)
+      `),
+      ","
     );
 
-    const capacityMap = new Map(capacityByHostel.map((c) => [c.hostelId, c]));
+    const [capacityByHostel, cashflowGrid] = await Promise.all([
+      prisma.$queryRaw<Array<{ hostel_id: string; total_capacity: number; active_tenants: number; occupancy: number }>>`
+        WITH room_capacity AS (
+          SELECT hostel_id, COALESCE(SUM(capacity), 0)::float AS total_capacity
+          FROM rooms
+          WHERE is_active = true
+          GROUP BY hostel_id
+        ), active_tenants AS (
+          SELECT hostel_id, COUNT(id)::float AS active_tenants
+          FROM tenants
+          WHERE owner_id = ${ownerId}::uuid AND status = 'ACTIVE'
+          GROUP BY hostel_id
+        )
+        SELECT
+          h.id::text AS hostel_id,
+          COALESCE(rc.total_capacity, 0)::float AS total_capacity,
+          COALESCE(at.active_tenants, 0)::float AS active_tenants,
+          CASE
+            WHEN COALESCE(rc.total_capacity, 0) > 0
+              THEN ROUND((COALESCE(at.active_tenants, 0) / rc.total_capacity * 1000)::numeric) / 10
+            ELSE 0
+          END::float AS occupancy
+        FROM hostels h
+        LEFT JOIN room_capacity rc ON rc.hostel_id = h.id
+        LEFT JOIN active_tenants at ON at.hostel_id = h.id
+        WHERE h.owner_id = ${ownerId}::uuid AND h.is_active = true
+      `,
+      prisma.$queryRaw<Array<{
+        month_key: string;
+        month_label: string;
+        hostel_id: string;
+        hostel_name: string;
+        city: string | null;
+        revenue: number;
+        collections: number;
+        pending_dues: number;
+        collection_rate: number;
+      }>>`
+        WITH ranges(month_key, month_label, start_date, end_date) AS (
+          VALUES ${rangeValues}
+        ), active_hostels AS (
+          SELECT id, name, city
+          FROM hostels
+          WHERE owner_id = ${ownerId}::uuid AND is_active = true
+        ), pay_agg AS (
+          SELECT obligation_id, SUM(amount_paid)::float AS total_paid
+          FROM payments
+          GROUP BY obligation_id
+        )
+        SELECT
+          r.month_key,
+          r.month_label,
+          h.id::text AS hostel_id,
+          h.name AS hostel_name,
+          h.city,
+          COALESCE(SUM(o.amount - GREATEST(o.amount - COALESCE(pay_agg.total_paid, 0), 0)), 0)::float AS revenue,
+          COALESCE(SUM(o.amount - GREATEST(o.amount - COALESCE(pay_agg.total_paid, 0), 0)), 0)::float AS collections,
+          COALESCE(SUM(GREATEST(o.amount - COALESCE(pay_agg.total_paid, 0), 0)), 0)::float AS pending_dues,
+          CASE
+            WHEN COALESCE(SUM(o.amount), 0) > 0
+              THEN ROUND((COALESCE(SUM(o.amount - GREATEST(o.amount - COALESCE(pay_agg.total_paid, 0), 0)), 0) / SUM(o.amount) * 10000)::numeric) / 100
+            ELSE 0
+          END::float AS collection_rate
+        FROM ranges r
+        CROSS JOIN active_hostels h
+        LEFT JOIN rent_obligations o
+          ON o.owner_id = ${ownerId}::uuid
+          AND o.hostel_id = h.id
+          AND o.status <> 'WAIVED'
+          AND o.rent_month >= r.start_date
+          AND o.rent_month <= r.end_date
+          AND EXISTS (
+            SELECT 1
+            FROM tenants t
+            WHERE t.id = o.tenant_id AND t.status = 'ACTIVE'
+          )
+        LEFT JOIN pay_agg ON pay_agg.obligation_id = o.id
+        GROUP BY r.month_key, r.month_label, h.id, h.name, h.city
+        ORDER BY r.month_key ASC, h.name ASC
+      `,
+    ]);
 
-    const cashflowGrid = await Promise.all(
-      ranges.flatMap((range) =>
-        hostels.map(async (h) => {
-          const cf = await financialService.getOperationalCashflowMetrics(
-            ownerId,
-            range.start,
-            range.end,
-            h.id
-          );
-          const cap = capacityMap.get(h.id);
-          return {
-            monthKey: range.monthKey,
-            monthLabel: range.label,
-            hostel_id: h.id,
-            hostel_name: h.name,
-            revenue: Number(cf.collected_total || 0),
-            collections: Number(cf.collected_total || 0),
-            occupancy_rate: cap?.occupancy ?? 0,
-            pending_dues: Number(cf.pending_total || 0),
-            collection_rate: Number(cf.collection_rate || 0),
-          };
-        })
-      )
+    const capacityMap = new Map(
+      capacityByHostel.map((c) => [
+        c.hostel_id,
+        {
+          activeTenants: Number(c.active_tenants || 0),
+          totalCapacity: Number(c.total_capacity || 0),
+          occupancy: Number(c.occupancy || 0),
+        },
+      ])
+    );
+    const cashflowRows = cashflowGrid.map((row) => ({
+      monthKey: row.month_key,
+      monthLabel: row.month_label,
+      hostel_id: row.hostel_id,
+      hostel_name: row.hostel_name,
+      city: row.city,
+      revenue: Number(row.revenue || 0),
+      collections: Number(row.collections || 0),
+      occupancy_rate: capacityMap.get(row.hostel_id)?.occupancy ?? 0,
+      pending_dues: Number(row.pending_dues || 0),
+      collection_rate: Number(row.collection_rate || 0),
+    }));
+    const hostelMeta = Array.from(
+      new Map(
+        cashflowRows.map((row) => [
+          row.hostel_id,
+          {
+            id: row.hostel_id,
+            name: row.hostel_name,
+            city: row.city,
+          },
+        ])
+      ).values()
     );
 
     const monthly_trends: PortfolioPerformanceMonth[] = ranges.map((range) => ({
       month: range.label,
       month_key: range.monthKey,
-      hostels: cashflowGrid
+      hostels: cashflowRows
         .filter((row) => row.monthKey === range.monthKey)
         .map(({ hostel_id, hostel_name, revenue, collections, occupancy_rate }) => ({
           hostel_id,
@@ -138,13 +208,14 @@ export class PortfolioPerformanceService {
     const previousKey = ranges[ranges.length - 2]?.monthKey;
 
     const currentByHostel = new Map(
-      cashflowGrid.filter((r) => r.monthKey === currentKey).map((r) => [r.hostel_id, r])
+      cashflowRows.filter((r) => r.monthKey === currentKey).map((r) => [r.hostel_id, r])
     );
     const previousByHostel = new Map(
-      cashflowGrid.filter((r) => r.monthKey === previousKey).map((r) => [r.hostel_id, r])
+      cashflowRows.filter((r) => r.monthKey === previousKey).map((r) => [r.hostel_id, r])
     );
+    const currentRows = cashflowRows.filter((r) => r.monthKey === currentKey);
 
-    let rankings: PortfolioPerformanceRanking[] = hostels.map((h) => {
+    let rankings: PortfolioPerformanceRanking[] = hostelMeta.map((h) => {
       const cur = currentByHostel.get(h.id);
       const prev = previousByHostel.get(h.id);
       const revenue = cur?.revenue ?? 0;
@@ -177,15 +248,29 @@ export class PortfolioPerformanceService {
       }));
     }
 
-    const aggregate = await dashboardSnapshotService.getPortfolioStats(ownerId);
+    const aggregateRevenue = currentRows.reduce((sum, row) => sum + Number(row.revenue || 0), 0);
+    const aggregateDue = currentRows.reduce((sum, row) => sum + Number(row.pending_dues || 0), 0);
+    const aggregateActiveTenants = Array.from(capacityMap.values()).reduce(
+      (sum, row) => sum + Number(row.activeTenants || 0),
+      0
+    );
+    const aggregateCapacity = Array.from(capacityMap.values()).reduce(
+      (sum, row) => sum + Number(row.totalCapacity || 0),
+      0
+    );
+    const aggregateExpected = aggregateRevenue + aggregateDue;
 
     return {
       portfolio: {
-        total_revenue: Number(aggregate.rent_collected_this_month || 0),
-        total_due: Number(aggregate.pending_dues || 0),
-        occupancy_rate: Number(aggregate.occupancy_rate || 0),
-        active_tenants: Number(aggregate.active_tenants || 0),
-        collection_rate: Number(aggregate.collection_rate || 0),
+        total_revenue: aggregateRevenue,
+        total_due: aggregateDue,
+        occupancy_rate: aggregateCapacity > 0
+          ? Math.round((aggregateActiveTenants / aggregateCapacity) * 10000) / 100
+          : 0,
+        active_tenants: aggregateActiveTenants,
+        collection_rate: aggregateExpected > 0
+          ? Math.round((aggregateRevenue / aggregateExpected) * 10000) / 100
+          : 0,
       },
       monthly_trends,
       hostel_rankings: rankings,
