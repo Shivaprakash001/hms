@@ -78,9 +78,9 @@ export function AddExpenseModal({
   };
 
   return (
-    <div className="fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center justify-center">
-      <div className="w-full sm:max-w-lg bg-card rounded-t-2xl sm:rounded-2xl border border-border max-h-[92vh] overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between mb-4">
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center">
+      <div className="w-full sm:max-w-lg bg-card rounded-t-2xl sm:rounded-2xl border border-border h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[92dvh] overflow-hidden flex flex-col shadow-2xl">
+        <div className="flex shrink-0 items-center justify-between border-b border-border/60 pb-3">
           <div className="px-4 pt-4">
             <h3 className="text-lg font-bold text-foreground">Add expense</h3>
             <p className="text-xs text-muted-foreground">Amount first. Details only when needed.</p>
@@ -90,7 +90,7 @@ export function AddExpenseModal({
           </button>
         </div>
 
-        <div className="space-y-4 overflow-y-auto px-4 pb-4">
+        <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
           <div>
             <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Quick templates
@@ -309,7 +309,7 @@ export function AddExpenseModal({
           )}
         </div>
 
-        <div className="border-t border-border bg-card p-4">
+        <div className="shrink-0 border-t border-border bg-card p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] shadow-[0_-8px_24px_rgba(0,0,0,0.06)]">
           <button
             type="button"
             onClick={submit}

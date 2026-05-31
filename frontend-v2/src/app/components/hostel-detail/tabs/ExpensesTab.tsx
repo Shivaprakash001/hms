@@ -1,5 +1,4 @@
-import { lazy, Suspense, useMemo, useRef, useState } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { CalendarDays, Eye, Paperclip, Plus, Repeat2, Search, Sparkles, UserRound, X, Zap } from 'lucide-react';
 import { toast } from 'sonner';
@@ -12,7 +11,6 @@ const AddExpenseModal = lazy(() => import('./expenses/AddExpenseModal').then((m)
 
 export function ExpensesTab({ hostelId }: { hostelId: string }) {
   const queryClient = useQueryClient();
-  const ledgerScrollRef = useRef<HTMLDivElement | null>(null);
   const [range, setRange] = useState('month');
   const [status, setStatus] = useState('all');
   const [sort, setSort] = useState('recent');
@@ -69,9 +67,6 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all(hostelId) }),
   });
 
-  if (isLoading) return <TabSkeleton />;
-  if (isError) return <TabError onRetry={refetch} />;
-
   const payload = (data || {}) as Record<string, any>;
   const expenses: Record<string, any>[] = Array.isArray(payload.expenses) ? payload.expenses : [];
   const kpis = payload.kpis || {};
@@ -87,18 +82,15 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
     () => Math.max(...categories.map((c: any) => Number(c.amount || 0)), 1),
     [categories],
   );
-  const expenseVirtualizer = useVirtualizer({
-    count: expenses.length,
-    getScrollElement: () => ledgerScrollRef.current,
-    estimateSize: () => 132,
-    overscan: 6,
-  });
 
   const toggleCategory = (category: string) => {
     setSelectedCategories((current) =>
       current.includes(category) ? current.filter((c) => c !== category) : [...current, category],
     );
   };
+
+  if (isLoading) return <TabSkeleton />;
+  if (isError) return <TabError onRetry={refetch} />;
 
   return (
     <div className="relative space-y-5 pb-24">
@@ -225,24 +217,14 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
         {expenses.length === 0 ? (
           <ExpenseEmptyState />
         ) : (
-          <div ref={ledgerScrollRef} className="max-h-[640px] overflow-auto pr-1">
-            <div className="relative" style={{ height: expenseVirtualizer.getTotalSize() }}>
-              {expenseVirtualizer.getVirtualItems().map((virtualRow) => {
-                const expense = expenses[virtualRow.index];
-                return (
-                  <div
-                    key={String(expense.id)}
-                    className="absolute left-0 right-0 pb-3"
-                    style={{ transform: `translateY(${virtualRow.start}px)` }}
-                  >
-                    <ExpenseCard
-                      expense={expense}
-                      onView={() => setSelectedExpense(expense)}
-                    />
-                  </div>
-                );
-              })}
-            </div>
+          <div className="space-y-2">
+            {expenses.map((expense) => (
+              <ExpenseCard
+                key={String(expense.id)}
+                expense={expense}
+                onView={() => setSelectedExpense(expense)}
+              />
+            ))}
           </div>
         )}
       </section>
@@ -560,62 +542,54 @@ function ExpenseCard({
   onView: () => void;
 }) {
   const tone = categoryTone(String(expense.category || 'Miscellaneous'));
+  const status = String(expense.status || 'paid').toUpperCase();
+  const date = expense.date
+    ? new Date(String(expense.date)).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+    : 'No date';
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
+    <button
+      type="button"
+      onClick={onView}
+      className="w-full rounded-xl border border-border bg-card p-3 text-left transition-colors hover:border-accent/40 active:scale-[0.99]"
+    >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-foreground truncate">{String(expense.title || 'Expense')}</p>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <span className={`px-2 py-1 rounded-full text-[10px] font-semibold ${tone.chip}`}>{String(expense.category || 'Misc')}</span>
-            <span className="text-[10px] text-muted-foreground inline-flex items-center gap-1">
-              <CalendarDays className="w-3 h-3" />
-              {expense.date ? new Date(String(expense.date)).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : 'No date'}
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold ${tone.chip}`}>
+              {String(expense.category || 'Misc')}
             </span>
-            {expense.is_recurring && (
-              <span className="text-[10px] text-accent inline-flex items-center gap-1">
-                <Repeat2 className="w-3 h-3" />
-                Recurring
-              </span>
-            )}
+            {expense.receipt_url && <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+            {expense.is_recurring && <Repeat2 className="h-3.5 w-3.5 shrink-0 text-accent" />}
           </div>
-          {(expense.vendor_name || expense.hostel) && (
-            <p className="mt-2 text-xs text-muted-foreground line-clamp-2">
-              {[expense.vendor_name, expense.hostel].filter(Boolean).join(' · ')}
-            </p>
-          )}
+          <p className="mt-2 truncate text-sm font-semibold text-foreground">
+            {String(expense.title || expense.vendor_name || 'Expense')}
+          </p>
+          <p className="mt-1 truncate text-xs text-muted-foreground">
+            {[expense.vendor_name, expense.payment_method ? `via ${expense.payment_method}` : null, date]
+              .filter(Boolean)
+              .join(' · ')}
+          </p>
         </div>
-        <div className="text-right shrink-0">
-          <p className="text-xl font-bold text-foreground">{fmt(expense.amount)}</p>
-          <p className={`mt-1 text-[10px] font-semibold ${expense.status === 'paid' ? 'text-success' : expense.status === 'cancelled' ? 'text-destructive' : 'text-warning'}`}>
-            {String(expense.status || 'paid').toUpperCase()}
+        <div className="shrink-0 text-right">
+          <p className="text-lg font-bold text-foreground">{fmt(expense.amount)}</p>
+          <p className={`mt-1 text-[10px] font-semibold ${
+            status === 'PAID' ? 'text-success' : status === 'CANCELLED' ? 'text-destructive' : 'text-warning'
+          }`}>
+            {status}
           </p>
         </div>
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-        <div>
-          <p className="font-semibold text-foreground">
-            {expense.payment_method ? `Paid via ${expense.payment_method}` : 'Payment method not set'}
-          </p>
-          <p>
-            {expense.added_by ? `Recorded by ${expense.added_by}` : 'Recorded by owner'}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onView}
-          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground"
-        >
+      <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+        <span className="inline-flex items-center gap-1">
+          <CalendarDays className="h-3 w-3" />
+          {date}
+        </span>
+        <span className="inline-flex items-center gap-1 font-semibold text-foreground">
           <Eye className="h-3.5 w-3.5" />
-          View Details
-        </button>
+          Details
+        </span>
       </div>
-      {expense.receipt_url && (
-        <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-[10px] font-semibold text-muted-foreground">
-          <Paperclip className="h-3 w-3" />
-          Bill attached
-        </p>
-      )}
-    </div>
+    </button>
   );
 }
 
