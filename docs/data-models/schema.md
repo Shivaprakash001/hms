@@ -63,7 +63,7 @@ bulk_import_batches represents a persisted HMS domain record.
 |---|---|---|---|
 | id | String | yes | Primary identifier. |
 | owner_id | String | yes | Foreign key or scoped identifier. |
-| hostel_id | String | yes | Foreign key or scoped identifier. |
+| hostel_id | String? | no | Optional hostel reference for search and filtering only. |
 | filename | String | yes | Domain field persisted by the application. |
 | file_size | Int? | no | Domain field persisted by the application. |
 | total_rows | Int | no | Domain field persisted by the application. Has a database default. |
@@ -158,6 +158,15 @@ expenses represents a persisted HMS domain record.
 | receipt_uploaded_at | DateTime? | no | Domain field persisted by the application. |
 | is_recurring | Boolean | no | Boolean flag. Has a database default. |
 | recurring_frequency | String? | no | Domain field persisted by the application. |
+
+**Relationships:**
+- belongs to profile via owner_id.
+- optionally references hostels via hostel_id.
+
+**How this works:**
+1. Expenses belong to the Sri Adithya business account.
+2. `hostel_id` can label where a cost happened.
+3. Profit, category, and vendor totals do not allocate costs by hostel.
 
 ## VisitorLead
 

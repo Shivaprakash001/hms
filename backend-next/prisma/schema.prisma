@@ -93,7 +93,7 @@ model expenses {
   category            String
   status              String?   @default("paid")
   created_at          DateTime  @default(now()) @db.Timestamptz(6)
-  hostel_id           String    @db.Uuid
+  hostel_id           String?   @db.Uuid
   notes               String?
   vendor_name         String?
   payment_method      String?
@@ -106,7 +106,7 @@ model expenses {
   expense_type        String    @default("VARIABLE")
   tags                String[]  @default([])
   metadata            Json?
-  hostels             hostels   @relation(fields: [hostel_id], references: [id])
+  hostels             hostels?  @relation(fields: [hostel_id], references: [id])
   profiles            profile   @relation(fields: [owner_id], references: [id])
 
   @@index([date])

@@ -6,73 +6,86 @@ const QUICK_CATEGORIES = [
   'Staff Salary',
   'Electricity',
   'Water',
-  'Gas Cylinder',
+  'Gas Cylinders',
   'Internet',
-  'Repairs',
-  'Cleaning',
+  'Cleaning Supplies',
+  'Maintenance & Repairs',
 ];
 const QUICK_METHODS = ['Cash', 'UPI', 'Bank Transfer', 'Debit Card', 'Credit Card', 'Cheque'];
+const BUSINESS_CATEGORIES = [
+  'Food & Groceries',
+  'Staff Salary',
+  'Electricity',
+  'Water',
+  'Gas Cylinders',
+  'Internet',
+  'Cleaning Supplies',
+  'Maintenance & Repairs',
+  'Security',
+  'Laundry',
+  'Transportation',
+  'Furniture & Equipment',
+  'Licenses & Government',
+  'Marketing',
+  'Medical & Emergency',
+  'Miscellaneous',
+];
 const QUICK_TEMPLATES = [
   { label: 'Electricity Bill', category: 'Electricity', method: 'UPI', title: 'Electricity bill' },
   { label: 'Water Bill', category: 'Water', method: 'UPI', title: 'Water bill' },
   { label: 'Internet Bill', category: 'Internet', method: 'UPI', title: 'Internet bill' },
   { label: 'Staff Salary', category: 'Staff Salary', method: 'Bank Transfer', title: 'Staff salary' },
-  { label: 'Gas Cylinder', category: 'Gas Cylinder', method: 'UPI', title: 'Gas cylinder' },
+  { label: 'Gas Cylinder', category: 'Gas Cylinders', method: 'UPI', title: 'Gas cylinder' },
   { label: 'Food Purchase', category: 'Food & Groceries', method: 'UPI', title: 'Food purchase' },
 ];
 
 export function AddExpenseModal({
   categories,
   loading,
+  mode = 'create',
+  initialExpense,
+  defaultHostelId,
+  defaultHostelLabel = 'Current hostel',
   onClose,
   onSubmit,
 }: {
   categories: string[];
   loading: boolean;
+  mode?: 'create' | 'edit';
+  initialExpense?: Record<string, any> | null;
+  defaultHostelId?: string;
+  defaultHostelLabel?: string;
   onClose: () => void;
   onSubmit: (body: Record<string, unknown>) => void;
 }) {
-  const [form, setForm] = useState({
-    title: '',
-    amount: '',
-    category: 'Miscellaneous',
-    date: new Date().toISOString().slice(0, 10),
-    status: 'paid',
-    notes: '',
-    payment_method: '',
-    vendor_name: '',
-    is_recurring: false,
-    recurring_frequency: 'monthly',
-    expense_type: 'OPERATIONAL',
-  });
+  const [form, setForm] = useState(() => expenseToForm(initialExpense));
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [showMore, setShowMore] = useState(false);
   const suggestion = form.title ? suggestExpenseCategory(form.title) : '';
-  const categoryOptions = Array.from(new Set([...QUICK_CATEGORIES, ...categories, 'Asset Purchase', 'Miscellaneous']));
+  const categoryOptions = Array.from(new Set([...QUICK_CATEGORIES, ...categories, ...BUSINESS_CATEGORIES]));
   const amountValue = Number(form.amount);
   const canSave =
     Number.isFinite(amountValue) &&
     amountValue > 0 &&
+    Boolean(form.title.trim()) &&
     Boolean(form.category) &&
     Boolean(form.payment_method) &&
-    Boolean(form.vendor_name.trim()) &&
     Boolean(form.date);
-  const generatedTitle = form.title.trim() || [form.vendor_name.trim(), form.category].filter(Boolean).join(' · ') || `${form.category} expense`;
 
   const submit = () => {
     if (!canSave) return;
     onSubmit({
       ...form,
-      title: generatedTitle,
+      title: form.title.trim(),
       amount: amountValue,
       category: form.category,
       notes: form.notes.trim() || undefined,
       vendor_name: form.vendor_name.trim() || undefined,
       payment_method: form.payment_method || undefined,
+      hostelId: form.hostelId || undefined,
       receipt_image: receiptFile || undefined,
       is_recurring: form.is_recurring,
       recurring_frequency: form.is_recurring ? form.recurring_frequency : undefined,
-      expense_type: form.category === 'Asset Purchase' ? 'CAPITAL' : form.expense_type,
       metadata: suggestion && suggestion !== form.category ? { category_suggestion: suggestion } : undefined,
     });
   };
@@ -83,7 +96,9 @@ export function AddExpenseModal({
         <div className="flex shrink-0 items-center justify-between border-b border-border/60 pb-3">
           <div className="px-4 pt-4">
             <h3 className="text-lg font-bold text-foreground">Add expense</h3>
-            <p className="text-xs text-muted-foreground">Amount first. Details only when needed.</p>
+            <p className="text-xs text-muted-foreground">
+              {mode === 'edit' ? 'Update the business expense details.' : 'Title, amount, category, method, date. Done fast.'}
+            </p>
           </div>
           <button type="button" onClick={onClose} className="mr-2 mt-2 p-2 rounded-lg hover:bg-muted">
             <X className="w-5 h-5" />
@@ -106,7 +121,6 @@ export function AddExpenseModal({
                       title: template.title,
                       category: template.category,
                       payment_method: template.method,
-                      expense_type: template.category === 'Asset Purchase' ? 'CAPITAL' : 'OPERATIONAL',
                     }))
                   }
                   className="shrink-0 rounded-full border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground"
@@ -116,6 +130,25 @@ export function AddExpenseModal({
               ))}
             </div>
           </div>
+
+          <input
+            value={form.title}
+            onChange={(e) => {
+              const title = e.target.value;
+              setForm((f) => ({ ...f, title, category: f.category === 'Miscellaneous' ? suggestExpenseCategory(title) : f.category }));
+            }}
+            placeholder="Title, e.g. rice purchase or EB bill"
+            className="w-full px-3 py-3 rounded-xl border border-border bg-background text-sm outline-none"
+          />
+          {suggestion && suggestion !== form.category && (
+            <button
+              type="button"
+              onClick={() => setForm((f) => ({ ...f, category: suggestion }))}
+              className="rounded-full bg-accent/10 px-3 py-1.5 text-[11px] font-semibold text-accent"
+            >
+              Use suggested category: {suggestion}
+            </button>
+          )}
 
           <div>
             <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -144,7 +177,7 @@ export function AddExpenseModal({
                 <button
                   key={category}
                   type="button"
-                  onClick={() => setForm((f) => ({ ...f, category, expense_type: category === 'Asset Purchase' ? 'CAPITAL' : f.expense_type }))}
+                  onClick={() => setForm((f) => ({ ...f, category }))}
                   className={`rounded-xl border px-3 py-2.5 text-sm font-semibold ${
                     form.category === category
                       ? 'border-accent bg-accent text-accent-foreground'
@@ -157,69 +190,19 @@ export function AddExpenseModal({
             </div>
             <select
               value={form.category}
-              onChange={(e) => {
-                const category = e.target.value;
-                setForm((f) => ({ ...f, category, expense_type: category === 'Asset Purchase' ? 'CAPITAL' : f.expense_type }));
-              }}
+              onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
               className="mt-2 w-full px-3 py-3 rounded-xl border border-border bg-background text-sm"
             >
               {categoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
             </select>
           </div>
 
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Expense type
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { value: 'OPERATIONAL', label: 'Operational', hint: 'Monthly running cost' },
-                { value: 'CAPITAL', label: 'Capital', hint: 'Asset purchase' },
-              ].map((type) => (
-                <button
-                  key={type.value}
-                  type="button"
-                  onClick={() => setForm((f) => ({ ...f, expense_type: type.value, category: type.value === 'CAPITAL' && f.category === 'Miscellaneous' ? 'Asset Purchase' : f.category }))}
-                  className={`rounded-xl border p-3 text-left ${
-                    form.expense_type === type.value
-                      ? 'border-accent bg-accent text-accent-foreground'
-                      : 'border-border bg-background text-foreground'
-                  }`}
-                >
-                  <span className="block text-sm font-semibold">{type.label}</span>
-                  <span className={`mt-0.5 block text-[10px] ${form.expense_type === type.value ? 'text-accent-foreground/80' : 'text-muted-foreground'}`}>
-                    {type.hint}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-
           <input
             value={form.vendor_name}
             onChange={(e) => setForm((f) => ({ ...f, vendor_name: e.target.value }))}
-            placeholder="Vendor, e.g. milk supplier, electrician, owner"
+            placeholder="Vendor optional, e.g. milk supplier"
             className="w-full px-3 py-3 rounded-xl border border-border bg-background text-sm outline-none"
           />
-
-          <input
-            value={form.title}
-            onChange={(e) => {
-              const title = e.target.value;
-              setForm((f) => ({ ...f, title, category: f.category === 'Miscellaneous' ? suggestExpenseCategory(title) : f.category }));
-            }}
-            placeholder="Short note, e.g. EB bill or rice purchase"
-            className="w-full px-3 py-3 rounded-xl border border-border bg-background text-sm outline-none"
-          />
-          {suggestion && (
-            <button
-              type="button"
-              onClick={() => setForm((f) => ({ ...f, category: suggestion }))}
-              className="rounded-full bg-accent/10 px-3 py-1.5 text-[11px] font-semibold text-accent"
-            >
-              Use suggested category: {suggestion}
-            </button>
-          )}
 
           <div className="grid grid-cols-2 gap-2">
             <input
@@ -268,6 +251,30 @@ export function AddExpenseModal({
 
           {showMore && (
             <div className="space-y-3 rounded-xl border border-border bg-muted/20 p-3">
+              {defaultHostelId && (
+                <label className="flex items-center justify-between rounded-xl border border-border bg-background p-3">
+                  <span>
+                    <span className="block text-sm font-medium text-foreground">Hostel reference</span>
+                    <span className="block text-[11px] text-muted-foreground">Optional label for search only.</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setForm((f) => ({
+                        ...f,
+                        hostelId: f.hostelId ? '' : defaultHostelId,
+                      }))
+                    }
+                    className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
+                      form.hostelId
+                        ? 'border-accent bg-accent text-accent-foreground'
+                        : 'border-border bg-card text-muted-foreground'
+                    }`}
+                  >
+                    {form.hostelId ? defaultHostelLabel : 'No reference'}
+                  </button>
+                </label>
+              )}
               <textarea
                 value={form.notes}
                 onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
@@ -301,7 +308,7 @@ export function AddExpenseModal({
               {form.is_recurring && (
                 <select value={form.recurring_frequency} onChange={(e) => setForm((f) => ({ ...f, recurring_frequency: e.target.value }))} className="w-full px-3 py-3 rounded-xl border border-border bg-background text-sm">
                   <option value="monthly">Monthly</option>
-                  <option value="weekly">Weekly</option>
+                  <option value="quarterly">Quarterly</option>
                   <option value="yearly">Yearly</option>
                 </select>
               )}
@@ -318,11 +325,11 @@ export function AddExpenseModal({
           >
             {loading
               ? 'Saving...'
-              : !form.vendor_name.trim()
-                ? 'Add vendor to save'
+              : !form.title.trim()
+                ? 'Add title to save'
                 : !form.payment_method
                   ? 'Choose payment method'
-                  : `Save ${amountValue > 0 ? `₹${amountValue.toLocaleString('en-IN')}` : 'expense'}`}
+                  : `${mode === 'edit' ? 'Update' : 'Save'} ${amountValue > 0 ? `₹${amountValue.toLocaleString('en-IN')}` : 'expense'}`}
           </button>
         </div>
       </div>
@@ -330,16 +337,38 @@ export function AddExpenseModal({
   );
 }
 
+function expenseToForm(expense?: Record<string, any> | null) {
+  return {
+    title: String(expense?.title || ''),
+    amount: expense?.amount ? String(expense.amount) : '',
+    category: String(expense?.category || 'Miscellaneous'),
+    date: expense?.date ? new Date(String(expense.date)).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+    status: String(expense?.status || 'paid'),
+    notes: String(expense?.notes || ''),
+    payment_method: String(expense?.payment_method || ''),
+    vendor_name: String(expense?.vendor_name || ''),
+    is_recurring: Boolean(expense?.is_recurring),
+    recurring_frequency: String(expense?.recurring_frequency || 'monthly'),
+    hostelId: String(expense?.hostel_id || ''),
+  };
+}
+
 function suggestExpenseCategory(title: string) {
   const text = title.toLowerCase();
   if (/(electric|power|eb|current|bill)/.test(text)) return 'Electricity';
   if (/(food|rice|milk|grocery|vegetable|kitchen|meal|dal|oil)/.test(text)) return 'Food & Groceries';
-  if (/(gas|cylinder|lpg)/.test(text)) return 'Gas Cylinder';
+  if (/(gas|cylinder|lpg)/.test(text)) return 'Gas Cylinders';
   if (/(wifi|internet|broadband|router|airtel|jio)/.test(text)) return 'Internet';
-  if (/(repair|plumb|paint|fix|carpenter)/.test(text)) return 'Repairs';
-  if (/(clean|housekeep)/.test(text)) return 'Cleaning';
+  if (/(repair|plumb|paint|fix|carpenter|maintenance)/.test(text)) return 'Maintenance & Repairs';
+  if (/(clean|housekeep|soap|phenyl)/.test(text)) return 'Cleaning Supplies';
   if (/(salary|staff|warden|watchman)/.test(text)) return 'Staff Salary';
+  if (/(security|guard|cctv)/.test(text)) return 'Security';
+  if (/(laundry|washing)/.test(text)) return 'Laundry';
+  if (/(transport|auto|fuel|petrol|diesel)/.test(text)) return 'Transportation';
+  if (/(bed|mattress|furniture|fridge|geyser|fan|machine|equipment)/.test(text)) return 'Furniture & Equipment';
+  if (/(license|licence|government|tax|permit)/.test(text)) return 'Licenses & Government';
+  if (/(marketing|banner|ad|poster)/.test(text)) return 'Marketing';
+  if (/(medical|emergency|first aid|doctor)/.test(text)) return 'Medical & Emergency';
   if (/(water|tanker)/.test(text)) return 'Water';
-  if (/(asset|washing machine|machine|bed|mattress|furniture|fridge|geyser|fan|cctv)/.test(text)) return 'Asset Purchase';
   return 'Miscellaneous';
 }

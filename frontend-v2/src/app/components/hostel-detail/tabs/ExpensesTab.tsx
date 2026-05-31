@@ -1,6 +1,6 @@
 import { lazy, Suspense, memo, useDeferredValue, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CalendarDays, Eye, Paperclip, Plus, Repeat2, Search, Sparkles, UserRound, X, Zap } from 'lucide-react';
+import { CalendarDays, Copy, Edit3, Eye, Paperclip, Plus, Repeat2, Search, Sparkles, X, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { queryKeys } from '@lib/queryKeys';
 import { fmt } from '../shared/format';
@@ -18,6 +18,8 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
   const [customEnd, setCustomEnd] = useState('');
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [showAddExpense, setShowAddExpense] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<Record<string, any> | null>(null);
+  const [draftExpense, setDraftExpense] = useState<Record<string, any> | null>(null);
   const [selectedExpense, setSelectedExpense] = useState<Record<string, any> | null>(null);
   const [showInsights, setShowInsights] = useState(false);
   const params = useMemo(
@@ -34,20 +36,22 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
   );
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: [...queryKeys.expenses.list(hostelId), params],
+    queryKey: [...queryKeys.expenses.list('business'), params],
     queryFn: () =>
-      import('@features/expenses/api').then((m) => m.expenseService.getAll(hostelId, params)),
+      import('@features/expenses/api').then((m) => m.expenseService.getAll(undefined, params)),
     staleTime: 2 * 60 * 1000,
   });
 
   const createMutation = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
-      import('@features/expenses/api').then((m) => m.expenseService.create(hostelId, body)),
+      import('@features/expenses/api').then((m) => m.expenseService.create(undefined, body)),
     onSuccess: () => {
       toast.success('Expense added');
-      queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all(hostelId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all('business') });
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.all() });
       setShowAddExpense(false);
+      setDraftExpense(null);
     },
     onError: (error: any) => {
       toast.error(error?.response?.data?.error?.message || error?.message || 'Could not add expense');
@@ -57,12 +61,25 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
   const updateMutation = useMutation({
     mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
       import('@features/expenses/api').then((m) => m.expenseService.update(id, body)),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all(hostelId) }),
+    onSuccess: () => {
+      toast.success('Expense updated');
+      queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all('business') });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.all() });
+      setEditingExpense(null);
+      setDraftExpense(null);
+      setShowAddExpense(false);
+    },
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => import('@features/expenses/api').then((m) => m.expenseService.delete(id)),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all(hostelId) }),
+    onSuccess: () => {
+      toast.success('Expense deleted');
+      queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all('business') });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.all() });
+    },
   });
 
   const payload = (data || {}) as Record<string, any>;
@@ -87,28 +104,32 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
     );
   };
 
+  const openCreateExpense = () => {
+    setEditingExpense(null);
+    setDraftExpense(null);
+    setShowAddExpense(true);
+  };
+
   if (isLoading) return <TabSkeleton />;
   if (isError) return <TabError onRetry={refetch} />;
 
   return (
     <div className="relative space-y-5 pb-24">
       <section className="rounded-2xl border border-border bg-card p-4">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Expense workspace</p>
-        <div className="mt-2 flex items-end justify-between gap-3">
-          <div>
-            <h2 className="text-2xl font-bold text-foreground">{fmt(kpis.this_month_expenses)}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Spent this month</p>
-          </div>
-          <div className="text-right">
-            <p className={`text-sm font-bold ${momExpenseChange > 0 ? 'text-warning' : 'text-success'}`}>
-              {momExpenseChange > 0 ? '+' : ''}{momExpenseChange}%
-            </p>
-            <p className="text-[11px] text-muted-foreground">vs last month</p>
-          </div>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Business expense workspace</p>
+        <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+          <SummaryMetric label="This Month Expenses" value={fmt(kpis.this_month_expenses)} tone="warning" />
+          <SummaryMetric label="Revenue" value={fmt(kpis.collected_revenue)} />
+          <SummaryMetric label="Net Profit" value={fmt(kpis.net_profit)} tone={Number(kpis.net_profit || 0) < 0 ? 'danger' : 'success'} />
+          <SummaryMetric
+            label="Expense Growth"
+            value={`${momExpenseChange > 0 ? '+' : ''}${momExpenseChange}%`}
+            tone={momExpenseChange > 0 ? 'warning' : 'success'}
+          />
         </div>
         <button
           type="button"
-          onClick={() => setShowAddExpense(true)}
+          onClick={openCreateExpense}
           className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-4 py-3.5 text-sm font-semibold text-accent-foreground active:scale-[0.99] transition-transform"
         >
           <Plus className="h-4 w-4" />
@@ -156,11 +177,12 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
       </section>
 
       <section className="space-y-3">
-        <SectionTitle title="Categories" sub="Swipe to filter the expenses owners check most" />
+        <SectionTitle title="Category insights" sub="Business-wide spend by category" />
         <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
-          {allCategories.slice(0, 10).map((category) => {
+          {allCategories.map((category) => {
             const selected = selectedCategories.includes(category);
             const amount = Number(categories.find((item: any) => item.category === category)?.amount || 0);
+            const percentage = Number(categories.find((item: any) => item.category === category)?.percentage || 0);
             return (
               <button
                 key={category}
@@ -173,7 +195,7 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
                 <span className="text-xl">{categoryIcon(category)}</span>
                 <span className="mt-2 block text-sm font-bold leading-tight">{category}</span>
                 <span className={`mt-1 block text-xs ${selected ? 'text-accent-foreground/80' : 'text-muted-foreground'}`}>
-                  {amount > 0 ? fmt(amount) : 'No spend'}
+                  {amount > 0 ? `${fmt(amount)} · ${percentage.toFixed(0)}%` : 'No spend'}
                 </span>
               </button>
             );
@@ -190,6 +212,14 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
           onStatusChange={setStatus}
           onSortChange={setSort}
           onSelectExpense={setSelectedExpense}
+          onEditExpense={(expense) => {
+            setEditingExpense(expense);
+            setShowAddExpense(true);
+          }}
+          onDuplicateExpense={(expense) => {
+            setDraftExpense(expense);
+            setShowAddExpense(true);
+          }}
         />
       </section>
 
@@ -218,7 +248,7 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
 
       <button
         type="button"
-        onClick={() => setShowAddExpense(true)}
+        onClick={openCreateExpense}
         className="fixed bottom-20 right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-accent text-accent-foreground shadow-lg active:scale-95 md:hidden"
         aria-label="Add expense"
       >
@@ -229,9 +259,23 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
         <Suspense fallback={null}>
           <AddExpenseModal
             categories={allCategories}
-            loading={createMutation.isPending}
-            onClose={() => setShowAddExpense(false)}
-            onSubmit={(body) => createMutation.mutate(body)}
+            mode={editingExpense ? 'edit' : 'create'}
+            initialExpense={editingExpense || draftExpense}
+            defaultHostelId={hostelId}
+            defaultHostelLabel="This hostel"
+            loading={createMutation.isPending || updateMutation.isPending}
+            onClose={() => {
+              setShowAddExpense(false);
+              setEditingExpense(null);
+              setDraftExpense(null);
+            }}
+            onSubmit={(body) => {
+              if (editingExpense?.id) {
+                updateMutation.mutate({ id: String(editingExpense.id), body });
+                return;
+              }
+              createMutation.mutate(body);
+            }}
           />
         </Suspense>
       )}
@@ -239,7 +283,13 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
         <ExpenseDetailsModal
           expense={selectedExpense}
           onClose={() => setSelectedExpense(null)}
+          onEdit={() => {
+            setEditingExpense(selectedExpense);
+            setSelectedExpense(null);
+            setShowAddExpense(true);
+          }}
           onDuplicate={() => {
+            setDraftExpense(selectedExpense);
             setSelectedExpense(null);
             setShowAddExpense(true);
           }}
@@ -262,11 +312,17 @@ const EXPENSE_CATEGORIES = [
   'Staff Salary',
   'Electricity',
   'Water',
-  'Gas Cylinder',
+  'Gas Cylinders',
   'Internet',
-  'Repairs',
-  'Cleaning',
-  'Asset Purchase',
+  'Cleaning Supplies',
+  'Maintenance & Repairs',
+  'Security',
+  'Laundry',
+  'Transportation',
+  'Furniture & Equipment',
+  'Licenses & Government',
+  'Marketing',
+  'Medical & Emergency',
   'Miscellaneous',
 ];
 
@@ -281,11 +337,11 @@ function MonthlyExpenseBreakdown({
     <section className="space-y-3">
       <SectionTitle
         title="Monthly expense breakdown"
-        sub="What is consuming hostel cash this month"
+        sub="What is consuming business cash this month"
       />
       <div className="rounded-2xl border border-border bg-card p-4">
         {categories.length === 0 ? (
-          <EmptyMini text="Add expenses to see where the hostel is spending money." />
+          <EmptyMini text="Add expenses to see where the business is spending money." />
         ) : (
           <div className="space-y-3">
             {categories.slice(0, 8).map((cat) => (
@@ -446,12 +502,18 @@ function categoryTone(category: string) {
     'Food & Groceries': { chip: 'bg-warning/10 text-warning', bar: 'bg-warning' },
     Electricity: { chip: 'bg-destructive/10 text-destructive', bar: 'bg-destructive' },
     Water: { chip: 'bg-info/10 text-info', bar: 'bg-info' },
-    'Gas Cylinder': { chip: 'bg-orange-500/10 text-orange-600', bar: 'bg-orange-500' },
+    'Gas Cylinders': { chip: 'bg-orange-500/10 text-orange-600', bar: 'bg-orange-500' },
     Internet: { chip: 'bg-accent/10 text-accent', bar: 'bg-accent' },
     'Staff Salary': { chip: 'bg-primary/10 text-primary', bar: 'bg-primary' },
-    Repairs: { chip: 'bg-primary/10 text-primary', bar: 'bg-primary' },
-    Cleaning: { chip: 'bg-emerald-500/10 text-emerald-600', bar: 'bg-emerald-500' },
-    'Asset Purchase': { chip: 'bg-purple-500/10 text-purple-600', bar: 'bg-purple-500' },
+    'Maintenance & Repairs': { chip: 'bg-primary/10 text-primary', bar: 'bg-primary' },
+    'Cleaning Supplies': { chip: 'bg-emerald-500/10 text-emerald-600', bar: 'bg-emerald-500' },
+    Security: { chip: 'bg-red-500/10 text-red-600', bar: 'bg-red-500' },
+    Laundry: { chip: 'bg-sky-500/10 text-sky-600', bar: 'bg-sky-500' },
+    Transportation: { chip: 'bg-amber-500/10 text-amber-600', bar: 'bg-amber-500' },
+    'Furniture & Equipment': { chip: 'bg-purple-500/10 text-purple-600', bar: 'bg-purple-500' },
+    'Licenses & Government': { chip: 'bg-slate-500/10 text-slate-600', bar: 'bg-slate-500' },
+    Marketing: { chip: 'bg-pink-500/10 text-pink-600', bar: 'bg-pink-500' },
+    'Medical & Emergency': { chip: 'bg-rose-500/10 text-rose-600', bar: 'bg-rose-500' },
   };
   return tones[category] || { chip: 'bg-muted text-muted-foreground', bar: 'bg-muted-foreground' };
 }
@@ -485,13 +547,13 @@ function ExpenseEmptyState() {
       <div className="mx-auto w-12 h-12 rounded-xl bg-accent/10 text-accent flex items-center justify-center">
         <Zap className="w-6 h-6" />
       </div>
-      <h3 className="mt-4 text-lg font-bold text-foreground">Start tracking hostel operations</h3>
+      <h3 className="mt-4 text-lg font-bold text-foreground">Start tracking business expenses</h3>
       <p className="mt-2 text-sm text-muted-foreground">
-        Track electricity, food, maintenance and staff costs to understand profitability.
+        Track food, salary, electricity, maintenance and supplier costs to understand profitability.
       </p>
       <div className="mt-4 grid gap-2 text-left text-xs text-muted-foreground">
-        <div className="rounded-lg bg-background border border-border p-3">Food cost vs revenue insight</div>
-        <div className="rounded-lg bg-background border border-border p-3">Expense per occupied bed</div>
+        <div className="rounded-lg bg-background border border-border p-3">Category percentage of total expenses</div>
+        <div className="rounded-lg bg-background border border-border p-3">Top vendors by payments</div>
         <div className="rounded-lg bg-background border border-border p-3">Profit margin warnings</div>
       </div>
     </div>
@@ -506,6 +568,8 @@ const RecentExpensesSection = memo(function RecentExpensesSection({
   onStatusChange,
   onSortChange,
   onSelectExpense,
+  onEditExpense,
+  onDuplicateExpense,
 }: {
   expenses: Record<string, any>[];
   total: number;
@@ -514,6 +578,8 @@ const RecentExpensesSection = memo(function RecentExpensesSection({
   onStatusChange: (value: string) => void;
   onSortChange: (value: string) => void;
   onSelectExpense: (expense: Record<string, any>) => void;
+  onEditExpense: (expense: Record<string, any>) => void;
+  onDuplicateExpense: (expense: Record<string, any>) => void;
 }) {
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search);
@@ -580,6 +646,8 @@ const RecentExpensesSection = memo(function RecentExpensesSection({
               key={String(expense.id)}
               expense={expense}
               onView={() => onSelectExpense(expense)}
+              onEdit={() => onEditExpense(expense)}
+              onDuplicate={() => onDuplicateExpense(expense)}
             />
           ))}
         </div>
@@ -591,9 +659,13 @@ const RecentExpensesSection = memo(function RecentExpensesSection({
 function ExpenseCard({
   expense,
   onView,
+  onEdit,
+  onDuplicate,
 }: {
   expense: Record<string, any>;
   onView: () => void;
+  onEdit: () => void;
+  onDuplicate: () => void;
 }) {
   const tone = categoryTone(String(expense.category || 'Miscellaneous'));
   const status = String(expense.status || 'paid').toUpperCase();
@@ -601,11 +673,7 @@ function ExpenseCard({
     ? new Date(String(expense.date)).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
     : 'No date';
   return (
-    <button
-      type="button"
-      onClick={onView}
-      className="w-full rounded-xl border border-border bg-card p-3 text-left transition-colors hover:border-accent/40 active:scale-[0.99]"
-    >
+    <div className="rounded-xl border border-border bg-card p-3 transition-colors hover:border-accent/40">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
@@ -638,24 +706,36 @@ function ExpenseCard({
           <CalendarDays className="h-3 w-3" />
           {date}
         </span>
-        <span className="inline-flex items-center gap-1 font-semibold text-foreground">
-          <Eye className="h-3.5 w-3.5" />
-          Details
-        </span>
       </div>
-    </button>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <button type="button" onClick={onView} className="inline-flex items-center justify-center gap-1 rounded-xl border border-border px-2 py-2 text-xs font-semibold">
+          <Eye className="h-3.5 w-3.5" />
+          View
+        </button>
+        <button type="button" onClick={onEdit} className="inline-flex items-center justify-center gap-1 rounded-xl border border-border px-2 py-2 text-xs font-semibold">
+          <Edit3 className="h-3.5 w-3.5" />
+          Edit
+        </button>
+        <button type="button" onClick={onDuplicate} className="inline-flex items-center justify-center gap-1 rounded-xl border border-border px-2 py-2 text-xs font-semibold">
+          <Copy className="h-3.5 w-3.5" />
+          Duplicate
+        </button>
+      </div>
+    </div>
   );
 }
 
 function ExpenseDetailsModal({
   expense,
   onClose,
+  onEdit,
   onDuplicate,
   onMarkPending,
   onDelete,
 }: {
   expense: Record<string, any>;
   onClose: () => void;
+  onEdit: () => void;
   onDuplicate: () => void;
   onMarkPending: () => void;
   onDelete: () => void;
@@ -702,7 +782,10 @@ function ExpenseDetailsModal({
           </a>
         )}
 
-        <div className="mt-4 grid grid-cols-3 gap-2">
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <button type="button" onClick={onEdit} className="rounded-xl border border-border py-2.5 text-xs font-semibold">
+            Edit
+          </button>
           <button type="button" onClick={onDuplicate} className="rounded-xl border border-border py-2.5 text-xs font-semibold">
             Duplicate
           </button>
@@ -753,10 +836,16 @@ function categoryIcon(category: string) {
   if (category.includes('Electric')) return '⚡';
   if (category.includes('Water')) return '💧';
   if (category.includes('Staff')) return '👨‍🍳';
-  if (category.includes('Repair')) return '🔧';
+  if (category.includes('Repair') || category.includes('Maintenance')) return '🔧';
   if (category.includes('Gas')) return '🔥';
   if (category.includes('Internet')) return '📶';
   if (category.includes('Cleaning')) return '🧹';
-  if (category.includes('Asset')) return '🧾';
+  if (category.includes('Security')) return '🛡️';
+  if (category.includes('Laundry')) return '🧺';
+  if (category.includes('Transportation')) return '🛺';
+  if (category.includes('Furniture') || category.includes('Equipment')) return '🧾';
+  if (category.includes('Licenses') || category.includes('Government')) return '📄';
+  if (category.includes('Marketing')) return '📣';
+  if (category.includes('Medical')) return '🩺';
   return '•';
 }

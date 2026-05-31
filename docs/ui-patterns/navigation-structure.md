@@ -51,7 +51,7 @@ Why this exists: route shells keep unrelated product areas out of each other’s
 | Rooms tab | Rooms is active | Room list, floor actions, room forms, room overview |
 | Tenants tab | Tenants is active | Active tenants, invited tenants, payment action |
 | Financials tab | Financials is active | Billing control center and payment modal |
-| Expenses tab | Expenses is active | Expense KPIs, ledger, filters, add expense form |
+| Expenses tab | Expenses is active | Business expense KPIs, ledger, categories, vendors, add expense form |
 | Move-outs tab | Move-outs is active | Move-out request preview and workflow link |
 
 Why this exists: hostel operations are broad, so each tab becomes its own bundle and query boundary.
@@ -61,6 +61,7 @@ Why this exists: hostel operations are broad, so each tab becomes its own bundle
 2. Tab clicks update the route path for deep links.
 3. Room and expense modals load as nested async islands.
 4. Inactive tabs do not mount their queries, forms, or heavy UI.
+5. The expenses tab reads business-wide expense totals.
 
 ## Large List Rendering
 
@@ -106,7 +107,7 @@ Why this exists: mobile Core Web Vitals are sensitive to the first dashboard vie
 | Tenant list | Window virtualizer | Large tenant sets do not mount every card. |
 | Tenant dashboard | Progressive secondary data | Dues and payment action appear before documents and announcements. |
 | Tenant chart | `IdleRender` plus lazy import | Recharts does not block route mount. |
-| Expense tab | Ledger before intelligence | Users can inspect records before analytics panels render. |
+| Expense tab | Ledger before intelligence | Users can inspect business expense records before analytics panels render. |
 | Room tab | Memoized floor grouping | Room cards avoid regrouping work on unrelated state changes. |
 | Marketing reveal | Mobile transform-only animation | Below-fold sections keep motion without blur paint cost. |
 | Bottom navigation | Direct route taps | Owner and tenant sections change without swipe handlers or drag transforms. |

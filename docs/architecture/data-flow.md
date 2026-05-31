@@ -133,6 +133,24 @@ Why this exists: rooms, tenants, expenses, move-outs, and billing should not exe
 2. `/hostels/:hostelId/:tab` loads the matching tab island.
 3. Query invalidation remains scoped to existing query keys.
 
+## Business expense flow
+
+| Step | Code | What happens |
+|---|---|---|
+| 1 | `ExpensesTab` | Shows business expense KPIs, category cards, vendor cards, and ledger. |
+| 2 | `expenseService.getAll(undefined, params)` | Calls `/expenses` without requiring a hostel ID. |
+| 3 | `/api/expenses` | Authenticates the owner and optionally validates a hostel reference. |
+| 4 | `expense-service.ts` | Calculates expense totals, category percentages, vendors, revenue, and profit business-wide. |
+| 5 | `AddExpenseModal` | Submits title, amount, category, method, and date as required fields. |
+
+Why this exists: Sri Adithya Hostels tracks central business expenses, not per-hostel accounting.
+
+**How this works:**
+1. The owner records a cost as a business expense.
+2. `hostel_id` is optional metadata for search and filtering.
+3. Revenue and profit calculations ignore hostel allocation.
+4. Expense mutations invalidate business expense, dashboard, and portfolio caches.
+
 ## Admissions CRM flow
 
 | Step | Code | What happens |

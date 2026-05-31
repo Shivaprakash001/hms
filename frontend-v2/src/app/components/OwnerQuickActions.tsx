@@ -17,11 +17,17 @@ const EXPENSE_CATEGORIES = [
   'Staff Salary',
   'Electricity',
   'Water',
-  'Gas Cylinder',
+  'Gas Cylinders',
   'Internet',
-  'Repairs',
-  'Cleaning',
-  'Asset Purchase',
+  'Cleaning Supplies',
+  'Maintenance & Repairs',
+  'Security',
+  'Laundry',
+  'Transportation',
+  'Furniture & Equipment',
+  'Licenses & Government',
+  'Marketing',
+  'Medical & Emergency',
   'Miscellaneous',
 ];
 
@@ -61,11 +67,12 @@ export function OwnerQuickActions() {
 
   const createExpenseMutation = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
-      import('@features/expenses/api').then((m) => m.expenseService.create(hostelId, body)),
+      import('@features/expenses/api').then((m) => m.expenseService.create(undefined, body)),
     onSuccess: () => {
       toast.success('Expense added');
-      queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all(hostelId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all('business') });
+      if (hostelId) queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.all() });
       setActive(null);
     },
     onError: (error: any) => {
@@ -111,7 +118,6 @@ export function OwnerQuickActions() {
               </button>
               <button
                 type="button"
-                disabled={!canUseHostelActions}
                 onClick={() => setActive('expense')}
                 className="flex items-center gap-3 rounded-xl border border-border px-3 py-3 text-left text-sm font-medium disabled:opacity-50"
               >
@@ -153,7 +159,7 @@ export function OwnerQuickActions() {
           <AddTenantModal hostelId={hostelId} onClose={() => setActive(null)} />
         </Suspense>
       )}
-      {active === 'expense' && hostelId && (
+      {active === 'expense' && (
         <Suspense fallback={null}>
           <AddExpenseModal
             categories={EXPENSE_CATEGORIES}

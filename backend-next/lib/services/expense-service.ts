@@ -7,20 +7,25 @@ const EXPENSE_CATEGORIES = [
   "Staff Salary",
   "Electricity",
   "Water",
-  "Gas Cylinder",
+  "Gas Cylinders",
   "Internet",
-  "Repairs",
-  "Cleaning",
-  "Asset Purchase",
+  "Cleaning Supplies",
+  "Maintenance & Repairs",
+  "Security",
+  "Laundry",
+  "Transportation",
+  "Furniture & Equipment",
+  "Licenses & Government",
+  "Marketing",
+  "Medical & Emergency",
   "Miscellaneous",
 ];
-
-const FIXED_CATEGORIES = new Set(["Staff Salary", "Electricity", "Water", "Gas Cylinder", "Internet"]);
 
 type ExpenseFilters = {
   range?: string;
   startDate?: string;
   endDate?: string;
+  hostelId?: string;
   categories?: string[];
   status?: string;
   sort?: string;
@@ -72,20 +77,29 @@ function pctChange(current: number, previous: number) {
   return round(((current - previous) / previous) * 100);
 }
 
-function healthFromRatio(ratio: number) {
-  if (ratio <= 35) return "healthy";
-  if (ratio <= 55) return "warning";
-  return "dangerous";
-}
-
 function normalizeCategory(category: string) {
   if (!category) return "Miscellaneous";
-  const lower = category.toLowerCase();
-  if (lower === "salary") return "Staff Salary";
-  if (["food", "grocery", "groceries", "kitchen"].includes(lower)) return "Food & Groceries";
-  if (["gas", "lpg", "cylinder"].includes(lower)) return "Gas Cylinder";
-  if (["furniture", "asset", "assets", "asset purchase"].includes(lower)) return "Asset Purchase";
-  if (lower === "maintenance") return "Repairs";
+  const lower = category.toLowerCase().trim();
+  const aliases: Record<string, string> = {
+    food: "Food & Groceries",
+    grocery: "Food & Groceries",
+    groceries: "Food & Groceries",
+    kitchen: "Food & Groceries",
+    salary: "Staff Salary",
+    staff: "Staff Salary",
+    gas: "Gas Cylinders",
+    "gas cylinder": "Gas Cylinders",
+    cylinder: "Gas Cylinders",
+    cleaning: "Cleaning Supplies",
+    repairs: "Maintenance & Repairs",
+    repair: "Maintenance & Repairs",
+    maintenance: "Maintenance & Repairs",
+    asset: "Furniture & Equipment",
+    assets: "Furniture & Equipment",
+    "asset purchase": "Furniture & Equipment",
+    furniture: "Furniture & Equipment",
+  };
+  if (aliases[lower]) return aliases[lower];
   const found = EXPENSE_CATEGORIES.find((c) => c.toLowerCase() === lower);
   return found || category;
 }
@@ -94,18 +108,31 @@ function suggestedCategory(title: string) {
   const text = title.toLowerCase();
   if (/(electric|power|eb|current|bescom|bill)/.test(text)) return "Electricity";
   if (/(food|rice|milk|grocery|vegetable|kitchen|meal|dal|oil)/.test(text)) return "Food & Groceries";
-  if (/(gas|cylinder|lpg)/.test(text)) return "Gas Cylinder";
+  if (/(gas|cylinder|lpg)/.test(text)) return "Gas Cylinders";
   if (/(wifi|internet|broadband|router|airtel|jio)/.test(text)) return "Internet";
-  if (/(repair|plumb|paint|fix|carpenter)/.test(text)) return "Repairs";
-  if (/(clean|housekeep|sanit)/.test(text)) return "Cleaning";
+  if (/(repair|plumb|paint|fix|carpenter|maintenance)/.test(text)) return "Maintenance & Repairs";
+  if (/(clean|housekeep|sanit|soap|phenyl)/.test(text)) return "Cleaning Supplies";
   if (/(salary|staff|warden|watchman)/.test(text)) return "Staff Salary";
+  if (/(security|guard|cctv)/.test(text)) return "Security";
+  if (/(laundry|washing|washer)/.test(text)) return "Laundry";
+  if (/(transport|auto|fuel|petrol|diesel)/.test(text)) return "Transportation";
+  if (/(bed|mattress|furniture|fridge|geyser|fan|machine|equipment)/.test(text)) return "Furniture & Equipment";
+  if (/(license|licence|government|tax|permit)/.test(text)) return "Licenses & Government";
+  if (/(marketing|banner|ad|advertis|poster)/.test(text)) return "Marketing";
+  if (/(medical|emergency|first aid|doctor)/.test(text)) return "Medical & Emergency";
   if (/(water|tanker)/.test(text)) return "Water";
-  if (/(asset|washing machine|machine|bed|mattress|furniture|fridge|geyser|fan|cctv)/.test(text)) return "Asset Purchase";
   return "Miscellaneous";
 }
 
+function businessPaymentWhere(ownerId: string, start: Date, end: Date) {
+  return {
+    payment_date: { gte: start, lt: end },
+    OR: [{ owner_id: ownerId }, { hostels: { owner_id: ownerId } }],
+  } as any;
+}
+
 export class ExpenseService {
-  async getAllExpenses(ownerId: string, hostelId: string, filters: ExpenseFilters = {}) {
+  async getAllExpenses(ownerId: string, filters: ExpenseFilters = {}) {
     const { start, end } = getRange(filters);
     const now = new Date();
     const currentMonthStart = startOfMonth(now);
@@ -115,16 +142,17 @@ export class ExpenseService {
 
     const ledgerWhere: any = {
       owner_id: ownerId,
-      hostel_id: hostelId,
       date: { gte: start, lt: end },
+      ...(filters.hostelId ? { hostel_id: filters.hostelId } : {}),
       ...(filters.status && filters.status !== "all" ? { status: filters.status } : {}),
-      ...(filters.categories?.length ? { category: { in: filters.categories } } : {}),
+      ...(filters.categories?.length ? { category: { in: filters.categories.map(normalizeCategory) } } : {}),
       ...(filters.search
         ? {
             OR: [
               { title: { contains: filters.search, mode: "insensitive" } },
               { notes: { contains: filters.search, mode: "insensitive" } },
               { vendor_name: { contains: filters.search, mode: "insensitive" } },
+              { payment_method: { contains: filters.search, mode: "insensitive" } },
             ],
           }
         : {}),
@@ -140,6 +168,9 @@ export class ExpenseService {
             ? { category: "asc" }
             : { date: "desc" };
 
+    const businessCurrentWhere = { owner_id: ownerId, date: { gte: currentMonthStart, lt: nextMonthStart } };
+    const businessPreviousWhere = { owner_id: ownerId, date: { gte: previousMonthStart, lt: currentMonthStart } };
+
     const [
       ledger,
       totalCount,
@@ -151,9 +182,6 @@ export class ExpenseService {
       categoryPrevious,
       monthlyExpenses,
       monthlyPayments,
-      latestSnapshot,
-      rooms,
-      activeTenants,
       duplicateCandidates,
     ] = await Promise.all([
       prisma.expenses.findMany({
@@ -165,49 +193,43 @@ export class ExpenseService {
       }),
       prisma.expenses.count({ where: ledgerWhere }),
       prisma.expenses.aggregate({
-        where: { owner_id: ownerId, hostel_id: hostelId, date: { gte: currentMonthStart, lt: nextMonthStart } },
+        where: businessCurrentWhere,
         _sum: { amount: true },
       }),
       prisma.expenses.aggregate({
-        where: { owner_id: ownerId, hostel_id: hostelId, date: { gte: previousMonthStart, lt: currentMonthStart } },
+        where: businessPreviousWhere,
         _sum: { amount: true },
       }),
       prisma.payments.aggregate({
-        where: { hostel_id: hostelId, payment_date: { gte: currentMonthStart, lt: nextMonthStart } },
+        where: businessPaymentWhere(ownerId, currentMonthStart, nextMonthStart),
         _sum: { amount_paid: true },
       }),
       prisma.payments.aggregate({
-        where: { hostel_id: hostelId, payment_date: { gte: previousMonthStart, lt: currentMonthStart } },
+        where: businessPaymentWhere(ownerId, previousMonthStart, currentMonthStart),
         _sum: { amount_paid: true },
       }),
       prisma.expenses.groupBy({
         by: ["category"],
-        where: { owner_id: ownerId, hostel_id: hostelId, date: { gte: currentMonthStart, lt: nextMonthStart } },
+        where: businessCurrentWhere,
         _sum: { amount: true },
       }),
       prisma.expenses.groupBy({
         by: ["category"],
-        where: { owner_id: ownerId, hostel_id: hostelId, date: { gte: previousMonthStart, lt: currentMonthStart } },
+        where: businessPreviousWhere,
         _sum: { amount: true },
       }),
       prisma.expenses.groupBy({
         by: ["date"],
-        where: { owner_id: ownerId, hostel_id: hostelId, date: { gte: sixMonthStart, lt: nextMonthStart } },
+        where: { owner_id: ownerId, date: { gte: sixMonthStart, lt: nextMonthStart } },
         _sum: { amount: true },
       }),
       prisma.payments.groupBy({
         by: ["payment_date"],
-        where: { hostel_id: hostelId, payment_date: { gte: sixMonthStart, lt: nextMonthStart } },
+        where: businessPaymentWhere(ownerId, sixMonthStart, nextMonthStart),
         _sum: { amount_paid: true },
       }),
-      prisma.hostel_daily_snapshots.findFirst({
-        where: { hostel_id: hostelId },
-        orderBy: { snapshot_date: "desc" },
-      }),
-      prisma.rooms.findMany({ where: { hostel_id: hostelId, is_active: true }, select: { id: true, capacity: true, base_rent: true } }),
-      prisma.tenants.count({ where: { hostel_id: hostelId, status: "ACTIVE" } }),
       prisma.expenses.findMany({
-        where: { owner_id: ownerId, hostel_id: hostelId, date: { gte: currentMonthStart, lt: nextMonthStart } },
+        where: businessCurrentWhere,
         select: { id: true, title: true, amount: true, date: true, category: true },
         orderBy: { created_at: "desc" },
         take: 200,
@@ -216,20 +238,11 @@ export class ExpenseService {
 
     const currentExpenses = Number(currentAgg._sum.amount || 0);
     const previousExpenses = Number(previousAgg._sum.amount || 0);
-    const collectedRevenue = Number(currentRevenue._sum.amount_paid || latestSnapshot?.collected_revenue || 0);
+    const collectedRevenue = Number(currentRevenue._sum.amount_paid || 0);
     const previousCollected = Number(previousRevenue._sum.amount_paid || 0);
     const netProfit = round(collectedRevenue - currentExpenses);
     const margin = collectedRevenue > 0 ? round((netProfit / collectedRevenue) * 100) : 0;
     const expenseRevenueRatio = collectedRevenue > 0 ? round((currentExpenses / collectedRevenue) * 100) : 0;
-    const expensePerTenant = activeTenants > 0 ? round(currentExpenses / activeTenants) : 0;
-    const totalCapacity = rooms.reduce((sum, r) => sum + Number(r.capacity || 0), 0);
-    const occupiedBeds = activeTenants;
-    const occupancyRate = totalCapacity > 0 ? round((occupiedBeds / totalCapacity) * 100) : Number(latestSnapshot?.occupancy_rate || 0);
-    const expensePerOccupiedBed = occupiedBeds > 0 ? round(currentExpenses / occupiedBeds) : 0;
-    const avgBedRent = activeTenants > 0 && collectedRevenue > 0
-      ? collectedRevenue / activeTenants
-      : rooms.reduce((sum, r) => sum + Number(r.base_rent || 0), 0) / Math.max(rooms.length, 1);
-    const vacancyLossEstimate = round(Math.max(0, totalCapacity - occupiedBeds) * avgBedRent);
 
     const previousByCategory = new Map(categoryPrevious.map((row) => [normalizeCategory(row.category), Number(row._sum.amount || 0)]));
     const categoryBreakdown = categoryCurrent
@@ -266,31 +279,20 @@ export class ExpenseService {
       return { month: key, revenue, expenses, profit: round(revenue - expenses) };
     });
 
-    const fixedExpenses = categoryBreakdown
-      .filter((c) => FIXED_CATEGORIES.has(c.category))
-      .reduce((sum, c) => sum + c.amount, 0);
-    const fixedCostRatio = currentExpenses > 0 ? round((fixedExpenses / currentExpenses) * 100) : 0;
-    const fastestGrowingCategory = [...categoryBreakdown].sort((a, b) => b.trend - a.trend)[0] || null;
-
     const duplicateKeys = new Map<string, number>();
     for (const item of duplicateCandidates) {
       const key = `${String(item.title).toLowerCase()}|${Number(item.amount)}|${new Date(item.date).toISOString().slice(0, 10)}`;
       duplicateKeys.set(key, (duplicateKeys.get(key) || 0) + 1);
     }
     const duplicateCount = Array.from(duplicateKeys.values()).filter((count) => count > 1).length;
+    const fastestGrowingCategory = [...categoryBreakdown].sort((a, b) => b.trend - a.trend)[0] || null;
 
     const insights = this.buildInsights({
       currentExpenses,
       previousExpenses,
       collectedRevenue,
-      previousCollected,
       margin,
       expenseRevenueRatio,
-      expensePerTenant,
-      expensePerOccupiedBed,
-      occupancyRate,
-      fixedCostRatio,
-      vacancyLossEstimate,
       fastestGrowingCategory,
       categoryBreakdown,
       duplicateCount,
@@ -301,6 +303,7 @@ export class ExpenseService {
         ...e,
         amount: Number(e.amount || 0),
         hostel: e.hostels?.name || null,
+        hostel_id: e.hostel_id || null,
         added_by: e.profiles?.name || e.profiles?.email || null,
         suggested_category: suggestedCategory(e.title || ""),
       })),
@@ -314,84 +317,60 @@ export class ExpenseService {
         net_profit: netProfit,
         profit_margin: margin,
         health: margin >= 25 ? "healthy" : margin >= 12 ? "warning" : "dangerous",
-        expense_per_tenant: expensePerTenant,
-        expense_per_occupied_room: expensePerOccupiedBed,
         expense_revenue_ratio: expenseRevenueRatio,
-        expense_ratio_health: healthFromRatio(expenseRevenueRatio),
-        fixed_variable_ratio: fixedCostRatio,
         fastest_growing_category: fastestGrowingCategory,
-        net_operational_margin: margin,
       },
       category_breakdown: categoryBreakdown,
       insights,
       monthly_trend: monthlyTrend,
-      occupancy_impact: {
-        occupancy_rate: occupancyRate,
-        active_tenants: activeTenants,
-        total_capacity: totalCapacity,
-        expense_per_occupied_bed: expensePerOccupiedBed,
-        vacancy_loss_estimate: vacancyLossEstimate,
-        fixed_cost_pressure: fixedCostRatio,
-        message:
-          occupancyRate < 70 && fixedCostRatio > 45
-            ? `Hostel is at ${occupancyRate}% occupancy while fixed costs remain high.`
-            : `Occupancy is ${occupancyRate}% with ${fixedCostRatio}% fixed cost pressure.`,
-      },
       meta: {
         range: { start, end },
         categories: EXPENSE_CATEGORIES,
+        hostel_filter: filters.hostelId || null,
+        accounting_scope: "business",
       },
     };
   }
 
   private buildInsights(data: any) {
     const insights: Array<{ type: string; severity: string; title: string; detail: string }> = [];
-    const food = data.categoryBreakdown.find((c: any) => c.category === "Food");
+    const food = data.categoryBreakdown.find((c: any) => c.category === "Food & Groceries");
     const electricity = data.categoryBreakdown.find((c: any) => c.category === "Electricity");
+    const salary = data.categoryBreakdown.find((c: any) => c.category === "Staff Salary");
 
-    if (data.expenseRevenueRatio > 0) {
-      insights.push({
-        type: "efficiency",
-        severity: data.expenseRevenueRatio > 55 ? "dangerous" : data.expenseRevenueRatio > 35 ? "warning" : "healthy",
-        title: `${data.expenseRevenueRatio}% of revenue consumed by operations`,
-        detail: data.expenseRevenueRatio > 55 ? "Review large and recurring costs before adding new beds." : "Operational expense ratio is within a manageable range.",
-      });
-    }
-
-    if (data.margin < 18) {
-      insights.push({
-        type: "profit",
-        severity: "dangerous",
-        title: "Profit margin dropped below 18%",
-        detail: "Collections or pricing need attention before costs scale further.",
-      });
-    }
-
-    if (food && data.collectedRevenue > 0) {
-      const foodRevenueRatio = round((food.amount / data.collectedRevenue) * 100);
+    if (food && data.currentExpenses > 0) {
       insights.push({
         type: "category",
-        severity: foodRevenueRatio > 35 ? "warning" : "healthy",
-        title: `Food costs are ${foodRevenueRatio}% of collected revenue`,
-        detail: foodRevenueRatio > 35 ? "Meal cost is becoming heavy. Check vendor rates and wastage." : "Food cost looks controlled for current collections.",
+        severity: food.percentage > 45 ? "warning" : "healthy",
+        title: `Food & Groceries consumed ${food.percentage}% of expenses this month`,
+        detail: food.percentage > 45 ? "Review kitchen purchase quantity, vendor rates, and wastage." : "Kitchen spending is within the tracked business range.",
       });
     }
 
-    if (electricity?.trend > 35) {
+    if (salary?.trend > 0) {
+      insights.push({
+        type: "salary",
+        severity: salary.trend > 20 ? "warning" : "healthy",
+        title: `Staff salary increased ${salary.trend}% compared to last month`,
+        detail: "Check one-time payments before treating this as a recurring increase.",
+      });
+    }
+
+    if (electricity?.trend > 25) {
       insights.push({
         type: "anomaly",
         severity: "warning",
-        title: `Electricity up ${electricity.trend}% compared to last month`,
-        detail: "Check AC usage, meter billing period, or duplicate EB entries.",
+        title: "Electricity spending is trending upward",
+        detail: `Electricity increased ${electricity.trend}% month over month.`,
       });
     }
 
-    if (data.occupancyRate < 70 && data.fixedCostRatio > 45) {
+    if (data.expenseRevenueRatio > 0) {
       insights.push({
-        type: "occupancy",
-        severity: "warning",
-        title: "Fixed cost pressure is high for current occupancy",
-        detail: `At ${data.occupancyRate}% occupancy, every vacant bed is amplifying operational costs.`,
+        type: "profit",
+        severity: data.expenseRevenueRatio > 60 ? "dangerous" : data.expenseRevenueRatio > 40 ? "warning" : "healthy",
+        title: `${data.expenseRevenueRatio}% of revenue went to business expenses`,
+        detail: data.expenseRevenueRatio > 60 ? "Profit is tight this month. Review top categories first." : "Expense ratio is inside a manageable business range.",
       });
     }
 
@@ -417,7 +396,7 @@ export class ExpenseService {
       insights.push({
         type: "healthy",
         severity: "healthy",
-        title: "Expenses look controlled this month",
+        title: "Business expenses look controlled this month",
         detail: "Keep logging daily costs to improve trend accuracy.",
       });
     }
@@ -432,7 +411,7 @@ export class ExpenseService {
     date: Date | string;
     category: string;
     status?: string;
-    hostel_id: string;
+    hostel_id?: string | null;
     notes?: string;
     vendor_name?: string;
     payment_method?: string;
@@ -445,10 +424,11 @@ export class ExpenseService {
     tags?: string[];
     metadata?: any;
   }) {
-    if (!data.hostel_id) throw new Error("HOSTEL_CONTEXT_REQUIRED: Expense requires hostel_id");
+    if (!data.title?.trim()) throw new Error("VALIDATION: Title is required");
     if (!Number.isFinite(Number(data.amount)) || Number(data.amount) <= 0) {
       throw new Error("VALIDATION: Amount must be greater than zero");
     }
+    if (!data.payment_method) throw new Error("VALIDATION: Payment method is required");
 
     const parsedDate = data.date instanceof Date ? data.date : new Date(data.date);
     if (Number.isNaN(parsedDate.getTime())) throw new Error("VALIDATION: Invalid date provided");
@@ -458,25 +438,27 @@ export class ExpenseService {
       data: {
         id: randomUUID(),
         owner_id: data.owner_id,
-        title: data.title,
+        title: data.title.trim(),
         amount: Number(data.amount),
         date: parsedDate,
         category,
         status: data.status || "paid",
-        hostel_id: data.hostel_id,
+        hostel_id: data.hostel_id || null,
         notes: data.notes || null,
         vendor_name: data.vendor_name || null,
         payment_method: data.payment_method || null,
         receipt_url: data.receipt_url || null,
         receipt_uploaded_at: data.receipt_url ? new Date() : null,
         is_recurring: Boolean(data.is_recurring),
-        recurring_frequency: data.recurring_frequency || null,
+        recurring_frequency: data.is_recurring ? data.recurring_frequency || "monthly" : null,
         created_by: data.created_by || data.owner_id,
         approved_by: data.approved_by || null,
-        expense_type: data.expense_type || (FIXED_CATEGORIES.has(category) ? "FIXED" : "VARIABLE"),
+        expense_type: data.expense_type || "BUSINESS",
         tags: data.tags || [],
         metadata: {
           ...(data.metadata || {}),
+          accounting_scope: "business",
+          hostel_reference_only: Boolean(data.hostel_id),
           suggested_category: suggestedCategory(data.title),
         },
       } as any,
@@ -485,7 +467,7 @@ export class ExpenseService {
     await eventSystem.trigger("expense_created", {
       expense_id: expense.id,
       owner_id: data.owner_id,
-      hostel_id: data.hostel_id,
+      hostel_id: data.hostel_id || undefined,
       title: data.title,
       amount: data.amount,
     });
@@ -498,10 +480,19 @@ export class ExpenseService {
     if (!existing) throw new Error("NOT_FOUND: Expense not found");
 
     const updateData: any = {};
-    if (data.title !== undefined) updateData.title = data.title;
-    if (data.amount !== undefined) updateData.amount = Number(data.amount);
+    if (data.title !== undefined) {
+      if (!String(data.title).trim()) throw new Error("VALIDATION: Title is required");
+      updateData.title = String(data.title).trim();
+    }
+    if (data.amount !== undefined) {
+      if (!Number.isFinite(Number(data.amount)) || Number(data.amount) <= 0) {
+        throw new Error("VALIDATION: Amount must be greater than zero");
+      }
+      updateData.amount = Number(data.amount);
+    }
     if (data.category !== undefined) updateData.category = normalizeCategory(data.category);
     if (data.status !== undefined) updateData.status = data.status;
+    if (data.hostel_id !== undefined || data.hostelId !== undefined) updateData.hostel_id = data.hostel_id ?? data.hostelId ?? null;
     if (data.notes !== undefined) updateData.notes = data.notes || null;
     if (data.vendor_name !== undefined) updateData.vendor_name = data.vendor_name || null;
     if (data.payment_method !== undefined) updateData.payment_method = data.payment_method || null;
@@ -519,13 +510,29 @@ export class ExpenseService {
       if (!Number.isNaN(d.getTime())) updateData.date = d;
     }
 
-    return prisma.expenses.update({ where: { id: expenseId }, data: updateData });
+    const expense = await prisma.expenses.update({ where: { id: expenseId }, data: updateData });
+    await eventSystem.trigger("expense_updated", {
+      expense_id: expense.id,
+      owner_id: ownerId,
+      hostel_id: expense.hostel_id || existing.hostel_id || undefined,
+      title: expense.title,
+      amount: Number(expense.amount || 0),
+    });
+    return expense;
   }
 
   async deleteExpense(expenseId: string, ownerId: string) {
     const existing = await prisma.expenses.findFirst({ where: { id: expenseId, owner_id: ownerId } });
     if (!existing) throw new Error("NOT_FOUND: Expense not found");
-    return prisma.expenses.delete({ where: { id: expenseId } });
+    const expense = await prisma.expenses.delete({ where: { id: expenseId } });
+    await eventSystem.trigger("expense_deleted", {
+      expense_id: expense.id,
+      owner_id: ownerId,
+      hostel_id: expense.hostel_id || undefined,
+      title: expense.title,
+      amount: Number(expense.amount || 0),
+    });
+    return expense;
   }
 }
 

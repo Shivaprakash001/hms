@@ -2,11 +2,14 @@ import api from '@lib/api-client';
 
 export const expenseService = {
     getAll: async (hostelId, params = {}) => {
-        const response = await api.get('/expenses', { params: { hostelId, ...params } });
+        const requestParams = { ...params };
+        if (hostelId) requestParams.hostelId = hostelId;
+        const response = await api.get('/expenses', { params: requestParams });
         return response.data.success !== undefined ? (response.data.data !== undefined ? response.data.data : response.data) : response.data;
     },
     create: async (hostelId, data) => {
-        let payload = { ...data, hostelId };
+        let payload = { ...data, hostelId: data?.hostelId ?? hostelId ?? undefined };
+        if (!payload.hostelId) delete payload.hostelId;
         if (data?.receipt_image instanceof File) {
             const { receipt_image, ...expenseData } = payload;
             const formData = new FormData();

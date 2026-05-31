@@ -38,7 +38,7 @@
 |---|---|
 | Payment recorded | Invalidate owner, hostel, portfolio, and tenant dashboard tags. |
 | Rent generated | Invalidate owner and hostel dashboard tags. |
-| Expense changed | Invalidate owner, hostel, analytics, and portfolio tags. |
+| Expense changed | Invalidate owner, optional hostel, analytics, and portfolio tags. |
 | Tenant activated, transferred, moved out, or reactivated | Invalidate owner, hostel, and tenant dashboard tags. |
 | Room allocated, released, created, updated, or deleted | Invalidate owner and hostel dashboard tags. |
 | Reminder or late fee creates financial state | Invalidate owner, hostel, and portfolio tags. |
@@ -47,6 +47,7 @@
 1. Redis tag sets remember cache keys created for each owner, hostel, or tenant.
 2. Domain events delete tagged keys after mutations.
 3. Short TTLs protect users if a rare invalidation path is missed.
+4. Business expenses invalidate owner totals even when no hostel is referenced.
 
 ## Redis queue primitives
 

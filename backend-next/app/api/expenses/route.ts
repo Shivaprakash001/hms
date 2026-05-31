@@ -28,7 +28,7 @@ async function parseExpenseCreateBody(req: NextRequest) {
   };
 }
 
-async function uploadReceiptImage(file: File, ownerId: string, hostelId: string) {
+async function uploadReceiptImage(file: File, ownerId: string, hostelId?: string) {
   if (!ALLOWED_RECEIPT_MIME.includes(file.type)) {
     throw new Error("VALIDATION: Receipt must be a JPG, PNG, or WEBP image");
   }
@@ -41,9 +41,11 @@ async function uploadReceiptImage(file: File, ownerId: string, hostelId: string)
   const upload = await imagekit.files.upload({
     file: buffer.toString("base64"),
     fileName: `expense_receipt_${Date.now()}.${extension}`,
-    folder: `owners/${ownerId}/hostels/${hostelId}/expenses/receipts`,
+    folder: hostelId
+      ? `owners/${ownerId}/hostels/${hostelId}/expenses/receipts`
+      : `owners/${ownerId}/business-expenses/receipts`,
     useUniqueFileName: true,
-    tags: ["expense_receipt", hostelId],
+    tags: ["expense_receipt", hostelId || "business"],
   });
 
   if (!upload?.url) throw new Error("UPLOAD_FAILED: Receipt upload failed");
@@ -64,14 +66,14 @@ export async function GET(req: NextRequest) {
   try {
     const scope = resolveOwnerScope(session);
     const hostelId = req.nextUrl.searchParams.get("hostelId") || undefined;
-    await requireHostelBelongsToOwner(scope.owner_id, hostelId);
-    if (!hostelId) return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
+    if (hostelId) await requireHostelBelongsToOwner(scope.owner_id, hostelId);
     const categories = req.nextUrl.searchParams.get("categories");
     const { limit, offset } = safePagination(req.nextUrl.searchParams.get("limit"), req.nextUrl.searchParams.get("offset"));
-    const expenses = await expenseService.getAllExpenses(scope.owner_id, hostelId, {
+    const expenses = await expenseService.getAllExpenses(scope.owner_id, {
       range: req.nextUrl.searchParams.get("range") || undefined,
       startDate: req.nextUrl.searchParams.get("startDate") || undefined,
       endDate: req.nextUrl.searchParams.get("endDate") || undefined,
+      hostelId,
       categories: categories ? categories.split(",").filter(Boolean) : undefined,
       status: req.nextUrl.searchParams.get("status") || undefined,
       sort: req.nextUrl.searchParams.get("sort") || undefined,
@@ -95,12 +97,11 @@ export async function POST(req: NextRequest) {
     const scope = resolveOwnerScope(session);
     const { body, receiptFile } = await parseExpenseCreateBody(req);
 
-    if (!body.title || !body.amount || !body.date || !body.category) {
-      return apiError("Missing required fields: title, amount, date, category", "VALIDATION_ERROR", 400);
+    if (!body.title || !body.amount || !body.date || !body.category || !body.payment_method) {
+      return apiError("Missing required fields: title, amount, date, category, payment_method", "VALIDATION_ERROR", 400);
     }
 
-    await requireHostelBelongsToOwner(scope.owner_id, body.hostelId || undefined);
-    if (!body.hostelId) return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
+    if (body.hostelId) await requireHostelBelongsToOwner(scope.owner_id, body.hostelId);
 
     const receiptUrl = receiptFile
       ? await uploadReceiptImage(receiptFile, scope.owner_id, body.hostelId)
@@ -113,7 +114,7 @@ export async function POST(req: NextRequest) {
       date: body.date,
       category: body.category,
       status: body.status || "paid",
-      hostel_id: body.hostelId || undefined, // Phase 4: hostel-scoped expenses
+      hostel_id: body.hostelId || null,
       notes: body.notes,
       vendor_name: body.vendor_name,
       payment_method: body.payment_method,
