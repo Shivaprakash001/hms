@@ -1,13 +1,29 @@
 import axios from 'axios';
 
-const DEFAULT_PRODUCTION_API_URL = 'https://api.sriadithyahostels.in';
+const configuredApiUrl = import.meta.env.VITE_API_URL;
+const DEFAULT_PRODUCTION_API_URL = 'https://api.sriadithyahostels.in/api';
 const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
 const isLocalDev =
   typeof window !== 'undefined' && LOCAL_HOSTNAMES.has(window.location.hostname);
 
+const normalizeApiUrl = (value?: string) => {
+  const trimmed = typeof value === 'string' ? value.trim().replace(/\/+$/, '') : '';
+  if (!trimmed) return DEFAULT_PRODUCTION_API_URL;
+
+  try {
+    const parsed = new URL(trimmed);
+    const pathname = parsed.pathname.replace(/\/+$/, '');
+    if (!pathname || pathname === '/') return `${parsed.origin}/api`;
+    if (pathname.toLowerCase() === '/api') return `${parsed.origin}/api`;
+    return `${parsed.origin}${pathname}`;
+  } catch {
+    return DEFAULT_PRODUCTION_API_URL;
+  }
+};
+
 const baseURL = isLocalDev
   ? '/api'
-  : DEFAULT_PRODUCTION_API_URL;
+  : normalizeApiUrl(configuredApiUrl);
 
 const api = axios.create({
   baseURL,
