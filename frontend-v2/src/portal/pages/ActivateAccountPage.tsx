@@ -60,6 +60,14 @@ type RuleCategory = {
   rules?: string[];
 };
 
+type ProfileDraft = {
+  profile: Record<string, string>;
+  selectedCollege: string;
+  selectedCourse: string;
+  photoUrl: string;
+  savedAt: number;
+};
+
 const currency = (value: unknown) =>
   Number(value || 0).toLocaleString('en-IN', {
     style: 'currency',
@@ -184,6 +192,47 @@ function invalidPhoneMessage(values: { primary?: string; emergency?: string; gua
     }
   }
   return '';
+}
+
+function profileDraftKey(token: string) {
+  return `hms:tenant-activation:${token}:profile-draft`;
+}
+
+function readProfileDraft(token: string): ProfileDraft | null {
+  if (!token || typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(profileDraftKey(token));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<ProfileDraft>;
+    if (!parsed.profile || typeof parsed.profile !== 'object') return null;
+    return {
+      profile: parsed.profile as Record<string, string>,
+      selectedCollege: String(parsed.selectedCollege || ''),
+      selectedCourse: String(parsed.selectedCourse || ''),
+      photoUrl: String(parsed.photoUrl || ''),
+      savedAt: Number(parsed.savedAt || Date.now()),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeProfileDraft(token: string, draft: Omit<ProfileDraft, 'savedAt'>) {
+  if (!token || typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(profileDraftKey(token), JSON.stringify({ ...draft, savedAt: Date.now() }));
+  } catch {
+    // Local draft save is best-effort. Backend save still remains authoritative.
+  }
+}
+
+function clearProfileDraft(token: string) {
+  if (!token || typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem(profileDraftKey(token));
+  } catch {
+    // Ignore storage failures.
+  }
 }
 
 const fieldClass =
@@ -327,6 +376,9 @@ export function ActivateAccountPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [activationMessageIndex, setActivationMessageIndex] = useState(0);
+  const [profileDraftReady, setProfileDraftReady] = useState(false);
+  const [profileDraftStatus, setProfileDraftStatus] = useState<'idle' | 'restored' | 'saving' | 'saved'>('idle');
+  const [photoUploading, setPhotoUploading] = useState(false);
 
   const [account, setAccount] = useState({ password: '', confirm_password: '', phone: '' });
   const [acks, setAcks] = useState<Record<string, boolean>>({});
@@ -363,12 +415,12 @@ export function ActivateAccountPage() {
       return;
     }
     setChecking(true);
+    setProfileDraftReady(false);
     try {
       const data = await tenantService.getActivationContext(token);
+      const draft = readProfileDraft(token);
       setCtx(data);
-      if (data.tenant?.photo_url) {
-        setProfilePhotoPreview(data.tenant.photo_url);
-      }
+      setProfilePhotoPreview(String(data.tenant?.photo_url || draft?.photoUrl || ''));
       setInvalid(false);
       setInvalidCode('');
       setError('');
@@ -391,27 +443,42 @@ export function ActivateAccountPage() {
         setSelectedCourse('Other');
       }
 
-      setProfile((prev) => ({
-        ...prev,
-        phone: prev.phone || phoneDigits(data.tenant?.phone_1 || data.profile?.phone),
-        gender: prev.gender || String(data.tenant?.gender || ''),
-        date_of_birth: prev.date_of_birth || String(data.tenant?.date_of_birth || ''),
-        permanent_address: prev.permanent_address || String(data.tenant?.permanent_address || ''),
-        temporary_address: prev.temporary_address || String(data.tenant?.temporary_address || ''),
-        profile_type: prev.profile_type || String(data.tenant?.profile_type || 'STUDENT'),
-        college_name: prev.college_name || college,
-        course: prev.course || course,
-        year_of_study: prev.year_of_study || String(data.tenant?.year_of_study || ''),
-        branch: prev.branch || String(data.tenant?.branch || ''),
-        roll_number: prev.roll_number || String(data.tenant?.roll_number || ''),
-        office_name: prev.office_name || String(data.tenant?.office_name || ''),
-        office_location: prev.office_location || String(data.tenant?.office_location || ''),
-        job_role: prev.job_role || String(data.tenant?.job_role || ''),
-        guardian_name: prev.guardian_name || String(data.tenant?.guardian_name || ''),
-        guardian_phone: prev.guardian_phone || phoneDigits(data.tenant?.guardian_phone || data.tenant?.phone_2),
-        guardian_relation: prev.guardian_relation || String(data.tenant?.guardian_relation || ''),
-        emergency_phone: prev.emergency_phone || phoneDigits(data.tenant?.phone_3),
-      }));
+      if (draft?.selectedCollege) {
+        setSelectedCollege(draft.selectedCollege);
+      }
+      if (draft?.selectedCourse) {
+        setSelectedCourse(draft.selectedCourse);
+      }
+
+      const backendProfile = {
+        phone: phoneDigits(data.tenant?.phone_1 || data.profile?.phone),
+        gender: String(data.tenant?.gender || ''),
+        date_of_birth: String(data.tenant?.date_of_birth || ''),
+        permanent_address: String(data.tenant?.permanent_address || ''),
+        temporary_address: String(data.tenant?.temporary_address || ''),
+        profile_type: String(data.tenant?.profile_type || 'STUDENT'),
+        college_name: college,
+        course,
+        year_of_study: String(data.tenant?.year_of_study || ''),
+        branch: String(data.tenant?.branch || ''),
+        roll_number: String(data.tenant?.roll_number || ''),
+        office_name: String(data.tenant?.office_name || ''),
+        office_location: String(data.tenant?.office_location || ''),
+        job_role: String(data.tenant?.job_role || ''),
+        guardian_name: String(data.tenant?.guardian_name || ''),
+        guardian_phone: phoneDigits(data.tenant?.guardian_phone || data.tenant?.phone_2),
+        guardian_relation: String(data.tenant?.guardian_relation || ''),
+        emergency_phone: phoneDigits(data.tenant?.phone_3),
+      };
+
+      setProfile({
+        ...backendProfile,
+        ...(data.activation_state?.profile_completed ? {} : draft?.profile || {}),
+      });
+      if (data.activation_state?.profile_completed) {
+        clearProfileDraft(token);
+      }
+      setProfileDraftStatus(draft && !data.activation_state?.profile_completed ? 'restored' : 'idle');
     } catch (err: unknown) {
       const message =
         (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ||
@@ -422,6 +489,7 @@ export function ActivateAccountPage() {
       setInvalidCode(code);
       setError(message);
     } finally {
+      setProfileDraftReady(true);
       setChecking(false);
     }
   };
@@ -449,6 +517,33 @@ export function ActivateAccountPage() {
     return () => window.clearInterval(timer);
   }, [activeStep, submitting]);
 
+  useEffect(() => {
+    if (!token || !ctx || !profileDraftReady || ctx.activation_state.profile_completed) return;
+    if (activeStep !== 'PROFILE') return;
+
+    setProfileDraftStatus('saving');
+    const timer = window.setTimeout(() => {
+      writeProfileDraft(token, {
+        profile,
+        selectedCollege,
+        selectedCourse,
+        photoUrl: /^https?:\/\//.test(profilePhotoPreview) ? profilePhotoPreview : '',
+      });
+      setProfileDraftStatus('saved');
+    }, 700);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    activeStep,
+    ctx,
+    profile,
+    profileDraftReady,
+    profilePhotoPreview,
+    selectedCollege,
+    selectedCourse,
+    token,
+  ]);
+
   const goToStep = (step: ActivationStep) => {
     const completed = new Set(ctx?.completed_steps ?? ctx?.activation_state.completed_steps ?? []);
     if (step === currentStep || completed.has(step)) {
@@ -469,22 +564,24 @@ export function ActivateAccountPage() {
           try {
             await login(ctx.profile.email, lastPassword);
             navigate('/tenant/dashboard', { replace: true });
-            return;
+            return true;
           } catch {
             navigate('/login?signin=1', { replace: true });
-            return;
+            return true;
           }
         }
         navigate(result?.redirect_to || '/login?signin=1', { replace: true });
-        return;
+        return true;
       }
       setCtx(result as ActivationContext);
       setVisibleStep(null);
+      return true;
     } catch (err: unknown) {
       const message =
         (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ||
         'Could not save this step';
       setError(message);
+      return false;
     } finally {
       setSubmitting(false);
     }
@@ -495,7 +592,7 @@ export function ActivateAccountPage() {
     submitStep('ACCOUNT', account);
   };
 
-  const handlePhotoChange = (file?: File) => {
+  const handlePhotoChange = async (file?: File) => {
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) {
       setError('Image must be under 2MB');
@@ -507,6 +604,31 @@ export function ActivateAccountPage() {
       setProfilePhotoPreview(reader.result as string);
     };
     reader.readAsDataURL(file);
+
+    setPhotoUploading(true);
+    setError('');
+    try {
+      const uploadRes = await tenantService.uploadActivationPhoto(token, file);
+      if (uploadRes?.photo_url) {
+        setProfilePhotoPreview(uploadRes.photo_url);
+        setProfilePhotoFile(null);
+        writeProfileDraft(token, {
+          profile,
+          selectedCollege,
+          selectedCourse,
+          photoUrl: uploadRes.photo_url,
+        });
+        setProfileDraftStatus('saved');
+      }
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.error?.message ||
+        err?.message ||
+        'Photo upload failed. You can try again or save after choosing the photo.';
+      setError(message);
+    } finally {
+      setPhotoUploading(false);
+    }
   };
 
   const profileSubmit = async (e: FormEvent) => {
@@ -545,7 +667,11 @@ export function ActivateAccountPage() {
           photoUrl = uploadRes.photo_url;
         }
       }
-      await submitStep('PROFILE', { ...profile, photo_url: photoUrl });
+      const saved = await submitStep('PROFILE', { ...profile, photo_url: photoUrl });
+      if (saved) {
+        clearProfileDraft(token);
+        setProfileDraftStatus('idle');
+      }
     } catch (err: any) {
       const message =
         err?.response?.data?.error?.message ||
@@ -706,7 +832,44 @@ export function ActivateAccountPage() {
             </div>
           ) : null}
 
-          {activeStep === 'ACCOUNT' && (!showWelcome || ctx.activation_state.account_setup_completed) && (
+          {activeStep === 'ACCOUNT' && ctx.activation_state.account_setup_completed && (
+            <div className="space-y-5">
+              <SectionHeading
+                icon={<UserRound className="w-5 h-5" />}
+                title="Account setup saved"
+                text="Your password is securely saved and hidden. Your phone number is restored from the saved account details."
+              />
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+                  <div>
+                    <p className="font-bold">Password saved securely</p>
+                    <p className="mt-1 text-emerald-800">
+                      We do not show saved passwords again. If you reload or return to this step, only your saved phone number is shown.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <Field
+                label="Primary mobile"
+                required
+                value={account.phone}
+                onChange={(v) => setAccount({ ...account, phone: phoneDigits(v) })}
+                inputMode="tel"
+                helperText="Saved with your account setup."
+              />
+              <button
+                type="button"
+                onClick={() => setVisibleStep(null)}
+                className="inline-flex items-center gap-2 rounded-2xl bg-accent px-5 py-3.5 text-sm font-semibold text-accent-foreground active:scale-[0.98] transition-transform shadow-sm"
+              >
+                Continue setup
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+
+          {activeStep === 'ACCOUNT' && !ctx.activation_state.account_setup_completed && !showWelcome && (
             <form onSubmit={accountSubmit} className="space-y-5">
               <SectionHeading icon={<UserRound className="w-5 h-5" />} title="Set up your account" text="Choose your password and confirm your primary mobile number. No OTP is required." />
               <div className="grid gap-4 sm:grid-cols-2">
@@ -862,6 +1025,29 @@ export function ActivateAccountPage() {
           {activeStep === 'PROFILE' && (
             <form onSubmit={profileSubmit} className="space-y-5">
               <SectionHeading icon={<ShieldCheck className="w-5 h-5" />} title="Complete required profile details" text="Start with personal and guardian contacts, then add address, academic or work details, and profile photo." />
+              <div className="flex items-center gap-2 rounded-2xl border border-border bg-secondary/40 px-4 py-3 text-xs font-semibold text-muted-foreground">
+                {profileDraftStatus === 'saving' ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin text-accent" />
+                    Saving draft...
+                  </>
+                ) : profileDraftStatus === 'restored' ? (
+                  <>
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    Draft restored from this device
+                  </>
+                ) : profileDraftStatus === 'saved' ? (
+                  <>
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    Draft saved locally
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    Saved steps are synced to your account
+                  </>
+                )}
+              </div>
 
               <FormGroup title="Personal details">
               <div className="grid gap-4 sm:grid-cols-2">
@@ -1044,9 +1230,14 @@ export function ActivateAccountPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-foreground text-sm">Profile photo *</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">JPG, PNG, or WEBP under 2MB</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {photoUploading ? 'Uploading photo now...' : 'JPG, PNG, or WEBP under 2MB'}
+                  </p>
                   {profilePhotoFile && (
                     <p className="text-xs text-accent font-medium mt-1 truncate">{profilePhotoFile.name}</p>
+                  )}
+                  {!profilePhotoFile && /^https?:\/\//.test(profilePhotoPreview) && (
+                    <p className="text-xs text-emerald-700 font-medium mt-1">Photo uploaded and saved</p>
                   )}
                 </div>
                 <input
@@ -1058,7 +1249,9 @@ export function ActivateAccountPage() {
                 <span className="text-sm font-semibold text-accent shrink-0">Choose</span>
               </label>
               </FormGroup>
-              <PrimaryButton loading={submitting}>Save profile</PrimaryButton>
+              <PrimaryButton loading={submitting || photoUploading}>
+                {photoUploading ? 'Uploading photo...' : 'Save profile'}
+              </PrimaryButton>
             </form>
           )}
 
