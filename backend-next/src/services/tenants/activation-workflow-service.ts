@@ -461,6 +461,7 @@ export class ActivationWorkflowService {
         id: tenant.id,
         profile_type: tenant.profile_type,
         status: tenant.status,
+        photo_url: tenant.photo_url,
         phone_1: tenant.phone_1,
         phone_2: tenant.phone_2,
         phone_3: tenant.phone_3,

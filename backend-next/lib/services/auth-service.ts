@@ -24,7 +24,7 @@ type CompletePasswordResetInput = {
 
 const GENERIC_RESET_RESPONSE = {
   success: true,
-  message: "If an account exists for this email, password reset instructions have been sent.",
+  message: "If an account exists for this email, Supabase will send password reset instructions.",
 };
 
 function tokenFingerprint(value: string) {

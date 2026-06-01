@@ -39,6 +39,22 @@ function envList(value?: string | null) {
     .filter(Boolean);
 }
 
+function isLocalhostUrl(value?: string | null) {
+  const normalized = normalizeUrl(value);
+  if (!normalized) return false;
+
+  try {
+    const hostname = new URL(normalized).hostname;
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  } catch {
+    return normalized.includes("localhost") || normalized.includes("127.0.0.1");
+  }
+}
+
+function isProductionRuntime() {
+  return process.env.VERCEL_ENV === "production" || process.env.NODE_ENV === "production";
+}
+
 function joinUrl(base: string, path = "") {
   const cleanBase = normalizeUrl(base);
   if (!path) return cleanBase;
@@ -48,6 +64,9 @@ function joinUrl(base: string, path = "") {
 export function getFrontendUrl() {
   const resolved = normalizeUrl(process.env.NEXT_PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL) || PRODUCTION_FRONTEND_URL;
   if (resolved.includes("api.sriadithyahostels.in")) {
+    return PRODUCTION_FRONTEND_URL;
+  }
+  if (isProductionRuntime() && isLocalhostUrl(resolved)) {
     return PRODUCTION_FRONTEND_URL;
   }
   return resolved;

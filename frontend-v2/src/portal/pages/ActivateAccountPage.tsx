@@ -376,7 +376,7 @@ export function ActivateAccountPage() {
   const [visibleStep, setVisibleStep] = useState<ActivationStep | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [activationMessageIndex, setActivationMessageIndex] = useState(0);
+  const [activationProgress, setActivationProgress] = useState(0);
   const [profileDraftReady, setProfileDraftReady] = useState(false);
   const [profileDraftStatus, setProfileDraftStatus] = useState<'idle' | 'restored' | 'saving' | 'saved'>('idle');
   const [photoUploading, setPhotoUploading] = useState(false);
@@ -506,15 +506,32 @@ export function ActivateAccountPage() {
   const requiredAcks = ctx?.rules?.required_acknowledgements ?? [];
   const allAcksChecked = requiredAcks.length > 0 && requiredAcks.every((key) => acks[key] === true);
   const strength = passwordStrength(account.password);
+  const activationStageIndex = activationProgress < 40 ? 0 : activationProgress < 78 ? 1 : 2;
+  const activationProgressWidth = `${Math.max(8, Math.round(activationProgress))}%`;
+
   useEffect(() => {
     setVisibleStep(null);
   }, [ctx?.current_step, ctx?.activation_state.current_step]);
 
   useEffect(() => {
-    if (!(submitting && activeStep === 'ACTIVATE')) return;
+    if (!(submitting && activeStep === 'ACTIVATE')) {
+      setActivationProgress(0);
+      return;
+    }
+
+    const startedAt = Date.now();
+    setActivationProgress(8);
     const timer = window.setInterval(() => {
-      setActivationMessageIndex((current) => (current + 1) % activationMessages.length);
-    }, 1200);
+      const elapsed = Date.now() - startedAt;
+      const next =
+        elapsed < 1800
+          ? 8 + (elapsed / 1800) * 32
+          : elapsed < 4600
+            ? 40 + ((elapsed - 1800) / 2800) * 38
+            : 78 + Math.min(((elapsed - 4600) / 6500) * 16, 16);
+      setActivationProgress(next);
+    }, 250);
+
     return () => window.clearInterval(timer);
   }, [activeStep, submitting]);
 
@@ -1287,10 +1304,13 @@ export function ActivateAccountPage() {
                 <div className="rounded-2xl border border-accent/30 bg-accent/5 p-4">
                   <div className="flex items-center gap-3">
                     <Loader2 className="h-5 w-5 animate-spin text-accent" />
-                    <p className="text-sm font-bold text-foreground">{activationMessages[activationMessageIndex]}</p>
+                    <p className="text-sm font-bold text-foreground">{activationMessages[activationStageIndex]}</p>
                   </div>
                   <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
-                    <div className="h-full w-2/3 animate-pulse rounded-full bg-accent" />
+                    <div
+                      className="h-full rounded-full bg-accent transition-[width] duration-500 ease-out"
+                      style={{ width: activationProgressWidth }}
+                    />
                   </div>
                 </div>
               )}
