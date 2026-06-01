@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Loader2, Chrome, MapPin, UtensilsCrossed, Shield, AlertCircle } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { useAuth } from '@context/AuthContext';
@@ -70,30 +70,11 @@ const getErrorDetails = (error: string) => {
 export function LoginPage() {
   const { login, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
-  const loginSearch = new URLSearchParams(location.search);
-  const [storedSessionNotice] = useState(() => readSessionExpiryNotice());
-  const locationState = location.state as {
-    sessionExpired?: boolean;
-    sessionMessage?: string;
-  } | null;
-  const sessionExpired = Boolean(locationState?.sessionExpired || storedSessionNotice);
-  const sessionExpiredMessage =
-    locationState?.sessionMessage ||
-    storedSessionNotice?.message ||
-    'You were signed out because your account was inactive for more than 30 minutes.';
-  const isIntentionalSignIn = loginSearch.get('signin') === '1' || sessionExpired;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (!isIntentionalSignIn) {
-      navigate('/', { replace: true });
-    }
-  }, [isIntentionalSignIn, navigate]);
 
   const navigateForUser = (user: any) => {
     const role = (user?.role || '').toLowerCase();
@@ -246,21 +227,6 @@ export function LoginPage() {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-5">
-            {sessionExpired && !error && (
-              <div
-                className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm"
-                style={{ color: '#92400E' }}
-              >
-                <Shield className="mt-0.5 h-5 w-5 shrink-0" />
-                <div>
-                  <p className="font-semibold">Session expired for your security</p>
-                  <p className="mt-1 leading-5">{sessionExpiredMessage}</p>
-                  <p className="mt-1 leading-5">
-                    This helps protect payment information, tenant records, and financial activity.
-                  </p>
-                </div>
-              </div>
-            )}
             {error && (() => {
               const { title, message, action } = getErrorDetails(error);
               return (

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { Phone, MapPin, MessageCircle } from 'lucide-react';
 import { ScrollReveal } from './ScrollReveal';
 import hostelLogo from './assets/hostel_icon.jpeg';
@@ -71,6 +72,12 @@ export function Footer() {
               >
                 Contact
               </button>
+              <Link
+                to="/login"
+                className="block text-white/80 hover:text-white transition-colors text-sm"
+              >
+                Tenant / Owner Login
+              </Link>
             </div>
           </div>
 
