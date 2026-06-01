@@ -43,7 +43,7 @@ export function Navbar() {
               Contact
             </button>
             <Link
-              to="/login"
+              to="/login?signin=1"
               className="text-[#2C2C2A] hover:text-[#F07B1D] transition-colors border border-[#F07B1D] px-4 py-2 rounded-lg"
             >
               Login
@@ -59,7 +59,7 @@ export function Navbar() {
 
           <div className="md:hidden flex items-center gap-2">
             <Link
-              to="/login"
+              to="/login?signin=1"
               className="text-[#2C2C2A] border border-[#F07B1D] px-3 py-2 rounded-lg text-sm"
             >
               Login
