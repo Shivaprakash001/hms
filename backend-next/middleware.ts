@@ -28,6 +28,11 @@ const PUBLIC_ROUTES = [
   "/api/cron",
 ];
 
+const PUBLIC_CSRF_ROUTES = [
+  "/api/auth/forgot-password",
+  "/api/auth/reset-password",
+];
+
 function isValidCsrfPair(cookieToken?: string | null, headerToken?: string | null) {
   if (!cookieToken || !headerToken) return false;
   if (cookieToken.length < 32 || headerToken.length < 32) return false;
@@ -63,6 +68,24 @@ export async function middleware(req: NextRequest) {
 
   // 2. Allow public routes
   if (PUBLIC_ROUTES.some((route) => pathname.startsWith(route))) {
+    const response = NextResponse.next();
+    Object.entries(corsHeaders).forEach(([k, v]) => response.headers.set(k, v));
+    return response;
+  }
+
+  // Public form endpoints do not require a logged-in JWT, but they still
+  // require CSRF protection because browsers automatically attach cookies.
+  if (PUBLIC_CSRF_ROUTES.some((route) => pathname.startsWith(route))) {
+    if (UNSAFE_METHODS.has(req.method)) {
+      const csrfCookie = req.cookies.get(CSRF_COOKIE_NAME)?.value;
+      const csrfHeader = req.headers.get(CSRF_HEADER_NAME);
+      if (!isValidCsrfPair(csrfCookie, csrfHeader)) {
+        return NextResponse.json(
+          { error: { message: "Security check failed. Refresh the page and try again.", code: "CSRF_VALIDATION_FAILED" } },
+          { status: 403, headers: corsHeaders }
+        );
+      }
+    }
     const response = NextResponse.next();
     Object.entries(corsHeaders).forEach(([k, v]) => response.headers.set(k, v));
     return response;

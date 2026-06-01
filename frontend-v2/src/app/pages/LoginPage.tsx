@@ -313,7 +313,16 @@ export function LoginPage() {
                 style={{ color: '#1B2D5B' }}
                 htmlFor="password"
               >
-                Password
+                <span className="flex items-center justify-between gap-3">
+                  <span>Password</span>
+                  <Link
+                    to="/forgot-password"
+                    className="text-xs font-bold underline-offset-4 hover:underline"
+                    style={{ color: '#F07B1D' }}
+                  >
+                    Forgot password?
+                  </Link>
+                </span>
               </label>
               <div className="relative">
                 <input

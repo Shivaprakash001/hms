@@ -38,6 +38,23 @@ export const ChangePasswordSchema = z.object({
   new_password: z.string().min(8).max(PASSWORD_MAX),
 });
 
+export const ForgotPasswordSchema = z.object({
+  email: z.string().trim().email().max(SHORT_TEXT),
+});
+
+export const ResetPasswordSchema = z.object({
+  code: z.string().min(1).max(4096).optional(),
+  access_token: z.string().min(1).max(8192).optional(),
+  new_password: z.string().min(8).max(PASSWORD_MAX),
+  confirm_password: z.string().min(8).max(PASSWORD_MAX),
+}).refine((data) => Boolean(data.code || data.access_token), {
+  message: "Reset token is required",
+  path: ["code"],
+}).refine((data) => data.new_password === data.confirm_password, {
+  message: "Passwords do not match",
+  path: ["confirm_password"],
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Tenant & Enrollment Schemas
 // ─────────────────────────────────────────────────────────────────────────────

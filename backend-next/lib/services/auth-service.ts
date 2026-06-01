@@ -2,14 +2,46 @@ import { prisma, supabase } from "../db";
 import { verifyPassword, hashPassword, generateToken } from "../auth";
 import { z } from "zod";
 import { LoginSchema } from "../validators";
-import { randomUUID } from "crypto";
-import { getGoogleRedirectUri } from "../config/domains";
+import { createHash, randomBytes, randomUUID } from "crypto";
+import { createClient } from "@supabase/supabase-js";
+import { frontendUrl, getGoogleRedirectUri } from "../config/domains";
 import { sessionLifecycleService } from "./session-lifecycle-service";
+import { eventLog } from "./event-log-service";
+import { setOneTimeLock } from "@/lib/redis/rate-limit";
+import { redisKeys } from "@/lib/redis/keys";
 
 type AuthSessionMeta = {
   ipAddress?: string | null;
   userAgent?: string | null;
 };
+
+type CompletePasswordResetInput = {
+  code?: string;
+  accessToken?: string;
+  newPassword: string;
+  meta?: AuthSessionMeta;
+};
+
+const GENERIC_RESET_RESPONSE = {
+  success: true,
+  message: "If an account exists for this email, password reset instructions have been sent.",
+};
+
+function tokenFingerprint(value: string) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function isolatedSupabaseAuthClient() {
+  const supabaseUrl = process.env.SUPABASE_URL || "";
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  return createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      persistSession: false,
+    },
+  });
+}
 
 export class AuthService {
   private getGoogleCodeRedirectUri(redirectUri?: string) {
@@ -237,6 +269,158 @@ export class AuthService {
     return {
       success: true,
       message: "Password reset successfully. You can now log in with your new password.",
+    };
+  }
+
+  private async ensureSupabaseResetIdentity(email: string) {
+    const password = `${randomBytes(24).toString("base64url")}Aa1!`;
+    const { error } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { hms_password_reset_only: true },
+    });
+
+    if (!error) return;
+    const message = String(error.message || "").toLowerCase();
+    if (message.includes("already") || message.includes("registered") || message.includes("exists")) {
+      return;
+    }
+    throw error;
+  }
+
+  async requestPasswordReset(email: string, meta: AuthSessionMeta = {}) {
+    const normalizedEmail = email.trim().toLowerCase();
+    const profile = await prisma.profile.findUnique({
+      where: { email: normalizedEmail },
+      select: { id: true, email: true, role: true, owner_id: true, is_active: true },
+    });
+
+    if (!profile || !profile.is_active) {
+      return GENERIC_RESET_RESPONSE;
+    }
+
+    try {
+      await this.ensureSupabaseResetIdentity(normalizedEmail);
+      const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+        redirectTo: frontendUrl("/reset-password"),
+      });
+      if (error) throw error;
+
+      await eventLog.log("PASSWORD_RESET_REQUESTED", profile.owner_id || profile.id, {
+        profile_id: profile.id,
+        role: profile.role,
+        email: normalizedEmail,
+        ip_address: meta.ipAddress || null,
+        user_agent: meta.userAgent || null,
+      });
+    } catch (error) {
+      console.error("[auth.requestPasswordReset] Supabase reset email failed", {
+        email: normalizedEmail,
+        profile_id: profile.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    return GENERIC_RESET_RESPONSE;
+  }
+
+  private async resolveSupabaseResetUser(code?: string, accessToken?: string) {
+    const authClient = isolatedSupabaseAuthClient();
+
+    if (code) {
+      const { data, error } = await authClient.auth.exchangeCodeForSession(code);
+      if (error || !data.session?.access_token || !data.user?.email) {
+        throw new Error("VALIDATION_ERROR: Reset link is invalid or expired");
+      }
+      return {
+        email: data.user.email,
+        supabaseUserId: data.user.id,
+        accessToken: data.session.access_token,
+        fingerprintSource: data.session.access_token,
+      };
+    }
+
+    if (accessToken) {
+      const { data, error } = await authClient.auth.getUser(accessToken);
+      if (error || !data.user?.email) {
+        throw new Error("VALIDATION_ERROR: Reset link is invalid or expired");
+      }
+      return {
+        email: data.user.email,
+        supabaseUserId: data.user.id,
+        accessToken,
+        fingerprintSource: accessToken,
+      };
+    }
+
+    throw new Error("VALIDATION_ERROR: Reset token is required");
+  }
+
+  async completePasswordReset(input: CompletePasswordResetInput) {
+    if (input.newPassword.length < 8) {
+      throw new Error("VALIDATION_ERROR: Password must be at least 8 characters");
+    }
+
+    const resetUser = await this.resolveSupabaseResetUser(input.code, input.accessToken);
+    const fingerprint = tokenFingerprint(resetUser.fingerprintSource);
+    const firstUse = await setOneTimeLock(redisKeys.passwordReset.usedToken(fingerprint), 60 * 60);
+    if (!firstUse) {
+      throw new Error("VALIDATION_ERROR: Reset link has already been used");
+    }
+
+    const normalizedEmail = resetUser.email.trim().toLowerCase();
+    const profile = await prisma.profile.findUnique({
+      where: { email: normalizedEmail },
+      select: { id: true, email: true, role: true, owner_id: true, is_active: true },
+    });
+
+    if (!profile || !profile.is_active) {
+      throw new Error("VALIDATION_ERROR: Reset link is invalid or expired");
+    }
+
+    const newHash = await hashPassword(input.newPassword);
+
+    await prisma.profile.update({
+      where: { id: profile.id },
+      data: {
+        password_hash: newHash,
+        password_reset_required: false,
+        password_reset_at: new Date(),
+      },
+    });
+
+    await sessionLifecycleService.revokeSession(undefined, profile.id);
+
+    const { error: supabaseUpdateError } = await supabase.auth.admin.updateUserById(resetUser.supabaseUserId, {
+      password: input.newPassword,
+    });
+    if (supabaseUpdateError) {
+      console.warn("[auth.completePasswordReset] Supabase password sync failed", {
+        profile_id: profile.id,
+        supabase_user_id: resetUser.supabaseUserId,
+        error: supabaseUpdateError.message,
+      });
+    }
+
+    await supabase.auth.admin.signOut(resetUser.accessToken, "global").catch((error: any) => {
+      console.warn("[auth.completePasswordReset] Supabase reset session sign-out failed", {
+        profile_id: profile.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+
+    await eventLog.log("PASSWORD_RESET_COMPLETED", profile.owner_id || profile.id, {
+      profile_id: profile.id,
+      role: profile.role,
+      email: normalizedEmail,
+      ip_address: input.meta?.ipAddress || null,
+      user_agent: input.meta?.userAgent || null,
+    });
+
+    return {
+      success: true,
+      message: "Password reset successfully. Please sign in with your new password.",
     };
   }
 

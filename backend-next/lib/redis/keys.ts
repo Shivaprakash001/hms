@@ -64,6 +64,9 @@ export const redisKeys = {
     activityThrottle: (sessionId: string) => redisKey("session", "activity-throttle", sessionId),
   },
   otpVerifyLock: (phone: string, purpose: string) => redisKey("otp", "verify-lock", phone, purpose),
+  passwordReset: {
+    usedToken: (fingerprint: string) => redisKey("password-reset", "used", fingerprint),
+  },
   queue: {
     pending: (name: string) => redisKey("queue", name, "pending"),
     processing: (name: string) => redisKey("queue", name, "processing"),
