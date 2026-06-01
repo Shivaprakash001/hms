@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import hostelLogo from './assets/hostel_icon.jpeg';
 
 export function Navbar() {
@@ -41,12 +42,12 @@ export function Navbar() {
             <button onClick={() => scrollToSection('contact')} className="text-[#2C2C2A] hover:text-[#F07B1D] transition-colors">
               Contact
             </button>
-            <a
-              href="/login"
+            <Link
+              to="/login"
               className="text-[#2C2C2A] hover:text-[#F07B1D] transition-colors border border-[#F07B1D] px-4 py-2 rounded-lg"
             >
               Login
-            </a>
+            </Link>
             <button
               onClick={() => scrollToSection('contact')}
               className="bg-[#F07B1D] text-white px-6 py-2 rounded-lg hover:bg-[#d96e18] transition-colors relative"
@@ -57,12 +58,12 @@ export function Navbar() {
           </div>
 
           <div className="md:hidden flex items-center gap-2">
-            <a
-              href="/login"
+            <Link
+              to="/login"
               className="text-[#2C2C2A] border border-[#F07B1D] px-3 py-2 rounded-lg text-sm"
             >
               Login
-            </a>
+            </Link>
             <button
               onClick={() => scrollToSection('contact')}
               className="bg-[#F07B1D] text-white px-4 py-2 rounded-lg hover:bg-[#d96e18] transition-colors text-sm relative"

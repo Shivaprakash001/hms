@@ -39,8 +39,8 @@ export function Hero({ availability }: { availability?: LandingAvailability }) {
 
             <motion.div
               className="mt-6"
-              initial={{ opacity: 0, filter: 'blur(15px)', y: 40 }}
-              animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }}
+              initial={{ opacity: 0, y: 36 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 1, delay: 0.1, ease: [0.25, 0.4, 0.25, 1] }}
             >
               <h1
@@ -56,8 +56,8 @@ export function Hero({ availability }: { availability?: LandingAvailability }) {
 
             <motion.p
               className="text-base md:text-lg text-[#2C2C2A]/80 pt-4"
-              initial={{ opacity: 0, filter: 'blur(10px)', y: 30 }}
-              animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }}
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.3, ease: [0.25, 0.4, 0.25, 1] }}
             >
               Join 78+ SNIST students — <strong className="text-[#1B2D5B]">₹8,000/month</strong>, everything included.
@@ -65,8 +65,8 @@ export function Hero({ availability }: { availability?: LandingAvailability }) {
 
             <motion.div
               className="flex flex-wrap gap-4 pt-6"
-              initial={{ opacity: 0, filter: 'blur(10px)', y: 20 }}
-              animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }}
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.5, ease: [0.25, 0.4, 0.25, 1] }}
             >
               <a
@@ -89,8 +89,8 @@ export function Hero({ availability }: { availability?: LandingAvailability }) {
 
             <motion.div
               className="flex flex-wrap gap-4 pt-8 border-t border-[#F07B1D]/20 mt-8"
-              initial={{ opacity: 0, filter: 'blur(10px)', y: 20 }}
-              animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }}
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.7, ease: [0.25, 0.4, 0.25, 1] }}
             >
               <div className="flex items-center gap-2 text-[#2C2C2A] text-sm">
@@ -120,8 +120,8 @@ export function Hero({ availability }: { availability?: LandingAvailability }) {
           </div>
 
           <motion.div
-            initial={{ opacity: 0, filter: 'blur(15px)', scale: 0.95 }}
-            animate={{ opacity: 1, filter: 'blur(0px)', scale: 1 }}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 1, delay: 0.4, ease: [0.25, 0.4, 0.25, 1] }}
           >
             <ImageCarousel />
