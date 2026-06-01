@@ -74,6 +74,28 @@ export async function POST(req: NextRequest) {
       where: { profile_id: session.sub },
       select: { id: true, owner_id: true, hostel_id: true },
     });
+    const normalizedRollNumber =
+      payload.profile_type !== "WORKING_PROFESSIONAL" && payload.roll_number
+        ? String(payload.roll_number).trim().toUpperCase()
+        : null;
+    if (tenantOwner && normalizedRollNumber) {
+      const duplicateRollNumberTenant = await prisma.tenants.findFirst({
+        where: {
+          id: { not: tenantOwner.id },
+          ...(tenantOwner.owner_id ? { owner_id: tenantOwner.owner_id } : { hostel_id: tenantOwner.hostel_id }),
+          roll_number: { equals: normalizedRollNumber, mode: "insensitive" },
+          status: { not: "CANCELLED" },
+        },
+        select: { id: true },
+      });
+
+      if (duplicateRollNumberTenant) {
+        return withOnboardingMetrics(
+          apiError("This roll number is already used by another tenant. Enter a unique roll number.", "VALIDATION_ERROR", 400),
+          { startedAt },
+        );
+      }
+    }
     let ownerPrefs: any = null;
     if (tenantOwner?.owner_id) {
       try {
@@ -148,7 +170,7 @@ export async function POST(req: NextRequest) {
           profile_type: payload.profile_type || "STUDENT",
 
           college_name: payload.college_name || null,
-          roll_number: payload.roll_number || null,
+          roll_number: normalizedRollNumber,
           course: payload.course || null,
           year_of_study: payload.year_of_study || null,
           branch: payload.branch || null,

@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useEffect, useState } from 'react';
+import { FormEvent, InputHTMLAttributes, ReactNode, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -89,14 +89,66 @@ const activationMessages = [
 
 function passwordStrength(password: string) {
   let score = 0;
-  if (password.length >= 8) score += 1;
-  if (/[A-Z]/.test(password)) score += 1;
-  if (/[0-9]/.test(password)) score += 1;
-  if (/[^A-Za-z0-9]/.test(password)) score += 1;
-  if (score <= 1) return { label: 'Weak', width: '25%', color: 'bg-destructive' };
-  if (score === 2) return { label: 'Fair', width: '50%', color: 'bg-amber-500' };
-  if (score === 3) return { label: 'Good', width: '75%', color: 'bg-accent' };
-  return { label: 'Strong', width: '100%', color: 'bg-success' };
+  const suggestions: string[] = [];
+
+  if (password.length >= 8) {
+    score += 1;
+  } else {
+    suggestions.push('Use at least 8 characters');
+  }
+
+  if (/[A-Z]/.test(password)) {
+    score += 1;
+  } else {
+    suggestions.push('Add one uppercase letter');
+  }
+
+  if (/[0-9]/.test(password)) {
+    score += 1;
+  } else {
+    suggestions.push('Add one number');
+  }
+
+  if (/[^A-Za-z0-9]/.test(password)) {
+    score += 1;
+  } else {
+    suggestions.push('Add one symbol');
+  }
+
+  if (score <= 1) {
+    return {
+      label: 'Weak',
+      width: '25%',
+      color: 'bg-red-500',
+      textColor: 'text-red-700',
+      suggestions,
+    };
+  }
+  if (score === 2) {
+    return {
+      label: 'Fair',
+      width: '50%',
+      color: 'bg-amber-500',
+      textColor: 'text-amber-700',
+      suggestions,
+    };
+  }
+  if (score === 3) {
+    return {
+      label: 'Good',
+      width: '75%',
+      color: 'bg-lime-500',
+      textColor: 'text-lime-700',
+      suggestions,
+    };
+  }
+  return {
+    label: 'Strong',
+    width: '100%',
+    color: 'bg-emerald-500',
+    textColor: 'text-emerald-700',
+    suggestions: [],
+  };
 }
 
 function duplicatePhoneMessage(values: { primary?: string; emergency?: string; guardian?: string }) {
@@ -116,6 +168,24 @@ function duplicatePhoneMessage(values: { primary?: string; emergency?: string; g
   return '';
 }
 
+function invalidPhoneMessage(values: { primary?: string; emergency?: string; guardian?: string }) {
+  const entries = [
+    ['Primary mobile', values.primary, true],
+    ['Emergency mobile', values.emergency, true],
+    ['Guardian mobile', values.guardian, false],
+  ] as const;
+
+  for (const [label, value, required] of entries) {
+    const rawValue = String(value || '').trim();
+    const digits = rawValue.replace(/\D/g, '');
+    if (!rawValue && !required) continue;
+    if (!/^[6-9]\d{9}$/.test(digits)) {
+      return `${label} must be a valid 10-digit Indian mobile number.`;
+    }
+  }
+  return '';
+}
+
 const fieldClass =
   'mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-3 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20';
 
@@ -125,12 +195,16 @@ function Field({
   onChange,
   type = 'text',
   required = false,
+  helperText,
+  inputMode,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   type?: string;
   required?: boolean;
+  helperText?: string;
+  inputMode?: InputHTMLAttributes<HTMLInputElement>['inputMode'];
 }) {
   return (
     <label className="block">
@@ -138,7 +212,8 @@ function Field({
         {label}
         {required ? ' *' : ''}
       </span>
-      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} className={fieldClass} />
+      <input type={type} inputMode={inputMode} value={value} onChange={(e) => onChange(e.target.value)} className={fieldClass} />
+      {helperText ? <span className="mt-1 block text-xs text-muted-foreground">{helperText}</span> : null}
     </label>
   );
 }
@@ -436,6 +511,15 @@ export function ActivateAccountPage() {
 
   const profileSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    const invalidMessage = invalidPhoneMessage({
+      primary: profile.phone,
+      emergency: profile.emergency_phone,
+      guardian: profile.guardian_phone,
+    });
+    if (invalidMessage) {
+      setError(invalidMessage);
+      return;
+    }
     const duplicateMessage = duplicatePhoneMessage({
       primary: profile.phone,
       emergency: profile.emergency_phone,
@@ -647,7 +731,12 @@ export function ActivateAccountPage() {
                   <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
                     <div className={`h-full ${strength.color} transition-all`} style={{ width: strength.width }} />
                   </div>
-                  <p className="mt-1 text-xs font-medium text-muted-foreground">Password strength: {strength.label}</p>
+                  <p className={`mt-1 text-xs font-semibold ${strength.textColor}`}>Password strength: {strength.label}</p>
+                  {strength.suggestions.length > 0 && (
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      Try: {strength.suggestions.slice(0, 2).join(', ')}.
+                    </p>
+                  )}
                 </label>
                 <label className="block">
                   <span className="text-xs font-semibold text-muted-foreground">Confirm password *</span>
@@ -677,17 +766,6 @@ export function ActivateAccountPage() {
           {activeStep === 'RULES' && (
             <div className="space-y-5 pb-24">
               <SectionHeading icon={<ClipboardCheck className="w-5 h-5" />} title={ctx.rules.title || 'Hostel rules'} text="6 rule sections · Estimated reading time: 2 minutes. Expand only the sections you want to inspect in detail." />
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {ruleCategories.slice(0, 6).map((category, index) => (
-                  <div key={category.id} className="rounded-2xl border border-border bg-background p-4">
-                    <p className="text-xs font-bold uppercase tracking-wide text-accent">Section {index + 1}</p>
-                    <p className="mt-1 text-sm font-bold text-foreground">{category.title}</p>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {(category.highlights?.length || 0) + (category.rules?.length || 0)} points
-                    </p>
-                  </div>
-                ))}
-              </div>
               <div className="grid gap-3">
                 {ruleCategories.map((category) => (
                   <details
@@ -787,8 +865,14 @@ export function ActivateAccountPage() {
 
               <FormGroup title="Personal details">
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Primary mobile" required value={profile.phone} onChange={(v) => setProfile({ ...profile, phone: phoneDigits(v) })} />
-                <Field label="Emergency contact (Mobile) *" required value={profile.emergency_phone} onChange={(v) => setProfile({ ...profile, emergency_phone: phoneDigits(v) })} />
+                <Field
+                  label="Primary mobile"
+                  required
+                  value={profile.phone}
+                  onChange={(v) => setProfile({ ...profile, phone: phoneDigits(v) })}
+                  inputMode="tel"
+                  helperText="Enter a valid 10-digit Indian mobile number."
+                />
                 <Field label="Date of birth" required type="date" value={profile.date_of_birth} onChange={(v) => setProfile({ ...profile, date_of_birth: v })} />
                 <label className="block">
                   <span className="text-xs font-semibold text-muted-foreground">Gender *</span>
@@ -804,9 +888,23 @@ export function ActivateAccountPage() {
               </FormGroup>
 
               <FormGroup title="Guardian details">
-              <div className="grid gap-4 sm:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Guardian name" value={profile.guardian_name} onChange={(v) => setProfile({ ...profile, guardian_name: v })} />
-                <Field label="Guardian phone" value={profile.guardian_phone} onChange={(v) => setProfile({ ...profile, guardian_phone: phoneDigits(v) })} />
+                <Field
+                  label="Guardian phone"
+                  value={profile.guardian_phone}
+                  onChange={(v) => setProfile({ ...profile, guardian_phone: phoneDigits(v) })}
+                  inputMode="tel"
+                  helperText="Use a valid 10-digit mobile number if provided."
+                />
+                <Field
+                  label="Emergency contact (Mobile)"
+                  required
+                  value={profile.emergency_phone}
+                  onChange={(v) => setProfile({ ...profile, emergency_phone: phoneDigits(v) })}
+                  inputMode="tel"
+                  helperText="Must be valid and different from primary and guardian numbers."
+                />
                 <label className="block">
                   <span className="text-xs font-semibold text-muted-foreground">Guardian relation</span>
                   <select value={profile.guardian_relation} onChange={(e) => setProfile({ ...profile, guardian_relation: e.target.value })} className={fieldClass}>
@@ -913,7 +1011,12 @@ export function ActivateAccountPage() {
                     </select>
                   </label>
 
-                  <Field label="Roll number" value={profile.roll_number} onChange={(v) => setProfile({ ...profile, roll_number: v })} />
+                  <Field
+                    label="Roll number"
+                    value={profile.roll_number}
+                    onChange={(v) => setProfile({ ...profile, roll_number: v.trimStart().toUpperCase() })}
+                    helperText="Use your unique college roll number. Duplicate roll numbers cannot be used."
+                  />
                 </div>
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2">

@@ -178,6 +178,25 @@ function assertUniqueActivationPhones(input: {
   }
 }
 
+async function assertUniqueRollNumberForTenant(tenant: any, rollNumber: string) {
+  const normalizedRollNumber = rollNumber.trim();
+  if (!normalizedRollNumber) return;
+
+  const duplicateTenant = await prisma.tenants.findFirst({
+    where: {
+      id: { not: tenant.id },
+      ...(tenant.owner_id ? { owner_id: tenant.owner_id } : { hostel_id: tenant.hostel_id }),
+      roll_number: { equals: normalizedRollNumber, mode: "insensitive" },
+      status: { not: "CANCELLED" },
+    },
+    select: { id: true },
+  });
+
+  if (duplicateTenant) {
+    throw new Error("VALIDATION_ERROR: This roll number is already used by another tenant. Enter a unique roll number.");
+  }
+}
+
 export class ActivationWorkflowService {
   private async resolveInvitation(token: string): Promise<ResolvedInvitation> {
     const normalizedToken = String(token || "").trim();
@@ -607,9 +626,13 @@ export class ActivationWorkflowService {
     if (!tenant.photo_url && !data?.photo_url) throw new Error("VALIDATION_ERROR: Profile photo is required");
 
     const profileType = data?.profile_type ? String(data.profile_type).toUpperCase() : tenant.profile_type || "STUDENT";
+    const rollNumber = profileType === "STUDENT" ? String(data?.roll_number || "").trim().toUpperCase() : "";
     const yearOfStudy = data?.year_of_study ? Number(data.year_of_study) : undefined;
     if (yearOfStudy !== undefined && (!Number.isInteger(yearOfStudy) || yearOfStudy < 1 || yearOfStudy > 6)) {
       throw new Error("VALIDATION_ERROR: Year of study must be between 1 and 6");
+    }
+    if (rollNumber) {
+      await assertUniqueRollNumberForTenant(tenant, rollNumber);
     }
     await prisma.$transaction(async (tx: any) => {
       await tx.profile.update({
@@ -635,7 +658,7 @@ export class ActivationWorkflowService {
           course: profileType === "STUDENT" ? data?.course || undefined : null,
           year_of_study: profileType === "STUDENT" ? yearOfStudy : undefined,
           branch: profileType === "STUDENT" ? data?.branch || undefined : null,
-          roll_number: profileType === "STUDENT" ? data?.roll_number || undefined : null,
+          roll_number: profileType === "STUDENT" ? rollNumber || undefined : null,
           office_name: profileType === "WORKING_PROFESSIONAL" ? data?.office_name || undefined : null,
           office_location: profileType === "WORKING_PROFESSIONAL" ? data?.office_location || undefined : null,
           job_role: profileType === "WORKING_PROFESSIONAL" ? data?.job_role || undefined : null,
