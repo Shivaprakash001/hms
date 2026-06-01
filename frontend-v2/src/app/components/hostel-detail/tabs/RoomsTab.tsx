@@ -144,9 +144,6 @@ export function RoomsTab({ hostelId }: { hostelId: string }) {
     },
   });
 
-  if (isLoading) return <TabSkeleton />;
-  if (isError)   return <TabError onRetry={refetch} />;
-
   const rooms: Record<string, unknown>[] = Array.isArray(roomsData) ? roomsData : [];
   const floors: Record<string, unknown>[] = Array.isArray(floorsData) ? floorsData : [];
 
@@ -172,6 +169,9 @@ export function RoomsTab({ hostelId }: { hostelId: string }) {
       totalVacant: rooms.filter((r) => String(r.status) === 'vacant').length,
     };
   }, [floors, rooms]);
+
+  if (isLoading) return <TabSkeleton />;
+  if (isError)   return <TabError onRetry={refetch} />;
 
   const { groups, totalBeds, totalOccupied, totalVacant } = roomSummary;
 

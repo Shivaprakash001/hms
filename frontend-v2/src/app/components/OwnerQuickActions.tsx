@@ -59,8 +59,6 @@ export function OwnerQuickActions() {
     enabled: !hidden && active !== null,
   });
 
-  if (hidden) return null;
-
   const hostels = unwrapHostels(data);
   const hostelId = String(hostels[0]?.id ?? '');
   const canUseHostelActions = Boolean(hostelId);
@@ -79,6 +77,8 @@ export function OwnerQuickActions() {
       toast.error(error?.response?.data?.error?.message || error?.message || 'Could not add expense');
     },
   });
+
+  if (hidden) return null;
 
   return (
     <>
