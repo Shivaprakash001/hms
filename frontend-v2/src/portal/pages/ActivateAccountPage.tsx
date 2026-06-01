@@ -197,7 +197,7 @@ function Progress({
               <div className={`h-1.5 rounded-full flex-1 transition-colors duration-300 ${
                 done || active ? 'bg-accent' : 'bg-muted'
               }`} />
-              {i < steps.length - 1 && <div className="w-1" />}
+              {i < activationSteps.length - 1 && <div className="w-1" />}
             </div>
           );
         })}
