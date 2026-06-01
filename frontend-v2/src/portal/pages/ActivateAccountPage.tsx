@@ -19,6 +19,7 @@ import {
   UserRound,
   Users,
   Wifi,
+  X,
 } from 'lucide-react';
 import { tenantService } from '@features/tenants/api';
 import { useAuth } from '@context/AuthContext';
@@ -733,6 +734,26 @@ export function ActivateAccountPage() {
 
   return (
     <div className="min-h-screen bg-background px-4 py-5 sm:py-8">
+      {error && (
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="fixed left-1/2 top-4 z-[80] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 shadow-2xl shadow-amber-900/10"
+        >
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <p className="min-w-0 flex-1 text-sm font-semibold leading-5 text-amber-900">{error}</p>
+            <button
+              type="button"
+              onClick={() => setError('')}
+              className="rounded-lg p-1 text-amber-700 transition-colors hover:bg-amber-100"
+              aria-label="Dismiss notification"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
       <main className="mx-auto grid w-full max-w-6xl gap-5 lg:grid-cols-[360px_1fr]">
         <aside className="h-fit rounded-2xl overflow-hidden border border-border shadow-sm">
           <div
@@ -793,13 +814,6 @@ export function ActivateAccountPage() {
         </aside>
 
         <section className="rounded-2xl border border-border bg-card p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:p-6 shadow-sm">
-          {error && (
-            <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-start gap-2.5">
-              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <p className="text-sm text-amber-800">{error}</p>
-            </div>
-          )}
-
           {showWelcome && activeStep === 'ACCOUNT' && !ctx.activation_state.account_setup_completed ? (
             <div className="space-y-5">
               <div>
@@ -1258,6 +1272,17 @@ export function ActivateAccountPage() {
           {activeStep === 'ACTIVATE' && (
             <div className="space-y-5">
               <SectionHeading icon={<CheckCircle2 className="w-5 h-5" />} title="Ready to activate" text="Your required setup is complete. Documents can be uploaded after you enter the tenant portal." />
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                  <div>
+                    <p className="font-bold">After activation, please login again</p>
+                    <p className="mt-1 leading-6">
+                      Your setup session will end after activation. Use the email/mobile and password you just created to login to the tenant portal.
+                    </p>
+                  </div>
+                </div>
+              </div>
               {submitting && (
                 <div className="rounded-2xl border border-accent/30 bg-accent/5 p-4">
                   <div className="flex items-center gap-3">
