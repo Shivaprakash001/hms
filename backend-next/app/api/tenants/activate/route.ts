@@ -6,6 +6,7 @@ import { apiError, apiResponse } from "@/lib/auth";
 import { invitationService } from "@/src/services/tenants/invitation-service";
 import { ActivationSchema } from "@/lib/validators";
 import { activationWorkflowService } from "@/src/services/tenants/activation-workflow-service";
+import { withOnboardingMetrics } from "@/lib/onboarding-metrics";
 
 
 /**
@@ -14,21 +15,22 @@ import { activationWorkflowService } from "@/src/services/tenants/activation-wor
  * Access: Public (token-based)
  */
 export async function POST(req: NextRequest) {
+  const startedAt = performance.now();
   try {
     const body = await req.json();
     const validated = ActivationSchema.safeParse(body);
 
     if (!validated.success) {
-      return apiError("Validation failed", "VALIDATION_ERROR", 400);
+      return withOnboardingMetrics(apiError("Validation failed", "VALIDATION_ERROR", 400), { startedAt });
     }
 
     const { token, password, confirm_password } = validated.data;
     if (password !== confirm_password) {
-      return apiError("Passwords do not match", "VALIDATION_ERROR", 400);
+      return withOnboardingMetrics(apiError("Passwords do not match", "VALIDATION_ERROR", 400), { startedAt });
     }
 
     const result = await invitationService.activateTenant(token, password);
-    return apiResponse(result, 200);
+    return withOnboardingMetrics(apiResponse(result, 200), { startedAt, payload: result });
   } catch (error: any) {
     const rawMessage = String(error?.message || "Failed to activate account");
     const [maybeCode, ...rest] = rawMessage.split(":");
@@ -44,7 +46,10 @@ export async function POST(req: NextRequest) {
     };
 
     const status = statusMap[normalizedCode] || 500;
-    return apiError(normalizedMessage, normalizedCode || "ACTIVATION_ERROR", status);
+    return withOnboardingMetrics(apiError(normalizedMessage, normalizedCode || "ACTIVATION_ERROR", status), {
+      startedAt,
+      payload: { code: normalizedCode, message: normalizedMessage },
+    });
   }
 }
 
@@ -54,17 +59,18 @@ export async function POST(req: NextRequest) {
  * Body: { token, step, data }
  */
 export async function PATCH(req: NextRequest) {
+  const startedAt = performance.now();
   try {
     const body = await req.json();
     const token = String(body?.token || "").trim();
     const step = String(body?.step || "").trim().toUpperCase() as any;
-    if (!token) return apiError("Activation token is required", "VALIDATION_ERROR", 400);
+    if (!token) return withOnboardingMetrics(apiError("Activation token is required", "VALIDATION_ERROR", 400), { startedAt });
 
     const result = await activationWorkflowService.mutate(token, step, body?.data || {}, {
       ip: req.headers.get("x-forwarded-for") || req.ip || "unknown",
       userAgent: req.headers.get("user-agent") || "unknown",
     });
-    return apiResponse(result, 200);
+    return withOnboardingMetrics(apiResponse(result, 200), { startedAt, payload: result });
   } catch (error: any) {
     const rawMessage = String(error?.message || "Failed to update activation workflow");
     const [maybeCode, ...rest] = rawMessage.split(":");
@@ -84,17 +90,21 @@ export async function PATCH(req: NextRequest) {
     };
 
     const status = statusMap[normalizedCode] || 500;
-    return apiError(normalizedMessage, normalizedCode || "ACTIVATION_ERROR", status);
+    return withOnboardingMetrics(apiError(normalizedMessage, normalizedCode || "ACTIVATION_ERROR", status), {
+      startedAt,
+      payload: { code: normalizedCode, message: normalizedMessage },
+    });
   }
 }
 
 export async function GET(req: NextRequest) {
+  const startedAt = performance.now();
   try {
     const token = new URL(req.url).searchParams.get("token");
-    if (!token) return apiError("Activation token is required", "VALIDATION_ERROR", 400);
+    if (!token) return withOnboardingMetrics(apiError("Activation token is required", "VALIDATION_ERROR", 400), { startedAt });
 
     const result = await invitationService.validateActivationToken(token);
-    return apiResponse(result, 200);
+    return withOnboardingMetrics(apiResponse(result, 200), { startedAt, payload: result });
   } catch (error: any) {
     const rawMessage = String(error?.message || "Failed to validate activation link");
     const [maybeCode, ...rest] = rawMessage.split(":");
@@ -108,6 +118,9 @@ export async function GET(req: NextRequest) {
     };
 
     const status = statusMap[normalizedCode] || 500;
-    return apiError(normalizedMessage, normalizedCode || "ACTIVATION_ERROR", status);
+    return withOnboardingMetrics(apiError(normalizedMessage, normalizedCode || "ACTIVATION_ERROR", status), {
+      startedAt,
+      payload: { code: normalizedCode, message: normalizedMessage },
+    });
   }
 }

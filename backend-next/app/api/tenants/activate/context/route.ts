@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { NextRequest } from "next/server";
 import { apiError, apiResponse } from "@/lib/auth";
 import { activationWorkflowService } from "@/src/services/tenants/activation-workflow-service";
+import { withOnboardingMetrics } from "@/lib/onboarding-metrics";
 
 function mapActivationError(error: any) {
   const rawMessage = String(error?.message || "Failed to load activation context");
@@ -24,14 +25,15 @@ function mapActivationError(error: any) {
 }
 
 export async function GET(req: NextRequest) {
+  const startedAt = performance.now();
   try {
     const token = new URL(req.url).searchParams.get("token");
-    if (!token) return apiError("Activation token is required", "VALIDATION_ERROR", 400);
+    if (!token) return withOnboardingMetrics(apiError("Activation token is required", "VALIDATION_ERROR", 400), { startedAt });
 
     const result = await activationWorkflowService.getContext(token);
-    return apiResponse(result, 200);
+    return withOnboardingMetrics(apiResponse(result, 200), { startedAt, payload: result });
   } catch (error: any) {
     const mapped = mapActivationError(error);
-    return apiError(mapped.message, mapped.code, mapped.status);
+    return withOnboardingMetrics(apiError(mapped.message, mapped.code, mapped.status), { startedAt, payload: mapped });
   }
 }

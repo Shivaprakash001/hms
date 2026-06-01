@@ -8,6 +8,7 @@ import { TenantProfileUpdateSchema } from "@/lib/validators";
 import { getTenantOperationalContext } from "@/lib/hostel-context";
 import { imagekit } from "@/lib/imagekit";
 import { normalizeIndianPhone } from "@/lib/utils/phone-utils";
+import { withOnboardingMetrics } from "@/lib/onboarding-metrics";
 
 /**
  * 👨‍🎓 COMPLETE TENANT PROFILE (Onboarding)
@@ -15,23 +16,25 @@ import { normalizeIndianPhone } from "@/lib/utils/phone-utils";
  * Parses FormData for profile details. Aadhaar documents uploaded via document service.
  */
 export async function POST(req: NextRequest) {
+  const startedAt = performance.now();
+  let externalCalls = 0;
   const session = await getSession(req);
   if (!session || session.role !== "TENANT") {
-    return apiError("Only tenants can complete profile", "FORBIDDEN", 403);
+    return withOnboardingMetrics(apiError("Only tenants can complete profile", "FORBIDDEN", 403), { startedAt });
   }
 
   try {
     const formData = await req.formData();
     const profileDataStr = formData.get("profile_data") as string;
     if (!profileDataStr) {
-      return apiError("profile_data is required", "VALIDATION_ERROR", 400);
+      return withOnboardingMetrics(apiError("profile_data is required", "VALIDATION_ERROR", 400), { startedAt });
     }
     
     let parsedData;
     try {
       parsedData = JSON.parse(profileDataStr);
     } catch (e) {
-      return apiError("Invalid JSON in profile_data", "VALIDATION_ERROR", 400);
+      return withOnboardingMetrics(apiError("Invalid JSON in profile_data", "VALIDATION_ERROR", 400), { startedAt });
     }
 
     const validated = TenantProfileUpdateSchema.safeParse(parsedData);
@@ -39,13 +42,22 @@ export async function POST(req: NextRequest) {
       const firstIssue = validated.error.issues[0];
       const issuePath = firstIssue?.path?.join(".") || "profile_data";
       const issueMessage = firstIssue?.message || "Invalid value";
-      return apiError(`Validation error at ${issuePath}: ${issueMessage}`, "VALIDATION_ERROR", 400);
+      return withOnboardingMetrics(apiError(`Validation error at ${issuePath}: ${issueMessage}`, "VALIDATION_ERROR", 400), { startedAt });
     }
 
     const payload = (validated.data as any);
     const normalizedPhone = normalizeIndianPhone(payload.phone);
     if (!normalizedPhone) {
-      return apiError("Valid Indian mobile number is required", "VALIDATION_ERROR", 400);
+      return withOnboardingMetrics(apiError("Valid Indian mobile number is required", "VALIDATION_ERROR", 400), { startedAt });
+    }
+    const normalizedEmergencyPhone = payload.emergency_contact
+      ? normalizeIndianPhone(payload.emergency_contact)
+      : null;
+    if (payload.emergency_contact && !normalizedEmergencyPhone) {
+      return withOnboardingMetrics(apiError("Valid emergency mobile number is required", "VALIDATION_ERROR", 400), { startedAt });
+    }
+    if (normalizedEmergencyPhone && normalizedEmergencyPhone === normalizedPhone) {
+      return withOnboardingMetrics(apiError("Primary mobile and emergency mobile must be different numbers", "VALIDATION_ERROR", 400), { startedAt });
     }
 
     // Default mapped values
@@ -72,16 +84,16 @@ export async function POST(req: NextRequest) {
     }
     const profilePhotoRequired = Boolean(ownerPrefs?.require_profile_photo_onboarding);
     if (profilePhotoRequired && !profilePhotoFile) {
-      return apiError("Profile photo is required by your hostel owner.", "VALIDATION_ERROR", 400);
+      return withOnboardingMetrics(apiError("Profile photo is required by your hostel owner.", "VALIDATION_ERROR", 400), { startedAt });
     }
 
     if (profilePhotoFile) {
       const allowed = ["image/jpeg", "image/png", "image/webp"];
       if (!allowed.includes(profilePhotoFile.type)) {
-        return apiError("Profile photo must be JPG, PNG, or WEBP", "VALIDATION_ERROR", 400);
+        return withOnboardingMetrics(apiError("Profile photo must be JPG, PNG, or WEBP", "VALIDATION_ERROR", 400), { startedAt });
       }
       if (profilePhotoFile.size > 2 * 1024 * 1024) {
-        return apiError("Profile photo must be less than 2MB", "VALIDATION_ERROR", 400);
+        return withOnboardingMetrics(apiError("Profile photo must be less than 2MB", "VALIDATION_ERROR", 400), { startedAt });
       }
     }
 
@@ -90,6 +102,7 @@ export async function POST(req: NextRequest) {
     if (profilePhotoFile && tenantOwner) {
       try {
         const photoBuffer = Buffer.from(await profilePhotoFile.arrayBuffer());
+        externalCalls = 1;
         const upload = await imagekit.files.upload({
           file:              photoBuffer.toString("base64"),
           fileName:          profilePhotoFile.name || "profile.jpg",
@@ -101,7 +114,10 @@ export async function POST(req: NextRequest) {
       } catch (uploadError) {
         console.error("[tenant.complete-profile] Profile photo upload failed", uploadError);
         if (profilePhotoRequired) {
-          return apiError("Profile photo upload failed. Please try again.", "UPLOAD_FAILED", 502);
+          return withOnboardingMetrics(apiError("Profile photo upload failed. Please try again.", "UPLOAD_FAILED", 502), {
+            startedAt,
+            externalCalls,
+          });
         }
       }
     }
@@ -114,7 +130,7 @@ export async function POST(req: NextRequest) {
         data: {
           name: payload.name || undefined,
           phone: normalizedPhone,
-          emergency_contact: payload.emergency_contact || undefined,
+          emergency_contact: normalizedEmergencyPhone || undefined,
           is_profile_completed: true,
         }
       });
@@ -150,13 +166,20 @@ export async function POST(req: NextRequest) {
       return tenantUpdate;
     }, { timeout: 15000 });
 
-    return apiResponse(updated, 201);
+    return withOnboardingMetrics(apiResponse(updated, 201), { startedAt, payload: updated, externalCalls });
   } catch (error: any) {
     console.error(error);
     const msg = String(error?.message || "");
     if (error?.code === "P2002") {
-      return apiError("This record violates a unique constraint.", "DUPLICATE", 409);
+      return withOnboardingMetrics(apiError("This record violates a unique constraint.", "DUPLICATE", 409), {
+        startedAt,
+        externalCalls,
+      });
     }
-    return apiError(error?.message || "Failed to complete profile");
+    return withOnboardingMetrics(apiError(error?.message || "Failed to complete profile"), {
+      startedAt,
+      payload: { message: error?.message },
+      externalCalls,
+    });
   }
 }

@@ -156,6 +156,28 @@ function compactObject<T extends Record<string, any>>(input: T) {
   return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)) as Partial<T>;
 }
 
+function assertUniqueActivationPhones(input: {
+  primary?: string | null;
+  guardian?: string | null;
+  emergency?: string | null;
+}) {
+  const phones = [
+    ["Primary mobile", input.primary],
+    ["Guardian mobile", input.guardian],
+    ["Emergency mobile", input.emergency],
+  ].filter(([, value]) => Boolean(value));
+
+  const seen = new Map<string, string>();
+  for (const [label, value] of phones) {
+    const phone = String(value);
+    const existing = seen.get(phone);
+    if (existing) {
+      throw new Error(`VALIDATION_ERROR: ${existing} and ${label} must be different numbers`);
+    }
+    seen.set(phone, String(label));
+  }
+}
+
 export class ActivationWorkflowService {
   private async resolveInvitation(token: string): Promise<ResolvedInvitation> {
     const normalizedToken = String(token || "").trim();
@@ -579,6 +601,7 @@ export class ActivationWorkflowService {
     if (!phone) throw new Error("VALIDATION_ERROR: Valid primary phone is required");
     if (guardianPhone === null && (data?.guardian_phone || data?.phone_2)) throw new Error("VALIDATION_ERROR: Valid guardian phone is required");
     if (!emergencyPhone) throw new Error("VALIDATION_ERROR: Valid emergency contact phone is required");
+    assertUniqueActivationPhones({ primary: phone, guardian: guardianPhone, emergency: emergencyPhone });
     if (!["Male", "Female", "Other", "Prefer not to say"].includes(gender)) throw new Error("VALIDATION_ERROR: Gender is required");
     if (!dob) throw new Error("VALIDATION_ERROR: Valid date of birth is required");
     if (!tenant.photo_url && !data?.photo_url) throw new Error("VALIDATION_ERROR: Profile photo is required");

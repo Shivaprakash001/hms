@@ -263,8 +263,12 @@ export function CompleteProfilePage() {
   const validateStep = (targetStep = step) => {
     if (targetStep === 1) {
       if (!form.name.trim()) return 'Full name is required';
-      if (!normalizeIndianPhone(form.phone)) return 'Enter a valid 10-digit Indian mobile number';
+      const primaryPhone = normalizeIndianPhone(form.phone);
+      const emergencyPhone = normalizeIndianPhone(form.emergency_contact);
+      if (!primaryPhone) return 'Enter a valid 10-digit Indian mobile number';
       if (!form.emergency_contact.trim()) return 'Emergency contact is required';
+      if (!emergencyPhone) return 'Enter a valid 10-digit emergency mobile number';
+      if (primaryPhone === emergencyPhone) return 'Primary mobile and emergency mobile must be different numbers';
       if (!form.gender) return 'Gender is required';
       if (!form.permanent_address.trim()) return 'Permanent address is required';
     }

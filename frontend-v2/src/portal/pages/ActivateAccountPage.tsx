@@ -9,6 +9,8 @@ import {
   CheckCircle2,
   ClipboardCheck,
   DoorOpen,
+  Eye,
+  EyeOff,
   FileText,
   Loader2,
   Lock,
@@ -70,6 +72,50 @@ const fmtDate = (value: unknown) =>
 
 const phoneDigits = (value: unknown) => String(value || '').replace(/\D/g, '').slice(-10);
 
+const activationSteps: { id: ActivationStep; label: string; helper: string }[] = [
+  { id: 'ACCOUNT', label: 'Account', helper: 'Password and mobile' },
+  { id: 'RULES', label: 'Rules', helper: 'Read and accept' },
+  { id: 'PROFILE', label: 'Profile', helper: 'Personal details' },
+  { id: 'ACTIVATE', label: 'Activate', helper: 'Enter portal' },
+];
+
+const guardianRelations = ['Father', 'Mother', 'Brother', 'Sister', 'Uncle', 'Aunt', 'Grandparent', 'Spouse', 'Other'];
+
+const activationMessages = [
+  'Activating your account...',
+  'Setting up your room access...',
+  'Preparing tenant portal...',
+];
+
+function passwordStrength(password: string) {
+  let score = 0;
+  if (password.length >= 8) score += 1;
+  if (/[A-Z]/.test(password)) score += 1;
+  if (/[0-9]/.test(password)) score += 1;
+  if (/[^A-Za-z0-9]/.test(password)) score += 1;
+  if (score <= 1) return { label: 'Weak', width: '25%', color: 'bg-destructive' };
+  if (score === 2) return { label: 'Fair', width: '50%', color: 'bg-amber-500' };
+  if (score === 3) return { label: 'Good', width: '75%', color: 'bg-accent' };
+  return { label: 'Strong', width: '100%', color: 'bg-success' };
+}
+
+function duplicatePhoneMessage(values: { primary?: string; emergency?: string; guardian?: string }) {
+  const entries = [
+    ['Primary mobile', phoneDigits(values.primary)],
+    ['Emergency mobile', phoneDigits(values.emergency)],
+    ['Guardian mobile', phoneDigits(values.guardian)],
+  ].filter(([, value]) => String(value || '').length > 0);
+
+  for (const [, value] of entries) {
+    if (String(value).length !== 10) continue;
+    const matches = entries.filter(([, candidate]) => candidate === value);
+    if (matches.length > 1) {
+      return `${matches.map(([label]) => label).join(' and ')} must be different numbers.`;
+    }
+  }
+  return '';
+}
+
 const fieldClass =
   'mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-3 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20';
 
@@ -124,21 +170,28 @@ function RuleIcon({ icon }: { icon?: string }) {
   return <ShieldCheck className={cls} />;
 }
 
-function Progress({ ctx }: { ctx: ActivationContext }) {
-  const steps: { id: ActivationStep; label: string }[] = [
-    { id: 'ACCOUNT', label: 'Account' },
-    { id: 'RULES', label: 'Rules' },
-    { id: 'PROFILE', label: 'Profile' },
-    { id: 'ACTIVATE', label: 'Activate' },
-  ];
+function Progress({
+  ctx,
+  activeStep,
+  onStepClick,
+}: {
+  ctx: ActivationContext;
+  activeStep: ActivationStep;
+  onStepClick: (step: ActivationStep) => void;
+}) {
   const completed = new Set(ctx.completed_steps ?? ctx.activation_state.completed_steps ?? []);
   const current = ctx.current_step ?? ctx.activation_state.current_step;
+  const currentIndex = activationSteps.findIndex((step) => step.id === current);
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <span className="font-bold text-accent">Step {Math.max(1, currentIndex + 1)} of 4</span>
+        <span className="text-muted-foreground">Complete setup in under 3 minutes</span>
+      </div>
       <div className="flex items-center gap-0">
-        {steps.map((step, i) => {
+        {activationSteps.map((step, i) => {
           const done = completed.has(step.id);
-          const active = current === step.id;
+          const active = activeStep === step.id;
           return (
             <div key={step.id} className="flex-1 flex items-center">
               <div className={`h-1.5 rounded-full flex-1 transition-colors duration-300 ${
@@ -150,11 +203,18 @@ function Progress({ ctx }: { ctx: ActivationContext }) {
         })}
       </div>
       <div className="grid grid-cols-4">
-        {steps.map((step, i) => {
+        {activationSteps.map((step, i) => {
           const done = completed.has(step.id);
-          const active = current === step.id;
+          const active = activeStep === step.id;
+          const clickable = done || current === step.id;
           return (
-            <div key={step.id} className="min-w-0 flex flex-col items-center gap-1">
+            <button
+              key={step.id}
+              type="button"
+              disabled={!clickable}
+              onClick={() => onStepClick(step.id)}
+              className="min-w-0 flex flex-col items-center gap-1 rounded-xl px-1 py-1 text-center disabled:cursor-not-allowed disabled:opacity-60"
+            >
               <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
                 done ? 'bg-success text-white' : active ? 'bg-accent text-white' : 'bg-muted text-muted-foreground'
               }`}>
@@ -165,7 +225,7 @@ function Progress({ ctx }: { ctx: ActivationContext }) {
               }`}>
                 {step.label}
               </p>
-            </div>
+            </button>
           );
         })}
       </div>
@@ -188,6 +248,10 @@ export function ActivateAccountPage() {
   const [submitting, setSubmitting] = useState(false);
   const [showWelcome, setShowWelcome] = useState(true);
   const [lastPassword, setLastPassword] = useState('');
+  const [visibleStep, setVisibleStep] = useState<ActivationStep | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [activationMessageIndex, setActivationMessageIndex] = useState(0);
 
   const [account, setAccount] = useState({ password: '', confirm_password: '', phone: '' });
   const [acks, setAcks] = useState<Record<string, boolean>>({});
@@ -293,9 +357,31 @@ export function ActivateAccountPage() {
   }, [token]);
 
   const currentStep = ctx?.current_step ?? ctx?.activation_state.current_step;
+  const activeStep = visibleStep || currentStep;
   const ruleCategories = ctx?.rules?.content?.categories ?? [];
   const requiredAcks = ctx?.rules?.required_acknowledgements ?? [];
   const allAcksChecked = requiredAcks.length > 0 && requiredAcks.every((key) => acks[key] === true);
+  const strength = passwordStrength(account.password);
+  useEffect(() => {
+    setVisibleStep(null);
+  }, [ctx?.current_step, ctx?.activation_state.current_step]);
+
+  useEffect(() => {
+    if (!(submitting && activeStep === 'ACTIVATE')) return;
+    const timer = window.setInterval(() => {
+      setActivationMessageIndex((current) => (current + 1) % activationMessages.length);
+    }, 1200);
+    return () => window.clearInterval(timer);
+  }, [activeStep, submitting]);
+
+  const goToStep = (step: ActivationStep) => {
+    const completed = new Set(ctx?.completed_steps ?? ctx?.activation_state.completed_steps ?? []);
+    if (step === currentStep || completed.has(step)) {
+      setError('');
+      setVisibleStep(step);
+      setShowWelcome(false);
+    }
+  };
 
   const submitStep = async (step: ActivationStep, data: Record<string, unknown>) => {
     setSubmitting(true);
@@ -318,6 +404,7 @@ export function ActivateAccountPage() {
         return;
       }
       setCtx(result as ActivationContext);
+      setVisibleStep(null);
     } catch (err: unknown) {
       const message =
         (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ||
@@ -349,6 +436,15 @@ export function ActivateAccountPage() {
 
   const profileSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    const duplicateMessage = duplicatePhoneMessage({
+      primary: profile.phone,
+      emergency: profile.emergency_phone,
+      guardian: profile.guardian_phone,
+    });
+    if (duplicateMessage) {
+      setError(duplicateMessage);
+      return;
+    }
     if (!profilePhotoFile && !profilePhotoPreview) {
       setError('Profile photo is required');
       return;
@@ -458,7 +554,7 @@ export function ActivateAccountPage() {
           </div>
 
           <div className="bg-card p-5">
-            <Progress ctx={ctx} />
+            <Progress ctx={ctx} activeStep={activeStep || ctx.activation_state.current_step} onStepClick={goToStep} />
 
           <div className="mt-5 rounded-2xl border border-border bg-secondary/40 p-4 text-sm">
             <p className="font-bold text-foreground">Stay summary</p>
@@ -494,16 +590,21 @@ export function ActivateAccountPage() {
             </div>
           )}
 
-          {showWelcome && currentStep === 'ACCOUNT' && !ctx.activation_state.account_setup_completed ? (
-            <div className="space-y-6">
+          {showWelcome && activeStep === 'ACCOUNT' && !ctx.activation_state.account_setup_completed ? (
+            <div className="space-y-5">
               <div>
-                <p className="text-sm font-semibold text-accent">Welcome</p>
+                <p className="text-sm font-semibold text-accent">Step 1 of 4</p>
                 <h2 className="mt-1 text-2xl font-bold text-foreground">
                   {ctx.activation_state.completed_steps.length > 0 ? 'Resume setup' : `Welcome to ${ctx.hostel.name}`}
                 </h2>
                 <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-                  Your room and billing details are ready. Complete a short setup to enter your tenant portal.
+                  Complete setup in under 3 minutes. Your room is already reserved, and only four simple steps are left before you enter the tenant portal.
                 </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Metric icon={<CheckCircle2 className="w-4 h-4" />} label="Setup time" value="Under 3 min" />
+                <Metric icon={<ClipboardCheck className="w-4 h-4" />} label="Simple steps" value="4 steps" />
+                <Metric icon={<DoorOpen className="w-4 h-4" />} label="Room status" value="Reserved" />
               </div>
               <div className="grid gap-3 sm:grid-cols-3">
                 <Metric icon={<DoorOpen className="w-4 h-4" />} label="Room" value={String(ctx.room_summary.room_number || 'Assigned')} />
@@ -521,26 +622,76 @@ export function ActivateAccountPage() {
             </div>
           ) : null}
 
-          {currentStep === 'ACCOUNT' && (!showWelcome || ctx.activation_state.account_setup_completed) && (
+          {activeStep === 'ACCOUNT' && (!showWelcome || ctx.activation_state.account_setup_completed) && (
             <form onSubmit={accountSubmit} className="space-y-5">
               <SectionHeading icon={<UserRound className="w-5 h-5" />} title="Set up your account" text="Choose your password and confirm your primary mobile number. No OTP is required." />
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Password" type="password" required value={account.password} onChange={(v) => setAccount({ ...account, password: v })} />
-                <Field label="Confirm password" type="password" required value={account.confirm_password} onChange={(v) => setAccount({ ...account, confirm_password: v })} />
+                <label className="block">
+                  <span className="text-xs font-semibold text-muted-foreground">Password *</span>
+                  <div className="relative mt-1.5">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={account.password}
+                      onChange={(e) => setAccount({ ...account, password: e.target.value })}
+                      className={`${fieldClass} mt-0 pr-11`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((value) => !value)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                    <div className={`h-full ${strength.color} transition-all`} style={{ width: strength.width }} />
+                  </div>
+                  <p className="mt-1 text-xs font-medium text-muted-foreground">Password strength: {strength.label}</p>
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold text-muted-foreground">Confirm password *</span>
+                  <div className="relative mt-1.5">
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      value={account.confirm_password}
+                      onChange={(e) => setAccount({ ...account, confirm_password: e.target.value })}
+                      className={`${fieldClass} mt-0 pr-11`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword((value) => !value)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                      aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                    >
+                      {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </label>
                 <Field label="Primary mobile" required value={account.phone} onChange={(v) => setAccount({ ...account, phone: phoneDigits(v) })} />
               </div>
               <PrimaryButton loading={submitting}>Save account setup</PrimaryButton>
             </form>
           )}
 
-          {currentStep === 'RULES' && (
-            <div className="space-y-5">
-              <SectionHeading icon={<ClipboardCheck className="w-5 h-5" />} title={ctx.rules.title || 'Hostel rules'} text="Review the important rules in short sections. Your acknowledgement is stored with the current rule snapshot." />
+          {activeStep === 'RULES' && (
+            <div className="space-y-5 pb-24">
+              <SectionHeading icon={<ClipboardCheck className="w-5 h-5" />} title={ctx.rules.title || 'Hostel rules'} text="6 rule sections · Estimated reading time: 2 minutes. Expand only the sections you want to inspect in detail." />
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {ruleCategories.slice(0, 6).map((category, index) => (
+                  <div key={category.id} className="rounded-2xl border border-border bg-background p-4">
+                    <p className="text-xs font-bold uppercase tracking-wide text-accent">Section {index + 1}</p>
+                    <p className="mt-1 text-sm font-bold text-foreground">{category.title}</p>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {(category.highlights?.length || 0) + (category.rules?.length || 0)} points
+                    </p>
+                  </div>
+                ))}
+              </div>
               <div className="grid gap-3">
                 {ruleCategories.map((category) => (
                   <details
                     key={category.id}
-                    open
                     className={`rounded-xl border p-4 bg-background transition-all duration-300 ${
                       category.id === 'facilities'
                         ? 'border-emerald-500/60 bg-emerald-50/5 dark:bg-emerald-950/5 shadow-md shadow-emerald-500/5 ring-1 ring-emerald-500/10'
@@ -616,56 +767,29 @@ export function ActivateAccountPage() {
                   </label>
                 ))}
               </div>
-              <button
-                type="button"
-                disabled={!allAcksChecked || submitting}
-                onClick={() => submitStep('RULES', { acknowledgements: acks, typed_signature_name: ctx.profile.name })}
-                className="inline-flex items-center gap-2 rounded-2xl bg-accent px-5 py-3.5 text-sm font-semibold text-accent-foreground disabled:opacity-50 active:scale-[0.98] transition-transform shadow-sm"
-              >
-                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                Accept rules
-              </button>
+              <div className="sticky bottom-3 z-20 rounded-2xl border border-border bg-card/95 p-3 shadow-xl backdrop-blur">
+                <button
+                  type="button"
+                  disabled={!allAcksChecked || submitting}
+                  onClick={() => submitStep('RULES', { acknowledgements: acks, typed_signature_name: ctx.profile.name })}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-accent px-5 py-3.5 text-sm font-semibold text-accent-foreground disabled:opacity-50 active:scale-[0.98] transition-transform shadow-sm"
+                >
+                  {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                  Accept rules
+                </button>
+              </div>
             </div>
           )}
 
-          {currentStep === 'PROFILE' && (
+          {activeStep === 'PROFILE' && (
             <form onSubmit={profileSubmit} className="space-y-5">
-              <SectionHeading icon={<ShieldCheck className="w-5 h-5" />} title="Complete required profile details" text="Tier 1 fields are required for activation. Other details improve hostel records and can be completed now or later." />
-              
-              {/* Profile Photo Upload */}
-              <label className="flex items-center gap-4 rounded-2xl border-2 border-dashed border-accent/30 bg-accent/5 p-4 cursor-pointer hover:border-accent hover:bg-accent/8 transition-colors">
-                <div className={`w-16 h-16 rounded-full overflow-hidden bg-secondary flex items-center justify-center shrink-0 ${
-                  profilePhotoPreview ? 'ring-2 ring-accent ring-offset-2' : 'ring-1 ring-border'
-                }`}>
-                  {profilePhotoPreview ? (
-                    <img
-                      src={profilePhotoPreview}
-                      alt="Profile preview"
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <Camera className="w-6 h-6 text-accent" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-foreground text-sm">Profile photo *</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">JPG, PNG, or WEBP under 2MB</p>
-                  {profilePhotoFile && (
-                    <p className="text-xs text-accent font-medium mt-1 truncate">{profilePhotoFile.name}</p>
-                  )}
-                </div>
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  className="hidden"
-                  onChange={(e) => handlePhotoChange(e.target.files?.[0])}
-                />
-                <span className="text-sm font-semibold text-accent shrink-0">Choose</span>
-              </label>
+              <SectionHeading icon={<ShieldCheck className="w-5 h-5" />} title="Complete required profile details" text="Start with personal and guardian contacts, then add address, academic or work details, and profile photo." />
 
+              <FormGroup title="Personal details">
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Primary mobile" required value={profile.phone} onChange={(v) => setProfile({ ...profile, phone: phoneDigits(v) })} />
                 <Field label="Emergency contact (Mobile) *" required value={profile.emergency_phone} onChange={(v) => setProfile({ ...profile, emergency_phone: phoneDigits(v) })} />
+                <Field label="Date of birth" required type="date" value={profile.date_of_birth} onChange={(v) => setProfile({ ...profile, date_of_birth: v })} />
                 <label className="block">
                   <span className="text-xs font-semibold text-muted-foreground">Gender *</span>
                   <select value={profile.gender} onChange={(e) => setProfile({ ...profile, gender: e.target.value })} className={fieldClass}>
@@ -676,7 +800,33 @@ export function ActivateAccountPage() {
                     <option value="Prefer not to say">Prefer not to say</option>
                   </select>
                 </label>
-                <Field label="Date of birth" required type="date" value={profile.date_of_birth} onChange={(v) => setProfile({ ...profile, date_of_birth: v })} />
+              </div>
+              </FormGroup>
+
+              <FormGroup title="Guardian details">
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Field label="Guardian name" value={profile.guardian_name} onChange={(v) => setProfile({ ...profile, guardian_name: v })} />
+                <Field label="Guardian phone" value={profile.guardian_phone} onChange={(v) => setProfile({ ...profile, guardian_phone: phoneDigits(v) })} />
+                <label className="block">
+                  <span className="text-xs font-semibold text-muted-foreground">Guardian relation</span>
+                  <select value={profile.guardian_relation} onChange={(e) => setProfile({ ...profile, guardian_relation: e.target.value })} className={fieldClass}>
+                    <option value="">Select relation</option>
+                    {guardianRelations.map((relation) => (
+                      <option key={relation} value={relation}>{relation}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              </FormGroup>
+
+              <FormGroup title="Address">
+              <div className="grid gap-4">
+                <TextArea label="Permanent address (Address, City, State, Pincode) *" required value={profile.permanent_address} onChange={(v) => setProfile({ ...profile, permanent_address: v })} />
+              </div>
+              </FormGroup>
+
+              <FormGroup title={profile.profile_type === 'STUDENT' ? 'Academic details' : 'Work details'}>
+              <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block">
                   <span className="text-xs font-semibold text-muted-foreground">Profile type</span>
                   <select value={profile.profile_type} onChange={(e) => setProfile({ ...profile, profile_type: e.target.value })} className={fieldClass}>
@@ -684,9 +834,6 @@ export function ActivateAccountPage() {
                     <option value="WORKING_PROFESSIONAL">Working professional</option>
                   </select>
                 </label>
-              </div>
-              <div className="grid gap-4">
-                <TextArea label="Permanent address (Address, City, State, Pincode) *" required value={profile.permanent_address} onChange={(v) => setProfile({ ...profile, permanent_address: v })} />
               </div>
 
               {profile.profile_type === 'STUDENT' ? (
@@ -750,6 +897,7 @@ export function ActivateAccountPage() {
                     />
                   )}
 
+                  <Field label="Branch" value={profile.branch} onChange={(v) => setProfile({ ...profile, branch: v })} />
                   <label className="block">
                     <span className="text-xs font-semibold text-muted-foreground">Year of study</span>
                     <select
@@ -774,19 +922,57 @@ export function ActivateAccountPage() {
                   <Field label="Job role" value={profile.job_role} onChange={(v) => setProfile({ ...profile, job_role: v })} />
                 </div>
               )}
+              </FormGroup>
 
-              <div className="grid gap-4 sm:grid-cols-3">
-                <Field label="Guardian name" value={profile.guardian_name} onChange={(v) => setProfile({ ...profile, guardian_name: v })} />
-                <Field label="Guardian phone" value={profile.guardian_phone} onChange={(v) => setProfile({ ...profile, guardian_phone: phoneDigits(v) })} />
-                <Field label="Guardian relation" value={profile.guardian_relation} onChange={(v) => setProfile({ ...profile, guardian_relation: v })} />
-              </div>
+              <FormGroup title="Profile photo">
+              <label className="flex items-center gap-4 rounded-2xl border-2 border-dashed border-accent/30 bg-accent/5 p-4 cursor-pointer hover:border-accent hover:bg-accent/8 transition-colors">
+                <div className={`w-16 h-16 rounded-full overflow-hidden bg-secondary flex items-center justify-center shrink-0 ${
+                  profilePhotoPreview ? 'ring-2 ring-accent ring-offset-2' : 'ring-1 ring-border'
+                }`}>
+                  {profilePhotoPreview ? (
+                    <img
+                      src={profilePhotoPreview}
+                      alt="Profile preview"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <Camera className="w-6 h-6 text-accent" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-foreground text-sm">Profile photo *</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">JPG, PNG, or WEBP under 2MB</p>
+                  {profilePhotoFile && (
+                    <p className="text-xs text-accent font-medium mt-1 truncate">{profilePhotoFile.name}</p>
+                  )}
+                </div>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(e) => handlePhotoChange(e.target.files?.[0])}
+                />
+                <span className="text-sm font-semibold text-accent shrink-0">Choose</span>
+              </label>
+              </FormGroup>
               <PrimaryButton loading={submitting}>Save profile</PrimaryButton>
             </form>
           )}
 
-          {currentStep === 'ACTIVATE' && (
+          {activeStep === 'ACTIVATE' && (
             <div className="space-y-5">
               <SectionHeading icon={<CheckCircle2 className="w-5 h-5" />} title="Ready to activate" text="Your required setup is complete. Documents can be uploaded after you enter the tenant portal." />
+              {submitting && (
+                <div className="rounded-2xl border border-accent/30 bg-accent/5 p-4">
+                  <div className="flex items-center gap-3">
+                    <Loader2 className="h-5 w-5 animate-spin text-accent" />
+                    <p className="text-sm font-bold text-foreground">{activationMessages[activationMessageIndex]}</p>
+                  </div>
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                    <div className="h-full w-2/3 animate-pulse rounded-full bg-accent" />
+                  </div>
+                </div>
+              )}
               <div className="grid gap-3 sm:grid-cols-2">
                 <Metric icon={<ShieldCheck className="w-4 h-4" />} label="Rules" value="Accepted" />
                 <Metric icon={<UserRound className="w-4 h-4" />} label="Profile" value="Required details complete" />
@@ -824,6 +1010,15 @@ function SectionHeading({ icon, title, text }: { icon: ReactNode; title: string;
         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{text}</p>
       </div>
     </div>
+  );
+}
+
+function FormGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="rounded-2xl border border-border bg-background p-4">
+      <h3 className="text-sm font-bold text-foreground">{title}</h3>
+      <div className="mt-4 space-y-4">{children}</div>
+    </section>
   );
 }
 
