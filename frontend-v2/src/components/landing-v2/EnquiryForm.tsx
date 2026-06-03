@@ -18,7 +18,7 @@ export function EnquiryForm({ availability }: { availability?: LandingAvailabili
       `Hi! I'm interested in Sri Adithya Hostels.\n\nName: ${formData.name}\nPhone: ${formData.phone}\nPreferred Move-in Date: ${formData.moveInDate}\n\nMessage: ${formData.message}`
     );
 
-    window.open(`https://wa.me/919392433422?text=${whatsappMessage}`, '_blank');
+    window.open(`https://api.whatsapp.com/send?phone=919392433422&text=${whatsappMessage}`, '_blank');
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -75,7 +75,7 @@ export function EnquiryForm({ availability }: { availability?: LandingAvailabili
                     </a>
 
                     <a
-                      href="https://wa.me/919392433422"
+                      href="https://api.whatsapp.com/send?phone=919392433422"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-4 p-4 bg-white rounded-lg hover:shadow-md transition-shadow group"

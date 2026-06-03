@@ -92,7 +92,7 @@ export function Footer() {
                 <span>9392433422</span>
               </a>
               <a
-                href="https://wa.me/919392433422"
+                href="https://api.whatsapp.com/send?phone=919392433422"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 text-white/80 hover:text-white transition-colors"

@@ -77,7 +77,7 @@ export function Hero({ availability }: { availability?: LandingAvailability }) {
                 <span>Book a Room Visit</span>
               </a>
               <a
-                href="https://wa.me/919392433422"
+                href="https://api.whatsapp.com/send?phone=919392433422"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 bg-white text-[#1B2D5B] border-l-4 border-green-500 px-8 py-4 rounded-lg hover:shadow-lg transition-all shadow-md font-semibold"

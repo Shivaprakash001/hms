@@ -34,7 +34,7 @@ export function OwnerCard() {
           <span>Call</span>
         </a>
         <a
-          href="https://wa.me/919392433422"
+          href="https://api.whatsapp.com/send?phone=919392433422"
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center justify-center gap-2 flex-1 bg-green-500 text-white px-4 py-2.5 rounded-lg hover:bg-green-600 transition-colors text-sm font-medium"

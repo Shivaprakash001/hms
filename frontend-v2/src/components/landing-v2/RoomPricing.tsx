@@ -78,7 +78,7 @@ export function RoomPricing({ availability }: { availability?: LandingAvailabili
                 </div>
 
                 <a
-                  href="https://wa.me/919392433422?text=Hi%2C%20I%27m%20interested%20in%20booking%20a%204-sharing%20room"
+                  href="https://api.whatsapp.com/send?phone=919392433422&text=Hi%2C%20I%27m%20interested%20in%20booking%20a%204-sharing%20room"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center justify-center gap-2 w-full bg-[#F07B1D] text-white py-4 rounded-lg hover:bg-[#d96e18] transition-colors font-semibold"

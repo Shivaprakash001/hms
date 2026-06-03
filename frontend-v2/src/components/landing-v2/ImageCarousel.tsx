@@ -1,9 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Building2, UtensilsCrossed, Bed } from 'lucide-react';
 
 export function ImageCarousel() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartX = useRef<number | null>(null);
+  const dragDeltaX = useRef(0);
 
   const slides = [
     {
@@ -24,14 +27,28 @@ export function ImageCarousel() {
   ];
 
   useEffect(() => {
-    if (isHovered) return;
+    if (isHovered || isDragging) return;
 
     const interval = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % slides.length);
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [isHovered, slides.length]);
+  }, [isHovered, isDragging, slides.length]);
+
+  const goToSlide = (index: number) => {
+    setCurrentIndex((index + slides.length) % slides.length);
+  };
+
+  const handleSwipeEnd = () => {
+    const delta = dragDeltaX.current;
+    dragStartX.current = null;
+    dragDeltaX.current = 0;
+    setIsDragging(false);
+
+    if (Math.abs(delta) < 48) return;
+    goToSlide(currentIndex + (delta < 0 ? 1 : -1));
+  };
 
   return (
     <div
@@ -39,9 +56,28 @@ export function ImageCarousel() {
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div className="overflow-hidden rounded-2xl shadow-lg">
+      <div
+        className="overflow-hidden rounded-2xl shadow-lg cursor-grab active:cursor-grabbing select-none"
+        style={{ touchAction: 'pan-y' }}
+        onPointerDown={(event) => {
+          dragStartX.current = event.clientX;
+          dragDeltaX.current = 0;
+          setIsDragging(true);
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }}
+        onPointerMove={(event) => {
+          if (dragStartX.current == null) return;
+          dragDeltaX.current = event.clientX - dragStartX.current;
+        }}
+        onPointerUp={(event) => {
+          if (dragStartX.current == null) return;
+          event.currentTarget.releasePointerCapture(event.pointerId);
+          handleSwipeEnd();
+        }}
+        onPointerCancel={handleSwipeEnd}
+      >
         <div
-          className="flex transition-transform duration-500 ease-in-out"
+          className={`flex transition-transform ease-in-out ${isDragging ? 'duration-200' : 'duration-500'}`}
           style={{ transform: `translateX(-${currentIndex * 100}%)` }}
         >
           {slides.map((slide, index) => {
@@ -70,7 +106,7 @@ export function ImageCarousel() {
         {slides.map((_, index) => (
           <button
             key={index}
-            onClick={() => setCurrentIndex(index)}
+            onClick={() => goToSlide(index)}
             className={`w-2 h-2 rounded-full transition-all duration-300 ${
               index === currentIndex
                 ? 'bg-[#F07B1D] w-6'

@@ -49,7 +49,7 @@ export function Location() {
 
                 <div className="pt-4">
                   <a
-                    href="https://maps.app.goo.gl/zEUydxJf6y4uZ2Kj9"
+                    href="https://maps.app.goo.gl/tUrcbuFmST7Zyt1c9"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center justify-center gap-2 w-full bg-[#1B2D5B] text-white py-3 rounded-lg hover:bg-[#152442] transition-colors"
@@ -64,7 +64,7 @@ export function Location() {
             <StaggerItem>
               <div className="rounded-xl overflow-hidden shadow-lg h-[400px]">
                 <iframe
-                  src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3805.8989654321!2d78.5234567!3d17.5012345!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMTfCsDMwJzA0LjQiTiA3OMKwMzEnMjQuNCJF!5e0!3m2!1sen!2sin!4v1234567890"
+                  src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d951.5284365512007!2d78.66220596962678!3d17.454269078321268!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3bcb770dd641583b%3A0xde3e95b9afb8c1b1!2sSri%20Adithya%20Boys%20Hostel!5e0!3m2!1sen!2sin!4v1780503771881!5m2!1sen!2sin"
                   width="100%"
                   height="100%"
                   style={{ border: 0 }}

@@ -125,9 +125,9 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
   const fullPayments = listFrom(full?.payments);
   const securityDepositAmount = firstPositiveAmount(
     tenant.security_deposit,
-    overview.security_deposit,
+    overview?.security_deposit,
     tenant.advance_deposit,
-    overview.advance_deposit,
+    overview?.advance_deposit,
     (advance as Record<string, unknown> | undefined)?.security_deposit,
     findSecurityDepositFromObligations(obligations as Record<string, unknown>[]),
   );
