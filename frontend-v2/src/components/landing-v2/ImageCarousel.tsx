@@ -1,30 +1,30 @@
 import { useState, useEffect, useRef } from 'react';
 import { Building2, UtensilsCrossed, Bed } from 'lucide-react';
 
+const slides = [
+  {
+    label: 'Room Interior',
+    icon: Bed,
+    image: 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
+  },
+  {
+    label: 'Daily Meals',
+    icon: UtensilsCrossed,
+    image: 'https://images.unsplash.com/photo-1542367592-8849eb950fd8?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
+  },
+  {
+    label: 'Hostel Building',
+    icon: Building2,
+    image: 'https://images.unsplash.com/photo-1779062553813-e2047a686036?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
+  },
+];
+
 export function ImageCarousel() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const dragStartX = useRef<number | null>(null);
   const dragDeltaX = useRef(0);
-
-  const slides = [
-    {
-      label: 'Room Interior',
-      icon: Bed,
-      gradient: 'from-[#F07B1D]/20 to-[#FBB040]/20'
-    },
-    {
-      label: 'Daily Meals',
-      icon: UtensilsCrossed,
-      gradient: 'from-green-500/20 to-emerald-400/20'
-    },
-    {
-      label: 'Hostel Building',
-      icon: Building2,
-      gradient: 'from-[#1B2D5B]/20 to-blue-400/20'
-    }
-  ];
 
   useEffect(() => {
     if (isHovered || isDragging) return;
@@ -87,13 +87,18 @@ export function ImageCarousel() {
                 key={index}
                 className="w-full flex-shrink-0"
               >
-                <div className={`aspect-[4/3] bg-gradient-to-br ${slide.gradient} flex flex-col items-center justify-center relative`}>
-                  <Icon className="w-16 h-16 text-[#1B2D5B]/30 mb-4" />
-                  <span className="text-[#1B2D5B]/60 font-medium text-sm">
-                    {slide.label}
-                  </span>
-                  <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-full text-xs font-medium text-[#1B2D5B] border border-[#F07B1D]/20">
-                    Photo placeholder
+                <div className="aspect-[4/3] relative overflow-hidden bg-[#FFFDF5]">
+                  <img
+                    src={slide.image}
+                    alt={slide.label}
+                    loading={index === 0 ? 'eager' : 'lazy'}
+                    draggable={false}
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+                  <div className="absolute bottom-5 left-5 flex items-center gap-3 rounded-full bg-white/90 px-4 py-2 text-sm font-semibold text-[#1B2D5B] shadow-sm backdrop-blur-sm">
+                    <Icon className="h-4 w-4 text-[#F07B1D]" />
+                    <span>{slide.label}</span>
                   </div>
                 </div>
               </div>

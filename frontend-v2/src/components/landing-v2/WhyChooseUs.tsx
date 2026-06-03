@@ -7,19 +7,19 @@ const features = [
     icon: UtensilsCrossed,
     title: 'Homely Food',
     description: 'Fresh, daily meals included — just like mom\'s cooking',
-    gradient: 'from-[#F07B1D]/20 to-[#FBB040]/20',
+    bgImage: 'https://images.unsplash.com/photo-1542367592-8849eb950fd8?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
   },
   {
     icon: Home,
     title: 'Homely Atmosphere',
     description: 'Warm, safe & comfortable — designed for students',
-    gradient: 'from-green-500/20 to-emerald-400/20',
+    bgImage: 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
   },
   {
     icon: MapPin,
     title: 'Prime Location',
     description: '400m from SNIST gate — walk in 5 minutes',
-    gradient: 'from-[#1B2D5B]/20 to-blue-400/20',
+    bgImage: 'https://images.unsplash.com/photo-1779062553813-e2047a686036?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
   },
 ];
 
@@ -101,21 +101,19 @@ export function WhyChooseUs() {
                 className={`flex transition-transform ease-in-out ${isDragging ? 'duration-200' : 'duration-500'}`}
                 style={{ transform: `translateX(-${currentIndex * 100}%)` }}
               >
-                {features.map((feature) => {
+                {features.map((feature, index) => {
                   const Icon = feature.icon;
                   return (
                     <div key={feature.title} className="w-full flex-shrink-0">
                       <div className="relative bg-[#FFFDF5] rounded-xl border border-[#F07B1D]/10 overflow-hidden group h-[280px] md:h-[320px]">
-                        <div className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} flex flex-col items-center justify-center`}>
-                          <Icon className="w-20 h-20 text-[#1B2D5B]/20 mb-4 transition-transform duration-500 group-hover:scale-110" />
-                          <span className="text-[#1B2D5B]/50 font-medium text-sm">
-                            {feature.title} visual
-                          </span>
-                        </div>
+                        <img
+                          src={feature.bgImage}
+                          alt={feature.title}
+                          loading={index === 0 ? 'eager' : 'lazy'}
+                          draggable={false}
+                          className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+                        />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
-                        <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-full text-xs font-medium text-[#1B2D5B] border border-[#F07B1D]/20">
-                          Photo placeholder
-                        </div>
 
                         <div className="relative h-full flex flex-col justify-end p-6 md:p-8">
                           <div className="w-12 h-12 md:w-14 md:h-14 bg-[#F07B1D] rounded-full flex items-center justify-center mb-4">
