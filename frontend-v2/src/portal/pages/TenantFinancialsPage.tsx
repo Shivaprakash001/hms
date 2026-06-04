@@ -13,6 +13,10 @@ import { buildPayableObligations } from '@/portal/utils/payableObligations';
 const fmt = (n: number) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
 const fmtDate = (d?: string) =>
   d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+const isValidDate = (d?: string) => {
+  if (!d) return false;
+  return !Number.isNaN(new Date(d).getTime());
+};
 const timelineTypeLabel = (type?: string) => {
   if (type === 'ADVANCE_CREDIT') return 'Future rent credit';
   const value = String(type || '').replace('PROJECTED_', '').replaceAll('_', ' ');
@@ -23,6 +27,7 @@ const timelineAmount = (item: any) => {
   if (item.type === 'PAYMENT' || item.type === 'ADVANCE_CREDIT') return Number(item.amount ?? 0);
   return Number(item.remaining ?? item.amount ?? 0);
 };
+const canSelectTimelineItem = (item: any) => item.state === 'upcoming' && timelineAmount(item) > 0;
 
 export function TenantFinancialsPage() {
   const queryClient = useQueryClient();
@@ -86,7 +91,29 @@ export function TenantFinancialsPage() {
 
   const obligations = (payments?.obligations ?? []) as Record<string, unknown>[];
   const paymentList = (payments?.payments ?? payments?.history ?? []) as Record<string, unknown>[];
-  const recentPayments = paymentList.slice(0, 5);
+  const advanceCreditHistory = ((advance as any)?.entries ?? [])
+    .filter((entry: any) => entry?.type === 'CREDIT' && entry?.reason === 'TOPUP')
+    .map((entry: any) => ({
+      id: `advance-${entry.id}`,
+      label: 'Future rent credit',
+      amount: Number(entry.amount ?? 0),
+      date: String(entry.created_at ?? ''),
+      method: entry.reference_type === 'PAYMENT_ATTEMPT' ? 'PHONEPE' : 'Rent advance',
+      receipt_payment_id: null,
+    }));
+  const recentPayments = [
+    ...paymentList.map((p) => ({
+      id: String(p.id),
+      label: 'Payment received',
+      amount: Number(p.amount_paid ?? p.amount ?? 0),
+      date: String(p.payment_date ?? p.created_at ?? ''),
+      method: String(p.payment_method ?? p.method ?? 'Payment'),
+      receipt_payment_id: p.id ? String(p.id) : null,
+    })),
+    ...advanceCreditHistory,
+  ]
+    .sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime())
+    .slice(0, 5);
   const currentObligation = obligations.find((o) => String(o.status).toLowerCase() !== 'paid');
 
   const advanceBalance = Number(advance?.balance ?? 0);
@@ -103,8 +130,14 @@ export function TenantFinancialsPage() {
     );
   };
 
+  useEffect(() => {
+    setSelectedProjectedIds((current) =>
+      current.filter((id) => timelineItems.some((item: any) => item.timeline_id === id && canSelectTimelineItem(item)))
+    );
+  }, [timelineItems]);
+
   const selectedProjectedItems = useMemo(
-    () => timelineItems.filter((item: any) => selectedProjectedIds.includes(item.timeline_id)),
+    () => timelineItems.filter((item: any) => selectedProjectedIds.includes(item.timeline_id) && canSelectTimelineItem(item)),
     [timelineItems, selectedProjectedIds]
   );
 
@@ -231,15 +264,15 @@ export function TenantFinancialsPage() {
               <div
                 key={item.timeline_id ?? item.obligation_id}
                 className={`flex items-center justify-between gap-3 rounded-xl border p-3 ${
-                  item.state === 'upcoming'
-                    ? 'border-dashed border-accent/30 bg-accent/5'
-                    : item.type === 'PAYMENT'
+                      item.state === 'upcoming'
+                        ? 'border-dashed border-accent/30 bg-accent/5'
+                    : item.type === 'PAYMENT' || item.type === 'ADVANCE_CREDIT' || item.state === 'covered'
                       ? 'border-emerald-200 bg-emerald-50/60'
                       : 'border-border'
                 }`}
               >
                 <div className="flex items-start gap-3">
-                  {item.state === 'upcoming' && (
+                  {canSelectTimelineItem(item) && (
                     <input
                       type="checkbox"
                       className="mt-1 rounded border-border text-accent focus:ring-accent cursor-pointer"
@@ -252,10 +285,18 @@ export function TenantFinancialsPage() {
                     <p className="text-xs text-muted-foreground">
                       {timelineTypeLabel(item.type)} · {['PAYMENT', 'ADVANCE_CREDIT'].includes(String(item.type)) ? 'Paid' : 'Due'} {fmtDate(item.due_date)}
                     </p>
+                    {Number(item.covered_by_advance ?? 0) > 0 && (
+                      <p className="text-xs text-emerald-700 mt-0.5">
+                        {fmt(Number(item.covered_by_advance))} covered by rent advance
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-bold">{fmt(timelineAmount(item))}</p>
+                  {Number(item.covered_by_advance ?? 0) > 0 && Number(item.amount ?? 0) > timelineAmount(item) && (
+                    <p className="text-[11px] text-muted-foreground line-through">{fmt(Number(item.amount ?? 0))}</p>
+                  )}
                   <span className="text-[11px] font-bold uppercase text-muted-foreground">{String(item.state).replaceAll('_', ' ')}</span>
                 </div>
               </div>
@@ -381,7 +422,7 @@ export function TenantFinancialsPage() {
             <span className="font-semibold text-accent">{fmt(Number((advance as any)?.available_rent_advance ?? 0))}</span>
           </div>
           <div className="flex justify-between font-bold pt-2 border-t border-border">
-            <span>Total Refundable balance</span>
+            <span>Total credit balance</span>
             <span className="text-foreground">{fmt(advanceBalance)}</span>
           </div>
         </div>
@@ -401,16 +442,16 @@ export function TenantFinancialsPage() {
                 className="flex items-center justify-between p-3 rounded-xl border border-border bg-card text-sm"
               >
                 <div>
-                  <p className="font-medium">{fmt(Number(p.amount_paid ?? p.amount ?? 0))}</p>
+                  <p className="font-medium">{fmt(Number(p.amount ?? 0))}</p>
+                  <p className="text-xs font-semibold text-foreground">{p.label}</p>
                   <p className="text-xs text-muted-foreground">
-                    {fmtDate(String(p.payment_date ?? p.created_at ?? ''))} ·{' '}
-                    {String(p.payment_method ?? p.method ?? 'Payment')}
+                    {isValidDate(p.date) ? fmtDate(p.date) : '—'} · {p.method}
                   </p>
                 </div>
-                {p.id && (
+                {p.receipt_payment_id && (
                   <button
                     type="button"
-                    onClick={() => handleReceipt(String(p.id))}
+                    onClick={() => handleReceipt(String(p.receipt_payment_id))}
                     className="p-2 rounded-lg text-accent hover:bg-accent/10"
                     aria-label="Download receipt"
                   >

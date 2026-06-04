@@ -2,6 +2,13 @@ import { useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 
 const fmt = (n: number) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
+const fmtMonth = (value?: string) => {
+  if (!value) return 'Unknown';
+  if (!Number.isNaN(new Date(value).getTime())) {
+    return new Date(value).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+  }
+  return value;
+};
 
 const STATUS_COLORS: Record<string, string> = {
   PENDING: 'text-amber-600',
@@ -37,23 +44,27 @@ interface Props {
 export function RentObligationList({ obligations, onRecordPayment, onSetupBilling }: Props) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const { months, rows } = useMemo(() => {
-    const byMonth = obligations.reduce<Record<string, Obligation[]>>((acc, o) => {
-      const month = o.installment_label ?? o.billing_period_start ?? o.rent_month ?? 'Unknown';
-      if (!acc[month]) acc[month] = [];
-      acc[month].push(o);
+    const byMonth = obligations.reduce<Record<string, { label: string; sort: number; obligations: Obligation[] }>>((acc, o) => {
+      const periodValue = o.billing_period_start ?? o.rent_month;
+      const label = o.installment_label ?? fmtMonth(periodValue);
+      const sort = periodValue && !Number.isNaN(new Date(periodValue).getTime())
+        ? new Date(periodValue).getTime()
+        : 0;
+      if (!acc[label]) acc[label] = { label, sort, obligations: [] };
+      acc[label].obligations.push(o);
       return acc;
     }, {});
-    const sortedMonths = Object.keys(byMonth).sort().reverse();
-    const flatRows = sortedMonths.flatMap((month) => [
-      { kind: 'month' as const, month },
-      ...byMonth[month].map((obligation, index) => ({
+    const sortedGroups = Object.values(byMonth).sort((a, b) => b.sort - a.sort || b.label.localeCompare(a.label));
+    const flatRows = sortedGroups.flatMap((group) => [
+      { kind: 'month' as const, month: group.label },
+      ...group.obligations.map((obligation, index) => ({
         kind: 'obligation' as const,
-        month,
+        month: group.label,
         obligation,
         index,
       })),
     ]);
-    return { months: sortedMonths, rows: flatRows };
+    return { months: sortedGroups.map((group) => group.label), rows: flatRows };
   }, [obligations]);
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
@@ -103,7 +114,9 @@ export function RentObligationList({ obligations, onRecordPayment, onSetupBillin
           const i = item.index;
           const status = String(o.status ?? 'PENDING').toUpperCase();
           const id = o.id ?? o.obligation_id ?? `${item.month}-${i}`;
-          const paidAmount = Number(o.paid_amount ?? o.paid ?? 0);
+          const billedAmount = Number(o.total_payable ?? o.amount ?? 0);
+          const rawPaidAmount = Number(o.paid_amount ?? o.paid ?? 0);
+          const paidAmount = status === 'PAID' && rawPaidAmount <= 0 ? billedAmount : rawPaidAmount;
           const displayAmount = Number(o.outstanding ?? o.amount ?? 0);
           return (
             <div

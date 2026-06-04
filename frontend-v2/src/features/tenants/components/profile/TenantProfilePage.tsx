@@ -45,6 +45,13 @@ const billingTimelineAmount = (item: Record<string, unknown>) => {
 };
 const billingTimelineDateVerb = (item: Record<string, unknown>) =>
   item.type === 'PAYMENT' || item.type === 'ADVANCE_CREDIT' ? 'Paid' : 'Due';
+const billingTimelineTone = (item: Record<string, unknown>) => {
+  if (item.type === 'PAYMENT' || item.type === 'ADVANCE_CREDIT' || item.state === 'covered') {
+    return 'border-emerald-200 bg-emerald-50/60';
+  }
+  if (item.state === 'upcoming') return 'border-dashed border-accent/30 bg-accent/5';
+  return 'border-border';
+};
 
 const positiveAmount = (value: unknown) => {
   const amount = Number(value ?? 0);
@@ -448,15 +455,23 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
               </div>
               <div className="space-y-2">
                 {timelineItems.slice(0, 12).map((item: any) => (
-                  <div key={item.timeline_id ?? item.obligation_id} className="flex justify-between gap-3 rounded-lg border border-border p-3 text-sm">
+                  <div key={item.timeline_id ?? item.obligation_id} className={`flex justify-between gap-3 rounded-lg border p-3 text-sm ${billingTimelineTone(item)}`}>
                     <div>
                       <p className="font-semibold">{item.label}</p>
                       <p className="text-xs text-muted-foreground">
                         {billingTimelineLabel(item)} · {billingTimelineDateVerb(item)} {new Date(item.due_date).toLocaleDateString('en-IN')}
                       </p>
+                      {Number(item.covered_by_advance ?? 0) > 0 && (
+                        <p className="text-xs text-emerald-700 mt-0.5">
+                          {money(item.covered_by_advance)} covered by rent advance
+                        </p>
+                      )}
                     </div>
                     <div className="text-right">
                       <p className="font-bold">₹{billingTimelineAmount(item).toLocaleString('en-IN')}</p>
+                      {Number(item.covered_by_advance ?? 0) > 0 && Number(item.amount ?? 0) > billingTimelineAmount(item) && (
+                        <p className="text-[11px] text-muted-foreground line-through">{money(item.amount)}</p>
+                      )}
                       <p className="text-[11px] font-bold uppercase text-muted-foreground">{String(item.state).replaceAll('_', ' ')}</p>
                     </div>
                   </div>
