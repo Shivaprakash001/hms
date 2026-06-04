@@ -461,7 +461,7 @@ export class ExpenseService {
           hostel_reference_only: Boolean(data.hostel_id),
           suggested_category: suggestedCategory(data.title),
         },
-      } as any,
+      },
     });
 
     await eventSystem.trigger("expense_created", {
