@@ -27,6 +27,7 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
   const [email, setEmail]             = useState('');
   const [roomId, setRoomId]           = useState(preselectedRoomId ?? '');
   const [joiningDate, setJoiningDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [paymentFrequency, setPaymentFrequency] = useState('MONTHLY');
   const [overrides, setOverrides]     = useState<Overrides>({});
   const [showAdv, setShowAdv]         = useState(false);
   const [error, setError]             = useState<string | null>(null);
@@ -51,6 +52,15 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
       setSelectedHostelId(String(hostels[0].id ?? hostels[0].hostel_id));
     }
   }, [hostels, selectedHostelId]);
+
+  useEffect(() => {
+    const selectedHostel = hostels.find((h: any) => String(h.id ?? h.hostel_id) === selectedHostelId);
+    if (selectedHostel?.rent_cycle) {
+      setPaymentFrequency(selectedHostel.rent_cycle);
+    } else {
+      setPaymentFrequency('MONTHLY');
+    }
+  }, [selectedHostelId, hostels]);
 
   useEffect(() => {
     if (hostelId) setSelectedHostelId(hostelId);
@@ -136,6 +146,7 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
       hostel_id:          selectedHostelId,
       room_id:            roomId,
       joining_date:       joiningDate,
+      payment_frequency:  paymentFrequency,
       monthly_rent:       display.monthly_rent || undefined,
       advance_amount:     display.advance_deposit,
       maintenance_amount: display.maintenance_charge,
@@ -281,6 +292,20 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
                   <span className="flex items-center gap-1.5"><Calendar className="w-3 h-3" /> Joining Date *</span>
                 </label>
                 <input type="date" value={joiningDate} onChange={(e) => setJoiningDate(e.target.value)} required className={inp} />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Billing Frequency *</label>
+                <select
+                  value={paymentFrequency}
+                  onChange={(e) => setPaymentFrequency(e.target.value)}
+                  required
+                  className={inp}
+                >
+                  <option value="MONTHLY">Monthly</option>
+                  <option value="QUARTERLY">Quarterly</option>
+                  <option value="HALF_YEARLY">Half Yearly</option>
+                  <option value="ACADEMIC_YEARLY">Academic Yearly</option>
+                </select>
               </div>
             </div>
           </div>

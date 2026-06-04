@@ -380,6 +380,7 @@ export function ActivateAccountPage() {
   const [profileDraftReady, setProfileDraftReady] = useState(false);
   const [profileDraftStatus, setProfileDraftStatus] = useState<'idle' | 'restored' | 'saving' | 'saved'>('idle');
   const [photoUploading, setPhotoUploading] = useState(false);
+  const [paymentFrequency, setPaymentFrequency] = useState('MONTHLY');
 
   const [account, setAccount] = useState({ password: '', confirm_password: '', phone: '' });
   const [acks, setAcks] = useState<Record<string, boolean>>({});
@@ -421,6 +422,7 @@ export function ActivateAccountPage() {
       const data = await tenantService.getActivationContext(token);
       const draft = readProfileDraft(token);
       setCtx(data);
+      setPaymentFrequency(String(data?.tenant?.payment_frequency || 'MONTHLY'));
       setProfilePhotoPreview(String(data.tenant?.photo_url || draft?.photoUrl || ''));
       setInvalid(false);
       setInvalidCode('');
@@ -1320,9 +1322,30 @@ export function ActivateAccountPage() {
                 <Metric icon={<FileText className="w-4 h-4" />} label="Documents" value={documentPending ? 'Pending after activation' : 'Uploaded'} />
                 <Metric icon={<Receipt className="w-4 h-4" />} label="Next rent cycle" value={fmtDate(ctx.room_summary.next_rent_generation_date)} />
               </div>
+              <div className="rounded-2xl border border-border bg-card p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-7 h-7 rounded-xl bg-accent/10 flex items-center justify-center text-accent shrink-0">
+                    <Receipt className="w-4 h-4" />
+                  </div>
+                  <label className="text-xs font-semibold text-muted-foreground">Select Billing Cycle</label>
+                </div>
+                <select
+                  value={paymentFrequency}
+                  onChange={(e) => setPaymentFrequency(e.target.value)}
+                  className="w-full mt-2 px-3 py-2.5 rounded-lg border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-accent"
+                >
+                  <option value="MONTHLY">Monthly (Pay rent every month)</option>
+                  <option value="QUARTERLY">Quarterly (Pay rent every 3 months)</option>
+                  <option value="HALF_YEARLY">Half Yearly (Pay rent every 6 months)</option>
+                  <option value="ACADEMIC_YEARLY">Academic Yearly (Pay rent every 12 months)</option>
+                </select>
+                <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+                  Confirm your preferred billing frequency. Changing it later will require submitting a change request to the hostel owner.
+                </p>
+              </div>
               <button
                 type="button"
-                onClick={() => submitStep('ACTIVATE', {})}
+                onClick={() => submitStep('ACTIVATE', { payment_frequency: paymentFrequency })}
                 disabled={submitting}
                 className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3.5 text-sm font-semibold text-primary-foreground disabled:opacity-50 active:scale-[0.98] transition-transform shadow-sm"
               >

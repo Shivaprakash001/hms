@@ -540,6 +540,7 @@ export class InvitationService {
       room_id: string;
       monthly_rent: number;
       joining_date?: string;
+      payment_frequency?: string;
     }
   ) {
     const normalizedEmail = String(data.email || "").trim().toLowerCase();
@@ -617,6 +618,7 @@ export class InvitationService {
           joined_on: joiningDate,
           billing_start_date: joiningDate,
           hostel_id: targetRoom.hostel_id,
+          payment_frequency: data.payment_frequency as any || undefined,
         },
       });
 

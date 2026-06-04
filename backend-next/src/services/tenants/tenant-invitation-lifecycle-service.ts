@@ -118,6 +118,7 @@ export class TenantInvitationLifecycleService {
           maintenance_type: maintenanceType,
           phone_1: normalizedPhone,
           personal_email: normalizedEmail,
+          payment_frequency: data.payment_frequency || capacity.room.hostels.rent_cycle || "MONTHLY",
         },
       });
 
@@ -251,6 +252,7 @@ export class TenantInvitationLifecycleService {
           status: "INVITED",
           ...(typeof overrides?.monthly_rent !== "undefined" ? { monthly_rent: Number(overrides.monthly_rent) } : {}),
           ...(typeof overrides?.phone !== "undefined" ? { phone_1: normalizeIndianPhone(overrides.phone) || invitation.phone } : {}),
+          ...(overrides?.payment_frequency ? { payment_frequency: overrides.payment_frequency } : {}),
         },
       });
 
@@ -456,7 +458,7 @@ export class TenantInvitationLifecycleService {
     return profile;
   }
 
-  async completeActivation(invitation: any, tenant: any, profile: any) {
+  async completeActivation(invitation: any, tenant: any, profile: any, paymentFrequency?: string) {
     const completedAt = new Date();
     await prisma.$transaction(async (tx: any) => {
       const reservation = await tx.tenant_invitation_reservations.findFirst({
@@ -512,6 +514,8 @@ export class TenantInvitationLifecycleService {
           profile_completed: true,
           activation_completed_at: completedAt,
           onboarding_last_activity_at: completedAt,
+          payment_frequency_effective_from: tenant.billing_start_date || tenant.joined_on || completedAt,
+          ...(paymentFrequency ? { payment_frequency: paymentFrequency } : {}),
         },
       });
     });

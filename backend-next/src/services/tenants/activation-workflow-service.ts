@@ -490,7 +490,7 @@ export class ActivationWorkflowService {
       await this.saveProfile(profile, tenant, data);
     }
     if (step === "ACTIVATE") {
-      await this.activate(profile, tenant, invitation);
+      await this.activate(profile, tenant, data, invitation);
       const requiredDocumentTypes = this.requiredDocumentTypes(tenant.profile_type);
       return {
         activation_state: {
@@ -668,10 +668,13 @@ export class ActivationWorkflowService {
     await eventLog.log("rules_accepted", tenant.owner_id || null, { tenant_id: tenant.id, hostel_id: tenant.hostel_id, rule_version_id: ruleVersion.id }, tenant.id);
   }
 
-  private async activate(profile: any, tenant: any, invitation?: any | null) {
+  private async activate(profile: any, tenant: any, data: any, invitation?: any | null) {
     if (!profile) throw new Error("INVALID_TRANSITION: Complete account setup before activation");
+    if (data?.payment_frequency && !["MONTHLY", "QUARTERLY", "HALF_YEARLY", "ACADEMIC_YEARLY"].includes(data.payment_frequency)) {
+      throw new Error("VALIDATION_ERROR: Invalid payment frequency cycle selection");
+    }
     if (invitation) {
-      await tenantInvitationLifecycleService.completeActivation(invitation, tenant, profile);
+      await tenantInvitationLifecycleService.completeActivation(invitation, tenant, profile, data?.payment_frequency);
       return;
     }
     const ruleVersion = await this.getActiveRuleVersion(tenant.hostel_id);
@@ -730,6 +733,8 @@ export class ActivationWorkflowService {
           profile_completed: true,
           activation_completed_at: completedAt,
           onboarding_last_activity_at: completedAt,
+          payment_frequency_effective_from: tenantNow.billing_start_date || tenantNow.joined_on || completedAt,
+          ...(data?.payment_frequency ? { payment_frequency: data.payment_frequency } : {}),
         },
       });
       if (tenantUpdate.count !== 1) {
