@@ -16,34 +16,53 @@ interface SectionShellProps {
 
 export function SectionShell({ title, description, isDirty, saving, onSave, onReset, children, error }: SectionShellProps) {
   return (
-    <div className="bg-card border border-border rounded-xl overflow-hidden">
-      <div className="px-5 py-4 border-b border-border flex items-start justify-between gap-3">
-        <div>
-          <h2 className="font-semibold text-foreground">{title}</h2>
-          {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
-        </div>
-        {isDirty && (
-          <div className="flex items-center gap-2 shrink-0">
-            <button onClick={onReset} className="text-xs text-muted-foreground hover:text-foreground px-2.5 py-1.5 rounded-lg hover:bg-secondary transition-colors">
-              Reset
-            </button>
-            <button
-              onClick={onSave}
-              disabled={saving}
-              className="text-xs bg-accent text-accent-foreground px-3 py-1.5 rounded-lg font-medium disabled:opacity-50 transition-opacity"
-            >
-              {saving ? 'Saving…' : 'Save'}
-            </button>
+    <>
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-border flex items-start justify-between gap-3">
+          <div>
+            <h2 className="font-semibold text-foreground">{title}</h2>
+            {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
           </div>
+          {isDirty && (
+            <div className="hidden md:flex items-center gap-2 shrink-0">
+              <button onClick={onReset} className="text-xs text-muted-foreground hover:text-foreground px-2.5 py-1.5 rounded-lg hover:bg-secondary transition-colors">
+                Reset
+              </button>
+              <button
+                onClick={onSave}
+                disabled={saving}
+                className="text-xs bg-accent text-accent-foreground px-3 py-1.5 rounded-lg font-medium disabled:opacity-50 transition-opacity"
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {error && (
+          <div className="mx-5 mt-4 px-3 py-2.5 bg-destructive/10 text-destructive text-xs rounded-lg">{error}</div>
         )}
+
+        <div className="px-5 py-5 space-y-5">{children}</div>
       </div>
 
-      {error && (
-        <div className="mx-5 mt-4 px-3 py-2.5 bg-destructive/10 text-destructive text-xs rounded-lg">{error}</div>
+      {isDirty && (
+        <div className="fixed bottom-24 md:bottom-10 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-4 bg-foreground border border-border shadow-2xl px-5 py-3 rounded-full animate-in fade-in slide-in-from-bottom-6 duration-300">
+          <span className="text-sm font-medium text-background hidden sm:block whitespace-nowrap">Unsaved changes</span>
+          <div className="w-px h-5 bg-background/20 hidden sm:block" />
+          <button onClick={onReset} className="text-sm font-medium text-background/70 hover:text-background transition-colors px-1 whitespace-nowrap">
+            Discard
+          </button>
+          <button
+            onClick={onSave}
+            disabled={saving}
+            className="text-sm bg-accent text-accent-foreground px-5 py-2 rounded-full font-semibold shadow-md hover:brightness-110 active:scale-95 disabled:opacity-50 transition-all whitespace-nowrap"
+          >
+            {saving ? 'Saving…' : 'Save changes'}
+          </button>
+        </div>
       )}
-
-      <div className="px-5 py-5 space-y-5">{children}</div>
-    </div>
+    </>
   );
 }
 
