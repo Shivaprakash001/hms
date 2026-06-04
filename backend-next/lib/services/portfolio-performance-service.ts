@@ -25,6 +25,8 @@ export interface PortfolioPerformanceRanking {
   collection_rate: number;
   pending_dues: number;
   active_tenants: number;
+  total_capacity: number;
+  vacant_beds: number;
   trend_percentage: number;
   is_top_performer: boolean;
 }
@@ -36,6 +38,8 @@ export interface PortfolioPerformanceResponse {
     occupancy_rate: number;
     active_tenants: number;
     collection_rate: number;
+    total_capacity: number;
+    vacant_beds: number;
   };
   monthly_trends: PortfolioPerformanceMonth[];
   hostel_rankings: PortfolioPerformanceRanking[];
@@ -218,8 +222,11 @@ export class PortfolioPerformanceService {
     let rankings: PortfolioPerformanceRanking[] = hostelMeta.map((h) => {
       const cur = currentByHostel.get(h.id);
       const prev = previousByHostel.get(h.id);
+      const capacity = capacityMap.get(h.id);
       const revenue = cur?.revenue ?? 0;
       const prevRevenue = prev?.revenue ?? 0;
+      const activeTenants = capacity?.activeTenants ?? 0;
+      const totalCapacity = capacity?.totalCapacity ?? 0;
       return {
         hostel_id: h.id,
         hostel_name: h.name,
@@ -228,7 +235,9 @@ export class PortfolioPerformanceService {
         occupancy_rate: cur?.occupancy_rate ?? 0,
         collection_rate: cur?.collection_rate ?? 0,
         pending_dues: cur?.pending_dues ?? 0,
-        active_tenants: capacityMap.get(h.id)?.activeTenants ?? 0,
+        active_tenants: activeTenants,
+        total_capacity: totalCapacity,
+        vacant_beds: Math.max(totalCapacity - activeTenants, 0),
         trend_percentage: trendPct(revenue, prevRevenue),
         is_top_performer: false,
       };
@@ -271,6 +280,8 @@ export class PortfolioPerformanceService {
         collection_rate: aggregateExpected > 0
           ? Math.round((aggregateRevenue / aggregateExpected) * 10000) / 100
           : 0,
+        total_capacity: aggregateCapacity,
+        vacant_beds: Math.max(aggregateCapacity - aggregateActiveTenants, 0),
       },
       monthly_trends,
       hostel_rankings: rankings,
