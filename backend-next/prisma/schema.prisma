@@ -753,14 +753,24 @@ model receipts {
 }
 
 model refresh_tokens {
-  id         String   @id @db.Uuid
-  user_id    String   @db.Uuid
-  token_hash String   @unique
-  expires_at DateTime @db.Timestamptz(6)
-  created_at DateTime @default(now()) @db.Timestamptz(6)
-  profiles   profile  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  id                  String    @id @db.Uuid
+  user_id             String    @db.Uuid
+  token_hash          String    @unique
+  expires_at          DateTime  @db.Timestamptz(6)
+  created_at          DateTime  @default(now()) @db.Timestamptz(6)
+  session_id          String?   @db.Uuid
+  absolute_expires_at DateTime? @db.Timestamptz(6)
+  last_activity_at    DateTime  @default(now()) @db.Timestamptz(6)
+  revoked_at          DateTime? @db.Timestamptz(6)
+  rotated_at          DateTime? @db.Timestamptz(6)
+  device_info         String?
+  ip_address          String?
+  profiles            profile   @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@index([expires_at])
+  @@index([last_activity_at])
+  @@index([revoked_at])
+  @@index([session_id])
   @@index([user_id])
 }
 

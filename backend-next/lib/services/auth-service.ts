@@ -126,7 +126,8 @@ export class AuthService {
       throw new Error("UNAUTHORIZED: Invalid OWNER: missing owner_id");
     }
 
-    const session = await sessionLifecycleService.createSession(profile, meta);
+    const sessionProfile = { ...profile, owner_id: effectiveOwnerId || null };
+    const session = await sessionLifecycleService.createSession(sessionProfile, meta);
 
     const token = await generateToken({
       sub: profile.id,
@@ -194,7 +195,8 @@ export class AuthService {
       throw new Error("FORBIDDEN: Account is not active");
     }
 
-    const session = await sessionLifecycleService.createSession(profile, meta);
+    const sessionProfile = { ...profile, owner_id: profile.owner_id || null };
+    const session = await sessionLifecycleService.createSession(sessionProfile, meta);
 
     const token = await generateToken({
       sub: profile.id,
@@ -727,7 +729,8 @@ export class AuthService {
       throw new Error("UNAUTHORIZED: Invalid OWNER: missing owner_id");
     }
 
-    const session = await sessionLifecycleService.createSession(profile, meta);
+    const sessionProfile = { ...profile, owner_id: effectiveOwnerId || null };
+    const session = await sessionLifecycleService.createSession(sessionProfile, meta);
 
     // 4. Create local JWT
     const token = await generateToken({
