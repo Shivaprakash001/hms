@@ -125,7 +125,13 @@ export function PortfolioView() {
             className="min-h-7 truncate text-2xl font-bold leading-7 text-foreground"
             style={{ fontFamily: 'var(--font-display)' }}
           >
-            {user?.name ? `Good morning, ${user.name.split(' ')[0]}` : 'Owner home'}
+            {user?.name ? `${(function() {
+              const hour = new Date().getHours();
+              if (hour < 12) return 'Good morning';
+              if (hour < 17) return 'Good afternoon';
+              if (hour < 21) return 'Good evening';
+              return 'Good night';
+            })()}, ${user.name.split(' ')[0]}` : 'Owner home'}
           </h1>
           <p className="mt-0.5 min-h-10 text-sm text-muted-foreground">
             What needs attention across {rankings.length} propert{rankings.length === 1 ? 'y' : 'ies'} today
