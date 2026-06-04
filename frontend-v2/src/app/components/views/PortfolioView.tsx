@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   Search, SlidersHorizontal, Building2, ArrowRight, BarChart3,
   CheckCircle, IndianRupee, TrendingUp, Users, Phone, Bell,
-  LogOut, UserCheck,
+  LogOut, UserCheck, Settings, X, ChevronRight,
 } from 'lucide-react';
 import { useAuth } from '@context/AuthContext';
 import { portfolioService } from '@features/dashboard/api';
@@ -23,6 +23,9 @@ const FilterModal = lazy(() =>
 );
 const EditHostelSheet = lazy(() =>
   import('@/app/components/modals/EditHostelSheet').then((m) => ({ default: m.EditHostelSheet }))
+);
+const SettingsView = lazy(() =>
+  import('@/app/components/views/SettingsView').then((m) => ({ default: m.SettingsView }))
 );
 
 const fmt = (n: number) => {
@@ -51,13 +54,19 @@ function Skeleton() {
 }
 
 export function PortfolioView() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddHostel, setShowAddHostel] = useState(false);
   const [showFilter, setShowFilter] = useState(false);
   const [editingHostelId, setEditingHostelId] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterOptions>({ occupancy: [], revenue: [], alerts: [] });
+  const [showSettings, setShowSettings] = useState(false);
+  const [showAvatarMenu, setShowAvatarMenu] = useState(false);
+
+  const userInitials = user?.name
+    ? user.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
+    : '?';
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.portfolio.shell(6),
@@ -153,14 +162,42 @@ export function PortfolioView() {
   return (
     <div className="px-4 py-5 space-y-5 min-w-0 max-w-5xl mx-auto pb-24 md:pb-8">
 
-      {/* Header */}
-      <div>
-        <h1 className="truncate text-2xl font-bold leading-7 text-foreground" style={{ fontFamily: 'var(--font-display)' }}>
-          {user?.name ? `${greeting}, ${user.name.split(' ')[0]}` : 'Owner home'}
-        </h1>
-        <p className="mt-0.5 text-sm text-muted-foreground">
-          {rankings.length} propert{rankings.length === 1 ? 'y' : 'ies'} · {monthLabel} snapshot
-        </p>
+      {/* Header — avatar on right, greeting on left */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="truncate text-2xl font-bold leading-7 text-foreground" style={{ fontFamily: 'var(--font-display)' }}>
+            {user?.name ? `${greeting}, ${user.name.split(' ')[0]}` : 'Owner home'}
+          </h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            {rankings.length} hostel{rankings.length === 1 ? '' : 's'} · {monthLabel} snapshot
+          </p>
+        </div>
+        {/* Avatar button — opens Settings on mobile */}
+        <div className="relative shrink-0">
+          <button
+            type="button"
+            onClick={() => setShowAvatarMenu((v) => !v)}
+            className="w-10 h-10 rounded-full bg-accent flex items-center justify-center text-sm font-bold text-accent-foreground shadow-sm active:scale-95 transition-transform md:hidden"
+            aria-label="Open settings"
+          >
+            {userInitials}
+          </button>
+          {/* Mobile avatar dropdown */}
+          {showAvatarMenu && (
+            <div className="absolute right-0 top-12 z-50 w-52 rounded-2xl border border-border bg-card shadow-xl p-2 md:hidden" onClick={() => setShowAvatarMenu(false)}>
+              <div className="px-3 py-2 border-b border-border mb-1">
+                <p className="text-sm font-semibold text-foreground truncate">{user?.name || 'Owner'}</p>
+                <p className="text-xs text-muted-foreground truncate">{user?.email || ''}</p>
+              </div>
+              <button type="button" onClick={() => { setShowAvatarMenu(false); setShowSettings(true); }} className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-foreground hover:bg-secondary">
+                <Settings className="w-4 h-4 text-muted-foreground" /> Settings
+              </button>
+              <button type="button" onClick={logout} className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-destructive hover:bg-destructive/10">
+                <LogOut className="w-4 h-4" /> Log out
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {isLoading ? <Skeleton /> : isError ? (
@@ -432,6 +469,30 @@ export function PortfolioView() {
         <Suspense fallback={null}>
           <EditHostelSheet hostelId={editingHostelId} hostelName={editingHostel.hostel_name} onClose={() => setEditingHostelId(null)} />
         </Suspense>
+      )}
+
+      {/* Settings Sheet — mobile only (desktop uses sidebar link) */}
+      {showSettings && (
+        <div className="fixed inset-0 z-50 md:hidden" onClick={() => setShowSettings(false)}>
+          <div className="absolute inset-0 bg-black/50" />
+          <div
+            className="absolute bottom-0 left-0 right-0 bg-background rounded-t-2xl overflow-hidden"
+            style={{ maxHeight: '92dvh' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-4 border-b border-border">
+              <h2 className="text-base font-bold text-foreground">Settings</h2>
+              <button type="button" onClick={() => setShowSettings(false)} className="p-1.5 rounded-lg text-muted-foreground hover:bg-secondary">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="overflow-y-auto" style={{ maxHeight: 'calc(92dvh - 61px)' }}>
+              <Suspense fallback={<div className="p-8 space-y-3"><div className="h-10 rounded-xl bg-muted animate-pulse" /><div className="h-10 rounded-xl bg-muted animate-pulse" /><div className="h-10 rounded-xl bg-muted animate-pulse" /></div>}>
+                <SettingsView />
+              </Suspense>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

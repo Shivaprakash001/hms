@@ -57,6 +57,7 @@ export function OwnerRoutes() {
         <Route path="/tenants/import" element={<BulkInvitationImportView />} />
         <Route path="/hostels/:hostelId/tenants/:tenantId" element={<TenantProfileRoute />} />
         <Route path="/hostels/:hostelId/move-outs" element={<MoveOutsView />} />
+        <Route path="/move-outs" element={<MoveOutsView />} />
         <Route path="/alerts" element={<AlertsView />} />
         <Route path="/billing" element={<BillingView />} />
         <Route path="/admissions" element={<AdmissionsView />} />

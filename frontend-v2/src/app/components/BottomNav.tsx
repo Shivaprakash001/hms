@@ -1,12 +1,12 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutGrid, Bell, CreditCard, Users, Settings } from 'lucide-react';
+import { LayoutGrid, Bell, CreditCard, Users, ClipboardList } from 'lucide-react';
 
 const navItems = [
   { to: '/dashboard', icon: LayoutGrid, label: 'Home' },
+  { to: '/admissions', icon: ClipboardList, label: 'Admissions' },
   { to: '/tenants', icon: Users, label: 'Tenants' },
   { to: '/billing', icon: CreditCard, label: 'Billing' },
   { to: '/alerts', icon: Bell, label: 'Alerts' },
-  { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 
 export function BottomNav() {

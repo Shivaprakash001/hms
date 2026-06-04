@@ -8,6 +8,8 @@ import { queryKeys } from '@lib/queryKeys';
 import { TenantsLayout } from '@features/tenants/components/layout/TenantsLayout';
 import { MoveOutStepper } from '@features/tenants/components/moveout/MoveOutStepper';
 import { TenantStatusBadge } from '@features/tenants/components/badges/TenantStatusBadge';
+import { ownerService } from '@features/owners/api';
+import { useTenantStore } from '@features/tenants/store/tenantStore';
 
 const fmt = (n: unknown) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
 const fmtDate = (d: unknown) =>
@@ -32,7 +34,28 @@ function settlementSource(active: Record<string, unknown>) {
 }
 
 export function MoveOutsView() {
-  const { hostelId = '' } = useParams();
+  const { hostelId: paramHostelId } = useParams();
+  const selectedHostelId = useTenantStore((s) => s.selectedHostelId);
+  const setSelectedHostelId = useTenantStore((s) => s.setSelectedHostelId);
+
+  // Load hostels
+  const { data: hostelsRaw } = useQuery({
+    queryKey: ['owner', 'hostels'],
+    queryFn: () => ownerService.getHostels(),
+    staleTime: 5 * 60_000,
+  });
+
+  const hostels = useMemo(() => {
+    if (Array.isArray(hostelsRaw)) return hostelsRaw as Record<string, unknown>[];
+    const obj = hostelsRaw as Record<string, unknown> | undefined;
+    if (Array.isArray(obj?.hostels)) return obj!.hostels as Record<string, unknown>[];
+    if (Array.isArray((obj?.data as Record<string, unknown>)?.hostels))
+      return (obj!.data as Record<string, unknown>).hostels as Record<string, unknown>[];
+    return [];
+  }, [hostelsRaw]);
+
+  const hostelId = paramHostelId || selectedHostelId || (hostels[0] ? String(hostels[0].id) : '');
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const qc = useQueryClient();
 
@@ -141,9 +164,29 @@ export function MoveOutsView() {
   });
 
   return (
-    <TenantsLayout title="Move-outs" subtitle="Inspection, settlement, and exit workflow" backTo={`/hostels/${hostelId}/tenants`}>
-      <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
-        <aside className="space-y-3">
+    <TenantsLayout
+      title="Move-outs"
+      subtitle="Inspection, settlement, and exit workflow"
+      backTo={paramHostelId ? `/hostels/${paramHostelId}/tenants` : '/tenants'}
+    >
+      <div className="space-y-4">
+        {/* Hostel Selector (only if accessed globally and multiple hostels exist) */}
+        {!paramHostelId && hostels.length > 1 && (
+          <select
+            value={hostelId}
+            onChange={(e) => setSelectedHostelId(e.target.value)}
+            className="w-full max-w-xs px-3 py-2 rounded-xl border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-accent"
+          >
+            {hostels.map((h) => (
+              <option key={String(h.id)} value={String(h.id)}>
+                {String(h.name ?? h.hostel_name ?? 'Hostel')}
+              </option>
+            ))}
+          </select>
+        )}
+
+        <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
+          <aside className="space-y-3">
           {isLoading ? (
             [1, 2, 3].map((i) => (
               <div key={i} className="h-28 animate-pulse rounded-2xl border border-border bg-card" />
@@ -455,7 +498,8 @@ export function MoveOutsView() {
           )}
         </section>
       </div>
-    </TenantsLayout>
+    </div>
+  </TenantsLayout>
   );
 }
 

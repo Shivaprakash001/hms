@@ -2,21 +2,18 @@ import { lazy, Suspense, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Bell, CheckSquare, GraduationCap, UserPlus, X } from 'lucide-react';
+import { Bell, CheckSquare, UserPlus, X } from 'lucide-react';
 import { useTenantsList } from '@features/tenants/hooks/useTenantsList';
 import { useTenantActions } from '@features/tenants/hooks/useTenantActions';
 import { useTenantStore } from '@features/tenants/store/tenantStore';
 import { TenantsLayout } from '@features/tenants/components/layout/TenantsLayout';
-import { TenantsDashboard } from '@features/tenants/components/dashboard/TenantsDashboard';
 import { TenantFilters } from '@features/tenants/components/list/TenantFilters';
 import { TenantTable } from '@features/tenants/components/list/TenantTable';
 import { TenantCardMobile } from '@features/tenants/components/list/TenantCardMobile';
 import { reminderService } from '@features/notifications/api';
 import { useIsMobile } from '@/app/components/ui/use-mobile';
-import { IdleRender } from '@/shared/performance';
 import type { NormalizedTenant } from '@features/tenants/utils/normalize';
 
-const AcademicMixChart = lazy(() => import('./tenants/AcademicMixChart').then((m) => ({ default: m.AcademicMixChart })));
 const AddTenantModal = lazy(() => import('@/app/components/modals/AddTenantModal').then((m) => ({ default: m.AddTenantModal })));
 const TenantProfileDrawer = lazy(() => import('@features/tenants/components/profile/TenantProfileDrawer').then((m) => ({ default: m.TenantProfileDrawer })));
 
@@ -34,31 +31,6 @@ export function TenantsHostelView() {
   const { tenants, total, dashboard, isLoading, refetch } = useTenantsList(hostelId);
   const actions = useTenantActions(hostelId);
 
-  const yearDistribution = useMemo(() => {
-    const counts = {
-      '1st Year': 0,
-      '2nd Year': 0,
-      '3rd Year': 0,
-      '4th Year': 0,
-      'Other': 0,
-    };
-    tenants.forEach((t) => {
-      if (t.status !== 'ACTIVE') return;
-      const year = t.yearOfStudy;
-      if (year === 1) counts['1st Year']++;
-      else if (year === 2) counts['2nd Year']++;
-      else if (year === 3) counts['3rd Year']++;
-      else if (year === 4) counts['4th Year']++;
-      else counts['Other']++;
-    });
-    return Object.entries(counts)
-      .map(([name, value]) => ({ name, value }))
-      .filter((item) => item.value > 0);
-  }, [tenants]);
-
-  const activeStudentCount = useMemo(() => {
-    return tenants.filter((t) => t.status === 'ACTIVE').length;
-  }, [tenants]);
 
   const overdueTenants = useMemo(
     () =>
@@ -126,91 +98,69 @@ export function TenantsHostelView() {
         </button>
       }
     >
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2">
-          <TenantsDashboard stats={dashboard} />
-        </div>
-        <div className="rounded-xl border border-border bg-card overflow-hidden">
-          <div className="px-4 py-3 border-b border-border flex items-center justify-between bg-muted/20">
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">Academic Mix</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">For room planning and batch-wise communication</p>
-            </div>
-            <GraduationCap className="h-4 w-4 text-accent" />
+      <div className="space-y-4">
+        <BulkTenantActions
+          overdueCount={overdueTenants.length}
+          selectedCount={selectedTenants.length}
+          onSelectOverdue={selectAllOverdue}
+          onClear={() => setSelectedTenantIds(new Set())}
+          onSend={() => bulkReminderMutation.mutate(selectedTenants.map((tenant) => tenant.id))}
+          busy={bulkReminderMutation.isPending}
+        />
+        <TenantFilters />
+        {isLoading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-24 rounded-xl bg-secondary animate-pulse" />
+            ))}
           </div>
-          <div className="p-4 flex items-center gap-3">
-            <IdleRender fallback={<div className="h-28 w-full rounded-xl bg-secondary animate-pulse" />}>
-              <Suspense fallback={<div className="h-28 w-full rounded-xl bg-secondary animate-pulse" />}>
-                <AcademicMixChart
-                  distribution={yearDistribution}
-                  activeStudentCount={activeStudentCount}
-                />
-              </Suspense>
-            </IdleRender>
-          </div>
-        </div>
+        ) : (
+          <>
+            <TenantTable
+              tenants={tenants}
+              hostelId={hostelId}
+              onReminder={(t) => reminderMutation.mutate(t.id)}
+              onMoveOut={() => navigate(`/hostels/${hostelId}/move-outs`)}
+              onResend={(t) => t.email && actions.resendInvite.mutate(t.email)}
+              selectedIds={selectedTenantIds}
+              onToggleSelect={toggleTenantSelection}
+            />
+            <TenantCardMobile
+              tenants={tenants}
+              hostelId={hostelId}
+              onSelect={handleView}
+              onReminder={(t) => reminderMutation.mutate(t.id)}
+              onCall={actions.callTenant}
+              onResend={(t) => t.email && actions.resendInvite.mutate(t.email)}
+              selectedIds={selectedTenantIds}
+              onToggleSelect={toggleTenantSelection}
+            />
+            {total > pageSize && (
+              <div className="flex justify-center gap-2 pt-4">
+                <button
+                  type="button"
+                  disabled={page === 0}
+                  onClick={() => setPage(page - 1)}
+                  className="px-4 py-2 rounded-lg border border-border text-sm disabled:opacity-40"
+                >
+                  Previous
+                </button>
+                <span className="text-sm text-muted-foreground self-center">
+                  Page {page + 1}
+                </span>
+                <button
+                  type="button"
+                  disabled={(page + 1) * pageSize >= total}
+                  onClick={() => setPage(page + 1)}
+                  className="px-4 py-2 rounded-lg border border-border text-sm disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </div>
-      <BulkTenantActions
-        overdueCount={overdueTenants.length}
-        selectedCount={selectedTenants.length}
-        onSelectOverdue={selectAllOverdue}
-        onClear={() => setSelectedTenantIds(new Set())}
-        onSend={() => bulkReminderMutation.mutate(selectedTenants.map((tenant) => tenant.id))}
-        busy={bulkReminderMutation.isPending}
-      />
-      <TenantFilters />
-      {isLoading ? (
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-24 rounded-xl bg-secondary animate-pulse" />
-          ))}
-        </div>
-      ) : (
-        <>
-          <TenantTable
-            tenants={tenants}
-            hostelId={hostelId}
-            onReminder={(t) => reminderMutation.mutate(t.id)}
-            onMoveOut={() => navigate(`/hostels/${hostelId}/move-outs`)}
-            onResend={(t) => t.email && actions.resendInvite.mutate(t.email)}
-            selectedIds={selectedTenantIds}
-            onToggleSelect={toggleTenantSelection}
-          />
-          <TenantCardMobile
-            tenants={tenants}
-            hostelId={hostelId}
-            onSelect={handleView}
-            onReminder={(t) => reminderMutation.mutate(t.id)}
-            onCall={actions.callTenant}
-            onResend={(t) => t.email && actions.resendInvite.mutate(t.email)}
-            selectedIds={selectedTenantIds}
-            onToggleSelect={toggleTenantSelection}
-          />
-          {total > pageSize && (
-            <div className="flex justify-center gap-2 pt-4">
-              <button
-                type="button"
-                disabled={page === 0}
-                onClick={() => setPage(page - 1)}
-                className="px-4 py-2 rounded-lg border border-border text-sm disabled:opacity-40"
-              >
-                Previous
-              </button>
-              <span className="text-sm text-muted-foreground self-center">
-                Page {page + 1}
-              </span>
-              <button
-                type="button"
-                disabled={(page + 1) * pageSize >= total}
-                onClick={() => setPage(page + 1)}
-                className="px-4 py-2 rounded-lg border border-border text-sm disabled:opacity-40"
-              >
-                Next
-              </button>
-            </div>
-          )}
-        </>
-      )}
     </TenantsLayout>
 
     {showInvite && (

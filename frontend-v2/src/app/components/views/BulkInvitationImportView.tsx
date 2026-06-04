@@ -43,9 +43,29 @@ export function BulkInvitationImportView() {
   }, [hostelsRaw]);
 
   const validation = batch?.validation || {};
-  const requiresHistorical = Boolean(validation.requires_historical_join_date_confirmation);
-  const readyCount = Number(validation.valid_rows || 0);
-  const blockedCount = Number(validation.invalid_rows || 0) + Number(validation.duplicate_rows || 0);
+  const previewValidRows = Array.isArray(batch?.preview?.valid) ? batch.preview.valid : [];
+  const previewInvalidRows = Array.isArray(batch?.preview?.invalid) ? batch.preview.invalid : [];
+  const previewDuplicateRows = Array.isArray(batch?.preview?.duplicates) ? batch.preview.duplicates : [];
+  const hasPendingEdits = Object.keys(editedData).length > 0;
+  const requiresHistorical = Boolean(
+    validation.requires_historical_join_date_confirmation ??
+      previewValidRows.some((row: any) =>
+        (row.warnings || []).some((warning: string) => warning.toLowerCase().includes('historical joining date')),
+      ),
+  );
+  const readyCount = Number(validation.valid_rows ?? previewValidRows.length);
+  const blockedCount =
+    Number(validation.invalid_rows ?? previewInvalidRows.length) +
+    Number(validation.duplicate_rows ?? previewDuplicateRows.length);
+  const sendDisabledReason = sending
+    ? ''
+    : hasPendingEdits
+      ? 'Revalidate your edited rows before sending invitations.'
+      : readyCount === 0
+        ? 'No rows are ready to invite yet. Fix validation issues and revalidate.'
+        : requiresHistorical && !confirmHistorical
+          ? 'Confirm historical joining dates before sending invitations.'
+          : '';
   const batchStatus = unwrap<any>(batchStatusRaw);
   const funnel = batchStatus?.funnel || {};
   const trackedRows = batchStatus?.rows || result?.results || [];
@@ -148,9 +168,17 @@ export function BulkInvitationImportView() {
           rows: rowsToRevalidate,
         }),
       );
+      const nextRequiresHistorical = Boolean(
+        response?.validation?.requires_historical_join_date_confirmation ??
+          (Array.isArray(response?.preview?.valid)
+            ? response.preview.valid.some((row: any) =>
+                (row.warnings || []).some((warning: string) => warning.toLowerCase().includes('historical joining date')),
+              )
+            : false),
+      );
       setBatch(response);
       setEditedData({});
-      setConfirmHistorical(false);
+      setConfirmHistorical((previous) => (nextRequiresHistorical ? previous : false));
     } catch (err: any) {
       setError(err?.response?.data?.error?.message || err?.message || 'Unable to revalidate edits.');
     } finally {
@@ -277,22 +305,22 @@ export function BulkInvitationImportView() {
               </label>
             )}
 
-            <PreviewTable title="Ready rows" rows={batch?.preview?.valid || []} isEditable={true} editedData={editedData} onEdit={handleRowEdit} />
-            <PreviewTable title="Invalid rows" rows={batch?.preview?.invalid || []} isEditable={true} editedData={editedData} onEdit={handleRowEdit} />
-            <PreviewTable title="Duplicate rows" rows={batch?.preview?.duplicates || []} isEditable={true} editedData={editedData} onEdit={handleRowEdit} />
+            <PreviewTable title="Ready rows" rows={previewValidRows} isEditable={true} editedData={editedData} onEdit={handleRowEdit} />
+            <PreviewTable title="Invalid rows" rows={previewInvalidRows} isEditable={true} editedData={editedData} onEdit={handleRowEdit} />
+            <PreviewTable title="Duplicate rows" rows={previewDuplicateRows} isEditable={true} editedData={editedData} onEdit={handleRowEdit} />
 
             <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"
                 onClick={sendInvitations}
-                disabled={sending || readyCount === 0 || (requiresHistorical && !confirmHistorical) || Object.keys(editedData).length > 0}
+                disabled={sending || Boolean(sendDisabledReason)}
                 className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-3 text-sm font-bold text-accent-foreground disabled:opacity-60"
               >
                 <Send className="h-4 w-4" />
                 {sending ? 'Sending invitations...' : 'Send invitations'}
               </button>
               
-              {Object.keys(editedData).length > 0 && (
+              {hasPendingEdits && (
                 <button
                   type="button"
                   onClick={revalidateEdits}
@@ -304,6 +332,9 @@ export function BulkInvitationImportView() {
                 </button>
               )}
             </div>
+            {sendDisabledReason && (
+              <p className="text-sm font-medium text-muted-foreground">{sendDisabledReason}</p>
+            )}
           </div>
         )}
 

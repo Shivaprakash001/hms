@@ -4,20 +4,23 @@ import { useTenantStore, type LifecycleFilter } from '@features/tenants/store/te
 const FILTERS: { id: LifecycleFilter; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'active', label: 'Active' },
-  { id: 'invited', label: 'Pending invite' },
+  { id: 'invited', label: 'Invited' },
   { id: 'overdue', label: 'Overdue' },
-  { id: 'move_out', label: 'Vacating' },
-  { id: 'unverified', label: 'Unverified' },
-  { id: 'no_room', label: 'No room' },
+  { id: 'move_out', label: 'Move-Out' },
+  { id: 'inactive', label: 'Former' },
 ];
 
 export function TenantFilters() {
   const searchQuery = useTenantStore((s) => s.searchQuery);
   const lifecycleFilter = useTenantStore((s) => s.lifecycleFilter);
-  const showInactive = useTenantStore((s) => s.showInactive);
   const setSearchQuery = useTenantStore((s) => s.setSearchQuery);
   const setLifecycleFilter = useTenantStore((s) => s.setLifecycleFilter);
   const setShowInactive = useTenantStore((s) => s.setShowInactive);
+
+  const handleFilter = (id: LifecycleFilter) => {
+    setLifecycleFilter(id);
+    setShowInactive(id === 'inactive');
+  };
 
   return (
     <div className="space-y-3">
@@ -36,7 +39,7 @@ export function TenantFilters() {
           <button
             key={id}
             type="button"
-            onClick={() => setLifecycleFilter(id)}
+            onClick={() => handleFilter(id)}
             className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors touch-manipulation ${
               lifecycleFilter === id
                 ? 'bg-accent text-accent-foreground'
@@ -47,15 +50,6 @@ export function TenantFilters() {
           </button>
         ))}
       </div>
-      <label className="flex items-center gap-2 text-sm text-muted-foreground">
-        <input
-          type="checkbox"
-          checked={showInactive}
-          onChange={(e) => setShowInactive(e.target.checked)}
-          className="rounded border-border"
-        />
-        Show former tenants
-      </label>
     </div>
   );
 }
