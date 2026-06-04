@@ -45,6 +45,7 @@ interface Props {
   onClose: () => void;
   amount: number;
   obligationIds: string[];
+  paymentType?: 'RENT' | 'ADVANCE';
   paymentContext?: PayableObligation[];
   onSuccess?: () => void;
 }
@@ -54,6 +55,7 @@ export function TenantPaymentModal({
   onClose,
   amount,
   obligationIds,
+  paymentType = 'RENT',
   paymentContext = [],
   onSuccess,
 }: Props) {
@@ -102,16 +104,24 @@ export function TenantPaymentModal({
   const canRetry = useMemo(() => ['FAILED', 'EXPIRED', 'CANCELLED'].includes(status), [status]);
 
   const handleCreateIntent = async () => {
-    const ids = [...new Set(obligationIds.filter(Boolean))];
-    if (ids.length === 0) {
-      setError('No pending dues are available for payment right now.');
-      return;
-    }
-
     setLoading(true);
     setError('');
     try {
-      const intent = await tenantPortalApi.createPaymentIntent({ obligation_ids: ids });
+      let intent;
+      if (paymentType === 'ADVANCE') {
+        intent = await tenantPortalApi.createPaymentIntent({
+          payment_type: 'ADVANCE',
+          amount,
+        });
+      } else {
+        const ids = [...new Set(obligationIds.filter(Boolean))];
+        if (ids.length === 0) {
+          setError('No pending dues are available for payment right now.');
+          setLoading(false);
+          return;
+        }
+        intent = await tenantPortalApi.createPaymentIntent({ obligation_ids: ids });
+      }
 
       if (intent.checkout_url) {
         window.location.href = intent.checkout_url;
@@ -171,7 +181,7 @@ export function TenantPaymentModal({
     <Dialog open={open} onOpenChange={(v) => !loading && status !== 'SUCCESS' && !v && onClose()}>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto p-0 gap-0">
         <DialogHeader className="p-5 border-b border-border bg-muted/30">
-          <DialogTitle>Pay rent</DialogTitle>
+          <DialogTitle>{paymentType === 'ADVANCE' ? 'Pay advance' : 'Pay rent'}</DialogTitle>
           <p className="text-sm text-muted-foreground">
             {step === 'init' && 'Review amount and continue to PhonePe'}
             {step === 'pay' && 'Complete payment or enter UPI reference'}
@@ -182,22 +192,26 @@ export function TenantPaymentModal({
 
         <div className="space-y-4 p-5">
           <div className="rounded-xl border border-accent/30 bg-accent/5 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-accent">Total due</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-accent">
+              {paymentType === 'ADVANCE' ? 'Total advance amount' : 'Total due'}
+            </p>
             <p className="text-3xl font-bold text-foreground mt-1">{fmt(amount)}</p>
           </div>
 
           {paymentContext.length > 0 && (
             <div className="rounded-xl border border-border p-3 space-y-2">
-              <p className="text-sm font-semibold text-foreground">You are paying for</p>
+              <p className="text-sm font-semibold text-foreground">
+                {paymentType === 'ADVANCE' ? 'You are paying in advance for' : 'You are paying for'}
+              </p>
               {paymentContext.map((item) => (
                 <div key={item.id} className="rounded-lg bg-muted/50 px-3 py-2 text-sm">
                   <div className="flex justify-between gap-2">
                     <span className="font-medium">
-                      Monthly stay ({fmtMonth(item.cycle || item.rent_month || item.due_date)})
+                      {paymentType === 'ADVANCE' ? item.label : `Monthly stay (${fmtMonth(item.cycle || item.rent_month || item.due_date)})`}
                     </span>
                     <span className="font-bold">{fmt(item.amount)}</span>
                   </div>
-                  {Number(item.maintenance_amount ?? 0) > 0 && (
+                  {paymentType !== 'ADVANCE' && Number(item.maintenance_amount ?? 0) > 0 && (
                     <p className="text-xs text-muted-foreground mt-1">Includes maintenance</p>
                   )}
                 </div>

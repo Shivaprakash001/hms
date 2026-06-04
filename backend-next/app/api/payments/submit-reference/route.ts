@@ -7,6 +7,7 @@ import { authService } from "@/lib/services/auth-service";
 import { apiError } from "@/lib/utils/api-utils";
 import { prisma } from "@/lib/db";
 import { paymentStatusEventService } from "@/lib/services/payment-status-event-service";
+import crypto from "crypto";
 
 /**
  * POST /api/payments/submit-reference
@@ -128,6 +129,29 @@ export async function POST(req: Request) {
       hostelId: attempt.hostel_id,
       metadata: { upi_reference: cleanRef },
     }).catch(() => {});
+
+    // Notify owner about the submission
+    try {
+      const tenantProfile = await prisma.tenants.findUnique({
+        where: { id: attempt.tenant_id },
+        include: { profiles: true },
+      });
+      const tenantName = tenantProfile?.profiles?.name || "A tenant";
+      const roomNo = tenantProfile?.room_no || "N/A";
+      const isAdvance = attempt.payment_type === "ADVANCE";
+
+      await prisma.notifications.create({
+        data: {
+          id: crypto.randomUUID(),
+          profile_id: attempt.owner_id,
+          title: isAdvance ? "Bulk Advance Payment Submitted" : "New Payment Submitted",
+          message: `${tenantName} (Room ${roomNo}) has submitted a ${isAdvance ? "bulk advance " : ""}payment of ₹${attempt.amount} (UPI Ref: ${cleanRef}).`,
+          type: "payment"
+        }
+      });
+    } catch (notificationErr) {
+      console.error("Failed to notify owner on reference submission:", notificationErr);
+    }
 
     return NextResponse.json({
       message: "UPI reference submitted. Payment will be confirmed shortly.",

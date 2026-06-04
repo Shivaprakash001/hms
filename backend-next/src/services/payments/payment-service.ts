@@ -1725,6 +1725,29 @@ export class PaymentService {
         tenant_id: attempt.tenant_id,
         gateway_txn_id: gatewayTxnId || null,
       });
+
+      // Notify owner about the confirmed advance payment
+      try {
+        const tenantProfile = await prisma.tenants.findUnique({
+          where: { id: attempt.tenant_id },
+          include: { profiles: true },
+        });
+        const tenantName = tenantProfile?.profiles?.name || "A tenant";
+        const roomNo = tenantProfile?.room_no || "N/A";
+
+        await prisma.notifications.create({
+          data: {
+            id: crypto.randomUUID(),
+            profile_id: attempt.owner_id,
+            title: "Bulk Advance Payment Confirmed",
+            message: `${tenantName} (Room ${roomNo}) advance payment of ₹${attempt.amount} has been confirmed.`,
+            type: "payment"
+          }
+        });
+      } catch (notificationErr) {
+        logger.error("Failed to notify owner on successful advance payment finalization:", notificationErr);
+      }
+
       return finalizedAdvance;
     }
 

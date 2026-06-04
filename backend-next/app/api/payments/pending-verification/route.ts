@@ -40,6 +40,10 @@ export async function GET(req: Request) {
         tenants: {
           include: {
             profiles: { select: { name: true, email: true, phone: true } },
+            room_allocations: {
+              where: { is_active: true },
+              include: { room: { select: { room_no: true } } },
+            },
           },
         },
         rent_obligations: {
@@ -53,20 +57,27 @@ export async function GET(req: Request) {
       orderBy: { created_at: "desc" },
     });
 
-    const items = attempts.map((a: any) => ({
-      attempt_id: a.id,
-      status: a.status,
-      flow_type: a.flow_type || (a.raw_webhook_payload?.source === "tenant_submission" ? "MANUAL_UPI_REFERENCE" : "RENT"),
-      tenant_name: a.tenants?.profiles?.name || "Unknown",
-      tenant_email: a.tenants?.profiles?.email || "",
-      tenant_phone: a.tenants?.profiles?.phone || "",
-      room_no: a.rent_obligations?.room_allocations?.room?.room_no || "N/A",
-      amount: Number(a.amount),
-      upi_reference: a.gateway_txn_id || "—",
-      rent_month: a.rent_obligations?.rent_month,
-      submitted_at: a.raw_webhook_payload?.submitted_at || a.updated_at,
-      created_at: a.created_at,
-    }));
+    const items = attempts.map((a: any) => {
+      const tenantActiveAllocation = a.tenants?.room_allocations?.[0];
+      const roomNo = tenantActiveAllocation?.room?.room_no || a.rent_obligations?.room_allocations?.room?.room_no || "N/A";
+      const isAdvance = a.payment_type === "ADVANCE" || a.flow_type === "ADVANCE";
+
+      return {
+        attempt_id: a.id,
+        status: a.status,
+        flow_type: a.flow_type || (a.raw_webhook_payload?.source === "tenant_submission" ? "MANUAL_UPI_REFERENCE" : "RENT"),
+        payment_type: a.payment_type,
+        tenant_name: a.tenants?.profiles?.name || "Unknown",
+        tenant_email: a.tenants?.profiles?.email || "",
+        tenant_phone: a.tenants?.profiles?.phone || "",
+        room_no: roomNo,
+        amount: Number(a.amount),
+        upi_reference: a.gateway_txn_id || "—",
+        rent_month: isAdvance ? "Advance Payment" : a.rent_obligations?.rent_month,
+        submitted_at: a.raw_webhook_payload?.submitted_at || a.updated_at,
+        created_at: a.created_at,
+      };
+    });
 
     return NextResponse.json({
       pending_count: items.length,

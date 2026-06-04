@@ -28,7 +28,9 @@ export function TenantFinancialsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { dues, payments, advance, isLoading } = useTenantDashboard();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectedProjectedIds, setSelectedProjectedIds] = useState<string[]>([]);
   const [showPayModal, setShowPayModal] = useState(false);
+  const [showAdvancePayModal, setShowAdvancePayModal] = useState(false);
   const [requestedFrequency, setRequestedFrequency] = useState('QUARTERLY');
   const [requestReason, setRequestReason] = useState('');
   const billingContext = useQuery({
@@ -99,6 +101,32 @@ export function TenantFinancialsPage() {
       checked ? [...new Set([...current, id])] : current.filter((x) => x !== id)
     );
   };
+
+  const toggleProjectedSelection = (id: string, checked: boolean) => {
+    setSelectedProjectedIds((current) =>
+      checked ? [...new Set([...current, id])] : current.filter((x) => x !== id)
+    );
+  };
+
+  const selectedProjectedItems = useMemo(
+    () => timelineItems.filter((item: any) => selectedProjectedIds.includes(item.timeline_id)),
+    [timelineItems, selectedProjectedIds]
+  );
+
+  const selectedProjectedTotal = useMemo(
+    () => selectedProjectedItems.reduce((s: number, item: any) => s + timelineAmount(item), 0),
+    [selectedProjectedItems]
+  );
+
+  const advancePaymentContext = useMemo(() => {
+    return selectedProjectedItems.map((item: any) => ({
+      id: item.timeline_id,
+      amount: timelineAmount(item),
+      label: item.label,
+      due_date: item.due_date,
+      cycle: item.period_start || item.rent_month,
+    }));
+  }, [selectedProjectedItems]);
 
   const handlePaymentSuccess = () => {
     setShowPayModal(false);
@@ -216,11 +244,21 @@ export function TenantFinancialsPage() {
                       : 'border-border'
                 }`}
               >
-                <div>
-                  <p className="text-sm font-semibold text-foreground">{item.label}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {timelineTypeLabel(item.type)} · {item.type === 'PAYMENT' ? 'Paid' : 'Due'} {fmtDate(item.due_date)}
-                  </p>
+                <div className="flex items-start gap-3">
+                  {item.state === 'upcoming' && (
+                    <input
+                      type="checkbox"
+                      className="mt-1 rounded border-border text-accent focus:ring-accent cursor-pointer"
+                      checked={selectedProjectedIds.includes(item.timeline_id)}
+                      onChange={(e) => toggleProjectedSelection(item.timeline_id, e.target.checked)}
+                    />
+                  )}
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">{item.label}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {timelineTypeLabel(item.type)} · {item.type === 'PAYMENT' ? 'Paid' : 'Due'} {fmtDate(item.due_date)}
+                    </p>
+                  </div>
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-bold">{fmt(timelineAmount(item))}</p>
@@ -229,6 +267,23 @@ export function TenantFinancialsPage() {
               </div>
             ))}
           </div>
+
+          {selectedProjectedTotal > 0 && (
+            <div className="flex items-center justify-between gap-3 pt-4 border-t border-border mt-4">
+              <div>
+                <p className="text-xs text-muted-foreground">Selected advance total</p>
+                <p className="text-xl font-bold text-accent">{fmt(selectedProjectedTotal)}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAdvancePayModal(true)}
+                className="flex items-center gap-2 px-5 py-3 rounded-xl bg-accent text-accent-foreground font-bold text-sm hover:bg-accent/90 transition-colors"
+              >
+                <CreditCard className="w-4 h-4" />
+                Pay Advance {fmt(selectedProjectedTotal)}
+              </button>
+            </div>
+          )}
         </section>
       )}
 
@@ -384,6 +439,21 @@ export function TenantFinancialsPage() {
         obligationIds={selectedIds}
         paymentContext={selectedItems}
         onSuccess={handlePaymentSuccess}
+      />
+
+      <TenantPaymentModal
+        open={showAdvancePayModal}
+        onClose={() => setShowAdvancePayModal(false)}
+        amount={selectedProjectedTotal}
+        obligationIds={[]}
+        paymentType="ADVANCE"
+        paymentContext={advancePaymentContext}
+        onSuccess={() => {
+          setShowAdvancePayModal(false);
+          setSelectedProjectedIds([]);
+          queryClient.invalidateQueries({ queryKey: ['tenant'] });
+          toast.success('Advance payment recorded successfully!');
+        }}
       />
     </div>
   );

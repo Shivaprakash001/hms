@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { AlertCircle, AlertTriangle, Phone, CheckCircle, Building2, CreditCard, ChevronDown, FileText, MessageSquare, UserRound, Loader2, CalendarDays } from 'lucide-react';
 import { ownerService } from '@features/owners/api';
 import { paymentService } from '@features/payments/api';
@@ -106,6 +107,44 @@ export function AlertsView() {
     ? billingRequestsData.requests
     : [];
 
+  const { data: pendingPaymentsData, refetch: refetchPayments } = useQuery({
+    queryKey: ['payments', 'pending-verification', activeHostelId ?? 'none'],
+    queryFn: () => paymentService.getPendingVerifications(activeHostelId!),
+    enabled: !!activeHostelId,
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: true,
+  });
+
+  const confirmPaymentMutation = useMutation({
+    mutationFn: (attemptId: string) => paymentService.confirmPayment(attemptId),
+    onSuccess: () => {
+      toast.success('Payment confirmed successfully');
+      queryClient.invalidateQueries({ queryKey: ['payments', 'pending-verification', activeHostelId ?? 'none'] });
+      refetchPayments();
+      refetch();
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.error?.message || 'Could not confirm payment');
+    },
+  });
+
+  const rejectPaymentMutation = useMutation({
+    mutationFn: (attemptId: string) => paymentService.rejectPayment(attemptId),
+    onSuccess: () => {
+      toast.success('Payment rejected');
+      queryClient.invalidateQueries({ queryKey: ['payments', 'pending-verification', activeHostelId ?? 'none'] });
+      refetchPayments();
+      refetch();
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.error?.message || 'Could not reject payment');
+    },
+  });
+
+  const pendingPayments: Record<string, any>[] = Array.isArray(pendingPaymentsData?.items)
+    ? pendingPaymentsData.items
+    : [];
+
   const pendingDocs: Record<string, unknown>[] = Array.isArray(pendingDocsData)
     ? pendingDocsData
     : [];
@@ -145,11 +184,13 @@ export function AlertsView() {
             {isLoading || isRequestsLoading ? 'Loading…' : (
               <>
                 {dues.length > 0 && `${fmt(totalOutstanding)} outstanding · ${overdueList.length} overdue`}
-                {dues.length > 0 && (pendingDocs.length > 0 || billingRequests.length > 0) && ' · '}
+                {dues.length > 0 && (pendingDocs.length > 0 || billingRequests.length > 0 || pendingPayments.length > 0) && ' · '}
                 {pendingDocs.length > 0 && `${pendingDocs.length} document verifications pending`}
-                {(dues.length > 0 || pendingDocs.length > 0) && billingRequests.length > 0 && ' · '}
+                {(dues.length > 0 || pendingDocs.length > 0) && (billingRequests.length > 0 || pendingPayments.length > 0) && ' · '}
                 {billingRequests.length > 0 && `${billingRequests.length} billing requests pending`}
-                {dues.length === 0 && pendingDocs.length === 0 && billingRequests.length === 0 && 'All clear'}
+                {(dues.length > 0 || pendingDocs.length > 0 || billingRequests.length > 0) && pendingPayments.length > 0 && ' · '}
+                {pendingPayments.length > 0 && `${pendingPayments.length} payments pending verification`}
+                {dues.length === 0 && pendingDocs.length === 0 && billingRequests.length === 0 && pendingPayments.length === 0 && 'All clear'}
               </>
             )}
           </p>
@@ -184,8 +225,8 @@ export function AlertsView() {
       </div>
 
       {/* Summary bar */}
-      {!isLoading && (dues.length > 0 || pendingDocs.length > 0 || billingRequests.length > 0) && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      {!isLoading && (dues.length > 0 || pendingDocs.length > 0 || billingRequests.length > 0 || pendingPayments.length > 0) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           <div className={`rounded-xl p-3 min-w-0 ${
             overdueList.length > 0 ? 'bg-[#EF4444]/8 border border-[#EF4444]/25' : 'bg-card border border-border'
           }`}>
@@ -223,6 +264,16 @@ export function AlertsView() {
             </div>
             <div className={`text-xl font-semibold ${billingRequests.length > 0 ? 'text-accent' : 'text-foreground'}`}>{billingRequests.length}</div>
             <div className="text-[10px] text-muted-foreground mt-0.5 truncate">{billingRequests.length > 0 ? 'Awaiting decision' : 'All clear'}</div>
+          </div>
+          <div className={`bg-card border rounded-xl p-3 min-w-0 ${
+            pendingPayments.length > 0 ? 'border-accent/35 bg-accent/5' : 'border-border'
+          }`}>
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <CreditCard className={`w-3.5 h-3.5 shrink-0 ${pendingPayments.length > 0 ? 'text-accent' : 'text-muted-foreground'}`} />
+              <span className="text-xs text-muted-foreground">Pending Payments</span>
+            </div>
+            <div className={`text-xl font-semibold ${pendingPayments.length > 0 ? 'text-accent' : 'text-foreground'}`}>{pendingPayments.length}</div>
+            <div className="text-[10px] text-muted-foreground mt-0.5 truncate">{pendingPayments.length > 0 ? 'Awaiting confirm' : 'All confirmed'}</div>
           </div>
         </div>
       )}
@@ -442,6 +493,77 @@ export function AlertsView() {
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
                       )}
                       Approve
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Payment Verification Requests Section */}
+      {!isLoading && pendingPayments.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-accent uppercase tracking-wider">Payment Verification Requests</span>
+            <span className="text-xs bg-accent/10 text-accent px-2 py-0.5 rounded-full font-medium">{pendingPayments.length}</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {pendingPayments.map((payment) => {
+              const attemptId = payment.attempt_id;
+              const tenantName = payment.tenant_name || 'Tenant';
+              const room = payment.room_no || 'N/A';
+              const amount = payment.amount;
+              const upiRef = payment.upi_reference || '—';
+              const isAdvance = payment.payment_type === 'ADVANCE' || payment.flow_type === 'ADVANCE';
+              const description = isAdvance ? 'Bulk Advance Payment' : `Rent for ${payment.rent_month || '—'}`;
+              
+              return (
+                <div key={attemptId} className="bg-card border border-border rounded-xl p-4 flex flex-col justify-between gap-3 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center shrink-0">
+                      <span className="text-sm font-bold text-accent">{tenantName.charAt(0).toUpperCase()}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <h4 className="font-semibold text-foreground truncate text-sm">{tenantName}</h4>
+                        <span className="text-xs text-muted-foreground shrink-0">Room {room}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Amount: <span className="font-bold text-foreground">{fmt(amount)}</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Type: <span className="font-semibold text-accent">{description}</span>
+                      </p>
+                      {upiRef && (
+                        <div className="mt-2 bg-secondary/50 p-2 rounded-lg text-xs font-mono select-all flex items-center justify-between">
+                          <span className="text-muted-foreground">UPI Ref:</span>
+                          <span className="font-semibold text-foreground">{upiRef}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 mt-1">
+                    <button
+                      onClick={() => rejectPaymentMutation.mutate(attemptId)}
+                      disabled={rejectPaymentMutation.isPending || confirmPaymentMutation.isPending}
+                      className="bg-secondary text-secondary-foreground py-2 rounded-lg text-xs font-semibold hover:bg-secondary/80 active:scale-98 transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
+                    >
+                      {rejectPaymentMutation.isPending && rejectPaymentMutation.variables === attemptId && (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      )}
+                      Reject
+                    </button>
+                    <button
+                      onClick={() => confirmPaymentMutation.mutate(attemptId)}
+                      disabled={confirmPaymentMutation.isPending || rejectPaymentMutation.isPending}
+                      className="bg-accent text-accent-foreground py-2 rounded-lg text-xs font-semibold hover:opacity-90 active:scale-98 transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
+                    >
+                      {confirmPaymentMutation.isPending && confirmPaymentMutation.variables === attemptId && (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      )}
+                      Confirm
                     </button>
                   </div>
                 </div>
