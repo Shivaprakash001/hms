@@ -14,6 +14,8 @@ export {
   getSession,
   apiResponse,
   apiError,
+  generateResetToken,
+  verifyResetToken,
 } from "./auth-edge";
 
 export type { AuthPayload } from "./auth-edge";

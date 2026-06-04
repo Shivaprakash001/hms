@@ -130,6 +130,31 @@ export async function verifyIdentityToken(
   }
 }
 
+/**
+ * Generate a 1-hour single-use secure password reset token.
+ */
+export async function generateResetToken(email: string): Promise<string> {
+  return new SignJWT({ email, action: "password_reset" })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("1h")
+    .sign(JWT_SECRET);
+}
+
+/**
+ * Verify a password reset token.
+ */
+export async function verifyResetToken(token: string): Promise<{ email: string } | null> {
+  try {
+    const { payload } = await jwtVerify(token, JWT_SECRET);
+    if (payload.action !== "password_reset" || !payload.email) return null;
+    return { email: payload.email as string };
+  } catch {
+    return null;
+  }
+}
+
+
 export function apiResponse(data: any, status = 200) {
   return NextResponse.json({
     success: true,
