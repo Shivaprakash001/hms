@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { getLogger } from "@/lib/logger";
 import { getTenantOperationalContext } from "@/lib/hostel-context";
+import { randomUUID } from "crypto";
 
 const logger = getLogger("tenant.advance");
 
@@ -80,6 +81,7 @@ export class TenantAdvanceService {
       const newBalance = Math.round((currentBalance + amount) * 100) / 100;
       const entry = await tx.tenant_advance_ledger.create({
         data: {
+          id: randomUUID(),
           tenant_id: tenantId,
           owner_id: ownerId,
           hostel_id: tenant.hostel_id,
@@ -143,6 +145,7 @@ export class TenantAdvanceService {
 
     const entry = await tx.tenant_advance_ledger.create({
       data: {
+        id: randomUUID(),
         tenant_id: tenantId,
         owner_id: ownerId,
         hostel_id: tenant.hostel_id,
@@ -215,6 +218,7 @@ export class TenantAdvanceService {
 
       const entry = await tx.tenant_advance_ledger.create({
         data: {
+          id: randomUUID(),
           tenant_id: tenantId,
           owner_id: ownerId,
           hostel_id: tenant.hostel_id,
@@ -342,6 +346,7 @@ export class TenantAdvanceService {
       const newBalance = Math.round((currentBalance - amount) * 100) / 100;
       const entry = await tx.tenant_advance_ledger.create({
         data: {
+          id: randomUUID(),
           tenant_id: tenantId,
           owner_id: ownerId,
           hostel_id: obligation.hostel_id,
