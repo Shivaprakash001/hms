@@ -35,24 +35,59 @@ export class TenantAdvanceService {
   }
 
   private async _buildBalanceResponse(tenantId: string) {
-    const entries = await prisma.tenant_advance_ledger.findMany({
-      where: { tenant_id: tenantId },
-      orderBy: { created_at: "asc" },
-    });
+    const [entries, tenant, paidAdvanceObligations] = await Promise.all([
+      prisma.tenant_advance_ledger.findMany({
+        where: { tenant_id: tenantId },
+        orderBy: { created_at: "asc" },
+      }),
+      prisma.tenants.findUniqueOrThrow({
+        where: { id: tenantId },
+        select: { advance_deposit: true },
+      }),
+      prisma.payments.aggregate({
+        where: {
+          tenant_id: tenantId,
+          obligation: {
+            obligation_type: "ADVANCE",
+          },
+        },
+        _sum: {
+          amount_paid: true,
+        },
+      }),
+    ]);
+
     const balance = entries.reduce((acc: number, e: any) => {
       const amt = Number(e.amount);
       return e.type === "CREDIT" ? acc + amt : acc - amt;
     }, 0);
+
+    const configuredSecurityDeposit = Number(tenant.advance_deposit || 0);
+    const paidAdvanceObligationSum = Number(paidAdvanceObligations?._sum?.amount_paid || 0);
+    const ledgerDepositCredits = this._sumLedgerCreditsByReason(entries, "DEPOSIT");
+    const ledgerSecurityDeposit = this._calculateLedgerSecurityDeposit({
+      ledgerBalance: balance,
+      configuredSecurityDeposit,
+      paidAdvanceObligationSum,
+      ledgerDepositCredits,
+    });
+    const availableRentAdvance = Math.max(0, balance - ledgerSecurityDeposit);
+    const paidSecurityDeposit = Math.min(configuredSecurityDeposit, ledgerSecurityDeposit + paidAdvanceObligationSum);
+
     return {
       tenant_id: tenantId,
       balance: Math.round(balance * 100) / 100,
       last_updated: entries.length > 0 ? entries[entries.length - 1].created_at : null,
       entries,
+      security_deposit: Math.round(configuredSecurityDeposit * 100) / 100,
+      security_deposit_paid: Math.round(paidSecurityDeposit * 100) / 100,
+      available_rent_advance: Math.round(availableRentAdvance * 100) / 100,
     };
   }
 
   /**
-   * Record advance received from tenant (DEPOSIT or TOPUP).
+   * Record money received from tenant.
+   * DEPOSIT is security deposit. TOPUP is rent advance/future rent credit.
    * Concurrency: SELECT FOR UPDATE on tenant row.
    */
   async credit(params: {
@@ -123,9 +158,10 @@ export class TenantAdvanceService {
       referenceId: string;
       referenceType: string;
       notes?: string;
+      reason?: "DEPOSIT" | "TOPUP";
     }
   ) {
-    const { tenantId, ownerId, createdBy, amount, referenceId, referenceType, notes } = params;
+    const { tenantId, ownerId, createdBy, amount, referenceId, referenceType, notes, reason = "TOPUP" } = params;
 
     // Idempotency: if a ledger entry already exists for this reference, return it.
     const existing = await tx.tenant_advance_ledger.findFirst({
@@ -155,10 +191,10 @@ export class TenantAdvanceService {
         owner_id: ownerId,
         hostel_id: tenant.hostel_id,
         type: "CREDIT",
-        reason: "DEPOSIT",
+        reason,
         amount,
         balance_after: newBalance,
-        notes: notes || `Gateway advance payment credited`,
+        notes: notes || `Gateway future rent payment credited`,
         reference_id: referenceId,
         reference_type: referenceType,
         created_by: createdBy,
@@ -171,6 +207,7 @@ export class TenantAdvanceService {
 
     logger.info("advance.credit.from_gateway", {
       tenant_id: tenantId,
+      reason,
       amount,
       new_balance: balanceAfterApply,
       entry_id: entry.id,
@@ -341,11 +378,13 @@ export class TenantAdvanceService {
       );
     }
 
-    // Check advance balance
-    const currentBalance = await this._computeBalance(tx, tenantId);
-    if (currentBalance < amount) {
+    // Check rent-advance availability. Security deposit credits are held
+    // separately and must not be consumed by rent adjustments.
+    const availability = await this._computeAdvanceAvailabilityInTx(tx, tenantId);
+    const currentBalance = availability.ledgerBalance;
+    if (availability.availableRentAdvance < amount) {
       throw new Error(
-        `BAD_REQUEST: Insufficient advance balance. Available: ₹${currentBalance.toFixed(2)}, Requested: ₹${amount.toFixed(2)}`
+        `BAD_REQUEST: Insufficient rent advance balance. Available: ₹${availability.availableRentAdvance.toFixed(2)}, Requested: ₹${amount.toFixed(2)}`
       );
     }
 
@@ -413,36 +452,11 @@ export class TenantAdvanceService {
     ownerId: string,
     createdBy: string
   ) {
-    // 1. Lock tenant row and fetch advance_deposit (security deposit)
+    // 1. Lock tenant row and compute rent-advance availability.
+    // Security deposit credits are not available for automatic rent settlement.
     await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${tenantId}::uuid FOR UPDATE`;
-    const tenant = await tx.tenants.findUniqueOrThrow({
-      where: { id: tenantId },
-      select: { advance_deposit: true },
-    });
-    const securityDeposit = Number(tenant.advance_deposit || 0);
-
-    // Fetch total paid amount against ADVANCE obligations (which represents the security deposit paid outside the ledger/already adjusted)
-    const paidAdvanceObligations = await tx.payments.aggregate({
-      where: {
-        tenant_id: tenantId,
-        obligation: {
-          obligation_type: "ADVANCE",
-        },
-      },
-      _sum: {
-        amount_paid: true,
-      },
-    });
-    const paidAdvanceObligationSum = Number(paidAdvanceObligations?._sum?.amount_paid || 0);
-
-    // Calculate the remaining security deposit that needs to be held/reserved in the ledger
-    const remainingSecurityDepositFromLedger = Math.max(0, securityDeposit - paidAdvanceObligationSum);
-
-    // 2. Fetch current advance ledger balance
-    const ledgerBalance = await this._computeBalance(tx, tenantId);
-    
-    // Only the amount exceeding the remaining security deposit that needs to be held is available for automatic rent/due adjustment.
-    let currentBalance = Math.round(Math.max(0, ledgerBalance - remainingSecurityDepositFromLedger) * 100) / 100;
+    const availability = await this._computeAdvanceAvailabilityInTx(tx, tenantId);
+    let currentBalance = this._roundCurrency(availability.availableRentAdvance);
     if (currentBalance <= 0) return;
 
     // 3. Fetch all outstanding obligations for this tenant (oldest first)
@@ -527,6 +541,80 @@ export class TenantAdvanceService {
     const creditSum = Number(credits._sum.amount ?? 0);
     const debitSum = Number(debits._sum.amount ?? 0);
     return Math.round((creditSum - debitSum) * 100) / 100;
+  }
+
+  private _sumLedgerCreditsByReason(entries: any[], reason: string): number {
+    return entries.reduce((acc: number, entry: any) => {
+      if (entry.type !== "CREDIT" || entry.reason !== reason) return acc;
+      return acc + Number(entry.amount || 0);
+    }, 0);
+  }
+
+  private _calculateLedgerSecurityDeposit(params: {
+    ledgerBalance: number;
+    configuredSecurityDeposit: number;
+    paidAdvanceObligationSum: number;
+    ledgerDepositCredits: number;
+  }): number {
+    const remainingSecurityDepositFromLedger = Math.max(
+      0,
+      params.configuredSecurityDeposit - params.paidAdvanceObligationSum
+    );
+    return this._roundCurrency(
+      Math.min(
+        Math.max(0, params.ledgerBalance),
+        remainingSecurityDepositFromLedger,
+        Math.max(0, params.ledgerDepositCredits)
+      )
+    );
+  }
+
+  private async _computeAdvanceAvailabilityInTx(tx: Prisma.TransactionClient, tenantId: string) {
+    const [tenant, paidAdvanceObligations, depositCredits, ledgerBalance] = await Promise.all([
+      tx.tenants.findUniqueOrThrow({
+        where: { id: tenantId },
+        select: { advance_deposit: true },
+      }),
+      tx.payments.aggregate({
+        where: {
+          tenant_id: tenantId,
+          obligation: {
+            obligation_type: "ADVANCE",
+          },
+        },
+        _sum: {
+          amount_paid: true,
+        },
+      }),
+      tx.tenant_advance_ledger.aggregate({
+        where: {
+          tenant_id: tenantId,
+          type: "CREDIT",
+          reason: "DEPOSIT",
+        },
+        _sum: {
+          amount: true,
+        },
+      }),
+      this._computeBalance(tx, tenantId),
+    ]);
+
+    const ledgerSecurityDeposit = this._calculateLedgerSecurityDeposit({
+      ledgerBalance,
+      configuredSecurityDeposit: Number(tenant.advance_deposit || 0),
+      paidAdvanceObligationSum: Number(paidAdvanceObligations?._sum?.amount_paid || 0),
+      ledgerDepositCredits: Number(depositCredits?._sum?.amount || 0),
+    });
+
+    return {
+      ledgerBalance,
+      ledgerSecurityDeposit,
+      availableRentAdvance: this._roundCurrency(Math.max(0, ledgerBalance - ledgerSecurityDeposit)),
+    };
+  }
+
+  private _roundCurrency(value: number): number {
+    return Math.round(value * 100) / 100;
   }
 }
 

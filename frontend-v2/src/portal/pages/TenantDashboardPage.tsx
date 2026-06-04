@@ -36,15 +36,6 @@ export function TenantDashboardPage() {
   const profileDocs = (profile?.documents ?? documents) as unknown[] | undefined;
   const profileType = String(tenant?.profile_type ?? profile?.profile_type ?? 'STUDENT');
   const advanceBalance = Number(advance?.balance ?? 0);
-  const depositCredits = (advance?.entries ?? []).filter(
-    (e: { type?: string; reason?: string }) =>
-      e.type === 'CREDIT' && ['DEPOSIT', 'TOPUP'].includes(String(e.reason))
-  );
-  const depositTotal = depositCredits.reduce(
-    (s: number, e: { amount?: number }) => s + Number(e.amount ?? 0),
-    0
-  );
-  const adjustments = depositTotal > 0 ? depositTotal - advanceBalance : 0;
 
   return (
     <div className="space-y-5">
@@ -145,20 +136,18 @@ export function TenantDashboardPage() {
             className="block rounded-2xl border border-border bg-card p-4 hover:border-accent/40 hover:shadow-sm transition-all"
           >
             <div className="flex items-center justify-between mb-3">
-              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Security deposit</p>
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Deposit & Rent Advance</p>
               <span className="text-xs text-accent font-semibold">&rarr; View details</span>
             </div>
             <div className="grid grid-cols-3 gap-2 text-center">
               <div className="rounded-xl bg-secondary py-2.5 px-2">
-                <p className="text-muted-foreground text-[10px] mb-0.5">Paid</p>
-                <p className="text-sm font-bold text-foreground">{fmt(depositTotal || advanceBalance)}</p>
+                <p className="text-muted-foreground text-[10px] mb-0.5">Paid Deposit</p>
+                <p className="text-sm font-bold text-foreground">{fmt(Number((advance as any)?.security_deposit_paid ?? 0))}</p>
               </div>
-              {adjustments > 0 && (
-                <div className="rounded-xl bg-secondary py-2.5 px-2">
-                  <p className="text-muted-foreground text-[10px] mb-0.5">Used</p>
-                  <p className="text-sm font-bold text-foreground">{fmt(adjustments)}</p>
-                </div>
-              )}
+              <div className="rounded-xl bg-secondary py-2.5 px-2">
+                <p className="text-muted-foreground text-[10px] mb-0.5">Rent Advance</p>
+                <p className="text-sm font-bold text-foreground">{fmt(Number((advance as any)?.available_rent_advance ?? 0))}</p>
+              </div>
               <div className="rounded-xl bg-accent/8 border border-accent/15 py-2.5 px-2">
                 <p className="text-accent/70 text-[10px] mb-0.5">Refundable</p>
                 <p className="text-sm font-bold text-accent">{fmt(advanceBalance)}</p>

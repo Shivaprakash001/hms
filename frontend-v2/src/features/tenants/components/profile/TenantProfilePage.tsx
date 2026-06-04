@@ -35,6 +35,16 @@ const money = (value: unknown) => `₹${Number(value ?? 0).toLocaleString('en-IN
 const date = (value: unknown) => (value ? new Date(String(value)).toLocaleDateString('en-IN') : '—');
 const title = (value: unknown) => String(value ?? '—').replaceAll('_', ' ');
 const ordinal = (n: number) => { const s = ['th','st','nd','rd']; const v = n % 100; return n + (s[(v-20)%10] || s[v] || s[0]); };
+const billingTimelineLabel = (item: Record<string, unknown>) => {
+  if (item.type === 'ADVANCE_CREDIT') return 'Future rent credit';
+  return String(item.type).replace('PROJECTED_', '').replaceAll('_', ' ');
+};
+const billingTimelineAmount = (item: Record<string, unknown>) => {
+  if (item.type === 'PAYMENT' || item.type === 'ADVANCE_CREDIT') return Number(item.amount ?? 0);
+  return Number(item.remaining ?? item.amount ?? 0);
+};
+const billingTimelineDateVerb = (item: Record<string, unknown>) =>
+  item.type === 'PAYMENT' || item.type === 'ADVANCE_CREDIT' ? 'Paid' : 'Due';
 
 const positiveAmount = (value: unknown) => {
   const amount = Number(value ?? 0);
@@ -442,11 +452,11 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
                     <div>
                       <p className="font-semibold">{item.label}</p>
                       <p className="text-xs text-muted-foreground">
-                        {String(item.type).replace('PROJECTED_', '').replaceAll('_', ' ')} · {item.type === 'PAYMENT' ? 'Paid' : 'Due'} {new Date(item.due_date).toLocaleDateString('en-IN')}
+                        {billingTimelineLabel(item)} · {billingTimelineDateVerb(item)} {new Date(item.due_date).toLocaleDateString('en-IN')}
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold">₹{Number(item.type === 'PAYMENT' ? item.amount : (item.remaining ?? item.amount ?? 0)).toLocaleString('en-IN')}</p>
+                      <p className="font-bold">₹{billingTimelineAmount(item).toLocaleString('en-IN')}</p>
                       <p className="text-[11px] font-bold uppercase text-muted-foreground">{String(item.state).replaceAll('_', ' ')}</p>
                     </div>
                   </div>

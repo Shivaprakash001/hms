@@ -152,13 +152,18 @@ export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initi
       if (!identityToken) throw new Error('Identity verification failed. Please try again.');
 
       if (payload.isAdvance) {
+        const advanceNotes = [
+          payload.note || 'Recorded offline future rent payment',
+          payload.referenceNumber ? `Reference: ${payload.referenceNumber}` : '',
+          `Payment mode: ${payload.paymentMethod}`,
+          `Payment date: ${payload.paymentDate}`,
+        ].filter(Boolean).join(' · ');
         const response = await api.post(`/tenants/${payload.tenantId}/advance`, {
           action: 'credit',
           reason: 'TOPUP',
           amount: payload.amountPaid,
-          notes: payload.note || 'Recorded offline payment in advance',
-          reference_id: payload.referenceNumber,
-          reference_type: 'OFFLINE',
+          notes: advanceNotes,
+          reference_type: 'OFFLINE_RENT_ADVANCE',
         });
         const result = response.data?.data ?? response.data;
         return {
@@ -247,7 +252,7 @@ export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initi
         <div className="sticky top-0 bg-background border-b border-border px-4 py-4 flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold text-foreground">Quick collect</h2>
-            <p className="text-xs text-muted-foreground">Search tenant, record rent paid or advance cash/UPI.</p>
+            <p className="text-xs text-muted-foreground">Search tenant, record rent paid or future rent cash/UPI.</p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-secondary rounded-lg transition-colors">
             <X className="w-5 h-5 text-foreground" />
@@ -327,7 +332,7 @@ export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initi
                 if (tenantDues.length === 0) {
                   return (
                     <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-100 text-xs text-emerald-800 font-medium">
-                      This tenant has no pending dues. Amount will be recorded as **Advance / Deposit**.
+                      This tenant has no pending dues. Amount will be recorded as future rent credit, not security deposit.
                     </div>
                   );
                 }
@@ -363,7 +368,7 @@ export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initi
                         </option>
                       );
                     })}
-                    <option value="advance">Advance / Deposit Payment (Add to balance)</option>
+                    <option value="advance">Future Rent Credit (prepaid rent)</option>
                   </select>
                 );
               })()}
@@ -505,7 +510,7 @@ export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initi
                 </p>
                 <p className="text-xs text-emerald-600 mt-1">
                   {successSummary.is_advance
-                    ? "→ The tenant's advance balance has been updated."
+                    ? "→ The tenant's future rent credit has been updated."
                     : "→ The tenant's outstanding bill has been updated."}
                 </p>
               </div>

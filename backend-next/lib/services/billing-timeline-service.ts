@@ -65,6 +65,16 @@ export class BillingTimelineService {
       take: 20,
     });
 
+    const rentAdvanceCredits = await prisma.tenant_advance_ledger.findMany({
+      where: {
+        tenant_id: tenantId,
+        type: "CREDIT",
+        reason: "TOPUP",
+      },
+      orderBy: { created_at: "desc" },
+      take: 20,
+    });
+
     const items = obligations.map((ob: any) => {
       const amount = money(ob.amount);
       const recordedPaid = money((ob.payments || []).reduce((s: number, p: any) => s + Number(p.amount_paid || 0), 0));
@@ -178,7 +188,28 @@ export class BillingTimelineService {
       reference_number: payment.reference_number,
     }));
 
-    const timeline = [...items, ...paymentItems, ...projectedItems].sort((a: any, b: any) => {
+    const rentAdvanceItems = rentAdvanceCredits.map((entry: any) => ({
+      obligation_id: null,
+      timeline_id: `advance-credit:${entry.id}`,
+      type: "ADVANCE_CREDIT",
+      billing_plan_id: null,
+      period_start: entry.created_at,
+      period_end: entry.created_at,
+      rent_month: entry.created_at,
+      label: "Future rent credit",
+      installment_sequence: null,
+      amount: money(entry.amount),
+      paid: money(entry.amount),
+      remaining: 0,
+      due_date: entry.created_at,
+      status: "PAID",
+      state: "paid",
+      payment_method: entry.reference_type === "PAYMENT_ATTEMPT" ? "PHONEPE" : "OFFLINE",
+      reference_number: entry.reference_id,
+      notes: entry.notes,
+    }));
+
+    const timeline = [...items, ...paymentItems, ...rentAdvanceItems, ...projectedItems].sort((a: any, b: any) => {
       const aDate = new Date(a.due_date || a.period_start || 0).getTime();
       const bDate = new Date(b.due_date || b.period_start || 0).getTime();
       if (aDate !== bDate) return aDate - bDate;
@@ -195,7 +226,8 @@ export class BillingTimelineService {
       requests: tenant.payment_frequency_change_requests,
       items: timeline,
       obligation_items: items,
-      payment_items: paymentItems,
+      payment_items: [...paymentItems, ...rentAdvanceItems],
+      rent_advance_items: rentAdvanceItems,
       projected_items: projectedItems,
     };
   }

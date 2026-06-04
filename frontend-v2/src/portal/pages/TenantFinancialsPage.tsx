@@ -14,12 +14,13 @@ const fmt = (n: number) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
 const fmtDate = (d?: string) =>
   d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 const timelineTypeLabel = (type?: string) => {
+  if (type === 'ADVANCE_CREDIT') return 'Future rent credit';
   const value = String(type || '').replace('PROJECTED_', '').replaceAll('_', ' ');
   if (type === 'PAYMENT') return 'Payment';
   return value || 'Installment';
 };
 const timelineAmount = (item: any) => {
-  if (item.type === 'PAYMENT') return Number(item.amount ?? 0);
+  if (item.type === 'PAYMENT' || item.type === 'ADVANCE_CREDIT') return Number(item.amount ?? 0);
   return Number(item.remaining ?? item.amount ?? 0);
 };
 
@@ -89,13 +90,6 @@ export function TenantFinancialsPage() {
   const currentObligation = obligations.find((o) => String(o.status).toLowerCase() !== 'paid');
 
   const advanceBalance = Number(advance?.balance ?? 0);
-  const entries = (advance?.entries ?? []) as { type?: string; reason?: string; amount?: number }[];
-  const depositTotal = entries
-    .filter((e) => e.type === 'CREDIT' && ['DEPOSIT', 'TOPUP'].includes(String(e.reason)))
-    .reduce((s, e) => s + Number(e.amount ?? 0), 0);
-  const debits = entries
-    .filter((e) => e.type === 'DEBIT')
-    .reduce((s, e) => s + Number(e.amount ?? 0), 0);
 
   const toggleSelection = (id: string, checked: boolean) => {
     setSelectedIds((current) =>
@@ -256,7 +250,7 @@ export function TenantFinancialsPage() {
                   <div>
                     <p className="text-sm font-semibold text-foreground">{item.label}</p>
                     <p className="text-xs text-muted-foreground">
-                      {timelineTypeLabel(item.type)} · {item.type === 'PAYMENT' ? 'Paid' : 'Due'} {fmtDate(item.due_date)}
+                      {timelineTypeLabel(item.type)} · {['PAYMENT', 'ADVANCE_CREDIT'].includes(String(item.type)) ? 'Paid' : 'Due'} {fmtDate(item.due_date)}
                     </p>
                   </div>
                 </div>
@@ -372,21 +366,23 @@ export function TenantFinancialsPage() {
       )}
 
       <section className="rounded-xl border border-border bg-card p-4">
-        <h2 className="text-sm font-semibold text-foreground mb-3">Security deposit & advance</h2>
+        <h2 className="text-sm font-semibold text-foreground mb-3">Security deposit & Rent advance</h2>
         <div className="space-y-2 text-sm">
           <div className="flex justify-between">
-            <span className="text-muted-foreground">Total deposited</span>
-            <span className="font-medium">{fmt(depositTotal)}</span>
+            <span className="text-muted-foreground">Security Deposit (Configured)</span>
+            <span className="font-medium">{fmt(Number((advance as any)?.security_deposit ?? 0))}</span>
           </div>
-          {debits > 0 && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Adjustments</span>
-              <span className="font-medium">{fmt(debits)}</span>
-            </div>
-          )}
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Security Deposit (Paid)</span>
+            <span className="font-medium text-emerald-600">{fmt(Number((advance as any)?.security_deposit_paid ?? 0))}</span>
+          </div>
+          <div className="flex justify-between pt-2 border-t border-border">
+            <span className="text-muted-foreground">Rent Advance (Available for rent)</span>
+            <span className="font-semibold text-accent">{fmt(Number((advance as any)?.available_rent_advance ?? 0))}</span>
+          </div>
           <div className="flex justify-between font-bold pt-2 border-t border-border">
-            <span>Refundable balance</span>
-            <span className="text-accent">{fmt(advanceBalance)}</span>
+            <span>Total Refundable balance</span>
+            <span className="text-foreground">{fmt(advanceBalance)}</span>
           </div>
         </div>
       </section>

@@ -603,6 +603,9 @@ export function TenantProfilePortalPage() {
             <ProfileRow label="Monthly rent" value={fmt(Number(t.monthly_rent ?? 0))} />
             <ProfileRow label="Maintenance" value={fmt(Number(t.maintenance_charge ?? 0))} />
             <ProfileRow label="Security deposit" value={fmt(Number(data.advance?.security_deposit ?? t.advance_deposit ?? 0))} />
+            {Number(data.advance?.available_rent_advance ?? 0) > 0 && (
+              <ProfileRow label="Rent advance" value={fmt(Number(data.advance?.available_rent_advance))} />
+            )}
           </>
         ) : (
           <p className="text-sm text-muted-foreground">Hostel details will appear once you are assigned.</p>

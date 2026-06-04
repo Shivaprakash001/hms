@@ -1200,7 +1200,7 @@ export class PaymentService {
   }
 
   /**
-   * Create a PhonePe payment intent for an advance/deposit payment.
+   * Create a PhonePe payment intent for a future rent/advance payment.
    * No obligation is linked — on SUCCESS, finalizePaymentAttempt credits the ledger.
    *
    * Lock ordering (consistent with adjustAgainstObligation):
@@ -1670,7 +1670,7 @@ export class PaymentService {
     const isManualConfirm = context?.source === "MANUAL_CONFIRM";
 
     // ──────────────────────────────────────────────────────────────
-    // 💎 ADVANCE PATH: Gateway-driven deposit, no obligation linkage
+    // 💎 ADVANCE PATH: Gateway-driven future rent credit, no obligation linkage
     // ──────────────────────────────────────────────────────────────
     if ((attempt as any).payment_domain === PAYMENT_DOMAIN.RENT_COLLECTION && (attempt as any).flow_type === PAYMENT_FLOW.ADVANCE) {
       if (!attempt.tenant_id) {
@@ -1687,6 +1687,8 @@ export class PaymentService {
           referenceId: attempt.id,
           referenceType: "PAYMENT_ATTEMPT",
           createdBy: attempt.owner_id,
+          reason: "TOPUP",
+          notes: "Gateway future rent payment credited",
         });
         return this.updateAttemptStatus(tx, {
           attemptId,

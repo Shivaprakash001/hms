@@ -8,7 +8,7 @@ import { prisma } from "@/lib/db";
 
 /**
  * GET  /api/tenants/[id]/advance  — balance + ledger history
- * POST /api/tenants/[id]/advance  — record credit (DEPOSIT/TOPUP) or debit (DEDUCTION/REFUND/CORRECTION)
+ * POST /api/tenants/[id]/advance  — record credit (DEPOSIT/TOPUP rent advance) or debit (DEDUCTION/REFUND/CORRECTION)
  *
  * Auth: OWNER or ADMIN only
  */
