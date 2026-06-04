@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { CheckCircle2, AlertTriangle, XCircle, Upload, Clock3 } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, XCircle, Upload, Clock3, RefreshCw } from 'lucide-react';
 import { bulkImportService } from '../../api/services';
 
 function formatCurrency(value) {
@@ -29,13 +29,72 @@ function rowIdentity(row) {
     return parts.length ? parts.join(' / ') : 'No readable tenant details';
 }
 
+function EditableRow({ row, errors, onChange }) {
+    const data = row.data;
+    const getError = (field) => errors?.find(e => e.field === field)?.message;
+
+    return (
+        <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-4">
+            <div className="flex items-center justify-between gap-3 mb-3">
+                <p className="text-sm font-bold text-rose-950">Row {row.row}</p>
+                <p className="text-xs font-semibold text-rose-700 truncate">{rowIdentity(row)}</p>
+            </div>
+            
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-600">Full Name</label>
+                    <input 
+                        className={`w-full px-3 py-2 text-sm rounded-lg border focus:outline-none transition-colors ${getError('name') ? 'border-rose-400 bg-rose-50 text-rose-900 focus:border-rose-500 focus:ring-1 focus:ring-rose-500' : 'border-slate-200 bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500'}`}
+                        value={data.name || ''} 
+                        onChange={e => onChange({ ...data, name: e.target.value })} 
+                    />
+                    {getError('name') && <p className="text-[10px] text-rose-600 leading-tight font-medium">{getError('name')}</p>}
+                </div>
+                <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-600">Phone</label>
+                    <input 
+                        className={`w-full px-3 py-2 text-sm rounded-lg border focus:outline-none transition-colors ${getError('phone') ? 'border-rose-400 bg-rose-50 text-rose-900 focus:border-rose-500 focus:ring-1 focus:ring-rose-500' : 'border-slate-200 bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500'}`}
+                        value={data.phone || ''} 
+                        onChange={e => onChange({ ...data, phone: e.target.value })} 
+                    />
+                    {getError('phone') && <p className="text-[10px] text-rose-600 leading-tight font-medium">{getError('phone')}</p>}
+                </div>
+                <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-600">Email</label>
+                    <input 
+                        className={`w-full px-3 py-2 text-sm rounded-lg border focus:outline-none transition-colors ${getError('email') ? 'border-rose-400 bg-rose-50 text-rose-900 focus:border-rose-500 focus:ring-1 focus:ring-rose-500' : 'border-slate-200 bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500'}`}
+                        value={data.email || ''} 
+                        onChange={e => onChange({ ...data, email: e.target.value })} 
+                    />
+                    {getError('email') && <p className="text-[10px] text-rose-600 leading-tight font-medium">{getError('email')}</p>}
+                </div>
+                <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-600">Room No</label>
+                    <input 
+                        className={`w-full px-3 py-2 text-sm rounded-lg border focus:outline-none transition-colors ${getError('room_no') ? 'border-rose-400 bg-rose-50 text-rose-900 focus:border-rose-500 focus:ring-1 focus:ring-rose-500' : 'border-slate-200 bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500'}`}
+                        value={data.room_no || ''} 
+                        onChange={e => onChange({ ...data, room_no: e.target.value })} 
+                    />
+                    {getError('room_no') && <p className="text-[10px] text-rose-600 leading-tight font-medium">{getError('room_no')}</p>}
+                </div>
+            </div>
+            
+            {errors?.filter(e => !['name', 'phone', 'email', 'room_no'].includes(e.field)).map((e, idx) => (
+               <p key={idx} className="text-[11px] font-semibold text-rose-600 mt-2 bg-rose-100/50 py-1.5 px-3 rounded-md">{e.message}</p> 
+            ))}
+        </div>
+    );
+}
+
 export default function BulkImportConfirm() {
     const navigate = useNavigate();
     const { batchId, hostelId } = useParams();
     const [isImporting, setIsImporting] = useState(false);
+    const [isRevalidating, setIsRevalidating] = useState(false);
     const [error, setError] = useState(null);
     const [importResult, setImportResult] = useState(null);
     const [batchPreview, setBatchPreview] = useState(null);
+    const [editedRows, setEditedRows] = useState({});
 
     useEffect(() => {
         let cancelled = false;
@@ -71,6 +130,51 @@ export default function BulkImportConfirm() {
     const invalidRows = batchPreview?.preview?.invalid || [];
     const duplicateRows = batchPreview?.preview?.duplicates || [];
     const isLoadingPreview = !batchPreview && !error;
+    const hasEdits = Object.keys(editedRows).length > 0;
+
+    const handleRowChange = (rowNumber, newData) => {
+        setEditedRows(prev => ({
+            ...prev,
+            [rowNumber]: newData
+        }));
+    };
+
+    const handleRevalidate = async () => {
+        setIsRevalidating(true);
+        setError(null);
+        try {
+            const allOriginalRows = [
+                ...(batchPreview?.preview?.valid || []),
+                ...(batchPreview?.preview?.invalid || []),
+                ...(batchPreview?.preview?.duplicates || [])
+            ];
+            allOriginalRows.sort((a, b) => a.row - b.row);
+            
+            const payloadRows = allOriginalRows.map(r => {
+                if (editedRows[r.row]) {
+                    return editedRows[r.row];
+                }
+                return r.data;
+            });
+
+            const result = await bulkImportService.revalidateRows({
+                rows: payloadRows,
+                hostel_id: hostelId,
+                filename: batchPreview?.filename,
+                import_defaults: batchPreview?.defaults
+            });
+
+            navigate(`/hostels/${hostelId}/bulk-import/${result.batch_id}/confirm`, { replace: true });
+            
+            setEditedRows({});
+            setBatchPreview(result);
+        } catch (err) {
+            const message = err?.response?.data?.error?.message || err?.response?.data?.error || err.message;
+            setError(message || 'Revalidation failed. Please try again.');
+        } finally {
+            setIsRevalidating(false);
+        }
+    };
 
     const handleConfirm = async () => {
         setIsImporting(true);
@@ -226,16 +330,39 @@ export default function BulkImportConfirm() {
                 </div>
 
                 {(validation.invalid_rows > 0 || validation.duplicate_rows > 0) && (
-                    <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
+                    <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 flex flex-col sm:flex-row gap-4 justify-between items-center">
                         <div className="flex gap-3">
                             <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
                             <div>
                                 <h2 className="text-base font-bold text-amber-950">Some rows need your attention</h2>
                                 <p className="text-sm text-amber-800 mt-1">
-                                    Import is paused because some rows cannot be safely created. The reasons are listed below with the spreadsheet row number.
+                                    Import is paused. You can edit the problematic rows below and revalidate.
                                 </p>
                             </div>
                         </div>
+                        {hasEdits && (
+                            <button
+                                onClick={handleRevalidate}
+                                disabled={isRevalidating}
+                                className={`whitespace-nowrap px-4 py-2 rounded-xl font-bold transition-all shadow-lg flex items-center justify-center gap-2 ${
+                                    isRevalidating
+                                        ? 'bg-amber-200 text-amber-600 cursor-not-allowed'
+                                        : 'bg-amber-500 hover:bg-amber-600 text-white active:scale-95 shadow-amber-500/30'
+                                }`}
+                            >
+                                {isRevalidating ? (
+                                    <>
+                                        <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                                        <span>Checking...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <RefreshCw size={16} />
+                                        <span>Revalidate Edits</span>
+                                    </>
+                                )}
+                            </button>
+                        )}
                     </div>
                 )}
 
@@ -296,46 +423,42 @@ export default function BulkImportConfirm() {
                 {(invalidRows.length > 0 || duplicateRows.length > 0) && (
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                         {invalidRows.length > 0 && (
-                            <div className="bg-white shadow-lg rounded-2xl border border-rose-100 p-6">
-                                <h3 className="text-lg font-bold text-slate-900">Rows to fix</h3>
-                                <p className="text-sm text-slate-500 mt-1 mb-4">
-                                    Update these rows in the sheet and upload again.
-                                </p>
-                                <div className="space-y-3">
+                            <div className="bg-white shadow-lg rounded-2xl border border-rose-100 p-6 flex flex-col h-full">
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-900">Rows to fix</h3>
+                                    <p className="text-sm text-slate-500 mt-1 mb-4">
+                                        Edit the incorrect values and click Revalidate.
+                                    </p>
+                                </div>
+                                <div className="space-y-4 flex-1">
                                     {invalidRows.map((row) => (
-                                        <div key={row.row} className="rounded-xl border border-rose-100 bg-rose-50 p-4">
-                                            <div className="flex items-center justify-between gap-3">
-                                                <p className="text-sm font-bold text-rose-950">Row {row.row}</p>
-                                                <p className="text-xs font-semibold text-rose-700 truncate">{rowIdentity(row)}</p>
-                                            </div>
-                                            <ul className="mt-3 space-y-2">
-                                                {(row.errors || []).map((rowError, idx) => (
-                                                    <li key={idx} className="text-sm text-rose-800">
-                                                        {formatError(rowError)}
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        </div>
+                                        <EditableRow 
+                                            key={row.row}
+                                            row={{ ...row, data: editedRows[row.row] || row.data }} 
+                                            errors={row.errors || []} 
+                                            onChange={(newData) => handleRowChange(row.row, newData)} 
+                                        />
                                     ))}
                                 </div>
                             </div>
                         )}
 
                         {duplicateRows.length > 0 && (
-                            <div className="bg-white shadow-lg rounded-2xl border border-yellow-100 p-6">
-                                <h3 className="text-lg font-bold text-slate-900">Duplicate rows</h3>
-                                <p className="text-sm text-slate-500 mt-1 mb-4">
-                                    These rows were skipped to avoid creating duplicate tenants.
-                                </p>
-                                <div className="space-y-3">
+                            <div className="bg-white shadow-lg rounded-2xl border border-yellow-100 p-6 flex flex-col h-full">
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-900">Duplicate rows</h3>
+                                    <p className="text-sm text-slate-500 mt-1 mb-4">
+                                        These rows conflict with existing tenants. Fix them below.
+                                    </p>
+                                </div>
+                                <div className="space-y-4 flex-1">
                                     {duplicateRows.map((row) => (
-                                        <div key={row.row} className="rounded-xl border border-yellow-100 bg-yellow-50 p-4">
-                                            <div className="flex items-center justify-between gap-3">
-                                                <p className="text-sm font-bold text-yellow-950">Row {row.row}</p>
-                                                <p className="text-xs font-semibold text-yellow-700 truncate">{rowIdentity(row)}</p>
-                                            </div>
-                                            <p className="mt-2 text-sm text-yellow-800">{row.reason || 'Duplicate tenant data found.'}</p>
-                                        </div>
+                                        <EditableRow 
+                                            key={row.row}
+                                            row={{ ...row, data: editedRows[row.row] || row.data }} 
+                                            errors={[{ field: 'general', message: row.reason || 'Duplicate tenant data found.' }]} 
+                                            onChange={(newData) => handleRowChange(row.row, newData)} 
+                                        />
                                     ))}
                                 </div>
                             </div>
@@ -357,16 +480,16 @@ export default function BulkImportConfirm() {
                 <div className="flex gap-4">
                     <button
                         onClick={handleCancel}
-                        disabled={isImporting}
+                        disabled={isImporting || isRevalidating}
                         className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 py-3 px-6 rounded-xl font-bold transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         Cancel
                     </button>
                     <button
                         onClick={handleConfirm}
-                        disabled={isImporting || validation.valid_rows === 0}
+                        disabled={isImporting || isRevalidating || validation.valid_rows === 0 || validation.invalid_rows > 0 || validation.duplicate_rows > 0}
                         className={`flex-1 py-3 px-6 rounded-xl font-bold transition-all shadow-lg flex items-center justify-center gap-2 ${
-                            isImporting || validation.valid_rows === 0
+                            isImporting || isRevalidating || validation.valid_rows === 0 || validation.invalid_rows > 0 || validation.duplicate_rows > 0
                                 ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
                                 : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20 active:scale-95'
                         }`}
@@ -379,11 +502,16 @@ export default function BulkImportConfirm() {
                         ) : (
                             <>
                                 <Upload size={18} />
-                                <span>Confirm Import ({validation.valid_rows} valid rows)</span>
+                                <span>Bulk Invite ({validation.valid_rows} valid rows)</span>
                             </>
                         )}
                     </button>
                 </div>
+                {(validation.invalid_rows > 0 || validation.duplicate_rows > 0) && (
+                    <p className="text-center text-sm text-slate-500 font-medium">
+                        You must fix or remove invalid rows before sending bulk invites.
+                    </p>
+                )}
             </div>
         </div>
     );

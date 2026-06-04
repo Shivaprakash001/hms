@@ -96,8 +96,14 @@ export const bulkImportService = {
         const response = await api.get(`/bulk-import/${batchId}/confirm`);
         return response.data;
     },
-    confirmBatchImport: async (batchId) => {
-        const response = await api.post(`/bulk-import/${batchId}/confirm`);
+    confirmBatchImport: async (batchId, options = {}) => {
+        const response = await api.post(`/bulk-import/${batchId}/confirm`, options);
+        return response.data;
+    },
+    revalidateRows: async ({ rows, hostel_id, filename, import_defaults }) => {
+        const response = await api.post('/bulk-import/revalidate', {
+            rows, hostel_id, filename, import_defaults,
+        });
         return response.data;
     },
 };

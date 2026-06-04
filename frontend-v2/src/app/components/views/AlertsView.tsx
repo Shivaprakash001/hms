@@ -11,7 +11,7 @@ import { RecordPaymentModal } from '../modals/RecordPaymentModal';
 function fmt(n: unknown): string {
   const v = Number(n || 0);
   if (v >= 100000) return `₹${(v / 100000).toFixed(1)}L`;
-  if (v >= 1000) return `₹${(v / 1000).toFixed(0)}K`;
+  // Using exact formatting below 1L to avoid rounding errors (e.g. 8500 becoming 9K)
   return `₹${v.toLocaleString('en-IN')}`;
 }
 
@@ -175,7 +175,7 @@ export function AlertsView() {
       {isLoading && (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="bg-card border border-border rounded-xl p-4 h-28 animate-pulse" />
+            <div key={i} className="bg-card border border-border rounded-xl p-4 h-20 animate-pulse" />
           ))}
         </div>
       )}
@@ -273,7 +273,7 @@ export function AlertsView() {
             <span className="text-xs font-semibold text-accent uppercase tracking-wider">Verification Requests</span>
             <span className="text-xs bg-accent/10 text-accent px-2 py-0.5 rounded-full font-medium">{pendingDocs.length}</span>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {pendingDocs.map((doc) => {
               const docId = String(doc.id);
               const tenantId = String(doc.tenant_id);
@@ -282,15 +282,20 @@ export function AlertsView() {
               const docType = String(doc.doc_type || 'Document');
               const room = String(doc.room_no || 'N/A');
               const uploadedAt = doc.uploaded_at ? new Date(String(doc.uploaded_at)) : null;
+              const avatarUrl = doc.avatar ?? doc.tenant_avatar ?? doc.tenant_avatar_url ?? doc.avatar_url;
 
               return (
-                <div key={docId} className="bg-card border border-border rounded-xl p-4 flex flex-col justify-between gap-3 shadow-sm">
+                <div key={docId} className="bg-card border border-border rounded-xl p-3 flex flex-col justify-between gap-3 shadow-sm hover:shadow-md transition-shadow">
                   <div className="flex items-start gap-3">
-                    <div className="w-9 h-9 rounded-full bg-accent/10 flex items-center justify-center shrink-0">
-                      <span className="text-xs font-bold text-accent">{name.charAt(0).toUpperCase()}</span>
-                    </div>
+                    {avatarUrl ? (
+                      <img src={String(avatarUrl)} alt={name} className="w-10 h-10 rounded-full object-cover shrink-0 border border-border" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center shrink-0">
+                        <span className="text-sm font-bold text-accent">{name.charAt(0).toUpperCase()}</span>
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
-                      <h4 className="font-semibold text-foreground truncate">{name}</h4>
+                      <h4 className="font-semibold text-foreground truncate text-sm">{name}</h4>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         Room {room} · {docType}
                       </p>
@@ -344,59 +349,56 @@ function DueCard({ due, isOverdue, urgencyLabel, urgencyColor, cardBorder, onRec
   const rawPhone = due.phone ?? due.tenant_phone ?? due.tenantPhone;
   const phone = rawPhone ? String(rawPhone).trim() : null;
   const telPhone = phone ? phone.replace(/[^\d+]/g, '') : null;
-  const dueDate = due.due_date ? new Date(String(due.due_date)) : null;
+  const avatarUrl = due.avatar ?? due.tenant_avatar ?? due.tenant_avatar_url ?? due.avatar_url;
 
   return (
-    <div className={`bg-card border ${cardBorder} rounded-xl p-4 space-y-3 min-w-0`}>
-      <div className="flex items-start gap-3">
-        <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
-          isOverdue ? 'bg-[#EF4444]/10' : 'bg-[#F59E0B]/10'
+    <div className={`bg-card border ${cardBorder} rounded-xl p-3 flex items-center gap-3 min-w-0 shadow-sm transition-all hover:shadow-md`}>
+      {/* Profile Pic / Initial */}
+      {avatarUrl ? (
+        <img src={String(avatarUrl)} alt={tenantName} className="w-10 h-10 rounded-full object-cover shrink-0 border border-border" />
+      ) : (
+        <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+          isOverdue ? 'bg-[#EF4444]/10 text-[#EF4444]' : 'bg-[#F59E0B]/10 text-[#F59E0B]'
         }`}>
-          <span className={`text-xs font-bold ${
-            isOverdue ? 'text-[#EF4444]' : 'text-[#F59E0B]'
-          }`}>{tenantName.charAt(0).toUpperCase()}</span>
+          <span className="text-sm font-bold">{tenantName.charAt(0).toUpperCase()}</span>
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h4 className="font-semibold text-foreground truncate">{tenantName}</h4>
-            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${
-              isOverdue ? 'bg-[#EF4444]/10 text-[#EF4444]' : 'bg-[#F59E0B]/10 text-[#F59E0B]'
-            }`}>{urgencyLabel}</span>
-          </div>
-          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            {room && <span className="text-xs text-muted-foreground">Room {String(room)}</span>}
-            {room && dueDate && <span className="text-muted-foreground text-xs">·</span>}
-            {dueDate && (
-              <span className="text-xs text-muted-foreground">
-                {dueDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
-              </span>
-            )}
-          </div>
+      )}
+
+      {/* Details */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <h4 className="font-semibold text-foreground truncate text-sm">{tenantName}</h4>
+          {room && <span className="text-xs text-muted-foreground shrink-0 hidden sm:inline-block">· Room {String(room)}</span>}
         </div>
-        <div className="text-right shrink-0">
-          <div className="font-semibold text-foreground text-sm">{fmt(amount)}</div>
-          <div className={`text-[10px] mt-0.5 ${urgencyColor}`}>outstanding</div>
+        <div className="flex items-center gap-2 mt-1 flex-wrap">
+          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${
+            isOverdue ? 'bg-[#EF4444]/10 text-[#EF4444]' : 'bg-[#F59E0B]/10 text-[#F59E0B]'
+          }`}>
+            {urgencyLabel}
+          </span>
+          <span className="text-xs font-bold text-foreground">{fmt(amount)}</span>
+          <span className="text-[10px] text-muted-foreground uppercase">due</span>
         </div>
       </div>
 
-      <div className="flex gap-2">
-        <button
-          onClick={onRecordPayment}
-          className="flex-1 bg-accent text-accent-foreground py-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 active:scale-95 transition-transform touch-manipulation"
-        >
-          <CreditCard className="w-3.5 h-3.5 shrink-0" />
-          Record Payment
-        </button>
+      {/* Actions (Minimal Icons) */}
+      <div className="flex items-center gap-2 shrink-0 ml-2">
         {telPhone && (
           <a
             href={`tel:${telPhone}`}
             aria-label={`Call ${tenantName}`}
-            className="min-w-[88px] bg-card border border-border text-foreground py-2.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 active:scale-95 transition-transform touch-manipulation"
+            className="w-9 h-9 flex items-center justify-center rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 active:scale-95 transition-all"
           >
-            <Phone className="w-3.5 h-3.5" />
-            Call
+            <Phone className="w-4 h-4" />
           </a>
         )}
+        <button
+          onClick={onRecordPayment}
+          aria-label="Record Payment"
+          className="w-9 h-9 flex items-center justify-center rounded-full bg-accent text-accent-foreground shadow-sm hover:opacity-90 active:scale-95 transition-all"
+        >
+          <CreditCard className="w-4 h-4" />
+        </button>
       </div>
     </div>
   );

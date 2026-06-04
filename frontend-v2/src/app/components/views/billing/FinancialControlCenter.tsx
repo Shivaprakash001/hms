@@ -7,7 +7,7 @@ import { TodayPriorities } from './TodayPriorities';
 import { HealthBar } from './HealthBar';
 import { CashPosition } from './CashPosition';
 import { RiskZone } from './RiskZone';
-import { RoomPerformance } from './RoomPerformance';
+
 import { PaymentLedger } from './PaymentLedger';
 
 const CollectionPipeline = lazy(() => import('./CollectionPipeline').then((m) => ({ default: m.CollectionPipeline })));
@@ -133,7 +133,7 @@ export function FinancialControlCenter({ hostelId, onRecordPayment, onAddExpense
 
       <RiskZone intel={intel} />
 
-      <RoomPerformance intel={intel} stats={stats} />
+
 
       <section className="rounded-xl border border-border bg-card p-4">
         <button
