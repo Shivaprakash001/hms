@@ -6,14 +6,14 @@ import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { bulkImportValidationService } from "@/lib/services/bulk-import-validation-service";
 import { prisma } from "@/lib/db";
 import crypto from "crypto";
-import type { ImportDefaults, TenantImportRow } from "@/lib/services/bulk-import-validation-service";
+import type { TenantImportRow } from "@/lib/services/bulk-import-validation-service";
 
 /**
- * 📤 Bulk Import - Upload and Validate
- * POST /api/bulk-import/upload
+ * 🔄 Bulk Import - Revalidate Editable Grid
+ * POST /api/bulk-import/revalidate
  * Access: Owner/Admin only
  * 
- * Accepts XLSX/CSV file, validates data, returns preview
+ * Accepts modified JSON array of rows, re-validates, and issues a new batch ID.
  */
 export async function POST(req: NextRequest) {
   const session = await getSession(req);
@@ -22,21 +22,19 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const formData = await req.formData();
-    const file = formData.get("file") as File;
-    const hostelId = formData.get("hostel_id") as string;
+    const body = await req.json().catch(() => ({}));
+    const { rows, hostel_id, filename, import_defaults } = body;
 
-    if (!file) {
-      return apiError("File is required", "VALIDATION_ERROR", 400);
+    if (!rows || !Array.isArray(rows)) {
+      return apiError("Rows array is required", "VALIDATION_ERROR", 400);
     }
-
-    if (!hostelId) {
+    if (!hostel_id) {
       return apiError("Hostel ID is required", "VALIDATION_ERROR", 400);
     }
 
     const hostel = await prisma.hostels.findFirst({
       where: {
-        id: hostelId,
+        id: hostel_id,
         owner_id: session.sub,
         is_active: true,
       },
@@ -46,43 +44,11 @@ export async function POST(req: NextRequest) {
       return apiError("Hostel not found or access denied", "NOT_FOUND", 404);
     }
 
-    const allowedTypes = [
-      "application/vnd.ms-excel",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "text/csv",
-    ];
-
-    if (!allowedTypes.includes(file.type)) {
-      return apiError(
-        "Invalid file type. Please upload Excel (.xlsx, .xls) or CSV file",
-        "VALIDATION_ERROR",
-        400
-      );
-    }
-
-    const maxSize = 5 * 1024 * 1024;
-    if (file.size > maxSize) {
-      return apiError(
-        "File too large. Maximum size is 5MB",
-        "VALIDATION_ERROR",
-        400
-      );
-    }
-
-    const fileBuffer = Buffer.from(await file.arrayBuffer());
-
-    const importDefaults = parseImportDefaults(formData);
-
-    const rows = await bulkImportValidationService.parseFile(
-      fileBuffer,
-      file.name
-    );
-
     const validation = await bulkImportValidationService.validateRows(
       rows,
-      hostelId,
+      hostel_id,
       session.sub,
-      importDefaults
+      import_defaults || {}
     );
 
     const batchId = crypto.randomUUID();
@@ -100,16 +66,16 @@ export async function POST(req: NextRequest) {
         data: {
           id: batchId,
           owner_id: session.sub,
-          hostel_id: hostelId,
-          filename: file.name,
-          file_size: file.size,
+          hostel_id: hostel_id,
+          filename: filename || "edited-batch.csv",
+          file_size: JSON.stringify(rows).length,
           total_rows: validation.totalRows,
           valid_rows: validation.summary.valid,
           failed_rows: validation.summary.invalid,
           duplicate_rows: validation.summary.duplicates,
           status: "VALIDATED",
           validation_errors: {
-            defaults: importDefaults,
+            defaults: import_defaults || {},
             valid_rows: validRowsForImport,
             invalid: validation.invalidRows.map((r) => ({
               row: r.row,
@@ -136,7 +102,7 @@ export async function POST(req: NextRequest) {
             id: crypto.randomUUID(),
             batch_id: batchId,
             owner_id: session.sub,
-            hostel_id: hostelId,
+            hostel_id: hostel_id,
             row_number: row.row,
             normalized_email: row.data.email,
             normalized_phone: row.data.phone,
@@ -152,7 +118,7 @@ export async function POST(req: NextRequest) {
     return apiResponse(
       {
         batch_id: batchId,
-        filename: file.name,
+        filename: filename || "edited-batch.csv",
         validation: {
           total_rows: validation.totalRows,
           valid_rows: validation.summary.valid,
@@ -170,7 +136,7 @@ export async function POST(req: NextRequest) {
       200
     );
   } catch (error: any) {
-    const rawMessage = String(error?.message || "Failed to process file");
+    const rawMessage = String(error?.message || "Failed to revalidate rows");
     const [maybeCode, ...rest] = rawMessage.split(":");
     const normalizedCode = maybeCode?.trim();
     const normalizedMessage = rest.length > 0 ? rest.join(":").trim() : rawMessage;
@@ -184,38 +150,8 @@ export async function POST(req: NextRequest) {
     };
 
     const status = statusMap[normalizedCode] || 500;
-    return apiError(normalizedMessage, normalizedCode || "UPLOAD_ERROR", status);
+    return apiError(normalizedMessage, normalizedCode || "REVALIDATE_ERROR", status);
   }
-}
-
-function parseImportDefaults(formData: FormData): ImportDefaults {
-  const maintenanceType = String(formData.get("maintenance_type") || "").toUpperCase();
-  return {
-    joining_date: stringValue(formData.get("joining_date")),
-    advance_deposit: numberValue(formData.get("advance_deposit")),
-    maintenance_charge: numberValue(formData.get("maintenance_charge")),
-    maintenance_type: ["MONTHLY", "ONE_TIME", "NONE"].includes(maintenanceType)
-      ? maintenanceType as ImportDefaults["maintenance_type"]
-      : undefined,
-    billing_start_mode: formData.get("billing_start_mode") === "IMPORT_DATE"
-      ? "IMPORT_DATE"
-      : "JOINING_DATE",
-  };
-}
-
-function stringValue(value: FormDataEntryValue | null) {
-  const text = String(value || "").trim();
-  return text || undefined;
-}
-
-function numberValue(value: FormDataEntryValue | null) {
-  const text = String(value || "").trim();
-  if (!text) return undefined;
-  const num = Number(text);
-  if (!Number.isFinite(num) || num < 0) {
-    throw new Error("VALIDATION_ERROR: Import default amounts must be zero or greater");
-  }
-  return num;
 }
 
 function sanitizeValidatedRow(row: any) {

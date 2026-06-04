@@ -108,6 +108,10 @@ export const bulkImportService = {
         const response = await api.get(`/bulk-import/${batchId}/confirm`);
         return response.data;
     },
+    revalidateRows: async (data) => {
+        const response = await api.post('/bulk-import/revalidate', data);
+        return response.data;
+    },
     getBatchStatus: async (batchId) => {
         const response = await api.get(`/bulk-import/${batchId}`);
         return response.data;

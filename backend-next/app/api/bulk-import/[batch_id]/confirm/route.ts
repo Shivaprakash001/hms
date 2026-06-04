@@ -62,7 +62,7 @@ export async function GET(
         },
         defaults: validationPayload.defaults || {},
         preview: {
-          valid: validationPayload.valid_rows.slice(0, 25).map(sanitizeImportRowForPreview),
+          valid: validationPayload.valid_rows.map(sanitizeImportRowForPreview),
           invalid: validationPayload.invalid || [],
           duplicates: validationPayload.duplicates || [],
         },

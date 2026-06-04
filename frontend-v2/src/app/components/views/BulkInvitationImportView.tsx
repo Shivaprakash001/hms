@@ -20,6 +20,8 @@ export function BulkInvitationImportView() {
   const [batch, setBatch] = useState<any>(null);
   const [result, setResult] = useState<any>(null);
   const [confirmHistorical, setConfirmHistorical] = useState(false);
+  const [editedData, setEditedData] = useState<Record<number, any>>({});
+  const [revalidating, setRevalidating] = useState(false);
 
   const { data: hostelsRaw } = useQuery({
     queryKey: ['owner-hostels-for-bulk-invite'],
@@ -106,6 +108,53 @@ export function BulkInvitationImportView() {
       setError(err?.response?.data?.error?.message || err?.message || 'Unable to send invitations.');
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleRowEdit = (rowId: number, field: string, value: string) => {
+    setEditedData((prev) => ({
+      ...prev,
+      [rowId]: {
+        ...(prev[rowId] || {}),
+        [field]: value,
+      },
+    }));
+  };
+
+  const revalidateEdits = async () => {
+    if (!hostelId) return;
+    setRevalidating(true);
+    setError('');
+    try {
+      const allOriginalRows = [
+        ...(batch?.preview?.valid || []),
+        ...(batch?.preview?.invalid || []),
+        ...(batch?.preview?.duplicates || []),
+      ].sort((a, b) => a.row - b.row);
+
+      const rowsToRevalidate = allOriginalRows.map((r) => {
+        const originalData = r.data || r;
+        const edits = editedData[r.row] || {};
+        return {
+          ...originalData,
+          ...edits,
+        };
+      });
+
+      const response = unwrap<any>(
+        await bulkImportService.revalidateRows({
+          hostel_id: hostelId,
+          filename: batch?.filename,
+          rows: rowsToRevalidate,
+        }),
+      );
+      setBatch(response);
+      setEditedData({});
+      setConfirmHistorical(false);
+    } catch (err: any) {
+      setError(err?.response?.data?.error?.message || err?.message || 'Unable to revalidate edits.');
+    } finally {
+      setRevalidating(false);
     }
   };
 
@@ -228,19 +277,33 @@ export function BulkInvitationImportView() {
               </label>
             )}
 
-            <PreviewTable title="Ready rows" rows={batch?.preview?.valid || []} />
-            <PreviewTable title="Invalid rows" rows={batch?.preview?.invalid || []} />
-            <PreviewTable title="Duplicate rows" rows={batch?.preview?.duplicates || []} />
+            <PreviewTable title="Ready rows" rows={batch?.preview?.valid || []} isEditable={true} editedData={editedData} onEdit={handleRowEdit} />
+            <PreviewTable title="Invalid rows" rows={batch?.preview?.invalid || []} isEditable={true} editedData={editedData} onEdit={handleRowEdit} />
+            <PreviewTable title="Duplicate rows" rows={batch?.preview?.duplicates || []} isEditable={true} editedData={editedData} onEdit={handleRowEdit} />
 
-            <button
-              type="button"
-              onClick={sendInvitations}
-              disabled={sending || readyCount === 0 || (requiresHistorical && !confirmHistorical)}
-              className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-3 text-sm font-bold text-accent-foreground disabled:opacity-60"
-            >
-              <Send className="h-4 w-4" />
-              {sending ? 'Sending invitations...' : 'Send invitations'}
-            </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={sendInvitations}
+                disabled={sending || readyCount === 0 || (requiresHistorical && !confirmHistorical) || Object.keys(editedData).length > 0}
+                className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-3 text-sm font-bold text-accent-foreground disabled:opacity-60"
+              >
+                <Send className="h-4 w-4" />
+                {sending ? 'Sending invitations...' : 'Send invitations'}
+              </button>
+              
+              {Object.keys(editedData).length > 0 && (
+                <button
+                  type="button"
+                  onClick={revalidateEdits}
+                  disabled={revalidating}
+                  className="inline-flex items-center gap-2 rounded-lg border border-accent bg-accent/10 px-4 py-3 text-sm font-bold text-accent disabled:opacity-60 transition-colors hover:bg-accent/20"
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                  {revalidating ? 'Revalidating...' : 'Revalidate edits'}
+                </button>
+              )}
+            </div>
           </div>
         )}
 
@@ -291,15 +354,28 @@ function Metric({ label, value, tone }: { label: string; value: number; tone: 's
   );
 }
 
-function PreviewTable({ title, rows }: { title: string; rows: any[] }) {
+function PreviewTable({
+  title,
+  rows,
+  isEditable = false,
+  editedData = {},
+  onEdit,
+}: {
+  title: string;
+  rows: any[];
+  isEditable?: boolean;
+  editedData?: Record<number, any>;
+  onEdit?: (rowId: number, field: string, value: string) => void;
+}) {
   if (!rows.length) return null;
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
-      <div className="border-b border-border px-4 py-3">
+      <div className="border-b border-border px-4 py-3 flex items-center justify-between">
         <h3 className="font-bold text-foreground">{title}</h3>
+        {isEditable && <span className="text-xs text-muted-foreground">Click on cells to edit inline</span>}
       </div>
       <div className="overflow-x-auto">
-        <table className="min-w-full text-left text-sm">
+        <table className="min-w-full text-left text-sm whitespace-nowrap">
           <thead className="bg-muted/60 text-xs uppercase text-muted-foreground">
             <tr>
               <th className="px-4 py-3">Row</th>
@@ -307,12 +383,20 @@ function PreviewTable({ title, rows }: { title: string; rows: any[] }) {
               <th className="px-4 py-3">Email</th>
               <th className="px-4 py-3">Phone</th>
               <th className="px-4 py-3">Room</th>
+              <th className="px-4 py-3">Rent</th>
+              <th className="px-4 py-3">Deposit</th>
+              <th className="px-4 py-3">Join Date</th>
+              <th className="px-4 py-3">Notes</th>
               <th className="px-4 py-3">Status</th>
             </tr>
           </thead>
           <tbody>
-            {rows.slice(0, 25).map((row, index) => {
+            {rows.map((row, index) => {
               const data = row.data || row;
+              const rowId = row.row || row.row_number || index;
+              const currentData = isEditable ? { ...data, ...(editedData[rowId] || {}) } : data;
+              const isEdited = !!editedData[rowId];
+
               const status =
                 row.success === false
                   ? row.error
@@ -322,14 +406,39 @@ function PreviewTable({ title, rows }: { title: string; rows: any[] }) {
                     row.action ||
                     row.errors?.[0]?.message ||
                     'Ready';
+
+              const renderCell = (field: string, fallback: string) => {
+                if (!isEditable) return fallback;
+                return (
+                  <input
+                    type="text"
+                    value={currentData[field] === undefined || currentData[field] === null ? '' : currentData[field]}
+                    onChange={(e) => onEdit?.(rowId, field, e.target.value)}
+                    className="w-full min-w-[80px] bg-transparent outline-none border-b border-transparent focus:border-accent focus:bg-background/50 px-1 py-0.5 rounded transition-all text-sm"
+                    placeholder="Empty"
+                  />
+                );
+              };
+
               return (
-                <tr key={`${row.row || row.row_number || index}-${data.email || index}`} className="border-t border-border">
-                  <td className="px-4 py-3">{row.row || row.row_number || '-'}</td>
-                  <td className="px-4 py-3">{data.name || '-'}</td>
-                  <td className="px-4 py-3">{data.email || '-'}</td>
-                  <td className="px-4 py-3">{data.phone || '-'}</td>
-                  <td className="px-4 py-3">{data.room_no || row.room || '-'}</td>
-                  <td className="px-4 py-3">{status}</td>
+                <tr key={`${rowId}-${data.email || index}`} className={`border-t border-border focus-within:bg-muted/30 ${isEdited ? 'bg-accent/5' : ''}`}>
+                  <td className="px-4 py-3">
+                    {rowId}
+                    {isEdited && <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-accent"></span>}
+                  </td>
+                  <td className="px-4 py-2">{renderCell('name', currentData.name || '-')}</td>
+                  <td className="px-4 py-2">{renderCell('email', currentData.email || '-')}</td>
+                  <td className="px-4 py-2">{renderCell('phone', currentData.phone || '-')}</td>
+                  <td className="px-4 py-2 w-28">{renderCell('room_no', currentData.room_no || row.room || '-')}</td>
+                  <td className="px-4 py-2 w-28">{renderCell('monthly_rent', currentData.monthly_rent != null ? `₹${currentData.monthly_rent}` : '-')}</td>
+                  <td className="px-4 py-2 w-28">{renderCell('advance_deposit', currentData.advance_deposit != null ? `₹${currentData.advance_deposit}` : '-')}</td>
+                  <td className="px-4 py-2 w-32">{renderCell('joining_date', currentData.joining_date || '-')}</td>
+                  <td className="px-4 py-2 max-w-[200px] truncate" title={currentData.notes}>
+                    {renderCell('notes', currentData.notes || '-')}
+                  </td>
+                  <td className="px-4 py-3 max-w-[300px] truncate text-xs" title={status}>
+                    {status}
+                  </td>
                 </tr>
               );
             })}
