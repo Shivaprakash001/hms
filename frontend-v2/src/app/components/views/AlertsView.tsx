@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { AlertCircle, AlertTriangle, Phone, CheckCircle, Building2, CreditCard, ChevronDown, FileText, MessageSquare } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Phone, CheckCircle, Building2, CreditCard, ChevronDown, FileText, MessageSquare, UserRound } from 'lucide-react';
 import { ownerService } from '@features/owners/api';
 import { paymentService } from '@features/payments/api';
 import { tenantService } from '@features/tenants/api';
@@ -25,6 +25,15 @@ function daysUntilDue(dueDateStr: unknown): number {
   if (!dueDateStr) return 0;
   const diff = new Date(String(dueDateStr)).getTime() - Date.now();
   return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+}
+
+function firstNonEmptyString(...values: unknown[]): string {
+  for (const value of values) {
+    if (value === null || value === undefined) continue;
+    const text = String(value).trim();
+    if (text && text !== 'undefined' && text !== 'null') return text;
+  }
+  return '';
 }
 
 export function AlertsView() {
@@ -221,6 +230,7 @@ export function AlertsView() {
                 urgencyLabel={days > 0 ? `${days}d overdue` : 'Overdue'}
                 urgencyColor="text-[#EF4444]"
                 cardBorder="border-[#EF4444]/20"
+                hostelId={activeHostelId ?? ''}
                 onRecordPayment={() =>
                   activeHostelId && setRecordPayment({
                     hostelId: activeHostelId,
@@ -253,6 +263,7 @@ export function AlertsView() {
                 urgencyLabel={days > 0 ? `due in ${days}d` : 'Due today'}
                 urgencyColor="text-[#F59E0B]"
                 cardBorder="border-[#F59E0B]/15"
+                hostelId={activeHostelId ?? ''}
                 onRecordPayment={() =>
                   activeHostelId && setRecordPayment({
                     hostelId: activeHostelId,
@@ -275,14 +286,15 @@ export function AlertsView() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {pendingDocs.map((doc) => {
-              const docId = String(doc.id);
-              const tenantId = String(doc.tenant_id);
-              const hostelId = String(doc.hostel_id || activeHostelId || '');
+              const docId = firstNonEmptyString(doc.id);
+              const tenantId = firstNonEmptyString(doc.tenant_id, doc.tenantId, (doc.tenant as Record<string, unknown> | undefined)?.id);
+              const hostelId = firstNonEmptyString(doc.hostel_id, doc.hostelId, activeHostelId);
+              const profilePath = tenantId && hostelId ? `/hostels/${hostelId}/tenants/${tenantId}?tab=documents` : '';
               const name = String(doc.tenant_name || 'Tenant');
               const docType = String(doc.doc_type || 'Document');
               const room = String(doc.room_no || 'N/A');
               const uploadedAt = doc.uploaded_at ? new Date(String(doc.uploaded_at)) : null;
-              const avatarUrl = doc.avatar ?? doc.tenant_avatar ?? doc.tenant_avatar_url ?? doc.avatar_url;
+              const avatarUrl = doc.photo_url ?? doc.avatar ?? doc.tenant_avatar ?? doc.tenant_avatar_url ?? doc.avatar_url;
 
               return (
                 <div key={docId} className="bg-card border border-border rounded-xl p-3 flex flex-col justify-between gap-3 shadow-sm hover:shadow-md transition-shadow">
@@ -306,13 +318,19 @@ export function AlertsView() {
                       )}
                     </div>
                   </div>
-                  <Link
-                    to={`/hostels/${hostelId}/tenants/${tenantId}?tab=documents`}
-                    className="w-full bg-accent text-accent-foreground py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-98 transition-all"
-                  >
-                    <MessageSquare className="w-3.5 h-3.5" />
-                    Verify & Chat
-                  </Link>
+                  {profilePath ? (
+                    <Link
+                      to={profilePath}
+                      className="w-full bg-accent text-accent-foreground py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-98 transition-all"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      Verify & Chat
+                    </Link>
+                  ) : (
+                    <div className="w-full bg-secondary text-muted-foreground py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5">
+                      Profile unavailable
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -339,17 +357,21 @@ interface DueCardProps {
   urgencyLabel: string;
   urgencyColor: string;
   cardBorder: string;
+  hostelId: string;
   onRecordPayment: () => void;
 }
 
-function DueCard({ due, isOverdue, urgencyLabel, urgencyColor, cardBorder, onRecordPayment }: DueCardProps) {
+function DueCard({ due, isOverdue, urgencyLabel, urgencyColor, cardBorder, hostelId, onRecordPayment }: DueCardProps) {
   const amount = Number(due.amount ?? due.outstanding ?? 0);
   const tenantName = String(due.tenant_name ?? due.name ?? 'Tenant');
   const room = due.room_no ?? due.room_number;
   const rawPhone = due.phone ?? due.tenant_phone ?? due.tenantPhone;
   const phone = rawPhone ? String(rawPhone).trim() : null;
   const telPhone = phone ? phone.replace(/[^\d+]/g, '') : null;
-  const avatarUrl = due.avatar ?? due.tenant_avatar ?? due.tenant_avatar_url ?? due.avatar_url;
+  const tenantId = firstNonEmptyString(due.tenant_id, due.tenantId, (due.tenant as Record<string, unknown> | undefined)?.id);
+  const resolvedHostelId = firstNonEmptyString(due.hostel_id, due.hostelId, hostelId);
+  const profilePath = tenantId && resolvedHostelId ? `/hostels/${resolvedHostelId}/tenants/${tenantId}?tab=billing` : '';
+  const avatarUrl = due.photo_url ?? due.avatar ?? due.tenant_avatar ?? due.tenant_avatar_url ?? due.avatar_url;
 
   return (
     <div className={`bg-card border ${cardBorder} rounded-xl p-3 flex items-center gap-3 min-w-0 shadow-sm transition-all hover:shadow-md`}>
@@ -391,6 +413,15 @@ function DueCard({ due, isOverdue, urgencyLabel, urgencyColor, cardBorder, onRec
           >
             <Phone className="w-4 h-4" />
           </a>
+        )}
+        {profilePath && (
+          <Link
+            to={profilePath}
+            aria-label={`View ${tenantName} profile`}
+            className="w-9 h-9 flex items-center justify-center rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 active:scale-95 transition-all"
+          >
+            <UserRound className="w-4 h-4" />
+          </Link>
         )}
         <button
           onClick={onRecordPayment}

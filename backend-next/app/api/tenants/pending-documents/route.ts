@@ -82,6 +82,7 @@ export async function GET(req: NextRequest) {
         uploaded_at: doc.created_at,
         tenant_name: doc.tenant.profiles?.name || "Tenant",
         tenant_phone: doc.tenant.profiles?.phone || doc.tenant.phone_1 || "",
+        photo_url: doc.tenant.photo_url || null,
         room_no: activeAlloc?.room?.room_no || "N/A",
         hostel_name: doc.tenant.hostels?.name || "Hostel",
         hostel_id: doc.tenant.hostel_id,

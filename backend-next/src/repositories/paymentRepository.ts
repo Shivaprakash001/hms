@@ -87,12 +87,14 @@ export class PaymentRepository {
             select: {
                 id: true,
                 tenant_id: true,
+                hostel_id: true,
                 rent_month: true,
                 due_date: true,
                 amount: true,
                 status: true,
                 tenants: {
                     select: {
+                        photo_url: true,
                         profiles: {
                             select: {
                                 name: true,
