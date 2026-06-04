@@ -41,6 +41,12 @@ export class BillingTimelineService {
 
     const policyResponse = await hostelPolicyService.getHostelPolicy(tenant.hostel_id).catch(() => null);
     const policy = billingScheduleService.normalizePolicy(policyResponse?.policy);
+    // Extract billing schedule settings from the full policy (NOT just payment_frequency)
+    const billingPrefs = (policyResponse?.policy?.billing ?? {}) as {
+      due_day?: number; auto_rent_day?: number; grace_days?: number;
+    };
+    const dueDay = Math.max(1, Math.min(28, Number(billingPrefs.due_day ?? 5)));
+    const autoRentDay = Math.max(1, Math.min(28, Number(billingPrefs.auto_rent_day ?? 1)));
 
     const obligations = await prisma.rent_obligations.findMany({
       where: {
@@ -102,6 +108,8 @@ export class BillingTimelineService {
       maintenanceAmount: String(tenant.maintenance_type || "MONTHLY") === "MONTHLY" ? money(tenant.maintenance_charge) : 0,
       periods: 6,
       policy,
+      dueDay,
+      autoRentDay,
     });
     const existingPeriodKeys = new Set(
       obligations.map((ob: any) => `${new Date(ob.billing_period_start || ob.rent_month).toISOString().slice(0, 10)}:${ob.obligation_type}`)
@@ -182,6 +190,7 @@ export class BillingTimelineService {
       active_frequency: activeFrequency,
       effective_from: tenant.payment_frequency_effective_from,
       updated_at: tenant.payment_frequency_updated_at,
+      billing_settings: { due_day: dueDay, auto_rent_day: autoRentDay, grace_days: Number(billingPrefs.grace_days ?? 0) },
       plans: tenant.tenant_billing_plans,
       requests: tenant.payment_frequency_change_requests,
       items: timeline,

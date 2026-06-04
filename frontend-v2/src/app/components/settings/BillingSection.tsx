@@ -1,11 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Trash2, ChevronDown, ChevronUp, CalendarRange } from 'lucide-react';
+import { Plus, Trash2, CalendarRange, Info, ChevronDown, ChevronUp } from 'lucide-react';
 import { useUpdateHostelPolicy, HostelPolicy, LateFeeRule } from '@features/settings/settingsHooks';
-import { SectionShell, Field, inp, Sel, Toggle, FieldRow } from './shared';
+import { SectionShell, Field, inp, Toggle, FieldRow } from './shared';
 
 interface Local {
-  rent_cycle: string; auto_rent_day: number; due_day: number; grace_days: number;
-  late_fee_enabled: boolean; late_fee_rules: LateFeeRule[]; max_late_fee: number;
+  auto_rent_day: number;
+  due_day: number;
+  grace_days: number;
+  late_fee_enabled: boolean;
+  late_fee_rules: LateFeeRule[];
+  max_late_fee: number;
   allowed_frequencies: string[];
   academic_year_start_month: number;
   academic_year_start_day: number;
@@ -14,56 +18,58 @@ interface Local {
   minimum_commitment_months: Record<string, number>;
 }
 
-const CYCLE_OPTIONS = [
-  { value: 'MONTHLY', label: 'Monthly' },
-];
-
 const RULE_TYPE_OPTIONS = [
-  { value: 'FLAT', label: 'Flat amount (₹)' },
-  { value: 'PERCENTAGE', label: 'Percentage of rent (%)' },
-  { value: 'PER_DAY', label: 'Per day (₹/day)' },
+  { value: 'FLAT', label: 'Flat (₹)' },
+  { value: 'PERCENTAGE', label: '% of rent' },
+  { value: 'PER_DAY', label: 'Per day (₹)' },
 ];
 
 const FREQUENCY_OPTIONS = [
-  { value: 'MONTHLY', label: 'Monthly', hint: 'Every month' },
-  { value: 'QUARTERLY', label: 'Quarterly', hint: '3-month grouped bills' },
-  { value: 'HALF_YEARLY', label: 'Half-yearly', hint: '6-month grouped bills' },
-  { value: 'ACADEMIC_YEARLY', label: 'Academic yearly', hint: 'One academic-cycle bill' },
+  { value: 'MONTHLY', label: 'Monthly', hint: 'Every month', always: true },
+  { value: 'QUARTERLY', label: 'Quarterly', hint: '3-month grouped' },
+  { value: 'HALF_YEARLY', label: 'Half-yearly', hint: '6-month grouped' },
+  { value: 'ACADEMIC_YEARLY', label: 'Academic year', hint: 'One bill per cycle' },
+];
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
 const init = (p?: HostelPolicy): Local => ({
-  rent_cycle: p?.billing.rent_cycle ?? 'MONTHLY',
   auto_rent_day: p?.billing.auto_rent_day ?? 1,
   due_day: p?.billing.due_day ?? 5,
   grace_days: p?.billing.grace_days ?? 0,
   late_fee_enabled: p?.billing.late_fee.enabled ?? false,
   late_fee_rules: p?.billing.late_fee.rules ?? [],
-  max_late_fee: p?.billing.late_fee.max_amount ?? 500,
-  allowed_frequencies: p?.billing.payment_frequency?.allowed_frequencies ?? ['MONTHLY', 'QUARTERLY'],
+  max_late_fee: p?.billing.late_fee.max_amount ?? 0,
+  allowed_frequencies: p?.billing.payment_frequency?.allowed_frequencies ?? ['MONTHLY'],
   academic_year_start_month: p?.billing.payment_frequency?.academic_year_start_month ?? 6,
   academic_year_start_day: p?.billing.payment_frequency?.academic_year_start_day ?? 1,
   academic_year_name_format: p?.billing.payment_frequency?.academic_year_name_format ?? 'YYYY-YYYY',
   frequency_change_cooldown_days: p?.billing.payment_frequency?.frequency_change_cooldown_days ?? 90,
   minimum_commitment_months: p?.billing.payment_frequency?.minimum_commitment_months ?? {
-    MONTHLY: 1,
-    QUARTERLY: 3,
-    HALF_YEARLY: 6,
-    ACADEMIC_YEARLY: 12,
-    CUSTOM_INSTALLMENTS: 1,
+    MONTHLY: 1, QUARTERLY: 3, HALF_YEARLY: 6, ACADEMIC_YEARLY: 12, CUSTOM_INSTALLMENTS: 1,
   },
 });
 
-// simple frontend preview — not authoritative, backend is source of truth
-function calcPreview(rentAmount: number, daysLate: number, local: Local) {
-  if (!local.late_fee_enabled || local.late_fee_rules.length === 0) return 0;
-  let total = 0;
-  for (const rule of local.late_fee_rules) {
-    if (daysLate < rule.starts_after_days) continue;
-    if (rule.type === 'FLAT') total += rule.amount;
-    else if (rule.type === 'PERCENTAGE') total += (rentAmount * rule.amount) / 100;
-    else if (rule.type === 'PER_DAY') total += rule.amount * Math.max(0, daysLate - rule.starts_after_days);
+/** Compute what the due date would look like for a given month (1-indexed) */
+function dueDateForMonth(autoRentDay: number, dueDay: number, referenceMonth = new Date().getMonth() + 1) {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = referenceMonth - 1; // 0-indexed
+  if (dueDay >= autoRentDay) {
+    // same month
+    return new Date(year, month, dueDay);
   }
-  return local.max_late_fee > 0 ? Math.min(total, local.max_late_fee) : total;
+  // pushed to next month
+  return new Date(year, month + 1, dueDay);
+}
+
+function ordinal(n: number) {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
 interface Props { hostelId: string; policy?: HostelPolicy }
@@ -89,7 +95,6 @@ export function BillingSection({ hostelId, policy }: Props) {
     setError(null);
     mutation.mutate({
       billing: {
-        rent_cycle: local.rent_cycle,
         auto_rent_day: local.auto_rent_day,
         due_day: local.due_day,
         grace_days: local.grace_days,
@@ -115,205 +120,305 @@ export function BillingSection({ hostelId, policy }: Props) {
     ...local.late_fee_rules,
     { type: 'FLAT', amount: 100, starts_after_days: local.grace_days + 1 },
   ]);
-
   const removeRule = (i: number) => upd('late_fee_rules', local.late_fee_rules.filter((_, idx) => idx !== i));
-
   const updateRule = (i: number, patch: Partial<LateFeeRule>) =>
     upd('late_fee_rules', local.late_fee_rules.map((r, idx) => idx === i ? { ...r, ...patch } : r));
 
-  const toggleFrequency = (frequency: string) => {
-    const exists = local.allowed_frequencies.includes(frequency);
+  const toggleFrequency = (freq: string) => {
+    const exists = local.allowed_frequencies.includes(freq);
     const next = exists
-      ? local.allowed_frequencies.filter(f => f !== frequency)
-      : [...local.allowed_frequencies, frequency];
+      ? local.allowed_frequencies.filter(f => f !== freq)
+      : [...local.allowed_frequencies, freq];
     upd('allowed_frequencies', next.includes('MONTHLY') ? next : ['MONTHLY', ...next]);
   };
 
-  const setCommitment = (frequency: string, value: number) => {
-    upd('minimum_commitment_months', {
-      ...local.minimum_commitment_months,
-      [frequency]: Math.max(0, Math.min(120, Number(value) || 0)),
-    });
-  };
+  const hasAcademicYearly = local.allowed_frequencies.includes('ACADEMIC_YEARLY');
+  const hasMultiPeriod = local.allowed_frequencies.some(f => f !== 'MONTHLY');
 
-  const previewFee = calcPreview(Number(previewRent) || 0, Number(previewDays) || 0, local);
-  const dueDateLabel = `Day ${local.due_day}`;
-  const graceExpiry = local.due_day + local.grace_days;
+  // Live schedule summary
+  const generationDay = local.auto_rent_day;
+  const dueDay = local.due_day;
+  const graceDays = local.grace_days;
+  const duePushedToNextMonth = dueDay < generationDay;
+  const effectiveDeadlineDay = dueDay + graceDays;
+  const feeKicksInDay = effectiveDeadlineDay + 1;
+
+  // Preview calculation
+  const previewFee = (() => {
+    if (!local.late_fee_enabled || local.late_fee_rules.length === 0) return 0;
+    const rent = Number(previewRent) || 0;
+    const days = Number(previewDays) || 0;
+    const effective = Math.max(days - graceDays, 0);
+    let total = 0;
+    for (const rule of local.late_fee_rules) {
+      if (effective < rule.starts_after_days) continue;
+      if (rule.type === 'FLAT') total += rule.amount;
+      else if (rule.type === 'PERCENTAGE') total += (rent * rule.amount) / 100;
+      else if (rule.type === 'PER_DAY') total += rule.amount * Math.max(0, effective - rule.starts_after_days);
+    }
+    return local.max_late_fee > 0 ? Math.min(total, local.max_late_fee) : total;
+  })();
 
   return (
     <SectionShell
       title="Rent & Billing"
-      description="Rent cycle, due dates, grace periods, and late fee rules"
+      description="When rent is generated, when it's due, and how late fees work"
       isDirty={isDirty} saving={mutation.isPending}
       onSave={save} onReset={() => { setLocal(snap.current); setError(null); }} error={error}
     >
-      {/* Billing cycle */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Field label="Rent cycle">
-          <Sel value={local.rent_cycle} onChange={v => upd('rent_cycle', v)} options={CYCLE_OPTIONS} />
-        </Field>
-        <Field label="Rent generation day" hint="Day of month rent is created">
-          <input type="number" min={1} max={28} className={inp}
-            value={local.auto_rent_day}
-            onChange={e => upd('auto_rent_day', Math.min(28, Math.max(1, +e.target.value)))} />
-        </Field>
-        <Field label="Due day" hint="Day of month payment is due">
-          <input type="number" min={1} max={28} className={inp}
-            value={local.due_day}
-            onChange={e => upd('due_day', Math.min(28, Math.max(1, +e.target.value)))} />
-        </Field>
-        <Field label="Grace period (days)" hint="Extra days before late fees apply">
-          <input type="number" min={0} max={30} className={inp}
-            value={local.grace_days}
-            onChange={e => upd('grace_days', Math.min(30, Math.max(0, +e.target.value)))} />
-        </Field>
-      </div>
-
-      <div className="rounded-xl border border-border bg-secondary/20 p-4 space-y-4">
-        <div className="flex items-start gap-3">
-          <div className="w-9 h-9 rounded-lg bg-accent/10 text-accent flex items-center justify-center">
-            <CalendarRange className="w-4 h-4" />
+      {/* ── Live billing summary ──────────────────────────────────── */}
+      <div className="rounded-xl border border-accent/20 bg-accent/5 p-4 space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-accent mb-3">Current schedule</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+          <div>
+            <p className="text-xs text-muted-foreground">Rent generated</p>
+            <p className="font-semibold text-foreground">{ordinal(generationDay)} of each month</p>
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-foreground">Flexible rent contracts</h3>
-            <p className="text-xs text-muted-foreground mt-1">
-              Tenants can request these billing frequencies. Owner approval is always required.
+            <p className="text-xs text-muted-foreground">Payment due</p>
+            <p className="font-semibold text-foreground">
+              {ordinal(dueDay)}{duePushedToNextMonth ? ' (next month)' : ' of same month'}
+            </p>
+            {duePushedToNextMonth && (
+              <p className="text-[10px] text-amber-600 mt-0.5">Due day is before generation day — pushed to next month</p>
+            )}
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Late fee starts</p>
+            <p className="font-semibold text-foreground">
+              {graceDays > 0
+                ? `Day ${ordinal(feeKicksInDay)} (${graceDays}d grace)`
+                : `Immediately after due`}
             </p>
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {FREQUENCY_OPTIONS.map(option => (
-            <label key={option.value} className="flex items-center gap-3 rounded-lg border border-border bg-background px-3 py-3 text-sm">
-              <input
-                type="checkbox"
-                checked={local.allowed_frequencies.includes(option.value)}
-                disabled={option.value === 'MONTHLY'}
-                onChange={() => toggleFrequency(option.value)}
-                className="h-4 w-4 accent-accent"
-              />
-              <span className="flex-1">
-                <span className="font-medium text-foreground">{option.label}</span>
-                <span className="block text-xs text-muted-foreground">{option.hint}</span>
-              </span>
-            </label>
-          ))}
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-          <Field label="Academic start month">
-            <input type="number" min={1} max={12} className={inp}
-              value={local.academic_year_start_month}
-              onChange={e => upd('academic_year_start_month', Math.min(12, Math.max(1, +e.target.value)))} />
+      </div>
+
+      {/* ── Timing fields ─────────────────────────────────────────── */}
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Timing</p>
+        <div className="grid grid-cols-3 gap-3">
+          <Field label="Generation day" hint="Rent is created on this day">
+            <input type="number" min={1} max={28} className={inp}
+              value={local.auto_rent_day}
+              onChange={e => upd('auto_rent_day', Math.min(28, Math.max(1, +e.target.value)))} />
           </Field>
-          <Field label="Academic start day">
-            <input type="number" min={1} max={31} className={inp}
-              value={local.academic_year_start_day}
-              onChange={e => upd('academic_year_start_day', Math.min(31, Math.max(1, +e.target.value)))} />
+          <Field label="Due day" hint="Payment is due on this day">
+            <input type="number" min={1} max={28} className={inp}
+              value={local.due_day}
+              onChange={e => upd('due_day', Math.min(28, Math.max(1, +e.target.value)))} />
           </Field>
-          <Field label="Cooldown days">
-            <input type="number" min={0} max={3650} className={inp}
-              value={local.frequency_change_cooldown_days}
-              onChange={e => upd('frequency_change_cooldown_days', Math.min(3650, Math.max(0, +e.target.value)))} />
+          <Field label="Grace period" hint="Extra days before fees apply">
+            <input type="number" min={0} max={30} className={inp}
+              value={local.grace_days}
+              onChange={e => upd('grace_days', Math.min(30, Math.max(0, +e.target.value)))} />
           </Field>
-          <Field label="Year label format">
-            <input className={inp} value={local.academic_year_name_format}
-              onChange={e => upd('academic_year_name_format', e.target.value)} />
-          </Field>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {FREQUENCY_OPTIONS.map(option => (
-            <Field key={option.value} label={`${option.label} lock (months)`}>
-              <input type="number" min={0} max={120} className={inp}
-                value={local.minimum_commitment_months[option.value] ?? 1}
-                onChange={e => setCommitment(option.value, +e.target.value)} />
-            </Field>
-          ))}
         </div>
       </div>
 
-      {/* Late fee toggle */}
-      <FieldRow label="Enable late fees" hint="Charge tenants for overdue payments">
-        <Toggle checked={local.late_fee_enabled} onChange={v => upd('late_fee_enabled', v)} />
-      </FieldRow>
-
-      {/* Late fee rules */}
-      {local.late_fee_enabled && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-foreground">Fee rules</span>
-            <button onClick={addRule} className="flex items-center gap-1 text-xs text-accent font-medium hover:underline">
-              <Plus className="w-3.5 h-3.5" /> Add rule
-            </button>
+      {/* ── Flexible contracts ────────────────────────────────────── */}
+      <div>
+        <div className="flex items-start gap-2.5 mb-3">
+          <CalendarRange className="w-4 h-4 text-accent mt-0.5 shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-foreground">Flexible billing contracts</p>
+            <p className="text-xs text-muted-foreground">Tenants can request these frequencies. Your approval is always required.</p>
           </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {FREQUENCY_OPTIONS.map(opt => {
+            const checked = local.allowed_frequencies.includes(opt.value);
+            return (
+              <label
+                key={opt.value}
+                className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition-colors ${
+                  checked
+                    ? 'border-accent/40 bg-accent/5'
+                    : 'border-border bg-card opacity-70'
+                } ${opt.always ? 'cursor-not-allowed' : ''}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={opt.always}
+                  onChange={() => toggleFrequency(opt.value)}
+                  className="mt-0.5 h-4 w-4 accent-accent shrink-0"
+                />
+                <span>
+                  <span className="block text-sm font-medium text-foreground">{opt.label}</span>
+                  <span className="block text-xs text-muted-foreground">{opt.hint}</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      </div>
 
-          {local.late_fee_rules.length === 0 && (
-            <p className="text-xs text-muted-foreground italic">No rules defined — late fees will not accumulate.</p>
-          )}
+      {/* Commitment minimums — only show if multi-period is enabled */}
+      {hasMultiPeriod && (
+        <div className="rounded-xl border border-border bg-secondary/20 p-4 space-y-3">
+          <div className="flex items-center gap-1.5">
+            <Info className="w-3.5 h-3.5 text-muted-foreground" />
+            <p className="text-xs font-medium text-muted-foreground">Minimum commitment (months) before tenant can switch</p>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {FREQUENCY_OPTIONS.filter(o => local.allowed_frequencies.includes(o.value)).map(opt => (
+              <Field key={opt.value} label={opt.label}>
+                <input type="number" min={0} max={120} className={inp}
+                  value={local.minimum_commitment_months[opt.value] ?? 1}
+                  onChange={e => upd('minimum_commitment_months', {
+                    ...local.minimum_commitment_months,
+                    [opt.value]: Math.max(0, Math.min(120, Number(e.target.value) || 0)),
+                  })} />
+              </Field>
+            ))}
+          </div>
+          <div className="flex items-start gap-2 text-xs text-muted-foreground">
+            <Info className="w-3 h-3 shrink-0 mt-0.5" />
+            <span>Frequency switch requests are blocked until tenant has completed this many months on their current plan.</span>
+          </div>
+        </div>
+      )}
 
-          {local.late_fee_rules.map((rule, i) => (
-            <div key={i} className="bg-secondary/50 border border-border rounded-lg p-3 grid grid-cols-3 gap-2 items-end">
-              <Field label="Type">
-                <Sel value={rule.type} onChange={v => updateRule(i, { type: v as LateFeeRule['type'] })} options={RULE_TYPE_OPTIONS} />
-              </Field>
-              <Field label={rule.type === 'PERCENTAGE' ? 'Rate (%)' : 'Amount (₹)'}>
-                <input type="number" min={0} className={inp} value={rule.amount}
-                  onChange={e => updateRule(i, { amount: +e.target.value })} />
-              </Field>
-              <div className="flex items-end gap-2">
-                <Field label="Starts after (days)">
-                  <input type="number" min={0} className={inp} value={rule.starts_after_days}
-                    onChange={e => updateRule(i, { starts_after_days: +e.target.value })} />
-                </Field>
-                <button onClick={() => removeRule(i)} className="mb-0.5 p-2 text-muted-foreground hover:text-destructive">
-                  <Trash2 className="w-4 h-4" />
+      {/* Academic year config — only show if ACADEMIC_YEARLY is allowed */}
+      {hasAcademicYearly && (
+        <div className="rounded-xl border border-border bg-secondary/20 p-4 space-y-3">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Academic year settings</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <Field label="Start month">
+              <select
+                value={local.academic_year_start_month}
+                onChange={e => upd('academic_year_start_month', +e.target.value)}
+                className={inp}
+              >
+                {MONTH_NAMES.map((name, i) => (
+                  <option key={i + 1} value={i + 1}>{name}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Start day">
+              <input type="number" min={1} max={31} className={inp}
+                value={local.academic_year_start_day}
+                onChange={e => upd('academic_year_start_day', Math.min(31, Math.max(1, +e.target.value)))} />
+            </Field>
+            <Field label="Cooldown (days)" hint="Min days before frequency change">
+              <input type="number" min={0} max={3650} className={inp}
+                value={local.frequency_change_cooldown_days}
+                onChange={e => upd('frequency_change_cooldown_days', Math.min(3650, Math.max(0, +e.target.value)))} />
+            </Field>
+            <Field label="Year label format" hint="e.g. YYYY-YYYY">
+              <input className={inp} value={local.academic_year_name_format}
+                onChange={e => upd('academic_year_name_format', e.target.value)} />
+            </Field>
+          </div>
+        </div>
+      )}
+
+      {/* ── Late fees ─────────────────────────────────────────────── */}
+      <div className="border-t border-border pt-5 space-y-4">
+        <FieldRow label="Enable late fees" hint="Charge tenants for overdue payments">
+          <Toggle checked={local.late_fee_enabled} onChange={v => upd('late_fee_enabled', v)} />
+        </FieldRow>
+
+        {local.late_fee_enabled && (
+          <>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-foreground">Fee rules</p>
+                <button type="button" onClick={addRule}
+                  className="flex items-center gap-1 text-xs text-accent font-semibold hover:underline">
+                  <Plus className="w-3.5 h-3.5" /> Add rule
                 </button>
               </div>
-            </div>
-          ))}
 
-          <Field label="Max late fee cap (₹)" hint="0 = no cap">
-            <input type="number" min={0} className={inp} value={local.max_late_fee}
-              onChange={e => upd('max_late_fee', +e.target.value)} />
-          </Field>
-        </div>
-      )}
+              {local.late_fee_rules.length === 0 && (
+                <p className="text-xs text-muted-foreground italic py-2">
+                  No rules yet — late fees won't accumulate until you add one.
+                </p>
+              )}
 
-      {/* Billing preview */}
-      {local.late_fee_enabled && (
-        <div className="border border-border rounded-xl overflow-hidden">
-          <button
-            onClick={() => setShowPreview(v => !v)}
-            className="w-full flex items-center justify-between px-4 py-3 bg-secondary/30 hover:bg-secondary/50 transition-colors text-sm font-medium"
-          >
-            <span>Late fee simulation</span>
-            {showPreview ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </button>
-          {showPreview && (
-            <div className="p-4 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Rent amount (₹)">
-                  <input type="number" className={inp} value={previewRent} onChange={e => setPreviewRent(e.target.value)} />
-                </Field>
-                <Field label="Days overdue">
-                  <input type="number" min={0} className={inp} value={previewDays} onChange={e => setPreviewDays(e.target.value)} />
-                </Field>
-              </div>
-              <div className="bg-secondary rounded-lg p-3 space-y-1.5 text-sm">
-                <div className="flex justify-between"><span className="text-muted-foreground">Due date</span><span>{dueDateLabel} each month</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Grace expires</span><span>Day {graceExpiry}</span></div>
-                <div className="flex justify-between font-medium border-t border-border pt-1.5 mt-1.5">
-                  <span>Late fee (estimated)</span>
-                  <span className="text-destructive">₹{previewFee.toFixed(0)}</span>
+              {local.late_fee_rules.map((rule, i) => (
+                <div key={i} className="rounded-xl border border-border bg-secondary/30 p-3 space-y-2">
+                  <div className="grid grid-cols-3 gap-2">
+                    <Field label="Type">
+                      <select className={inp} value={rule.type}
+                        onChange={e => updateRule(i, { type: e.target.value as LateFeeRule['type'] })}>
+                        {RULE_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </Field>
+                    <Field label={rule.type === 'PERCENTAGE' ? 'Rate (%)' : 'Amount (₹)'}>
+                      <input type="number" min={0} className={inp} value={rule.amount}
+                        onChange={e => updateRule(i, { amount: +e.target.value })} />
+                    </Field>
+                    <div className="flex items-end gap-2">
+                      <Field label="Apply after (days overdue)">
+                        <input type="number" min={0} className={inp} value={rule.starts_after_days}
+                          onChange={e => updateRule(i, { starts_after_days: +e.target.value })} />
+                      </Field>
+                      <button type="button" onClick={() => removeRule(i)}
+                        className="mb-0.5 p-2 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    {rule.type === 'FLAT' && `One-time ₹${rule.amount} charge after ${rule.starts_after_days + (graceDays || 0)} days past due (${rule.starts_after_days}d after grace ends)`}
+                    {rule.type === 'PER_DAY' && `₹${rule.amount}/day starting ${rule.starts_after_days + (graceDays || 0)} days past due`}
+                    {rule.type === 'PERCENTAGE' && `${rule.amount}% of rent charged after ${rule.starts_after_days + (graceDays || 0)} days past due`}
+                  </p>
                 </div>
-                <div className="flex justify-between font-semibold">
-                  <span>Total payable</span>
-                  <span>₹{(+(previewRent || 0) + previewFee).toFixed(0)}</span>
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">Simulation only — actual fees calculated by the billing engine.</p>
+              ))}
+
+              {local.late_fee_rules.length > 0 && (
+                <Field label="Maximum total late fee (₹)" hint="0 = no cap — fees accumulate without limit">
+                  <input type="number" min={0} className={inp} value={local.max_late_fee}
+                    onChange={e => upd('max_late_fee', +e.target.value)} />
+                </Field>
+              )}
             </div>
-          )}
-        </div>
-      )}
+
+            {/* Late fee simulator */}
+            <div className="rounded-xl border border-border overflow-hidden">
+              <button type="button"
+                onClick={() => setShowPreview(v => !v)}
+                className="w-full flex items-center justify-between px-4 py-3 bg-secondary/30 hover:bg-secondary/50 transition-colors text-sm font-medium">
+                <span>Test late fee calculator</span>
+                {showPreview ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+              {showPreview && (
+                <div className="p-4 space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Monthly rent (₹)">
+                      <input type="number" className={inp} value={previewRent} onChange={e => setPreviewRent(e.target.value)} />
+                    </Field>
+                    <Field label="Days overdue (from due date)">
+                      <input type="number" min={0} className={inp} value={previewDays} onChange={e => setPreviewDays(e.target.value)} />
+                    </Field>
+                  </div>
+                  <div className="bg-secondary/50 rounded-xl p-4 space-y-2 text-sm">
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Grace period</span><span>{graceDays} day{graceDays !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Effective overdue days</span>
+                      <span>{Math.max(0, (Number(previewDays) || 0) - graceDays)}d</span>
+                    </div>
+                    <div className="flex justify-between font-medium border-t border-border pt-2">
+                      <span>Late fee</span>
+                      <span className="text-destructive">₹{previewFee.toFixed(0)}</span>
+                    </div>
+                    <div className="flex justify-between font-bold">
+                      <span>Total payable</span>
+                      <span>₹{((Number(previewRent) || 0) + previewFee).toFixed(0)}</span>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Estimated — actual amounts calculated by the billing engine at time of charge.</p>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </SectionShell>
   );
 }

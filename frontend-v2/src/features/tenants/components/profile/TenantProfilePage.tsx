@@ -34,6 +34,7 @@ type SectionId = (typeof SECTIONS)[number]['id'];
 const money = (value: unknown) => `₹${Number(value ?? 0).toLocaleString('en-IN')}`;
 const date = (value: unknown) => (value ? new Date(String(value)).toLocaleDateString('en-IN') : '—');
 const title = (value: unknown) => String(value ?? '—').replaceAll('_', ' ');
+const ordinal = (n: number) => { const s = ['th','st','nd','rd']; const v = n % 100; return n + (s[(v-20)%10] || s[v] || s[0]); };
 
 const positiveAmount = (value: unknown) => {
   const amount = Number(value ?? 0);
@@ -357,6 +358,18 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
               <span className="text-muted-foreground">Active billing frequency:</span>{' '}
               <strong>{title(billingTimeline.data?.active_frequency ?? tenant.payment_frequency ?? 'MONTHLY')}</strong>
             </p>
+            {billingTimeline.data?.billing_settings && (
+              <p>
+                <span className="text-muted-foreground">Due date rule:</span>{' '}
+                <strong>
+                  Generated {ordinal(billingTimeline.data.billing_settings.auto_rent_day)},
+                  due {ordinal(billingTimeline.data.billing_settings.due_day)} each month
+                  {billingTimeline.data.billing_settings.grace_days > 0
+                    ? ` · ${billingTimeline.data.billing_settings.grace_days}d grace`
+                    : ''}
+                </strong>
+              </p>
+            )}
           </div>
 
           {pendingBillingRequests.length > 0 && (
