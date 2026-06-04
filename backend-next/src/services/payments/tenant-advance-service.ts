@@ -413,11 +413,20 @@ export class TenantAdvanceService {
     ownerId: string,
     createdBy: string
   ) {
-    // 1. Lock tenant row
+    // 1. Lock tenant row and fetch advance_deposit (security deposit)
     await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${tenantId}::uuid FOR UPDATE`;
+    const tenant = await tx.tenants.findUniqueOrThrow({
+      where: { id: tenantId },
+      select: { advance_deposit: true },
+    });
+    const securityDeposit = Number(tenant.advance_deposit || 0);
 
-    // 2. Fetch current advance balance
-    let currentBalance = await this._computeBalance(tx, tenantId);
+    // 2. Fetch current advance ledger balance
+    const ledgerBalance = await this._computeBalance(tx, tenantId);
+    
+    // Only the amount exceeding the configured security deposit is available for automatic rent/due adjustment.
+    // The security deposit is held/reserved and only settled when the tenant moves out.
+    let currentBalance = Math.round(Math.max(0, ledgerBalance - securityDeposit) * 100) / 100;
     if (currentBalance <= 0) return;
 
     // 3. Fetch all outstanding obligations for this tenant (oldest first)
