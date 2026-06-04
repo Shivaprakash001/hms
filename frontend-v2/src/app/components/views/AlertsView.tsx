@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { AlertCircle, AlertTriangle, Phone, CheckCircle, Building2, CreditCard, ChevronDown, FileText, MessageSquare, UserRound } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AlertCircle, AlertTriangle, Phone, CheckCircle, Building2, CreditCard, ChevronDown, FileText, MessageSquare, UserRound, Loader2, CalendarDays } from 'lucide-react';
 import { ownerService } from '@features/owners/api';
 import { paymentService } from '@features/payments/api';
 import { tenantService } from '@features/tenants/api';
@@ -43,6 +43,7 @@ function dueBalance(due: Record<string, unknown>): number {
 }
 
 export function AlertsView() {
+  const queryClient = useQueryClient();
   const [selectedHostelId, setSelectedHostelId] = useState<string | null>(null);
   const [showHostelPicker, setShowHostelPicker] = useState(false);
   const [recordPayment, setRecordPayment] = useState<{ hostelId: string; dueId?: string; amount?: string } | null>(null);
@@ -77,6 +78,33 @@ export function AlertsView() {
     staleTime: 60 * 1000,
     refetchOnWindowFocus: true,
   });
+
+  const { data: billingRequestsData, isLoading: isRequestsLoading } = useQuery({
+    queryKey: ['owner', 'billing-frequency-requests', activeHostelId ?? 'none'],
+    queryFn: () => ownerService.getFrequencyChangeRequests({ hostelId: activeHostelId || '', status: 'PENDING' }),
+    enabled: !!activeHostelId,
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: true,
+  });
+
+  const decisionMutation = useMutation({
+    mutationFn: ({ id, action }: { id: string; action: 'APPROVE' | 'REJECT' }) =>
+      ownerService.decideFrequencyChangeRequest(id, action),
+    onSuccess: () => {
+      toast.success('Billing request updated');
+      queryClient.invalidateQueries({ queryKey: ['owner', 'billing-frequency-requests', activeHostelId ?? 'none'] });
+      refetch();
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.error?.message || 'Could not update billing request');
+    },
+  });
+
+  const billingRequests: Record<string, any>[] = Array.isArray(billingRequestsData)
+    ? billingRequestsData
+    : Array.isArray(billingRequestsData?.requests)
+    ? billingRequestsData.requests
+    : [];
 
   const pendingDocs: Record<string, unknown>[] = Array.isArray(pendingDocsData)
     ? pendingDocsData
@@ -114,12 +142,14 @@ export function AlertsView() {
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold text-foreground">Alerts & Verifications</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {isLoading ? 'Loading…' : (
+            {isLoading || isRequestsLoading ? 'Loading…' : (
               <>
                 {dues.length > 0 && `${fmt(totalOutstanding)} outstanding · ${overdueList.length} overdue`}
-                {dues.length > 0 && pendingDocs.length > 0 && ' · '}
+                {dues.length > 0 && (pendingDocs.length > 0 || billingRequests.length > 0) && ' · '}
                 {pendingDocs.length > 0 && `${pendingDocs.length} document verifications pending`}
-                {dues.length === 0 && pendingDocs.length === 0 && 'All clear'}
+                {(dues.length > 0 || pendingDocs.length > 0) && billingRequests.length > 0 && ' · '}
+                {billingRequests.length > 0 && `${billingRequests.length} billing requests pending`}
+                {dues.length === 0 && pendingDocs.length === 0 && billingRequests.length === 0 && 'All clear'}
               </>
             )}
           </p>
@@ -154,8 +184,8 @@ export function AlertsView() {
       </div>
 
       {/* Summary bar */}
-      {!isLoading && (dues.length > 0 || pendingDocs.length > 0) && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      {!isLoading && (dues.length > 0 || pendingDocs.length > 0 || billingRequests.length > 0) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div className={`rounded-xl p-3 min-w-0 ${
             overdueList.length > 0 ? 'bg-[#EF4444]/8 border border-[#EF4444]/25' : 'bg-card border border-border'
           }`}>
@@ -184,6 +214,16 @@ export function AlertsView() {
             <div className={`text-xl font-semibold ${pendingDocs.length > 0 ? 'text-accent' : 'text-foreground'}`}>{pendingDocs.length}</div>
             <div className="text-[10px] text-muted-foreground mt-0.5 truncate">{pendingDocs.length > 0 ? 'Awaiting verification' : 'All verified'}</div>
           </div>
+          <div className={`bg-card border rounded-xl p-3 min-w-0 ${
+            billingRequests.length > 0 ? 'border-accent/35 bg-accent/5' : 'border-border'
+          }`}>
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <CalendarDays className={`w-3.5 h-3.5 shrink-0 ${billingRequests.length > 0 ? 'text-accent' : 'text-muted-foreground'}`} />
+              <span className="text-xs text-muted-foreground">Billing Requests</span>
+            </div>
+            <div className={`text-xl font-semibold ${billingRequests.length > 0 ? 'text-accent' : 'text-foreground'}`}>{billingRequests.length}</div>
+            <div className="text-[10px] text-muted-foreground mt-0.5 truncate">{billingRequests.length > 0 ? 'Awaiting decision' : 'All clear'}</div>
+          </div>
         </div>
       )}
 
@@ -206,14 +246,14 @@ export function AlertsView() {
       )}
 
       {/* Empty — all clear */}
-      {!isLoading && !isError && dues.length === 0 && pendingDocs.length === 0 && (
+      {!isLoading && !isError && dues.length === 0 && pendingDocs.length === 0 && billingRequests.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 gap-3">
           <div className="w-14 h-14 bg-[#10B981]/10 rounded-full flex items-center justify-center">
             <CheckCircle className="w-7 h-7 text-[#10B981]" />
           </div>
           <div className="text-center">
             <p className="font-medium text-foreground">All clear</p>
-            <p className="text-sm text-muted-foreground mt-1">No outstanding payments or pending verifications</p>
+            <p className="text-sm text-muted-foreground mt-1">No outstanding payments, pending verifications or billing requests</p>
           </div>
         </div>
       )}
@@ -338,6 +378,72 @@ export function AlertsView() {
                       Profile unavailable
                     </div>
                   )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Billing Contract Requests Section */}
+      {!isLoading && billingRequests.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-accent uppercase tracking-wider">Billing Contract Requests</span>
+            <span className="text-xs bg-accent/10 text-accent px-2 py-0.5 rounded-full font-medium">{billingRequests.length}</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {billingRequests.map((req) => {
+              const reqId = req.id;
+              const tenantName = req.tenants?.profiles?.name || 'Tenant';
+              const requestedFrequency = String(req.requested_frequency).replaceAll('_', ' ');
+              const currentFrequency = String(req.active_frequency || 'MONTHLY').replaceAll('_', ' ');
+              const reason = req.reason ? String(req.reason) : 'No reason provided';
+              const effectiveFrom = req.effective_from ? new Date(req.effective_from) : null;
+              
+              return (
+                <div key={reqId} className="bg-card border border-border rounded-xl p-4 flex flex-col justify-between gap-3 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center shrink-0">
+                      <span className="text-sm font-bold text-accent">{tenantName.charAt(0).toUpperCase()}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-semibold text-foreground truncate text-sm">{tenantName}</h4>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Requested: <span className="font-semibold text-foreground">{requestedFrequency}</span> (from {currentFrequency})
+                      </p>
+                      {effectiveFrom && (
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                          Effective: {effectiveFrom.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground bg-secondary/50 p-2 rounded-lg mt-2 italic">
+                        "{reason}"
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 mt-1">
+                    <button
+                      onClick={() => decisionMutation.mutate({ id: reqId, action: 'REJECT' })}
+                      disabled={decisionMutation.isPending}
+                      className="bg-secondary text-secondary-foreground py-2 rounded-lg text-xs font-semibold hover:bg-secondary/80 active:scale-98 transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
+                    >
+                      {decisionMutation.isPending && decisionMutation.variables?.id === reqId && decisionMutation.variables?.action === 'REJECT' && (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      )}
+                      Reject
+                    </button>
+                    <button
+                      onClick={() => decisionMutation.mutate({ id: reqId, action: 'APPROVE' })}
+                      disabled={decisionMutation.isPending}
+                      className="bg-accent text-accent-foreground py-2 rounded-lg text-xs font-semibold hover:opacity-90 active:scale-98 transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
+                    >
+                      {decisionMutation.isPending && decisionMutation.variables?.id === reqId && decisionMutation.variables?.action === 'APPROVE' && (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      )}
+                      Approve
+                    </button>
+                  </div>
                 </div>
               );
             })}
