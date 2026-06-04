@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CheckCircle2, Loader2, Mail } from 'lucide-react';
 import { authService } from '@/features/auth/api';
 
-const GENERIC_MESSAGE = 'If an account exists for this email, Supabase will send password reset instructions.';
+const GENERIC_MESSAGE = 'If an account exists for this email, you will receive password reset instructions shortly.';
 
 export function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -45,7 +45,7 @@ export function ForgotPasswordPage() {
               Forgot password
             </h1>
             <p className="mt-2 text-sm leading-6 text-neutral-600">
-              Enter the email linked to your owner or tenant account. For security, the reset email is delivered by Supabase.
+              Enter the email linked to your owner or tenant account. A secure reset link will be sent to your registered email address.
             </p>
           </div>
 

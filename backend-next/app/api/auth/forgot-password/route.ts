@@ -8,7 +8,7 @@ import { rateLimitService } from "@/lib/services/rate-limit-service";
 import { getClientIp } from "@/lib/security/api-guard";
 import { ForgotPasswordSchema } from "@/lib/validators";
 
-const GENERIC_MESSAGE = "If an account exists for this email, Supabase will send password reset instructions.";
+const GENERIC_MESSAGE = "If an account exists for this email, you will receive password reset instructions shortly.";
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req) ?? "unknown";
