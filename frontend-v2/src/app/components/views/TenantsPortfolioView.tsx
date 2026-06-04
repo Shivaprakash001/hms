@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Building2, ChevronRight, Upload } from 'lucide-react';
+import { Building2, ChevronRight, Upload, ClipboardList, UserPlus, ArrowRight } from 'lucide-react';
 import { ownerService } from '@features/owners/api';
 import { useTenantStore } from '@features/tenants/store/tenantStore';
 import { TenantsLayout } from '@features/tenants/components/layout/TenantsLayout';
@@ -48,6 +48,39 @@ export function TenantsPortfolioView() {
       }
     >
       <div className="space-y-4">
+        {/* Quick Actions — Admissions + Add Tenant */}
+        <div className="grid grid-cols-2 gap-3">
+          <Link
+            to="/admissions"
+            className="flex items-center gap-3 p-3 rounded-xl border border-border bg-card hover:border-accent/40 hover:shadow-sm transition-all group"
+          >
+            <div className="w-9 h-9 rounded-lg bg-[#F59E0B]/10 flex items-center justify-center shrink-0">
+              <ClipboardList className="w-4 h-4 text-[#F59E0B]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-foreground group-hover:text-accent transition-colors">Admissions</p>
+              <p className="text-[10px] text-muted-foreground">Lead pipeline</p>
+            </div>
+            <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0 group-hover:text-accent transition-colors" />
+          </Link>
+
+          {activeHostelId && (
+            <Link
+              to={`/hostels/${activeHostelId}/tenants`}
+              className="flex items-center gap-3 p-3 rounded-xl border border-border bg-card hover:border-accent/40 hover:shadow-sm transition-all group"
+            >
+              <div className="w-9 h-9 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
+                <Building2 className="w-4 h-4 text-accent" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-foreground group-hover:text-accent transition-colors">Full dashboard</p>
+                <p className="text-[10px] text-muted-foreground">Hostel tenants</p>
+              </div>
+              <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0 group-hover:text-accent transition-colors" />
+            </Link>
+          )}
+        </div>
+
         <label className="block text-sm text-muted-foreground">
           Hostel
           <select
@@ -65,19 +98,6 @@ export function TenantsPortfolioView() {
             ))}
           </select>
         </label>
-
-        {activeHostelId && (
-          <Link
-            to={`/hostels/${activeHostelId}/tenants`}
-            className="flex items-center justify-between p-4 rounded-xl border border-border bg-card hover:border-accent/50 transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <Building2 className="w-5 h-5 text-accent" />
-              <span className="font-medium text-foreground">Open full tenants dashboard</span>
-            </div>
-            <ChevronRight className="w-5 h-5 text-muted-foreground" />
-          </Link>
-        )}
 
         {activeHostelId && (
           <>
