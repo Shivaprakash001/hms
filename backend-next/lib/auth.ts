@@ -19,7 +19,7 @@ export {
 export type { AuthPayload } from "./auth-edge";
 
 export async function hashPassword(password: string) {
-  return bcrypt.hash(password, 12);
+  return bcrypt.hash(password, 10);
 }
 
 export async function verifyPassword(password: string, hash: string) {
