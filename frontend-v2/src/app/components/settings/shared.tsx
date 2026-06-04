@@ -23,20 +23,7 @@ export function SectionShell({ title, description, isDirty, saving, onSave, onRe
             <h2 className="font-semibold text-foreground">{title}</h2>
             {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
           </div>
-          {isDirty && (
-            <div className="hidden md:flex items-center gap-2 shrink-0">
-              <button onClick={onReset} className="text-xs text-muted-foreground hover:text-foreground px-2.5 py-1.5 rounded-lg hover:bg-secondary transition-colors">
-                Reset
-              </button>
-              <button
-                onClick={onSave}
-                disabled={saving}
-                className="text-xs bg-accent text-accent-foreground px-3 py-1.5 rounded-lg font-medium disabled:opacity-50 transition-opacity"
-              >
-                {saving ? 'Saving…' : 'Save'}
-              </button>
-            </div>
-          )}
+
         </div>
 
         {error && (
