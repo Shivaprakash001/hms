@@ -30,25 +30,14 @@ interface Props {
   onEdit?: (hostelId: string) => void;
 }
 
-function BedsLabel({
-  active,
-  capacity,
-  vacant,
-}: {
-  active: number;
-  capacity: number;
-  vacant: number;
-}) {
+function BedsLabel({ active, capacity, vacant }: { active: number; capacity: number; vacant: number }) {
   if (capacity === 0) return <span className="text-muted-foreground">—</span>;
   if (vacant === 0)
-    return (
-      <span className="font-semibold text-success text-sm">
-        Full · {active}/{capacity}
-      </span>
-    );
+    return <span className="font-semibold text-success text-sm">Full · {active}/{capacity}</span>;
   return (
-    <span className="font-semibold text-foreground text-sm">
-      {active}/{capacity} filled
+    <span className="text-sm">
+      <span className="font-semibold text-foreground">{active}/{capacity}</span>
+      <span className="text-xs text-amber-600 font-medium ml-1">· {vacant} vacant</span>
     </span>
   );
 }

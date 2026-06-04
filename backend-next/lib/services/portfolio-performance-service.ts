@@ -40,6 +40,8 @@ export interface PortfolioPerformanceResponse {
     collection_rate: number;
     total_capacity: number;
     vacant_beds: number;
+    move_out_open: number;
+    pending_invites: number;
   };
   monthly_trends: PortfolioPerformanceMonth[];
   hostel_rankings: PortfolioPerformanceRanking[];
@@ -77,7 +79,7 @@ export class PortfolioPerformanceService {
       ","
     );
 
-    const [capacityByHostel, cashflowGrid] = await Promise.all([
+    const [capacityByHostel, cashflowGrid, moveOutResult, pendingInviteResult] = await Promise.all([
       prisma.$queryRaw<Array<{ hostel_id: string; total_capacity: number; active_tenants: number; occupancy: number }>>`
         WITH room_capacity AS (
           SELECT hostel_id, COALESCE(SUM(capacity), 0)::float AS total_capacity
@@ -156,6 +158,18 @@ export class PortfolioPerformanceService {
         LEFT JOIN pay_agg ON pay_agg.obligation_id = o.id
         GROUP BY r.month_key, r.month_label, h.id, h.name, h.city
         ORDER BY r.month_key ASC, h.name ASC
+      `,
+      prisma.$queryRaw<Array<{ move_out_open: number }>>`
+        SELECT COUNT(*)::int AS move_out_open
+        FROM move_out_requests
+        WHERE owner_id = ${ownerId}::uuid
+          AND status NOT IN ('COMPLETED', 'CANCELLED')
+      `,
+      prisma.$queryRaw<Array<{ pending_invites: number }>>`
+        SELECT COUNT(*)::int AS pending_invites
+        FROM tenants
+        WHERE owner_id = ${ownerId}::uuid
+          AND status = 'INVITED'
       `,
     ]);
 
@@ -269,6 +283,9 @@ export class PortfolioPerformanceService {
     );
     const aggregateExpected = aggregateRevenue + aggregateDue;
 
+    const moveOutOpen = Number(moveOutResult[0]?.move_out_open ?? 0);
+    const pendingInvites = Number(pendingInviteResult[0]?.pending_invites ?? 0);
+
     return {
       portfolio: {
         total_revenue: aggregateRevenue,
@@ -282,6 +299,8 @@ export class PortfolioPerformanceService {
           : 0,
         total_capacity: aggregateCapacity,
         vacant_beds: Math.max(aggregateCapacity - aggregateActiveTenants, 0),
+        move_out_open: moveOutOpen,
+        pending_invites: pendingInvites,
       },
       monthly_trends,
       hostel_rankings: rankings,
