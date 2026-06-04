@@ -11,6 +11,7 @@ import {
 } from "@/lib/services/billing-validation";
 import { billingScheduleService, type PaymentFrequency } from "@/lib/services/billing-schedule-service";
 import crypto from "crypto";
+import { tenantAdvanceService } from "./tenant-advance-service";
 
 /**
  * 🏦 Rent Generation Service — Phases 1-7
@@ -455,6 +456,24 @@ export class RentGenerationService {
             const result = await tx.rent_obligations.createMany({ data: maintRows, skipDuplicates: true });
             maintCount = result.count;
           }
+
+          // Gather unique tenant IDs from both rent and maintenance rows
+          const uniqueTenantIds = Array.from(
+            new Set([
+              ...rentRows.map((r: any) => r.tenant_id),
+              ...maintRows.map((r: any) => r.tenant_id),
+            ])
+          );
+
+          // Auto-apply advance balance for each tenant who had obligations created
+          for (const tenantId of uniqueTenantIds) {
+            const row = rentRows.find((r: any) => r.tenant_id === tenantId) ||
+                        maintRows.find((r: any) => r.tenant_id === tenantId);
+            if (row) {
+              await tenantAdvanceService.autoApplyAdvanceToDuesInTx(tx, tenantId, row.owner_id, row.owner_id);
+            }
+          }
+
           return { rentCount, maintCount };
         });
         created += txResults.rentCount + txResults.maintCount;

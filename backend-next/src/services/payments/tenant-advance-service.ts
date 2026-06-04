@@ -95,8 +95,13 @@ export class TenantAdvanceService {
           created_by: createdBy,
         },
       });
-      logger.info("advance.credit", { tenant_id: tenantId, reason, amount, new_balance: newBalance, entry_id: entry.id });
-      return { entry, balance: newBalance };
+      
+      // Auto-apply advance balance to any outstanding obligations!
+      await this.autoApplyAdvanceToDuesInTx(tx, tenantId, ownerId, createdBy);
+      const balanceAfterApply = await this._computeBalance(tx, tenantId);
+
+      logger.info("advance.credit", { tenant_id: tenantId, reason, amount, new_balance: balanceAfterApply, entry_id: entry.id });
+      return { entry, balance: balanceAfterApply };
     });
   }
 
@@ -160,15 +165,19 @@ export class TenantAdvanceService {
       },
     });
 
+    // Auto-apply advance balance to any outstanding obligations!
+    await this.autoApplyAdvanceToDuesInTx(tx, tenantId, ownerId, createdBy);
+    const balanceAfterApply = await this._computeBalance(tx, tenantId);
+
     logger.info("advance.credit.from_gateway", {
       tenant_id: tenantId,
       amount,
-      new_balance: newBalance,
+      new_balance: balanceAfterApply,
       entry_id: entry.id,
       reference_id: referenceId,
     });
 
-    return { entry, balance: newBalance, alreadyCredited: false };
+    return { entry, balance: balanceAfterApply, alreadyCredited: false };
   }
 
   /**
@@ -284,95 +293,168 @@ export class TenantAdvanceService {
     await this._assertAdvanceEnabled(ownerId, tenantId);
 
     return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      // Lock tenant row first (always first to avoid deadlock ordering)
-      await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${tenantId}::uuid FOR UPDATE`;
-      // Lock obligation row
-      await tx.$queryRaw`SELECT id FROM rent_obligations WHERE id = ${obligationId}::uuid FOR UPDATE`;
-
-      const obligation = await tx.rent_obligations.findUnique({
-        where: { id: obligationId },
-        include: { payments: { select: { amount_paid: true } } },
-      });
-
-      if (!obligation) throw new Error("NOT_FOUND: Obligation not found");
-      if (obligation.tenant_id !== tenantId) throw new Error("FORBIDDEN: Obligation does not belong to this tenant");
-      if (obligation.status === "PAID") throw new Error("BAD_REQUEST: Obligation already fully paid");
-      if (obligation.status === "WAIVED") throw new Error("BAD_REQUEST: Cannot adjust a waived obligation");
-
-      const paidPaisa = obligation.payments.reduce(
-        (acc: number, p: any) => acc + Math.round(Number(p.amount_paid) * 100), 0
-      );
-      const obligationPaisa = Math.round(Number(obligation.amount) * 100);
-      const remainingPaisa = obligationPaisa - paidPaisa;
-      const adjustPaisa = Math.round(amount * 100);
-
-      if (adjustPaisa > remainingPaisa) {
-        throw new Error(
-          `BAD_REQUEST: Adjustment exceeds outstanding balance. Outstanding: ₹${(remainingPaisa / 100).toFixed(2)}, Requested: ₹${amount.toFixed(2)}`
-        );
-      }
-
-      // Check advance balance
-      const currentBalance = await this._computeBalance(tx, tenantId);
-      if (currentBalance < amount) {
-        throw new Error(
-          `BAD_REQUEST: Insufficient advance balance. Available: ₹${currentBalance.toFixed(2)}, Requested: ₹${amount.toFixed(2)}`
-        );
-      }
-
-      // Create payment record
-      const payment = await tx.payments.create({
-        data: {
-          obligation_id: obligationId,
-          tenant_id: tenantId,
-          owner_id: ownerId,
-          hostel_id: obligation.hostel_id,
-          amount_paid: adjustPaisa / 100,
-          payment_method: "ADVANCE_ADJUSTMENT",
-          reference_number: `ADV-${Date.now()}`,
-          payment_date: new Date(),
-        },
-      });
-
-      // Update obligation status
-      const newPaidPaisa = paidPaisa + adjustPaisa;
-      const newStatus = newPaidPaisa >= obligationPaisa ? "PAID" : "PARTIAL";
-      await tx.rent_obligations.update({
-        where: { id: obligationId },
-        data: { status: newStatus },
-      });
-
-      // Ledger DEBIT
-      const newBalance = Math.round((currentBalance - amount) * 100) / 100;
-      const entry = await tx.tenant_advance_ledger.create({
-        data: {
-          id: randomUUID(),
-          tenant_id: tenantId,
-          owner_id: ownerId,
-          hostel_id: obligation.hostel_id,
-          type: "DEBIT",
-          reason: "ADJUSTMENT",
-          amount,
-          balance_after: newBalance,
-          notes: notes || `Adjusted against obligation ${obligationId}`,
-          reference_id: obligationId,
-          reference_type: "OBLIGATION",
-          created_by: createdBy,
-        },
-      });
-
-      logger.info("advance.adjust", {
-        tenant_id: tenantId,
-        obligation_id: obligationId,
-        amount,
-        new_balance: newBalance,
-        payment_id: payment.id,
-        entry_id: entry.id,
-        obligation_new_status: newStatus,
-      });
-
-      return { entry, payment, balance: newBalance, obligation_status: newStatus };
+      return this.adjustAgainstObligationInTx(tx, params);
     });
+  }
+
+  /**
+   * Inner logic to adjust advance balance against an obligation, running inside an existing transaction.
+   */
+  async adjustAgainstObligationInTx(
+    tx: Prisma.TransactionClient,
+    params: {
+      tenantId: string;
+      ownerId: string;
+      createdBy: string;
+      obligationId: string;
+      amount: number;
+      notes?: string;
+    }
+  ) {
+    const { tenantId, ownerId, createdBy, obligationId, amount, notes } = params;
+
+    // Lock tenant row first (always first to avoid deadlock ordering)
+    await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${tenantId}::uuid FOR UPDATE`;
+    // Lock obligation row
+    await tx.$queryRaw`SELECT id FROM rent_obligations WHERE id = ${obligationId}::uuid FOR UPDATE`;
+
+    const obligation = await tx.rent_obligations.findUnique({
+      where: { id: obligationId },
+      include: { payments: { select: { amount_paid: true } } },
+    });
+
+    if (!obligation) throw new Error("NOT_FOUND: Obligation not found");
+    if (obligation.tenant_id !== tenantId) throw new Error("FORBIDDEN: Obligation does not belong to this tenant");
+    if (obligation.status === "PAID") throw new Error("BAD_REQUEST: Obligation already fully paid");
+    if (obligation.status === "WAIVED") throw new Error("BAD_REQUEST: Cannot adjust a waived obligation");
+
+    const paidPaisa = obligation.payments.reduce(
+      (acc: number, p: any) => acc + Math.round(Number(p.amount_paid) * 100), 0
+    );
+    const obligationPaisa = Math.round(Number(obligation.amount) * 100);
+    const remainingPaisa = obligationPaisa - paidPaisa;
+    const adjustPaisa = Math.round(amount * 100);
+
+    if (adjustPaisa > remainingPaisa) {
+      throw new Error(
+        `BAD_REQUEST: Adjustment exceeds outstanding balance. Outstanding: ₹${(remainingPaisa / 100).toFixed(2)}, Requested: ₹${amount.toFixed(2)}`
+      );
+    }
+
+    // Check advance balance
+    const currentBalance = await this._computeBalance(tx, tenantId);
+    if (currentBalance < amount) {
+      throw new Error(
+        `BAD_REQUEST: Insufficient advance balance. Available: ₹${currentBalance.toFixed(2)}, Requested: ₹${amount.toFixed(2)}`
+      );
+    }
+
+    // Create payment record
+    const payment = await tx.payments.create({
+      data: {
+        obligation_id: obligationId,
+        tenant_id: tenantId,
+        owner_id: ownerId,
+        hostel_id: obligation.hostel_id,
+        amount_paid: adjustPaisa / 100,
+        payment_method: "ADVANCE_ADJUSTMENT",
+        reference_number: `ADV-${Date.now()}`,
+        payment_date: new Date(),
+      },
+    });
+
+    // Update obligation status
+    const newPaidPaisa = paidPaisa + adjustPaisa;
+    const newStatus = newPaidPaisa >= obligationPaisa ? "PAID" : "PARTIAL";
+    await tx.rent_obligations.update({
+      where: { id: obligationId },
+      data: { status: newStatus },
+    });
+
+    // Ledger DEBIT
+    const newBalance = Math.round((currentBalance - amount) * 100) / 100;
+    const entry = await tx.tenant_advance_ledger.create({
+      data: {
+        id: randomUUID(),
+        tenant_id: tenantId,
+        owner_id: ownerId,
+        hostel_id: obligation.hostel_id,
+        type: "DEBIT",
+        reason: "ADJUSTMENT",
+        amount,
+        balance_after: newBalance,
+        notes: notes || `Adjusted against obligation ${obligationId}`,
+        reference_id: obligationId,
+        reference_type: "OBLIGATION",
+        created_by: createdBy,
+      },
+    });
+
+    logger.info("advance.adjust", {
+      tenant_id: tenantId,
+      obligation_id: obligationId,
+      amount,
+      new_balance: newBalance,
+      payment_id: payment.id,
+      entry_id: entry.id,
+      obligation_new_status: newStatus,
+    });
+
+    return { entry, payment, balance: newBalance, obligation_status: newStatus };
+  }
+
+  /**
+   * Automatically apply any positive advance balance to unpaid obligations
+   * (PENDING / PARTIAL) for the tenant, oldest first. Runs inside an existing transaction.
+   */
+  async autoApplyAdvanceToDuesInTx(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    ownerId: string,
+    createdBy: string
+  ) {
+    // 1. Lock tenant row
+    await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${tenantId}::uuid FOR UPDATE`;
+
+    // 2. Fetch current advance balance
+    let currentBalance = await this._computeBalance(tx, tenantId);
+    if (currentBalance <= 0) return;
+
+    // 3. Fetch all outstanding obligations for this tenant (oldest first)
+    const obligations = await tx.rent_obligations.findMany({
+      where: {
+        tenant_id: tenantId,
+        status: { in: ["PENDING", "PARTIAL"] },
+      },
+      include: { payments: { select: { amount_paid: true } } },
+      orderBy: { rent_month: "asc" },
+    });
+
+    if (obligations.length === 0) return;
+
+    for (const obligation of obligations) {
+      if (currentBalance <= 0) break;
+
+      const paidAmount = obligation.payments.reduce(
+        (sum, p) => sum + Number(p.amount_paid), 0
+      );
+      const remainingAmount = Math.round((Number(obligation.amount) - paidAmount) * 100) / 100;
+
+      if (remainingAmount <= 0) continue;
+
+      const adjustAmount = Math.min(currentBalance, remainingAmount);
+      if (adjustAmount > 0) {
+        await this.adjustAgainstObligationInTx(tx, {
+          tenantId,
+          ownerId,
+          createdBy,
+          obligationId: obligation.id,
+          amount: adjustAmount,
+          notes: `Auto-adjusted from tenant advance balance`,
+        });
+        currentBalance = Math.round((currentBalance - adjustAmount) * 100) / 100;
+      }
+    }
   }
 
   // ── Private helpers ───────────────────────────────────────────────────────

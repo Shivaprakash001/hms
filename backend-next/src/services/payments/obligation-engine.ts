@@ -1,4 +1,5 @@
 import { getLogger } from "@/lib/logger";
+import { tenantAdvanceService } from "./tenant-advance-service";
 
 const logger = getLogger("obligation-engine");
 
@@ -171,6 +172,9 @@ export class ObligationEngine {
           obligation_type: obligationType,
         },
       });
+
+      await tenantAdvanceService.autoApplyAdvanceToDuesInTx(tx, tenantId, ownerId, ownerId);
+
       return true;
     } catch (err: any) {
       if (err?.code === "P2002") {
