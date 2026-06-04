@@ -421,12 +421,28 @@ export class TenantAdvanceService {
     });
     const securityDeposit = Number(tenant.advance_deposit || 0);
 
+    // Fetch total paid amount against ADVANCE obligations (which represents the security deposit paid outside the ledger/already adjusted)
+    const paidAdvanceObligations = await tx.payments.aggregate({
+      where: {
+        tenant_id: tenantId,
+        obligation: {
+          obligation_type: "ADVANCE",
+        },
+      },
+      _sum: {
+        amount_paid: true,
+      },
+    });
+    const paidAdvanceObligationSum = Number(paidAdvanceObligations?._sum?.amount_paid || 0);
+
+    // Calculate the remaining security deposit that needs to be held/reserved in the ledger
+    const remainingSecurityDepositFromLedger = Math.max(0, securityDeposit - paidAdvanceObligationSum);
+
     // 2. Fetch current advance ledger balance
     const ledgerBalance = await this._computeBalance(tx, tenantId);
     
-    // Only the amount exceeding the configured security deposit is available for automatic rent/due adjustment.
-    // The security deposit is held/reserved and only settled when the tenant moves out.
-    let currentBalance = Math.round(Math.max(0, ledgerBalance - securityDeposit) * 100) / 100;
+    // Only the amount exceeding the remaining security deposit that needs to be held is available for automatic rent/due adjustment.
+    let currentBalance = Math.round(Math.max(0, ledgerBalance - remainingSecurityDepositFromLedger) * 100) / 100;
     if (currentBalance <= 0) return;
 
     // 3. Fetch all outstanding obligations for this tenant (oldest first)

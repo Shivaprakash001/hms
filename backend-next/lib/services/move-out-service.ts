@@ -150,8 +150,33 @@ export class MoveOutService {
     const configuredSecurityDeposit = Number(req.tenant.advance_deposit || 0);
     const advBal = await tenantAdvanceService.getBalance(req.tenant_id, req.owner_id);
     const paidAdvanceBalance = Math.max(0, Number(advBal.balance || 0));
-    const paidSecurityDeposit = Math.min(paidAdvanceBalance, configuredSecurityDeposit);
-    const extraAdvanceBalance = Math.max(0, paidAdvanceBalance - paidSecurityDeposit);
+
+    // Fetch total paid amount against ADVANCE obligations (which represents the security deposit paid outside the ledger/already adjusted)
+    const paidAdvanceObligations = await prisma.payments.aggregate({
+      where: {
+        tenant_id: req.tenant_id,
+        obligation: {
+          obligation_type: "ADVANCE",
+        },
+      },
+      _sum: {
+        amount_paid: true,
+      },
+    });
+    const paidAdvanceObligationSum = Number(paidAdvanceObligations?._sum?.amount_paid || 0);
+
+    // Calculate the remaining security deposit that needs to be held/reserved in the ledger
+    const remainingSecurityDepositFromLedger = Math.max(0, configuredSecurityDeposit - paidAdvanceObligationSum);
+
+    // The portion of the ledger balance that represents the security deposit
+    const ledgerSecurityDeposit = Math.min(paidAdvanceBalance, remainingSecurityDepositFromLedger);
+
+    // Extra advance balance in the ledger (exceeding the security deposit portion)
+    const extraAdvanceBalance = Math.max(0, paidAdvanceBalance - ledgerSecurityDeposit);
+
+    // Total paid security deposit (ledger portion + obligation portion)
+    const paidSecurityDeposit = Math.min(configuredSecurityDeposit, ledgerSecurityDeposit + paidAdvanceObligationSum);
+
     const dues = await financialService.getTenantDues(req.tenant_id, req.owner_id, req.hostel_id);
     const insp = req.inspection;
     const totalDeductions = Number(insp?.total_deductions || 0);
@@ -159,7 +184,7 @@ export class MoveOutService {
     const lateFeesDue = Number(dues.late_fees_due || 0);
     const maintenanceAndOtherDues = Math.max(0, Number(dues.total_due || 0) - rentDue - lateFeesDue);
     const totalDues = Number(dues.total_due || 0);
-    const net = paidAdvanceBalance - totalDues - totalDeductions;
+    const net = paidSecurityDeposit + extraAdvanceBalance - totalDues - totalDeductions;
 
     return {
       request_id: requestId,
