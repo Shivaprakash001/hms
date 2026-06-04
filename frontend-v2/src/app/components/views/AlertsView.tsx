@@ -36,6 +36,12 @@ function firstNonEmptyString(...values: unknown[]): string {
   return '';
 }
 
+function dueBalance(due: Record<string, unknown>): number {
+  const value = due.outstanding ?? due.remaining ?? due.balance ?? due.amount ?? 0;
+  const amount = Number(value);
+  return Number.isFinite(amount) ? Math.max(0, amount) : 0;
+}
+
 export function AlertsView() {
   const [selectedHostelId, setSelectedHostelId] = useState<string | null>(null);
   const [showHostelPicker, setShowHostelPicker] = useState(false);
@@ -76,11 +82,12 @@ export function AlertsView() {
     ? pendingDocsData
     : [];
 
-  const dues: Record<string, unknown>[] = Array.isArray(duesData)
+  const rawDues: Record<string, unknown>[] = Array.isArray(duesData)
     ? duesData
     : Array.isArray((duesData as Record<string, unknown>)?.dues)
     ? ((duesData as Record<string, unknown>).dues as Record<string, unknown>[])
     : [];
+  const dues = rawDues.filter((due) => dueBalance(due) > 0);
 
   const now = Date.now();
 
@@ -91,14 +98,14 @@ export function AlertsView() {
     const bOverdue = bDate < now;
     if (aOverdue && !bOverdue) return -1;
     if (!aOverdue && bOverdue) return 1;
-    const aAmt = Number(a.amount ?? a.outstanding ?? 0);
-    const bAmt = Number(b.amount ?? b.outstanding ?? 0);
+    const aAmt = dueBalance(a);
+    const bAmt = dueBalance(b);
     return bAmt - aAmt;
   });
 
   const overdueList = sortedDues.filter((d) => d.due_date && new Date(String(d.due_date)).getTime() < now);
   const pendingList = sortedDues.filter((d) => !d.due_date || new Date(String(d.due_date)).getTime() >= now);
-  const totalOutstanding = sortedDues.reduce((sum, d) => sum + Number(d.amount ?? d.outstanding ?? 0), 0);
+  const totalOutstanding = sortedDues.reduce((sum, d) => sum + dueBalance(d), 0);
 
   return (
     <div className="px-4 py-5 space-y-5 min-w-0">
@@ -157,7 +164,7 @@ export function AlertsView() {
               <span className="text-xs text-muted-foreground">Overdue</span>
             </div>
             <div className={`text-xl font-semibold ${overdueList.length > 0 ? 'text-[#EF4444]' : 'text-foreground'}`}>{overdueList.length}</div>
-            <div className="text-[10px] text-muted-foreground mt-0.5 truncate">{fmt(overdueList.reduce((s, d) => s + Number(d.amount ?? d.outstanding ?? 0), 0))}</div>
+            <div className="text-[10px] text-muted-foreground mt-0.5 truncate">{fmt(overdueList.reduce((s, d) => s + dueBalance(d), 0))}</div>
           </div>
           <div className="bg-card border border-border rounded-xl p-3 min-w-0">
             <div className="flex items-center gap-1.5 mb-1.5">
@@ -165,7 +172,7 @@ export function AlertsView() {
               <span className="text-xs text-muted-foreground">Upcoming</span>
             </div>
             <div className="text-xl font-semibold text-foreground">{pendingList.length}</div>
-            <div className="text-[10px] text-muted-foreground mt-0.5 truncate">{fmt(pendingList.reduce((s, d) => s + Number(d.amount ?? d.outstanding ?? 0), 0))}</div>
+            <div className="text-[10px] text-muted-foreground mt-0.5 truncate">{fmt(pendingList.reduce((s, d) => s + dueBalance(d), 0))}</div>
           </div>
           <div className={`bg-card border rounded-xl p-3 min-w-0 ${
             pendingDocs.length > 0 ? 'border-accent/35 bg-accent/5' : 'border-border'
@@ -220,7 +227,7 @@ export function AlertsView() {
           </div>
           {overdueList.map((due, i) => {
             const days = daysOverdue(due.due_date);
-            const amount = Number(due.amount ?? due.outstanding ?? 0);
+            const amount = dueBalance(due);
             const dueId = String(due.obligation_id ?? due.id ?? i);
             return (
               <DueCard
@@ -253,7 +260,7 @@ export function AlertsView() {
           </div>
           {pendingList.map((due, i) => {
             const days = daysUntilDue(due.due_date);
-            const amount = Number(due.amount ?? due.outstanding ?? 0);
+            const amount = dueBalance(due);
             const dueId = String(due.obligation_id ?? due.id ?? i);
             return (
               <DueCard
@@ -362,7 +369,7 @@ interface DueCardProps {
 }
 
 function DueCard({ due, isOverdue, urgencyLabel, urgencyColor, cardBorder, hostelId, onRecordPayment }: DueCardProps) {
-  const amount = Number(due.amount ?? due.outstanding ?? 0);
+  const amount = dueBalance(due);
   const tenantName = String(due.tenant_name ?? due.name ?? 'Tenant');
   const room = due.room_no ?? due.room_number;
   const rawPhone = due.phone ?? due.tenant_phone ?? due.tenantPhone;

@@ -51,7 +51,11 @@ const SETTINGS_GROUPS: { title: string; hint: string; sections: SectionId[] }[] 
   },
 ];
 
-export function SettingsView() {
+interface SettingsViewProps {
+  embedded?: boolean;
+}
+
+export function SettingsView({ embedded = false }: SettingsViewProps = {}) {
   const { logout } = useAuth();
   const [activeSection, setActiveSection] = useState<SectionId>('hostel');
   const [selectedHostelId, setSelectedHostelId] = useState<string | null>(null);
@@ -99,7 +103,7 @@ export function SettingsView() {
     <div className="min-h-screen bg-background">
       {/* Page header + hostel selector */}
       <div className="sticky top-0 z-10 bg-card border-b border-border px-4 py-3 flex items-center justify-between gap-3">
-        <h1 className="font-semibold text-foreground text-base">Settings</h1>
+        <h1 className="font-semibold text-foreground text-base">{embedded ? 'Hostel' : 'Settings'}</h1>
         {hostelsList.length > 0 && (
           <div className="relative">
             <select

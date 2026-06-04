@@ -31,7 +31,6 @@ const SettingsView = lazy(() =>
 const fmt = (n: number) => {
   const v = Number(n || 0);
   if (v >= 100000) return `₹${(v / 100000).toFixed(1)}L`;
-  if (v >= 1000) return `₹${(v / 1000).toFixed(0)}K`;
   return `₹${v.toLocaleString('en-IN')}`;
 };
 
@@ -488,7 +487,7 @@ export function PortfolioView() {
             </div>
             <div className="overflow-y-auto" style={{ maxHeight: 'calc(92dvh - 61px)' }}>
               <Suspense fallback={<div className="p-8 space-y-3"><div className="h-10 rounded-xl bg-muted animate-pulse" /><div className="h-10 rounded-xl bg-muted animate-pulse" /><div className="h-10 rounded-xl bg-muted animate-pulse" /></div>}>
-                <SettingsView />
+                <SettingsView embedded />
               </Suspense>
             </div>
           </div>

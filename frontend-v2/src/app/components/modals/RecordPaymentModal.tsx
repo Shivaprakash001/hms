@@ -26,6 +26,12 @@ interface OfflinePaymentPayload {
   hostelId: string;
 }
 
+function dueBalance(due: Record<string, unknown>): number {
+  const value = due.outstanding ?? due.remaining ?? due.balance ?? due.amount ?? 0;
+  const amount = Number(value);
+  return Number.isFinite(amount) ? Math.max(0, amount) : 0;
+}
+
 export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initialAmount = '' }: RecordPaymentModalProps) {
   const queryClient = useQueryClient();
   const [selectedDueId, setSelectedDueId] = useState(initialDueId);
@@ -46,11 +52,12 @@ export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initi
     staleTime: 60 * 1000,
   });
 
-  const dues: Record<string, unknown>[] = Array.isArray(duesData)
+  const rawDues: Record<string, unknown>[] = Array.isArray(duesData)
     ? duesData
     : Array.isArray((duesData as Record<string, unknown>)?.dues)
     ? ((duesData as Record<string, unknown>).dues as Record<string, unknown>[])
     : [];
+  const dues = rawDues.filter((due) => dueBalance(due) > 0);
 
   const selectedDue = dues.find((d) => String(d.obligation_id ?? d.id) === selectedDueId);
   const filteredDues = dues.filter((due) => {
@@ -85,6 +92,8 @@ export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initi
       queryClient.invalidateQueries({ queryKey: queryKeys.payments.all(hostelId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.payments.dues(hostelId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tenants.all(hostelId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.all() });
       const recorded = result?.payment ?? result;
       hmsToast.paymentSuccess(Number((recorded as Record<string, unknown>)?.amount_paid ?? amount));
       setSuccessSummary(recorded);
@@ -130,7 +139,7 @@ export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initi
     });
   };
 
-  const outstandingForSelected = selectedDue ? Number(selectedDue.outstanding ?? selectedDue.amount ?? 0) : 0;
+  const outstandingForSelected = selectedDue ? dueBalance(selectedDue) : 0;
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center">
@@ -169,7 +178,7 @@ export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initi
                     const id = String(d.obligation_id ?? d.id);
                     const name = String(d.tenant_name ?? d.name ?? 'Tenant');
                     const room = d.room_no ?? d.room_number ? `Room ${d.room_no ?? d.room_number}` : 'Room N/A';
-                    const outstanding = Number(d.outstanding ?? d.amount ?? 0);
+                    const outstanding = dueBalance(d);
                     const selected = selectedDueId === id;
                     return (
                       <button
@@ -177,7 +186,7 @@ export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initi
                         type="button"
                         onClick={() => {
                           setSelectedDueId(id);
-                          setAmount(String(d.outstanding ?? d.amount ?? ''));
+                          setAmount(String(dueBalance(d)));
                         }}
                         className={`flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm ${
                           selected ? 'bg-accent/10 text-accent' : 'text-foreground hover:bg-secondary'

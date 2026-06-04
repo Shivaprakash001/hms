@@ -5,7 +5,6 @@ import { ChevronRight, Trophy, AlertCircle } from 'lucide-react';
 const fmt = (n: number) => {
   const v = Number(n ?? 0);
   if (v >= 100000) return `₹${(v / 100000).toFixed(1)}L`;
-  if (v >= 1000) return `₹${(v / 1000).toFixed(0)}K`;
   return `₹${v.toLocaleString('en-IN')}`;
 };
 
