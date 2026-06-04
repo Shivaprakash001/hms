@@ -232,6 +232,9 @@ model hostels {
   timezone            String                   @default("UTC")
   auto_rent_day       Int                      @default(1)
   phonepe_merchant_id String?
+  public_slug         String?                  @unique
+  admissions_enabled  Boolean                  @default(true)
+  admission_photos    Json?
   created_at          DateTime                 @default(now()) @db.Timestamptz(6)
   updated_at          DateTime?                @db.Timestamptz(6)
   logo_url            String?
@@ -251,6 +254,8 @@ model hostels {
   floors              floors[]
   tenants             tenants[]
   move_out_requests   move_out_requests[]
+  visitor_leads       visitor_leads[]
+  room_reservations   room_reservations[]
   tenant_invitations  tenant_invitations[]
   tenant_invitation_reservations tenant_invitation_reservations[]
 }
@@ -675,6 +680,9 @@ model profile {
   other_profiles                                                    profile[]             @relation("profilesToprofiles")
   refresh_tokens                                                    refresh_tokens[]
   tenants                                                           tenants?
+  visitor_leads                                                     visitor_leads[]
+  lead_notes                                                        lead_notes[]
+  room_reservations                                                 room_reservations[]
 
   @@index([email])
   @@index([name])
@@ -931,8 +939,10 @@ model rooms {
   wifi_name          String?
   wifi_password      String?
   notes              String?
+  admission_photos   Json?
   room_activity_logs room_activity_logs[]
   room_allocations   roomAllocation[]
+  room_reservations  room_reservations[]
   tenant_invitations tenant_invitations[]
   tenant_invitation_reservations tenant_invitation_reservations[]
   hostels            hostels              @relation(fields: [hostel_id], references: [id])
@@ -999,6 +1009,94 @@ model tenant_advance_ledger {
   @@index([tenant_id, created_at])
   @@index([tenant_id, hostel_id])
   @@index([tenant_id])
+}
+
+model visitor_leads {
+  id                        String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  hostel_id                 String              @db.Uuid
+  owner_id                  String              @db.Uuid
+  student_name              String
+  student_phone             String
+  student_email             String?
+  parent_name               String?
+  parent_phone              String?
+  decision_maker_type       String              @default("BOTH")
+  source                    String              @default("QR")
+  status                    String              @default("NEW")
+  notes                     String?
+  lead_score                Int                 @default(0)
+  first_visited_at          DateTime            @default(now()) @db.Timestamptz(6)
+  last_activity_at          DateTime            @default(now()) @db.Timestamptz(6)
+  parent_contacted_at       DateTime?           @db.Timestamptz(6)
+  parent_follow_up_required Boolean             @default(false)
+  converted_at              DateTime?           @db.Timestamptz(6)
+  converted_tenant_id       String?             @db.Uuid
+  lost_reason               String?
+  lost_note                 String?
+  created_at                DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at                DateTime?           @db.Timestamptz(6)
+  hostel                    hostels             @relation(fields: [hostel_id], references: [id])
+  owner                     profile             @relation(fields: [owner_id], references: [id])
+  converted_tenant          tenants?            @relation(fields: [converted_tenant_id], references: [id])
+  activities                lead_activities[]
+  reservations              room_reservations[]
+  lead_notes                lead_notes[]
+
+  @@index([owner_id, status, last_activity_at(sort: Desc)], map: "idx_visitor_leads_owner_status_activity")
+  @@index([hostel_id, status, last_activity_at(sort: Desc)], map: "idx_visitor_leads_hostel_status_activity")
+  @@index([hostel_id, student_phone], map: "idx_visitor_leads_hostel_phone")
+  @@index([owner_id, lead_score(sort: Desc)], map: "idx_visitor_leads_owner_score")
+  @@index([converted_tenant_id], map: "idx_visitor_leads_converted_tenant")
+  @@map("visitor_leads")
+}
+
+model lead_activities {
+  id            String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lead_id       String        @db.Uuid
+  activity_type String
+  metadata      Json?
+  created_at    DateTime      @default(now()) @db.Timestamptz(6)
+  lead          visitor_leads @relation(fields: [lead_id], references: [id], onDelete: Cascade)
+
+  @@index([lead_id, created_at(sort: Desc)], map: "idx_lead_activities_lead_created")
+  @@index([activity_type, created_at(sort: Desc)], map: "idx_lead_activities_type_created")
+  @@map("lead_activities")
+}
+
+model room_reservations {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lead_id        String        @db.Uuid
+  room_id        String        @db.Uuid
+  hostel_id      String        @db.Uuid
+  reserved_until DateTime      @db.Timestamptz(6)
+  status         String        @default("ACTIVE")
+  approved_by    String?       @db.Uuid
+  created_at     DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime?     @db.Timestamptz(6)
+  converted_at   DateTime?     @db.Timestamptz(6)
+  lead           visitor_leads @relation(fields: [lead_id], references: [id], onDelete: Cascade)
+  room           rooms         @relation(fields: [room_id], references: [id])
+  hostel         hostels       @relation(fields: [hostel_id], references: [id])
+  approver       profile?      @relation(fields: [approved_by], references: [id])
+
+  @@index([lead_id, status], map: "idx_room_reservations_lead_status")
+  @@index([room_id, status, reserved_until], map: "idx_room_reservations_room_status_expiry")
+  @@index([hostel_id, status, reserved_until], map: "idx_room_reservations_hostel_status_expiry")
+  @@map("room_reservations")
+}
+
+model lead_notes {
+  id         String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lead_id    String        @db.Uuid
+  owner_id   String        @db.Uuid
+  note       String
+  created_at DateTime      @default(now()) @db.Timestamptz(6)
+  lead       visitor_leads @relation(fields: [lead_id], references: [id], onDelete: Cascade)
+  owner      profile       @relation(fields: [owner_id], references: [id])
+
+  @@index([lead_id, created_at(sort: Desc)], map: "idx_lead_notes_lead_created")
+  @@index([owner_id, created_at(sort: Desc)], map: "idx_lead_notes_owner_created")
+  @@map("lead_notes")
 }
 
 model tenant_behavior_scores {
@@ -1098,6 +1196,7 @@ model tenants {
   tenant_invitations       tenant_invitations[]
   tenant_invitation_reservations tenant_invitation_reservations[]
   bulk_import_rows         bulk_import_rows[]
+  visitor_leads            visitor_leads[]
 
   @@index([hostel_id])
   @@index([owner_id])
