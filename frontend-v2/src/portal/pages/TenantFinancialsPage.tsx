@@ -41,6 +41,7 @@ export function TenantFinancialsPage() {
     queryKey: ['tenant', 'billing-timeline'],
     queryFn: () => tenantPortalApi.getMyBillingTimeline(),
   });
+  const timelineItems = billingTimeline.data?.items ?? [];
   const frequencyMutation = useMutation({
     mutationFn: () => tenantPortalApi.requestBillingFrequencyChange({
       requested_frequency: requestedFrequency,
@@ -159,7 +160,6 @@ export function TenantFinancialsPage() {
   }
 
   const totalDue = Number(dues?.total_due ?? payments?.outstanding_balance ?? 0);
-  const timelineItems = billingTimeline.data?.items ?? [];
   const allowedFrequencies = (billingContext.data?.allowed_frequencies ?? ['MONTHLY', 'QUARTERLY'])
     .filter((f: string) => f !== billingContext.data?.active_frequency && f !== 'CUSTOM_INSTALLMENTS');
   const pendingFrequencyRequest = (billingContext.data?.requests ?? []).find((r: any) => r.status === 'PENDING');
