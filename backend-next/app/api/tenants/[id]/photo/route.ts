@@ -32,7 +32,7 @@ export async function POST(
     if (file.size > 2 * 1024 * 1024)
       return apiError("Photo must be under 2MB", "VALIDATION", 400);
 
-    const tenant = await prisma.tenant.findUnique({
+    const tenant = await prisma.tenants.findUnique({
       where: { id: params.id },
       select: { id: true, profile_id: true, owner_id: true },
     });
@@ -53,7 +53,7 @@ export async function POST(
       tags: ["PROFILE_PHOTO", tenant.id],
     });
 
-    const result = await prisma.tenant.update({
+    const result = await prisma.tenants.update({
       where: { id: tenant.id },
       data: { photo_url: upload.url },
       select: { id: true, photo_url: true },

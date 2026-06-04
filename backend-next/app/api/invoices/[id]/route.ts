@@ -16,7 +16,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const { id: paymentId } = params;
     
     // Verify ownership before generation
-    const payment = await prisma.payment.findUnique({
+    const payment = await prisma.payments.findUnique({
       where: { id: paymentId },
       select: { owner_id: true }
     });
