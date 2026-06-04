@@ -72,7 +72,7 @@ const MAX_IMPORT_ROWS = 150;
 export class BulkImportValidationService {
   async parseFile(fileBuffer: Buffer, filename: string): Promise<TenantImportRow[]> {
     try {
-      const workbook = XLSX.read(fileBuffer, { type: "buffer" });
+      const workbook = XLSX.read(fileBuffer, { type: "buffer", raw: true });
       const sheetName = workbook.SheetNames[0];
       
       if (!sheetName) {
@@ -87,7 +87,7 @@ export class BulkImportValidationService {
       }
 
       const jsonData = XLSX.utils.sheet_to_json<any>(worksheet, {
-        raw: false,
+        raw: true,
         defval: "",
       });
 
@@ -394,14 +394,29 @@ export class BulkImportValidationService {
   }
 
   private parseDate(dateStr: string): Date | null {
+    if (!dateStr) return null;
+
+    const trimmed = String(dateStr).trim();
+
+    // Check if it's an Excel numeric date serial
+    const numericDate = Number(trimmed);
+    if (!isNaN(numericDate) && numericDate > 20000 && numericDate < 100000) {
+      // Excel epoch is Dec 30, 1899
+      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+      const date = new Date(excelEpoch.getTime() + numericDate * 86400000);
+      if (!isNaN(date.getTime())) {
+        return date;
+      }
+    }
+
     const formats = [
-      /^(\d{4})-(\d{2})-(\d{2})$/,
-      /^(\d{2})\/(\d{2})\/(\d{4})$/,
-      /^(\d{2})-(\d{2})-(\d{4})$/,
+      /^(\d{4})-(\d{1,2})-(\d{1,2})$/,
+      /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/,
+      /^(\d{1,2})-(\d{1,2})-(\d{2,4})$/,
     ];
 
     for (const format of formats) {
-      const match = dateStr.match(format);
+      const match = trimmed.match(format);
       if (match) {
         let year, month, day;
         if (format === formats[0]) {
@@ -409,12 +424,24 @@ export class BulkImportValidationService {
         } else {
           [, day, month, year] = match;
         }
+
+        if (year.length === 2) {
+          year = "20" + year; // Convert "26" to "2026"
+        }
+
         const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
         if (!isNaN(date.getTime())) {
           return date;
         }
       }
     }
+
+    // Fallback using standard JS parsing if it looks like a date string
+    const fallbackDate = new Date(trimmed);
+    if (!isNaN(fallbackDate.getTime())) {
+      return fallbackDate;
+    }
+
     return null;
   }
 
