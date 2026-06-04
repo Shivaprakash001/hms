@@ -16,9 +16,14 @@ const logger = getLogger("tenant-service");
 export class TenantService {
   private withLegacyTenantRelations(tenant: any) {
     if (!tenant) return tenant;
+    const invitation = tenant.tenant_invitations?.[0] || null;
+    const fallbackProfile = tenant.profile ?? tenant.profiles ?? (invitation
+      ? { id: null, name: invitation.name, email: invitation.email, phone: invitation.phone }
+      : null);
     return {
       ...tenant,
-      profile: tenant.profile ?? tenant.profiles,
+      profile: fallbackProfile,
+      profiles: tenant.profiles ?? fallbackProfile,
       allocations: tenant.allocations ?? tenant.room_allocations ?? [],
       obligations: tenant.obligations ?? tenant.rent_obligations ?? [],
     };
@@ -56,6 +61,11 @@ export class TenantService {
         created_at: true,
         updated_at: true,
         profiles: true,
+        tenant_invitations: {
+          orderBy: { created_at: "desc" },
+          take: 1,
+          select: { name: true, email: true, phone: true, status: true },
+        },
         room_allocations: {
           where: { is_active: true, end_date: null },
           orderBy: { start_date: "desc" },
@@ -115,6 +125,11 @@ export class TenantService {
         created_at: true,
         updated_at: true,
         profiles: true,
+        tenant_invitations: {
+          orderBy: { created_at: "desc" },
+          take: 1,
+          select: { name: true, email: true, phone: true, status: true },
+        },
         room_allocations: {
           where: { is_active: true, end_date: null },
           orderBy: { start_date: "desc" },
@@ -162,6 +177,8 @@ export class TenantService {
       where.OR = [
         { profiles: { name: { contains: search, mode: "insensitive" } } },
         { profiles: { email: { contains: search, mode: "insensitive" } } },
+        { tenant_invitations: { some: { name: { contains: search, mode: "insensitive" } } } },
+        { tenant_invitations: { some: { email: { contains: search, mode: "insensitive" } } } },
         { roll_number: { contains: search, mode: "insensitive" } },
       ];
     }
@@ -171,6 +188,11 @@ export class TenantService {
         where,
         include: {
           profiles: true,
+          tenant_invitations: {
+            orderBy: { created_at: "desc" },
+            take: 1,
+            select: { name: true, email: true, phone: true, status: true },
+          },
           room_allocations: {
             where: { is_active: true, end_date: null },
             include: { room: true },
@@ -283,7 +305,7 @@ export class TenantService {
       }
     }
 
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: any) => {
       if (Object.keys(profileUpdate).length > 0) {
         await tx.profile.update({
           where: { id: profileId },
@@ -728,6 +750,10 @@ export class TenantService {
         id: true,
         owner_id: true,
         status: true,
+        tenant_invitations: {
+          where: { status: { in: ["PENDING", "OPENED", "ACTIVATION_STARTED"] as any } },
+          select: { id: true },
+        },
         room_allocations: { where: { is_active: true, end_date: null }, select: { id: true } },
       },
     });
@@ -739,7 +765,28 @@ export class TenantService {
     }
 
     const now = new Date();
-    await prisma.$transaction(async (tx) => {
+    const invitationIds = (tenant.tenant_invitations || []).map((invitation: any) => invitation.id);
+    let releasedReservationCount = 0;
+    await prisma.$transaction(async (tx: any) => {
+      if (invitationIds.length > 0) {
+        await tx.tenant_invitations.updateMany({
+          where: { id: { in: invitationIds }, status: { in: ["PENDING", "OPENED", "ACTIVATION_STARTED"] as any } },
+          data: { status: "CANCELLED" as any, cancelled_at: now, updated_at: now },
+        });
+
+        const releaseResult = await tx.tenant_invitation_reservations.updateMany({
+          where: { invitation_id: { in: invitationIds }, status: "ACTIVE" },
+          data: {
+            status: "RELEASED" as any,
+            released_by: ownerId,
+            released_at: now,
+            release_reason: "CANCELLED",
+            updated_at: now,
+          },
+        });
+        releasedReservationCount = releaseResult.count;
+      }
+
       await tx.tenants.update({
         where: { id: tenantId },
         data: { status: "CANCELLED" as any },
@@ -767,6 +814,8 @@ export class TenantService {
 
     await eventLog.log("INVITATION_CANCELLED_BY_OWNER", ownerId, {
       tenant_id: tenantId,
+      invitation_ids: invitationIds,
+      released_reservation_count: releasedReservationCount,
       released_allocations: legacyTenant.allocations.length,
     }, tenantId);
     await eventSystem.trigger("tenant_status_changed", {

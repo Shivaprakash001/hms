@@ -26,6 +26,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       },
       include: {
         profiles: true,
+        tenant_invitations: {
+          orderBy: { created_at: "desc" },
+          take: 1,
+          select: { name: true, email: true, phone: true, status: true },
+        },
         room_allocations: {
           where: { is_active: true, end_date: null },
           orderBy: { start_date: "desc" },
@@ -52,11 +57,17 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     }
 
     const requiredDocuments = requiredDocumentTypes(tenant.profile_type);
+    const invitation = tenant.tenant_invitations?.[0] || null;
+    const profile = tenant.profiles || (invitation
+      ? { id: null, name: invitation.name, email: invitation.email, phone: invitation.phone }
+      : null);
     return NextResponse.json({
       ...tenant,
+      profiles: profile,
+      profile,
       identification_documents: (tenant.identification_documents || [])
-        .filter((doc) => requiredDocuments.includes(doc.doc_type))
-        .map((doc) => {
+        .filter((doc: any) => requiredDocuments.includes(doc.doc_type))
+        .map((doc: any) => {
           const { file_url, file_path, file_id, ...safeDoc } = doc;
           return {
             ...safeDoc,

@@ -10,6 +10,7 @@ import { ApiError } from "@/src/lib/api-error";
 import { roomRepository } from "@/src/repositories/roomRepository";
 import { prisma } from "@/lib/db";
 import { propertyService } from "@/lib/services/property-service";
+import { roomCapacityService } from "@/lib/services/room-capacity-service";
 import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
 import { assertHostelBelongsToOwner, requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
 
@@ -106,9 +107,12 @@ export async function GET(req: NextRequest) {
     }
 
     const rawRooms = Array.isArray(roomResult.rooms) ? roomResult.rooms : [];
+    const capacityMap = await roomCapacityService.getHostelCapacityMap(hostelId, { ownerId: scope.owner_id });
     const rooms = rawRooms.map((room: any) => {
       const allocs = Array.isArray(room.tenants) ? room.tenants : [];
-      const occupiedCount = allocs.length;
+      const capacity = capacityMap.get(room.id);
+      const occupiedCount = capacity?.occupied ?? allocs.length;
+      const reservedCount = capacity?.reserved ?? 0;
       const firstTenant = allocs[0] ?? null;
       const tenants = allocs.map((allocation: any) => ({
         allocation_id: allocation.allocation_id,
@@ -118,7 +122,7 @@ export async function GET(req: NextRequest) {
         monthly_rent: Number(allocation.monthly_rent ?? room.base_rent ?? 0),
         joined_date: allocation.joined_date,
       }));
-      const derivedStatus = occupiedCount === 0 ? "vacant" : "occupied";
+      const derivedStatus = capacity?.state ?? (occupiedCount === 0 ? "vacant" : "occupied");
       return {
         id: room.id,
         room_no: room.room_no,
@@ -137,7 +141,9 @@ export async function GET(req: NextRequest) {
         is_active: room.is_active,
         status: derivedStatus,
         occupied_count: occupiedCount,
-        vacant_count: Math.max(0, room.capacity - occupiedCount),
+        reserved_count: reservedCount,
+        used_count: capacity?.used ?? occupiedCount,
+        vacant_count: capacity?.available ?? Math.max(0, room.capacity - occupiedCount),
         tenants,
         tenant_name: firstTenant?.name ?? null,
         tenant_id: firstTenant?.tenant_id ?? null,

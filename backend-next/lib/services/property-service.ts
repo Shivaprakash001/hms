@@ -1,5 +1,6 @@
 import { prisma } from "../db";
 import { financialService } from "@/src/services/payments/financial-service";
+import { roomCapacityService } from "./room-capacity-service";
 import crypto from "crypto";
 
 
@@ -346,7 +347,7 @@ export class PropertyService {
 
   async getFloorsWithRooms(ownerId: string, hostelId: string) {
     // Load named floors ordered by sort_order; fall back to a synthetic record for rooms with no floor_id.
-    const [floors, rooms] = await Promise.all([
+    const [floors, rooms, capacityMap] = await Promise.all([
       prisma.floors.findMany({
         where: { hostel_id: hostelId, hostel: { owner_id: ownerId } },
         orderBy: { sort_order: "asc" },
@@ -371,6 +372,7 @@ export class PropertyService {
         },
         orderBy: { room_no: "asc" },
       }),
+      roomCapacityService.getHostelCapacityMap(hostelId, { ownerId }),
     ]);
 
     // Build floor index by id; also a fallback bucket for rooms with no floor_id.
@@ -397,6 +399,7 @@ export class PropertyService {
         };
       });
 
+      const capacity = capacityMap.get(room.id);
       const roomEntry = {
         id: room.id,
         room_no: room.room_no,
@@ -404,7 +407,11 @@ export class PropertyService {
         base_rent: room.base_rent,
         wifi_name: room.wifi_name ?? null,
         notes: room.notes ?? null,
-        occupied: tenants.length,
+        occupied: capacity?.occupied ?? tenants.length,
+        reserved: capacity?.reserved ?? 0,
+        used: capacity?.used ?? tenants.length,
+        available: capacity?.available ?? Math.max(Number(room.capacity || 0) - tenants.length, 0),
+        status: capacity?.state ?? (tenants.length === 0 ? "vacant" : tenants.length >= Number(room.capacity || 0) ? "full" : "partial"),
         floor_id: room.floor_id ?? null,
         tenants,
         pending_dues: tenants.reduce((s: number, t: any) => s + t.pending_dues, 0),
@@ -477,8 +484,7 @@ export class PropertyService {
     });
 
     const floorNum = room.floor ?? 0;
-    const capacity = room.capacity;
-    const occupied = tenants.length;
+    const capacity = await roomCapacityService.getRoomCapacitySnapshot(room.id, { ownerId });
 
     // Gather latest payments for the room
     const payments = tenants
@@ -497,12 +503,14 @@ export class PropertyService {
         room_id: room.id,
         room_no: room.room_no,
         floor: floorNum,
-        capacity: capacity,
+        capacity: capacity.capacity,
         base_rent: room.base_rent,
         monthly_rent: room.base_rent,
-        occupied: occupied,
-        remaining_capacity: Math.max(capacity - occupied, 0),
-        status: occupied === 0 ? "Vacant" : (occupied >= capacity ? "Full" : "Occupied")
+        occupied: capacity.occupied,
+        reserved: capacity.reserved,
+        used: capacity.used,
+        remaining_capacity: capacity.available,
+        status: capacity.state === "full" ? "Full" : capacity.state === "vacant" ? "Vacant" : capacity.state === "reserved" ? "Reserved" : "Occupied"
       },
       tenants,
       payments,
@@ -520,17 +528,11 @@ export class PropertyService {
 
     if (!room) throw new Error("NOT_FOUND: Room not found");
 
-    const occupants = await prisma.roomAllocation.count({
-      where: {
-        room_id: roomId,
-        is_active: true,
-        end_date: null
-      }
-    });
+    const capacitySnapshot = await roomCapacityService.getRoomCapacitySnapshot(roomId, { ownerId });
 
     if (data.capacity !== undefined) {
-      if (data.capacity < occupants) {
-        throw new Error(`VALIDATION: Capacity (${data.capacity}) cannot be less than current occupants (${occupants})`);
+      if (data.capacity < capacitySnapshot.used) {
+        throw new Error(`VALIDATION: Capacity (${data.capacity}) cannot be less than occupied plus reserved beds (${capacitySnapshot.used})`);
       }
       if (data.capacity > 20) {
         throw new Error(`VALIDATION: Capacity cannot exceed 20`);

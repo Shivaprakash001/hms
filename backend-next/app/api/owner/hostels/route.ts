@@ -46,17 +46,23 @@ export async function GET(req: NextRequest) {
               where: { is_active: true, end_date: null },
               select: { id: true },
             },
+            tenant_invitation_reservations: {
+              where: { status: "ACTIVE", expires_at: { gt: new Date() } },
+              select: { id: true },
+            },
           },
         },
       },
     });
 
-    const result = hostels.map((hostel) => {
+    const result = hostels.map((hostel: any) => {
       const totalRooms = hostel.rooms.length;
-      const totalCapacity = hostel.rooms.reduce((s, r) => s + r.capacity, 0);
-      const occupiedBeds = hostel.rooms.reduce((s, r) => s + r.room_allocations.length, 0);
-      const vacantBeds = Math.max(totalCapacity - occupiedBeds, 0);
-      const occupancyRate = totalCapacity > 0 ? Math.round((occupiedBeds / totalCapacity) * 100) : 0;
+      const totalCapacity = hostel.rooms.reduce((s: number, r: any) => s + r.capacity, 0);
+      const occupiedBeds = hostel.rooms.reduce((s: number, r: any) => s + r.room_allocations.length, 0);
+      const reservedBeds = hostel.rooms.reduce((s: number, r: any) => s + r.tenant_invitation_reservations.length, 0);
+      const usedBeds = occupiedBeds + reservedBeds;
+      const vacantBeds = Math.max(totalCapacity - usedBeds, 0);
+      const occupancyRate = totalCapacity > 0 ? Math.round((usedBeds / totalCapacity) * 100) : 0;
 
       return {
         id: hostel.id,
@@ -75,6 +81,8 @@ export async function GET(req: NextRequest) {
           total_rooms: totalRooms,
           total_capacity: totalCapacity,
           occupied_beds: occupiedBeds,
+          reserved_beds: reservedBeds,
+          used_beds: usedBeds,
           vacant_beds: vacantBeds,
           occupancy_rate: occupancyRate,
         },

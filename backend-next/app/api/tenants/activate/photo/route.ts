@@ -6,6 +6,7 @@ import { apiResponse, apiError } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { imagekit } from "@/lib/imagekit";
 import { withOnboardingMetrics } from "@/lib/onboarding-metrics";
+import { tenantInvitationLifecycleService } from "@/src/services/tenants/tenant-invitation-lifecycle-service";
 
 export async function POST(req: NextRequest) {
   const startedAt = performance.now();
@@ -26,21 +27,12 @@ export async function POST(req: NextRequest) {
       return withOnboardingMetrics(apiError("Photo must be under 2MB", "VALIDATION_ERROR", 400), { startedAt });
     }
 
-    const profile = await prisma.profile.findFirst({
-      where: {
-        invitation_token: token,
-        invitation_expires_at: { gte: new Date() },
-      },
-      include: {
-        tenants: true,
-      },
-    });
-
-    if (!profile || !profile.tenants) {
+    const resolved = await tenantInvitationLifecycleService.resolveByToken(token);
+    if (!resolved.tenant) {
       return withOnboardingMetrics(apiError("Invalid or expired activation link", "INVALID", 410), { startedAt });
     }
 
-    const tenant = profile.tenants;
+    const tenant = resolved.tenant;
 
     const buffer = Buffer.from(await file.arrayBuffer());
     externalCalls = 1;

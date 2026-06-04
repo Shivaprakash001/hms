@@ -8,6 +8,7 @@ const HostelDetailView = lazy(() => import('@/app/components/HostelDetailView').
 const TenantsPortfolioView = lazy(() => import('@/app/components/views/TenantsPortfolioView').then((m) => ({ default: m.TenantsPortfolioView })));
 const TenantsHostelView = lazy(() => import('@/app/components/views/TenantsHostelView').then((m) => ({ default: m.TenantsHostelView })));
 const TenantProfileRoute = lazy(() => import('@/app/components/views/TenantProfileRoute').then((m) => ({ default: m.TenantProfileRoute })));
+const BulkInvitationImportView = lazy(() => import('@/app/components/views/BulkInvitationImportView').then((m) => ({ default: m.BulkInvitationImportView })));
 const MoveOutsView = lazy(() => import('@/app/components/views/MoveOutsView').then((m) => ({ default: m.MoveOutsView })));
 const AlertsView = lazy(() => import('@/app/components/views/AlertsView').then((m) => ({ default: m.AlertsView })));
 const BillingView = lazy(() => import('@/app/components/views/BillingView').then((m) => ({ default: m.BillingView })));
@@ -53,6 +54,7 @@ export function OwnerRoutes() {
         <Route path="/hostels/:hostelId/tenants" element={<TenantsHostelView />} />
         <Route path="/hostels/:hostelId/:tab" element={<HostelDetailView />} />
         <Route path="/tenants" element={<TenantsPortfolioView />} />
+        <Route path="/tenants/import" element={<BulkInvitationImportView />} />
         <Route path="/hostels/:hostelId/tenants/:tenantId" element={<TenantProfileRoute />} />
         <Route path="/hostels/:hostelId/move-outs" element={<MoveOutsView />} />
         <Route path="/alerts" element={<AlertsView />} />

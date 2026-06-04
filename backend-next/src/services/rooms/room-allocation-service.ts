@@ -1,6 +1,7 @@
 import { prisma, supabase } from "../../../lib/db";
 import { eventSystem } from "../../../lib/events";
 import { allocationReconciliationService } from "../../../lib/services/allocation-reconciliation-service";
+import { roomCapacityService } from "../../../lib/services/room-capacity-service";
 import { getLogger } from "../../../lib/logger";
 import { allocationRepository } from "../../repositories/allocationRepository";
 import { assertCapability } from "../../../lib/services/move-out-service";
@@ -69,20 +70,10 @@ export class RoomAllocationService {
           throw new Error("VALIDATION_ERROR: Tenant is already allocated to a room and checking out is required first");
         }
 
-        // 2. Check room capacity
-        const room = await tx.rooms.findUnique({
-          where: { id: roomId },
-          include: {
-            room_allocations: {
-              where: { end_date: null }
-            }
-          }
-        });
-        
-        if (!room) {
-          throw new Error("VALIDATION_ERROR: Room not found");
-        }
-        if (room.room_allocations.length >= room.capacity) {
+        // 2. Check room capacity, including active invitation reservations.
+        const capacity = await roomCapacityService.getRoomCapacitySnapshot(roomId, { tx, ownerId });
+        const room = capacity.room;
+        if (capacity.available <= 0) {
           throw new Error("VALIDATION_ERROR: Room is at maximum capacity");
         }
 
@@ -170,19 +161,9 @@ export class RoomAllocationService {
         }
 
         // 2. Check new room ownership and capacity before closing the old allocation.
-        const room = await tx.rooms.findFirst({
-          where: { id: newRoomId, hostels: { owner_id: ownerId } },
-          include: {
-            room_allocations: {
-              where: { is_active: true, end_date: null }
-            }
-          }
-        });
-        
-        if (!room) {
-          throw new Error("VALIDATION_ERROR: Target room not found");
-        }
-        if (room.room_allocations.length >= room.capacity) {
+        const capacity = await roomCapacityService.getRoomCapacitySnapshot(newRoomId, { tx, ownerId });
+        const room = capacity.room;
+        if (capacity.available <= 0) {
           throw new Error("VALIDATION_ERROR: Target room is at maximum capacity");
         }
 

@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { formatShortMonth } from "../format";
 import { financialService } from "../../src/services/payments/financial-service";
 import { operationalPendingInvariantHolds } from "./financial-invariants";
+import { roomCapacityService } from "./room-capacity-service";
 
 /**
  * 📊 Dashboard Service — Financial Metrics (Source of Truth)
@@ -111,31 +112,40 @@ export class DashboardService {
           COALESCE(f.name, CASE WHEN r.floor IS NOT NULL THEN 'Floor ' || r.floor::text ELSE 'Unassigned' END) AS floor_name,
           COALESCE(r.room_type, 'Standard') AS room_type,
           COALESCE(r.capacity, 0)::int AS capacity,
-          COUNT(ra.id)::int AS occupied
+          COUNT(ra.id)::int AS occupied,
+          COALESCE(res.reserved, 0)::int AS reserved,
+          (COUNT(ra.id) + COALESCE(res.reserved, 0))::int AS used
         FROM rooms r
         LEFT JOIN floors f ON f.id = r.floor_id
         LEFT JOIN room_allocations ra
           ON ra.room_id = r.id
          AND ra.is_active = true
          AND ra.end_date IS NULL
+        LEFT JOIN LATERAL (
+          SELECT COUNT(*)::int AS reserved
+          FROM tenant_invitation_reservations tir
+          WHERE tir.room_id = r.id
+            AND tir.status = 'ACTIVE'
+            AND tir.expires_at > now()
+        ) res ON true
         WHERE r.hostel_id = ${hostelId}::uuid
           AND r.is_active = true
-        GROUP BY r.id, r.room_no, r.floor, f.name, r.room_type, r.capacity
+        GROUP BY r.id, r.room_no, r.floor, f.name, r.room_type, r.capacity, res.reserved
       ),
       room_summary AS (
         SELECT
           COUNT(*)::int AS total_rooms,
           COALESCE(SUM(capacity), 0)::int AS total_capacity,
-          COUNT(*) FILTER (WHERE occupied > 0)::int AS occupied_rooms
+          COUNT(*) FILTER (WHERE used > 0)::int AS occupied_rooms
         FROM room_utilization_rows
       ),
       floor_summary AS (
         SELECT
           floor,
           COALESCE(SUM(capacity), 0)::int AS capacity,
-          COALESCE(SUM(occupied), 0)::int AS occupied,
+          COALESCE(SUM(used), 0)::int AS occupied,
           CASE WHEN COALESCE(SUM(capacity), 0) > 0
-            THEN ROUND((SUM(occupied)::numeric / SUM(capacity)::numeric) * 100)::int
+            THEN ROUND((SUM(used)::numeric / SUM(capacity)::numeric) * 100)::int
             ELSE 0
           END AS occupancy_rate
         FROM room_utilization_rows
@@ -294,8 +304,10 @@ export class DashboardService {
               'room_type', rur.room_type,
               'capacity', rur.capacity,
               'occupied', rur.occupied,
-              'vacant', GREATEST(rur.capacity - rur.occupied, 0),
-              'state', CASE WHEN rur.occupied >= rur.capacity THEN 'full' WHEN rur.occupied = 0 THEN 'vacant' ELSE 'partial' END
+              'reserved', rur.reserved,
+              'used', rur.used,
+              'vacant', GREATEST(rur.capacity - rur.used, 0),
+              'state', CASE WHEN rur.used >= rur.capacity THEN 'full' WHEN rur.occupied = 0 AND rur.reserved = 0 THEN 'vacant' WHEN rur.occupied = 0 THEN 'reserved' ELSE 'partial' END
             )
             ORDER BY rur.floor, rur.room_no
           )
@@ -863,14 +875,30 @@ export class DashboardService {
         },
         _sum: { amount: true },
       }),
-      // Count rooms that have at least one active allocation (source-of-truth occupancy)
-      prisma.rooms.count({
-        where: {
-          hostel_id: hostelId,
-          is_active: true,
-          room_allocations: { some: { is_active: true, end_date: null } },
-        },
-      }),
+      prisma.$queryRaw<Array<{ count: number }>>`
+        SELECT COUNT(*)::int AS count
+        FROM rooms r
+        WHERE r.hostel_id = ${hostelId}::uuid
+          AND r.is_active = true
+          AND (
+            EXISTS (
+              SELECT 1
+              FROM room_allocations ra
+              JOIN tenants t ON t.id = ra.tenant_id
+              WHERE ra.room_id = r.id
+                AND ra.is_active = true
+                AND ra.end_date IS NULL
+                AND t.status = 'ACTIVE'
+            )
+            OR EXISTS (
+              SELECT 1
+              FROM tenant_invitation_reservations tir
+              WHERE tir.room_id = r.id
+                AND tir.status = 'ACTIVE'
+                AND tir.expires_at > now()
+            )
+          )
+      `,
     ]);
 
     const totalCapacity = Number(roomStats[0]?.total_capacity ?? 0);
@@ -1120,28 +1148,33 @@ export class DashboardService {
     const fixedExpenses = expenseCategories.filter((c) => fixedCategories.has(c.category)).reduce((sum, c) => sum + c.amount, 0);
     const fixedCostRatio = monthlyExpenses > 0 ? Math.round((fixedExpenses / monthlyExpenses) * 100) : 0;
 
-    const roomUtilization = rooms.map((room) => {
-      const occupied = room.room_allocations.length;
+    const capacityMap = await roomCapacityService.getHostelCapacityMap(hostelId, { ownerId: userId });
+    const roomUtilization = rooms.map((room: any) => {
+      const snapshot = capacityMap.get(room.id);
+      const occupied = snapshot?.occupied ?? room.room_allocations.length;
+      const reserved = snapshot?.reserved ?? 0;
       const capacity = Number(room.capacity || 0);
       return {
         id: room.id,
         room_no: room.room_no,
         floor: room.floor_ref?.name || (room.floor != null ? `Floor ${room.floor}` : "Unassigned"),
         room_type: room.room_type || "Standard",
-        capacity,
+        capacity: snapshot?.capacity ?? capacity,
         occupied,
-        vacant: Math.max(capacity - occupied, 0),
-        state: occupied >= capacity ? "full" : occupied === 0 ? "vacant" : "partial",
+        reserved,
+        used: snapshot?.used ?? occupied,
+        vacant: snapshot?.available ?? Math.max(capacity - occupied, 0),
+        state: snapshot?.state ?? (occupied >= capacity ? "full" : occupied === 0 ? "vacant" : "partial"),
       };
     });
-    const fullRooms = roomUtilization.filter((r) => r.state === "full").length;
-    const partialRooms = roomUtilization.filter((r) => r.state === "partial").length;
-    const vacantRooms = roomUtilization.filter((r) => r.state === "vacant").length;
+    const fullRooms = roomUtilization.filter((r: any) => r.state === "full").length;
+    const partialRooms = roomUtilization.filter((r: any) => r.state === "partial").length;
+    const vacantRooms = roomUtilization.filter((r: any) => r.state === "vacant").length;
     const floorMap = new Map<string, { floor: string; capacity: number; occupied: number }>();
-    for (const room of roomUtilization) {
+    for (const room of roomUtilization as any[]) {
       const current = floorMap.get(room.floor) || { floor: room.floor, capacity: 0, occupied: 0 };
       current.capacity += room.capacity;
-      current.occupied += room.occupied;
+      current.occupied += room.used;
       floorMap.set(room.floor, current);
     }
     const floorOccupancy = Array.from(floorMap.values()).map((f) => ({
@@ -1276,7 +1309,7 @@ export class DashboardService {
         status: hostel?.is_active ? "Active" : "Inactive",
       },
       total_rooms: Number(roomStats[0]?.total_rooms ?? 0),
-      occupied_rooms: occupiedRoomCount,
+      occupied_rooms: Number(Array.isArray(occupiedRoomCount) ? occupiedRoomCount[0]?.count || 0 : occupiedRoomCount || 0),
       total_tenants: totalTenants,
       active_tenants: activeTenants,
       total_capacity: totalCapacity,

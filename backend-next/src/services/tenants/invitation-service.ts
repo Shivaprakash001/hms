@@ -8,6 +8,8 @@ import { allocationReconciliationService } from "../../../lib/services/allocatio
 import { hostelBillingPreferencesService, type MaintenanceType } from "../../../lib/services/hostel-billing-preferences-service";
 import { eventLog } from "../../../lib/services/event-log-service";
 import { frontendUrl } from "../../../lib/config/domains";
+import { roomCapacityService } from "../../../lib/services/room-capacity-service";
+import { tenantInvitationLifecycleService } from "./tenant-invitation-lifecycle-service";
 
 const logger = getLogger("invitation-service");
 
@@ -25,6 +27,10 @@ function mapAllocationConstraintError(err: any): Error {
 
 export class InvitationService {
   async inviteTenant(data: any, ownerId: string) {
+    return tenantInvitationLifecycleService.createInvitation(data, ownerId);
+  }
+
+  async inviteTenantLegacy(data: any, ownerId: string) {
     const { email, name, phone, room_id } = data;
 
     // ── Resolve financial defaults from hostel preferences ────────
@@ -72,7 +78,8 @@ export class InvitationService {
     });
     if (!room) throw new Error("NOT_FOUND: Target room not found");
     if (!room.hostels) throw new Error("NOT_FOUND: Associated hostel not found");
-    if (room.room_allocations.length >= room.capacity) {
+    const capacity = await roomCapacityService.getRoomCapacitySnapshot(room.id, { ownerId });
+    if (capacity.available <= 0) {
       throw new Error("CAPACITY_EXCEEDED: Room is already at full capacity");
     }
 
@@ -305,6 +312,15 @@ export class InvitationService {
   }
 
   async validateActivationToken(token: string) {
+    const resolved = await tenantInvitationLifecycleService.resolveByToken(token);
+    return {
+      valid: true,
+      email: resolved.profile?.email || resolved.invitation?.email,
+      name: resolved.profile?.name || resolved.invitation?.name,
+    };
+  }
+
+  async validateActivationTokenLegacy(token: string) {
     const profile = await prisma.profile.findFirst({
       where: {
         invitation_token: token,
@@ -332,6 +348,19 @@ export class InvitationService {
   }
 
   async resendInvitation(
+    email: string,
+    actor?: { id: string; role: string },
+    overrides?: {
+      name?: string;
+      phone?: string;
+      room_id?: string;
+      monthly_rent?: number;
+    }
+  ) {
+    return tenantInvitationLifecycleService.resendInvitationByEmail(email, actor, overrides);
+  }
+
+  async resendInvitationLegacy(
     email: string,
     actor?: { id: string; role: string },
     overrides?: {
@@ -387,13 +416,8 @@ export class InvitationService {
           }
 
           if (roomIdOverride) {
-            const targetRoom = await tx.rooms.findUnique({
-              where: { id: roomIdOverride },
-              include: {
-                hostels: true,
-                room_allocations: { where: { is_active: true } },
-              },
-            });
+            const capacity = await roomCapacityService.getRoomCapacitySnapshot(roomIdOverride, { tx });
+            const targetRoom = capacity.room;
             if (!targetRoom || !targetRoom.hostels) {
               throw new Error("NOT_FOUND: Target room not found");
             }
@@ -406,7 +430,7 @@ export class InvitationService {
               where: { tenant_id: tenantDetails.id, is_active: true },
             });
             if (!activeAllocation || activeAllocation.room_id !== roomIdOverride) {
-              if (targetRoom.room_allocations.length >= targetRoom.capacity) {
+              if (capacity.available <= 0) {
                 throw new Error("CAPACITY_EXCEEDED: Target room is already at full capacity");
               }
             }
@@ -558,7 +582,8 @@ export class InvitationService {
       },
     });
     if (!targetRoom || !targetRoom.hostels) throw new Error("NOT_FOUND: Target room not found");
-    if (targetRoom.room_allocations.length >= targetRoom.capacity) {
+    const targetCapacity = await roomCapacityService.getRoomCapacitySnapshot(targetRoom.id, { ownerId });
+    if (targetCapacity.available <= 0) {
       throw new Error("CAPACITY_EXCEEDED: Target room is already at full capacity");
     }
 

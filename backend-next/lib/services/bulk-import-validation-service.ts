@@ -11,15 +11,18 @@ const logger = getLogger("bulk-import-validation");
 export interface TenantImportRow {
   name: string;
   phone: string;
-  email?: string;
+  email: string;
   room_no: string;
+  room_id?: string;
   monthly_rent?: number;
   advance_deposit?: number;
+  deposit?: number;
   maintenance_charge?: number;
   maintenance_type?: MaintenanceType;
   joining_date?: string;
+  notes?: string;
   billing_start_mode?: "JOINING_DATE" | "IMPORT_DATE";
-  onboarding_password: string;
+  onboarding_password?: string;
   onboarding_password_hash?: string;
   profile_type?: string;
   emergency_contact?: string;
@@ -109,15 +112,12 @@ export class BulkImportValidationService {
     return rawData.map((row) => ({
       name: this.readCell(row, ["Full Name", "full_name", "name", "Name", "NAME"]),
       phone: this.readCell(row, ["Phone Number", "phone_number", "phone", "Phone", "PHONE", "mobile", "Mobile"]),
-      email: this.readCell(row, ["Username", "Email Address", "Email Address_1", "email_address", "email", "Email", "EMAIL"]) || undefined,
+      email: this.readCell(row, ["Username", "Email Address", "Email Address_1", "email_address", "email", "Email", "EMAIL"]),
       room_no: this.readCell(row, ["Current Room", "current_room", "room_no", "room", "Room", "ROOM", "room_number"]),
-      onboarding_password: this.readCell(row, [
-        "Temporary Onboarding Password",
-        "temporary_onboarding_password",
-        "onboarding_password",
-        "password",
-        "Password",
-      ]),
+      monthly_rent: this.parseNumber(this.readCell(row, ["Monthly Rent", "monthly_rent", "rent", "Rent"])),
+      advance_deposit: this.parseNumber(this.readCell(row, ["Deposit", "deposit", "Advance Deposit", "advance_deposit"])),
+      joining_date: this.readCell(row, ["Joining Date", "joining_date", "Join Date", "join_date"]) || undefined,
+      notes: this.readCell(row, ["Notes", "notes"]) || undefined,
       profile_type: this.readCell(row, ["profile_type", "type"]) || "STUDENT",
       emergency_contact: this.readCell(row, ["emergency_contact", "emergency"]) || undefined,
       gender: this.readCell(row, ["gender", "Gender"]) || undefined,
@@ -207,28 +207,49 @@ export class BulkImportValidationService {
         }
       }
 
-      if (row.email) {
-        const normalizedEmail = row.email.toLowerCase();
-        if (!this.isValidEmail(normalizedEmail)) {
-          errors.push({
-            row: rowNumber,
-            field: "email",
-            message: "Invalid email format",
-            value: row.email,
-          });
-        } else if (existingEmails.has(normalizedEmail)) {
-          isDuplicate = true;
-          duplicateReason = `Email ${normalizedEmail} already exists in system`;
-        } else if (emailsSeen.has(normalizedEmail)) {
-          isDuplicate = true;
-          duplicateReason = `Email ${normalizedEmail} appears multiple times in this file`;
-        } else {
-          emailsSeen.add(normalizedEmail);
-        }
+      const normalizedEmail = String(row.email || "").trim().toLowerCase();
+      if (!normalizedEmail) {
+        errors.push({
+          row: rowNumber,
+          field: "email",
+          message: "Email is required",
+          value: row.email,
+        });
+      } else if (!this.isValidEmail(normalizedEmail)) {
+        errors.push({
+          row: rowNumber,
+          field: "email",
+          message: "Invalid email format",
+          value: row.email,
+        });
+      } else if (existingEmails.has(normalizedEmail)) {
+        isDuplicate = true;
+        duplicateReason = `Email ${normalizedEmail} already exists in system or active invitations`;
+      } else if (emailsSeen.has(normalizedEmail)) {
+        isDuplicate = true;
+        duplicateReason = `Email ${normalizedEmail} appears multiple times in this file`;
       } else {
-        warnings.push("Email not provided - tenant will use phone-based login only");
+        emailsSeen.add(normalizedEmail);
       }
 
+      for (const [field, value] of Object.entries({
+        name: row.name,
+        email: row.email,
+        phone: row.phone,
+        room_no: row.room_no,
+        notes: row.notes,
+      })) {
+        if (this.isSpreadsheetFormula(value)) {
+          errors.push({
+            row: rowNumber,
+            field,
+            message: "Spreadsheet formulas are not allowed in import values",
+            value,
+          });
+        }
+      }
+
+      let roomForRow: any = null;
       if (!row.room_no) {
         errors.push({
           row: rowNumber,
@@ -238,6 +259,7 @@ export class BulkImportValidationService {
         });
       } else {
         const room = hostelRooms.find((r) => r.room_no === row.room_no);
+        roomForRow = room;
         if (!room) {
           errors.push({
             row: rowNumber,
@@ -257,7 +279,7 @@ export class BulkImportValidationService {
             });
           }
 
-          const currentOccupancy = room._count.room_allocations;
+          const currentOccupancy = room.occupied_count + room.reserved_count;
           const assignmentsInFile = roomAssignmentsSeen.get(room.id) || 0;
           if (currentOccupancy + assignmentsInFile + 1 > room.capacity) {
             errors.push({
@@ -281,20 +303,21 @@ export class BulkImportValidationService {
         });
       }
 
-      if (!row.onboarding_password || row.onboarding_password.length < 6) {
+      const rowJoiningDate = row.joining_date || defaultJoiningDate;
+      const parsedJoiningDate = this.parseDate(rowJoiningDate);
+      if (row.joining_date && !parsedJoiningDate) {
         errors.push({
           row: rowNumber,
-          field: "onboarding_password",
-          message: "Onboarding password must be at least 6 characters",
-          value: row.onboarding_password ? "***" : undefined,
+          field: "joining_date",
+          message: "Invalid joining date (use YYYY-MM-DD or DD/MM/YYYY)",
+          value: row.joining_date,
         });
-      } else if (!this.isValidPassword(row.onboarding_password)) {
-        errors.push({
-          row: rowNumber,
-          field: "onboarding_password",
-          message: "Password must contain at least one letter and one number",
-          value: "***",
-        });
+      } else if (parsedJoiningDate) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (parsedJoiningDate < today) {
+          warnings.push("Historical joining date requires owner confirmation before invitations are sent");
+        }
       }
 
       const room = row.room_no ? hostelRooms.find((r) => r.room_no === row.room_no) : undefined;
@@ -304,11 +327,13 @@ export class BulkImportValidationService {
         data: {
           ...row,
           phone: normalizedPhone || row.phone,
-          monthly_rent: room?.base_rent ? Number(room.base_rent) : undefined,
+          email: normalizedEmail,
+          room_id: roomForRow?.id || room?.id,
+          monthly_rent: row.monthly_rent ?? (room?.base_rent ? Number(room.base_rent) : undefined),
           advance_deposit: defaultAdvanceDeposit,
           maintenance_charge: defaultMaintenanceCharge,
           maintenance_type: defaultMaintenanceType,
-          joining_date: defaultJoiningDate,
+          joining_date: row.joining_date || defaultJoiningDate,
           billing_start_mode: defaultBillingStartMode,
           rent_source: "ROOM_CONFIG",
         },
@@ -363,6 +388,11 @@ export class BulkImportValidationService {
     return hasLetter && hasNumber;
   }
 
+  private isSpreadsheetFormula(value: unknown): boolean {
+    const text = String(value || "").trim();
+    return /^[=+\-@]/.test(text);
+  }
+
   private parseDate(dateStr: string): Date | null {
     const formats = [
       /^(\d{4})-(\d{2})-(\d{2})$/,
@@ -404,7 +434,18 @@ export class BulkImportValidationService {
       },
       select: { phone: true },
     });
-    return new Set(profiles.map((p) => p.phone!).filter(Boolean));
+    const invited = await prisma.tenant_invitations.findMany({
+      where: {
+        owner_id: ownerId,
+        status: { in: ["PENDING", "OPENED", "ACTIVATION_STARTED"] },
+        phone: { not: null },
+      },
+      select: { phone: true },
+    });
+    return new Set([
+      ...profiles.map((p: any) => p.phone!).filter(Boolean),
+      ...invited.map((i: any) => i.phone).filter(Boolean),
+    ]);
   }
 
   private async getExistingEmails(ownerId: string): Promise<Set<string>> {
@@ -415,10 +456,20 @@ export class BulkImportValidationService {
       },
       select: { email: true },
     });
-    return new Set(profiles.map((p) => p.email.toLowerCase()));
+    const invited = await prisma.tenant_invitations.findMany({
+      where: {
+        owner_id: ownerId,
+        status: { in: ["PENDING", "OPENED", "ACTIVATION_STARTED"] },
+      },
+      select: { email: true },
+    });
+    return new Set([
+      ...profiles.map((p: any) => p.email.toLowerCase()),
+      ...invited.map((i: any) => String(i.email || "").toLowerCase()).filter(Boolean),
+    ]);
   }
 
-  private async getHostelRooms(hostelId: string): Promise<Array<{ id: string; room_no: string; is_active: boolean; capacity: number; base_rent: number | null; _count: { room_allocations: number } }>> {
+  private async getHostelRooms(hostelId: string): Promise<Array<{ id: string; room_no: string; is_active: boolean; capacity: number; base_rent: number | null; occupied_count: number; reserved_count: number }>> {
     const hostelRooms = await prisma.rooms.findMany({
       where: { hostel_id: hostelId },
       select: {
@@ -430,13 +481,24 @@ export class BulkImportValidationService {
         _count: {
           select: {
             room_allocations: {
-              where: { is_active: true }
-            }
+              where: { is_active: true, end_date: null, tenant: { status: "ACTIVE" } }
+            },
+            tenant_invitation_reservations: {
+              where: { status: "ACTIVE", expires_at: { gt: new Date() } },
+            },
           }
         }
       },
     });
-    return hostelRooms;
+    return hostelRooms.map((room: any) => ({
+      id: room.id,
+      room_no: room.room_no,
+      is_active: room.is_active,
+      capacity: room.capacity,
+      base_rent: room.base_rent,
+      occupied_count: room._count?.room_allocations || 0,
+      reserved_count: room._count?.tenant_invitation_reservations || 0,
+    }));
   }
 }
 

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Building2, ChevronRight } from 'lucide-react';
+import { Building2, ChevronRight, Upload } from 'lucide-react';
 import { ownerService } from '@features/owners/api';
 import { useTenantStore } from '@features/tenants/store/tenantStore';
 import { TenantsLayout } from '@features/tenants/components/layout/TenantsLayout';
@@ -37,6 +37,15 @@ export function TenantsPortfolioView() {
     <TenantsLayout
       title="All tenants"
       subtitle="Portfolio-wide tenant operations"
+      actions={
+        <Link
+          to="/tenants/import"
+          className="inline-flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-accent-foreground"
+        >
+          <Upload className="h-4 w-4" />
+          Bulk invite
+        </Link>
+      }
     >
       <div className="space-y-4">
         <label className="block text-sm text-muted-foreground">

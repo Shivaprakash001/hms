@@ -108,8 +108,20 @@ export const bulkImportService = {
         const response = await api.get(`/bulk-import/${batchId}/confirm`);
         return response.data;
     },
+    getBatchStatus: async (batchId) => {
+        const response = await api.get(`/bulk-import/${batchId}`);
+        return response.data;
+    },
     confirmBatchImport: async (batchId) => {
         const response = await api.post(`/bulk-import/${batchId}/confirm`);
+        return response.data;
+    },
+    confirmInvitationBatch: async (batchId, options = {}) => {
+        const response = await api.post(`/bulk-import/${batchId}/confirm`, options);
+        return response.data;
+    },
+    downloadTemplate: async () => {
+        const response = await api.get('/bulk-import/template', { responseType: 'blob' });
         return response.data;
     },
 };

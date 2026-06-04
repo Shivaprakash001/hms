@@ -35,6 +35,7 @@ export class TenantMigrationService {
     batchId: string,
     rowNumber: number
   ): Promise<ImportResult> {
+    throw new Error("LEGACY_IMPORT_DISABLED: Legacy ACTIVE tenant migration is disabled. Use the bulk invitation lifecycle instead.");
     try {
       const normalizedPhone = data.phone;
       const normalizedEmail = data.email ? data.email.toLowerCase() : `tenant+${normalizedPhone}@system.local`;
@@ -57,7 +58,7 @@ export class TenantMigrationService {
       }
 
       const joiningDate = data.joining_date
-        ? this.parseDate(data.joining_date)
+        ? this.parseDate(data.joining_date || "")
         : new Date();
       joiningDate.setHours(0, 0, 0, 0);
 
@@ -88,7 +89,16 @@ export class TenantMigrationService {
         };
       }
 
-      const hashedOnboardingPassword = data.onboarding_password_hash || await hashPassword(data.onboarding_password);
+      const onboardingPassword = data.onboarding_password;
+      if (!data.onboarding_password_hash && !onboardingPassword) {
+        return {
+          success: false,
+          error: "Legacy migration requires an onboarding password; use bulk invitation import for new tenants",
+          row: rowNumber,
+        };
+      }
+
+      const hashedOnboardingPassword = data.onboarding_password_hash || await hashPassword(onboardingPassword!);
 
       const onboardingExpiresAt = new Date();
       onboardingExpiresAt.setDate(onboardingExpiresAt.getDate() + 30);
@@ -245,6 +255,7 @@ export class TenantMigrationService {
     hostelId: string,
     batchId: string
   ): Promise<BulkImportResult> {
+    throw new Error("LEGACY_IMPORT_DISABLED: Legacy ACTIVE tenant migration is disabled. Use the bulk invitation lifecycle instead.");
     const results: ImportResult[] = [];
     const errors: string[] = [];
     let successCount = 0;

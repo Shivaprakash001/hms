@@ -4,9 +4,10 @@ import { normalizeIndianPhone } from "../../../lib/utils/phone-utils";
 import { getTenantOperationalContext } from "../../../lib/hostel-context";
 import { allocationReconciliationService } from "../../../lib/services/allocation-reconciliation-service";
 import { eventLog } from "../../../lib/services/event-log-service";
+import { tenantInvitationLifecycleService } from "./tenant-invitation-lifecycle-service";
 
 type ActivationStep = "ACCOUNT" | "RULES" | "PROFILE" | "ACTIVATE";
-type ResolvedInvitation = { profile: any; tenant: any; token: string };
+type ResolvedInvitation = { profile: any | null; tenant: any; invitation?: any | null; token: string; source?: string };
 
 const REQUIRED_ACKNOWLEDGEMENTS = [
   "fee_refund_rules",
@@ -198,70 +199,17 @@ async function assertUniqueRollNumberForTenant(tenant: any, rollNumber: string) 
 }
 
 export class ActivationWorkflowService {
-  private async resolveInvitation(token: string): Promise<ResolvedInvitation> {
+  private async resolveInvitation(token: string, options: { markOpened?: boolean } = {}): Promise<ResolvedInvitation> {
     const normalizedToken = String(token || "").trim();
     if (!normalizedToken) throw new Error("VALIDATION_ERROR: Activation token is required");
-
-    const profile = await prisma.profile.findFirst({
-      where: {
-        invitation_token: normalizedToken,
-        invitation_expires_at: { gte: new Date() },
-        role: "TENANT",
-      },
-      include: {
-        tenants: {
-          include: {
-            hostels: {
-              include: {
-                profiles: { select: { id: true, name: true, phone: true, email: true } },
-              },
-            },
-            room_allocations: {
-              where: { is_active: true, end_date: null },
-              orderBy: { start_date: "desc" },
-              take: 1,
-              include: { room: true },
-            },
-            identification_documents: {
-              where: { is_active: true },
-              orderBy: { created_at: "desc" },
-            },
-            rule_acceptances: {
-              orderBy: { accepted_at: "desc" },
-              take: 5,
-              include: { rule_version: true },
-            },
-          },
-        },
-      },
-    });
-
-    if (!profile || !profile.tenants) {
-      const anyProfile = await prisma.profile.findFirst({
-        where: { invitation_token: normalizedToken, role: "TENANT" },
-        include: { tenants: true },
-      });
-      if (anyProfile?.tenants?.status === "ACTIVE") throw new Error("ALREADY_ACTIVE: Account already active");
-      if (anyProfile?.tenants?.status === "CANCELLED") throw new Error("CANCELLED: Invitation was cancelled");
-      if (anyProfile?.tenants?.status === "EXPIRED") {
-        await eventLog.log("expired_invite_rate", anyProfile.tenants.owner_id || null, { tenant_id: anyProfile.tenants.id }, anyProfile.tenants.id);
-        throw new Error("EXPIRED: Invitation expired");
-      }
-      if (anyProfile?.invitation_expires_at && anyProfile.invitation_expires_at < new Date()) {
-        if (anyProfile.tenants) {
-          await eventLog.log("expired_invite_rate", anyProfile.tenants.owner_id || null, { tenant_id: anyProfile.tenants.id }, anyProfile.tenants.id);
-        }
-        throw new Error("EXPIRED: Invitation expired");
-      }
-      throw new Error("INVALID: Activation link expired or already used");
-    }
-    if (profile.tenants.status === "ACTIVE") throw new Error("ALREADY_ACTIVE: Account already active");
-    if (profile.tenants.status === "CANCELLED") throw new Error("CANCELLED: Invitation was cancelled");
-    if (profile.tenants.status === "EXPIRED") throw new Error("EXPIRED: Invitation expired");
-    if (profile.tenants.status !== "INVITED") {
+    const resolved = await tenantInvitationLifecycleService.resolveByToken(normalizedToken, options);
+    if (resolved.tenant.status === "ACTIVE") throw new Error("ALREADY_ACTIVE: Account already active");
+    if (resolved.tenant.status === "CANCELLED") throw new Error("CANCELLED: Invitation was cancelled");
+    if (resolved.tenant.status === "EXPIRED") throw new Error("EXPIRED: Invitation expired");
+    if (resolved.tenant.status !== "INVITED") {
       throw new Error("INVALID: Activation is not available for this tenant");
     }
-    return { profile, tenant: profile.tenants, token: normalizedToken };
+    return resolved;
   }
 
   private async markActivity(tenant: any, eventType: string, metadata: Record<string, any> = {}) {
@@ -320,9 +268,9 @@ export class ActivationWorkflowService {
 
   private computeState(profile: any, tenant: any, ruleVersion: any) {
     const latestAcceptance = (tenant.rule_acceptances || []).find((a: any) => a.rule_version_id === ruleVersion.id);
-    const accountSetupCompleted = Boolean(profile.password_hash && (tenant.phone_1 || profile.phone));
+    const accountSetupCompleted = Boolean(profile?.password_hash && (tenant.phone_1 || profile?.phone));
     const missingTier1: string[] = [];
-    if (!(tenant.phone_1 || profile.phone)) missingTier1.push("phone");
+    if (!(tenant.phone_1 || profile?.phone)) missingTier1.push("phone");
     if (!tenant.gender) missingTier1.push("gender");
     if (!tenant.date_of_birth) missingTier1.push("date_of_birth");
     if (!tenant.phone_3) missingTier1.push("emergency_phone");
@@ -417,8 +365,7 @@ export class ActivationWorkflowService {
   }
 
   async getContext(token: string) {
-    const { profile, tenant } = await this.resolveInvitation(token);
-    await this.markActivity(tenant, "activation_started", { source: "context" });
+    const { profile, tenant, invitation } = await this.resolveInvitation(token, { markOpened: true });
     const hostel = tenant.hostels;
     if (!tenant.hostel_id || !hostel) throw new Error("INTERNAL_ERROR: Tenant hostel context unavailable");
     const ruleVersion = await this.getActiveRuleVersion(tenant.hostel_id);
@@ -431,7 +378,8 @@ export class ActivationWorkflowService {
     }
 
     const activeAllocation = tenant.room_allocations?.[0] || null;
-    const room = activeAllocation?.room || null;
+    const activeReservation = invitation?.reservations?.[0] || null;
+    const room = activeAllocation?.room || activeReservation?.room || invitation?.room || null;
     const roommateCount = room
       ? await prisma.roomAllocation.count({
           where: { room_id: room.id, is_active: true, end_date: null, tenant_id: { not: tenant.id } },
@@ -452,10 +400,10 @@ export class ActivationWorkflowService {
       blocked_steps: state.blocked_steps,
       missing_fields: state.missing_fields,
       profile: {
-        id: profile.id,
-        name: profile.name,
-        email: profile.email,
-        phone: profile.phone,
+        id: profile?.id || null,
+        name: profile?.name || invitation?.name || null,
+        email: profile?.email || invitation?.email || null,
+        phone: profile?.phone || invitation?.phone || tenant.phone_1 || null,
       },
       tenant: {
         id: tenant.id,
@@ -526,14 +474,14 @@ export class ActivationWorkflowService {
     if (!["ACCOUNT", "RULES", "PROFILE", "ACTIVATE"].includes(step)) {
       throw new Error("VALIDATION_ERROR: Unsupported activation step");
     }
-    const { profile, tenant } = await this.resolveInvitation(token);
+    const { profile, tenant, invitation } = await this.resolveInvitation(token);
     if (!tenant.hostel_id) throw new Error("INTERNAL_ERROR: Tenant hostel context unavailable");
     const ruleVersion = await this.getActiveRuleVersion(tenant.hostel_id);
     const state = this.computeState(profile, tenant, ruleVersion);
     this.assertTransition(step, state);
 
     if (step === "ACCOUNT") {
-      await this.saveAccount(profile, tenant, data);
+      await this.saveAccount(profile, tenant, data, token, invitation);
     }
     if (step === "RULES") {
       await this.acceptRules(profile, tenant, data, context);
@@ -542,7 +490,7 @@ export class ActivationWorkflowService {
       await this.saveProfile(profile, tenant, data);
     }
     if (step === "ACTIVATE") {
-      await this.activate(profile, tenant);
+      await this.activate(profile, tenant, invitation);
       const requiredDocumentTypes = this.requiredDocumentTypes(tenant.profile_type);
       return {
         activation_state: {
@@ -578,9 +526,14 @@ export class ActivationWorkflowService {
     }
   }
 
-  private async saveAccount(profile: any, tenant: any, data: any) {
+  private async saveAccount(profile: any | null, tenant: any, data: any, token: string, invitation?: any | null) {
     const password = String(data?.password || "");
     const confirmPassword = String(data?.confirm_password || data?.confirmPassword || "");
+    if (!profile && invitation) {
+      await tenantInvitationLifecycleService.startActivation(token, data);
+      return;
+    }
+    if (!profile) throw new Error("INVALID_TRANSITION: Complete account setup from a valid invitation");
     const primaryPhone = normalizeIndianPhone(data?.phone || data?.primary_phone || tenant.phone_1 || profile.phone);
     if (!primaryPhone) throw new Error("VALIDATION_ERROR: Valid primary phone is required");
 
@@ -609,6 +562,7 @@ export class ActivationWorkflowService {
   }
 
   private async saveProfile(profile: any, tenant: any, data: any) {
+    if (!profile) throw new Error("INVALID_TRANSITION: Complete account setup before profile completion");
     const phone = normalizeIndianPhone(data?.phone || data?.primary_phone || tenant.phone_1 || profile.phone);
     const gender = data?.gender ? String(data.gender) : tenant.gender;
     const dob = validDateOfBirth(data?.date_of_birth || tenant.date_of_birth);
@@ -672,6 +626,7 @@ export class ActivationWorkflowService {
   }
 
   private async acceptRules(profile: any, tenant: any, data: any, context: { ip: string; userAgent: string }) {
+    if (!profile) throw new Error("INVALID_TRANSITION: Complete account setup before accepting rules");
     await eventLog.log("rules_viewed", tenant.owner_id || null, { tenant_id: tenant.id, hostel_id: tenant.hostel_id }, tenant.id);
     const acknowledgements = data?.acknowledgements || {};
     const missing = REQUIRED_ACKNOWLEDGEMENTS.filter((key) => acknowledgements[key] !== true);
@@ -699,7 +654,7 @@ export class ActivationWorkflowService {
             rules_snapshot: rulesSnapshot,
             accepted_ip: context.ip,
             accepted_user_agent: context.userAgent,
-            typed_signature_name: data?.typed_signature_name || profile.name,
+            typed_signature_name: data?.typed_signature_name || profile?.name,
           },
         });
       } catch (error: any) {
@@ -713,7 +668,12 @@ export class ActivationWorkflowService {
     await eventLog.log("rules_accepted", tenant.owner_id || null, { tenant_id: tenant.id, hostel_id: tenant.hostel_id, rule_version_id: ruleVersion.id }, tenant.id);
   }
 
-  private async activate(profile: any, tenant: any) {
+  private async activate(profile: any, tenant: any, invitation?: any | null) {
+    if (!profile) throw new Error("INVALID_TRANSITION: Complete account setup before activation");
+    if (invitation) {
+      await tenantInvitationLifecycleService.completeActivation(invitation, tenant, profile);
+      return;
+    }
     const ruleVersion = await this.getActiveRuleVersion(tenant.hostel_id);
     const current = await prisma.profile.findUnique({
       where: { id: profile.id },

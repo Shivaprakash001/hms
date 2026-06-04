@@ -6,7 +6,6 @@ import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { bulkImportValidationService } from "@/lib/services/bulk-import-validation-service";
 import { prisma } from "@/lib/db";
 import crypto from "crypto";
-import { hashPassword } from "@/lib/auth";
 import type { ImportDefaults, TenantImportRow } from "@/lib/services/bulk-import-validation-service";
 
 /**
@@ -87,40 +86,67 @@ export async function POST(req: NextRequest) {
     );
 
     const batchId = crypto.randomUUID();
-    const validRowsForImport = await Promise.all(validation.validRows.map(async (r) => ({
+    const validRowsForImport = validation.validRows.map((r) => ({
       row: r.row,
-      data: await secureImportRow(r.data),
-    })));
+      data: sanitizeImportRowForStorage(r.data),
+      warnings: r.warnings,
+    }));
+    const hasHistoricalJoinDateWarnings = validation.validRows.some((r) =>
+      r.warnings.some((warning) => warning.toLowerCase().includes("historical joining date"))
+    );
 
-    await prisma.bulk_import_batches.create({
-      data: {
-        id: batchId,
-        owner_id: session.sub,
-        hostel_id: hostelId,
-        filename: file.name,
-        file_size: file.size,
-        total_rows: validation.totalRows,
-        valid_rows: validation.summary.valid,
-        failed_rows: validation.summary.invalid,
-        duplicate_rows: validation.summary.duplicates,
-        status: "VALIDATED",
-        validation_errors: {
-          defaults: importDefaults,
-          valid_rows: validRowsForImport,
-          invalid: validation.invalidRows.map((r) => ({
-            row: r.row,
-            data: sanitizeImportRowForStorage(r.data),
-            errors: r.errors,
-          })),
-          duplicates: validation.duplicates.map((r) => ({
-            row: r.row,
-            data: sanitizeImportRowForStorage(r.data),
-            reason: r.duplicateReason,
-          })),
-        } as any,
-        import_source_version: "tenant_identity_collection_v2",
-        uploaded_by: session.sub,
-      },
+    await prisma.$transaction(async (tx: any) => {
+      await tx.bulk_import_batches.create({
+        data: {
+          id: batchId,
+          owner_id: session.sub,
+          hostel_id: hostelId,
+          filename: file.name,
+          file_size: file.size,
+          total_rows: validation.totalRows,
+          valid_rows: validation.summary.valid,
+          failed_rows: validation.summary.invalid,
+          duplicate_rows: validation.summary.duplicates,
+          status: "VALIDATED",
+          validation_errors: {
+            defaults: importDefaults,
+            valid_rows: validRowsForImport,
+            invalid: validation.invalidRows.map((r) => ({
+              row: r.row,
+              data: sanitizeImportRowForStorage(r.data),
+              errors: r.errors,
+              warnings: r.warnings,
+            })),
+            duplicates: validation.duplicates.map((r) => ({
+              row: r.row,
+              data: sanitizeImportRowForStorage(r.data),
+              reason: r.duplicateReason,
+              warnings: r.warnings,
+            })),
+            requires_historical_join_date_confirmation: hasHistoricalJoinDateWarnings,
+          } as any,
+          import_source_version: "tenant_invitation_lifecycle_v1",
+          uploaded_by: session.sub,
+        },
+      });
+
+      for (const row of validation.validRows) {
+        await tx.bulk_import_rows.create({
+          data: {
+            id: crypto.randomUUID(),
+            batch_id: batchId,
+            owner_id: session.sub,
+            hostel_id: hostelId,
+            row_number: row.row,
+            normalized_email: row.data.email,
+            normalized_phone: row.data.phone,
+            normalized_room: row.data.room_no,
+            mapped_data: sanitizeImportRowForStorage(row.data),
+            validation_status: row.warnings.length ? "READY_WITH_WARNINGS" : "READY",
+            execution_status: "PENDING",
+          },
+        });
+      }
     });
 
     return apiResponse(
@@ -133,6 +159,7 @@ export async function POST(req: NextRequest) {
           invalid_rows: validation.summary.invalid,
           duplicate_rows: validation.summary.duplicates,
           warnings: validation.summary.warnings,
+          requires_historical_join_date_confirmation: hasHistoricalJoinDateWarnings,
         },
         preview: {
           valid: validation.validRows.slice(0, 5).map(sanitizeValidatedRow),
@@ -191,21 +218,11 @@ function numberValue(value: FormDataEntryValue | null) {
   return num;
 }
 
-async function secureImportRow(row: TenantImportRow): Promise<TenantImportRow> {
-  const { onboarding_password, ...rest } = row;
-  return {
-    ...rest,
-    onboarding_password: "",
-    onboarding_password_hash: await hashPassword(onboarding_password),
-  };
-}
-
 function sanitizeValidatedRow(row: any) {
   return {
     ...row,
     data: {
       ...row.data,
-      onboarding_password: row.data?.onboarding_password ? "***" : undefined,
       onboarding_password_hash: undefined,
     },
   };
@@ -217,6 +234,10 @@ function sanitizeImportRowForStorage(row: TenantImportRow): Partial<TenantImport
     phone: row.phone,
     email: row.email,
     room_no: row.room_no,
-    onboarding_password: row.onboarding_password ? "***" : undefined,
+    room_id: row.room_id,
+    monthly_rent: row.monthly_rent,
+    advance_deposit: row.advance_deposit,
+    joining_date: row.joining_date,
+    notes: row.notes,
   };
 }

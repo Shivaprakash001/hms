@@ -93,8 +93,9 @@ function readinessForHostel(hostel: any, rooms: any[]) {
 function publicRoom(room: any) {
   const activeAllocations = room.room_allocations || [];
   const activeReservations = room.room_reservations || [];
+  const activeInvitationReservations = room.tenant_invitation_reservations || [];
   const occupied = activeAllocations.length;
-  const reserved = activeReservations.length;
+  const reserved = activeReservations.length + activeInvitationReservations.length;
   const availableBeds = Math.max(0, Number(room.capacity || 0) - occupied - reserved);
   return {
     id: room.id,
@@ -144,8 +145,9 @@ export class AdmissionsService {
             include: {
               floor_ref: { select: { name: true } },
               room_reservations: { where: { status: "ACTIVE", reserved_until: { gt: new Date() } }, select: { id: true } },
+              tenant_invitation_reservations: { where: { status: "ACTIVE", expires_at: { gt: new Date() } }, select: { id: true } },
               room_allocations: {
-                where: { is_active: true, end_date: null },
+                where: { is_active: true, end_date: null, tenant: { status: "ACTIVE" } },
                 include: {
                   tenant: {
                     select: {
@@ -179,6 +181,7 @@ export class AdmissionsService {
             include: {
               room_allocations: { where: { is_active: true, end_date: null }, select: { id: true } },
               room_reservations: { where: { status: "ACTIVE", reserved_until: { gt: new Date() } }, select: { id: true } },
+              tenant_invitation_reservations: { where: { status: "ACTIVE", expires_at: { gt: new Date() } }, select: { id: true } },
             },
           },
         },
@@ -188,7 +191,7 @@ export class AdmissionsService {
         const public_slug = await ensureHostelSlug(h);
         const vacancyCount = h.rooms.reduce((sum: number, room: any) => {
           const occupied = room.room_allocations?.length || 0;
-          const reserved = room.room_reservations?.length || 0;
+          const reserved = (room.room_reservations?.length || 0) + (room.tenant_invitation_reservations?.length || 0);
           return sum + Math.max(0, Number(room.capacity || 0) - occupied - reserved);
         }, 0);
         const startingPrice = h.rooms
@@ -453,6 +456,7 @@ export class AdmissionsService {
       include: {
         room_allocations: { where: { is_active: true, end_date: null }, select: { id: true } },
         room_reservations: { where: { status: "ACTIVE", reserved_until: { gt: new Date() } }, select: { id: true, lead_id: true } },
+        tenant_invitation_reservations: { where: { status: "ACTIVE", expires_at: { gt: new Date() } }, select: { id: true } },
       },
     });
     if (!room) throw ApiError.notFound("Room not found");
@@ -473,7 +477,10 @@ export class AdmissionsService {
       },
     });
     if (recentExpired) throw ApiError.conflict("Please wait before creating another reservation for this phone number");
-    const availability = Number(room.capacity || 0) - room.room_allocations.length - room.room_reservations.length;
+    const availability = Number(room.capacity || 0)
+      - room.room_allocations.length
+      - room.room_reservations.length
+      - room.tenant_invitation_reservations.length;
     if (availability <= 0) throw ApiError.conflict("Room has no available beds to reserve");
 
     const hours = Math.min(72, Math.max(1, Number(input.duration_hours || 24)));

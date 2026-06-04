@@ -58,10 +58,47 @@ model bulk_import_batches {
   hostels                                                hostels   @relation(fields: [hostel_id], references: [id])
   profiles_bulk_import_batches_uploaded_byToprofiles     profile   @relation("bulk_import_batches_uploaded_byToprofiles", fields: [uploaded_by], references: [id])
   profiles_profiles_import_batch_idTobulk_import_batches profile[] @relation("profiles_import_batch_idTobulk_import_batches")
+  bulk_import_rows                                      bulk_import_rows[]
+  tenant_invitations                                    tenant_invitations[]
+  tenant_invitation_reservations                        tenant_invitation_reservations[]
 
   @@index([hostel_id, created_at(sort: Desc)])
   @@index([owner_id, created_at(sort: Desc)])
   @@index([status, created_at(sort: Desc)])
+}
+
+model bulk_import_rows {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  batch_id            String    @db.Uuid
+  owner_id            String    @db.Uuid
+  hostel_id           String    @db.Uuid
+  row_number          Int
+  normalized_email    String
+  normalized_phone    String
+  normalized_room     String
+  mapped_data         Json
+  validation_status   String    @default("PENDING")
+  conflict_type       String?
+  owner_decision      String?
+  tenant_id           String?   @db.Uuid
+  invitation_id       String?   @db.Uuid
+  reservation_id      String?   @db.Uuid
+  execution_status    String    @default("PENDING")
+  email_status        String?
+  error_message       String?
+  executed_at         DateTime? @db.Timestamptz(6)
+  created_at          DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime? @db.Timestamptz(6)
+  batch               bulk_import_batches @relation(fields: [batch_id], references: [id])
+  tenant              tenants? @relation(fields: [tenant_id], references: [id])
+  invitation          tenant_invitations? @relation(fields: [invitation_id], references: [id])
+  reservation         tenant_invitation_reservations? @relation(fields: [reservation_id], references: [id])
+
+  @@unique([batch_id, normalized_email, normalized_phone])
+  @@index([owner_id, hostel_id, execution_status])
+  @@index([batch_id, validation_status])
+  @@index([tenant_id])
+  @@map("bulk_import_rows")
 }
 
 model complaints {
@@ -93,7 +130,7 @@ model expenses {
   category            String
   status              String?   @default("paid")
   created_at          DateTime  @default(now()) @db.Timestamptz(6)
-  hostel_id           String?   @db.Uuid
+  hostel_id           String    @db.Uuid
   notes               String?
   vendor_name         String?
   payment_method      String?
@@ -106,7 +143,7 @@ model expenses {
   expense_type        String    @default("VARIABLE")
   tags                String[]  @default([])
   metadata            Json?
-  hostels             hostels?  @relation(fields: [hostel_id], references: [id])
+  hostels             hostels   @relation(fields: [hostel_id], references: [id])
   profiles            profile   @relation(fields: [owner_id], references: [id])
 
   @@index([date])
@@ -195,9 +232,6 @@ model hostels {
   timezone            String                   @default("UTC")
   auto_rent_day       Int                      @default(1)
   phonepe_merchant_id String?
-  public_slug         String?                  @unique
-  admissions_enabled  Boolean                  @default(true)
-  admission_photos    Json?
   created_at          DateTime                 @default(now()) @db.Timestamptz(6)
   updated_at          DateTime?                @db.Timestamptz(6)
   logo_url            String?
@@ -217,8 +251,8 @@ model hostels {
   floors              floors[]
   tenants             tenants[]
   move_out_requests   move_out_requests[]
-  visitor_leads       VisitorLead[]
-  lead_reservations   RoomReservation[]
+  tenant_invitations  tenant_invitations[]
+  tenant_invitation_reservations tenant_invitation_reservations[]
 }
 
 model identity_tokens {
@@ -597,7 +631,6 @@ model payments {
   @@index([created_at])
   @@index([hostel_id])
   @@index([hostel_id, payment_date])
-  @@index([obligation_id])
   @@index([owner_id, created_at])
   @@index([owner_id])
   @@index([tenant_id, amount_paid])
@@ -636,9 +669,6 @@ model profile {
   expenses                                                          expenses[]
   rule_versions                                                     RuleVersion[]
   hostels                                                           hostels[]
-  visitor_leads                                                     VisitorLead[]         @relation("VisitorLeadOwner")
-  lead_notes                                                        LeadNote[]            @relation("LeadNoteOwner")
-  room_reservations_approved                                        RoomReservation[]     @relation("RoomReservationApprover")
   notifications                                                     notifications[]
   bulk_import_batches_profiles_import_batch_idTobulk_import_batches bulk_import_batches?  @relation("profiles_import_batch_idTobulk_import_batches", fields: [import_batch_id], references: [id])
   profiles                                                          profile?              @relation("profilesToprofiles", fields: [owner_id], references: [id])
@@ -723,24 +753,14 @@ model receipts {
 }
 
 model refresh_tokens {
-  id                  String    @id @db.Uuid
-  user_id             String    @db.Uuid
-  session_id          String?   @db.Uuid
-  token_hash          String    @unique
-  expires_at          DateTime  @db.Timestamptz(6)
-  absolute_expires_at DateTime? @db.Timestamptz(6)
-  last_activity_at    DateTime  @default(now()) @db.Timestamptz(6)
-  revoked_at          DateTime? @db.Timestamptz(6)
-  rotated_at          DateTime? @db.Timestamptz(6)
-  device_info         String?
-  ip_address          String?
-  created_at          DateTime  @default(now()) @db.Timestamptz(6)
-  profiles            profile   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  id         String   @id @db.Uuid
+  user_id    String   @db.Uuid
+  token_hash String   @unique
+  expires_at DateTime @db.Timestamptz(6)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  profiles   profile  @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@index([expires_at])
-  @@index([last_activity_at])
-  @@index([revoked_at])
-  @@index([session_id])
   @@index([user_id])
 }
 
@@ -845,7 +865,6 @@ model rent_obligations {
   @@index([hostel_id, status])
   @@index([is_superseded])
   @@index([owner_id])
-  @@index([owner_id, hostel_id, status, due_date])
   @@index([tenant_id, billing_period_end])
   @@index([tenant_id, billing_period_start])
   @@index([tenant_id, rent_month])
@@ -902,104 +921,16 @@ model rooms {
   wifi_name          String?
   wifi_password      String?
   notes              String?
-  admission_photos   Json?
   room_activity_logs room_activity_logs[]
   room_allocations   roomAllocation[]
-  room_reservations  RoomReservation[]
+  tenant_invitations tenant_invitations[]
+  tenant_invitation_reservations tenant_invitation_reservations[]
   hostels            hostels              @relation(fields: [hostel_id], references: [id])
   floor_ref          floors?              @relation(fields: [floor_id], references: [id])
 
   @@unique([hostel_id, room_no])
   @@index([hostel_id])
   @@index([floor_id])
-}
-
-model VisitorLead {
-  id                        String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  hostel_id                 String            @db.Uuid
-  owner_id                  String            @db.Uuid
-  student_name              String
-  student_phone             String
-  student_email             String?
-  parent_name               String?
-  parent_phone              String?
-  decision_maker_type       String            @default("BOTH")
-  source                    String            @default("QR")
-  status                    String            @default("NEW")
-  notes                     String?
-  lead_score                Int               @default(0)
-  first_visited_at          DateTime          @default(now()) @db.Timestamptz(6)
-  last_activity_at          DateTime          @default(now()) @db.Timestamptz(6)
-  parent_contacted_at       DateTime?         @db.Timestamptz(6)
-  parent_follow_up_required Boolean           @default(false)
-  converted_at              DateTime?         @db.Timestamptz(6)
-  converted_tenant_id       String?           @db.Uuid
-  lost_reason               String?
-  lost_note                 String?
-  created_at                DateTime          @default(now()) @db.Timestamptz(6)
-  updated_at                DateTime?         @db.Timestamptz(6)
-  hostel                    hostels           @relation(fields: [hostel_id], references: [id])
-  owner                     profile           @relation("VisitorLeadOwner", fields: [owner_id], references: [id])
-  converted_tenant          tenants?          @relation("VisitorLeadConvertedTenant", fields: [converted_tenant_id], references: [id])
-  activities                LeadActivity[]
-  notes_list                LeadNote[]
-  reservations              RoomReservation[]
-
-  @@index([owner_id, status, last_activity_at(sort: Desc)])
-  @@index([hostel_id, status, last_activity_at(sort: Desc)])
-  @@index([hostel_id, student_phone])
-  @@index([owner_id, lead_score(sort: Desc)])
-  @@index([converted_tenant_id])
-  @@map("visitor_leads")
-}
-
-model LeadActivity {
-  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  lead_id       String      @db.Uuid
-  activity_type String
-  metadata      Json?
-  created_at    DateTime    @default(now()) @db.Timestamptz(6)
-  lead          VisitorLead @relation(fields: [lead_id], references: [id], onDelete: Cascade)
-
-  @@index([lead_id, created_at(sort: Desc)])
-  @@index([activity_type, created_at(sort: Desc)])
-  @@map("lead_activities")
-}
-
-model RoomReservation {
-  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  lead_id        String      @db.Uuid
-  room_id        String      @db.Uuid
-  hostel_id      String      @db.Uuid
-  reserved_until DateTime    @db.Timestamptz(6)
-  status         String      @default("ACTIVE")
-  approved_by    String?     @db.Uuid
-  created_at     DateTime    @default(now()) @db.Timestamptz(6)
-  updated_at     DateTime?   @db.Timestamptz(6)
-  converted_at   DateTime?   @db.Timestamptz(6)
-  lead           VisitorLead @relation(fields: [lead_id], references: [id], onDelete: Cascade)
-  room           rooms       @relation(fields: [room_id], references: [id])
-  hostel         hostels     @relation(fields: [hostel_id], references: [id])
-  approver       profile?    @relation("RoomReservationApprover", fields: [approved_by], references: [id])
-
-  @@index([lead_id, status])
-  @@index([room_id, status, reserved_until])
-  @@index([hostel_id, status, reserved_until])
-  @@map("room_reservations")
-}
-
-model LeadNote {
-  id         String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  lead_id    String      @db.Uuid
-  owner_id   String      @db.Uuid
-  note       String
-  created_at DateTime    @default(now()) @db.Timestamptz(6)
-  lead       VisitorLead @relation(fields: [lead_id], references: [id], onDelete: Cascade)
-  owner      profile     @relation("LeadNoteOwner", fields: [owner_id], references: [id])
-
-  @@index([lead_id, created_at(sort: Desc)])
-  @@index([owner_id, created_at(sort: Desc)])
-  @@map("lead_notes")
 }
 
 model floors {
@@ -1091,7 +1022,7 @@ model tenant_transfer_logs {
 
 model tenants {
   id                       String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  profile_id               String                   @unique @db.Uuid
+  profile_id               String?                  @unique @db.Uuid
   profile_type             String                   @default("STUDENT")
   monthly_rent             Decimal?                 @db.Decimal(10, 2)
   joined_on                DateTime?                @db.Date
@@ -1149,15 +1080,82 @@ model tenants {
   tenant_advance_ledger    tenant_advance_ledger[]
   tenant_behavior_scores   tenant_behavior_scores?
   move_out_requests        move_out_requests[]
-  converted_visitor_leads  VisitorLead[]            @relation("VisitorLeadConvertedTenant")
   identification_documents identificationDocument[]
   tenant_billing_plans     tenant_billing_plans[]
   payment_frequency_change_requests payment_frequency_change_requests[]
   hostels                  hostels                  @relation(fields: [hostel_id], references: [id])
-  profiles                 profile                  @relation(fields: [profile_id], references: [id])
+  profiles                 profile?                 @relation(fields: [profile_id], references: [id])
+  tenant_invitations       tenant_invitations[]
+  tenant_invitation_reservations tenant_invitation_reservations[]
+  bulk_import_rows         bulk_import_rows[]
 
   @@index([hostel_id])
   @@index([owner_id])
+}
+
+model tenant_invitations {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id           String    @db.Uuid
+  owner_id            String    @db.Uuid
+  hostel_id           String    @db.Uuid
+  room_id             String    @db.Uuid
+  batch_id            String?   @db.Uuid
+  name                String
+  email               String
+  phone               String?
+  token               String    @unique
+  expires_at          DateTime  @db.Timestamptz(6)
+  status              String    @default("PENDING")
+  opened_at           DateTime? @db.Timestamptz(6)
+  activation_started_at DateTime? @db.Timestamptz(6)
+  activated_at        DateTime? @db.Timestamptz(6)
+  cancelled_at        DateTime? @db.Timestamptz(6)
+  created_at          DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime? @db.Timestamptz(6)
+  tenant              tenants   @relation(fields: [tenant_id], references: [id])
+  hostel              hostels   @relation(fields: [hostel_id], references: [id])
+  room                rooms     @relation(fields: [room_id], references: [id])
+  batch               bulk_import_batches? @relation(fields: [batch_id], references: [id])
+  reservations        tenant_invitation_reservations[]
+  bulk_import_rows    bulk_import_rows[]
+
+  @@index([owner_id, email, status])
+  @@index([tenant_id, status])
+  @@index([owner_id, hostel_id, status])
+  @@index([room_id, status, expires_at])
+  @@index([batch_id])
+  @@map("tenant_invitations")
+}
+
+model tenant_invitation_reservations {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id           String    @db.Uuid
+  invitation_id       String    @db.Uuid
+  owner_id            String    @db.Uuid
+  hostel_id           String    @db.Uuid
+  room_id             String    @db.Uuid
+  batch_id            String?   @db.Uuid
+  status              String    @default("ACTIVE")
+  reserved_at         DateTime  @default(now()) @db.Timestamptz(6)
+  expires_at          DateTime  @db.Timestamptz(6)
+  released_by         String?   @db.Uuid
+  released_at         DateTime? @db.Timestamptz(6)
+  release_reason      String?
+  created_at          DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime? @db.Timestamptz(6)
+  tenant              tenants   @relation(fields: [tenant_id], references: [id])
+  invitation          tenant_invitations @relation(fields: [invitation_id], references: [id])
+  hostel              hostels   @relation(fields: [hostel_id], references: [id])
+  room                rooms     @relation(fields: [room_id], references: [id])
+  batch               bulk_import_batches? @relation(fields: [batch_id], references: [id])
+  bulk_import_rows    bulk_import_rows[]
+
+  @@index([tenant_id, status])
+  @@index([invitation_id, status])
+  @@index([room_id, status, expires_at])
+  @@index([owner_id, hostel_id, status])
+  @@index([batch_id])
+  @@map("tenant_invitation_reservations")
 }
 
 model tenant_billing_plans {

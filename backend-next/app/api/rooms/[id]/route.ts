@@ -105,6 +105,12 @@ export async function DELETE(
     if (activeAllocations > 0) {
       return apiError("Cannot delete room with active tenants", "VALIDATION_ERROR", 400);
     }
+    const activeReservations = await prisma.tenant_invitation_reservations.count({
+      where: { room_id: params.id, status: "ACTIVE", expires_at: { gt: new Date() } },
+    });
+    if (activeReservations > 0) {
+      return apiError("Cannot delete room with active invitation reservations", "VALIDATION_ERROR", 400);
+    }
 
     await prisma.rooms.delete({ where: { id: params.id } });
     return new Response(null, { status: 204 });

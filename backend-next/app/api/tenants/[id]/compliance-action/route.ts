@@ -19,7 +19,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const action = String(body?.action || "").toUpperCase();
     const tenant = await prisma.tenants.findUnique({
       where: { id: params.id },
-      include: { profiles: true, hostels: true },
+      include: {
+        profiles: true,
+        hostels: true,
+        tenant_invitations: { orderBy: { created_at: "desc" }, take: 1 },
+      },
     });
     if (!tenant) return apiError("Tenant not found", "NOT_FOUND", 404);
     if (tenant.owner_id !== session.sub) return apiError("Forbidden", "FORBIDDEN", 403);
@@ -28,7 +32,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       if (tenant.status !== "INVITED") {
         return apiError("Invite can only be resent for invited tenants", "VALIDATION_ERROR", 400);
       }
-      const result = await invitationService.resendInvitation(tenant.profiles.email, {
+      const inviteEmail = tenant.profiles?.email || tenant.tenant_invitations?.[0]?.email;
+      if (!inviteEmail) {
+        return apiError("Invitation contact email is missing", "VALIDATION_ERROR", 400);
+      }
+      const result = await invitationService.resendInvitation(inviteEmail, {
         id: session.sub,
         role: session.role,
       });
@@ -38,6 +46,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (action === "REGENERATE_INVITE_TOKEN" || action === "EXTEND_INVITATION_EXPIRY") {
       if (tenant.status !== "INVITED") {
         return apiError("Invitation can only be changed for invited tenants", "VALIDATION_ERROR", 400);
+      }
+      if (!tenant.profile_id || !tenant.profiles) {
+        return apiError("Use resend invitation for tenant-first invitations", "VALIDATION_ERROR", 400);
       }
 
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -90,6 +101,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     if (action === "RESEND_RULES" || action === "REMIND_DOCUMENTS") {
+      if (!tenant.profile_id) {
+        return apiError("Tenant profile is not available until activation starts", "VALIDATION_ERROR", 400);
+      }
       const title = action === "RESEND_RULES" ? "Please review hostel rules" : "Documents pending";
       const message =
         action === "RESEND_RULES"

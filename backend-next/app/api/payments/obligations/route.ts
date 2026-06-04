@@ -61,6 +61,7 @@ export async function POST(req: NextRequest) {
       select: {
         owner_id: true,
         hostel_id: true,
+        status: true,
         room_allocations: {
           where: { is_active: true },
           select: { id: true, hostel_id: true, room: { select: { hostel_id: true } } },
@@ -73,6 +74,9 @@ export async function POST(req: NextRequest) {
     const ownerId = session.role === "OWNER" ? session.sub : session.sub;
     if (tenant.owner_id !== ownerId) {
       return apiError("Tenant does not belong to your account", "FORBIDDEN", 403);
+    }
+    if (tenant.status !== "ACTIVE") {
+      return apiError("Manual obligations can only be created for ACTIVE tenants", "VALIDATION_ERROR", 400);
     }
 
     if (!tenant.hostel_id) {

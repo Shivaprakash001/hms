@@ -2,6 +2,7 @@ import { prisma } from "../db";
 import { eventLog } from "./event-log-service";
 import { getLogger } from "../logger";
 import { invalidateHostelDashboardCache } from "../cache/dashboard-cache";
+import { roomCapacityService } from "./room-capacity-service";
 
 const logger = getLogger("allocation-reconcile");
 
@@ -42,31 +43,26 @@ export class AllocationReconciliationService {
     const repairs: string[] = [];
     const now = new Date();
 
-    // 1) Room capacity integrity — only ACTIVE + INVITED hold a real bed
-    //    CANCELLED and EXPIRED are non-occupying statuses like LEFT.
-    const occupants = await prisma.roomAllocation.count({
-      where: {
-        room_id: allocation.room_id,
-        is_active: true,
-        end_date: null,
-        tenant: { status: { in: ["ACTIVE", "INVITED"] } },
-      },
-    });
+    // 1) Room capacity integrity — occupied tenants plus active invitation
+    //    reservations consume room capacity.
+    const capacity = await roomCapacityService.getRoomCapacitySnapshot(allocation.room_id);
     checks.push("capacity_checked");
 
-    if (occupants > allocation.room.capacity) {
-      const msg = `Room ${allocation.room_id} over capacity: ${occupants}/${allocation.room.capacity}`;
+    if (capacity.used > capacity.capacity) {
+      const msg = `Room ${allocation.room_id} over capacity: ${capacity.occupied} occupied + ${capacity.reserved} reserved/${capacity.capacity}`;
       logger.error("allocation.capacity_violation", {
         allocation_id: allocationId,
         room_id: allocation.room_id,
-        occupants,
-        capacity: allocation.room.capacity,
+        occupants: capacity.occupied,
+        reserved: capacity.reserved,
+        capacity: capacity.capacity,
       });
       await eventLog.log("ALLOCATION_CAPACITY_VIOLATION", allocation.tenant.owner_id || null, {
         allocation_id: allocationId,
         room_id: allocation.room_id,
-        occupants,
-        capacity: allocation.room.capacity,
+        occupants: capacity.occupied,
+        reserved: capacity.reserved,
+        capacity: capacity.capacity,
       }, allocation.tenant_id);
       // Conservative: we do not auto-evict.
       throw new Error(`CONFLICT: ${msg}`);
@@ -74,7 +70,7 @@ export class AllocationReconciliationService {
 
     // 2) Tenant lifecycle vs allocation integrity
     //    CANCELLED and EXPIRED must not hold open allocations.
-    if (!['ACTIVE', 'INVITED'].includes(allocation.tenant.status) && allocation.is_active) {
+    if (allocation.tenant.status !== 'ACTIVE' && allocation.is_active) {
       await prisma.roomAllocation.update({
         where: { id: allocationId },
         data: { is_active: false, end_date: now },
@@ -188,48 +184,58 @@ export class AllocationReconciliationService {
   }
 
   /**
-   * Expire stale invitations and release seats.
-   * Rule: tenant INVITED + invitation_expires_at passed => status EXPIRED (not LEFT).
+   * Expire stale invitations and release room reservations.
+   * Rule: tenant INVITED + invitation expired => status EXPIRED (not LEFT).
    *
    * IMPORTANT: LEFT is reserved for previously-ACTIVE tenants who departed.
    * A tenant who was never activated goes to EXPIRED, not LEFT.
    */
   async expireStaleInvitations(now: Date = new Date()) {
-    const stale = await prisma.tenants.findMany({
+    const staleInvitations = await prisma.tenant_invitations.findMany({
       where: {
-        status: "INVITED",
-        profiles: {
-          invitation_expires_at: { lt: now },
-        },
+        status: { in: ["PENDING", "OPENED"] },
+        expires_at: { lt: now },
       },
-      select: {
-        id: true,
-        owner_id: true,
-        hostel_id: true,
-        profile_id: true,
-        room_allocations: {
-          where: { is_active: true, end_date: null },
-          select: { id: true },
+      include: {
+        tenant: true,
+        reservations: {
+          where: { status: "ACTIVE" },
+          select: { id: true, room_id: true },
         },
       },
     });
 
     let expired = 0;
-    for (const t of stale) {
-      await prisma.$transaction(async (tx) => {
+    for (const invitation of staleInvitations) {
+      await prisma.$transaction(async (tx: any) => {
+        await tx.tenant_invitations.update({
+          where: { id: invitation.id },
+          data: { status: "EXPIRED", updated_at: now },
+        });
         await tx.tenants.update({
-          where: { id: t.id },
+          where: { id: invitation.tenant_id },
           data: { status: "EXPIRED" as any },
         });
+        await tx.tenant_invitation_reservations.updateMany({
+          where: { invitation_id: invitation.id, status: "ACTIVE" },
+          data: {
+            status: "RELEASED",
+            released_by: invitation.owner_id,
+            released_at: now,
+            release_reason: "EXPIRED",
+            updated_at: now,
+          },
+        });
+        // Legacy cleanup only. New invitations do not create allocations or obligations.
         await tx.roomAllocation.updateMany({
-          where: { tenant_id: t.id, is_active: true, end_date: null },
+          where: { tenant_id: invitation.tenant_id, is_active: true, end_date: null },
           data: { is_active: false, end_date: now },
         });
         // Waive any future unpaid obligations — never activated tenants
         // should not accumulate financial obligations.
         await tx.rent_obligations.updateMany({
           where: {
-            tenant_id: t.id,
+            tenant_id: invitation.tenant_id,
             status: { in: ["PENDING", "PARTIAL"] },
           },
           data: { status: "WAIVED" },
@@ -237,12 +243,14 @@ export class AllocationReconciliationService {
       });
 
       expired++;
-      await eventLog.log("INVITATION_EXPIRED_AUTO_RELEASE", t.owner_id || null, {
-        tenant_id: t.id,
+      await eventLog.log("INVITATION_EXPIRED_AUTO_RELEASE", invitation.owner_id || null, {
+        tenant_id: invitation.tenant_id,
+        invitation_id: invitation.id,
         new_status: "EXPIRED",
-        released_allocations: (t as any).room_allocations.length,
-      }, t.id);
-      if (t.hostel_id) invalidateHostelDashboardCache(t.hostel_id);
+        released_rooms: invitation.reservations.map((r: any) => r.room_id),
+        released_reservations: invitation.reservations.map((r: any) => r.id),
+      }, invitation.tenant_id);
+      if (invitation.hostel_id) invalidateHostelDashboardCache(invitation.hostel_id);
     }
 
     return { expired_count: expired };

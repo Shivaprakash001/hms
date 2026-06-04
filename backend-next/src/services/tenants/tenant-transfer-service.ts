@@ -26,6 +26,7 @@ import { eventSystem } from "../../../lib/events";
 import { eventLog } from "../../../lib/services/event-log-service";
 import { getLogger } from "../../../lib/logger";
 import { assertCapability } from "../../../lib/services/move-out-service";
+import { roomCapacityService } from "../../../lib/services/room-capacity-service";
 import crypto from "crypto";
 
 const logger = getLogger("tenant-transfer-service");
@@ -85,16 +86,55 @@ export class TenantTransferService {
     if (!(tenant as any).room_allocations[0]) {
       throw new Error("VALIDATION_ERROR: Tenant has no active allocation. Use normal room allocation instead.");
     }
+    if (tenant.status !== "ACTIVE") {
+      throw new Error("VALIDATION_ERROR: Only active tenants can be transferred");
+    }
 
     const currentAllocation = (tenant as any).room_allocations[0];
     const fromHostelId = currentAllocation.room.hostel_id;
+
+    const activeMoveOut = await prisma.move_out_requests.findFirst({
+      where: {
+        tenant_id: tenantId,
+        status: { notIn: ["COMPLETED", "CANCELLED", "REJECTED"] },
+      },
+      include: {
+        settlement: true,
+        disputes: { where: { status: "OPEN" }, select: { id: true } },
+      },
+    });
+    if (activeMoveOut) {
+      throw new Error("VALIDATION_ERROR: Transfer is blocked by an active move-out workflow");
+    }
+
+    const unresolvedSettlement = await prisma.exit_settlement_transactions.findFirst({
+      where: {
+        tenant_id: tenantId,
+        payment_status: { notIn: ["PAID", "SETTLED", "WAIVED", "CANCELLED"] },
+      },
+      select: { id: true },
+    });
+    if (unresolvedSettlement) {
+      throw new Error("VALIDATION_ERROR: Transfer is blocked by an unresolved settlement");
+    }
+
+    const openDispute = await prisma.exit_disputes.findFirst({
+      where: {
+        status: "OPEN",
+        request: { tenant_id: tenantId },
+      },
+      select: { id: true },
+    });
+    if (openDispute) {
+      throw new Error("VALIDATION_ERROR: Transfer is blocked by an active dispute");
+    }
 
     // 2. Verify target room exists and belongs to the same owner
     const targetRoom = await prisma.rooms.findUnique({
       where: { id: targetRoomId },
       include: {
         hostel: { select: { id: true, owner_id: true, name: true, is_active: true } },
-        room_allocations: { where: { is_active: true, end_date: null } },
+        room_allocations: { where: { is_active: true, end_date: null, tenant: { status: "ACTIVE" } } },
       },
     });
 
@@ -120,7 +160,8 @@ export class TenantTransferService {
     }
 
     // 5. Capacity check
-    if (targetRoom.room_allocations.length >= targetRoom.capacity) {
+    const capacity = await roomCapacityService.getRoomCapacitySnapshot(targetRoomId, { ownerId: tenant.owner_id });
+    if (capacity.available <= 0) {
       throw new Error("VALIDATION_ERROR: Target room is at maximum capacity");
     }
 
