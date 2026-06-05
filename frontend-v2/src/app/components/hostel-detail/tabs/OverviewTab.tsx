@@ -20,7 +20,7 @@ import {
 import { dashboardService } from '@features/dashboard/api';
 import { queryKeys } from '@lib/queryKeys';
 import { type HostelDetailTab as Tab } from '../types';
-import { fmt } from '../shared/format';
+import { fmt, fmtExact } from '../shared/format';
 import { TabSkeleton } from '../shared/TabStates';
 import { toast } from 'sonner';
 
@@ -82,7 +82,7 @@ export function OverviewTab({ hostelId }: { hostelId: string }) {
   // 1. Today's Focus Card
   const focusItems: string[] = [];
   if (overdueTotal > 0) {
-    focusItems.push(`Collect ${fmt(overdueTotal)} from ${overdueTenantsCount} tenant${overdueTenantsCount !== 1 ? 's' : ''}`);
+    focusItems.push(`Collect ${fmtExact(overdueTotal)} from ${overdueTenantsCount} tenant${overdueTenantsCount !== 1 ? 's' : ''}`);
   }
   if (vacantBeds > 0) {
     focusItems.push(`Fill ${vacantBeds} vacant bed${vacantBeds !== 1 ? 's' : ''}`);
@@ -99,7 +99,7 @@ export function OverviewTab({ hostelId }: { hostelId: string }) {
 
   // 2. Today's Priorities Sorted by business impact
   const priorityItems = [
-    { key: 'overdue', condition: overdueTotal > 0, label: `${fmt(overdueTotal)} Overdue`, icon: '💰' },
+    { key: 'overdue', condition: overdueTotal > 0, label: `${fmtExact(overdueTotal)} Overdue`, icon: '💰' },
     { key: 'moveout', condition: moveOutRequests > 0, label: `${moveOutRequests} Move-out Request${moveOutRequests !== 1 ? 's' : ''}`, icon: '🚪' },
     { key: 'vacant', condition: vacantBeds > 0, label: `${vacantBeds} Vacant Bed${vacantBeds !== 1 ? 's' : ''}`, icon: '🛏' },
     { key: 'invites', condition: pendingInvites > 0, label: `${pendingInvites} Pending Invite${pendingInvites !== 1 ? 's' : ''}`, icon: '📨' }
@@ -211,11 +211,11 @@ export function OverviewTab({ hostelId }: { hostelId: string }) {
         <div className="grid grid-cols-3 divide-x divide-border">
           <div className="text-center">
             <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">Beds</div>
-            <div className="text-base font-bold text-foreground">{activeTenants} / {totalCapacity}</div>
+            <div className="text-base font-bold text-foreground">{occupiedBeds} / {totalCapacity}</div>
           </div>
           <div className="text-center">
             <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">Due</div>
-            <div className="text-base font-bold text-foreground">{fmt(pendingTotal)}</div>
+            <div className="text-base font-bold text-foreground">{fmtExact(pendingTotal)}</div>
           </div>
           <div className="text-center">
             <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">Cash</div>
@@ -295,11 +295,11 @@ export function OverviewTab({ hostelId }: { hostelId: string }) {
         <div className="grid grid-cols-3 gap-2">
           <div className="bg-secondary/40 rounded-xl p-3 text-center">
             <div className="text-[10px] text-muted-foreground font-semibold">Outstanding</div>
-            <div className="text-sm font-bold text-foreground mt-1">{fmt(pendingTotal)}</div>
+            <div className="text-sm font-bold text-foreground mt-1">{fmtExact(pendingTotal)}</div>
           </div>
           <div className="bg-secondary/40 rounded-xl p-3 text-center">
             <div className="text-[10px] text-muted-foreground font-semibold">Overdue</div>
-            <div className="text-sm font-bold text-foreground mt-1">{fmt(overdueTotal)}</div>
+            <div className="text-sm font-bold text-foreground mt-1">{fmtExact(overdueTotal)}</div>
           </div>
           <div className="bg-secondary/40 rounded-xl p-3 text-center">
             <div className="text-[10px] text-muted-foreground font-semibold">Collection Rate</div>

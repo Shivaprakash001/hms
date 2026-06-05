@@ -139,7 +139,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
   const primaryPhone = String(profile?.phone ?? tenant?.phone_1 ?? overview?.phone ?? '').trim();
   const email = String(profile?.email ?? overview?.email ?? '').trim();
   const currentRoom = (tenant.current_room ?? overview?.current_room ?? null) as Record<string, unknown> | null;
-  const displayedRoomNo = currentRoom?.room_no ?? tenant.room_number ?? overview.room_number ?? null;
+  const displayedRoomNo = currentRoom?.room_no ?? tenant.room_number ?? overview?.room_number ?? null;
   const needsRoomAssignment = status.toUpperCase() === 'ACTIVE' && !displayedRoomNo;
 
   const obligations = listFrom(dues, ['items', 'obligations']);
