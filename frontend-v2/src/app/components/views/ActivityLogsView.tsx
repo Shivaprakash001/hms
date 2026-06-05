@@ -84,15 +84,16 @@ export function ActivityLogsView() {
     };
   };
 
-  const { startDate, endDate } = getDates();
-
   // Fetch activity logs
   const { data: logsData, isLoading, isError, refetch } = useQuery({
     queryKey: [
       'owner', 'activity-logs',
-      selectedHostelId, selectedAction, timeRange, startDate, endDate, searchQuery, page
+      selectedHostelId, selectedAction, timeRange, searchQuery, page,
+      timeRange === 'custom' ? customStartDate : '',
+      timeRange === 'custom' ? customEndDate : ''
     ],
     queryFn: async () => {
+      const { startDate, endDate } = getDates();
       const response = await api.get('/owner/activity-logs', {
         params: {
           hostelId: selectedHostelId || undefined,
