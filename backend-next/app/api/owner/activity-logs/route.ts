@@ -65,18 +65,18 @@ export async function GET(req: NextRequest) {
     ]);
 
     // Fetch actor profile details
-    const actorIds = Array.from(new Set(logs.map((l) => l.user_id)));
+    const actorIds = Array.from(new Set(logs.map((l: any) => l.user_id)));
     const profiles = await prisma.profile.findMany({
       where: { id: { in: actorIds } },
       select: { id: true, name: true, email: true },
     });
-    const profileMap = new Map(profiles.map((p) => [p.id, p]));
+    const profileMap = new Map(profiles.map((p: any) => [p.id, p]));
 
     // Fetch hostel names if we want to display hostel context nicely
     const hostelIds = Array.from(
       new Set(
         logs
-          .map((l) => (l.metadata as any)?.hostel_id)
+          .map((l: any) => (l.metadata as any)?.hostel_id)
           .filter(Boolean) as string[]
       )
     );
@@ -84,12 +84,98 @@ export async function GET(req: NextRequest) {
       where: { id: { in: hostelIds } },
       select: { id: true, name: true },
     });
-    const hostelMap = new Map(hostels.map((h) => [h.id, h.name]));
+    const hostelMap = new Map(hostels.map((h: any) => [h.id, h.name]));
+
+    // Gather all tenant_ids and allocation_ids for enrichment
+    const tenantIds: string[] = [];
+    const allocationIds: string[] = [];
+    logs.forEach((log: any) => {
+      const meta = (log.metadata as any) || {};
+      if (meta.tenant_id) tenantIds.push(meta.tenant_id);
+      if (meta.allocation_id) allocationIds.push(meta.allocation_id);
+    });
+
+    // Fetch tenant profiles
+    const tenants = tenantIds.length > 0 ? await prisma.tenants.findMany({
+      where: { id: { in: tenantIds } },
+      select: {
+        id: true,
+        profiles: {
+          select: { name: true }
+        }
+      }
+    }) : [];
+    const tenantNameMap = new Map<string, string>();
+    tenants.forEach((t: any) => {
+      if (t.profiles?.name) {
+        tenantNameMap.set(t.id, t.profiles.name);
+      }
+    });
+
+    // Fetch allocations and their room numbers
+    const allocations = allocationIds.length > 0 ? await prisma.roomAllocation.findMany({
+      where: { id: { in: allocationIds } },
+      include: {
+        room: {
+          select: { room_no: true }
+        }
+      }
+    }) : [];
+    const allocationRoomMap = new Map<string, string>();
+    allocations.forEach((a: any) => {
+      if (a.room?.room_no) {
+        allocationRoomMap.set(a.id, a.room.room_no);
+      }
+    });
+
+    // Fetch all allocations for these tenants to determine room transitions (e.g. G1 -> G2)
+    const allTenantAllocations = tenantIds.length > 0 ? await prisma.roomAllocation.findMany({
+      where: { tenant_id: { in: tenantIds } },
+      include: {
+        room: {
+          select: { room_no: true }
+        }
+      },
+      orderBy: { start_date: "asc" }
+    }) : [];
+    const tenantAllocationsMap = new Map<string, typeof allTenantAllocations>();
+    allTenantAllocations.forEach((alloc: any) => {
+      if (!tenantAllocationsMap.has(alloc.tenant_id)) {
+        tenantAllocationsMap.set(alloc.tenant_id, []);
+      }
+      tenantAllocationsMap.get(alloc.tenant_id)!.push(alloc);
+    });
 
     // Enrich logs
-    let enrichedLogs = logs.map((log) => {
-      const meta = (log.metadata as any) || {};
+    let enrichedLogs = logs.map((log: any) => {
+      const meta = { ...((log.metadata as any) || {}) };
       const logHostelId = meta.hostel_id || null;
+
+      if (log.entity_type === "ROOM" && log.action_type === "ALLOCATE") {
+        if (meta.tenant_id) {
+          const tenantName = tenantNameMap.get(meta.tenant_id) || "Unknown Tenant";
+          const currentRoomNo = allocationRoomMap.get(meta.allocation_id) || "Room";
+          
+          let roomsStr = currentRoomNo;
+          const tAllocs = tenantAllocationsMap.get(meta.tenant_id) || [];
+          const currentIdx = tAllocs.findIndex((a: any) => a.id === meta.allocation_id);
+          if (currentIdx > 0) {
+            const prevRoomNo = tAllocs[currentIdx - 1].room?.room_no || "Room";
+            roomsStr = `${prevRoomNo} -> ${currentRoomNo}`;
+          } else {
+            roomsStr = `None -> ${currentRoomNo}`;
+          }
+
+          // Populate friendly UI fields
+          meta.tenant_name = tenantName;
+          meta.rooms = roomsStr;
+
+          // For the compact log subtitle
+          meta.name = tenantName;
+          meta.room_no = currentRoomNo;
+        }
+      }
+
       return {
         id: log.id,
         action_type: log.action_type,
@@ -106,7 +192,7 @@ export async function GET(req: NextRequest) {
     if (search) {
       const q = search.toLowerCase();
       enrichedLogs = enrichedLogs.filter(
-        (log) =>
+        (log: any) =>
           log.actor.name.toLowerCase().includes(q) ||
           log.action_type.toLowerCase().includes(q) ||
           log.entity_type.toLowerCase().includes(q) ||

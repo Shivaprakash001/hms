@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   Building2, Calendar, ChevronDown, ChevronUp, Search, Activity, Clock,
   Plus, Edit, Trash2, IndianRupee, AlertCircle, User, ArrowRightLeft,
-  Settings, CheckCircle2, ChevronRight, X
+  Settings, CheckCircle2, ChevronRight, X, Receipt
 } from 'lucide-react';
 import { ownerService } from '@features/owners/api';
 import api from '@lib/api-client';
@@ -63,6 +63,75 @@ const getSeverity = (log: any) => {
   };
 };
 
+const getSettingsLogMeta = (meta: any) => {
+  const domains = Array.isArray(meta.changed_domains) ? meta.changed_domains : ['settings'];
+  
+  const DOMAIN_MAP: Record<string, { title: string; impact: string }> = {
+    billing: {
+      title: "Billing & Late Fee Rules",
+      impact: "updates rent cycles, grace periods, late fee structures, deposits, and partial payment settings"
+    },
+    payments: {
+      title: "Payment Gateway Credentials",
+      impact: "updates UPI ID, PhonePe merchant integration details, or instructions for tenants"
+    },
+    reminders: {
+      title: "Automated Reminders",
+      impact: "updates schedules, WhatsApp/email channels, and late fee escalation policies"
+    },
+    receipts: {
+      title: "Invoice & Receipt Formats",
+      impact: "updates receipt prefixes, legal disclaimers, custom footer notes, and automated receipt emails"
+    },
+    branding: {
+      title: "Branding & Support Contact",
+      impact: "updates colors, custom hostel logo URL, registered legal name, and GST number"
+    },
+    tenant_rules: {
+      title: "Tenant Onboarding Rules",
+      impact: "updates emergency contact mandates, invite expiration windows, and profile fields"
+    },
+    room_rules: {
+      title: "Room Allocation Policies",
+      impact: "updates occupancy enforcement strictness, overbooking permissions, and transfer approval workflows"
+    },
+    automation: {
+      title: "System Automation Settings",
+      impact: "updates auto-rent generation triggers, auto-reminders, and nightly data reconciliation tasks"
+    },
+    dashboard: {
+      title: "Dashboard Customization",
+      impact: "updates occupancy threshold warnings, collection target rates, and default widget views"
+    },
+    notifications: {
+      title: "Notification Settings",
+      impact: "updates daily owner email summary settings and communication channels"
+    },
+    operations: {
+      title: "Regional Operations Options",
+      impact: "updates base currency, system timezone, time/date display formatting, and data retention policies"
+    },
+    settings: {
+      title: "Hostel Settings Configuration",
+      impact: "updates administrative preferences and system preferences"
+    }
+  };
+
+  if (domains.length === 1) {
+    const info = DOMAIN_MAP[domains[0]] || DOMAIN_MAP.settings;
+    return {
+      title: `${info.title} Updated`,
+      description: `This change ${info.impact} for all new and existing transactions.`
+    };
+  } else {
+    const titles = domains.map(d => DOMAIN_MAP[d]?.title || d).join(", ");
+    return {
+      title: "Hostel Policies Updated",
+      description: `Updated multiple settings (${titles}) which will impact billing, operations, and automation.`
+    };
+  }
+};
+
 const formatActor = (actor: any) => {
   if (!actor || !actor.name) return 'System';
   const isOwner = actor.email === 'sriadithyahostels@gmail.com';
@@ -108,7 +177,6 @@ const getDiffs = (metadata: any) => {
     { prev: 'previous_amount', curr: 'amount', label: 'Amount' },
     { prev: 'previous_status', curr: 'status', label: 'Status' },
     { prev: 'previous_room_no', curr: 'room_no', label: 'Room' },
-    { prev: 'previous_version', curr: 'policy_version', label: 'Policy Version' },
     { prev: 'previous_capacity', curr: 'capacity', label: 'Capacity' },
   ];
 
@@ -159,7 +227,24 @@ function ActivityLogItem({ log, getEventMeta }: ActivityLogItemProps) {
       return `${meta.name || meta.email || 'Tenant'}`;
     }
     if (log.entity_type === 'HOSTEL_POLICY') {
-      return `v${meta.policy_version || 1} • ${Array.isArray(meta.changed_domains) ? meta.changed_domains.join(', ') : 'settings'}`;
+      const domains = Array.isArray(meta.changed_domains) ? meta.changed_domains : ['settings'];
+      const friendlyDomains = domains.map(d => {
+        const DOMAIN_NAMES: Record<string, string> = {
+          billing: "Billing & Late Fees",
+          payments: "Payment Gateways",
+          reminders: "Auto Reminders",
+          receipts: "Invoice Formats",
+          branding: "Branding & Contact",
+          tenant_rules: "Tenant Onboarding",
+          room_rules: "Room Allocations",
+          automation: "System Automation",
+          dashboard: "Dashboard Widgets",
+          notifications: "Notification Channels",
+          operations: "Operations Config"
+        };
+        return DOMAIN_NAMES[d] || d;
+      });
+      return `${friendlyDomains.join(', ')}`;
     }
     return description;
   };
@@ -227,12 +312,11 @@ function ActivityLogItem({ log, getEventMeta }: ActivityLogItemProps) {
               </div>
 
               {Object.entries(log.metadata || {}).map(([key, val]: [string, any]) => {
-                if (['id', 'uuid', 'entity_id', 'user_id', 'hostel_id'].includes(key)) return null;
+                if (['id', 'uuid', 'entity_id', 'user_id', 'hostel_id', 'tenant_id', 'allocation_id', 'name', 'room_no', 'policy_version', 'previous_version', 'changed_domains'].includes(key)) return null;
                 if (key.startsWith('previous_')) return null;
                 if (typeof val === 'object') return null;
                 
-                let displayKey = key.replace(/_/g, ' ');
-                displayKey = displayKey.charAt(0).toUpperCase() + displayKey.slice(1);
+                let displayKey = key.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
                 let displayVal = String(val);
 
                 if (key.includes('amount') || key === 'rent' || key === 'deposit' || key === 'paid') {
@@ -412,7 +496,7 @@ export function ActivityLogsView({ embedded = false }: ActivityLogsViewProps) {
         iconColor = 'text-blue-500 bg-blue-500/10';
       }
     } else if (entity_type === 'EXPENSE') {
-      IconComponent = Trash2;
+      IconComponent = Receipt;
       if (action_type === 'CREATE') {
         title = 'Expense Recorded';
         description = `Recorded expense "${meta.title || ''}" of ${formatCurrency(meta.amount || 0)}`;
@@ -444,8 +528,9 @@ export function ActivityLogsView({ embedded = false }: ActivityLogsViewProps) {
       }
     } else if (entity_type === 'HOSTEL_POLICY') {
       IconComponent = Settings;
-      title = 'Rules Updated';
-      description = `Updated rules for domains: ${Array.isArray(meta.changed_domains) ? meta.changed_domains.join(', ') : 'settings'} (v${meta.policy_version || 1})`;
+      const settingsMeta = getSettingsLogMeta(meta);
+      title = settingsMeta.title;
+      description = settingsMeta.description;
       iconColor = 'text-purple-500 bg-purple-500/10';
     }
 
