@@ -41,12 +41,23 @@ export const eventSystem = new HMSEventEmitter();
 
 eventSystem.on("tenant_created", async (data) => {
   await activityService.log({
-    userId: data.creator_id,
+    userId: data.creator_id || data.owner_id,
     ownerId: data.owner_id,
     actionType: "CREATE",
     entityType: "TENANT",
     entityId: data.tenant_id,
-    metadata: { email: data.email }
+    metadata: { email: data.email, hostel_id: data.hostel_id }
+  });
+});
+
+eventSystem.on("tenant_updated", async (data) => {
+  await activityService.log({
+    userId: data.userId || data.owner_id,
+    ownerId: data.owner_id,
+    actionType: "UPDATE",
+    entityType: "TENANT",
+    entityId: data.tenant_id,
+    metadata: { name: data.name, email: data.email, hostel_id: data.hostel_id }
   });
 });
 
@@ -59,8 +70,46 @@ eventSystem.on("tenant_allocated_room", async (data) => {
     entityId: data.room_id,
     metadata: { 
       tenant_id: data.tenant_id,
-      allocation_id: data.allocation_id 
+      allocation_id: data.allocation_id,
+      hostel_id: data.hostel_id
     }
+  });
+});
+
+eventSystem.on("tenant_transferred", async (data) => {
+  await activityService.log({
+    userId: data.owner_id,
+    ownerId: data.owner_id,
+    actionType: "TRANSFER",
+    entityType: "TENANT",
+    entityId: data.tenant_id,
+    metadata: {
+      from_hostel_id: data.from_hostel_id,
+      to_hostel_id: data.to_hostel_id,
+      hostel_id: data.to_hostel_id
+    }
+  });
+});
+
+eventSystem.on("tenant_status_changed", async (data) => {
+  await activityService.log({
+    userId: data.userId || data.owner_id,
+    ownerId: data.owner_id,
+    actionType: "STATUS_CHANGE",
+    entityType: "TENANT",
+    entityId: data.tenant_id,
+    metadata: { status: data.status, hostel_id: data.hostel_id }
+  });
+});
+
+eventSystem.on("tenant_reactivated", async (data) => {
+  await activityService.log({
+    userId: data.userId || data.owner_id,
+    ownerId: data.owner_id,
+    actionType: "REACTIVATE",
+    entityType: "TENANT",
+    entityId: data.tenant_id,
+    metadata: { hostel_id: data.hostel_id }
   });
 });
 
@@ -71,7 +120,29 @@ eventSystem.on("payment_recorded", async (data) => {
     actionType: "PAYMENT",
     entityType: "PAYMENT",
     entityId: data.payment_id,
-    metadata: { amount: data.amount, method: data.method }
+    metadata: { amount: data.amount, method: data.method, hostel_id: data.hostel_id }
+  });
+});
+
+eventSystem.on("rent_waived", async (data) => {
+  await activityService.log({
+    userId: data.userId || data.owner_id,
+    ownerId: data.owner_id,
+    actionType: "WAIVE",
+    entityType: "RENT",
+    entityId: data.obligationId,
+    metadata: { hostel_id: data.hostel_id }
+  });
+});
+
+eventSystem.on("rent_generated", async (data) => {
+  await activityService.log({
+    userId: data.owner_id,
+    ownerId: data.owner_id,
+    actionType: "GENERATE",
+    entityType: "RENT",
+    entityId: data.obligationId,
+    metadata: { tenant_id: data.tenant_id, amount: data.amount, hostel_id: data.hostel_id }
   });
 });
 
@@ -82,7 +153,73 @@ eventSystem.on("expense_created", async (data) => {
     actionType: "CREATE",
     entityType: "EXPENSE",
     entityId: data.expense_id,
-    metadata: { title: data.title, amount: data.amount }
+    metadata: { title: data.title, amount: data.amount, hostel_id: data.hostel_id }
+  });
+});
+
+eventSystem.on("expense_updated", async (data) => {
+  await activityService.log({
+    userId: data.owner_id,
+    ownerId: data.owner_id,
+    actionType: "UPDATE",
+    entityType: "EXPENSE",
+    entityId: data.expense_id,
+    metadata: { title: data.title, amount: data.amount, hostel_id: data.hostel_id }
+  });
+});
+
+eventSystem.on("expense_deleted", async (data) => {
+  await activityService.log({
+    userId: data.owner_id,
+    ownerId: data.owner_id,
+    actionType: "DELETE",
+    entityType: "EXPENSE",
+    entityId: data.expense_id,
+    metadata: { title: data.title, amount: data.amount, hostel_id: data.hostel_id }
+  });
+});
+
+eventSystem.on("room_created", async (data) => {
+  await activityService.log({
+    userId: data.user_id || data.owner_id,
+    ownerId: data.owner_id,
+    actionType: "CREATE",
+    entityType: "ROOM",
+    entityId: data.room_id,
+    metadata: { room_no: data.room_no, capacity: data.capacity, hostel_id: data.hostel_id }
+  });
+});
+
+eventSystem.on("room_updated", async (data) => {
+  await activityService.log({
+    userId: data.user_id || data.owner_id,
+    ownerId: data.owner_id,
+    actionType: "UPDATE",
+    entityType: "ROOM",
+    entityId: data.room_id,
+    metadata: { room_no: data.room_no, hostel_id: data.hostel_id }
+  });
+});
+
+eventSystem.on("room_deleted", async (data) => {
+  await activityService.log({
+    userId: data.user_id || data.owner_id,
+    ownerId: data.owner_id,
+    actionType: "DELETE",
+    entityType: "ROOM",
+    entityId: data.room_id,
+    metadata: { room_no: data.room_no, hostel_id: data.hostel_id }
+  });
+});
+
+eventSystem.on("hostel_policy_updated", async (data) => {
+  await activityService.log({
+    userId: data.userId || data.owner_id,
+    ownerId: data.owner_id,
+    actionType: "UPDATE",
+    entityType: "HOSTEL_POLICY",
+    entityId: data.hostel_id,
+    metadata: { changed_domains: data.changed_domains, policy_version: data.policy_version, hostel_id: data.hostel_id }
   });
 });
 

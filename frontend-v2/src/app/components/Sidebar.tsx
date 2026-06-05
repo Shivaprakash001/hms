@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { Home, Bell, CreditCard, Settings, LogOut, Users, ClipboardList } from 'lucide-react';
+import { Home, Bell, CreditCard, Settings, LogOut, Users, ClipboardList, Activity } from 'lucide-react';
 import { useAuth } from '@context/AuthContext';
 
 const navItems = [
@@ -81,6 +81,19 @@ export function Sidebar() {
         >
           <Settings className="w-4 h-4 shrink-0" />
           Settings
+        </NavLink>
+        <NavLink
+          to="/activity"
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
+              isActive
+                ? 'bg-sidebar-primary text-white shadow-sm'
+                : 'text-sidebar-foreground/60 hover:text-white hover:bg-sidebar-accent'
+            }`
+          }
+        >
+          <Activity className="w-4 h-4 shrink-0" />
+          Activity Log
         </NavLink>
         <button
           onClick={logout}

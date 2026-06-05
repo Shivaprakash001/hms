@@ -13,7 +13,7 @@ export function TenantFinancialSummary({ summary, advance }: Props) {
     { label: 'Overdue', value: fmt(Number(s.overdue_amount ?? s.overdueAmount ?? 0)) },
     { label: 'Total credit balance', value: fmt(Number(advance?.balance ?? advance?.current_balance ?? 0)) },
     { label: 'Paid deposit', value: fmt(Number(advance?.security_deposit_paid ?? 0)) },
-    { label: 'Rent advance (available)', value: fmt(Number(advance?.available_rent_advance ?? 0)) },
+    { label: 'Future rent credit', value: fmt(Number(advance?.available_rent_advance ?? 0)) },
   ];
 
   return (

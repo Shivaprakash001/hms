@@ -1,5 +1,6 @@
 import { prisma } from "../db";
 import { eventLog } from "./event-log-service";
+import { eventSystem } from "../events";
 
 export type MaintenanceType = "MONTHLY" | "ONE_TIME" | "NONE";
 export type RentCycle = "MONTHLY";
@@ -814,6 +815,14 @@ export class HostelPolicyService {
       policy_version: next.policy_version,
       changed_domains: changedDomains(current, next),
     });
+
+    await eventSystem.trigger("hostel_policy_updated", {
+      hostel_id: hostel.id,
+      owner_id: ownerId,
+      userId: changedBy,
+      changed_domains: changedDomains(current, next),
+      policy_version: next.policy_version,
+    }).catch((e: any) => console.error("Failed to trigger hostel_policy_updated event:", e));
 
     if (JSON.stringify(compatibility.billing_defaults) !== JSON.stringify(toCompatibilityPreferences(current).billing_defaults)) {
       await eventLog.log("BILLING_DEFAULTS_UPDATED", ownerId, {

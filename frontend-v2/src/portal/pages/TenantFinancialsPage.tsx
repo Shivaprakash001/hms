@@ -98,7 +98,7 @@ export function TenantFinancialsPage() {
       label: 'Future rent credit',
       amount: Number(entry.amount ?? 0),
       date: String(entry.created_at ?? ''),
-      method: entry.reference_type === 'PAYMENT_ATTEMPT' ? 'PHONEPE' : 'Rent advance',
+      method: entry.reference_type === 'PAYMENT_ATTEMPT' ? 'PHONEPE' : 'Future rent credit',
       receipt_payment_id: null,
     }));
   const recentPayments = [
@@ -287,7 +287,7 @@ export function TenantFinancialsPage() {
                     </p>
                     {Number(item.covered_by_advance ?? 0) > 0 && (
                       <p className="text-xs text-emerald-700 mt-0.5">
-                        {fmt(Number(item.covered_by_advance))} covered by rent advance
+                        {fmt(Number(item.covered_by_advance))} covered by future rent credit
                       </p>
                     )}
                   </div>
@@ -407,7 +407,7 @@ export function TenantFinancialsPage() {
       )}
 
       <section className="rounded-xl border border-border bg-card p-4">
-        <h2 className="text-sm font-semibold text-foreground mb-3">Security deposit & Rent advance</h2>
+        <h2 className="text-sm font-semibold text-foreground mb-3">Security deposit & Future rent credit</h2>
         <div className="space-y-2 text-sm">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Security Deposit (Configured)</span>
@@ -418,7 +418,7 @@ export function TenantFinancialsPage() {
             <span className="font-medium text-emerald-600">{fmt(Number((advance as any)?.security_deposit_paid ?? 0))}</span>
           </div>
           <div className="flex justify-between pt-2 border-t border-border">
-            <span className="text-muted-foreground">Rent Advance (Available for rent)</span>
+            <span className="text-muted-foreground">Future Rent Credit (Available for rent)</span>
             <span className="font-semibold text-accent">{fmt(Number((advance as any)?.available_rent_advance ?? 0))}</span>
           </div>
           <div className="flex justify-between font-bold pt-2 border-t border-border">

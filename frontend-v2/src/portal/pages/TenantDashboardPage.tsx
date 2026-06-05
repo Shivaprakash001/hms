@@ -136,7 +136,7 @@ export function TenantDashboardPage() {
             className="block rounded-2xl border border-border bg-card p-4 hover:border-accent/40 hover:shadow-sm transition-all"
           >
             <div className="flex items-center justify-between mb-3">
-              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Deposit & Rent Advance</p>
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Deposit & Future Rent Credit</p>
               <span className="text-xs text-accent font-semibold">&rarr; View details</span>
             </div>
             <div className="grid grid-cols-3 gap-2 text-center">
@@ -145,7 +145,7 @@ export function TenantDashboardPage() {
                 <p className="text-sm font-bold text-foreground">{fmt(Number((advance as any)?.security_deposit_paid ?? 0))}</p>
               </div>
               <div className="rounded-xl bg-secondary py-2.5 px-2">
-                <p className="text-muted-foreground text-[10px] mb-0.5">Rent Advance</p>
+                <p className="text-muted-foreground text-[10px] mb-0.5">Future Rent Credit</p>
                 <p className="text-sm font-bold text-foreground">{fmt(Number((advance as any)?.available_rent_advance ?? 0))}</p>
               </div>
               <div className="rounded-xl bg-accent/8 border border-accent/15 py-2.5 px-2">

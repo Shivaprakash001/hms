@@ -1,24 +1,20 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { FileText, Check, X, Send, MessageSquare, ChevronDown, ChevronUp, ExternalLink, ShieldCheck } from 'lucide-react';
+import { FileText, Check, X, Send, MessageSquare, ChevronDown, ChevronUp, ExternalLink, ShieldCheck, User, AlertCircle, FileWarning } from 'lucide-react';
 import { tenantService } from '@features/tenants/api';
 import { queryKeys } from '@lib/queryKeys';
 
 interface Props {
   hostelId: string;
   tenantId: string;
-  documents: Record<string, unknown>[];
+  documents: Record<string, any>[];
   profileType?: string;
+  photoUrl?: string;
   onUpdated?: () => void;
 }
 
-const requiredDocumentTypes = (profileType?: string) =>
-  String(profileType || 'STUDENT').toUpperCase() === 'WORKING_PROFESSIONAL'
-    ? ['AADHAAR', 'WORK_ID']
-    : ['AADHAAR', 'COLLEGE_ID'];
-
-export function VerificationPanel({ hostelId, tenantId, documents, profileType, onUpdated }: Props) {
+export function VerificationPanel({ hostelId, tenantId, documents = [], profileType, photoUrl, onUpdated }: Props) {
   const qc = useQueryClient();
   const [newMessages, setNewMessages] = useState<Record<string, string>>({});
   const [expandedChats, setExpandedChats] = useState<Record<string, boolean>>({});
@@ -68,19 +64,6 @@ export function VerificationPanel({ hostelId, tenantId, documents, profileType, 
     onError: () => toast.error('Could not approve all documents'),
   });
 
-  const visibleDocuments = (documents ?? []).filter((doc) =>
-    requiredDocumentTypes(profileType).includes(String(doc.doc_type ?? doc.type ?? '').toUpperCase())
-  );
-
-  if (!visibleDocuments.length) {
-    return (
-      <div className="p-6 rounded-xl border border-dashed border-border text-center text-sm text-muted-foreground bg-muted/20">
-        <FileText className="w-8 h-8 mx-auto mb-2 opacity-50 text-muted-foreground" />
-        No required identification documents on file. Tenant needs Aadhaar and {String(profileType).toUpperCase() === 'WORKING_PROFESSIONAL' ? 'Work ID' : 'College ID'}.
-      </div>
-    );
-  }
-
   const handleSendMessage = (docId: string) => {
     const text = (newMessages[docId] || '').trim();
     if (!text) return;
@@ -91,247 +74,297 @@ export function VerificationPanel({ hostelId, tenantId, documents, profileType, 
     setExpandedChats((prev) => ({ ...prev, [docId]: !prev[docId] }));
   };
 
-  const pendingCount = visibleDocuments.filter((doc) => String(doc.document_status ?? doc.status ?? 'PENDING').toUpperCase() === 'PENDING').length;
-  const approvedCount = visibleDocuments.filter((doc) => {
-    const status = String(doc.document_status ?? doc.status ?? '').toUpperCase();
-    return status === 'APPROVED' || doc.is_verified === true;
+  // Find checklist documents
+  const aadhaarDoc = documents.find(d => {
+    const t = String(d.doc_type ?? d.type ?? '').toUpperCase();
+    return t === 'AADHAAR' || t === 'AADHAAR_CARD';
+  });
+
+  const isProfessional = String(profileType || 'STUDENT').toUpperCase() === 'WORKING_PROFESSIONAL';
+  const idType = isProfessional ? 'WORK_ID' : 'COLLEGE_ID';
+  const idDoc = documents.find(d => {
+    const t = String(d.doc_type ?? d.type ?? '').toUpperCase();
+    return t === idType || t === 'COLLEGE_ID' || t === 'WORK_ID';
+  });
+
+  const agreementDoc = documents.find(d => {
+    const t = String(d.doc_type ?? d.type ?? '').toUpperCase();
+    return t === 'AGREEMENT' || t === 'RENTAL_AGREEMENT';
+  });
+
+  const checklist = [
+    {
+      key: 'aadhaar',
+      label: 'Aadhaar Card',
+      description: 'Government photo identification card',
+      doc: aadhaarDoc,
+    },
+    {
+      key: 'id',
+      label: isProfessional ? 'Work ID Card' : 'Student ID Card',
+      description: isProfessional ? 'Proof of employment or company ID' : 'College/educational institution ID card',
+      doc: idDoc,
+    },
+    {
+      key: 'photo',
+      label: 'Profile Photo',
+      description: 'Recent passport-sized profile picture',
+      doc: photoUrl ? {
+        id: 'photo',
+        doc_type: 'PHOTO',
+        download_url: photoUrl,
+        document_status: 'APPROVED',
+        is_verified: true,
+      } : null,
+      isPhoto: true,
+    },
+    {
+      key: 'agreement',
+      label: 'Rental Agreement',
+      description: 'Signed digital or physical lease agreement',
+      doc: agreementDoc,
+    }
+  ];
+
+  // Global counts for all required docs
+  const totalCount = checklist.length;
+  const verifiedCount = checklist.filter(item => {
+    if (!item.doc) return false;
+    const status = String(item.doc.document_status ?? item.doc.status ?? '').toUpperCase();
+    return status === 'APPROVED' || item.doc.is_verified === true;
   }).length;
-  const rejectedCount = visibleDocuments.filter((doc) => String(doc.document_status ?? doc.status ?? '').toUpperCase() === 'REJECTED').length;
-  const unverifiedCount = visibleDocuments.length - approvedCount;
+
+  const pendingDocs = checklist.filter(item => {
+    if (!item.doc) return false;
+    if (item.isPhoto) return false;
+    const status = String(item.doc.document_status ?? item.doc.status ?? '').toUpperCase();
+    return status === 'PENDING' || status === 'UPLOADED';
+  });
 
   return (
     <div className="space-y-4">
+      {/* Overview Progress Card */}
       <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-semibold text-foreground">Document verification</p>
+            <p className="text-sm font-semibold text-foreground">Document Checklist</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Review active tenant submissions. Replacements archive the old file automatically.
+              Verification progress: <strong className="text-foreground">{verifiedCount} of {totalCount}</strong> complete
             </p>
           </div>
-          <button
-            type="button"
-            disabled={unverifiedCount === 0 || verifyAllMutation.isPending}
-            onClick={() => verifyAllMutation.mutate()}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <ShieldCheck className="w-4 h-4" />
-            Approve all unverified
-          </button>
+          {pendingDocs.length > 0 && (
+            <button
+              type="button"
+              disabled={verifyAllMutation.isPending}
+              onClick={() => verifyAllMutation.mutate()}
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-accent px-4 py-2 text-xs font-bold text-accent-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              Approve pending ({pendingDocs.length})
+            </button>
+          )}
         </div>
-        <div className="grid grid-cols-3 gap-2 mt-4 text-center">
-          <div className="rounded-xl bg-amber-500/10 px-3 py-2">
-            <p className="text-lg font-bold text-amber-600">{pendingCount}</p>
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Pending</p>
-          </div>
-          <div className="rounded-xl bg-emerald-500/10 px-3 py-2">
-            <p className="text-lg font-bold text-emerald-600">{approvedCount}</p>
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Approved</p>
-          </div>
-          <div className="rounded-xl bg-rose-500/10 px-3 py-2">
-            <p className="text-lg font-bold text-rose-600">{rejectedCount}</p>
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Queried</p>
-          </div>
+
+        {/* Progress bar */}
+        <div className="w-full bg-secondary rounded-full h-2 mt-4 overflow-hidden">
+          <div
+            className="bg-emerald-500 h-2 rounded-full transition-all duration-300"
+            style={{ width: `${(verifiedCount / totalCount) * 100}%` }}
+          />
         </div>
       </div>
 
-      {visibleDocuments.map((doc) => {
-        const id = String(doc.id ?? '');
-        const status = String(doc.document_status ?? doc.status ?? 'PENDING').toUpperCase();
-        const fileUrl = String(doc.download_url ?? '');
-        const docNumber = String(doc.doc_number ?? '').trim();
-        const fileSize = Number(doc.file_size ?? 0);
-        const fileSizeLabel = fileSize > 0 ? `${(fileSize / 1024 / 1024).toFixed(1)} MB` : '';
-        
-        let chatMessages: { sender: string; sender_name: string; message: string; timestamp: string }[] = [];
-        try {
-          const reasonStr = String(doc.rejection_reason || '');
-          if (reasonStr.startsWith('[') && reasonStr.endsWith(']')) {
-            chatMessages = JSON.parse(reasonStr);
-          } else if (reasonStr) {
-            chatMessages = [{ sender: 'owner', sender_name: 'Owner Query', message: reasonStr, timestamp: '' }];
+      {/* Checklist items */}
+      <div className="space-y-3">
+        {checklist.map((item) => {
+          const doc = item.doc;
+          const status = doc ? String(doc.document_status ?? doc.status ?? 'PENDING').toUpperCase() : 'MISSING';
+          const fileUrl = doc ? String(doc.download_url ?? '') : '';
+          const docNumber = doc ? String(doc.doc_number ?? '').trim() : '';
+
+          let chatMessages: { sender: string; sender_name: string; message: string; timestamp: string }[] = [];
+          if (doc) {
+            try {
+              const reasonStr = String(doc.rejection_reason || '');
+              if (reasonStr.startsWith('[') && reasonStr.endsWith(']')) {
+                chatMessages = JSON.parse(reasonStr);
+              } else if (reasonStr) {
+                chatMessages = [{ sender: 'owner', sender_name: 'Owner Query', message: reasonStr, timestamp: '' }];
+              }
+            } catch {
+              chatMessages = [];
+            }
           }
-        } catch {
-          chatMessages = [];
-        }
 
-        const isChatExpanded = expandedChats[id] || chatMessages.length > 0;
+          const docId = doc ? String(doc.id) : item.key;
+          const isChatExpanded = expandedChats[docId] || chatMessages.length > 0;
 
-        return (
-          <div key={id} className="p-5 rounded-2xl border border-border bg-card shadow-sm hover:shadow-md transition-shadow duration-200">
-            {/* Header section with Doc Type and status */}
-            <div className="flex items-start justify-between gap-3 flex-wrap">
-              <div className="flex gap-3 items-center">
-                <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center text-accent shrink-0">
-                  <FileText className="w-5 h-5" />
-                </div>
-                <div className="min-w-0">
-                  <p className="font-semibold text-foreground">{String(doc.doc_type ?? doc.type ?? 'Document')}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Uploaded on {new Date(String(doc.created_at)).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                  </p>
-                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-                    {docNumber && <span>No. {docNumber}</span>}
-                    {doc.mime_type && <span>{String(doc.mime_type).replace('application/', '').replace('image/', '').toUpperCase()}</span>}
-                    {fileSizeLabel && <span>{fileSizeLabel}</span>}
+          return (
+            <div key={item.key} className="p-4 rounded-xl border border-border bg-card shadow-sm space-y-3">
+              <div className="flex items-start justify-between gap-3 flex-wrap sm:flex-nowrap">
+                <div className="flex gap-3 items-center min-w-0">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                    status === 'APPROVED' ? 'bg-emerald-500/10 text-emerald-600' :
+                    status === 'REJECTED' ? 'bg-rose-500/10 text-rose-600' :
+                    status === 'MISSING' ? 'bg-secondary text-muted-foreground' :
+                    'bg-amber-500/10 text-amber-600'
+                  }`}>
+                    {item.isPhoto ? <User className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-semibold text-foreground text-sm">{item.label}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{item.description}</p>
+                    {docNumber && <p className="text-[10px] font-mono text-muted-foreground mt-1 bg-secondary/50 px-1.5 py-0.5 rounded inline-block">No. {docNumber}</p>}
                   </div>
                 </div>
-              </div>
-              
-              <div className="flex items-center gap-2">
-                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider ${
-                  status === 'APPROVED' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/25' :
-                  status === 'REJECTED' ? 'bg-rose-500/10 text-rose-500 border border-rose-500/25' :
-                  'bg-amber-500/10 text-amber-500 border border-amber-500/25'
-                }`}>
-                  {status}
-                </span>
 
-                {fileUrl && (
-                  <a
-                    href={fileUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="p-1.5 rounded-lg border border-border hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors shrink-0"
-                    title="View Document"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-                )}
-              </div>
-            </div>
+                <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
+                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase ${
+                    status === 'APPROVED' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/25' :
+                    status === 'REJECTED' ? 'bg-rose-500/10 text-rose-600 border-rose-500/25' :
+                    status === 'MISSING' ? 'bg-secondary text-muted-foreground border-border' :
+                    'bg-amber-500/10 text-amber-600 border-amber-500/25'
+                  }`}>
+                    {status === 'APPROVED' ? 'Verified' : status === 'REJECTED' ? 'Queried' : status}
+                  </span>
 
-            {/* Verification action buttons for Owner */}
-            {status === 'PENDING' && (
-              <div className="mt-4 pt-4 border-t border-border/60 space-y-3">
-                <div className="flex gap-2.5">
-                <button
-                  type="button"
-                  disabled={verifyMutation.isPending}
-                  onClick={() => verifyMutation.mutate(id)}
-                  className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-500 text-white hover:bg-emerald-600 active:scale-98 transition-all text-xs font-semibold shadow-sm"
-                >
-                  <Check className="w-4 h-4" />
-                  Approve Document
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRejectingDocId(rejectingDocId === id ? '' : id)}
-                  className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 active:scale-98 transition-all text-xs font-semibold border border-rose-500/20"
-                >
-                  <X className="w-4 h-4" />
-                  Reject / Query
-                </button>
-                </div>
-
-                {rejectingDocId === id && (
-                  <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 space-y-2">
-                    <textarea
-                      rows={3}
-                      maxLength={800}
-                      placeholder="Tell the tenant what needs to be corrected..."
-                      value={rejectReasons[id] || ''}
-                      onChange={(e) => setRejectReasons((prev) => ({ ...prev, [id]: e.target.value }))}
-                      className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-rose-500"
-                    />
-                    <div className="flex justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setRejectingDocId('')}
-                        className="rounded-lg border border-border px-3 py-2 text-xs font-medium"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        disabled={rejectMutation.isPending || !(rejectReasons[id] || '').trim()}
-                        onClick={() => rejectMutation.mutate({ docId: id, reason: (rejectReasons[id] || '').trim() })}
-                        className="rounded-lg bg-rose-500 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
-                      >
-                        Send query
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Conversation / Query Section */}
-            <div className="mt-4 pt-4 border-t border-border/60 space-y-3">
-              <button
-                type="button"
-                onClick={() => toggleChat(id)}
-                className="flex items-center justify-between w-full text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <span className="flex items-center gap-1.5">
-                  <MessageSquare className="w-3.5 h-3.5" />
-                  {chatMessages.length > 0
-                    ? `Verification Thread (${chatMessages.length} messages)`
-                    : 'Start Verification Chat / Query'}
-                </span>
-                {isChatExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-              </button>
-
-              {isChatExpanded && (
-                <div className="space-y-4 pt-2">
-                  {/* Chat messages viewport */}
-                  {chatMessages.length > 0 && (
-                    <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
-                      {chatMessages.map((msg, idx) => {
-                        const isOwner = msg.sender === 'owner';
-                        return (
-                          <div
-                            key={idx}
-                            className={`flex flex-col max-w-[85%] ${isOwner ? 'ml-auto items-end' : 'mr-auto items-start'}`}
-                          >
-                            <span className="text-[10px] text-muted-foreground mb-0.5 px-1">
-                              {msg.sender_name}
-                            </span>
-                            <div className={`p-3 rounded-2xl text-xs font-medium leading-relaxed ${
-                              isOwner
-                                ? 'bg-accent text-accent-foreground rounded-tr-none'
-                                : 'bg-secondary text-secondary-foreground rounded-tl-none'
-                            }`}>
-                              {msg.message}
-                            </div>
-                            {msg.timestamp && (
-                              <span className="text-[9px] text-muted-foreground mt-0.5 px-1">
-                                {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+                  {fileUrl && (
+                    <a
+                      href={fileUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="p-1 rounded-lg border border-border hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                      title="View file"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
                   )}
+                </div>
+              </div>
 
-                  {/* Input field to send new message */}
+              {/* Actions for uploaded documents that are pending */}
+              {doc && !item.isPhoto && status === 'PENDING' && (
+                <div className="pt-2 border-t border-border/40 space-y-2">
                   <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Type a query or message for the tenant..."
-                      value={newMessages[id] || ''}
-                      onChange={(e) => setNewMessages((prev) => ({ ...prev, [id]: e.target.value }))}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleSendMessage(id);
-                      }}
-                      className="flex-1 px-4 py-2.5 rounded-xl border border-border bg-background text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-accent"
-                    />
                     <button
                       type="button"
-                      disabled={messageMutation.isPending}
-                      onClick={() => handleSendMessage(id)}
-                      className="p-2.5 rounded-xl bg-accent text-accent-foreground hover:opacity-90 active:scale-95 transition-all"
+                      disabled={verifyMutation.isPending}
+                      onClick={() => verifyMutation.mutate(docId)}
+                      className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 text-xs font-bold"
                     >
-                      <Send className="w-4 h-4" />
+                      <Check className="w-3.5 h-3.5" />
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRejectingDocId(rejectingDocId === docId ? '' : docId)}
+                      className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg bg-rose-500/10 text-rose-600 hover:bg-rose-500/20 text-xs font-bold border border-rose-500/20"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      Query / Reject
                     </button>
                   </div>
+
+                  {rejectingDocId === docId && (
+                    <div className="rounded-lg border border-rose-200 bg-rose-500/5 p-3 space-y-2">
+                      <textarea
+                        rows={2}
+                        maxLength={500}
+                        placeholder="Explain what is incorrect or missing in the file..."
+                        value={rejectReasons[docId] || ''}
+                        onChange={(e) => setRejectReasons((prev) => ({ ...prev, [docId]: e.target.value }))}
+                        className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-rose-500"
+                      />
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setRejectingDocId('')}
+                          className="px-2 py-1 border border-border rounded text-[11px]"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          disabled={rejectMutation.isPending || !(rejectReasons[docId] || '').trim()}
+                          onClick={() => rejectMutation.mutate({ docId, reason: (rejectReasons[docId] || '').trim() })}
+                          className="bg-rose-600 text-white px-2.5 py-1 rounded text-[11px] font-bold"
+                        >
+                          Send query
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Chat thread for uploaded docs */}
+              {doc && !item.isPhoto && (
+                <div className="pt-2 border-t border-border/40 space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => toggleChat(docId)}
+                    className="flex items-center justify-between w-full text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <span className="flex items-center gap-1">
+                      <MessageSquare className="w-3 h-3 text-accent" />
+                      {chatMessages.length > 0
+                        ? `Query History (${chatMessages.length})`
+                        : 'Ask tenant to correct / start chat'}
+                    </span>
+                    {isChatExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                  </button>
+
+                  {isChatExpanded && (
+                    <div className="space-y-3 pt-1">
+                      {chatMessages.length > 0 && (
+                        <div className="space-y-2 max-h-48 overflow-y-auto pr-1 bg-secondary/20 p-2 rounded-lg">
+                          {chatMessages.map((msg, idx) => {
+                            const isOwner = msg.sender === 'owner';
+                            return (
+                              <div
+                                key={idx}
+                                className={`flex flex-col max-w-[90%] ${isOwner ? 'ml-auto items-end' : 'mr-auto items-start'}`}
+                              >
+                                <span className="text-[9px] text-muted-foreground px-1">{msg.sender_name}</span>
+                                <div className={`p-2 rounded-xl text-[11px] mt-0.5 ${
+                                  isOwner ? 'bg-accent text-accent-foreground' : 'bg-secondary text-secondary-foreground'
+                                }`}>
+                                  {msg.message}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      <div className="flex gap-1.5">
+                        <input
+                          type="text"
+                          placeholder="Type query to send..."
+                          value={newMessages[docId] || ''}
+                          onChange={(e) => setNewMessages((prev) => ({ ...prev, [docId]: e.target.value }))}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSendMessage(docId);
+                          }}
+                          className="flex-1 px-3 py-1.5 rounded-lg border border-border bg-background text-xs focus:outline-none focus:ring-1 focus:ring-accent"
+                        />
+                        <button
+                          type="button"
+                          disabled={messageMutation.isPending}
+                          onClick={() => handleSendMessage(docId)}
+                          className="px-2 bg-accent text-accent-foreground rounded-lg hover:opacity-90"
+                        >
+                          <Send className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -14,6 +14,7 @@ const AlertsView = lazy(() => import('@/app/components/views/AlertsView').then((
 const BillingView = lazy(() => import('@/app/components/views/BillingView').then((m) => ({ default: m.BillingView })));
 const AdmissionsView = lazy(() => import('@/app/components/views/AdmissionsView').then((m) => ({ default: m.AdmissionsView })));
 const SettingsView = lazy(() => import('@/app/components/views/SettingsView').then((m) => ({ default: m.SettingsView })));
+const ActivityLogsView = lazy(() => import('@/app/components/views/ActivityLogsView').then((m) => ({ default: m.ActivityLogsView })));
 const OwnerProviderShell = lazy(() => import('./OwnerProviderShell').then((m) => ({ default: m.OwnerProviderShell })));
 
 function OwnerRouteFallback() {
@@ -62,6 +63,7 @@ export function OwnerRoutes() {
         <Route path="/billing" element={<BillingView />} />
         <Route path="/admissions" element={<AdmissionsView />} />
         <Route path="/settings" element={<SettingsView />} />
+        <Route path="/activity" element={<ActivityLogsView />} />
       </Route>
     </Route>
   );

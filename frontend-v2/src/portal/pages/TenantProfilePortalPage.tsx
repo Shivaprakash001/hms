@@ -604,7 +604,7 @@ export function TenantProfilePortalPage() {
             <ProfileRow label="Maintenance" value={fmt(Number(t.maintenance_charge ?? 0))} />
             <ProfileRow label="Security deposit" value={fmt(Number(data.advance?.security_deposit ?? t.advance_deposit ?? 0))} />
             {Number(data.advance?.available_rent_advance ?? 0) > 0 && (
-              <ProfileRow label="Rent advance" value={fmt(Number(data.advance?.available_rent_advance))} />
+              <ProfileRow label="Future rent credit" value={fmt(Number(data.advance?.available_rent_advance))} />
             )}
           </>
         ) : (

@@ -13,6 +13,7 @@ import { propertyService } from "@/lib/services/property-service";
 import { roomCapacityService } from "@/lib/services/room-capacity-service";
 import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
 import { assertHostelBelongsToOwner, requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
+import { eventSystem } from "@/lib/events";
 
 
 /**
@@ -217,6 +218,15 @@ export async function POST(req: NextRequest) {
     });
 
     console.log(`[rooms.POST] Room created: ${room.id}`);
+    await eventSystem.trigger("room_created", {
+      room_id: room.id,
+      room_no: room.room_no,
+      hostel_id: hostel.id,
+      owner_id: scope.owner_id,
+      user_id: scope.actor_id,
+      capacity: room.capacity,
+    }).catch((e: any) => console.error("Failed to trigger room_created event:", e));
+
     return ApiResponse.success(room, "Room created successfully", { status: 201 });
   } catch (error: any) {
     console.error("Detailed API Error [rooms.POST]:", error);

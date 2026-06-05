@@ -59,8 +59,11 @@ export async function PATCH(
 
     // Broadcast Server-Sent Event so owner dashboards refresh automatically
     await eventSystem.trigger("room_updated", {
-      roomId: params.id,
-      ownerId: scope.owner_id
+      room_id: params.id,
+      room_no: updatedRoom.room_no,
+      hostel_id: updatedRoom.hostel_id,
+      owner_id: scope.owner_id,
+      user_id: scope.actor_id,
     });
 
     return apiResponse(updatedRoom);
@@ -113,6 +116,15 @@ export async function DELETE(
     }
 
     await prisma.rooms.delete({ where: { id: params.id } });
+
+    await eventSystem.trigger("room_deleted", {
+      room_id: params.id,
+      room_no: existing.room_no,
+      hostel_id: existing.hostel_id,
+      owner_id: scope.owner_id,
+      user_id: scope.actor_id,
+    }).catch((e: any) => console.error("Failed to trigger room_deleted event:", e));
+
     return new Response(null, { status: 204 });
   } catch (error: any) {
     return apiError(error.message || "Failed to delete room");

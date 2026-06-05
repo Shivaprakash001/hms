@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   Search, SlidersHorizontal, Building2, ArrowRight, BarChart3,
   CheckCircle, IndianRupee, TrendingUp, Users, Phone, Bell,
-  LogOut, UserCheck, Settings, X, ChevronRight,
+  LogOut, UserCheck, Settings, X, ChevronRight, Activity,
 } from 'lucide-react';
 import { useAuth } from '@context/AuthContext';
 import { portfolioService } from '@features/dashboard/api';
@@ -190,6 +190,9 @@ export function PortfolioView() {
               </div>
               <button type="button" onClick={() => { setShowAvatarMenu(false); setShowSettings(true); }} className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-foreground hover:bg-secondary">
                 <Settings className="w-4 h-4 text-muted-foreground" /> Settings
+              </button>
+              <button type="button" onClick={() => { setShowAvatarMenu(false); navigate('/activity'); }} className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-foreground hover:bg-secondary">
+                <Activity className="w-4 h-4 text-muted-foreground" /> Activity Log
               </button>
               <button type="button" onClick={logout} className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-destructive hover:bg-destructive/10">
                 <LogOut className="w-4 h-4" /> Log out
