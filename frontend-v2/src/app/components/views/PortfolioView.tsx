@@ -192,7 +192,7 @@ export function PortfolioView() {
                 <Settings className="w-4 h-4 text-muted-foreground" /> Settings
               </button>
               <button type="button" onClick={() => { setShowAvatarMenu(false); navigate('/activity'); }} className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-foreground hover:bg-secondary">
-                <Activity className="w-4 h-4 text-muted-foreground" /> Activity Log
+                <Activity className="w-4 h-4 text-muted-foreground" /> System Logs
               </button>
               <button type="button" onClick={logout} className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-destructive hover:bg-destructive/10">
                 <LogOut className="w-4 h-4" /> Log out

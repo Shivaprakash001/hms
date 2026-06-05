@@ -43,7 +43,7 @@ export default function App() {
 
         {/* Mobile bottom nav */}
         <BottomNav />
-        <OwnerQuickActions />
+        {location.pathname !== '/activity' && <OwnerQuickActions />}
       </div>
     </div>
   );

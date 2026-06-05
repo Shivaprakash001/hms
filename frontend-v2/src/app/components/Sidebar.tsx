@@ -93,7 +93,7 @@ export function Sidebar() {
           }
         >
           <Activity className="w-4 h-4 shrink-0" />
-          Activity Log
+          System Logs
         </NavLink>
         <button
           onClick={logout}

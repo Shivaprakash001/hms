@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { ownerService } from '@features/owners/api';
 import { useAuth } from '@context/AuthContext';
 import { useHostelPolicy } from '@features/settings/settingsHooks';
 import { queryKeys } from '@lib/queryKeys';
 import {
   User, Receipt, UserCheck, CreditCard, Building2,
-  Bell, Zap, Shield, LogOut, ChevronDown, ChevronRight,
+  Bell, Zap, Shield, LogOut, ChevronDown, ChevronRight, Activity,
 } from 'lucide-react';
 import { ProfileSection } from '../settings/ProfileSection';
 import { BillingSection } from '../settings/BillingSection';
@@ -55,9 +56,36 @@ interface SettingsViewProps {
 
 export function SettingsView({ embedded = false }: SettingsViewProps = {}) {
   const { logout } = useAuth();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab') as SectionId;
+
   const [activeSection, setActiveSection] = useState<SectionId>('hostel');
   const [selectedHostelId, setSelectedHostelId] = useState<string | null>(null);
   const [mobileOpenSection, setMobileOpenSection] = useState<SectionId | null>('hostel');
+
+  useEffect(() => {
+    if (tabParam === 'activity') {
+      navigate('/activity', { replace: true });
+    } else if (tabParam && ['profile', 'hostel', 'billing', 'tenant-defaults', 'notifications', 'automation', 'access'].includes(tabParam)) {
+      setActiveSection(tabParam);
+      setMobileOpenSection(tabParam);
+    }
+  }, [tabParam, navigate]);
+
+  const handleSelectSection = (id: SectionId) => {
+    setActiveSection(id);
+    setSearchParams({ tab: id });
+  };
+
+  const handleMobileToggleSection = (id: SectionId) => {
+    if (mobileOpenSection === id) {
+      setMobileOpenSection(null);
+    } else {
+      setMobileOpenSection(id);
+      setSearchParams({ tab: id });
+    }
+  };
 
   const { data: hostelsRaw } = useQuery({
     queryKey: queryKeys.owner.hostels(),
@@ -101,7 +129,7 @@ export function SettingsView({ embedded = false }: SettingsViewProps = {}) {
       {/* Page header + hostel selector */}
       <div className="sticky top-0 z-10 bg-card border-b border-border px-4 py-3 flex items-center justify-between gap-3">
         <h1 className="font-semibold text-foreground text-base">{embedded ? 'Hostel' : 'Settings'}</h1>
-        {hostelsList.length > 0 && (
+        {hostelsList.length > 0 && activeSection !== 'activity' && (
           <div className="relative">
             <select
               value={selectedHostelId ?? ''}
@@ -131,7 +159,7 @@ export function SettingsView({ embedded = false }: SettingsViewProps = {}) {
                 return (
                   <button
                     key={s.id}
-                    onClick={() => setActiveSection(s.id)}
+                    onClick={() => handleSelectSection(s.id)}
                     className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors rounded-lg mx-1.5 ${
                       activeSection === s.id
                         ? 'bg-accent/10 text-accent font-medium'
@@ -179,7 +207,7 @@ export function SettingsView({ embedded = false }: SettingsViewProps = {}) {
               return (
                 <div key={s.id} className="bg-card border border-border rounded-xl overflow-hidden">
                   <button
-                    onClick={() => setMobileOpenSection(isOpen ? null : s.id)}
+                    onClick={() => handleMobileToggleSection(s.id)}
                     className="w-full flex items-center gap-3 px-4 py-3.5"
                   >
                     <div className={`p-1.5 rounded-lg ${isOpen ? 'bg-accent/10' : 'bg-secondary'}`}>
