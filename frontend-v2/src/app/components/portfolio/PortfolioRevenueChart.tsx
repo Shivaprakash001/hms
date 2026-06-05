@@ -21,6 +21,12 @@ const fmt = (n: number) => {
   return `${sign}₹${v.toLocaleString('en-IN')}`;
 };
 
+const fullFmt = (n: number) => {
+  const v = Math.abs(Number(n || 0));
+  const sign = n < 0 ? '-' : '';
+  return `${sign}₹${v.toLocaleString('en-IN')}`;
+};
+
 const pctFmt = (n: number) => `${Math.round(n)}%`;
 
 /* ── Colors ──────────────────────────────────────────────────────────── */
@@ -77,18 +83,18 @@ function ChartTooltip({ active, payload, label }: any) {
       <div className="flex items-center gap-2">
         <span className="w-2 h-2 rounded-full shrink-0" style={{ background: COLORS.revenue }} />
         <span className="text-muted-foreground">Revenue</span>
-        <span className="ml-auto font-semibold text-foreground">{fmt(revenue)}</span>
+        <span className="ml-auto font-semibold text-foreground">{fullFmt(revenue)}</span>
       </div>
       <div className="flex items-center gap-2">
         <span className="w-2 h-2 rounded-full shrink-0" style={{ background: COLORS.expenses }} />
         <span className="text-muted-foreground">Expenses</span>
-        <span className="ml-auto font-semibold text-foreground">{fmt(expenses)}</span>
+        <span className="ml-auto font-semibold text-foreground">{fullFmt(expenses)}</span>
       </div>
       <div className="flex items-center gap-2 pt-1 border-t border-border">
         <span className="w-2 h-2 rounded-full shrink-0" style={{ background: COLORS.profit }} />
         <span className="text-muted-foreground">Net Profit</span>
         <span className={`ml-auto font-bold ${profit >= 0 ? 'text-blue-600' : 'text-destructive'}`}>
-          {fmt(profit)}
+          {fullFmt(profit)}
         </span>
       </div>
     </div>
@@ -275,7 +281,7 @@ export function PortfolioRevenueChart({
                 {insights.highest_profit_hostel.hostel_name}
               </p>
               <p className="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold mt-0.5">
-                {fmt(insights.highest_profit_hostel.profit)} profit
+                {fullFmt(insights.highest_profit_hostel.profit)} profit
               </p>
             </div>
           ) : (
@@ -311,7 +317,7 @@ export function PortfolioRevenueChart({
                 {insights.highest_outstanding_hostel.hostel_name}
               </p>
               <p className="text-[10px] text-red-700 dark:text-red-400 font-semibold mt-0.5">
-                {fmt(insights.highest_outstanding_hostel.pending_dues)} due
+                {fullFmt(insights.highest_outstanding_hostel.pending_dues)} due
               </p>
             </div>
           ) : (

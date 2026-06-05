@@ -115,6 +115,7 @@ export function PortfolioView() {
   const totalRevenue = Number(portfolio.total_revenue ?? 0);
   const collectionRate = Number(portfolio.collection_rate ?? 0);
   const activeTenants = Number(portfolio.active_tenants ?? 0);
+  const occupiedBeds = Number(portfolio.occupied_beds ?? activeTenants);
   const totalCapacity = Number(portfolio.total_capacity ?? 0);
   const vacantBeds = Number(portfolio.vacant_beds ?? 0);
   const moveOutOpen = Number(portfolio.move_out_open ?? 0);
@@ -129,7 +130,7 @@ export function PortfolioView() {
     : 'clear';
 
   // Avg revenue per bed for vacancy loss estimate
-  const avgBedRevenue = activeTenants > 0 ? totalRevenue / activeTenants : 0;
+  const avgBedRevenue = occupiedBeds > 0 ? totalRevenue / occupiedBeds : 0;
   const vacancyLoss = Math.round(avgBedRevenue * vacantBeds);
 
   // Operations Queue items — ordered by priority
@@ -251,7 +252,7 @@ export function PortfolioView() {
                   <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400">Vacant beds</p>
                   <p className="mt-1 text-2xl font-bold text-foreground">{vacantBeds} bed{vacantBeds === 1 ? '' : 's'} open</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {activeTenants}/{totalCapacity} occupied
+                    {occupiedBeds}/{totalCapacity} occupied
                     {vacancyLoss > 0 ? ` · ${fmt(vacancyLoss)}/mo potential revenue` : ''}
                   </p>
                 </div>
@@ -304,7 +305,7 @@ export function PortfolioView() {
                 <Users className="w-3.5 h-3.5 text-accent" />
               </div>
               <p className="text-lg font-bold truncate leading-tight text-foreground">
-                {totalCapacity > 0 ? `${activeTenants}/${totalCapacity}` : `${activeTenants}`}
+                {totalCapacity > 0 ? `${occupiedBeds}/${totalCapacity}` : `${occupiedBeds}`}
               </p>
               <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
                 {vacantBeds > 0 ? `${vacantBeds} vacant` : 'Beds filled'}

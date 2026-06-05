@@ -1,6 +1,7 @@
 import { prisma } from "../db";
 import { Prisma } from "@prisma/client";
 import { formatShortMonth } from "../format";
+import { roomCapacityService } from "./room-capacity-service";
 
 export interface PortfolioPerformanceHostelMonth {
   hostel_id: string;
@@ -32,6 +33,8 @@ export interface PortfolioPerformanceRanking {
   collection_rate: number;
   pending_dues: number;
   active_tenants: number;
+  occupied_beds: number;
+  reserved_beds: number;
   total_capacity: number;
   vacant_beds: number;
   trend_percentage: number;
@@ -52,6 +55,8 @@ export interface PortfolioPerformanceResponse {
     total_due: number;
     occupancy_rate: number;
     active_tenants: number;
+    occupied_beds: number;
+    reserved_beds: number;
     collection_rate: number;
     total_capacity: number;
     vacant_beds: number;
@@ -98,32 +103,18 @@ export class PortfolioPerformanceService {
     const firstRange = ranges[0];
     const lastRange = ranges[ranges.length - 1];
 
-    const [capacityByHostel, cashflowGrid, expenseGrid, moveOutResult, pendingInviteResult] = await Promise.all([
-      prisma.$queryRaw<Array<{ hostel_id: string; total_capacity: number; active_tenants: number; occupancy: number }>>`
-        WITH room_capacity AS (
-          SELECT hostel_id, COALESCE(SUM(capacity), 0)::float AS total_capacity
-          FROM rooms
-          WHERE is_active = true
-          GROUP BY hostel_id
-        ), active_tenants AS (
-          SELECT hostel_id, COUNT(id)::float AS active_tenants
-          FROM tenants
-          WHERE owner_id = ${ownerId}::uuid AND status = 'ACTIVE'
-          GROUP BY hostel_id
-        )
+    const [activeTenantRows, cashflowGrid, expenseGrid, moveOutResult, pendingInviteResult] = (await Promise.all([
+      prisma.$queryRaw<Array<{ hostel_id: string; active_tenants: number }>>`
         SELECT
           h.id::text AS hostel_id,
-          COALESCE(rc.total_capacity, 0)::float AS total_capacity,
-          COALESCE(at.active_tenants, 0)::float AS active_tenants,
-          CASE
-            WHEN COALESCE(rc.total_capacity, 0) > 0
-              THEN ROUND((COALESCE(at.active_tenants, 0) / rc.total_capacity * 1000)::numeric) / 10
-            ELSE 0
-          END::float AS occupancy
+          COUNT(t.id)::float AS active_tenants
         FROM hostels h
-        LEFT JOIN room_capacity rc ON rc.hostel_id = h.id
-        LEFT JOIN active_tenants at ON at.hostel_id = h.id
+        LEFT JOIN tenants t
+          ON t.hostel_id = h.id
+          AND t.owner_id = ${ownerId}::uuid
+          AND t.status = 'ACTIVE'
         WHERE h.owner_id = ${ownerId}::uuid AND h.is_active = true
+        GROUP BY h.id
       `,
       prisma.$queryRaw<Array<{
         month_key: string;
@@ -181,7 +172,7 @@ export class PortfolioPerformanceService {
       // Expense aggregation by hostel by month for the same date range
       prisma.$queryRaw<Array<{
         month_key: string;
-        hostel_id: string;
+        hostel_id: string | null;
         expenses: number;
       }>>`
         WITH ranges(month_key, month_label, start_date, end_date) AS (
@@ -194,7 +185,6 @@ export class PortfolioPerformanceService {
         FROM ranges r
         JOIN expenses e
           ON e.owner_id = ${ownerId}::uuid
-          AND e.hostel_id IS NOT NULL
           AND e.date >= r.start_date::date
           AND e.date <= r.end_date::date
         GROUP BY r.month_key, e.hostel_id
@@ -212,25 +202,65 @@ export class PortfolioPerformanceService {
         WHERE owner_id = ${ownerId}::uuid
           AND status = 'INVITED'
       `,
-    ]);
+    ])) as [
+      Array<{ hostel_id: string; active_tenants: number }>,
+      Array<{
+        month_key: string;
+        month_label: string;
+        hostel_id: string;
+        hostel_name: string;
+        city: string | null;
+        revenue: number;
+        collections: number;
+        pending_dues: number;
+        collection_rate: number;
+      }>,
+      Array<{
+        month_key: string;
+        hostel_id: string | null;
+        expenses: number;
+      }>,
+      Array<{ move_out_open: number }>,
+      Array<{ pending_invites: number }>
+    ];
 
     // Build expense lookup: monthKey -> hostelId -> amount
-    const expenseMap = new Map<string, Map<string, number>>();
+    const expenseMap = new Map<string, Map<string | null, number>>();
     for (const row of expenseGrid) {
       if (!expenseMap.has(row.month_key)) expenseMap.set(row.month_key, new Map());
       expenseMap.get(row.month_key)!.set(row.hostel_id, Number(row.expenses || 0));
     }
 
-    const capacityMap = new Map(
-      capacityByHostel.map((c) => [
-        c.hostel_id,
-        {
-          activeTenants: Number(c.active_tenants || 0),
-          totalCapacity: Number(c.total_capacity || 0),
-          occupancy: Number(c.occupancy || 0),
-        },
-      ])
+    const activeTenantMap = new Map(
+      activeTenantRows.map((row) => [row.hostel_id, Number(row.active_tenants || 0)]),
     );
+
+    const hostelIds = Array.from(new Set(cashflowGrid.map((row) => row.hostel_id)));
+    const capacityEntries = await Promise.all(
+      hostelIds.map(async (hostelId) => {
+        const roomMap = await roomCapacityService.getHostelCapacityMap(hostelId, { ownerId });
+        const snapshots = Array.from(roomMap.values());
+        const totalCapacity = snapshots.reduce((sum, snapshot) => sum + Number(snapshot.capacity || 0), 0);
+        const occupiedBeds = snapshots.reduce((sum, snapshot) => sum + Number(snapshot.occupied || 0), 0);
+        const reservedBeds = snapshots.reduce((sum, snapshot) => sum + Number(snapshot.reserved || 0), 0);
+        const vacantBeds = snapshots.reduce((sum, snapshot) => sum + Number(snapshot.available || 0), 0);
+
+        return [
+          hostelId,
+          {
+            activeTenants: activeTenantMap.get(hostelId) || 0,
+            occupiedBeds,
+            reservedBeds,
+            totalCapacity,
+            vacantBeds,
+            occupancy: totalCapacity > 0
+              ? Math.round((occupiedBeds / totalCapacity) * 10000) / 100
+              : 0,
+          },
+        ] as const;
+      }),
+    );
+    const capacityMap = new Map(capacityEntries);
     const cashflowRows = cashflowGrid.map((row) => {
       const revenue = Number(row.revenue || 0);
       const expenses = expenseMap.get(row.month_key)?.get(row.hostel_id) ?? 0;
@@ -265,7 +295,9 @@ export class PortfolioPerformanceService {
     const monthly_trends: PortfolioPerformanceMonth[] = ranges.map((range) => {
       const monthHostels = cashflowRows.filter((row) => row.monthKey === range.monthKey);
       const totalRevenue = monthHostels.reduce((s, h) => s + h.revenue, 0);
-      const totalExpenses = monthHostels.reduce((s, h) => s + h.expenses, 0);
+      const totalExpenses = expenseGrid
+        .filter((row) => row.month_key === range.monthKey)
+        .reduce((sum, row) => sum + Number(row.expenses || 0), 0);
       return {
         month: range.label,
         month_key: range.monthKey,
@@ -303,6 +335,8 @@ export class PortfolioPerformanceService {
       const expenses = cur?.expenses ?? 0;
       const prevRevenue = prev?.revenue ?? 0;
       const activeTenants = capacity?.activeTenants ?? 0;
+      const occupiedBeds = capacity?.occupiedBeds ?? 0;
+      const reservedBeds = capacity?.reservedBeds ?? 0;
       const totalCapacity = capacity?.totalCapacity ?? 0;
       return {
         hostel_id: h.id,
@@ -315,8 +349,10 @@ export class PortfolioPerformanceService {
         collection_rate: cur?.collection_rate ?? 0,
         pending_dues: cur?.pending_dues ?? 0,
         active_tenants: activeTenants,
+        occupied_beds: occupiedBeds,
+        reserved_beds: reservedBeds,
         total_capacity: totalCapacity,
-        vacant_beds: Math.max(totalCapacity - activeTenants, 0),
+        vacant_beds: capacity?.vacantBeds ?? Math.max(totalCapacity - occupiedBeds - reservedBeds, 0),
         trend_percentage: trendPct(revenue, prevRevenue),
         is_top_performer: false,
       };
@@ -337,14 +373,28 @@ export class PortfolioPerformanceService {
     }
 
     const aggregateRevenue = currentRows.reduce((sum, row) => sum + Number(row.revenue || 0), 0);
-    const aggregateExpenses = currentRows.reduce((sum, row) => sum + Number(row.expenses || 0), 0);
+    const aggregateExpenses = expenseGrid
+      .filter((row) => row.month_key === currentKey)
+      .reduce((sum, row) => sum + Number(row.expenses || 0), 0);
     const aggregateDue = currentRows.reduce((sum, row) => sum + Number(row.pending_dues || 0), 0);
     const aggregateActiveTenants = Array.from(capacityMap.values()).reduce(
       (sum, row) => sum + Number(row.activeTenants || 0),
       0
     );
+    const aggregateOccupiedBeds = Array.from(capacityMap.values()).reduce(
+      (sum, row) => sum + Number(row.occupiedBeds || 0),
+      0
+    );
+    const aggregateReservedBeds = Array.from(capacityMap.values()).reduce(
+      (sum, row) => sum + Number(row.reservedBeds || 0),
+      0
+    );
     const aggregateCapacity = Array.from(capacityMap.values()).reduce(
       (sum, row) => sum + Number(row.totalCapacity || 0),
+      0
+    );
+    const aggregateVacantBeds = Array.from(capacityMap.values()).reduce(
+      (sum, row) => sum + Number(row.vacantBeds || 0),
       0
     );
     const aggregateExpected = aggregateRevenue + aggregateDue;
@@ -388,14 +438,16 @@ export class PortfolioPerformanceService {
         total_profit: aggregateRevenue - aggregateExpenses,
         total_due: aggregateDue,
         occupancy_rate: aggregateCapacity > 0
-          ? Math.round((aggregateActiveTenants / aggregateCapacity) * 10000) / 100
+          ? Math.round((aggregateOccupiedBeds / aggregateCapacity) * 10000) / 100
           : 0,
         active_tenants: aggregateActiveTenants,
+        occupied_beds: aggregateOccupiedBeds,
+        reserved_beds: aggregateReservedBeds,
         collection_rate: aggregateExpected > 0
           ? Math.round((aggregateRevenue / aggregateExpected) * 10000) / 100
           : 0,
         total_capacity: aggregateCapacity,
-        vacant_beds: Math.max(aggregateCapacity - aggregateActiveTenants, 0),
+        vacant_beds: aggregateVacantBeds,
         move_out_open: moveOutOpen,
         pending_invites: pendingInvites,
       },

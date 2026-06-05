@@ -17,6 +17,7 @@ export interface HostelRanking {
   collection_rate: number;
   pending_dues: number;
   active_tenants?: number;
+  occupied_beds?: number;
   total_capacity?: number;
   vacant_beds?: number;
   trend_percentage: number;
@@ -56,6 +57,7 @@ function HostelPerformanceCardComponent({ hostel, rank, onEdit }: Props) {
   );
 
   const activeTenants = Number(hostel.active_tenants ?? 0);
+  const occupiedBeds = Number(hostel.occupied_beds ?? activeTenants);
   const totalCapacity = Number(hostel.total_capacity ?? 0);
   const vacantBeds = Number(hostel.vacant_beds ?? 0);
   const hasAlert = hostel.pending_dues > 0 || vacantBeds > 0;
@@ -103,7 +105,7 @@ function HostelPerformanceCardComponent({ hostel, rank, onEdit }: Props) {
         <div>
           <p className="text-[10px] uppercase text-muted-foreground mb-0.5">Beds</p>
           <BedsLabel
-            active={activeTenants}
+            active={occupiedBeds}
             capacity={totalCapacity}
             vacant={vacantBeds}
           />
