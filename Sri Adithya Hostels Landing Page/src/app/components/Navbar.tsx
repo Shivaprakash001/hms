@@ -1,0 +1,60 @@
+import { Home } from 'lucide-react';
+
+export function Navbar() {
+  const scrollToSection = (id: string) => {
+    const element = document.getElementById(id);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  return (
+    <nav className="bg-white shadow-sm sticky top-0 z-50">
+      <div className="max-w-7xl mx-auto px-4 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-[#F07B1D] rounded-full flex items-center justify-center">
+              <Home className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl font-semibold text-[#1B2D5B]" style={{ fontFamily: 'var(--font-display)' }}>
+                Sri Adithya Hostels
+              </h1>
+            </div>
+          </div>
+
+          <div className="hidden md:flex items-center gap-6">
+            <button onClick={() => scrollToSection('home')} className="text-[#2C2C2A] hover:text-[#F07B1D] transition-colors">
+              Home
+            </button>
+            <button onClick={() => scrollToSection('facilities')} className="text-[#2C2C2A] hover:text-[#F07B1D] transition-colors">
+              Facilities
+            </button>
+            <button onClick={() => scrollToSection('rooms')} className="text-[#2C2C2A] hover:text-[#F07B1D] transition-colors">
+              Rooms
+            </button>
+            <button onClick={() => scrollToSection('location')} className="text-[#2C2C2A] hover:text-[#F07B1D] transition-colors">
+              Location
+            </button>
+            <button onClick={() => scrollToSection('contact')} className="text-[#2C2C2A] hover:text-[#F07B1D] transition-colors">
+              Contact
+            </button>
+            <button
+              onClick={() => scrollToSection('contact')}
+              className="bg-[#F07B1D] text-white px-6 py-2 rounded-lg hover:bg-[#d96e18] transition-colors"
+            >
+              Enquire Now
+            </button>
+          </div>
+
+          <button
+            onClick={() => scrollToSection('contact')}
+            className="md:hidden bg-[#F07B1D] text-white px-4 py-2 rounded-lg hover:bg-[#d96e18] transition-colors text-sm"
+          >
+            Enquire Now
+          </button>
+        </div>
+      </div>
+    </nav>
+  );
+}

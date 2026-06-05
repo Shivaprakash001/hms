@@ -1,0 +1,1382 @@
+;
+; Archive created at 2026-06-01 03:15:16 IST
+;     dbname: postgres
+;     TOC Entries: 1373
+;     Compression: gzip
+;     Dump Version: 1.16-0
+;     Format: CUSTOM
+;     Integer: 4 bytes
+;     Offset: 8 bytes
+;     Dumped from database version: 17.6
+;     Dumped by pg_dump version: 17.9 (Ubuntu 17.9-1.pgdg24.04+1)
+;
+;
+; Selected TOC Entries:
+;
+30; 2615 16498 SCHEMA - auth supabase_admin
+21; 2615 16392 SCHEMA - extensions postgres
+29; 2615 16578 SCHEMA - graphql supabase_admin
+28; 2615 16567 SCHEMA - graphql_public supabase_admin
+11; 2615 16390 SCHEMA - pgbouncer pgbouncer
+65; 2615 18612 SCHEMA - public postgres
+6307; 0 0 COMMENT - SCHEMA public postgres
+12; 2615 16559 SCHEMA - realtime supabase_admin
+31; 2615 16546 SCHEMA - storage supabase_admin
+66; 2615 21423 SCHEMA - test postgres
+27; 2615 16607 SCHEMA - vault supabase_admin
+2; 3079 16393 EXTENSION - pg_stat_statements 
+6308; 0 0 COMMENT - EXTENSION pg_stat_statements 
+4; 3079 16447 EXTENSION - pgcrypto 
+6309; 0 0 COMMENT - EXTENSION pgcrypto 
+5; 3079 16608 EXTENSION - supabase_vault 
+6310; 0 0 COMMENT - EXTENSION supabase_vault 
+3; 3079 16436 EXTENSION - uuid-ossp 
+6311; 0 0 COMMENT - EXTENSION "uuid-ossp" 
+1222; 1247 16742 TYPE auth aal_level supabase_auth_admin
+1246; 1247 16883 TYPE auth code_challenge_method supabase_auth_admin
+1219; 1247 16736 TYPE auth factor_status supabase_auth_admin
+1216; 1247 16730 TYPE auth factor_type supabase_auth_admin
+1264; 1247 16986 TYPE auth oauth_authorization_status supabase_auth_admin
+1276; 1247 17059 TYPE auth oauth_client_type supabase_auth_admin
+1258; 1247 16964 TYPE auth oauth_registration_type supabase_auth_admin
+1267; 1247 16996 TYPE auth oauth_response_type supabase_auth_admin
+1252; 1247 16925 TYPE auth one_time_token_type supabase_auth_admin
+1354; 1247 18674 TYPE public AdvanceLedgerReason postgres
+1351; 1247 18668 TYPE public AdvanceLedgerType postgres
+1348; 1247 18642 TYPE public AttemptStatus postgres
+1780; 1247 92622 TYPE public BillingPlanStatus postgres
+1786; 1247 92642 TYPE public BillingTransitionStrategy postgres
+1783; 1247 92632 TYPE public FrequencyChangeStatus postgres
+1501; 1247 20988 TYPE public MoveOutReason postgres
+1522; 1247 21178 TYPE public MoveOutStatus postgres
+1777; 1247 92610 TYPE public PaymentFrequency postgres
+1345; 1247 18632 TYPE public PaymentStatus postgres
+1342; 1247 18615 TYPE public Role postgres
+1525; 1247 21214 TYPE public TenantStatus postgres
+1330; 1247 17406 TYPE realtime action supabase_admin
+1321; 1247 17367 TYPE realtime equality_op supabase_admin
+1324; 1247 17381 TYPE realtime user_defined_filter supabase_admin
+1336; 1247 17448 TYPE realtime wal_column supabase_admin
+1333; 1247 17419 TYPE realtime wal_rls supabase_admin
+1306; 1247 17292 TYPE storage buckettype supabase_storage_admin
+1537; 1247 21425 TYPE test AdvanceLedgerReason postgres
+1540; 1247 21438 TYPE test AdvanceLedgerType postgres
+1543; 1247 21444 TYPE test AttemptStatus postgres
+1558; 1247 21518 TYPE test MoveOutReason postgres
+1555; 1247 21498 TYPE test MoveOutStatus postgres
+1546; 1247 21464 TYPE test PaymentStatus postgres
+1549; 1247 21474 TYPE test Role postgres
+1552; 1247 21484 TYPE test TenantStatus postgres
+522; 1255 16544 FUNCTION auth email() supabase_auth_admin
+6312; 0 0 COMMENT auth FUNCTION email() supabase_auth_admin
+534; 1255 16712 FUNCTION auth jwt() supabase_auth_admin
+521; 1255 16543 FUNCTION auth role() supabase_auth_admin
+6313; 0 0 COMMENT auth FUNCTION role() supabase_auth_admin
+520; 1255 16542 FUNCTION auth uid() supabase_auth_admin
+6314; 0 0 COMMENT auth FUNCTION uid() supabase_auth_admin
+523; 1255 16551 FUNCTION extensions grant_pg_cron_access() supabase_admin
+6315; 0 0 COMMENT extensions FUNCTION grant_pg_cron_access() supabase_admin
+527; 1255 16572 FUNCTION extensions grant_pg_graphql_access() supabase_admin
+6316; 0 0 COMMENT extensions FUNCTION grant_pg_graphql_access() supabase_admin
+524; 1255 16553 FUNCTION extensions grant_pg_net_access() supabase_admin
+6317; 0 0 COMMENT extensions FUNCTION grant_pg_net_access() supabase_admin
+525; 1255 16563 FUNCTION extensions pgrst_ddl_watch() supabase_admin
+526; 1255 16564 FUNCTION extensions pgrst_drop_watch() supabase_admin
+528; 1255 16574 FUNCTION extensions set_graphql_placeholder() supabase_admin
+6318; 0 0 COMMENT extensions FUNCTION set_graphql_placeholder() supabase_admin
+564; 1255 18325 FUNCTION graphql_public graphql(text, text, jsonb, jsonb) supabase_admin
+470; 1255 16391 FUNCTION pgbouncer get_auth(text) supabase_admin
+567; 1255 19305 FUNCTION public check_room_capacity() postgres
+568; 1255 19595 FUNCTION public prevent_hostel_daily_snapshot_mutation() postgres
+569; 1255 19704 FUNCTION public prevent_payment_ledger_mutation() postgres
+565; 1255 19283 FUNCTION public prune_action_logs() postgres
+566; 1255 19304 FUNCTION public prune_identity_tokens() postgres
+557; 1255 17441 FUNCTION realtime apply_rls(jsonb, integer) supabase_admin
+562; 1255 17520 FUNCTION realtime broadcast_changes(text, text, text, text, text, record, record, text) supabase_admin
+559; 1255 17453 FUNCTION realtime build_prepared_statement_sql(text, regclass, realtime.wal_column[]) supabase_admin
+555; 1255 17403 FUNCTION realtime cast(text, regtype) supabase_admin
+554; 1255 17398 FUNCTION realtime check_equality_op(realtime.equality_op, regtype, text, text) supabase_admin
+558; 1255 17449 FUNCTION realtime is_visible_through_filters(realtime.wal_column[], realtime.user_defined_filter[]) supabase_admin
+563; 1255 17544 FUNCTION realtime list_changes(name, name, integer, integer) supabase_admin
+553; 1255 17397 FUNCTION realtime quote_wal2json(regclass) supabase_admin
+561; 1255 17519 FUNCTION realtime send(jsonb, text, text, boolean) supabase_admin
+552; 1255 17395 FUNCTION realtime subscription_check_filters() supabase_admin
+556; 1255 17430 FUNCTION realtime to_regrole(text) supabase_admin
+560; 1255 17513 FUNCTION realtime topic() supabase_realtime_admin
+551; 1255 17358 FUNCTION storage allow_any_operation(text[]) supabase_storage_admin
+550; 1255 17357 FUNCTION storage allow_only_operation(text) supabase_storage_admin
+541; 1255 17233 FUNCTION storage can_insert_object(text, text, uuid, jsonb) supabase_storage_admin
+544; 1255 17289 FUNCTION storage enforce_bucket_name_length() supabase_storage_admin
+537; 1255 17208 FUNCTION storage extension(text) supabase_storage_admin
+536; 1255 17207 FUNCTION storage filename(text) supabase_storage_admin
+535; 1255 17206 FUNCTION storage foldername(text) supabase_storage_admin
+545; 1255 17346 FUNCTION storage get_common_prefix(text, text, text) supabase_storage_admin
+538; 1255 17220 FUNCTION storage get_size_by_bucket() supabase_storage_admin
+542; 1255 17272 FUNCTION storage list_multipart_uploads_with_delimiter(text, text, text, integer, text, text) supabase_storage_admin
+546; 1255 17347 FUNCTION storage list_objects_with_delimiter(text, text, text, integer, text, text, text) supabase_storage_admin
+543; 1255 17288 FUNCTION storage operation() supabase_storage_admin
+549; 1255 17353 FUNCTION storage protect_delete() supabase_storage_admin
+539; 1255 17222 FUNCTION storage search(text, text, integer, integer, integer, text, text, text) supabase_storage_admin
+548; 1255 17351 FUNCTION storage search_by_timestamp(text, text, integer, integer, text, text, text, text) supabase_storage_admin
+547; 1255 17350 FUNCTION storage search_v2(text, text, integer, integer, text, text, text, text) supabase_storage_admin
+540; 1255 17223 FUNCTION storage update_updated_at_column() supabase_storage_admin
+284; 1259 16529 TABLE auth audit_log_entries supabase_auth_admin
+6319; 0 0 COMMENT auth TABLE audit_log_entries supabase_auth_admin
+303; 1259 17082 TABLE auth custom_oauth_providers supabase_auth_admin
+297; 1259 16887 TABLE auth flow_state supabase_auth_admin
+6320; 0 0 COMMENT auth TABLE flow_state supabase_auth_admin
+288; 1259 16684 TABLE auth identities supabase_auth_admin
+6321; 0 0 COMMENT auth TABLE identities supabase_auth_admin
+6322; 0 0 COMMENT auth COLUMN identities.email supabase_auth_admin
+283; 1259 16522 TABLE auth instances supabase_auth_admin
+6323; 0 0 COMMENT auth TABLE instances supabase_auth_admin
+292; 1259 16774 TABLE auth mfa_amr_claims supabase_auth_admin
+6324; 0 0 COMMENT auth TABLE mfa_amr_claims supabase_auth_admin
+291; 1259 16762 TABLE auth mfa_challenges supabase_auth_admin
+6325; 0 0 COMMENT auth TABLE mfa_challenges supabase_auth_admin
+290; 1259 16749 TABLE auth mfa_factors supabase_auth_admin
+6326; 0 0 COMMENT auth TABLE mfa_factors supabase_auth_admin
+6327; 0 0 COMMENT auth COLUMN mfa_factors.last_webauthn_challenge_data supabase_auth_admin
+300; 1259 16999 TABLE auth oauth_authorizations supabase_auth_admin
+302; 1259 17072 TABLE auth oauth_client_states supabase_auth_admin
+6328; 0 0 COMMENT auth TABLE oauth_client_states supabase_auth_admin
+299; 1259 16969 TABLE auth oauth_clients supabase_auth_admin
+301; 1259 17032 TABLE auth oauth_consents supabase_auth_admin
+298; 1259 16937 TABLE auth one_time_tokens supabase_auth_admin
+282; 1259 16511 TABLE auth refresh_tokens supabase_auth_admin
+6329; 0 0 COMMENT auth TABLE refresh_tokens supabase_auth_admin
+281; 1259 16510 SEQUENCE auth refresh_tokens_id_seq supabase_auth_admin
+6330; 0 0 SEQUENCE OWNED BY auth refresh_tokens_id_seq supabase_auth_admin
+295; 1259 16816 TABLE auth saml_providers supabase_auth_admin
+6331; 0 0 COMMENT auth TABLE saml_providers supabase_auth_admin
+296; 1259 16834 TABLE auth saml_relay_states supabase_auth_admin
+6332; 0 0 COMMENT auth TABLE saml_relay_states supabase_auth_admin
+285; 1259 16537 TABLE auth schema_migrations supabase_auth_admin
+6333; 0 0 COMMENT auth TABLE schema_migrations supabase_auth_admin
+289; 1259 16714 TABLE auth sessions supabase_auth_admin
+6334; 0 0 COMMENT auth TABLE sessions supabase_auth_admin
+6335; 0 0 COMMENT auth COLUMN sessions.not_after supabase_auth_admin
+6336; 0 0 COMMENT auth COLUMN sessions.refresh_token_hmac_key supabase_auth_admin
+6337; 0 0 COMMENT auth COLUMN sessions.refresh_token_counter supabase_auth_admin
+294; 1259 16801 TABLE auth sso_domains supabase_auth_admin
+6338; 0 0 COMMENT auth TABLE sso_domains supabase_auth_admin
+293; 1259 16792 TABLE auth sso_providers supabase_auth_admin
+6339; 0 0 COMMENT auth TABLE sso_providers supabase_auth_admin
+6340; 0 0 COMMENT auth COLUMN sso_providers.resource_id supabase_auth_admin
+280; 1259 16499 TABLE auth users supabase_auth_admin
+6341; 0 0 COMMENT auth TABLE users supabase_auth_admin
+6342; 0 0 COMMENT auth COLUMN users.is_sso_user supabase_auth_admin
+305; 1259 17147 TABLE auth webauthn_challenges supabase_auth_admin
+304; 1259 17124 TABLE auth webauthn_credentials supabase_auth_admin
+450; 1259 92526 TABLE public RuleVersion postgres
+451; 1259 92538 TABLE public TenantPolicyAcceptance postgres
+353; 1259 19401 TABLE public _prisma_migrations postgres
+349; 1259 19273 TABLE public action_logs postgres
+340; 1259 18868 TABLE public activity_logs postgres
+378; 1259 21305 TABLE public admin_financial_audit_log postgres
+367; 1259 20817 TABLE public bulk_import_batches postgres
+6343; 0 0 COMMENT public TABLE bulk_import_batches postgres
+342; 1259 18885 TABLE public complaints postgres
+375; 1259 21149 TABLE public exit_disputes postgres
+373; 1259 21098 TABLE public exit_feedbacks postgres
+372; 1259 21065 TABLE public exit_settlement_transactions postgres
+341; 1259 18876 TABLE public expenses postgres
+358; 1259 19553 TABLE public financial_invariant_failures postgres
+377; 1259 21294 TABLE public financial_reconciliation_issues postgres
+449; 1259 92463 TABLE public floors postgres
+359; 1259 19569 TABLE public hostel_daily_snapshots postgres
+356; 1259 19524 TABLE public hostel_invariant_checks postgres
+323; 1259 18712 TABLE public hostels postgres
+376; 1259 21238 TABLE public identification_documents postgres
+351; 1259 19294 TABLE public identity_tokens postgres
+455; 1259 92762 TABLE public lead_activities postgres
+457; 1259 92806 TABLE public lead_notes postgres
+366; 1259 20803 TABLE public login_attempts postgres
+6344; 0 0 COMMENT public TABLE login_attempts postgres
+346; 1259 18966 TABLE public message_logs postgres
+345; 1259 18958 TABLE public message_packs postgres
+357; 1259 19537 TABLE public migration_audit_runs postgres
+374; 1259 21130 TABLE public move_out_inspection_items postgres
+371; 1259 21041 TABLE public move_out_inspections postgres
+370; 1259 21013 TABLE public move_out_requests postgres
+336; 1259 18841 TABLE public notifications postgres
+352; 1259 19322 TABLE public owner_dashboard_snapshots postgres
+334; 1259 18816 TABLE public payment_attempt_obligations postgres
+362; 1259 19738 TABLE public payment_attempt_status_events postgres
+333; 1259 18806 TABLE public payment_attempts postgres
+453; 1259 92661 TABLE public payment_frequency_change_requests postgres
+363; 1259 19751 TABLE public payment_operational_anomalies postgres
+361; 1259 19725 TABLE public payment_provider_verification_snapshots postgres
+365; 1259 19777 TABLE public payment_reconciliation_items postgres
+364; 1259 19765 TABLE public payment_reconciliation_runs postgres
+360; 1259 19707 TABLE public payment_webhook_events postgres
+332; 1259 18798 TABLE public payments postgres
+369; 1259 20938 TABLE public phone_verification_otps postgres
+321; 1259 18687 TABLE public profiles postgres
+6345; 0 0 COMMENT public COLUMN profiles.password_reset_required postgres
+6346; 0 0 COMMENT public COLUMN profiles.is_imported postgres
+6347; 0 0 COMMENT public COLUMN profiles.import_batch_id postgres
+335; 1259 18832 TABLE public reactivation_requests postgres
+343; 1259 18895 TABLE public receipts postgres
+339; 1259 18860 TABLE public refresh_tokens postgres
+329; 1259 18769 TABLE public reminder_logs postgres
+354; 1259 19436 TABLE public rent_generation_ledgers postgres
+330; 1259 18778 TABLE public rent_generation_logs postgres
+327; 1259 18750 TABLE public rent_obligations postgres
+325; 1259 18735 TABLE public room_activity_logs postgres
+326; 1259 18743 TABLE public room_allocations postgres
+456; 1259 92776 TABLE public room_reservations postgres
+324; 1259 18726 TABLE public rooms postgres
+344; 1259 18903 TABLE public system_event_logs postgres
+331; 1259 18790 TABLE public system_locks postgres
+328; 1259 18761 TABLE public tenant_advance_ledger postgres
+348; 1259 19251 TABLE public tenant_behavior_scores postgres
+452; 1259 92649 TABLE public tenant_billing_plans postgres
+355; 1259 19510 TABLE public tenant_transfer_logs postgres
+322; 1259 18697 TABLE public tenants postgres
+338; 1259 18851 TABLE public token_blacklist postgres
+337; 1259 18850 SEQUENCE public token_blacklist_id_seq postgres
+6348; 0 0 SEQUENCE OWNED BY public token_blacklist_id_seq postgres
+347; 1259 19220 TABLE public usage_tracking postgres
+454; 1259 92731 TABLE public visitor_leads postgres
+350; 1259 19284 TABLE public whatsapp_logs postgres
+368; 1259 20852 TABLE public whatsapp_webhook_events postgres
+320; 1259 17523 TABLE realtime messages supabase_realtime_admin
+314; 1259 17361 TABLE realtime schema_migrations supabase_admin
+317; 1259 17383 TABLE realtime subscription supabase_admin
+316; 1259 17382 SEQUENCE realtime subscription_id_seq supabase_admin
+307; 1259 17178 TABLE storage buckets supabase_storage_admin
+6349; 0 0 COMMENT storage COLUMN buckets.owner supabase_storage_admin
+311; 1259 17298 TABLE storage buckets_analytics supabase_storage_admin
+312; 1259 17311 TABLE storage buckets_vectors supabase_storage_admin
+306; 1259 17170 TABLE storage migrations supabase_storage_admin
+308; 1259 17188 TABLE storage objects supabase_storage_admin
+6350; 0 0 COMMENT storage COLUMN objects.owner supabase_storage_admin
+309; 1259 17237 TABLE storage s3_multipart_uploads supabase_storage_admin
+310; 1259 17251 TABLE storage s3_multipart_uploads_parts supabase_storage_admin
+313; 1259 17321 TABLE storage vector_indexes supabase_storage_admin
+379; 1259 21543 TABLE test action_logs postgres
+380; 1259 21551 TABLE test activity_logs postgres
+381; 1259 21559 TABLE test addon_transactions postgres
+382; 1259 21568 TABLE test addon_usage postgres
+448; 1259 22295 TABLE test admin_financial_audit_log postgres
+383; 1259 21576 TABLE test autopay_attempts postgres
+384; 1259 21584 TABLE test bulk_import_batches postgres
+385; 1259 21600 TABLE test complaints postgres
+442; 1259 22220 TABLE test exit_disputes postgres
+443; 1259 22231 TABLE test exit_feedbacks postgres
+441; 1259 22195 TABLE test exit_settlement_transactions postgres
+386; 1259 21610 TABLE test expenses postgres
+387; 1259 21619 TABLE test financial_invariant_failures postgres
+447; 1259 22284 TABLE test financial_reconciliation_issues postgres
+388; 1259 21629 TABLE test hostel_daily_snapshots postgres
+389; 1259 21646 TABLE test hostel_invariant_checks postgres
+390; 1259 21655 TABLE test hostels postgres
+392; 1259 21679 TABLE test identification_documents postgres
+391; 1259 21670 TABLE test identity_tokens postgres
+393; 1259 21691 TABLE test login_attempts postgres
+394; 1259 21700 TABLE test message_logs postgres
+395; 1259 21710 TABLE test message_packs postgres
+396; 1259 21718 TABLE test migration_audit_runs postgres
+440; 1259 22183 TABLE test move_out_inspection_items postgres
+439; 1259 22165 TABLE test move_out_inspections postgres
+438; 1259 22148 TABLE test move_out_requests postgres
+397; 1259 21732 TABLE test notifications postgres
+398; 1259 21741 TABLE test overflow_ledger postgres
+399; 1259 21753 TABLE test owner_dashboard_snapshots postgres
+400; 1259 21775 TABLE test owner_invoices postgres
+401; 1259 21784 TABLE test owner_onboarding_states postgres
+444; 1259 22240 TABLE test owner_settlement_ledger postgres
+402; 1259 21797 TABLE test owner_subscriptions postgres
+403; 1259 21808 TABLE test owner_usage_snapshots postgres
+404; 1259 21822 TABLE test payment_attempt_obligations postgres
+405; 1259 21828 TABLE test payment_attempt_status_events postgres
+406; 1259 21836 TABLE test payment_attempts postgres
+407; 1259 21846 TABLE test payment_operational_anomalies postgres
+408; 1259 21855 TABLE test payment_provider_verification_snapshots postgres
+409; 1259 21863 TABLE test payment_reconciliation_items postgres
+410; 1259 21871 TABLE test payment_reconciliation_runs postgres
+411; 1259 21880 TABLE test payment_webhook_events postgres
+412; 1259 21890 TABLE test payments postgres
+415; 1259 21933 TABLE test phone_verification_otps postgres
+413; 1259 21899 TABLE test plans postgres
+414; 1259 21919 TABLE test profiles postgres
+416; 1259 21944 TABLE test reactivation_requests postgres
+417; 1259 21953 TABLE test receipts postgres
+418; 1259 21961 TABLE test refresh_tokens postgres
+419; 1259 21969 TABLE test reminder_logs postgres
+420; 1259 21979 TABLE test rent_generation_ledgers postgres
+421; 1259 21989 TABLE test rent_generation_logs postgres
+422; 1259 22001 TABLE test rent_obligations postgres
+423; 1259 22013 TABLE test room_activity_logs postgres
+424; 1259 22021 TABLE test room_allocations postgres
+425; 1259 22028 TABLE test rooms postgres
+446; 1259 22270 TABLE test settlement_batch_items postgres
+445; 1259 22252 TABLE test settlement_batches postgres
+426; 1259 22038 TABLE test subscriptions postgres
+427; 1259 22051 TABLE test system_event_logs postgres
+428; 1259 22059 TABLE test system_locks postgres
+429; 1259 22067 TABLE test tenant_advance_ledger postgres
+430; 1259 22075 TABLE test tenant_behavior_scores postgres
+431; 1259 22084 TABLE test tenant_transfer_logs postgres
+432; 1259 22093 TABLE test tenants postgres
+434; 1259 22111 TABLE test token_blacklist postgres
+433; 1259 22110 SEQUENCE test token_blacklist_id_seq postgres
+6351; 0 0 SEQUENCE OWNED BY test token_blacklist_id_seq postgres
+435; 1259 22120 TABLE test usage_tracking postgres
+436; 1259 22127 TABLE test whatsapp_logs postgres
+437; 1259 22137 TABLE test whatsapp_webhook_events postgres
+4247; 2604 16514 DEFAULT auth refresh_tokens id supabase_auth_admin
+4384; 2604 18854 DEFAULT public token_blacklist id postgres
+4744; 2604 22114 DEFAULT test token_blacklist id postgres
+6131; 0 16529 TABLE DATA auth audit_log_entries supabase_auth_admin
+6148; 0 17082 TABLE DATA auth custom_oauth_providers supabase_auth_admin
+6142; 0 16887 TABLE DATA auth flow_state supabase_auth_admin
+6133; 0 16684 TABLE DATA auth identities supabase_auth_admin
+6130; 0 16522 TABLE DATA auth instances supabase_auth_admin
+6137; 0 16774 TABLE DATA auth mfa_amr_claims supabase_auth_admin
+6136; 0 16762 TABLE DATA auth mfa_challenges supabase_auth_admin
+6135; 0 16749 TABLE DATA auth mfa_factors supabase_auth_admin
+6145; 0 16999 TABLE DATA auth oauth_authorizations supabase_auth_admin
+6147; 0 17072 TABLE DATA auth oauth_client_states supabase_auth_admin
+6144; 0 16969 TABLE DATA auth oauth_clients supabase_auth_admin
+6146; 0 17032 TABLE DATA auth oauth_consents supabase_auth_admin
+6143; 0 16937 TABLE DATA auth one_time_tokens supabase_auth_admin
+6129; 0 16511 TABLE DATA auth refresh_tokens supabase_auth_admin
+6140; 0 16816 TABLE DATA auth saml_providers supabase_auth_admin
+6141; 0 16834 TABLE DATA auth saml_relay_states supabase_auth_admin
+6132; 0 16537 TABLE DATA auth schema_migrations supabase_auth_admin
+6134; 0 16714 TABLE DATA auth sessions supabase_auth_admin
+6139; 0 16801 TABLE DATA auth sso_domains supabase_auth_admin
+6138; 0 16792 TABLE DATA auth sso_providers supabase_auth_admin
+6127; 0 16499 TABLE DATA auth users supabase_auth_admin
+6150; 0 17147 TABLE DATA auth webauthn_challenges supabase_auth_admin
+6149; 0 17124 TABLE DATA auth webauthn_credentials supabase_auth_admin
+6291; 0 92526 TABLE DATA public RuleVersion postgres
+6292; 0 92538 TABLE DATA public TenantPolicyAcceptance postgres
+6194; 0 19401 TABLE DATA public _prisma_migrations postgres
+6190; 0 19273 TABLE DATA public action_logs postgres
+6181; 0 18868 TABLE DATA public activity_logs postgres
+6219; 0 21305 TABLE DATA public admin_financial_audit_log postgres
+6208; 0 20817 TABLE DATA public bulk_import_batches postgres
+6183; 0 18885 TABLE DATA public complaints postgres
+6216; 0 21149 TABLE DATA public exit_disputes postgres
+6214; 0 21098 TABLE DATA public exit_feedbacks postgres
+6213; 0 21065 TABLE DATA public exit_settlement_transactions postgres
+6182; 0 18876 TABLE DATA public expenses postgres
+6199; 0 19553 TABLE DATA public financial_invariant_failures postgres
+6218; 0 21294 TABLE DATA public financial_reconciliation_issues postgres
+6290; 0 92463 TABLE DATA public floors postgres
+6200; 0 19569 TABLE DATA public hostel_daily_snapshots postgres
+6197; 0 19524 TABLE DATA public hostel_invariant_checks postgres
+6164; 0 18712 TABLE DATA public hostels postgres
+6217; 0 21238 TABLE DATA public identification_documents postgres
+6192; 0 19294 TABLE DATA public identity_tokens postgres
+6296; 0 92762 TABLE DATA public lead_activities postgres
+6298; 0 92806 TABLE DATA public lead_notes postgres
+6207; 0 20803 TABLE DATA public login_attempts postgres
+6187; 0 18966 TABLE DATA public message_logs postgres
+6186; 0 18958 TABLE DATA public message_packs postgres
+6198; 0 19537 TABLE DATA public migration_audit_runs postgres
+6215; 0 21130 TABLE DATA public move_out_inspection_items postgres
+6212; 0 21041 TABLE DATA public move_out_inspections postgres
+6211; 0 21013 TABLE DATA public move_out_requests postgres
+6177; 0 18841 TABLE DATA public notifications postgres
+6193; 0 19322 TABLE DATA public owner_dashboard_snapshots postgres
+6175; 0 18816 TABLE DATA public payment_attempt_obligations postgres
+6203; 0 19738 TABLE DATA public payment_attempt_status_events postgres
+6174; 0 18806 TABLE DATA public payment_attempts postgres
+6294; 0 92661 TABLE DATA public payment_frequency_change_requests postgres
+6204; 0 19751 TABLE DATA public payment_operational_anomalies postgres
+6202; 0 19725 TABLE DATA public payment_provider_verification_snapshots postgres
+6206; 0 19777 TABLE DATA public payment_reconciliation_items postgres
+6205; 0 19765 TABLE DATA public payment_reconciliation_runs postgres
+6201; 0 19707 TABLE DATA public payment_webhook_events postgres
+6173; 0 18798 TABLE DATA public payments postgres
+6210; 0 20938 TABLE DATA public phone_verification_otps postgres
+6162; 0 18687 TABLE DATA public profiles postgres
+6176; 0 18832 TABLE DATA public reactivation_requests postgres
+6184; 0 18895 TABLE DATA public receipts postgres
+6180; 0 18860 TABLE DATA public refresh_tokens postgres
+6170; 0 18769 TABLE DATA public reminder_logs postgres
+6195; 0 19436 TABLE DATA public rent_generation_ledgers postgres
+6171; 0 18778 TABLE DATA public rent_generation_logs postgres
+6168; 0 18750 TABLE DATA public rent_obligations postgres
+6166; 0 18735 TABLE DATA public room_activity_logs postgres
+6167; 0 18743 TABLE DATA public room_allocations postgres
+6297; 0 92776 TABLE DATA public room_reservations postgres
+6165; 0 18726 TABLE DATA public rooms postgres
+6185; 0 18903 TABLE DATA public system_event_logs postgres
+6172; 0 18790 TABLE DATA public system_locks postgres
+6169; 0 18761 TABLE DATA public tenant_advance_ledger postgres
+6189; 0 19251 TABLE DATA public tenant_behavior_scores postgres
+6293; 0 92649 TABLE DATA public tenant_billing_plans postgres
+6196; 0 19510 TABLE DATA public tenant_transfer_logs postgres
+6163; 0 18697 TABLE DATA public tenants postgres
+6179; 0 18851 TABLE DATA public token_blacklist postgres
+6188; 0 19220 TABLE DATA public usage_tracking postgres
+6295; 0 92731 TABLE DATA public visitor_leads postgres
+6191; 0 19284 TABLE DATA public whatsapp_logs postgres
+6209; 0 20852 TABLE DATA public whatsapp_webhook_events postgres
+6159; 0 17361 TABLE DATA realtime schema_migrations supabase_admin
+6161; 0 17383 TABLE DATA realtime subscription supabase_admin
+6152; 0 17178 TABLE DATA storage buckets supabase_storage_admin
+6156; 0 17298 TABLE DATA storage buckets_analytics supabase_storage_admin
+6157; 0 17311 TABLE DATA storage buckets_vectors supabase_storage_admin
+6151; 0 17170 TABLE DATA storage migrations supabase_storage_admin
+6153; 0 17188 TABLE DATA storage objects supabase_storage_admin
+6154; 0 17237 TABLE DATA storage s3_multipart_uploads supabase_storage_admin
+6155; 0 17251 TABLE DATA storage s3_multipart_uploads_parts supabase_storage_admin
+6158; 0 17321 TABLE DATA storage vector_indexes supabase_storage_admin
+6220; 0 21543 TABLE DATA test action_logs postgres
+6221; 0 21551 TABLE DATA test activity_logs postgres
+6222; 0 21559 TABLE DATA test addon_transactions postgres
+6223; 0 21568 TABLE DATA test addon_usage postgres
+6289; 0 22295 TABLE DATA test admin_financial_audit_log postgres
+6224; 0 21576 TABLE DATA test autopay_attempts postgres
+6225; 0 21584 TABLE DATA test bulk_import_batches postgres
+6226; 0 21600 TABLE DATA test complaints postgres
+6283; 0 22220 TABLE DATA test exit_disputes postgres
+6284; 0 22231 TABLE DATA test exit_feedbacks postgres
+6282; 0 22195 TABLE DATA test exit_settlement_transactions postgres
+6227; 0 21610 TABLE DATA test expenses postgres
+6228; 0 21619 TABLE DATA test financial_invariant_failures postgres
+6288; 0 22284 TABLE DATA test financial_reconciliation_issues postgres
+6229; 0 21629 TABLE DATA test hostel_daily_snapshots postgres
+6230; 0 21646 TABLE DATA test hostel_invariant_checks postgres
+6231; 0 21655 TABLE DATA test hostels postgres
+6233; 0 21679 TABLE DATA test identification_documents postgres
+6232; 0 21670 TABLE DATA test identity_tokens postgres
+6234; 0 21691 TABLE DATA test login_attempts postgres
+6235; 0 21700 TABLE DATA test message_logs postgres
+6236; 0 21710 TABLE DATA test message_packs postgres
+6237; 0 21718 TABLE DATA test migration_audit_runs postgres
+6281; 0 22183 TABLE DATA test move_out_inspection_items postgres
+6280; 0 22165 TABLE DATA test move_out_inspections postgres
+6279; 0 22148 TABLE DATA test move_out_requests postgres
+6238; 0 21732 TABLE DATA test notifications postgres
+6239; 0 21741 TABLE DATA test overflow_ledger postgres
+6240; 0 21753 TABLE DATA test owner_dashboard_snapshots postgres
+6241; 0 21775 TABLE DATA test owner_invoices postgres
+6242; 0 21784 TABLE DATA test owner_onboarding_states postgres
+6285; 0 22240 TABLE DATA test owner_settlement_ledger postgres
+6243; 0 21797 TABLE DATA test owner_subscriptions postgres
+6244; 0 21808 TABLE DATA test owner_usage_snapshots postgres
+6245; 0 21822 TABLE DATA test payment_attempt_obligations postgres
+6246; 0 21828 TABLE DATA test payment_attempt_status_events postgres
+6247; 0 21836 TABLE DATA test payment_attempts postgres
+6248; 0 21846 TABLE DATA test payment_operational_anomalies postgres
+6249; 0 21855 TABLE DATA test payment_provider_verification_snapshots postgres
+6250; 0 21863 TABLE DATA test payment_reconciliation_items postgres
+6251; 0 21871 TABLE DATA test payment_reconciliation_runs postgres
+6252; 0 21880 TABLE DATA test payment_webhook_events postgres
+6253; 0 21890 TABLE DATA test payments postgres
+6256; 0 21933 TABLE DATA test phone_verification_otps postgres
+6254; 0 21899 TABLE DATA test plans postgres
+6255; 0 21919 TABLE DATA test profiles postgres
+6257; 0 21944 TABLE DATA test reactivation_requests postgres
+6258; 0 21953 TABLE DATA test receipts postgres
+6259; 0 21961 TABLE DATA test refresh_tokens postgres
+6260; 0 21969 TABLE DATA test reminder_logs postgres
+6261; 0 21979 TABLE DATA test rent_generation_ledgers postgres
+6262; 0 21989 TABLE DATA test rent_generation_logs postgres
+6263; 0 22001 TABLE DATA test rent_obligations postgres
+6264; 0 22013 TABLE DATA test room_activity_logs postgres
+6265; 0 22021 TABLE DATA test room_allocations postgres
+6266; 0 22028 TABLE DATA test rooms postgres
+6287; 0 22270 TABLE DATA test settlement_batch_items postgres
+6286; 0 22252 TABLE DATA test settlement_batches postgres
+6267; 0 22038 TABLE DATA test subscriptions postgres
+6268; 0 22051 TABLE DATA test system_event_logs postgres
+6269; 0 22059 TABLE DATA test system_locks postgres
+6270; 0 22067 TABLE DATA test tenant_advance_ledger postgres
+6271; 0 22075 TABLE DATA test tenant_behavior_scores postgres
+6272; 0 22084 TABLE DATA test tenant_transfer_logs postgres
+6273; 0 22093 TABLE DATA test tenants postgres
+6275; 0 22111 TABLE DATA test token_blacklist postgres
+6276; 0 22120 TABLE DATA test usage_tracking postgres
+6277; 0 22127 TABLE DATA test whatsapp_logs postgres
+6278; 0 22137 TABLE DATA test whatsapp_webhook_events postgres
+4237; 0 16612 TABLE DATA vault secrets supabase_admin
+6352; 0 0 SEQUENCE SET auth refresh_tokens_id_seq supabase_auth_admin
+6353; 0 0 SEQUENCE SET public token_blacklist_id_seq postgres
+6354; 0 0 SEQUENCE SET realtime subscription_id_seq supabase_admin
+6355; 0 0 SEQUENCE SET test token_blacklist_id_seq postgres
+4984; 2606 16787 CONSTRAINT auth mfa_amr_claims amr_id_pk supabase_auth_admin
+4953; 2606 16535 CONSTRAINT auth audit_log_entries audit_log_entries_pkey supabase_auth_admin
+5039; 2606 17119 CONSTRAINT auth custom_oauth_providers custom_oauth_providers_identifier_key supabase_auth_admin
+5041; 2606 17117 CONSTRAINT auth custom_oauth_providers custom_oauth_providers_pkey supabase_auth_admin
+5007; 2606 16893 CONSTRAINT auth flow_state flow_state_pkey supabase_auth_admin
+4962; 2606 16911 CONSTRAINT auth identities identities_pkey supabase_auth_admin
+4964; 2606 16921 CONSTRAINT auth identities identities_provider_id_provider_unique supabase_auth_admin
+4951; 2606 16528 CONSTRAINT auth instances instances_pkey supabase_auth_admin
+4986; 2606 16780 CONSTRAINT auth mfa_amr_claims mfa_amr_claims_session_id_authentication_method_pkey supabase_auth_admin
+4982; 2606 16768 CONSTRAINT auth mfa_challenges mfa_challenges_pkey supabase_auth_admin
+4974; 2606 16961 CONSTRAINT auth mfa_factors mfa_factors_last_challenged_at_key supabase_auth_admin
+4976; 2606 16755 CONSTRAINT auth mfa_factors mfa_factors_pkey supabase_auth_admin
+5020; 2606 17020 CONSTRAINT auth oauth_authorizations oauth_authorizations_authorization_code_key supabase_auth_admin
+5022; 2606 17018 CONSTRAINT auth oauth_authorizations oauth_authorizations_authorization_id_key supabase_auth_admin
+5024; 2606 17016 CONSTRAINT auth oauth_authorizations oauth_authorizations_pkey supabase_auth_admin
+5034; 2606 17078 CONSTRAINT auth oauth_client_states oauth_client_states_pkey supabase_auth_admin
+5017; 2606 16980 CONSTRAINT auth oauth_clients oauth_clients_pkey supabase_auth_admin
+5028; 2606 17042 CONSTRAINT auth oauth_consents oauth_consents_pkey supabase_auth_admin
+5030; 2606 17044 CONSTRAINT auth oauth_consents oauth_consents_user_client_unique supabase_auth_admin
+5011; 2606 16946 CONSTRAINT auth one_time_tokens one_time_tokens_pkey supabase_auth_admin
+4945; 2606 16518 CONSTRAINT auth refresh_tokens refresh_tokens_pkey supabase_auth_admin
+4948; 2606 16697 CONSTRAINT auth refresh_tokens refresh_tokens_token_unique supabase_auth_admin
+4996; 2606 16827 CONSTRAINT auth saml_providers saml_providers_entity_id_key supabase_auth_admin
+4998; 2606 16825 CONSTRAINT auth saml_providers saml_providers_pkey supabase_auth_admin
+5003; 2606 16841 CONSTRAINT auth saml_relay_states saml_relay_states_pkey supabase_auth_admin
+4956; 2606 16541 CONSTRAINT auth schema_migrations schema_migrations_pkey supabase_auth_admin
+4969; 2606 16718 CONSTRAINT auth sessions sessions_pkey supabase_auth_admin
+4993; 2606 16808 CONSTRAINT auth sso_domains sso_domains_pkey supabase_auth_admin
+4988; 2606 16799 CONSTRAINT auth sso_providers sso_providers_pkey supabase_auth_admin
+4938; 2606 16881 CONSTRAINT auth users users_phone_key supabase_auth_admin
+4940; 2606 16505 CONSTRAINT auth users users_pkey supabase_auth_admin
+5049; 2606 17156 CONSTRAINT auth webauthn_challenges webauthn_challenges_pkey supabase_auth_admin
+5045; 2606 17139 CONSTRAINT auth webauthn_credentials webauthn_credentials_pkey supabase_auth_admin
+5756; 2606 92537 CONSTRAINT public RuleVersion RuleVersion_pkey postgres
+5759; 2606 92547 CONSTRAINT public TenantPolicyAcceptance TenantPolicyAcceptance_pkey postgres
+5258; 2606 19409 CONSTRAINT public _prisma_migrations _prisma_migrations_pkey postgres
+5237; 2606 19281 CONSTRAINT public action_logs action_logs_pkey postgres
+5200; 2606 18875 CONSTRAINT public activity_logs activity_logs_pkey postgres
+5394; 2606 21314 CONSTRAINT public admin_financial_audit_log admin_financial_audit_log_pkey postgres
+5338; 2606 20833 CONSTRAINT public bulk_import_batches bulk_import_batches_pkey postgres
+5212; 2606 18894 CONSTRAINT public complaints complaints_pkey postgres
+5380; 2606 21159 CONSTRAINT public exit_disputes exit_disputes_pkey postgres
+5373; 2606 21106 CONSTRAINT public exit_feedbacks exit_feedbacks_pkey postgres
+5368; 2606 21088 CONSTRAINT public exit_settlement_transactions exit_settlement_transactions_pkey postgres
+5209; 2606 18884 CONSTRAINT public expenses expenses_pkey postgres
+5285; 2606 19563 CONSTRAINT public financial_invariant_failures financial_invariant_failures_pkey postgres
+5388; 2606 21304 CONSTRAINT public financial_reconciliation_issues financial_reconciliation_issues_pkey postgres
+5752; 2606 92472 CONSTRAINT public floors floors_pkey postgres
+5289; 2606 19588 CONSTRAINT public hostel_daily_snapshots hostel_daily_snapshots_hostel_id_snapshot_date_key postgres
+5291; 2606 19586 CONSTRAINT public hostel_daily_snapshots hostel_daily_snapshots_pkey postgres
+5276; 2606 19533 CONSTRAINT public hostel_invariant_checks hostel_invariant_checks_pkey postgres
+5105; 2606 18725 CONSTRAINT public hostels hostels_pkey postgres
+5383; 2606 21249 CONSTRAINT public identification_documents identification_documents_pkey postgres
+5250; 2606 19302 CONSTRAINT public identity_tokens identity_tokens_pkey postgres
+5783; 2606 92770 CONSTRAINT public lead_activities lead_activities_pkey postgres
+5792; 2606 92814 CONSTRAINT public lead_notes lead_notes_pkey postgres
+5334; 2606 20812 CONSTRAINT public login_attempts login_attempts_pkey postgres
+5229; 2606 18975 CONSTRAINT public message_logs message_logs_pkey postgres
+5226; 2606 18965 CONSTRAINT public message_packs message_packs_pkey postgres
+5280; 2606 19551 CONSTRAINT public migration_audit_runs migration_audit_runs_pkey postgres
+5377; 2606 21141 CONSTRAINT public move_out_inspection_items move_out_inspection_items_pkey postgres
+5363; 2606 21057 CONSTRAINT public move_out_inspections move_out_inspections_pkey postgres
+5357; 2606 21025 CONSTRAINT public move_out_requests move_out_requests_pkey postgres
+5187; 2606 18849 CONSTRAINT public notifications notifications_pkey postgres
+5255; 2606 19344 CONSTRAINT public owner_dashboard_snapshots owner_dashboard_snapshots_pkey postgres
+5183; 2606 18821 CONSTRAINT public payment_attempt_obligations payment_attempt_obligations_pkey postgres
+5311; 2606 19748 CONSTRAINT public payment_attempt_status_events payment_attempt_status_events_payment_attempt_id_transition_key postgres
+5313; 2606 19746 CONSTRAINT public payment_attempt_status_events payment_attempt_status_events_pkey postgres
+5177; 2606 18815 CONSTRAINT public payment_attempts payment_attempts_pkey postgres
+4918; 2606 19703 CHECK CONSTRAINT public payment_attempts payment_attempts_platform_billing_no_hostel_scope postgres
+4919; 2606 19702 CHECK CONSTRAINT public payment_attempts payment_attempts_rent_collection_requires_hostel_scope postgres
+4920; 2606 19701 CHECK CONSTRAINT public payment_attempts payment_attempts_settled_requires_success postgres
+5771; 2606 92672 CONSTRAINT public payment_frequency_change_requests payment_frequency_change_requests_pkey postgres
+5319; 2606 19760 CONSTRAINT public payment_operational_anomalies payment_operational_anomalies_pkey postgres
+5305; 2606 19733 CONSTRAINT public payment_provider_verification_snapshots payment_provider_verification_snapshots_pkey postgres
+5327; 2606 19785 CONSTRAINT public payment_reconciliation_items payment_reconciliation_items_pkey postgres
+5323; 2606 19774 CONSTRAINT public payment_reconciliation_runs payment_reconciliation_runs_pkey postgres
+5294; 2606 19719 CONSTRAINT public payment_webhook_events payment_webhook_events_event_hash_key postgres
+5299; 2606 19717 CONSTRAINT public payment_webhook_events payment_webhook_events_pkey postgres
+5163; 2606 18805 CONSTRAINT public payments payments_pkey postgres
+5351; 2606 20949 CONSTRAINT public phone_verification_otps phone_verification_otps_pkey postgres
+5096; 2606 18696 CONSTRAINT public profiles profiles_pkey postgres
+5185; 2606 18840 CONSTRAINT public reactivation_requests reactivation_requests_pkey postgres
+5219; 2606 18902 CONSTRAINT public receipts receipts_pkey postgres
+5194; 2606 18867 CONSTRAINT public refresh_tokens refresh_tokens_pkey postgres
+5147; 2606 18777 CONSTRAINT public reminder_logs reminder_logs_pkey postgres
+5261; 2606 19450 CONSTRAINT public rent_generation_ledgers rent_generation_ledgers_owner_id_hostel_id_rent_month_oblig_key postgres
+5264; 2606 19448 CONSTRAINT public rent_generation_ledgers rent_generation_ledgers_pkey postgres
+5150; 2606 18789 CONSTRAINT public rent_generation_logs rent_generation_logs_pkey postgres
+5132; 2606 18760 CONSTRAINT public rent_obligations rent_obligations_pkey postgres
+5115; 2606 18742 CONSTRAINT public room_activity_logs room_activity_logs_pkey postgres
+5120; 2606 18749 CONSTRAINT public room_allocations room_allocations_pkey postgres
+5788; 2606 92785 CONSTRAINT public room_reservations room_reservations_pkey postgres
+5112; 2606 18734 CONSTRAINT public rooms rooms_pkey postgres
+5224; 2606 18910 CONSTRAINT public system_event_logs system_event_logs_pkey postgres
+5154; 2606 18797 CONSTRAINT public system_locks system_locks_pkey postgres
+5139; 2606 18768 CONSTRAINT public tenant_advance_ledger tenant_advance_ledger_pkey postgres
+5233; 2606 19259 CONSTRAINT public tenant_behavior_scores tenant_behavior_scores_pkey postgres
+5766; 2606 92660 CONSTRAINT public tenant_billing_plans tenant_billing_plans_pkey postgres
+5268; 2606 19519 CONSTRAINT public tenant_transfer_logs tenant_transfer_logs_pkey postgres
+5102; 2606 18711 CONSTRAINT public tenants tenants_pkey postgres
+5189; 2606 18859 CONSTRAINT public token_blacklist token_blacklist_pkey postgres
+5231; 2606 19226 CONSTRAINT public usage_tracking usage_tracking_pkey postgres
+5779; 2606 92746 CONSTRAINT public visitor_leads visitor_leads_pkey postgres
+5246; 2606 19291 CONSTRAINT public whatsapp_logs whatsapp_logs_pkey postgres
+5341; 2606 20865 CONSTRAINT public whatsapp_webhook_events whatsapp_webhook_events_event_hash_key postgres
+5343; 2606 20863 CONSTRAINT public whatsapp_webhook_events whatsapp_webhook_events_pkey postgres
+5085; 2606 17537 CONSTRAINT realtime messages messages_pkey supabase_realtime_admin
+5081; 2606 17391 CONSTRAINT realtime subscription pk_subscription supabase_admin
+5078; 2606 17365 CONSTRAINT realtime schema_migrations schema_migrations_pkey supabase_admin
+5070; 2606 17344 CONSTRAINT storage buckets_analytics buckets_analytics_pkey supabase_storage_admin
+5057; 2606 17186 CONSTRAINT storage buckets buckets_pkey supabase_storage_admin
+5073; 2606 17320 CONSTRAINT storage buckets_vectors buckets_vectors_pkey supabase_storage_admin
+5052; 2606 17177 CONSTRAINT storage migrations migrations_name_key supabase_storage_admin
+5054; 2606 17175 CONSTRAINT storage migrations migrations_pkey supabase_storage_admin
+5063; 2606 17198 CONSTRAINT storage objects objects_pkey supabase_storage_admin
+5068; 2606 17260 CONSTRAINT storage s3_multipart_uploads_parts s3_multipart_uploads_parts_pkey supabase_storage_admin
+5066; 2606 17245 CONSTRAINT storage s3_multipart_uploads s3_multipart_uploads_pkey supabase_storage_admin
+5076; 2606 17330 CONSTRAINT storage vector_indexes vector_indexes_pkey supabase_storage_admin
+5401; 2606 21550 CONSTRAINT test action_logs action_logs_pkey postgres
+5403; 2606 21558 CONSTRAINT test activity_logs activity_logs_pkey postgres
+5406; 2606 21567 CONSTRAINT test addon_transactions addon_transactions_pkey postgres
+5408; 2606 21575 CONSTRAINT test addon_usage addon_usage_pkey postgres
+5744; 2606 22304 CONSTRAINT test admin_financial_audit_log admin_financial_audit_log_pkey postgres
+5410; 2606 21583 CONSTRAINT test autopay_attempts autopay_attempts_pkey postgres
+5414; 2606 21599 CONSTRAINT test bulk_import_batches bulk_import_batches_pkey postgres
+5418; 2606 21609 CONSTRAINT test complaints complaints_pkey postgres
+5710; 2606 22230 CONSTRAINT test exit_disputes exit_disputes_pkey postgres
+5714; 2606 22239 CONSTRAINT test exit_feedbacks exit_feedbacks_pkey postgres
+5706; 2606 22219 CONSTRAINT test exit_settlement_transactions exit_settlement_transactions_pkey postgres
+5425; 2606 21618 CONSTRAINT test expenses expenses_pkey postgres
+5430; 2606 21628 CONSTRAINT test financial_invariant_failures financial_invariant_failures_pkey postgres
+5738; 2606 22294 CONSTRAINT test financial_reconciliation_issues financial_reconciliation_issues_pkey postgres
+5435; 2606 21645 CONSTRAINT test hostel_daily_snapshots hostel_daily_snapshots_pkey postgres
+5441; 2606 21654 CONSTRAINT test hostel_invariant_checks hostel_invariant_checks_pkey postgres
+5443; 2606 21669 CONSTRAINT test hostels hostels_pkey postgres
+5448; 2606 21690 CONSTRAINT test identification_documents identification_documents_pkey postgres
+5445; 2606 21678 CONSTRAINT test identity_tokens identity_tokens_pkey postgres
+5457; 2606 21699 CONSTRAINT test login_attempts login_attempts_pkey postgres
+5460; 2606 21709 CONSTRAINT test message_logs message_logs_pkey postgres
+5462; 2606 21717 CONSTRAINT test message_packs message_packs_pkey postgres
+5465; 2606 21731 CONSTRAINT test migration_audit_runs migration_audit_runs_pkey postgres
+5701; 2606 22194 CONSTRAINT test move_out_inspection_items move_out_inspection_items_pkey postgres
+5698; 2606 22182 CONSTRAINT test move_out_inspections move_out_inspections_pkey postgres
+5692; 2606 22164 CONSTRAINT test move_out_requests move_out_requests_pkey postgres
+5467; 2606 21740 CONSTRAINT test notifications notifications_pkey postgres
+5476; 2606 21752 CONSTRAINT test overflow_ledger overflow_ledger_pkey postgres
+5481; 2606 21774 CONSTRAINT test owner_dashboard_snapshots owner_dashboard_snapshots_pkey postgres
+5486; 2606 21783 CONSTRAINT test owner_invoices owner_invoices_pkey postgres
+5493; 2606 21796 CONSTRAINT test owner_onboarding_states owner_onboarding_states_pkey postgres
+5723; 2606 22251 CONSTRAINT test owner_settlement_ledger owner_settlement_ledger_pkey postgres
+5497; 2606 21807 CONSTRAINT test owner_subscriptions owner_subscriptions_pkey postgres
+5505; 2606 21821 CONSTRAINT test owner_usage_snapshots owner_usage_snapshots_pkey postgres
+5508; 2606 21827 CONSTRAINT test payment_attempt_obligations payment_attempt_obligations_pkey postgres
+5513; 2606 21835 CONSTRAINT test payment_attempt_status_events payment_attempt_status_events_pkey postgres
+5521; 2606 21845 CONSTRAINT test payment_attempts payment_attempts_pkey postgres
+5530; 2606 21854 CONSTRAINT test payment_operational_anomalies payment_operational_anomalies_pkey postgres
+5534; 2606 21862 CONSTRAINT test payment_provider_verification_snapshots payment_provider_verification_snapshots_pkey postgres
+5540; 2606 21870 CONSTRAINT test payment_reconciliation_items payment_reconciliation_items_pkey postgres
+5545; 2606 21879 CONSTRAINT test payment_reconciliation_runs payment_reconciliation_runs_pkey postgres
+5551; 2606 21889 CONSTRAINT test payment_webhook_events payment_webhook_events_pkey postgres
+5561; 2606 21898 CONSTRAINT test payments payments_pkey postgres
+5581; 2606 21943 CONSTRAINT test phone_verification_otps phone_verification_otps_pkey postgres
+5566; 2606 21918 CONSTRAINT test plans plans_pkey postgres
+5576; 2606 21932 CONSTRAINT test profiles profiles_pkey postgres
+5585; 2606 21952 CONSTRAINT test reactivation_requests reactivation_requests_pkey postgres
+5592; 2606 21960 CONSTRAINT test receipts receipts_pkey postgres
+5595; 2606 21968 CONSTRAINT test refresh_tokens refresh_tokens_pkey postgres
+5602; 2606 21978 CONSTRAINT test reminder_logs reminder_logs_pkey postgres
+5608; 2606 21988 CONSTRAINT test rent_generation_ledgers rent_generation_ledgers_pkey postgres
+5611; 2606 22000 CONSTRAINT test rent_generation_logs rent_generation_logs_pkey postgres
+5620; 2606 22012 CONSTRAINT test rent_obligations rent_obligations_pkey postgres
+5624; 2606 22020 CONSTRAINT test room_activity_logs room_activity_logs_pkey postgres
+5629; 2606 22027 CONSTRAINT test room_allocations room_allocations_pkey postgres
+5635; 2606 22037 CONSTRAINT test rooms rooms_pkey postgres
+5734; 2606 22283 CONSTRAINT test settlement_batch_items settlement_batch_items_pkey postgres
+5728; 2606 22269 CONSTRAINT test settlement_batches settlement_batches_pkey postgres
+5638; 2606 22050 CONSTRAINT test subscriptions subscriptions_pkey postgres
+5643; 2606 22058 CONSTRAINT test system_event_logs system_event_logs_pkey postgres
+5645; 2606 22066 CONSTRAINT test system_locks system_locks_pkey postgres
+5649; 2606 22074 CONSTRAINT test tenant_advance_ledger tenant_advance_ledger_pkey postgres
+5654; 2606 22083 CONSTRAINT test tenant_behavior_scores tenant_behavior_scores_pkey postgres
+5658; 2606 22092 CONSTRAINT test tenant_transfer_logs tenant_transfer_logs_pkey postgres
+5665; 2606 22109 CONSTRAINT test tenants tenants_pkey postgres
+5668; 2606 22119 CONSTRAINT test token_blacklist token_blacklist_pkey postgres
+5671; 2606 22126 CONSTRAINT test usage_tracking usage_tracking_pkey postgres
+5680; 2606 22136 CONSTRAINT test whatsapp_logs whatsapp_logs_pkey postgres
+5685; 2606 22147 CONSTRAINT test whatsapp_webhook_events whatsapp_webhook_events_pkey postgres
+4954; 1259 16536 INDEX auth audit_logs_instance_id_idx supabase_auth_admin
+4924; 1259 16707 INDEX auth confirmation_token_idx supabase_auth_admin
+5035; 1259 17123 INDEX auth custom_oauth_providers_created_at_idx supabase_auth_admin
+5036; 1259 17122 INDEX auth custom_oauth_providers_enabled_idx supabase_auth_admin
+5037; 1259 17120 INDEX auth custom_oauth_providers_identifier_idx supabase_auth_admin
+5042; 1259 17121 INDEX auth custom_oauth_providers_provider_type_idx supabase_auth_admin
+4925; 1259 16709 INDEX auth email_change_token_current_idx supabase_auth_admin
+4926; 1259 16710 INDEX auth email_change_token_new_idx supabase_auth_admin
+4972; 1259 16789 INDEX auth factor_id_created_at_idx supabase_auth_admin
+5005; 1259 16897 INDEX auth flow_state_created_at_idx supabase_auth_admin
+4960; 1259 16877 INDEX auth identities_email_idx supabase_auth_admin
+6356; 0 0 COMMENT auth INDEX identities_email_idx supabase_auth_admin
+4965; 1259 16704 INDEX auth identities_user_id_idx supabase_auth_admin
+5008; 1259 16894 INDEX auth idx_auth_code supabase_auth_admin
+5032; 1259 17079 INDEX auth idx_oauth_client_states_created_at supabase_auth_admin
+5009; 1259 16895 INDEX auth idx_user_id_auth_method supabase_auth_admin
+4927; 1259 17165 INDEX auth idx_users_created_at_desc supabase_auth_admin
+4928; 1259 17164 INDEX auth idx_users_email supabase_auth_admin
+4929; 1259 17166 INDEX auth idx_users_last_sign_in_at_desc supabase_auth_admin
+4930; 1259 17167 INDEX auth idx_users_name supabase_auth_admin
+4980; 1259 16900 INDEX auth mfa_challenge_created_at_idx supabase_auth_admin
+4977; 1259 16761 INDEX auth mfa_factors_user_friendly_name_unique supabase_auth_admin
+4978; 1259 16906 INDEX auth mfa_factors_user_id_idx supabase_auth_admin
+5018; 1259 17031 INDEX auth oauth_auth_pending_exp_idx supabase_auth_admin
+5015; 1259 16984 INDEX auth oauth_clients_deleted_at_idx supabase_auth_admin
+5025; 1259 17057 INDEX auth oauth_consents_active_client_idx supabase_auth_admin
+5026; 1259 17055 INDEX auth oauth_consents_active_user_client_idx supabase_auth_admin
+5031; 1259 17056 INDEX auth oauth_consents_user_order_idx supabase_auth_admin
+5012; 1259 16953 INDEX auth one_time_tokens_relates_to_hash_idx supabase_auth_admin
+5013; 1259 16952 INDEX auth one_time_tokens_token_hash_hash_idx supabase_auth_admin
+5014; 1259 16954 INDEX auth one_time_tokens_user_id_token_type_key supabase_auth_admin
+4931; 1259 16711 INDEX auth reauthentication_token_idx supabase_auth_admin
+4932; 1259 16708 INDEX auth recovery_token_idx supabase_auth_admin
+4941; 1259 16519 INDEX auth refresh_tokens_instance_id_idx supabase_auth_admin
+4942; 1259 16520 INDEX auth refresh_tokens_instance_id_user_id_idx supabase_auth_admin
+4943; 1259 16703 INDEX auth refresh_tokens_parent_idx supabase_auth_admin
+4946; 1259 16791 INDEX auth refresh_tokens_session_id_revoked_idx supabase_auth_admin
+4949; 1259 16896 INDEX auth refresh_tokens_updated_at_idx supabase_auth_admin
+4999; 1259 16833 INDEX auth saml_providers_sso_provider_id_idx supabase_auth_admin
+5000; 1259 16898 INDEX auth saml_relay_states_created_at_idx supabase_auth_admin
+5001; 1259 16848 INDEX auth saml_relay_states_for_email_idx supabase_auth_admin
+5004; 1259 16847 INDEX auth saml_relay_states_sso_provider_id_idx supabase_auth_admin
+4966; 1259 16899 INDEX auth sessions_not_after_idx supabase_auth_admin
+4967; 1259 17069 INDEX auth sessions_oauth_client_id_idx supabase_auth_admin
+4970; 1259 16790 INDEX auth sessions_user_id_idx supabase_auth_admin
+4991; 1259 16815 INDEX auth sso_domains_domain_idx supabase_auth_admin
+4994; 1259 16814 INDEX auth sso_domains_sso_provider_id_idx supabase_auth_admin
+4989; 1259 16800 INDEX auth sso_providers_resource_id_idx supabase_auth_admin
+4990; 1259 16962 INDEX auth sso_providers_resource_id_pattern_idx supabase_auth_admin
+4979; 1259 16959 INDEX auth unique_phone_factor_per_user supabase_auth_admin
+4971; 1259 16788 INDEX auth user_id_created_at_idx supabase_auth_admin
+4933; 1259 16868 INDEX auth users_email_partial_key supabase_auth_admin
+6357; 0 0 COMMENT auth INDEX users_email_partial_key supabase_auth_admin
+4934; 1259 16705 INDEX auth users_instance_id_email_idx supabase_auth_admin
+4935; 1259 16509 INDEX auth users_instance_id_idx supabase_auth_admin
+4936; 1259 16923 INDEX auth users_is_anonymous_idx supabase_auth_admin
+5047; 1259 17163 INDEX auth webauthn_challenges_expires_at_idx supabase_auth_admin
+5050; 1259 17162 INDEX auth webauthn_challenges_user_id_idx supabase_auth_admin
+5043; 1259 17145 INDEX auth webauthn_credentials_credential_id_key supabase_auth_admin
+5046; 1259 17146 INDEX auth webauthn_credentials_user_id_idx supabase_auth_admin
+5753; 1259 92548 INDEX public RuleVersion_hostel_id_active_idx postgres
+5754; 1259 92549 INDEX public RuleVersion_hostel_id_is_active_idx postgres
+5757; 1259 92551 INDEX public TenantPolicyAcceptance_hostel_id_idx postgres
+5760; 1259 92550 INDEX public TenantPolicyAcceptance_tenant_id_idx postgres
+5761; 1259 92552 INDEX public TenantPolicyAcceptance_tenant_id_rule_version_id_key postgres
+5235; 1259 19282 INDEX public action_logs_owner_id_action_created_at_idx postgres
+5335; 1259 20850 INDEX public bulk_import_batches_hostel_id_created_at_idx postgres
+5336; 1259 20849 INDEX public bulk_import_batches_owner_id_created_at_idx postgres
+5339; 1259 20905 INDEX public bulk_import_batches_status_created_at_idx postgres
+5210; 1259 19509 INDEX public complaints_hostel_id_idx postgres
+5381; 1259 21165 INDEX public exit_disputes_request_id_status_idx postgres
+5371; 1259 21113 INDEX public exit_feedbacks_hostel_id_idx postgres
+5374; 1259 21112 INDEX public exit_feedbacks_request_id_key postgres
+5375; 1259 21114 INDEX public exit_feedbacks_tenant_id_idx postgres
+5365; 1259 21096 INDEX public exit_settlement_transactions_owner_id_hostel_id_idx postgres
+5366; 1259 21097 INDEX public exit_settlement_transactions_payment_status_idx postgres
+5369; 1259 21094 INDEX public exit_settlement_transactions_request_id_key postgres
+5370; 1259 21095 INDEX public exit_settlement_transactions_tenant_id_idx postgres
+5201; 1259 19024 INDEX public expenses_date_idx postgres
+5202; 1259 92509 INDEX public expenses_hostel_id_category_date_idx postgres
+5203; 1259 19508 INDEX public expenses_hostel_id_date_idx postgres
+5204; 1259 19507 INDEX public expenses_hostel_id_idx postgres
+5205; 1259 92510 INDEX public expenses_hostel_id_status_idx postgres
+5206; 1259 19025 INDEX public expenses_owner_id_date_idx postgres
+5207; 1259 19023 INDEX public expenses_owner_id_idx postgres
+5281; 1259 19567 INDEX public financial_invariant_failures_detected_at_idx postgres
+5282; 1259 19568 INDEX public financial_invariant_failures_hostel_id_idx postgres
+5283; 1259 19564 INDEX public financial_invariant_failures_invariant_type_idx postgres
+5286; 1259 19565 INDEX public financial_invariant_failures_severity_idx postgres
+5287; 1259 19566 INDEX public financial_invariant_failures_status_idx postgres
+5749; 1259 92478 INDEX public floors_hostel_id_idx postgres
+5750; 1259 92479 INDEX public floors_owner_id_idx postgres
+5292; 1259 19594 INDEX public hostel_daily_snapshots_snapshot_date_idx postgres
+5272; 1259 19534 INDEX public hostel_invariant_checks_check_type_idx postgres
+5273; 1259 19536 INDEX public hostel_invariant_checks_checked_at_idx postgres
+5274; 1259 19607 INDEX public hostel_invariant_checks_is_valid_idx postgres
+5106; 1259 92730 INDEX public hostels_public_slug_key postgres
+5384; 1259 21317 INDEX public identification_documents_tenant_id_doc_type_is_active_idx postgres
+5385; 1259 21315 INDEX public identification_documents_tenant_id_idx postgres
+5386; 1259 21316 INDEX public identification_documents_tenant_id_is_active_idx postgres
+5251; 1259 19303 INDEX public identity_tokens_user_id_used_expires_at_idx postgres
+5395; 1259 21338 INDEX public idx_afal_action_created postgres
+5396; 1259 21336 INDEX public idx_afal_admin_created postgres
+5397; 1259 21339 INDEX public idx_afal_owner_created postgres
+5398; 1259 21337 INDEX public idx_afal_subject postgres
+5389; 1259 21334 INDEX public idx_fri_hostel postgres
+5390; 1259 21335 INDEX public idx_fri_issue_type postgres
+5391; 1259 21333 INDEX public idx_fri_owner postgres
+5392; 1259 21332 INDEX public idx_fri_status_severity postgres
+5277; 1259 19535 INDEX public idx_invariant_checks_valid postgres
+5780; 1259 92830 INDEX public idx_lead_activities_lead_created postgres
+5781; 1259 92831 INDEX public idx_lead_activities_type_created postgres
+5789; 1259 92835 INDEX public idx_lead_notes_lead_created postgres
+5790; 1259 92836 INDEX public idx_lead_notes_owner_created postgres
+5167; 1259 19700 INDEX public idx_payment_attempts_provider_order postgres
+5168; 1259 19699 INDEX public idx_payment_attempts_provider_transaction postgres
+5086; 1259 20802 INDEX public idx_profiles_password_reset_required postgres
+5784; 1259 92834 INDEX public idx_room_reservations_hostel_status_expiry postgres
+5785; 1259 92832 INDEX public idx_room_reservations_lead_status postgres
+5786; 1259 92833 INDEX public idx_room_reservations_room_status_expiry postgres
+5773; 1259 92829 INDEX public idx_visitor_leads_converted_tenant postgres
+5774; 1259 92827 INDEX public idx_visitor_leads_hostel_phone postgres
+5775; 1259 92826 INDEX public idx_visitor_leads_hostel_status_activity postgres
+5776; 1259 92828 INDEX public idx_visitor_leads_owner_score postgres
+5777; 1259 92825 INDEX public idx_visitor_leads_owner_status_activity postgres
+5238; 1259 19293 INDEX public idx_whatsapp_logs_obligation_template_created postgres
+5239; 1259 19320 INDEX public idx_wl_obligation_template_date postgres
+5329; 1259 20909 INDEX public login_attempts_attempt_type_created_at_idx postgres
+5330; 1259 20906 INDEX public login_attempts_identifier_created_at_idx postgres
+5331; 1259 20907 INDEX public login_attempts_identifier_ip_address_created_at_idx postgres
+5332; 1259 20908 INDEX public login_attempts_ip_address_created_at_idx postgres
+5227; 1259 19038 INDEX public message_logs_idempotency_key_key postgres
+5278; 1259 19552 INDEX public migration_audit_runs_audit_date_idx postgres
+5378; 1259 21147 INDEX public move_out_inspection_items_request_id_idx postgres
+5361; 1259 21064 INDEX public move_out_inspections_inspected_at_idx postgres
+5364; 1259 21063 INDEX public move_out_inspections_request_id_key postgres
+5354; 1259 21198 INDEX public move_out_requests_hostel_id_status_idx postgres
+5355; 1259 21199 INDEX public move_out_requests_owner_id_status_idx postgres
+5358; 1259 21039 INDEX public move_out_requests_planned_exit_date_idx postgres
+5359; 1259 21200 INDEX public move_out_requests_status_created_at_idx postgres
+5252; 1259 19345 INDEX public owner_dashboard_snapshots_is_stale_idx postgres
+5253; 1259 19347 INDEX public owner_dashboard_snapshots_monthly_computed_at_idx postgres
+5256; 1259 19346 INDEX public owner_dashboard_snapshots_stats_computed_at_idx postgres
+5181; 1259 19017 INDEX public payment_attempt_obligations_payment_attempt_id_obligation_i_key postgres
+5308; 1259 19750 INDEX public payment_attempt_status_events_hostel_id_created_at_idx postgres
+5309; 1259 19749 INDEX public payment_attempt_status_events_payment_attempt_id_created_at_idx postgres
+5169; 1259 19696 INDEX public payment_attempts_flow_type_idx postgres
+5170; 1259 19016 INDEX public payment_attempts_gateway_txn_id_key postgres
+5171; 1259 19608 INDEX public payment_attempts_hostel_id_idx postgres
+5172; 1259 19698 INDEX public payment_attempts_merchant_context_type_merchant_context_id_idx postgres
+5173; 1259 19694 INDEX public payment_attempts_merchant_transaction_id_key postgres
+5174; 1259 19015 INDEX public payment_attempts_merchant_txn_id_key postgres
+5175; 1259 19695 INDEX public payment_attempts_payment_domain_idx postgres
+5178; 1259 20912 INDEX public payment_attempts_provider_provider_order_id_idx postgres
+5179; 1259 20911 INDEX public payment_attempts_provider_provider_transaction_id_idx postgres
+5180; 1259 19697 INDEX public payment_attempts_settlement_status_idx postgres
+5768; 1259 92677 INDEX public payment_frequency_change_requests_hostel_id_status_idx postgres
+5769; 1259 92678 INDEX public payment_frequency_change_requests_owner_id_status_idx postgres
+5772; 1259 92679 INDEX public payment_frequency_change_requests_tenant_id_status_idx postgres
+5314; 1259 19761 INDEX public payment_operational_anomalies_anomaly_type_status_idx postgres
+5315; 1259 19763 INDEX public payment_operational_anomalies_hostel_id_detected_at_idx postgres
+5316; 1259 19764 INDEX public payment_operational_anomalies_operational_owner_id_detected_idx postgres
+5317; 1259 19762 INDEX public payment_operational_anomalies_payment_attempt_id_idx postgres
+5302; 1259 19735 INDEX public payment_provider_verification_snapshots_hostel_id_verified__idx postgres
+5303; 1259 19734 INDEX public payment_provider_verification_snapshots_payment_attempt_id__idx postgres
+5306; 1259 19736 INDEX public payment_provider_verification_snapshots_provider_verified_a_idx postgres
+5307; 1259 19737 INDEX public payment_provider_verification_snapshots_raw_response_hash_idx postgres
+5324; 1259 19788 INDEX public payment_reconciliation_items_hostel_id_created_at_idx postgres
+5325; 1259 19787 INDEX public payment_reconciliation_items_payment_attempt_id_idx postgres
+5328; 1259 19786 INDEX public payment_reconciliation_items_reconciliation_run_id_idx postgres
+5320; 1259 19776 INDEX public payment_reconciliation_runs_hostel_id_started_at_idx postgres
+5321; 1259 19775 INDEX public payment_reconciliation_runs_payment_domain_started_at_idx postgres
+5295; 1259 19722 INDEX public payment_webhook_events_hostel_id_received_at_idx postgres
+5296; 1259 19723 INDEX public payment_webhook_events_operational_owner_id_received_at_idx postgres
+5297; 1259 19721 INDEX public payment_webhook_events_payment_attempt_id_idx postgres
+5300; 1259 19724 INDEX public payment_webhook_events_processing_status_idx postgres
+5301; 1259 19720 INDEX public payment_webhook_events_provider_received_at_idx postgres
+5155; 1259 19011 INDEX public payments_created_at_idx postgres
+5156; 1259 19502 INDEX public payments_hostel_id_idx postgres
+5157; 1259 19503 INDEX public payments_hostel_id_payment_date_idx postgres
+5158; 1259 19008 INDEX public payments_idempotency_key_key postgres
+5159; 1259 92723 INDEX public payments_obligation_id_idx postgres
+5160; 1259 19012 INDEX public payments_owner_id_created_at_idx postgres
+5161; 1259 19009 INDEX public payments_owner_id_idx postgres
+5164; 1259 19014 INDEX public payments_tenant_id_amount_paid_idx postgres
+5165; 1259 19010 INDEX public payments_tenant_id_idx postgres
+5166; 1259 19013 INDEX public payments_tenant_id_payment_date_idx postgres
+5347; 1259 20951 INDEX public phone_verification_otps_expires_at_idx postgres
+5348; 1259 20953 INDEX public phone_verification_otps_meta_message_id_idx postgres
+5349; 1259 20950 INDEX public phone_verification_otps_phone_idx postgres
+5352; 1259 20954 INDEX public phone_verification_otps_request_ip_created_at_idx postgres
+5353; 1259 20952 INDEX public phone_verification_otps_status_idx postgres
+5087; 1259 18989 INDEX public profiles_email_idx postgres
+5088; 1259 18984 INDEX public profiles_email_key postgres
+5089; 1259 18985 INDEX public profiles_invitation_token_key postgres
+5090; 1259 18987 INDEX public profiles_name_idx postgres
+5091; 1259 18990 INDEX public profiles_owner_id_created_at_idx postgres
+5092; 1259 18986 INDEX public profiles_owner_id_idx postgres
+5093; 1259 20913 INDEX public profiles_password_reset_required_is_active_idx postgres
+5094; 1259 18988 INDEX public profiles_phone_idx postgres
+5213; 1259 19504 INDEX public receipts_hostel_id_idx postgres
+5214; 1259 19505 INDEX public receipts_hostel_id_issued_at_idx postgres
+5215; 1259 19609 INDEX public receipts_hostel_id_receipt_number_key postgres
+5216; 1259 19679 INDEX public receipts_hostel_receipt_number_unique postgres
+5217; 1259 19027 INDEX public receipts_payment_id_key postgres
+5191; 1259 19022 INDEX public refresh_tokens_expires_at_idx postgres
+5192; 1259 92726 INDEX public refresh_tokens_last_activity_at_idx postgres
+5195; 1259 92727 INDEX public refresh_tokens_revoked_at_idx postgres
+5196; 1259 92725 INDEX public refresh_tokens_session_id_idx postgres
+5197; 1259 19020 INDEX public refresh_tokens_token_hash_key postgres
+5198; 1259 19021 INDEX public refresh_tokens_user_id_idx postgres
+5143; 1259 19261 INDEX public reminder_logs_converted_to_payment_idx postgres
+5144; 1259 19506 INDEX public reminder_logs_hostel_id_idx postgres
+5145; 1259 19004 INDEX public reminder_logs_obligation_id_idx postgres
+5148; 1259 19005 INDEX public reminder_logs_tenant_id_idx postgres
+5259; 1259 19453 INDEX public rent_generation_ledgers_hostel_id_rent_month_idx postgres
+5262; 1259 19452 INDEX public rent_generation_ledgers_owner_id_rent_month_idx postgres
+5265; 1259 19451 INDEX public rent_generation_ledgers_rent_month_status_idx postgres
+5151; 1259 19006 INDEX public rent_generation_logs_rent_month_idx postgres
+5152; 1259 19007 INDEX public rent_generation_logs_triggered_by_idx postgres
+5123; 1259 19000 INDEX public rent_obligations_allocation_id_rent_month_obligation_type_key postgres
+5124; 1259 92680 INDEX public rent_obligations_billing_plan_id_idx postgres
+5125; 1259 19498 INDEX public rent_obligations_hostel_id_idx postgres
+5126; 1259 19500 INDEX public rent_obligations_hostel_id_rent_month_idx postgres
+5127; 1259 19499 INDEX public rent_obligations_hostel_id_status_idx postgres
+5128; 1259 92681 INDEX public rent_obligations_is_superseded_idx postgres
+5129; 1259 92722 INDEX public rent_obligations_owner_id_hostel_id_status_due_date_idx postgres
+5130; 1259 19501 INDEX public rent_obligations_owner_id_idx postgres
+5133; 1259 92682 INDEX public rent_obligations_tenant_id_billing_period_end_idx postgres
+5134; 1259 92683 INDEX public rent_obligations_tenant_id_billing_period_start_idx postgres
+5135; 1259 18999 INDEX public rent_obligations_tenant_id_rent_month_idx postgres
+5113; 1259 18996 INDEX public room_activity_logs_owner_id_idx postgres
+5116; 1259 18995 INDEX public room_activity_logs_room_id_idx postgres
+5117; 1259 19496 INDEX public room_allocations_hostel_id_idx postgres
+5118; 1259 19497 INDEX public room_allocations_hostel_id_is_active_idx postgres
+5121; 1259 18998 INDEX public room_allocations_room_id_is_active_idx postgres
+5122; 1259 18997 INDEX public room_allocations_tenant_id_is_active_end_date_idx postgres
+5107; 1259 92485 INDEX public rooms_floor_id_idx postgres
+5108; 1259 18994 INDEX public rooms_hostel_id_idx postgres
+5109; 1259 19610 INDEX public rooms_hostel_id_room_no_key postgres
+5110; 1259 19678 INDEX public rooms_hostel_room_no_active_unique postgres
+5220; 1259 19030 INDEX public system_event_logs_created_at_idx postgres
+5221; 1259 19029 INDEX public system_event_logs_event_type_idx postgres
+5222; 1259 19028 INDEX public system_event_logs_owner_id_idx postgres
+5136; 1259 19666 INDEX public tenant_advance_ledger_hostel_id_idx postgres
+5137; 1259 19002 INDEX public tenant_advance_ledger_owner_id_idx postgres
+5140; 1259 19003 INDEX public tenant_advance_ledger_tenant_id_created_at_idx postgres
+5141; 1259 19667 INDEX public tenant_advance_ledger_tenant_id_hostel_id_idx postgres
+5142; 1259 19001 INDEX public tenant_advance_ledger_tenant_id_idx postgres
+5234; 1259 19260 INDEX public tenant_behavior_scores_tenant_id_last_calculated_idx postgres
+5762; 1259 92673 INDEX public tenant_billing_plans_effective_from_idx postgres
+5763; 1259 92674 INDEX public tenant_billing_plans_hostel_id_idx postgres
+5764; 1259 92675 INDEX public tenant_billing_plans_owner_id_hostel_id_idx postgres
+5767; 1259 92676 INDEX public tenant_billing_plans_tenant_id_status_idx postgres
+5266; 1259 19521 INDEX public tenant_transfer_logs_from_hostel_id_idx postgres
+5269; 1259 19520 INDEX public tenant_transfer_logs_tenant_id_idx postgres
+5270; 1259 19522 INDEX public tenant_transfer_logs_to_hostel_id_idx postgres
+5271; 1259 19523 INDEX public tenant_transfer_logs_transferred_at_idx postgres
+5097; 1259 92720 INDEX public tenants_activation_completed_at_idx postgres
+5098; 1259 19495 INDEX public tenants_hostel_id_idx postgres
+5099; 1259 92721 INDEX public tenants_onboarding_last_activity_at_idx postgres
+5100; 1259 18993 INDEX public tenants_owner_id_idx postgres
+5103; 1259 18991 INDEX public tenants_profile_id_key postgres
+5190; 1259 19019 INDEX public token_blacklist_token_key postgres
+5360; 1259 21197 INDEX public udx_mor_tenant_active postgres
+5240; 1259 19676 INDEX public whatsapp_logs_delivery_status_created_at_idx postgres
+5241; 1259 19675 INDEX public whatsapp_logs_hostel_id_created_at_idx postgres
+5242; 1259 19672 INDEX public whatsapp_logs_idempotency_key_key postgres
+5243; 1259 19292 INDEX public whatsapp_logs_obligation_id_template_created_at_idx postgres
+5244; 1259 19673 INDEX public whatsapp_logs_owner_id_created_at_idx postgres
+5247; 1259 20869 INDEX public whatsapp_logs_provider_message_id_idx postgres
+5248; 1259 19674 INDEX public whatsapp_logs_tenant_id_created_at_idx postgres
+5344; 1259 20868 INDEX public whatsapp_webhook_events_processing_status_idx postgres
+5345; 1259 20867 INDEX public whatsapp_webhook_events_provider_message_id_idx postgres
+5346; 1259 20866 INDEX public whatsapp_webhook_events_provider_received_at_idx postgres
+5079; 1259 17538 INDEX realtime ix_realtime_subscription_entity supabase_admin
+5083; 1259 17539 INDEX realtime messages_inserted_at_topic_index supabase_realtime_admin
+5082; 1259 17542 INDEX realtime subscription_subscription_id_entity_filters_action_filter_key supabase_admin
+5055; 1259 17187 INDEX storage bname supabase_storage_admin
+5058; 1259 17204 INDEX storage bucketid_objname supabase_storage_admin
+5071; 1259 17345 INDEX storage buckets_analytics_unique_name_idx supabase_storage_admin
+5064; 1259 17271 INDEX storage idx_multipart_uploads_list supabase_storage_admin
+5059; 1259 17236 INDEX storage idx_objects_bucket_id_name supabase_storage_admin
+5060; 1259 17352 INDEX storage idx_objects_bucket_id_name_lower supabase_storage_admin
+5061; 1259 17205 INDEX storage name_prefix_search supabase_storage_admin
+5074; 1259 17336 INDEX storage vector_indexes_name_bucket_id_idx supabase_storage_admin
+5399; 1259 22305 INDEX test action_logs_owner_id_action_created_at_idx postgres
+5404; 1259 22306 INDEX test addon_transactions_owner_id_idx postgres
+5411; 1259 22307 INDEX test bulk_import_batches_hostel_id_created_at_idx postgres
+5412; 1259 22308 INDEX test bulk_import_batches_owner_id_created_at_idx postgres
+5415; 1259 22309 INDEX test bulk_import_batches_status_created_at_idx postgres
+5416; 1259 22310 INDEX test complaints_hostel_id_idx postgres
+5711; 1259 22491 INDEX test exit_disputes_request_id_status_idx postgres
+5712; 1259 22493 INDEX test exit_feedbacks_hostel_id_idx postgres
+5715; 1259 22492 INDEX test exit_feedbacks_request_id_key postgres
+5716; 1259 22494 INDEX test exit_feedbacks_tenant_id_idx postgres
+5703; 1259 22489 INDEX test exit_settlement_transactions_owner_id_hostel_id_idx postgres
+5704; 1259 22490 INDEX test exit_settlement_transactions_payment_status_idx postgres
+5707; 1259 22487 INDEX test exit_settlement_transactions_request_id_key postgres
+5708; 1259 22488 INDEX test exit_settlement_transactions_tenant_id_idx postgres
+5419; 1259 22311 INDEX test expenses_date_idx postgres
+5420; 1259 22312 INDEX test expenses_hostel_id_date_idx postgres
+5421; 1259 22313 INDEX test expenses_hostel_id_idx postgres
+5422; 1259 22314 INDEX test expenses_owner_id_date_idx postgres
+5423; 1259 22315 INDEX test expenses_owner_id_idx postgres
+5426; 1259 22316 INDEX test financial_invariant_failures_detected_at_idx postgres
+5427; 1259 22317 INDEX test financial_invariant_failures_hostel_id_idx postgres
+5428; 1259 22318 INDEX test financial_invariant_failures_invariant_type_idx postgres
+5431; 1259 22319 INDEX test financial_invariant_failures_severity_idx postgres
+5432; 1259 22320 INDEX test financial_invariant_failures_status_idx postgres
+5433; 1259 22322 INDEX test hostel_daily_snapshots_hostel_id_snapshot_date_key postgres
+5436; 1259 22321 INDEX test hostel_daily_snapshots_snapshot_date_idx postgres
+5437; 1259 22323 INDEX test hostel_invariant_checks_check_type_idx postgres
+5438; 1259 22324 INDEX test hostel_invariant_checks_checked_at_idx postgres
+5439; 1259 22325 INDEX test hostel_invariant_checks_is_valid_idx postgres
+5449; 1259 22329 INDEX test identification_documents_tenant_id_doc_type_is_active_idx postgres
+5450; 1259 22327 INDEX test identification_documents_tenant_id_idx postgres
+5451; 1259 22328 INDEX test identification_documents_tenant_id_is_active_idx postgres
+5446; 1259 22326 INDEX test identity_tokens_user_id_used_expires_at_idx postgres
+5745; 1259 22515 INDEX test idx_afal_action_created postgres
+5746; 1259 22513 INDEX test idx_afal_admin_created postgres
+5747; 1259 22516 INDEX test idx_afal_owner_created postgres
+5748; 1259 22514 INDEX test idx_afal_subject postgres
+5739; 1259 22511 INDEX test idx_fri_hostel postgres
+5740; 1259 22512 INDEX test idx_fri_issue_type postgres
+5741; 1259 22510 INDEX test idx_fri_owner postgres
+5742; 1259 22509 INDEX test idx_fri_status_severity postgres
+5468; 1259 22337 INDEX test idx_ol_billing_month postgres
+5469; 1259 22338 INDEX test idx_ol_owner_id postgres
+5470; 1259 22339 INDEX test idx_ol_status postgres
+5717; 1259 22497 INDEX test idx_osl_hostel_status postgres
+5718; 1259 22495 INDEX test idx_osl_owner_hostel_created postgres
+5719; 1259 22496 INDEX test idx_osl_owner_status postgres
+5720; 1259 22499 INDEX test idx_osl_payment postgres
+5721; 1259 22498 INDEX test idx_osl_settlement_batch postgres
+5499; 1259 22357 INDEX test idx_ous_billing_month postgres
+5500; 1259 22358 INDEX test idx_ous_owner_id postgres
+5725; 1259 22502 INDEX test idx_sb_created_by postgres
+5726; 1259 22501 INDEX test idx_sb_status_created postgres
+5730; 1259 22506 INDEX test idx_sbi_batch_status postgres
+5731; 1259 22505 INDEX test idx_sbi_hostel_status postgres
+5732; 1259 22504 INDEX test idx_sbi_owner_status postgres
+5672; 1259 22467 INDEX test idx_whatsapp_logs_obligation_template_created postgres
+5673; 1259 22468 INDEX test idx_wl_obligation_template_date postgres
+5452; 1259 22330 INDEX test login_attempts_attempt_type_created_at_idx postgres
+5453; 1259 22331 INDEX test login_attempts_identifier_created_at_idx postgres
+5454; 1259 22332 INDEX test login_attempts_identifier_ip_address_created_at_idx postgres
+5455; 1259 22333 INDEX test login_attempts_ip_address_created_at_idx postgres
+5458; 1259 22334 INDEX test message_logs_idempotency_key_key postgres
+5463; 1259 22335 INDEX test migration_audit_runs_audit_date_idx postgres
+5702; 1259 22486 INDEX test move_out_inspection_items_request_id_idx postgres
+5696; 1259 22485 INDEX test move_out_inspections_inspected_at_idx postgres
+5699; 1259 22484 INDEX test move_out_inspections_request_id_key postgres
+5689; 1259 22479 INDEX test move_out_requests_hostel_id_status_idx postgres
+5690; 1259 22480 INDEX test move_out_requests_owner_id_status_idx postgres
+5693; 1259 22481 INDEX test move_out_requests_planned_exit_date_idx postgres
+5694; 1259 22482 INDEX test move_out_requests_status_created_at_idx postgres
+5471; 1259 22340 INDEX test overflow_ledger_billing_month_idx postgres
+5472; 1259 22336 INDEX test overflow_ledger_idempotency_key_key postgres
+5473; 1259 22343 INDEX test overflow_ledger_owner_id_billing_month_key postgres
+5474; 1259 22341 INDEX test overflow_ledger_owner_id_idx postgres
+5477; 1259 22342 INDEX test overflow_ledger_status_idx postgres
+5478; 1259 22344 INDEX test owner_dashboard_snapshots_is_stale_idx postgres
+5479; 1259 22345 INDEX test owner_dashboard_snapshots_monthly_computed_at_idx postgres
+5482; 1259 22346 INDEX test owner_dashboard_snapshots_stats_computed_at_idx postgres
+5483; 1259 22347 INDEX test owner_invoices_invoice_number_key postgres
+5484; 1259 22348 INDEX test owner_invoices_owner_id_created_at_idx postgres
+5487; 1259 22349 INDEX test owner_invoices_status_idx postgres
+5488; 1259 22350 INDEX test owner_onboarding_states_activation_score_idx postgres
+5489; 1259 22351 INDEX test owner_onboarding_states_onboarding_completed_at_idx postgres
+5490; 1259 22352 INDEX test owner_onboarding_states_onboarding_last_seen_at_idx postgres
+5491; 1259 22353 INDEX test owner_onboarding_states_onboarding_step_idx postgres
+5494; 1259 22355 INDEX test owner_subscriptions_owner_id_idx postgres
+5495; 1259 22354 INDEX test owner_subscriptions_owner_id_key postgres
+5498; 1259 22356 INDEX test owner_subscriptions_status_idx postgres
+5501; 1259 22359 INDEX test owner_usage_snapshots_billing_month_idx postgres
+5502; 1259 22361 INDEX test owner_usage_snapshots_owner_id_billing_month_key postgres
+5503; 1259 22360 INDEX test owner_usage_snapshots_owner_id_idx postgres
+5506; 1259 22362 INDEX test payment_attempt_obligations_payment_attempt_id_obligation_i_key postgres
+5509; 1259 22363 INDEX test payment_attempt_status_events_hostel_id_created_at_idx postgres
+5510; 1259 22364 INDEX test payment_attempt_status_events_payment_attempt_id_created_at_idx postgres
+5511; 1259 22365 INDEX test payment_attempt_status_events_payment_attempt_id_transition_key postgres
+5514; 1259 22368 INDEX test payment_attempts_flow_type_idx postgres
+5515; 1259 22367 INDEX test payment_attempts_gateway_txn_id_key postgres
+5516; 1259 22369 INDEX test payment_attempts_hostel_id_idx postgres
+5517; 1259 22370 INDEX test payment_attempts_merchant_context_type_merchant_context_id_idx postgres
+5518; 1259 22366 INDEX test payment_attempts_merchant_txn_id_key postgres
+5519; 1259 22371 INDEX test payment_attempts_payment_domain_idx postgres
+5522; 1259 22372 INDEX test payment_attempts_provider_provider_order_id_idx postgres
+5523; 1259 22373 INDEX test payment_attempts_provider_provider_transaction_id_idx postgres
+5524; 1259 22374 INDEX test payment_attempts_settlement_status_idx postgres
+5525; 1259 22375 INDEX test payment_operational_anomalies_anomaly_type_status_idx postgres
+5526; 1259 22376 INDEX test payment_operational_anomalies_hostel_id_detected_at_idx postgres
+5527; 1259 22377 INDEX test payment_operational_anomalies_operational_owner_id_detected_idx postgres
+5528; 1259 22378 INDEX test payment_operational_anomalies_payment_attempt_id_idx postgres
+5531; 1259 22379 INDEX test payment_provider_verification_snapshots_hostel_id_verified__idx postgres
+5532; 1259 22380 INDEX test payment_provider_verification_snapshots_payment_attempt_id__idx postgres
+5535; 1259 22381 INDEX test payment_provider_verification_snapshots_provider_verified_a_idx postgres
+5536; 1259 22382 INDEX test payment_provider_verification_snapshots_raw_response_hash_idx postgres
+5537; 1259 22383 INDEX test payment_reconciliation_items_hostel_id_created_at_idx postgres
+5538; 1259 22384 INDEX test payment_reconciliation_items_payment_attempt_id_idx postgres
+5541; 1259 22385 INDEX test payment_reconciliation_items_reconciliation_run_id_idx postgres
+5542; 1259 22386 INDEX test payment_reconciliation_runs_hostel_id_started_at_idx postgres
+5543; 1259 22387 INDEX test payment_reconciliation_runs_payment_domain_started_at_idx postgres
+5546; 1259 22388 INDEX test payment_webhook_events_event_hash_key postgres
+5547; 1259 22389 INDEX test payment_webhook_events_hostel_id_received_at_idx postgres
+5548; 1259 22390 INDEX test payment_webhook_events_operational_owner_id_received_at_idx postgres
+5549; 1259 22391 INDEX test payment_webhook_events_payment_attempt_id_idx postgres
+5552; 1259 22392 INDEX test payment_webhook_events_processing_status_idx postgres
+5553; 1259 22393 INDEX test payment_webhook_events_provider_received_at_idx postgres
+5554; 1259 22395 INDEX test payments_created_at_idx postgres
+5555; 1259 22396 INDEX test payments_hostel_id_idx postgres
+5556; 1259 22397 INDEX test payments_hostel_id_payment_date_idx postgres
+5557; 1259 22394 INDEX test payments_idempotency_key_key postgres
+5558; 1259 22398 INDEX test payments_owner_id_created_at_idx postgres
+5559; 1259 22399 INDEX test payments_owner_id_idx postgres
+5562; 1259 22400 INDEX test payments_tenant_id_amount_paid_idx postgres
+5563; 1259 22401 INDEX test payments_tenant_id_idx postgres
+5564; 1259 22402 INDEX test payments_tenant_id_payment_date_idx postgres
+5577; 1259 22412 INDEX test phone_verification_otps_expires_at_idx postgres
+5578; 1259 22414 INDEX test phone_verification_otps_meta_message_id_idx postgres
+5579; 1259 22411 INDEX test phone_verification_otps_phone_idx postgres
+5582; 1259 22415 INDEX test phone_verification_otps_request_ip_created_at_idx postgres
+5583; 1259 22413 INDEX test phone_verification_otps_status_idx postgres
+5567; 1259 22405 INDEX test profiles_email_idx postgres
+5568; 1259 22403 INDEX test profiles_email_key postgres
+5569; 1259 22404 INDEX test profiles_invitation_token_key postgres
+5570; 1259 22406 INDEX test profiles_name_idx postgres
+5571; 1259 22407 INDEX test profiles_owner_id_created_at_idx postgres
+5572; 1259 22408 INDEX test profiles_owner_id_idx postgres
+5573; 1259 22409 INDEX test profiles_password_reset_required_is_active_idx postgres
+5574; 1259 22410 INDEX test profiles_phone_idx postgres
+5586; 1259 22417 INDEX test receipts_hostel_id_idx postgres
+5587; 1259 22418 INDEX test receipts_hostel_id_issued_at_idx postgres
+5588; 1259 22419 INDEX test receipts_hostel_id_receipt_number_key postgres
+5589; 1259 22420 INDEX test receipts_hostel_receipt_number_unique postgres
+5590; 1259 22416 INDEX test receipts_payment_id_key postgres
+5593; 1259 22422 INDEX test refresh_tokens_expires_at_idx postgres
+5596; 1259 22421 INDEX test refresh_tokens_token_hash_key postgres
+5597; 1259 22423 INDEX test refresh_tokens_user_id_idx postgres
+5598; 1259 22424 INDEX test reminder_logs_converted_to_payment_idx postgres
+5599; 1259 22425 INDEX test reminder_logs_hostel_id_idx postgres
+5600; 1259 22426 INDEX test reminder_logs_obligation_id_idx postgres
+5603; 1259 22427 INDEX test reminder_logs_tenant_id_idx postgres
+5604; 1259 22428 INDEX test rent_generation_ledgers_hostel_id_rent_month_idx postgres
+5605; 1259 22431 INDEX test rent_generation_ledgers_owner_id_hostel_id_rent_month_oblig_key postgres
+5606; 1259 22429 INDEX test rent_generation_ledgers_owner_id_rent_month_idx postgres
+5609; 1259 22430 INDEX test rent_generation_ledgers_rent_month_status_idx postgres
+5612; 1259 22432 INDEX test rent_generation_logs_rent_month_idx postgres
+5613; 1259 22433 INDEX test rent_generation_logs_triggered_by_idx postgres
+5614; 1259 22439 INDEX test rent_obligations_allocation_id_rent_month_obligation_type_key postgres
+5615; 1259 22434 INDEX test rent_obligations_hostel_id_idx postgres
+5616; 1259 22435 INDEX test rent_obligations_hostel_id_rent_month_idx postgres
+5617; 1259 22436 INDEX test rent_obligations_hostel_id_status_idx postgres
+5618; 1259 22437 INDEX test rent_obligations_owner_id_idx postgres
+5621; 1259 22438 INDEX test rent_obligations_tenant_id_rent_month_idx postgres
+5622; 1259 22440 INDEX test room_activity_logs_owner_id_idx postgres
+5625; 1259 22441 INDEX test room_activity_logs_room_id_idx postgres
+5626; 1259 22442 INDEX test room_allocations_hostel_id_idx postgres
+5627; 1259 22443 INDEX test room_allocations_hostel_id_is_active_idx postgres
+5630; 1259 22444 INDEX test room_allocations_room_id_is_active_idx postgres
+5631; 1259 22445 INDEX test room_allocations_tenant_id_is_active_end_date_idx postgres
+5632; 1259 22446 INDEX test rooms_hostel_id_idx postgres
+5633; 1259 22447 INDEX test rooms_hostel_id_room_no_key postgres
+5636; 1259 22448 INDEX test subscriptions_owner_id_key postgres
+5639; 1259 22449 INDEX test system_event_logs_created_at_idx postgres
+5640; 1259 22450 INDEX test system_event_logs_event_type_idx postgres
+5641; 1259 22451 INDEX test system_event_logs_owner_id_idx postgres
+5646; 1259 22452 INDEX test tenant_advance_ledger_hostel_id_idx postgres
+5647; 1259 22453 INDEX test tenant_advance_ledger_owner_id_idx postgres
+5650; 1259 22454 INDEX test tenant_advance_ledger_tenant_id_created_at_idx postgres
+5651; 1259 22455 INDEX test tenant_advance_ledger_tenant_id_hostel_id_idx postgres
+5652; 1259 22456 INDEX test tenant_advance_ledger_tenant_id_idx postgres
+5655; 1259 22457 INDEX test tenant_behavior_scores_tenant_id_last_calculated_idx postgres
+5656; 1259 22458 INDEX test tenant_transfer_logs_from_hostel_id_idx postgres
+5659; 1259 22459 INDEX test tenant_transfer_logs_tenant_id_idx postgres
+5660; 1259 22460 INDEX test tenant_transfer_logs_to_hostel_id_idx postgres
+5661; 1259 22461 INDEX test tenant_transfer_logs_transferred_at_idx postgres
+5662; 1259 22463 INDEX test tenants_hostel_id_idx postgres
+5663; 1259 22464 INDEX test tenants_owner_id_idx postgres
+5666; 1259 22462 INDEX test tenants_profile_id_key postgres
+5669; 1259 22465 INDEX test token_blacklist_token_key postgres
+5695; 1259 22483 INDEX test udx_mor_tenant_active postgres
+5724; 1259 22500 INDEX test udx_osl_idempotency_key postgres
+5729; 1259 22503 INDEX test udx_sb_batch_number postgres
+5735; 1259 22507 INDEX test udx_sbi_batch_owner_hostel postgres
+5736; 1259 22508 INDEX test udx_sbi_idempotency_key postgres
+5674; 1259 22469 INDEX test whatsapp_logs_delivery_status_created_at_idx postgres
+5675; 1259 22470 INDEX test whatsapp_logs_hostel_id_created_at_idx postgres
+5676; 1259 22466 INDEX test whatsapp_logs_idempotency_key_key postgres
+5677; 1259 22471 INDEX test whatsapp_logs_obligation_id_template_created_at_idx postgres
+5678; 1259 22472 INDEX test whatsapp_logs_owner_id_created_at_idx postgres
+5681; 1259 22473 INDEX test whatsapp_logs_provider_message_id_idx postgres
+5682; 1259 22474 INDEX test whatsapp_logs_tenant_id_created_at_idx postgres
+5683; 1259 22475 INDEX test whatsapp_webhook_events_event_hash_key postgres
+5686; 1259 22476 INDEX test whatsapp_webhook_events_processing_status_idx postgres
+5687; 1259 22477 INDEX test whatsapp_webhook_events_provider_message_id_idx postgres
+5688; 1259 22478 INDEX test whatsapp_webhook_events_provider_received_at_idx postgres
+5948; 2620 19306 TRIGGER public room_allocations enforce_room_capacity postgres
+5951; 2620 19597 TRIGGER public hostel_daily_snapshots trg_prevent_hostel_daily_snapshot_delete postgres
+5952; 2620 19596 TRIGGER public hostel_daily_snapshots trg_prevent_hostel_daily_snapshot_update postgres
+5949; 2620 19706 TRIGGER public payments trg_prevent_payment_ledger_delete postgres
+5950; 2620 19705 TRIGGER public payments trg_prevent_payment_ledger_update postgres
+5947; 2620 17396 TRIGGER realtime subscription tr_check_filters supabase_admin
+5943; 2620 17290 TRIGGER storage buckets enforce_bucket_name_length_trigger supabase_storage_admin
+5944; 2620 17354 TRIGGER storage buckets protect_buckets_delete supabase_storage_admin
+5945; 2620 17355 TRIGGER storage objects protect_objects_delete supabase_storage_admin
+5946; 2620 17224 TRIGGER storage objects update_objects_updated_at supabase_storage_admin
+5794; 2606 16691 FK CONSTRAINT auth identities identities_user_id_fkey supabase_auth_admin
+5799; 2606 16781 FK CONSTRAINT auth mfa_amr_claims mfa_amr_claims_session_id_fkey supabase_auth_admin
+5798; 2606 16769 FK CONSTRAINT auth mfa_challenges mfa_challenges_auth_factor_id_fkey supabase_auth_admin
+5797; 2606 16756 FK CONSTRAINT auth mfa_factors mfa_factors_user_id_fkey supabase_auth_admin
+5805; 2606 17021 FK CONSTRAINT auth oauth_authorizations oauth_authorizations_client_id_fkey supabase_auth_admin
+5806; 2606 17026 FK CONSTRAINT auth oauth_authorizations oauth_authorizations_user_id_fkey supabase_auth_admin
+5807; 2606 17050 FK CONSTRAINT auth oauth_consents oauth_consents_client_id_fkey supabase_auth_admin
+5808; 2606 17045 FK CONSTRAINT auth oauth_consents oauth_consents_user_id_fkey supabase_auth_admin
+5804; 2606 16947 FK CONSTRAINT auth one_time_tokens one_time_tokens_user_id_fkey supabase_auth_admin
+5793; 2606 16724 FK CONSTRAINT auth refresh_tokens refresh_tokens_session_id_fkey supabase_auth_admin
+5801; 2606 16828 FK CONSTRAINT auth saml_providers saml_providers_sso_provider_id_fkey supabase_auth_admin
+5802; 2606 16901 FK CONSTRAINT auth saml_relay_states saml_relay_states_flow_state_id_fkey supabase_auth_admin
+5803; 2606 16842 FK CONSTRAINT auth saml_relay_states saml_relay_states_sso_provider_id_fkey supabase_auth_admin
+5795; 2606 17064 FK CONSTRAINT auth sessions sessions_oauth_client_id_fkey supabase_auth_admin
+5796; 2606 16719 FK CONSTRAINT auth sessions sessions_user_id_fkey supabase_auth_admin
+5800; 2606 16809 FK CONSTRAINT auth sso_domains sso_domains_sso_provider_id_fkey supabase_auth_admin
+5810; 2606 17157 FK CONSTRAINT auth webauthn_challenges webauthn_challenges_user_id_fkey supabase_auth_admin
+5809; 2606 17140 FK CONSTRAINT auth webauthn_credentials webauthn_credentials_user_id_fkey supabase_auth_admin
+5926; 2606 92563 FK CONSTRAINT public RuleVersion RuleVersion_hostel_id_fkey postgres
+5927; 2606 92568 FK CONSTRAINT public RuleVersion RuleVersion_profileId_fkey postgres
+5928; 2606 92578 FK CONSTRAINT public TenantPolicyAcceptance TenantPolicyAcceptance_hostel_id_fkey postgres
+5929; 2606 92583 FK CONSTRAINT public TenantPolicyAcceptance TenantPolicyAcceptance_rule_version_id_fkey postgres
+5930; 2606 92573 FK CONSTRAINT public TenantPolicyAcceptance TenantPolicyAcceptance_tenant_id_fkey postgres
+5855; 2606 20924 FK CONSTRAINT public bulk_import_batches bulk_import_batches_hostel_id_fkey postgres
+5856; 2606 20919 FK CONSTRAINT public bulk_import_batches bulk_import_batches_uploaded_by_fkey postgres
+5849; 2606 19641 FK CONSTRAINT public complaints complaints_hostel_id_fkey postgres
+5850; 2606 19164 FK CONSTRAINT public complaints complaints_tenant_id_fkey postgres
+5863; 2606 21370 FK CONSTRAINT public exit_disputes exit_disputes_request_id_fkey postgres
+5861; 2606 21375 FK CONSTRAINT public exit_feedbacks exit_feedbacks_request_id_fkey postgres
+5860; 2606 21365 FK CONSTRAINT public exit_settlement_transactions exit_settlement_transactions_request_id_fkey postgres
+5847; 2606 19636 FK CONSTRAINT public expenses expenses_hostel_id_fkey postgres
+5848; 2606 19159 FK CONSTRAINT public expenses expenses_owner_id_fkey postgres
+5925; 2606 92558 FK CONSTRAINT public floors floors_hostel_id_fkey postgres
+5820; 2606 19049 FK CONSTRAINT public hostels hostels_owner_id_fkey postgres
+5864; 2606 21340 FK CONSTRAINT public identification_documents identification_documents_tenant_id_fkey postgres
+5936; 2606 92771 FK CONSTRAINT public lead_activities lead_activities_lead_id_fkey postgres
+5941; 2606 92815 FK CONSTRAINT public lead_notes lead_notes_lead_id_fkey postgres
+5942; 2606 92820 FK CONSTRAINT public lead_notes lead_notes_owner_id_fkey postgres
+5862; 2606 21360 FK CONSTRAINT public move_out_inspection_items move_out_inspection_items_request_id_fkey postgres
+5859; 2606 21355 FK CONSTRAINT public move_out_inspections move_out_inspections_request_id_fkey postgres
+5857; 2606 21350 FK CONSTRAINT public move_out_requests move_out_requests_hostel_id_fkey postgres
+5858; 2606 21345 FK CONSTRAINT public move_out_requests move_out_requests_tenant_id_fkey postgres
+5845; 2606 19149 FK CONSTRAINT public notifications notifications_profile_id_fkey postgres
+5842; 2606 19134 FK CONSTRAINT public payment_attempt_obligations payment_attempt_obligations_obligation_id_fkey postgres
+5843; 2606 19129 FK CONSTRAINT public payment_attempt_obligations payment_attempt_obligations_payment_attempt_id_fkey postgres
+5840; 2606 19114 FK CONSTRAINT public payment_attempts payment_attempts_obligation_id_fkey postgres
+5841; 2606 19234 FK CONSTRAINT public payment_attempts payment_attempts_tenant_id_fkey postgres
+5932; 2606 92699 FK CONSTRAINT public payment_frequency_change_requests payment_frequency_change_requests_tenant_id_fkey postgres
+5836; 2606 19631 FK CONSTRAINT public payments payments_hostel_id_fkey postgres
+5837; 2606 19099 FK CONSTRAINT public payments payments_obligation_id_fkey postgres
+5838; 2606 19104 FK CONSTRAINT public payments payments_payment_attempt_id_fkey postgres
+5839; 2606 19109 FK CONSTRAINT public payments payments_tenant_id_fkey postgres
+5816; 2606 20914 FK CONSTRAINT public profiles profiles_import_batch_id_fkey postgres
+5817; 2606 19039 FK CONSTRAINT public profiles profiles_owner_id_fkey postgres
+5844; 2606 19144 FK CONSTRAINT public reactivation_requests reactivation_requests_tenant_id_fkey postgres
+5851; 2606 19646 FK CONSTRAINT public receipts receipts_hostel_id_fkey postgres
+5852; 2606 19169 FK CONSTRAINT public receipts receipts_payment_id_fkey postgres
+5853; 2606 19174 FK CONSTRAINT public receipts receipts_tenant_id_fkey postgres
+5846; 2606 19154 FK CONSTRAINT public refresh_tokens refresh_tokens_user_id_fkey postgres
+5833; 2606 19626 FK CONSTRAINT public reminder_logs reminder_logs_hostel_id_fkey postgres
+5834; 2606 19089 FK CONSTRAINT public reminder_logs reminder_logs_obligation_id_fkey postgres
+5835; 2606 19094 FK CONSTRAINT public reminder_logs reminder_logs_tenant_id_fkey postgres
+5827; 2606 19074 FK CONSTRAINT public rent_obligations rent_obligations_allocation_id_fkey postgres
+5828; 2606 92684 FK CONSTRAINT public rent_obligations rent_obligations_billing_plan_id_fkey postgres
+5829; 2606 19621 FK CONSTRAINT public rent_obligations rent_obligations_hostel_id_fkey postgres
+5830; 2606 92689 FK CONSTRAINT public rent_obligations rent_obligations_superseded_by_request_id_fkey postgres
+5831; 2606 19079 FK CONSTRAINT public rent_obligations rent_obligations_tenant_id_fkey postgres
+5823; 2606 19059 FK CONSTRAINT public room_activity_logs room_activity_logs_room_id_fkey postgres
+5824; 2606 19616 FK CONSTRAINT public room_allocations room_allocations_hostel_id_fkey postgres
+5825; 2606 19064 FK CONSTRAINT public room_allocations room_allocations_room_id_fkey postgres
+5826; 2606 19069 FK CONSTRAINT public room_allocations room_allocations_tenant_id_fkey postgres
+5937; 2606 92801 FK CONSTRAINT public room_reservations room_reservations_approved_by_fkey postgres
+5938; 2606 92796 FK CONSTRAINT public room_reservations room_reservations_hostel_id_fkey postgres
+5939; 2606 92786 FK CONSTRAINT public room_reservations room_reservations_lead_id_fkey postgres
+5940; 2606 92791 FK CONSTRAINT public room_reservations room_reservations_room_id_fkey postgres
+5821; 2606 92553 FK CONSTRAINT public rooms rooms_floor_id_fkey postgres
+5822; 2606 19054 FK CONSTRAINT public rooms rooms_hostel_id_fkey postgres
+5832; 2606 19084 FK CONSTRAINT public tenant_advance_ledger tenant_advance_ledger_tenant_id_fkey postgres
+5854; 2606 19262 FK CONSTRAINT public tenant_behavior_scores tenant_behavior_scores_tenant_id_fkey postgres
+5931; 2606 92694 FK CONSTRAINT public tenant_billing_plans tenant_billing_plans_tenant_id_fkey postgres
+5818; 2606 19611 FK CONSTRAINT public tenants tenants_hostel_id_fkey postgres
+5819; 2606 19044 FK CONSTRAINT public tenants tenants_profile_id_fkey postgres
+5933; 2606 92757 FK CONSTRAINT public visitor_leads visitor_leads_converted_tenant_id_fkey postgres
+5934; 2606 92747 FK CONSTRAINT public visitor_leads visitor_leads_hostel_id_fkey postgres
+5935; 2606 92752 FK CONSTRAINT public visitor_leads visitor_leads_owner_id_fkey postgres
+5811; 2606 17199 FK CONSTRAINT storage objects objects_bucketId_fkey supabase_storage_admin
+5812; 2606 17246 FK CONSTRAINT storage s3_multipart_uploads s3_multipart_uploads_bucket_id_fkey supabase_storage_admin
+5813; 2606 17266 FK CONSTRAINT storage s3_multipart_uploads_parts s3_multipart_uploads_parts_bucket_id_fkey supabase_storage_admin
+5814; 2606 17261 FK CONSTRAINT storage s3_multipart_uploads_parts s3_multipart_uploads_parts_upload_id_fkey supabase_storage_admin
+5815; 2606 17331 FK CONSTRAINT storage vector_indexes vector_indexes_bucket_id_fkey supabase_storage_admin
+5865; 2606 22517 FK CONSTRAINT test autopay_attempts autopay_attempts_subscription_id_fkey postgres
+5866; 2606 22522 FK CONSTRAINT test bulk_import_batches bulk_import_batches_hostel_id_fkey postgres
+5867; 2606 22527 FK CONSTRAINT test bulk_import_batches bulk_import_batches_uploaded_by_fkey postgres
+5868; 2606 22532 FK CONSTRAINT test complaints complaints_hostel_id_fkey postgres
+5869; 2606 22537 FK CONSTRAINT test complaints complaints_tenant_id_fkey postgres
+5918; 2606 22788 FK CONSTRAINT test exit_disputes exit_disputes_request_id_fkey postgres
+5919; 2606 22793 FK CONSTRAINT test exit_feedbacks exit_feedbacks_request_id_fkey postgres
+5917; 2606 22783 FK CONSTRAINT test exit_settlement_transactions exit_settlement_transactions_request_id_fkey postgres
+5870; 2606 22542 FK CONSTRAINT test expenses expenses_hostel_id_fkey postgres
+5871; 2606 22547 FK CONSTRAINT test expenses expenses_owner_id_fkey postgres
+5872; 2606 22552 FK CONSTRAINT test hostels hostels_owner_id_fkey postgres
+5873; 2606 22563 FK CONSTRAINT test identification_documents identification_documents_tenant_id_fkey postgres
+5916; 2606 22778 FK CONSTRAINT test move_out_inspection_items move_out_inspection_items_request_id_fkey postgres
+5915; 2606 22773 FK CONSTRAINT test move_out_inspections move_out_inspections_request_id_fkey postgres
+5913; 2606 22768 FK CONSTRAINT test move_out_requests move_out_requests_hostel_id_fkey postgres
+5914; 2606 22763 FK CONSTRAINT test move_out_requests move_out_requests_tenant_id_fkey postgres
+5874; 2606 22568 FK CONSTRAINT test notifications notifications_profile_id_fkey postgres
+5875; 2606 22573 FK CONSTRAINT test overflow_ledger overflow_ledger_invoice_id_fkey postgres
+5876; 2606 22578 FK CONSTRAINT test owner_invoices owner_invoices_owner_id_fkey postgres
+5877; 2606 22583 FK CONSTRAINT test owner_invoices owner_invoices_plan_id_fkey postgres
+5878; 2606 22588 FK CONSTRAINT test owner_invoices owner_invoices_subscription_id_fkey postgres
+5920; 2606 22808 FK CONSTRAINT test owner_settlement_ledger owner_settlement_ledger_batch_item_id_fkey postgres
+5921; 2606 22798 FK CONSTRAINT test owner_settlement_ledger owner_settlement_ledger_payment_id_fkey postgres
+5922; 2606 22803 FK CONSTRAINT test owner_settlement_ledger owner_settlement_ledger_settlement_batch_id_fkey postgres
+5879; 2606 22593 FK CONSTRAINT test owner_subscriptions owner_subscriptions_owner_id_fkey postgres
+5880; 2606 22598 FK CONSTRAINT test owner_subscriptions owner_subscriptions_plan_id_fkey postgres
+5881; 2606 22603 FK CONSTRAINT test payment_attempt_obligations payment_attempt_obligations_obligation_id_fkey postgres
+5882; 2606 22608 FK CONSTRAINT test payment_attempt_obligations payment_attempt_obligations_payment_attempt_id_fkey postgres
+5883; 2606 22613 FK CONSTRAINT test payment_attempts payment_attempts_invoice_id_fkey postgres
+5884; 2606 22618 FK CONSTRAINT test payment_attempts payment_attempts_obligation_id_fkey postgres
+5885; 2606 22623 FK CONSTRAINT test payment_attempts payment_attempts_tenant_id_fkey postgres
+5886; 2606 22628 FK CONSTRAINT test payments payments_hostel_id_fkey postgres
+5887; 2606 22633 FK CONSTRAINT test payments payments_obligation_id_fkey postgres
+5888; 2606 22638 FK CONSTRAINT test payments payments_payment_attempt_id_fkey postgres
+5889; 2606 22643 FK CONSTRAINT test payments payments_tenant_id_fkey postgres
+5890; 2606 22648 FK CONSTRAINT test profiles profiles_import_batch_id_fkey postgres
+5891; 2606 22653 FK CONSTRAINT test profiles profiles_owner_id_fkey postgres
+5892; 2606 22658 FK CONSTRAINT test reactivation_requests reactivation_requests_tenant_id_fkey postgres
+5893; 2606 22663 FK CONSTRAINT test receipts receipts_hostel_id_fkey postgres
+5894; 2606 22668 FK CONSTRAINT test receipts receipts_payment_id_fkey postgres
+5895; 2606 22673 FK CONSTRAINT test receipts receipts_tenant_id_fkey postgres
+5896; 2606 22678 FK CONSTRAINT test refresh_tokens refresh_tokens_user_id_fkey postgres
+5897; 2606 22683 FK CONSTRAINT test reminder_logs reminder_logs_hostel_id_fkey postgres
+5898; 2606 22688 FK CONSTRAINT test reminder_logs reminder_logs_obligation_id_fkey postgres
+5899; 2606 22693 FK CONSTRAINT test reminder_logs reminder_logs_tenant_id_fkey postgres
+5900; 2606 22698 FK CONSTRAINT test rent_obligations rent_obligations_allocation_id_fkey postgres
+5901; 2606 22703 FK CONSTRAINT test rent_obligations rent_obligations_hostel_id_fkey postgres
+5902; 2606 22708 FK CONSTRAINT test rent_obligations rent_obligations_tenant_id_fkey postgres
+5903; 2606 22713 FK CONSTRAINT test room_activity_logs room_activity_logs_room_id_fkey postgres
+5904; 2606 22718 FK CONSTRAINT test room_allocations room_allocations_hostel_id_fkey postgres
+5905; 2606 22723 FK CONSTRAINT test room_allocations room_allocations_room_id_fkey postgres
+5906; 2606 22728 FK CONSTRAINT test room_allocations room_allocations_tenant_id_fkey postgres
+5907; 2606 22733 FK CONSTRAINT test rooms rooms_hostel_id_fkey postgres
+5923; 2606 22813 FK CONSTRAINT test settlement_batch_items settlement_batch_items_batch_id_fkey postgres
+5924; 2606 22818 FK CONSTRAINT test settlement_batch_items settlement_batch_items_ledger_debit_id_fkey postgres
+5908; 2606 22738 FK CONSTRAINT test subscriptions subscriptions_plan_id_fkey postgres
+5909; 2606 22743 FK CONSTRAINT test tenant_advance_ledger tenant_advance_ledger_tenant_id_fkey postgres
+5910; 2606 22748 FK CONSTRAINT test tenant_behavior_scores tenant_behavior_scores_tenant_id_fkey postgres
+5911; 2606 22753 FK CONSTRAINT test tenants tenants_hostel_id_fkey postgres
+5912; 2606 22758 FK CONSTRAINT test tenants tenants_profile_id_fkey postgres
+6104; 0 16529 ROW SECURITY auth audit_log_entries supabase_auth_admin
+6115; 0 16887 ROW SECURITY auth flow_state supabase_auth_admin
+6106; 0 16684 ROW SECURITY auth identities supabase_auth_admin
+6103; 0 16522 ROW SECURITY auth instances supabase_auth_admin
+6110; 0 16774 ROW SECURITY auth mfa_amr_claims supabase_auth_admin
+6109; 0 16762 ROW SECURITY auth mfa_challenges supabase_auth_admin
+6108; 0 16749 ROW SECURITY auth mfa_factors supabase_auth_admin
+6116; 0 16937 ROW SECURITY auth one_time_tokens supabase_auth_admin
+6102; 0 16511 ROW SECURITY auth refresh_tokens supabase_auth_admin
+6113; 0 16816 ROW SECURITY auth saml_providers supabase_auth_admin
+6114; 0 16834 ROW SECURITY auth saml_relay_states supabase_auth_admin
+6105; 0 16537 ROW SECURITY auth schema_migrations supabase_auth_admin
+6107; 0 16714 ROW SECURITY auth sessions supabase_auth_admin
+6112; 0 16801 ROW SECURITY auth sso_domains supabase_auth_admin
+6111; 0 16792 ROW SECURITY auth sso_providers supabase_auth_admin
+6101; 0 16499 ROW SECURITY auth users supabase_auth_admin
+6125; 0 17523 ROW SECURITY realtime messages supabase_realtime_admin
+6118; 0 17178 ROW SECURITY storage buckets supabase_storage_admin
+6122; 0 17298 ROW SECURITY storage buckets_analytics supabase_storage_admin
+6123; 0 17311 ROW SECURITY storage buckets_vectors supabase_storage_admin
+6117; 0 17170 ROW SECURITY storage migrations supabase_storage_admin
+6119; 0 17188 ROW SECURITY storage objects supabase_storage_admin
+6120; 0 17237 ROW SECURITY storage s3_multipart_uploads supabase_storage_admin
+6121; 0 17251 ROW SECURITY storage s3_multipart_uploads_parts supabase_storage_admin
+6124; 0 17321 ROW SECURITY storage vector_indexes supabase_storage_admin
+6126; 6104 16430 PUBLICATION - supabase_realtime postgres
+4232; 3466 16575 EVENT TRIGGER - issue_graphql_placeholder supabase_admin
+4235; 3466 16654 EVENT TRIGGER - issue_pg_cron_access supabase_admin
+4231; 3466 16573 EVENT TRIGGER - issue_pg_graphql_access supabase_admin
+4236; 3466 16657 EVENT TRIGGER - issue_pg_net_access supabase_admin
+4233; 3466 16576 EVENT TRIGGER - pgrst_ddl_watch supabase_admin
+4234; 3466 16577 EVENT TRIGGER - pgrst_drop_watch supabase_admin

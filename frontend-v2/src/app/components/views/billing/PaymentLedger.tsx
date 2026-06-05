@@ -137,70 +137,121 @@ export function PaymentLedger({ payments, paymentsData, onRowClick }: Props) {
           {search || statusFilter !== 'All' ? 'No results match your filter' : 'No payment records found'}
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <div className="min-w-[560px] text-sm">
-            <div className="grid grid-cols-[1.4fr_0.7fr_0.8fr_0.8fr_0.9fr] border-b border-border bg-muted/30">
-              <div className="text-left text-xs font-medium text-muted-foreground px-4 py-2.5">Tenant</div>
-              <div className="text-left text-xs font-medium text-muted-foreground px-2 py-2.5">Room</div>
-              <div className="text-left text-xs font-medium text-muted-foreground px-2 py-2.5">Month</div>
-              <div className="text-left text-xs font-medium text-muted-foreground px-2 py-2.5">Status</div>
-              <div className="text-right text-xs font-medium text-muted-foreground px-4 py-2.5">Amount</div>
-            </div>
-            <div ref={scrollRef} className="max-h-[560px] overflow-auto">
-              <div
-                className="relative w-full"
-                style={{ height: rowVirtualizer.getTotalSize() }}
-              >
-              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                const p: any = rows[virtualRow.index];
-                const i = virtualRow.index;
-                const id = p.obligation_id ?? p.id;
-                const name = p.tenantName ?? p.tenant_name ?? 'Unknown';
-                const room = p.roomNo ?? p.room_no ?? '—';
-                const month = p.rentMonth ?? p.rent_month ?? '—';
-                const status = (p.status ?? 'PENDING').toUpperCase();
-                const total = Number(p.rentAmount ?? p.total_amount ?? p.amount ?? 0);
-                const outstanding = Number(p.outstanding ?? p.remaining ?? 0);
-                const method = p.paymentMethod ?? p.payment_method;
-                const daysOverdue = Number(p.daysOverdue ?? p.days_overdue ?? 0);
+        <>
+          {/* Mobile View: cards list */}
+          <div className="block md:hidden divide-y divide-border max-h-[560px] overflow-y-auto">
+            {rows.map((p: any, i: number) => {
+              const id = p.obligation_id ?? p.id;
+              const name = p.tenantName ?? p.tenant_name ?? 'Unknown';
+              const room = p.roomNo ?? p.room_no ?? '—';
+              const month = p.rentMonth ?? p.rent_month ?? '—';
+              const status = (p.status ?? 'PENDING').toUpperCase();
+              const total = Number(p.rentAmount ?? p.total_amount ?? p.amount ?? 0);
+              const outstanding = Number(p.outstanding ?? p.remaining ?? 0);
+              const method = p.paymentMethod ?? p.payment_method;
+              const daysOverdue = Number(p.daysOverdue ?? p.days_overdue ?? 0);
 
-                return (
-                  <button
-                    key={id ?? i}
-                    onClick={() => id && onRowClick(id)}
-                    className={cn(
-                      'absolute left-0 grid w-full grid-cols-[1.4fr_0.7fr_0.8fr_0.8fr_0.9fr] border-b border-border text-left hover:bg-muted/40 transition-colors',
-                      daysOverdue > 0 && status !== 'PAID' ? 'bg-red-500/5' : '',
+              return (
+                <button
+                  key={id ?? i}
+                  type="button"
+                  onClick={() => id && onRowClick(id)}
+                  className={cn(
+                    "w-full px-4 py-3 text-left hover:bg-muted/40 transition-colors flex justify-between items-start gap-3",
+                    daysOverdue > 0 && status !== 'PAID' ? 'bg-red-500/5' : ''
+                  )}
+                >
+                  <div className="space-y-1">
+                    <div className="font-semibold text-sm text-foreground">{name}</div>
+                    <div className="text-xs text-muted-foreground">Room {room} · {month}</div>
+                    {method && (
+                      <div className="text-xs text-muted-foreground">Paid via {methodShort(method)}</div>
                     )}
-                    style={{ transform: `translateY(${virtualRow.start}px)` }}
-                  >
-                    <div className="px-4 py-3">
-                      <div className="font-medium text-foreground truncate max-w-[120px]">{name}</div>
-                      {method && (
-                        <div className="text-xs text-muted-foreground">{methodShort(method)}</div>
-                      )}
-                    </div>
-                    <div className="px-2 py-3 text-xs text-muted-foreground">{room}</div>
-                    <div className="px-2 py-3 text-xs text-muted-foreground">{month}</div>
-                    <div className="px-2 py-3">
+                  </div>
+                  <div className="text-right space-y-1 shrink-0">
+                    <div className="font-bold text-sm text-foreground">{fmt(total)}</div>
+                    <div className="flex flex-col items-end gap-1">
                       <StatusBadge status={status} />
-                      {daysOverdue > 0 && status !== 'PAID' && (
-                        <div className="text-xs text-red-500 mt-0.5">{daysOverdue}d late</div>
-                      )}
-                    </div>
-                    <div className="px-4 py-3 text-right">
-                      <div className="font-semibold text-foreground">{fmt(total)}</div>
                       {outstanding > 0 && status !== 'PAID' && (
-                        <div className="text-xs text-red-500">{fmt(outstanding)} due</div>
+                        <span className="text-[10px] font-semibold text-red-500">{fmt(outstanding)} due</span>
+                      )}
+                      {daysOverdue > 0 && status !== 'PAID' && (
+                        <span className="text-[10px] text-red-500">{daysOverdue}d late</span>
                       )}
                     </div>
-                  </button>
-                );
-              })}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Desktop View: virtualized table */}
+          <div className="hidden md:block overflow-x-auto">
+            <div className="min-w-[560px] text-sm">
+              <div className="grid grid-cols-[1.4fr_0.7fr_0.8fr_0.8fr_0.9fr] border-b border-border bg-muted/30">
+                <div className="text-left text-xs font-medium text-muted-foreground px-4 py-2.5">Tenant</div>
+                <div className="text-left text-xs font-medium text-muted-foreground px-2 py-2.5">Room</div>
+                <div className="text-left text-xs font-medium text-muted-foreground px-2 py-2.5">Month</div>
+                <div className="text-left text-xs font-medium text-muted-foreground px-2 py-2.5">Status</div>
+                <div className="text-right text-xs font-medium text-muted-foreground px-4 py-2.5">Amount</div>
+              </div>
+              <div ref={scrollRef} className="max-h-[560px] overflow-auto">
+                <div
+                  className="relative w-full"
+                  style={{ height: rowVirtualizer.getTotalSize() }}
+                >
+                  {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                    const p: any = rows[virtualRow.index];
+                    const i = virtualRow.index;
+                    const id = p.obligation_id ?? p.id;
+                    const name = p.tenantName ?? p.tenant_name ?? 'Unknown';
+                    const room = p.roomNo ?? p.room_no ?? '—';
+                    const month = p.rentMonth ?? p.rent_month ?? '—';
+                    const status = (p.status ?? 'PENDING').toUpperCase();
+                    const total = Number(p.rentAmount ?? p.total_amount ?? p.amount ?? 0);
+                    const outstanding = Number(p.outstanding ?? p.remaining ?? 0);
+                    const method = p.paymentMethod ?? p.payment_method;
+                    const daysOverdue = Number(p.daysOverdue ?? p.days_overdue ?? 0);
+
+                    return (
+                      <button
+                        key={id ?? i}
+                        type="button"
+                        onClick={() => id && onRowClick(id)}
+                        className={cn(
+                          'absolute left-0 grid w-full grid-cols-[1.4fr_0.7fr_0.8fr_0.8fr_0.9fr] border-b border-border text-left hover:bg-muted/40 transition-colors',
+                          daysOverdue > 0 && status !== 'PAID' ? 'bg-red-500/5' : '',
+                        )}
+                        style={{ transform: `translateY(${virtualRow.start}px)` }}
+                      >
+                        <div className="px-4 py-3">
+                          <div className="font-medium text-foreground truncate max-w-[120px]">{name}</div>
+                          {method && (
+                            <div className="text-xs text-muted-foreground">{methodShort(method)}</div>
+                          )}
+                        </div>
+                        <div className="px-2 py-3 text-xs text-muted-foreground">{room}</div>
+                        <div className="px-2 py-3 text-xs text-muted-foreground">{month}</div>
+                        <div className="px-2 py-3">
+                          <StatusBadge status={status} />
+                          {daysOverdue > 0 && status !== 'PAID' && (
+                            <div className="text-xs text-red-500 mt-0.5">{daysOverdue}d late</div>
+                          )}
+                        </div>
+                        <div className="px-4 py-3 text-right">
+                          <div className="font-semibold text-foreground">{fmt(total)}</div>
+                          {outstanding > 0 && status !== 'PAID' && (
+                            <div className="text-xs text-red-500">{fmt(outstanding)} due</div>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );

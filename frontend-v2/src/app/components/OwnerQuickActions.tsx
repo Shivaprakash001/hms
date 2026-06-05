@@ -51,6 +51,7 @@ export function OwnerQuickActions() {
     location.pathname.startsWith('/login') ||
     location.pathname.startsWith('/tenant') ||
     location.pathname.startsWith('/hostels/') ||
+    location.pathname.startsWith('/billing') ||
     location.pathname.startsWith('/alerts');
 
   const { data } = useQuery({
