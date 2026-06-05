@@ -50,7 +50,8 @@ export function OwnerQuickActions() {
     location.pathname.startsWith('/settings') ||
     location.pathname.startsWith('/login') ||
     location.pathname.startsWith('/tenant') ||
-    location.pathname.startsWith('/hostels/');
+    location.pathname.startsWith('/hostels/') ||
+    location.pathname.startsWith('/alerts');
 
   const { data } = useQuery({
     queryKey: queryKeys.owner.hostels(),
