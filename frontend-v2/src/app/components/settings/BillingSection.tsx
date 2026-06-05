@@ -16,6 +16,8 @@ interface Local {
   academic_year_name_format: string;
   frequency_change_cooldown_days: number;
   minimum_commitment_months: Record<string, number>;
+  partial_payments_enabled: boolean;
+  partial_min_amount: number;
 }
 
 const RULE_TYPE_OPTIONS = [
@@ -51,6 +53,8 @@ const init = (p?: HostelPolicy): Local => ({
   minimum_commitment_months: p?.billing.payment_frequency?.minimum_commitment_months ?? {
     MONTHLY: 1, QUARTERLY: 3, HALF_YEARLY: 6, ACADEMIC_YEARLY: 12, CUSTOM_INSTALLMENTS: 1,
   },
+  partial_payments_enabled: p?.billing.partial_payments.enabled ?? false,
+  partial_min_amount: p?.billing.partial_payments.minimum_amount ?? 0,
 });
 
 /** Compute what the due date would look like for a given month (1-indexed) */
@@ -107,6 +111,7 @@ export function BillingSection({ hostelId, policy }: Props) {
           frequency_change_cooldown_days: local.frequency_change_cooldown_days,
           minimum_commitment_months: local.minimum_commitment_months,
         },
+        partial_payments: { enabled: local.partial_payments_enabled, minimum_amount: local.partial_min_amount },
       },
     }, {
       onSuccess: () => { snap.current = local; },
@@ -417,6 +422,19 @@ export function BillingSection({ hostelId, policy }: Props) {
               )}
             </div>
           </>
+        )}
+      </div>
+
+      {/* ── Partial payments ──────────────────────────────────────── */}
+      <div className="border-t border-border pt-5 space-y-4">
+        <FieldRow label="Allow partial rent payments" hint="Tenants can pay less than the full amount due for rent invoices">
+          <Toggle checked={local.partial_payments_enabled} onChange={v => upd('partial_payments_enabled', v)} />
+        </FieldRow>
+        {local.partial_payments_enabled && (
+          <Field label="Minimum payment amount (₹)" hint="0 = no minimum">
+            <input type="number" min={0} className={inp} value={local.partial_min_amount}
+              onChange={e => upd('partial_min_amount', +e.target.value)} />
+          </Field>
         )}
       </div>
     </SectionShell>
