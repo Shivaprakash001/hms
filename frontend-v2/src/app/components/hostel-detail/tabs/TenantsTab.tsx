@@ -1,18 +1,32 @@
-import { lazy, Suspense, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { lazy, Suspense, useMemo, useState, type KeyboardEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Users, Plus, CreditCard, Phone, ChevronRight, Send } from 'lucide-react';
+import { Users, Plus, CreditCard, Phone, Send, Search } from 'lucide-react';
 import { queryKeys } from '@lib/queryKeys';
-import { fmt, fmtExact } from '../shared/format';
+import { fmtExact } from '../shared/format';
 import { TabError, TabSkeleton } from '../shared/TabStates';
+import { getInitials, normalizeTenants } from '@features/tenants/utils/normalize';
 
 const AddTenantModal = lazy(() => import('../../modals/AddTenantModal').then((m) => ({ default: m.AddTenantModal })));
 const RecordPaymentModal = lazy(() => import('../../modals/RecordPaymentModal').then((m) => ({ default: m.RecordPaymentModal })));
 
+type TenantFilter = 'all' | 'due' | 'paid' | 'overdue' | 'unassigned';
+
+const tenantFilters: { id: TenantFilter; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'due', label: 'Due' },
+  { id: 'paid', label: 'Paid' },
+  { id: 'overdue', label: 'Overdue' },
+  { id: 'unassigned', label: 'Unassigned' },
+];
+
 export function TenantsTab({ hostelId }: { hostelId: string }) {
+  const navigate = useNavigate();
   const [showAdd, setShowAdd] = useState(false);
   const [showPayment, setShowPayment] = useState<string>('');
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<TenantFilter>('all');
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.tenants.list(hostelId),
     queryFn: () => import('@features/tenants/api').then((m) => m.tenantService.getAll(hostelId, { status: 'ACTIVE' })),
@@ -32,20 +46,54 @@ export function TenantsTab({ hostelId }: { hostelId: string }) {
       toast.error(e?.response?.data?.error?.message ?? 'Failed to resend'),
   });
 
-  if (isLoading) return <TabSkeleton />;
-  if (isError) return <TabError onRetry={refetch} />;
-
   const tenants: Record<string, unknown>[] = Array.isArray(data)
     ? data
     : Array.isArray((data as Record<string, unknown>)?.tenants)
     ? ((data as Record<string, unknown>).tenants as Record<string, unknown>[])
     : [];
 
+  const activeTenants = useMemo(() => normalizeTenants({ tenants }), [tenants]);
+
+  const filteredTenants = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    return activeTenants.filter((tenant) => {
+      const paymentStatus = tenant.paymentStatus.toLowerCase();
+      const matchesFilter =
+        filter === 'all' ||
+        (filter === 'due' && tenant.outstandingAmount > 0) ||
+        (filter === 'paid' && tenant.outstandingAmount <= 0) ||
+        (filter === 'overdue' && paymentStatus === 'overdue') ||
+        (filter === 'unassigned' && tenant.room === 'N/A');
+
+      if (!matchesFilter) return false;
+      if (!query) return true;
+
+      return [tenant.name, tenant.email, tenant.phone, tenant.room, tenant.rollNumber]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query));
+    });
+  }, [activeTenants, filter, search]);
+
   const invitedTenants: Record<string, unknown>[] = Array.isArray(invitedData)
     ? invitedData
     : Array.isArray((invitedData as Record<string, unknown>)?.tenants)
     ? ((invitedData as Record<string, unknown>).tenants as Record<string, unknown>[])
     : [];
+
+  if (isLoading) return <TabSkeleton />;
+  if (isError) return <TabError onRetry={refetch} />;
+
+  const openTenantProfile = (tenantId: string) => {
+    if (tenantId) navigate(`/hostels/${hostelId}/tenants/${tenantId}`);
+  };
+
+  const handleCardKeyDown = (event: KeyboardEvent, tenantId: string) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openTenantProfile(tenantId);
+    }
+  };
 
   return (
     <div className="space-y-3">
@@ -59,13 +107,35 @@ export function TenantsTab({ hostelId }: { hostelId: string }) {
         </button>
       </div>
 
-      <Link
-        to={`/hostels/${hostelId}/tenants`}
-        className="flex items-center justify-between p-3 rounded-xl border border-accent/30 bg-accent/5 text-sm font-medium text-accent"
-      >
-        Manage all tenants
-        <ChevronRight className="w-4 h-4" />
-      </Link>
+      {activeTenants.length > 0 && (
+        <div className="space-y-2">
+          <label className="relative block">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search name, phone, email, room..."
+              className="h-11 w-full rounded-xl border border-border bg-card pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-accent"
+            />
+          </label>
+          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+            {tenantFilters.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setFilter(item.id)}
+                className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                  filter === item.id
+                    ? 'bg-accent text-accent-foreground'
+                    : 'bg-secondary text-muted-foreground'
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {invitedTenants.length > 0 && (
         <div className="space-y-2">
@@ -74,10 +144,18 @@ export function TenantsTab({ hostelId }: { hostelId: string }) {
             <span className="text-xs text-muted-foreground">{invitedTenants.length} waiting</span>
           </div>
           {invitedTenants.map((tenant) => {
+            const invitedTenantId = String(tenant.id ?? tenant.tenant_id ?? '');
             const email = String(tenant.email ?? tenant.tenant_email ?? '');
             const room = tenant.room_no ?? tenant.room_number ?? tenant.room;
             return (
-              <div key={String(tenant.id)} className="bg-card border border-amber-500/20 rounded-xl p-4">
+              <div
+                key={String(tenant.id)}
+                role="button"
+                tabIndex={0}
+                onClick={() => openTenantProfile(invitedTenantId)}
+                onKeyDown={(event) => handleCardKeyDown(event, invitedTenantId)}
+                className="bg-card border border-amber-500/20 rounded-xl p-4 cursor-pointer transition-colors hover:border-accent/40 focus:outline-none focus:ring-2 focus:ring-accent/30"
+              >
                 <div className="flex items-start gap-3">
                   <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-xs font-bold bg-amber-500/10 text-amber-700">
                     {String(tenant.name ?? tenant.tenant_name ?? 'T').charAt(0).toUpperCase()}
@@ -100,7 +178,10 @@ export function TenantsTab({ hostelId }: { hostelId: string }) {
                 <button
                   type="button"
                   disabled={!email || resending}
-                  onClick={() => email && resendInvite(email)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (email) resendInvite(email);
+                  }}
                   className="mt-3 w-full flex items-center justify-center gap-1.5 py-2.5 bg-amber-50 text-amber-700 rounded-lg text-xs font-semibold active:scale-[0.98] transition-transform touch-manipulation disabled:opacity-50"
                 >
                   <Send className="w-3.5 h-3.5 shrink-0" />
@@ -112,7 +193,7 @@ export function TenantsTab({ hostelId }: { hostelId: string }) {
         </div>
       )}
 
-      {tenants.length === 0 && (
+      {activeTenants.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 gap-3">
           <div className="w-12 h-12 bg-secondary rounded-xl flex items-center justify-center">
             <Users className="w-6 h-6 text-muted-foreground" />
@@ -129,20 +210,33 @@ export function TenantsTab({ hostelId }: { hostelId: string }) {
           </button>
         </div>
       )}
-      {tenants.map((tenant) => {
-        const paymentStatus = String(tenant.payment_status ?? 'unknown').toLowerCase();
+      {activeTenants.length > 0 && filteredTenants.length === 0 && (
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/50 px-4 py-10 text-center">
+          <p className="font-medium text-foreground">No tenants match this view</p>
+          <p className="mt-1 text-sm text-muted-foreground">Try another search or filter.</p>
+        </div>
+      )}
+      {filteredTenants.map((tenant) => {
+        const paymentStatus = tenant.paymentStatus.toLowerCase();
         const isPaid = paymentStatus === 'paid';
         const isOverdue = paymentStatus === 'overdue';
-        const dueAmt = Number(tenant.outstanding_amount ?? tenant.due_amount ?? tenant.dues ?? 0);
-        const room = tenant.room_no ?? tenant.room_number ?? tenant.room;
-        const dueDate = tenant.due_date ? new Date(String(tenant.due_date)) : null;
+        const dueAmt = tenant.outstandingAmount;
+        const hasRoom = tenant.room && tenant.room !== 'N/A';
+        const dueDate = tenant.dueDate ? new Date(String(tenant.dueDate)) : null;
         const now = Date.now();
         const overdueDays = dueDate && dueDate.getTime() < now
           ? Math.floor((now - dueDate.getTime()) / 86400000)
           : 0;
-        const tenantId = String(tenant.obligation_id ?? tenant.id ?? '');
+        const tenantId = tenant.id;
+        const paymentTargetId = String(tenant.obligationId ?? tenant.id ?? '');
         return (
-          <div key={String(tenant.id)} className={`bg-card border rounded-xl p-4 min-w-0 ${
+          <div
+            key={tenant.id}
+            role="button"
+            tabIndex={0}
+            onClick={() => openTenantProfile(tenantId)}
+            onKeyDown={(event) => handleCardKeyDown(event, tenantId)}
+            className={`bg-card border rounded-xl p-4 min-w-0 cursor-pointer transition-colors hover:border-accent/40 focus:outline-none focus:ring-2 focus:ring-accent/30 ${
             isOverdue ? 'border-[#EF4444]/20' : 'border-border'
           }`}>
             <div className="flex items-start gap-3">
@@ -151,11 +245,15 @@ export function TenantsTab({ hostelId }: { hostelId: string }) {
                 : isPaid ? 'bg-[#10B981]/10 text-[#10B981]'
                 : 'bg-accent/10 text-accent'
               }`}>
-                {String(tenant.name ?? 'T').charAt(0).toUpperCase()}
+                {tenant.photoUrl ? (
+                  <img src={tenant.photoUrl} alt="" className="h-full w-full rounded-full object-cover" loading="lazy" />
+                ) : (
+                  getInitials(tenant.name)
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-semibold text-foreground truncate">{String(tenant.name ?? '')}</span>
+                  <span className="font-semibold text-foreground truncate">{tenant.name}</span>
                   <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${
                     isPaid ? 'bg-[#10B981]/10 text-[#10B981]'
                     : isOverdue ? 'bg-[#EF4444]/10 text-[#EF4444]'
@@ -165,22 +263,22 @@ export function TenantsTab({ hostelId }: { hostelId: string }) {
                   </span>
                 </div>
                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                  {room && <span className="text-xs text-muted-foreground">Room {String(room)}</span>}
-                  {room && <span className="text-muted-foreground text-xs">·</span>}
-                  <span className="text-xs text-muted-foreground">{fmtExact(tenant.monthly_rent ?? tenant.rent ?? 0)}/mo</span>
+                  <span className="text-xs text-muted-foreground">{hasRoom ? `Room ${tenant.room}` : 'Room not assigned'}</span>
+                  <span className="text-muted-foreground text-xs">·</span>
+                  <span className="text-xs text-muted-foreground">{fmtExact(tenant.rent)}/mo</span>
                 </div>
                 {!isPaid && dueAmt > 0 && (
                   <div className={`text-xs font-medium mt-1 ${
                     isOverdue ? 'text-[#EF4444]' : 'text-[#F59E0B]'
                   }`}>
-                    {fmt(dueAmt)} outstanding
+                    {fmtExact(dueAmt)} outstanding
                   </div>
                 )}
               </div>
               <div className="flex flex-col items-end gap-1.5 shrink-0">
-                {tenant.phone && (
+                {tenant.phone && tenant.phone !== 'N/A' && (
                   <a
-                    href={`tel:${String(tenant.phone)}`}
+                    href={`tel:${tenant.phone}`}
                     onClick={(e) => e.stopPropagation()}
                     className="p-1.5 text-muted-foreground active:scale-95 transition-transform"
                   >
@@ -191,7 +289,10 @@ export function TenantsTab({ hostelId }: { hostelId: string }) {
             </div>
             {!isPaid && (
               <button
-                onClick={() => setShowPayment(tenantId)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setShowPayment(paymentTargetId);
+                }}
                 className="mt-3 w-full flex items-center justify-center gap-1.5 py-2.5 bg-accent text-accent-foreground rounded-lg text-xs font-semibold active:scale-[0.98] transition-transform touch-manipulation"
               >
                 <CreditCard className="w-3.5 h-3.5 shrink-0" />

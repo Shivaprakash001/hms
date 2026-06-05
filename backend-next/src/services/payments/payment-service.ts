@@ -3011,7 +3011,20 @@ export class PaymentService {
     return summary;
   }
 
-  async getPaymentDetail(obligationId: string, ownerId: string, hostelId: string) {
+  async getPaymentDetail(id: string, ownerId: string, hostelId: string) {
+    const payment = await prisma.payments.findFirst({
+      where: { id, hostel_id: hostelId },
+      select: {
+        obligation_id: true,
+        obligation: { select: { owner_id: true, hostel_id: true } },
+      },
+    });
+    const paymentObligationId =
+      payment?.obligation?.owner_id === ownerId && payment.obligation.hostel_id === hostelId
+        ? payment.obligation_id
+        : null;
+    const obligationId = paymentObligationId ?? id;
+
     const obligation = await prisma.rent_obligations.findFirst({
       where: { id: obligationId, owner_id: ownerId, hostel_id: hostelId },
       include: {

@@ -361,6 +361,11 @@ export class PropertyService {
               tenant: {
                 include: {
                   profiles: true,
+                  tenant_invitations: {
+                    orderBy: { created_at: "desc" },
+                    take: 1,
+                    select: { name: true, email: true, phone: true },
+                  },
                   rent_obligations: {
                     where: { status: { in: ["PENDING", "PARTIAL"] } },
                     include: { payments: { select: { amount_paid: true, payment_date: true } } },
@@ -383,18 +388,19 @@ export class PropertyService {
     const unassigned: any = { id: "__unassigned", name: "Unassigned", sort_order: 999, rooms: [] };
 
     rooms.forEach((room: any) => {
-      const tenants = room.room_allocations.map((a: any) => {
-        const tenant = a.tenant;
-        const profile = tenant.profiles;
-        const summary = financialService.getTenantPaymentSummary(tenant.id, tenant.rent_obligations || []);
-        return {
-          tenant_id: tenant.id,
-          name: profile.name,
-          email: profile.email,
-          phone: profile.phone,
-          joined_date: a.start_date,
-          rent: Number(tenant.monthly_rent),
-          pending_dues: Number(summary.pending_amount || 0),
+	      const tenants = room.room_allocations.map((a: any) => {
+	        const tenant = a.tenant;
+	        const profile = tenant.profiles;
+	        const invitation = tenant.tenant_invitations?.[0];
+	        const summary = financialService.getTenantPaymentSummary(tenant.id, tenant.rent_obligations || []);
+	        return {
+	          tenant_id: tenant.id,
+	          name: profile?.name ?? invitation?.name ?? "Tenant",
+	          email: profile?.email ?? tenant.personal_email ?? invitation?.email ?? null,
+	          phone: profile?.phone ?? tenant.phone_1 ?? invitation?.phone ?? null,
+	          joined_date: a.start_date,
+	          rent: Number(tenant.monthly_rent),
+	          pending_dues: Number(summary.pending_amount || 0),
           status: tenant.status,
         };
       });
@@ -436,6 +442,11 @@ export class PropertyService {
             tenant: {
               include: {
                 profiles: true,
+                tenant_invitations: {
+                  orderBy: { created_at: "desc" },
+                  take: 1,
+                  select: { name: true, email: true, phone: true },
+                },
                 rent_obligations: {
                   where: { status: { in: ["PENDING", "PARTIAL"] } },
                   include: { payments: { select: { amount_paid: true, payment_date: true } } }
@@ -450,11 +461,12 @@ export class PropertyService {
     if (!room) throw new Error("NOT_FOUND: Room not found");
 
     const tenants = room.room_allocations.map((a: any) => {
-      const tenant = a.tenant;
-      const profile = tenant.profiles;
-      const obligations = tenant.rent_obligations || [];
-      const summary = financialService.getTenantPaymentSummary(tenant.id, obligations);
-      const pendingDues = Number(summary.pending_amount || 0);
+	      const tenant = a.tenant;
+	      const profile = tenant.profiles;
+	      const invitation = tenant.tenant_invitations?.[0];
+	      const obligations = tenant.rent_obligations || [];
+	      const summary = financialService.getTenantPaymentSummary(tenant.id, obligations);
+	      const pendingDues = Number(summary.pending_amount || 0);
 
       // Extract last payment info
       const allPayments = obligations.flatMap((o: any) => o.payments);
@@ -466,14 +478,14 @@ export class PropertyService {
         ? (lastPayment ? "PAID" : "NO_HISTORY")
         : (summary.total_paid > 0 ? "PARTIAL" : "PENDING");
 
-      return {
-        tenant_id: tenant.id,
-        profile_id: profile.id,
-        name: profile.name,
-        email: profile.email,
-        phone: profile.phone,
-        joined_date: a.start_date,
-        rent: Number(tenant.monthly_rent),
+	      return {
+	        tenant_id: tenant.id,
+	        profile_id: profile?.id ?? tenant.profile_id ?? null,
+	        name: profile?.name ?? invitation?.name ?? "Tenant",
+	        email: profile?.email ?? tenant.personal_email ?? invitation?.email ?? null,
+	        phone: profile?.phone ?? tenant.phone_1 ?? invitation?.phone ?? null,
+	        joined_date: a.start_date,
+	        rent: Number(tenant.monthly_rent),
         payment_status: paymentStatus,
         last_payment: lastPayment ? lastPayment.payment_date : null,
         last_payment_amount: lastPayment ? Number(lastPayment.amount_paid) : 0,

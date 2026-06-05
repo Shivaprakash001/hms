@@ -5,6 +5,7 @@ import { AlertCircle, ChevronDown, ChevronRight, Loader2, Pencil, Phone, Repeat2
 import api from '@lib/api-client';
 import { queryKeys } from '@lib/queryKeys';
 import { allocationService } from '@features/rooms/api';
+import { normalizeTenants } from '@features/tenants/utils/normalize';
 import { fmt, fmtExact } from '../../shared/format';
 
 export function RoomFormModal({
@@ -277,8 +278,34 @@ export function AssignExistingTenantSheet({
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['profiles', 'unassigned-tenants', hostelId],
     queryFn: async () => {
-      const response = await api.get('/profiles/unassigned/tenants', { params: { hostelId } });
-      return response.data?.success ? response.data.data : response.data;
+      try {
+        const response = await api.get('/profiles/unassigned/tenants', { params: { hostelId } });
+        const body = response.data ?? response;
+        const payload = body?.data ?? body;
+        const profiles = Array.isArray(payload?.profiles)
+          ? payload.profiles
+          : Array.isArray(body?.profiles)
+            ? body.profiles
+            : Array.isArray(payload)
+              ? payload
+              : [];
+        return { profiles };
+      } catch (error) {
+        const { tenantService } = await import('@features/tenants/api');
+        const activeTenantResponse = await tenantService.getAll(hostelId, { status: 'ACTIVE' });
+        const profiles = normalizeTenants(activeTenantResponse)
+          .filter((tenant) => tenant.room === 'N/A')
+          .map((tenant) => ({
+            id: tenant.profileId ?? tenant.id,
+            profile_id: tenant.profileId,
+            tenant_id: tenant.id,
+            name: tenant.name,
+            email: tenant.email,
+            phone: tenant.phone === 'N/A' ? null : tenant.phone,
+            status: tenant.status,
+          }));
+        return { profiles };
+      }
     },
   });
 
@@ -341,7 +368,7 @@ export function AssignExistingTenantSheet({
             <div className="flex justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-accent" />
             </div>
-          ) : isError ? (
+          ) : isError && tenants.length === 0 ? (
             <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-center">
               <p className="text-sm font-semibold text-foreground">Could not load unassigned tenants</p>
               <button type="button" onClick={() => refetch()} className="mt-3 rounded-lg border border-border px-4 py-2 text-xs font-semibold">
@@ -456,7 +483,7 @@ export function RoomOverviewModal({ hostelId, roomId, onClose, onEditRoom, onTra
   const payments = Array.isArray(overview.payments) ? overview.payments : [];
 
   return (
-    <div className="fixed inset-0 z-40 flex items-end bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-[70] flex items-end bg-black/40" onClick={onClose}>
       <div
         className="w-full bg-card rounded-t-2xl border-t border-border max-h-[85dvh] overflow-y-auto flex flex-col"
         onClick={(e) => e.stopPropagation()}
@@ -475,7 +502,7 @@ export function RoomOverviewModal({ hostelId, roomId, onClose, onEditRoom, onTra
         </div>
 
         {/* Content */}
-        <div className="p-4 space-y-4">
+        <div className="px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] space-y-4 md:pb-4">
           {/* Rent & Dues Summary */}
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-secondary/40 rounded-xl p-3 border border-border/50">

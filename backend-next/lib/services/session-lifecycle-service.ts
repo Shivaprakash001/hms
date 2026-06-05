@@ -8,11 +8,11 @@ import {
   touchSessionActivity,
 } from "@/lib/redis/session-revocation";
 
-export const ACCESS_TOKEN_MAX_AGE_SECONDS = 20 * 60;
+export const ACCESS_TOKEN_MAX_AGE_SECONDS = 12 * 60 * 60;
 export const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000;
 export const WARNING_AFTER_MS = 25 * 60 * 1000;
 export const TENANT_REFRESH_DAYS = 30;
-export const OWNER_ABSOLUTE_MS = 12 * 60 * 60 * 1000;
+export const OWNER_ABSOLUTE_MS = 30 * 24 * 60 * 60 * 1000;
 
 type SessionUser = {
   id: string;
@@ -122,6 +122,11 @@ export class SessionLifecycleService {
     }
 
     const sessionId = tokenRecord.session_id || tokenRecord.id;
+
+    if (!tokenRecord.profiles) {
+      await this.revokeTokenFamily(tokenRecord.id, tokenRecord.session_id, tokenRecord.user_id);
+      return { ok: false as const, reason: "expired" as const };
+    }
 
     if (tokenRecord.revoked_at || isEpochRevoked(tokenRecord.expires_at)) {
       await this.revokeAllUserSessions(tokenRecord.user_id);
