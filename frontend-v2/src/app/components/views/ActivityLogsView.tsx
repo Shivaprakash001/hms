@@ -563,7 +563,7 @@ export function ActivityLogsView({ embedded = false }: ActivityLogsViewProps) {
       )}
 
       {/* Quick Filters Scrollable Container */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-none">
+      <div className="flex items-center gap-1.5 overflow-x-auto py-2 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-none">
         {QUICK_CHIPS.map((chip) => {
           const isActive = getIsChipActive(chip.id);
           return (
@@ -573,7 +573,7 @@ export function ActivityLogsView({ embedded = false }: ActivityLogsViewProps) {
               onClick={() => handleChipClick(chip.id)}
               className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all border ${
                 isActive
-                  ? 'bg-accent/15 border-accent text-accent'
+                  ? 'bg-accent/15 border-accent text-accent shadow-sm'
                   : 'bg-card border-border text-muted-foreground hover:text-foreground hover:bg-secondary/40'
               }`}
             >
@@ -598,21 +598,23 @@ export function ActivityLogsView({ embedded = false }: ActivityLogsViewProps) {
         </div>
 
         {/* Secondary filters flex container */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
           {/* Hostel Context Picker */}
-          <div className="relative shrink-0">
+          <div className="relative flex-1 sm:flex-initial sm:min-w-[150px]">
             <button
               onClick={() => setShowHostelPicker((v) => !v)}
-              className="flex items-center gap-1 px-3 py-2 bg-secondary/30 border border-border rounded-lg text-xs font-medium text-foreground hover:bg-secondary/50 transition-colors"
+              className="w-full flex items-center justify-between gap-1 px-3 py-2 bg-secondary/30 border border-border rounded-lg text-xs font-medium text-foreground hover:bg-secondary/50 transition-colors"
             >
-              <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="truncate max-w-[100px]">{activeHostel ? String(activeHostel.name) : 'All Hostels'}</span>
-              <ChevronDown className="w-3 h-3 text-muted-foreground" />
+              <span className="flex items-center gap-1.5 min-w-0">
+                <Building2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                <span className="truncate max-w-[100px]">{activeHostel ? String(activeHostel.name) : 'All Hostels'}</span>
+              </span>
+              <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
             </button>
             {showHostelPicker && (
               <>
                 <div className="fixed inset-0 z-30" onClick={() => setShowHostelPicker(false)} />
-                <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-lg z-40 min-w-[180px] overflow-hidden py-1">
+                <div className="absolute right-0 left-0 sm:left-auto top-full mt-1 bg-card border border-border rounded-lg shadow-lg z-40 min-w-[180px] overflow-hidden py-1">
                   <button
                     onClick={() => { setSelectedHostelId(''); setShowHostelPicker(false); setPage(0); }}
                     className={`w-full text-left px-3 py-2 text-xs font-medium transition-colors ${
@@ -638,11 +640,11 @@ export function ActivityLogsView({ embedded = false }: ActivityLogsViewProps) {
           </div>
 
           {/* Time period filter */}
-          <div className="relative">
+          <div className="relative flex-1 sm:flex-initial sm:min-w-[130px]">
             <select
               value={timeRange}
               onChange={(e) => { setTimeRange(e.target.value); setPage(0); }}
-              className="text-xs font-medium bg-secondary/30 border border-border rounded-lg px-2 py-2 pr-6 appearance-none focus:outline-none focus:ring-1 focus:ring-accent"
+              className="w-full text-xs font-medium bg-secondary/30 border border-border rounded-lg px-2 py-2 pr-8 appearance-none focus:outline-none focus:ring-1 focus:ring-accent"
             >
               {TIME_RANGES.map((r) => (
                 <option key={r.value} value={r.value}>{r.label}</option>
