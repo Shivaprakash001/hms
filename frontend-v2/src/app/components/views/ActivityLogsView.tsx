@@ -537,6 +537,15 @@ export function ActivityLogsView({ embedded = false }: ActivityLogsViewProps) {
     }
   };
 
+  const getActiveChipId = () => {
+    for (const chip of QUICK_CHIPS) {
+      if (getIsChipActive(chip.id)) {
+        return chip.id;
+      }
+    }
+    return 'all';
+  };
+
   const grouped = groupLogsByDate(logs);
 
   return (
@@ -562,8 +571,24 @@ export function ActivityLogsView({ embedded = false }: ActivityLogsViewProps) {
         </div>
       )}
 
-      {/* Quick Filters Scrollable Container */}
-      <div className="flex items-center gap-1.5 overflow-x-auto py-2 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-none">
+      {/* Quick Filters - Mobile Select Dropdown */}
+      <div className="sm:hidden relative w-full">
+        <select
+          value={getActiveChipId()}
+          onChange={(e) => handleChipClick(e.target.value)}
+          className="w-full text-xs font-semibold bg-card border border-border rounded-xl px-3.5 py-2.5 pr-8 appearance-none focus:outline-none focus:ring-1 focus:ring-accent"
+        >
+          {QUICK_CHIPS.map((chip) => (
+            <option key={chip.id} value={chip.id}>
+              {chip.label}
+            </option>
+          ))}
+        </select>
+        <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+      </div>
+
+      {/* Quick Filters - Desktop Chips */}
+      <div className="hidden sm:flex items-center gap-1.5 overflow-x-auto py-2 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-none">
         {QUICK_CHIPS.map((chip) => {
           const isActive = getIsChipActive(chip.id);
           return (
