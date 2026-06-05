@@ -72,8 +72,7 @@ export async function POST(req: Request) {
 
     if (action === "confirm") {
       // Finalize as SUCCESS — records the payment and updates obligation.
-      // isManualConfirm:true bypasses the plan gate in finalizePaymentAttempt
-      // so the owner can always settle a parked PENDING_MANUAL_CONFIRMATION attempt.
+      // Owner can always settle a parked PENDING_MANUAL_CONFIRMATION attempt.
       const clientIp =
         req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
         req.headers.get("x-real-ip") ||

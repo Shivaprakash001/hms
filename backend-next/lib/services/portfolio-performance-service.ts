@@ -7,12 +7,17 @@ export interface PortfolioPerformanceHostelMonth {
   hostel_name: string;
   revenue: number;
   collections: number;
+  expenses: number;
+  profit: number;
   occupancy_rate: number;
 }
 
 export interface PortfolioPerformanceMonth {
   month: string;
   month_key: string;
+  total_revenue: number;
+  total_expenses: number;
+  total_profit: number;
   hostels: PortfolioPerformanceHostelMonth[];
 }
 
@@ -21,6 +26,8 @@ export interface PortfolioPerformanceRanking {
   hostel_name: string;
   city: string | null;
   revenue: number;
+  expenses: number;
+  profit: number;
   occupancy_rate: number;
   collection_rate: number;
   pending_dues: number;
@@ -31,9 +38,17 @@ export interface PortfolioPerformanceRanking {
   is_top_performer: boolean;
 }
 
+export interface BusinessHealthInsight {
+  highest_profit_hostel: { hostel_name: string; profit: number } | null;
+  lowest_occupancy_hostel: { hostel_name: string; occupancy_rate: number } | null;
+  highest_outstanding_hostel: { hostel_name: string; pending_dues: number } | null;
+}
+
 export interface PortfolioPerformanceResponse {
   portfolio: {
     total_revenue: number;
+    total_expenses: number;
+    total_profit: number;
     total_due: number;
     occupancy_rate: number;
     active_tenants: number;
@@ -45,6 +60,7 @@ export interface PortfolioPerformanceResponse {
   };
   monthly_trends: PortfolioPerformanceMonth[];
   hostel_rankings: PortfolioPerformanceRanking[];
+  business_health_insights: BusinessHealthInsight;
   top_performer_hostel_id: string | null;
   computed_at: string;
 }
@@ -79,7 +95,10 @@ export class PortfolioPerformanceService {
       ","
     );
 
-    const [capacityByHostel, cashflowGrid, moveOutResult, pendingInviteResult] = await Promise.all([
+    const firstRange = ranges[0];
+    const lastRange = ranges[ranges.length - 1];
+
+    const [capacityByHostel, cashflowGrid, expenseGrid, moveOutResult, pendingInviteResult] = await Promise.all([
       prisma.$queryRaw<Array<{ hostel_id: string; total_capacity: number; active_tenants: number; occupancy: number }>>`
         WITH room_capacity AS (
           SELECT hostel_id, COALESCE(SUM(capacity), 0)::float AS total_capacity
@@ -159,6 +178,28 @@ export class PortfolioPerformanceService {
         GROUP BY r.month_key, r.month_label, h.id, h.name, h.city
         ORDER BY r.month_key ASC, h.name ASC
       `,
+      // Expense aggregation by hostel by month for the same date range
+      prisma.$queryRaw<Array<{
+        month_key: string;
+        hostel_id: string;
+        expenses: number;
+      }>>`
+        WITH ranges(month_key, month_label, start_date, end_date) AS (
+          VALUES ${rangeValues}
+        )
+        SELECT
+          r.month_key,
+          e.hostel_id::text AS hostel_id,
+          COALESCE(SUM(e.amount), 0)::float AS expenses
+        FROM ranges r
+        JOIN expenses e
+          ON e.owner_id = ${ownerId}::uuid
+          AND e.hostel_id IS NOT NULL
+          AND e.date >= r.start_date::date
+          AND e.date <= r.end_date::date
+        GROUP BY r.month_key, e.hostel_id
+        ORDER BY r.month_key ASC
+      `,
       prisma.$queryRaw<Array<{ move_out_open: number }>>`
         SELECT COUNT(*)::int AS move_out_open
         FROM move_out_requests
@@ -173,6 +214,13 @@ export class PortfolioPerformanceService {
       `,
     ]);
 
+    // Build expense lookup: monthKey -> hostelId -> amount
+    const expenseMap = new Map<string, Map<string, number>>();
+    for (const row of expenseGrid) {
+      if (!expenseMap.has(row.month_key)) expenseMap.set(row.month_key, new Map());
+      expenseMap.get(row.month_key)!.set(row.hostel_id, Number(row.expenses || 0));
+    }
+
     const capacityMap = new Map(
       capacityByHostel.map((c) => [
         c.hostel_id,
@@ -183,18 +231,24 @@ export class PortfolioPerformanceService {
         },
       ])
     );
-    const cashflowRows = cashflowGrid.map((row) => ({
-      monthKey: row.month_key,
-      monthLabel: row.month_label,
-      hostel_id: row.hostel_id,
-      hostel_name: row.hostel_name,
-      city: row.city,
-      revenue: Number(row.revenue || 0),
-      collections: Number(row.collections || 0),
-      occupancy_rate: capacityMap.get(row.hostel_id)?.occupancy ?? 0,
-      pending_dues: Number(row.pending_dues || 0),
-      collection_rate: Number(row.collection_rate || 0),
-    }));
+    const cashflowRows = cashflowGrid.map((row) => {
+      const revenue = Number(row.revenue || 0);
+      const expenses = expenseMap.get(row.month_key)?.get(row.hostel_id) ?? 0;
+      return {
+        monthKey: row.month_key,
+        monthLabel: row.month_label,
+        hostel_id: row.hostel_id,
+        hostel_name: row.hostel_name,
+        city: row.city,
+        revenue,
+        collections: Number(row.collections || 0),
+        expenses,
+        profit: revenue - expenses,
+        occupancy_rate: capacityMap.get(row.hostel_id)?.occupancy ?? 0,
+        pending_dues: Number(row.pending_dues || 0),
+        collection_rate: Number(row.collection_rate || 0),
+      };
+    });
     const hostelMeta = Array.from(
       new Map(
         cashflowRows.map((row) => [
@@ -208,19 +262,27 @@ export class PortfolioPerformanceService {
       ).values()
     );
 
-    const monthly_trends: PortfolioPerformanceMonth[] = ranges.map((range) => ({
-      month: range.label,
-      month_key: range.monthKey,
-      hostels: cashflowRows
-        .filter((row) => row.monthKey === range.monthKey)
-        .map(({ hostel_id, hostel_name, revenue, collections, occupancy_rate }) => ({
+    const monthly_trends: PortfolioPerformanceMonth[] = ranges.map((range) => {
+      const monthHostels = cashflowRows.filter((row) => row.monthKey === range.monthKey);
+      const totalRevenue = monthHostels.reduce((s, h) => s + h.revenue, 0);
+      const totalExpenses = monthHostels.reduce((s, h) => s + h.expenses, 0);
+      return {
+        month: range.label,
+        month_key: range.monthKey,
+        total_revenue: totalRevenue,
+        total_expenses: totalExpenses,
+        total_profit: totalRevenue - totalExpenses,
+        hostels: monthHostels.map(({ hostel_id, hostel_name, revenue, collections, expenses, profit, occupancy_rate }) => ({
           hostel_id,
           hostel_name,
           revenue,
           collections,
+          expenses,
+          profit,
           occupancy_rate,
         })),
-    }));
+      };
+    });
 
     const currentKey = ranges[ranges.length - 1]?.monthKey;
     const previousKey = ranges[ranges.length - 2]?.monthKey;
@@ -238,6 +300,7 @@ export class PortfolioPerformanceService {
       const prev = previousByHostel.get(h.id);
       const capacity = capacityMap.get(h.id);
       const revenue = cur?.revenue ?? 0;
+      const expenses = cur?.expenses ?? 0;
       const prevRevenue = prev?.revenue ?? 0;
       const activeTenants = capacity?.activeTenants ?? 0;
       const totalCapacity = capacity?.totalCapacity ?? 0;
@@ -246,6 +309,8 @@ export class PortfolioPerformanceService {
         hostel_name: h.name,
         city: h.city,
         revenue,
+        expenses,
+        profit: revenue - expenses,
         occupancy_rate: cur?.occupancy_rate ?? 0,
         collection_rate: cur?.collection_rate ?? 0,
         pending_dues: cur?.pending_dues ?? 0,
@@ -272,6 +337,7 @@ export class PortfolioPerformanceService {
     }
 
     const aggregateRevenue = currentRows.reduce((sum, row) => sum + Number(row.revenue || 0), 0);
+    const aggregateExpenses = currentRows.reduce((sum, row) => sum + Number(row.expenses || 0), 0);
     const aggregateDue = currentRows.reduce((sum, row) => sum + Number(row.pending_dues || 0), 0);
     const aggregateActiveTenants = Array.from(capacityMap.values()).reduce(
       (sum, row) => sum + Number(row.activeTenants || 0),
@@ -286,9 +352,40 @@ export class PortfolioPerformanceService {
     const moveOutOpen = Number(moveOutResult[0]?.move_out_open ?? 0);
     const pendingInvites = Number(pendingInviteResult[0]?.pending_invites ?? 0);
 
+    // ── Business Health Insights ──────────────────────────────────────
+    const rankingsWithData = rankings.filter((r) => r.revenue > 0 || r.expenses > 0 || r.pending_dues > 0);
+
+    const highestProfitHostel = rankingsWithData.length > 0
+      ? rankingsWithData.reduce((best, r) => r.profit > best.profit ? r : best, rankingsWithData[0])
+      : null;
+
+    const hostelsWithCapacity = rankings.filter((r) => r.total_capacity > 0);
+    const lowestOccupancyHostel = hostelsWithCapacity.length > 0
+      ? hostelsWithCapacity.reduce((worst, r) => r.occupancy_rate < worst.occupancy_rate ? r : worst, hostelsWithCapacity[0])
+      : null;
+
+    const hostelsWithDues = rankings.filter((r) => r.pending_dues > 0);
+    const highestOutstandingHostel = hostelsWithDues.length > 0
+      ? hostelsWithDues.reduce((worst, r) => r.pending_dues > worst.pending_dues ? r : worst, hostelsWithDues[0])
+      : null;
+
+    const business_health_insights: BusinessHealthInsight = {
+      highest_profit_hostel: highestProfitHostel
+        ? { hostel_name: highestProfitHostel.hostel_name, profit: highestProfitHostel.profit }
+        : null,
+      lowest_occupancy_hostel: lowestOccupancyHostel
+        ? { hostel_name: lowestOccupancyHostel.hostel_name, occupancy_rate: lowestOccupancyHostel.occupancy_rate }
+        : null,
+      highest_outstanding_hostel: highestOutstandingHostel
+        ? { hostel_name: highestOutstandingHostel.hostel_name, pending_dues: highestOutstandingHostel.pending_dues }
+        : null,
+    };
+
     return {
       portfolio: {
         total_revenue: aggregateRevenue,
+        total_expenses: aggregateExpenses,
+        total_profit: aggregateRevenue - aggregateExpenses,
         total_due: aggregateDue,
         occupancy_rate: aggregateCapacity > 0
           ? Math.round((aggregateActiveTenants / aggregateCapacity) * 10000) / 100
@@ -304,6 +401,7 @@ export class PortfolioPerformanceService {
       },
       monthly_trends,
       hostel_rankings: rankings,
+      business_health_insights,
       top_performer_hostel_id: topId,
       computed_at: new Date().toISOString(),
     };

@@ -19,9 +19,8 @@ const RATE_LIMIT_MAX       = 5;       // max confirms per window
  * POST /api/payments/manual-confirm
  *
  * Owner manually confirms a PENDING_MANUAL_CONFIRMATION payment attempt.
- * Required for FREE plan owners — gateway confirmed the UPI payment but the
- * plan does not include automation, so the owner must explicitly approve
- * settlement before the obligation is marked PAID.
+ * Owner override for gateway payments that require explicit manual approval
+ * before the obligation is marked PAID.
  *
  * Security guarantees:
  *  - JWT auth required — OWNER or ADMIN only

@@ -4,7 +4,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Users, Plus, CreditCard, Phone, ChevronRight, Send } from 'lucide-react';
 import { queryKeys } from '@lib/queryKeys';
-import { fmt } from '../shared/format';
+import { fmt, fmtExact } from '../shared/format';
 import { TabError, TabSkeleton } from '../shared/TabStates';
 
 const AddTenantModal = lazy(() => import('../../modals/AddTenantModal').then((m) => ({ default: m.AddTenantModal })));
@@ -167,7 +167,7 @@ export function TenantsTab({ hostelId }: { hostelId: string }) {
                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                   {room && <span className="text-xs text-muted-foreground">Room {String(room)}</span>}
                   {room && <span className="text-muted-foreground text-xs">·</span>}
-                  <span className="text-xs text-muted-foreground">{fmt(tenant.monthly_rent ?? tenant.rent ?? 0)}/mo</span>
+                  <span className="text-xs text-muted-foreground">{fmtExact(tenant.monthly_rent ?? tenant.rent ?? 0)}/mo</span>
                 </div>
                 {!isPaid && dueAmt > 0 && (
                   <div className={`text-xs font-medium mt-1 ${
@@ -219,4 +219,3 @@ export function TenantsTab({ hostelId }: { hostelId: string }) {
     </div>
   );
 }
-

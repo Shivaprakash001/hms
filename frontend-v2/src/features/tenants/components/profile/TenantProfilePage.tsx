@@ -139,6 +139,8 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
   const primaryPhone = String(profile?.phone ?? tenant?.phone_1 ?? overview?.phone ?? '').trim();
   const email = String(profile?.email ?? overview?.email ?? '').trim();
   const currentRoom = (tenant.current_room ?? overview?.current_room ?? null) as Record<string, unknown> | null;
+  const displayedRoomNo = currentRoom?.room_no ?? tenant.room_number ?? overview.room_number ?? null;
+  const needsRoomAssignment = status.toUpperCase() === 'ACTIVE' && !displayedRoomNo;
 
   const obligations = listFrom(dues, ['items', 'obligations']);
   const fullPayments = listFrom(full?.payments);
@@ -308,7 +310,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
             )}
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Room: <strong className="text-foreground">{currentRoom?.room_no ?? tenant.room_number ?? overview.room_number ?? 'Not assigned'}</strong>
+            Room: <strong className="text-foreground">{displayedRoomNo ?? 'Not assigned'}</strong>
             {' · '}
             Joined: <strong className="text-foreground">{date(tenant.joined_on ?? overview.joined_at)}</strong>
             {' · '}
@@ -316,6 +318,27 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
           </p>
         </div>
       </div>
+
+      {needsRoomAssignment && (
+        <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-amber-900">Tenant requires room assignment</p>
+              <p className="mt-1 text-xs leading-5 text-amber-800">
+                This tenant is active but not allocated to a room. Assign a room before relying on occupancy or rent-by-room reports.
+              </p>
+              <button
+                type="button"
+                onClick={() => setSection('stay')}
+                className="mt-3 rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white"
+              >
+                Assign Room
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex gap-2 overflow-x-auto scrollbar-hide mb-5 pb-1 border-b border-border">
         {SECTIONS.map(({ id, label }) => (

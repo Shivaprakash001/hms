@@ -8,17 +8,9 @@ ALTER TABLE "public"."plans"
   ADD COLUMN IF NOT EXISTS "overflow_price_per_tenant_paise" INTEGER NOT NULL DEFAULT 0,
   ADD COLUMN IF NOT EXISTS "overflow_hard_cap"              INTEGER NOT NULL DEFAULT 0;
 
-UPDATE "public"."plans" SET
-  "overflow_enabled"                = true,
-  "overflow_price_per_tenant_paise" = 1000,
-  "overflow_hard_cap"               = 150
-WHERE "id" = 'STARTER';
-
-UPDATE "public"."plans" SET
-  "overflow_enabled"                = true,
-  "overflow_price_per_tenant_paise" = 800,
-  "overflow_hard_cap"               = 400
-WHERE "id" = 'GROWTH';
+-- Single-owner architecture: subscription plan tiers are not active.
+-- Keep overflow billing columns available for schema compatibility, but do not
+-- configure plan-specific behavior here.
 
 -- ── 2. line_items on owner_invoices ──────────────────────────────────────────
 

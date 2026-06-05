@@ -345,7 +345,12 @@ export class DashboardService {
     const unpaidTenantCount = operationalPendingInvariantHolds(pendingTotal, Number(row.unpaid_tenant_count || 0))
       ? Number(row.unpaid_tenant_count || 0)
       : 0;
-    const occupancyRate = totalCapacity > 0 ? Math.round((activeTenants / totalCapacity) * 100) : 0;
+    const capacityMap = await roomCapacityService.getHostelCapacityMap(hostelId, { ownerId: userId });
+    const occupiedBeds = [...capacityMap.values()].reduce((sum, snapshot) => sum + Number(snapshot.occupied || 0), 0);
+    const usedBeds = [...capacityMap.values()].reduce((sum, snapshot) => sum + Number(snapshot.used || 0), 0);
+    const availableBeds = [...capacityMap.values()].reduce((sum, snapshot) => sum + Number(snapshot.available || 0), 0);
+    const unassignedActiveTenants = Math.max(0, activeTenants - occupiedBeds);
+    const occupancyRate = totalCapacity > 0 ? Math.round((usedBeds / totalCapacity) * 100) : 0;
     const netProfit = currentRevenue - monthlyExpenses;
     const previousProfit = previousRevenue - previousExpenses;
     const profitMargin = currentRevenue > 0 ? Math.round((netProfit / currentRevenue) * 100) : 0;
@@ -353,9 +358,9 @@ export class DashboardService {
     const previousCollectionRate = previousExpectedRevenue > 0 ? Math.round((previousRevenue / previousExpectedRevenue) * 100) : 0;
     const expenseRatio = currentRevenue > 0 ? Math.round((monthlyExpenses / currentRevenue) * 100) : 0;
     const expensePerTenant = activeTenants > 0 ? Math.round(monthlyExpenses / activeTenants) : 0;
-    const revenuePerOccupiedBed = activeTenants > 0 ? Math.round(currentRevenue / activeTenants) : 0;
-    const avgBedRevenue = activeTenants > 0 ? currentRevenue / activeTenants : 0;
-    const vacancyLossEstimate = Math.round(Math.max(totalCapacity - activeTenants, 0) * avgBedRevenue);
+    const revenuePerOccupiedBed = occupiedBeds > 0 ? Math.round(currentRevenue / occupiedBeds) : 0;
+    const avgBedRevenue = occupiedBeds > 0 ? currentRevenue / occupiedBeds : 0;
+    const vacancyLossEstimate = Math.round(availableBeds * avgBedRevenue);
     const revenueTrend = previousRevenue > 0 ? Math.round(((currentRevenue - previousRevenue) / previousRevenue) * 100) : currentRevenue > 0 ? 100 : 0;
     const profitTrend = previousProfit !== 0 ? Math.round(((netProfit - previousProfit) / Math.abs(previousProfit)) * 100) : netProfit > 0 ? 100 : 0;
     const expenseGrowth = previousExpenses > 0 ? Math.round(((monthlyExpenses - previousExpenses) / previousExpenses) * 100) : monthlyExpenses > 0 ? 100 : 0;
@@ -402,9 +407,16 @@ export class DashboardService {
       ...(occupancyRate < 70 ? [{
         severity: occupancyRate < 60 ? "critical" : "warning",
         title: "Low occupancy pressure",
-        impact: `${Math.max(totalCapacity - activeTenants, 0)} vacant beds may cost ₹${vacancyLossEstimate.toLocaleString("en-IN")}`,
+        impact: `${availableBeds} vacant beds may cost ₹${vacancyLossEstimate.toLocaleString("en-IN")}`,
         action: "Push room filling or adjust pricing",
         cta: "Open rooms",
+      }] : []),
+      ...(unassignedActiveTenants > 0 ? [{
+        severity: "warning",
+        title: `${unassignedActiveTenants} active tenant${unassignedActiveTenants === 1 ? "" : "s"} need room allocation`,
+        impact: "These tenants are active but not occupying a room",
+        action: "Assign rooms before trusting occupancy reports",
+        cta: "Open tenants",
       }] : []),
       ...(expenseRatio > 45 ? [{
         severity: expenseRatio > 60 ? "critical" : "warning",
@@ -441,8 +453,11 @@ export class DashboardService {
       occupied_rooms: Number(row.occupied_rooms || 0),
       total_tenants: totalTenants,
       active_tenants: activeTenants,
+      occupied_beds: occupiedBeds,
+      reserved_beds: Math.max(0, usedBeds - occupiedBeds),
+      unassigned_active_tenants: unassignedActiveTenants,
       total_capacity: totalCapacity,
-      vacant_beds: Math.max(totalCapacity - activeTenants, 0),
+      vacant_beds: availableBeds,
       occupancy_rate: occupancyRate,
       revenue: currentRevenue,
       total_revenue: currentRevenue,
@@ -479,10 +494,12 @@ export class DashboardService {
         kpis: {
           occupancy: {
             value: occupancyRate,
-            occupied_beds: activeTenants,
-            vacant_beds: Math.max(totalCapacity - activeTenants, 0),
+            occupied_beds: occupiedBeds,
+            reserved_beds: Math.max(0, usedBeds - occupiedBeds),
+            vacant_beds: availableBeds,
+            unassigned_active_tenants: unassignedActiveTenants,
             trend: 0,
-            insight: `${Math.max(totalCapacity - activeTenants, 0)} vacant beds need filling`,
+            insight: `${availableBeds} vacant beds need filling`,
           },
           revenue: {
             collected: currentRevenue,
@@ -537,7 +554,7 @@ export class DashboardService {
           },
           floor_occupancy: row.floor_occupancy || [],
           vacancy_risk: {
-            vacant_beds: Math.max(totalCapacity - activeTenants, 0),
+            vacant_beds: availableBeds,
             vacancy_loss_estimate: vacancyLossEstimate,
             insight: occupancyRate < 70 ? "Occupancy is dragging profitability" : "Occupancy is supporting revenue",
           },
@@ -902,9 +919,14 @@ export class DashboardService {
     ]);
 
     const totalCapacity = Number(roomStats[0]?.total_capacity ?? 0);
+    const capacityMap = await roomCapacityService.getHostelCapacityMap(hostelId, { ownerId: userId });
+    const occupiedBeds = [...capacityMap.values()].reduce((sum, snapshot) => sum + Number(snapshot.occupied || 0), 0);
+    const usedBeds = [...capacityMap.values()].reduce((sum, snapshot) => sum + Number(snapshot.used || 0), 0);
+    const availableBeds = [...capacityMap.values()].reduce((sum, snapshot) => sum + Number(snapshot.available || 0), 0);
+    const unassignedActiveTenants = Math.max(0, Number(activeTenants || 0) - occupiedBeds);
     const currentRevenue = Number(payments._sum.amount_paid || 0);
     const monthlyExpenses = Number(costs?._sum?.amount || 0);
-    const occupancyRate = totalCapacity > 0 ? Math.round((activeTenants / totalCapacity) * 100) : 0;
+    const occupancyRate = totalCapacity > 0 ? Math.round((usedBeds / totalCapacity) * 100) : 0;
 
     // Pending dues calculation — single DB aggregate instead of findMany+include+JS loop.
     // Logic is identical: remaining = amount - SUM(payments); overdue = due_date < today.
@@ -1121,9 +1143,9 @@ export class DashboardService {
     const previousCollectionRate = previousExpectedRevenue > 0 ? Math.round((previousRevenue / previousExpectedRevenue) * 100) : 0;
     const expenseRatio = currentRevenue > 0 ? Math.round((monthlyExpenses / currentRevenue) * 100) : 0;
     const expensePerTenant = activeTenants > 0 ? Math.round(monthlyExpenses / activeTenants) : 0;
-    const revenuePerOccupiedBed = activeTenants > 0 ? Math.round(currentRevenue / activeTenants) : 0;
-    const avgBedRevenue = activeTenants > 0 ? currentRevenue / activeTenants : 0;
-    const vacancyLossEstimate = Math.round(Math.max(totalCapacity - activeTenants, 0) * avgBedRevenue);
+    const revenuePerOccupiedBed = occupiedBeds > 0 ? Math.round(currentRevenue / occupiedBeds) : 0;
+    const avgBedRevenue = occupiedBeds > 0 ? currentRevenue / occupiedBeds : 0;
+    const vacancyLossEstimate = Math.round(availableBeds * avgBedRevenue);
     const occupancyTrend = occupancyRate - (Number(occupancyProfitRows.at(-30)?.occupancy_rate || occupancyRate) || occupancyRate);
     const revenueTrend = previousRevenue > 0 ? Math.round(((currentRevenue - previousRevenue) / previousRevenue) * 100) : currentRevenue > 0 ? 100 : 0;
     const profitTrend = previousProfit !== 0 ? Math.round(((netProfit - previousProfit) / Math.abs(previousProfit)) * 100) : netProfit > 0 ? 100 : 0;
@@ -1148,7 +1170,6 @@ export class DashboardService {
     const fixedExpenses = expenseCategories.filter((c) => fixedCategories.has(c.category)).reduce((sum, c) => sum + c.amount, 0);
     const fixedCostRatio = monthlyExpenses > 0 ? Math.round((fixedExpenses / monthlyExpenses) * 100) : 0;
 
-    const capacityMap = await roomCapacityService.getHostelCapacityMap(hostelId, { ownerId: userId });
     const roomUtilization = rooms.map((room: any) => {
       const snapshot = capacityMap.get(room.id);
       const occupied = snapshot?.occupied ?? room.room_allocations.length;
@@ -1246,9 +1267,16 @@ export class DashboardService {
       ...(occupancyRate < 70 ? [{
         severity: occupancyRate < 60 ? "critical" : "warning",
         title: "Low occupancy pressure",
-        impact: `${Math.max(totalCapacity - activeTenants, 0)} vacant beds may cost ₹${vacancyLossEstimate.toLocaleString("en-IN")}`,
+        impact: `${availableBeds} vacant beds may cost ₹${vacancyLossEstimate.toLocaleString("en-IN")}`,
         action: "Push room filling or adjust pricing",
         cta: "Open rooms",
+      }] : []),
+      ...(unassignedActiveTenants > 0 ? [{
+        severity: "warning",
+        title: `${unassignedActiveTenants} active tenant${unassignedActiveTenants === 1 ? "" : "s"} need room allocation`,
+        impact: "These tenants are active but not occupying a room",
+        action: "Assign rooms before trusting occupancy reports",
+        cta: "Open tenants",
       }] : []),
       ...(expenseRatio > 45 ? [{
         severity: expenseRatio > 60 ? "critical" : "warning",
@@ -1312,8 +1340,11 @@ export class DashboardService {
       occupied_rooms: Number(Array.isArray(occupiedRoomCount) ? occupiedRoomCount[0]?.count || 0 : occupiedRoomCount || 0),
       total_tenants: totalTenants,
       active_tenants: activeTenants,
+      occupied_beds: occupiedBeds,
+      reserved_beds: Math.max(0, usedBeds - occupiedBeds),
+      unassigned_active_tenants: unassignedActiveTenants,
       total_capacity: totalCapacity,
-      vacant_beds: Math.max(totalCapacity - activeTenants, 0),
+      vacant_beds: availableBeds,
       occupancy_rate: occupancyRate,
       revenue: currentRevenue,
       total_revenue: currentRevenue,
@@ -1349,10 +1380,12 @@ export class DashboardService {
         kpis: {
           occupancy: {
             value: occupancyRate,
-            occupied_beds: activeTenants,
-            vacant_beds: Math.max(totalCapacity - activeTenants, 0),
+            occupied_beds: occupiedBeds,
+            reserved_beds: Math.max(0, usedBeds - occupiedBeds),
+            vacant_beds: availableBeds,
+            unassigned_active_tenants: unassignedActiveTenants,
             trend: Math.round(occupancyTrend),
-            insight: `${Math.max(totalCapacity - activeTenants, 0)} vacant beds need filling`,
+            insight: `${availableBeds} vacant beds need filling`,
           },
           revenue: {
             collected: currentRevenue,
@@ -1403,7 +1436,7 @@ export class DashboardService {
           summary: { full_rooms: fullRooms, partial_rooms: partialRooms, vacant_rooms: vacantRooms },
           floor_occupancy: floorOccupancy,
           vacancy_risk: {
-            vacant_beds: Math.max(totalCapacity - activeTenants, 0),
+            vacant_beds: availableBeds,
             vacancy_loss_estimate: vacancyLossEstimate,
             insight: occupancyRate < 70 ? "Occupancy is dragging profitability" : "Occupancy is supporting revenue",
           },

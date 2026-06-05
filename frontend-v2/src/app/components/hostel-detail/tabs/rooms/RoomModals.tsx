@@ -1,7 +1,11 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { AlertCircle, ChevronDown, ChevronRight, Loader2, Pencil, Phone, Repeat2, Trash2, Users, Wifi, X } from 'lucide-react';
-import { fmt } from '../../shared/format';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { AlertCircle, ChevronDown, ChevronRight, Loader2, Pencil, Phone, Repeat2, Search, Trash2, UserPlus, Users, Wifi, X } from 'lucide-react';
+import api from '@lib/api-client';
+import { queryKeys } from '@lib/queryKeys';
+import { allocationService } from '@features/rooms/api';
+import { fmt, fmtExact } from '../../shared/format';
 
 export function RoomFormModal({
   room,
@@ -251,6 +255,163 @@ export function FloorActionsSheet({
   );
 }
 
+export function AssignExistingTenantSheet({
+  hostelId,
+  roomId,
+  roomLabel,
+  onClose,
+  onAssigned,
+  onInviteNew,
+}: {
+  hostelId: string;
+  roomId: string;
+  roomLabel: string;
+  onClose: () => void;
+  onAssigned: () => void;
+  onInviteNew: () => void;
+}) {
+  const qc = useQueryClient();
+  const [search, setSearch] = useState('');
+  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
+
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ['profiles', 'unassigned-tenants', hostelId],
+    queryFn: async () => {
+      const response = await api.get('/profiles/unassigned/tenants', { params: { hostelId } });
+      return response.data?.success ? response.data.data : response.data;
+    },
+  });
+
+  const tenants = Array.isArray(data?.profiles) ? data.profiles : [];
+  const filteredTenants = tenants.filter((tenant: Record<string, unknown>) => {
+    const text = `${tenant.name ?? ''} ${tenant.phone ?? ''} ${tenant.email ?? ''}`.toLowerCase();
+    return text.includes(search.trim().toLowerCase());
+  });
+
+  const assignMutation = useMutation({
+    mutationFn: (tenantId: string) =>
+      allocationService.allocate(hostelId, {
+        tenant_id: tenantId,
+        room_id: roomId,
+        start_date: new Date().toISOString().split('T')[0],
+      }),
+    onSuccess: () => {
+      toast.success('Tenant assigned to room');
+      qc.invalidateQueries({ queryKey: queryKeys.rooms.list(hostelId) });
+      qc.invalidateQueries({ queryKey: queryKeys.rooms.all(hostelId) });
+      qc.invalidateQueries({ queryKey: queryKeys.tenants.all(hostelId) });
+      qc.invalidateQueries({ queryKey: queryKeys.dashboard.statsShell(hostelId) });
+      onAssigned();
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.error?.message ?? 'Could not assign tenant');
+    },
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={onClose}>
+      <div
+        className="w-full bg-card rounded-t-2xl border-t border-border max-h-[88dvh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sticky top-0 z-10 bg-card border-b border-border px-4 py-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-foreground">Assign Existing Tenant</h2>
+              <p className="mt-1 text-xs text-muted-foreground">Room {roomLabel} has a vacant bed. Pick an active tenant who has no room assigned.</p>
+            </div>
+            <button type="button" onClick={onClose} className="p-1.5 text-muted-foreground active:scale-90">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="px-4 py-4 space-y-4">
+          <label className="flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2.5">
+            <Search className="h-4 w-4 text-muted-foreground" />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search tenant name, phone, email..."
+              className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+            />
+          </label>
+
+          {isLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-accent" />
+            </div>
+          ) : isError ? (
+            <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-center">
+              <p className="text-sm font-semibold text-foreground">Could not load unassigned tenants</p>
+              <button type="button" onClick={() => refetch()} className="mt-3 rounded-lg border border-border px-4 py-2 text-xs font-semibold">
+                Try again
+              </button>
+            </div>
+          ) : filteredTenants.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border p-6 text-center">
+              <Users className="mx-auto h-7 w-7 text-muted-foreground" />
+              <p className="mt-2 text-sm font-semibold text-foreground">No active unassigned tenants found</p>
+              <p className="mt-1 text-xs text-muted-foreground">Invite a new tenant if this vacant bed is for a new admission.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {filteredTenants.map((tenant: Record<string, unknown>) => {
+                const tenantId = String(tenant.tenant_id ?? tenant.id);
+                const selected = selectedTenantId === tenantId;
+                return (
+                  <button
+                    key={tenantId}
+                    type="button"
+                    onClick={() => setSelectedTenantId(tenantId)}
+                    className={[
+                      'w-full rounded-xl border p-3 text-left transition-colors',
+                      selected ? 'border-accent bg-accent/5' : 'border-border bg-card',
+                    ].join(' ')}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold text-foreground">{String(tenant.name ?? 'Tenant')}</p>
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                          {[tenant.phone, tenant.email].filter(Boolean).join(' · ') || 'No contact added'}
+                        </p>
+                      </div>
+                      <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700">
+                        Active
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="rounded-xl border border-border bg-secondary/20 p-3">
+            <p className="text-xs font-semibold text-foreground">OR</p>
+            <button
+              type="button"
+              onClick={onInviteNew}
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card py-2.5 text-sm font-semibold text-accent active:scale-[0.98]"
+            >
+              <UserPlus className="h-4 w-4" />
+              Invite New Tenant
+            </button>
+          </div>
+
+          <button
+            type="button"
+            disabled={!selectedTenantId || assignMutation.isPending}
+            onClick={() => selectedTenantId && assignMutation.mutate(selectedTenantId)}
+            className="w-full rounded-xl bg-accent py-3 text-sm font-bold text-accent-foreground disabled:opacity-45"
+          >
+            {assignMutation.isPending ? 'Assigning...' : 'Assign to Room'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface RoomOverviewModalProps {
   hostelId: string;
   roomId: string;
@@ -319,7 +480,7 @@ export function RoomOverviewModal({ hostelId, roomId, onClose, onEditRoom, onTra
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-secondary/40 rounded-xl p-3 border border-border/50">
               <span className="text-[10px] text-muted-foreground block font-medium">Monthly Rent</span>
-              <span className="text-sm font-bold text-foreground">{fmt(room.base_rent ?? room.monthly_rent ?? 0)}</span>
+              <span className="text-sm font-bold text-foreground">{fmtExact(room.base_rent ?? room.monthly_rent ?? 0)}</span>
             </div>
             <div className="bg-secondary/40 rounded-xl p-3 border border-border/50">
               <span className="text-[10px] text-muted-foreground block font-medium">Pending Room Dues</span>
@@ -361,7 +522,7 @@ export function RoomOverviewModal({ hostelId, roomId, onClose, onEditRoom, onTra
                             <span>{t.phone || 'No phone'}</span>
                           </div>
                           <p className="text-[10px] text-muted-foreground mt-0.5">
-                            Rent: <span className="font-semibold text-foreground">{fmt(t.rent ?? room.base_rent ?? 0)}/mo</span>
+                            Rent: <span className="font-semibold text-foreground">{fmtExact(t.rent ?? room.base_rent ?? 0)}/mo</span>
                           </p>
                         </div>
                       </div>
@@ -432,4 +593,3 @@ export function RoomOverviewModal({ hostelId, roomId, onClose, onEditRoom, onTra
     </div>
   );
 }
-

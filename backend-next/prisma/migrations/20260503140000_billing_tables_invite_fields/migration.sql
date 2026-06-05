@@ -17,12 +17,8 @@ CREATE TABLE IF NOT EXISTS plans (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-INSERT INTO plans (code, name, price_paise, tenant_limit, hostel_limit, features, display_order)
-VALUES
-  ('STARTER',  'Starter',  0,      25,   1,    '["1 Hostel","Up to 25 tenants","Payments & receipts"]',       1),
-  ('PRO',      'Pro',      49900,  100,  3,    '["3 Hostels","Up to 100 tenants","All features","Priority support"]', 2),
-  ('BUSINESS', 'Business', 99900,  NULL, NULL, '["Unlimited tenants","Unlimited hostels","All features","Dedicated support"]', 3)
-ON CONFLICT (code) DO NOTHING;
+-- Single-owner architecture: do not seed subscription tiers.
+-- The compatibility table is decommissioned by a later migration.
 
 -- ── 2. owner_subscriptions table ─────────────────────────────
 CREATE TABLE IF NOT EXISTS owner_subscriptions (

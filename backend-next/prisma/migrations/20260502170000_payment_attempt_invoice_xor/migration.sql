@@ -18,16 +18,13 @@ BEGIN
   END IF;
 END $$;
 
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'payment_attempts_obligation_invoice_xor_check'
-  ) THEN
-    ALTER TABLE payment_attempts
-      ADD CONSTRAINT payment_attempts_obligation_invoice_xor_check
-      CHECK (((obligation_id IS NOT NULL)::int + (invoice_id IS NOT NULL)::int) = 1);
-  END IF;
-END $$;
+-- Historical note:
+-- A strict obligation/invoice XOR check is incompatible with current payment
+-- architecture because ADVANCE / future-rent-credit attempts can legitimately
+-- have neither obligation_id nor invoice_id. The later
+-- add_payment_attempt_obligations migration removes this constraint too.
+ALTER TABLE payment_attempts
+  DROP CONSTRAINT IF EXISTS payment_attempts_obligation_invoice_xor_check;
 
 CREATE INDEX IF NOT EXISTS idx_payment_attempts_invoice_id
   ON payment_attempts(invoice_id);

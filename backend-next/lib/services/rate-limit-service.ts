@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { prisma } from "../db";
 import { getLogger } from "../logger";
 import { checkFixedWindowLimit } from "@/lib/redis/rate-limit";
@@ -227,6 +228,7 @@ export class RateLimitService {
     try {
       await prisma.login_attempts.create({
         data: {
+          id: randomUUID(),
           identifier,
           attempt_type: attemptType,
           success,

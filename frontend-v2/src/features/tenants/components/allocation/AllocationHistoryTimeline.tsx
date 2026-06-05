@@ -94,12 +94,22 @@ export function AllocationHistoryTimeline({ hostelId, tenantId, allocations, cur
               onClick={() => setShowTransfer(true)}
               className="mt-4 flex w-full items-center justify-center gap-1.5 py-2.5 rounded-xl bg-accent text-accent-foreground text-sm font-semibold touch-manipulation"
             >
-              <ArrowRightLeft className="w-4 h-4" />
-              Transfer
+              <BedDouble className="w-4 h-4" />
+              Assign room record
             </button>
           </>
         ) : (
-          <p className="text-sm text-muted-foreground">No active room assignment</p>
+          <>
+            <p className="text-sm text-muted-foreground">No active room assignment</p>
+            <button
+              type="button"
+              onClick={() => setShowTransfer(true)}
+              className="mt-4 flex w-full items-center justify-center gap-1.5 py-2.5 rounded-xl bg-accent text-accent-foreground text-sm font-semibold touch-manipulation"
+            >
+              <BedDouble className="w-4 h-4" />
+              Assign Room
+            </button>
+          </>
         )}
       </div>
 
@@ -132,6 +142,7 @@ export function AllocationHistoryTimeline({ hostelId, tenantId, allocations, cur
         <TransferRoomSheet
           hostelId={hostelId}
           tenantId={tenantId}
+          mode={active ? 'transfer' : 'assign'}
           onClose={() => setShowTransfer(false)}
           onSuccess={() => {
             setShowTransfer(false);

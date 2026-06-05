@@ -17,10 +17,13 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const hostelId = req.nextUrl.searchParams.get("hostelId") || undefined;
     const tenants = await prisma.tenants.findMany({
       where: {
         owner_id: session.sub,
-        status: { not: "LEFT" },
+        ...(hostelId ? { hostel_id: hostelId } : {}),
+        status: "ACTIVE",
+        profile_id: { not: null },
         room_allocations: {
           none: {
             is_active: true,
@@ -48,9 +51,9 @@ export async function GET(req: NextRequest) {
     const profiles = tenants.map((tenant) => ({
       id: tenant.profile_id,
       tenant_id: tenant.id,
-      name: (tenant as any).profiles.name,
-      email: (tenant as any).profiles.email,
-      phone: (tenant as any).profiles.phone,
+      name: (tenant as any).profiles?.name ?? "Tenant",
+      email: (tenant as any).profiles?.email ?? null,
+      phone: (tenant as any).profiles?.phone ?? null,
       status: tenant.status,
     }));
 

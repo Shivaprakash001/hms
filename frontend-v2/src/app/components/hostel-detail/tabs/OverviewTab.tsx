@@ -52,8 +52,10 @@ export function OverviewTab({ hostelId }: { hostelId: string }) {
 
   // Occupancy details
   const activeTenants = Number(s.active_tenants ?? 0);
+  const occupiedBeds = Number(s.occupied_beds ?? activeTenants);
+  const unassignedActiveTenants = Number(s.unassigned_active_tenants ?? 0);
   const totalCapacity = Number(s.total_capacity ?? 0);
-  const vacantBeds = Number(s.vacant_beds ?? Math.max(totalCapacity - activeTenants, 0));
+  const vacantBeds = Number(s.vacant_beds ?? Math.max(totalCapacity - occupiedBeds, 0));
   
   const roomUtilization = intel.occupancy?.room_utilization ?? [];
   const floorOccupancy = intel.occupancy?.floor_occupancy ?? [];
@@ -84,6 +86,9 @@ export function OverviewTab({ hostelId }: { hostelId: string }) {
   }
   if (vacantBeds > 0) {
     focusItems.push(`Fill ${vacantBeds} vacant bed${vacantBeds !== 1 ? 's' : ''}`);
+  }
+  if (unassignedActiveTenants > 0) {
+    focusItems.unshift(`Assign rooms to ${unassignedActiveTenants} active tenant${unassignedActiveTenants !== 1 ? 's' : ''}`);
   }
   if (moveOutRequests > 0) {
     focusItems.push(`Process ${moveOutRequests} move-out request${moveOutRequests !== 1 ? 's' : ''}`);
@@ -224,7 +229,7 @@ export function OverviewTab({ hostelId }: { hostelId: string }) {
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-foreground">Occupancy</h3>
           <span className="text-xs text-muted-foreground font-semibold">
-            {activeTenants} / {totalCapacity} occupied · {vacantBeds} beds vacant
+            {occupiedBeds} / {totalCapacity} occupied · {vacantBeds} beds vacant
           </span>
         </div>
 

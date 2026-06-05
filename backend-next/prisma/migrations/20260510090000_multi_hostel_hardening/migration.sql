@@ -7,7 +7,9 @@ ALTER TABLE public.room_allocations ALTER COLUMN hostel_id SET NOT NULL;
 ALTER TABLE public.rent_obligations ALTER COLUMN hostel_id SET NOT NULL;
 ALTER TABLE public.payments ALTER COLUMN hostel_id SET NOT NULL;
 ALTER TABLE public.receipts ALTER COLUMN hostel_id SET NOT NULL;
-ALTER TABLE public.expenses ALTER COLUMN hostel_id SET NOT NULL;
+-- Single-owner architecture supports business-level expenses that are not tied
+-- to a hostel. Later migrations also explicitly keep expenses.hostel_id
+-- nullable, so do not enforce NOT NULL here.
 ALTER TABLE public.complaints ALTER COLUMN hostel_id SET NOT NULL;
 ALTER TABLE public.reminder_logs ALTER COLUMN hostel_id SET NOT NULL;
 

@@ -11,7 +11,7 @@ import { imagekit } from "@/lib/imagekit";
  * POST /api/tenants/[id]/photo
  *
  * Multipart form-data: field "file" (image/jpeg | image/png | image/webp, max 2MB)
- * Auth: TENANT (own) or OWNER (their tenant). STARTER plan or higher required.
+ * Auth: TENANT (own) or OWNER (their tenant).
  */
 export async function POST(
   req: NextRequest,

@@ -2,11 +2,12 @@ import { lazy, Suspense, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Users, BedDouble, Receipt, AlertCircle, Plus, CreditCard, Phone, Wifi, FileText, Eye, EyeOff, Copy, Check, Pencil, Layers, ChevronDown, ChevronRight, X, Trash2, MoreVertical, TrendingUp, TrendingDown, Sparkles, Search, CalendarDays, Repeat2, Upload, Zap, Activity, AlertTriangle, BellRing, ClipboardCheck, Flame, Home, IndianRupee, Megaphone, UserPlus, Send, Loader2 } from 'lucide-react';
 import { queryKeys } from '@lib/queryKeys';
-import { fmt } from '../shared/format';
+import { fmt, fmtExact } from '../shared/format';
 import { TabError, TabSkeleton } from '../shared/TabStates';
 
 const AddTenantModal = lazy(() => import('../../modals/AddTenantModal').then((m) => ({ default: m.AddTenantModal })));
 const TransferRoomSheet = lazy(() => import('@features/tenants/components/allocation/TransferRoomSheet').then((m) => ({ default: m.TransferRoomSheet })));
+const AssignExistingTenantSheet = lazy(() => import('./rooms/RoomModals').then((m) => ({ default: m.AssignExistingTenantSheet })));
 const RoomFormModal = lazy(() => import('./rooms/RoomModals').then((m) => ({ default: m.RoomFormModal })));
 const FloorNameModal = lazy(() => import('./rooms/RoomModals').then((m) => ({ default: m.FloorNameModal })));
 const FloorActionsSheet = lazy(() => import('./rooms/RoomModals').then((m) => ({ default: m.FloorActionsSheet })));
@@ -74,6 +75,7 @@ function WifiCell({ wifiName, wifiPassword }: { wifiName: string | null; wifiPas
 export function RoomsTab({ hostelId }: { hostelId: string }) {
   const qc = useQueryClient();
   const [assignTenantRoomId, setAssignTenantRoomId] = useState<string | null>(null);
+  const [inviteTenantRoomId, setInviteTenantRoomId] = useState<string | null>(null);
   const [roomForm, setRoomForm]               = useState<{ room: Record<string, unknown> | null; floorId?: string } | null>(null);
   const [showAddFloor, setShowAddFloor]       = useState(false);
   const [floorMenu, setFloorMenu]             = useState<{ id: string; name: string } | null>(null);
@@ -294,7 +296,7 @@ export function RoomsTab({ hostelId }: { hostelId: string }) {
                               {tenants.slice(0, 3).map((tenant, index) => (
                                 <div key={String(tenant.tenant_id ?? tenant.allocation_id ?? index)} className="flex items-center justify-between gap-2 text-xs">
                                   <span className="text-muted-foreground truncate">{String(tenant.name ?? 'Tenant')}</span>
-                                  <span className="font-semibold text-foreground shrink-0">{fmt(tenant.monthly_rent ?? room.base_rent ?? 0)}/mo</span>
+                                  <span className="font-semibold text-foreground shrink-0">{fmtExact(tenant.monthly_rent ?? room.base_rent ?? 0)}/mo</span>
                                 </div>
                               ))}
                               {tenants.length > 3 && (
@@ -303,7 +305,7 @@ export function RoomsTab({ hostelId }: { hostelId: string }) {
                             </div>
                           )}
                           {!isOccupied && (
-                            <div className="text-xs text-muted-foreground mt-0.5">{fmt(room.monthly_rent ?? room.base_rent ?? 0)}/mo base rent</div>
+                            <div className="text-xs text-muted-foreground mt-0.5">{fmtExact(room.monthly_rent ?? room.base_rent ?? 0)}/mo base rent</div>
                           )}
                           {room.notes && (
                             <div className="flex items-start gap-1 mt-1.5">
@@ -360,10 +362,29 @@ export function RoomsTab({ hostelId }: { hostelId: string }) {
       {/* Modals */}
       {assignTenantRoomId && (
         <Suspense fallback={null}>
+          <AssignExistingTenantSheet
+            hostelId={hostelId}
+            roomId={assignTenantRoomId}
+            roomLabel={String(rooms.find((room) => String(room.id) === assignTenantRoomId)?.room_no ?? 'room')}
+            onClose={() => setAssignTenantRoomId(null)}
+            onAssigned={() => {
+              setAssignTenantRoomId(null);
+              invalidate();
+            }}
+            onInviteNew={() => {
+              setInviteTenantRoomId(assignTenantRoomId);
+              setAssignTenantRoomId(null);
+            }}
+          />
+        </Suspense>
+      )}
+
+      {inviteTenantRoomId && (
+        <Suspense fallback={null}>
           <AddTenantModal
             hostelId={hostelId}
-            preselectedRoomId={assignTenantRoomId}
-            onClose={() => setAssignTenantRoomId(null)}
+            preselectedRoomId={inviteTenantRoomId}
+            onClose={() => setInviteTenantRoomId(null)}
           />
         </Suspense>
       )}

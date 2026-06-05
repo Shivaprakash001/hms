@@ -61,7 +61,26 @@ export class RoomAllocationService {
     let allocationData: any;
     try {
       allocationData = await prisma.$transaction(async (tx: any) => {
-        // 1. Check if tenant already has an active allocation
+        // 1. Only ACTIVE tenants owned by this owner can be manually assigned.
+        const tenant = await tx.tenants.findFirst({
+          where: {
+            id: tenantId,
+            owner_id: ownerId,
+          },
+          select: {
+            id: true,
+            status: true,
+          },
+        });
+
+        if (!tenant) {
+          throw new Error("NOT_FOUND: Tenant not found");
+        }
+        if (tenant.status !== "ACTIVE") {
+          throw new Error("VALIDATION_ERROR: Only active tenants can be assigned to rooms");
+        }
+
+        // 2. Check if tenant already has an active allocation
         const existing = await tx.roomAllocation.findFirst({
           where: { tenant_id: tenantId, is_active: true, end_date: null }
         });
@@ -70,14 +89,14 @@ export class RoomAllocationService {
           throw new Error("VALIDATION_ERROR: Tenant is already allocated to a room and checking out is required first");
         }
 
-        // 2. Check room capacity, including active invitation reservations.
+        // 3. Check room capacity, including active invitation reservations.
         const capacity = await roomCapacityService.getRoomCapacitySnapshot(roomId, { tx, ownerId });
         const room = capacity.room;
         if (capacity.available <= 0) {
           throw new Error("VALIDATION_ERROR: Room is at maximum capacity");
         }
 
-        // 3. Create allocation with denormalized hostel_id (immutable snapshot)
+        // 4. Create allocation with denormalized hostel_id (immutable snapshot)
         const allocation = await tx.roomAllocation.create({
           data: {
             id: crypto.randomUUID(),
@@ -88,7 +107,7 @@ export class RoomAllocationService {
           }
         });
 
-        // 4. Update Tenant.hostel_id to reflect current operational hostel
+        // 5. Update Tenant.hostel_id to reflect current operational hostel
         await tx.tenants.update({
           where: { id: tenantId },
           data: { hostel_id: room.hostel_id },

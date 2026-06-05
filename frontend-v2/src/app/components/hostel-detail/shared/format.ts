@@ -5,3 +5,7 @@ export function fmt(amount: unknown): string {
   return `₹${n.toLocaleString('en-IN')}`;
 }
 
+export function fmtExact(amount: unknown): string {
+  const n = Number(amount || 0);
+  return `₹${n.toLocaleString('en-IN')}`;
+}

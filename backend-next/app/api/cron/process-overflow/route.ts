@@ -11,8 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
  * Protected by CRON_SECRET bearer token.
  * Idempotent: safe to call multiple times for the same billing month.
  *
- * Calculates and invoices overflow tenants for all eligible ACTIVE owners
- * on overflow-enabled plans (STARTER/GROWTH).
+ * Decommissioned with the single-owner architecture.
  */
 export async function GET(_req: NextRequest) {
   return NextResponse.json(

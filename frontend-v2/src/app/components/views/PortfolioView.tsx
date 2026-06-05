@@ -2,7 +2,7 @@ import { lazy, Suspense, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Search, SlidersHorizontal, Building2, ArrowRight, BarChart3,
+  Search, SlidersHorizontal, Building2, ArrowRight,
   CheckCircle, IndianRupee, TrendingUp, Users, Phone, Bell,
   LogOut, UserCheck, Settings, X, ChevronRight, Activity,
 } from 'lucide-react';
@@ -396,15 +396,12 @@ export function PortfolioView() {
             </section>
           )}
 
-          {/* Monthly Trend — always visible */}
+          {/* Business Health Trend — always visible */}
           <section className="rounded-xl border border-border bg-card p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <BarChart3 className="h-4 w-4 text-accent" />
-              <h2 className="text-sm font-semibold text-foreground">Monthly trend</h2>
-            </div>
             <Suspense fallback={<div className="h-52 rounded-xl bg-muted animate-pulse" />}>
               <PortfolioRevenueChart
                 monthlyTrends={monthlyTrends}
+                insights={data?.business_health_insights}
                 topPerformerId={data?.top_performer_hostel_id}
                 topPerformerName={topPerformer?.hostel_name}
               />

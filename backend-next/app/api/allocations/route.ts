@@ -68,6 +68,8 @@ export async function POST(req: NextRequest) {
     console.error("Detailed API Error [allocations.POST]:", error);
     
     if (error.message.startsWith("VALIDATION_ERROR")) return apiError(error.message.split(": ")[1], "VALIDATION_ERROR", 400);
+    if (error.message.startsWith("NOT_FOUND")) return apiError(error.message.split(": ")[1], "NOT_FOUND", 404);
+    if (error.message.startsWith("FORBIDDEN")) return apiError(error.message.split(": ")[1], "FORBIDDEN", 403);
     if (error.message.startsWith("RPC_ERROR")) return apiError(error.message.split(": ")[1], "RPC_ERROR", 500);
     
     return Response.json(
