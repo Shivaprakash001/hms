@@ -387,7 +387,7 @@ export function OverviewTab({ hostelId }: { hostelId: string }) {
         )}
 
         <button 
-          onClick={() => navigate(`/hostels/${hostelId}/activity`)}
+          onClick={() => navigate('/alerts')}
           className="w-full py-2.5 rounded-xl border border-border bg-card hover:bg-secondary text-xs font-bold text-accent transition-colors"
         >
           View All

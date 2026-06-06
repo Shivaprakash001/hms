@@ -13,7 +13,6 @@ const TenantsTab = lazy(() => import('./hostel-detail/tabs/TenantsTab').then((m)
 const FinancialsTab = lazy(() => import('./hostel-detail/tabs/FinancialsTab').then((m) => ({ default: m.FinancialsTab })));
 const ExpensesTab = lazy(() => import('./hostel-detail/tabs/ExpensesTab').then((m) => ({ default: m.ExpensesTab })));
 const MoveOutsTab = lazy(() => import('./hostel-detail/tabs/MoveOutsTab').then((m) => ({ default: m.MoveOutsTab })));
-const HostelActivityCenterView = lazy(() => import('./views/HostelActivityCenterView').then((m) => ({ default: m.HostelActivityCenterView })));
 
 function ActiveHostelTab({ activeTab, hostelId }: { activeTab: HostelDetailTab; hostelId: string }) {
   if (activeTab === 'rooms') return <RoomsTab hostelId={hostelId} />;
@@ -21,7 +20,6 @@ function ActiveHostelTab({ activeTab, hostelId }: { activeTab: HostelDetailTab; 
   if (activeTab === 'financials') return <FinancialsTab hostelId={hostelId} />;
   if (activeTab === 'expenses') return <ExpensesTab hostelId={hostelId} />;
   if (activeTab === 'moveouts') return <MoveOutsTab hostelId={hostelId} />;
-  if (activeTab === 'activity') return <HostelActivityCenterView hostelId={hostelId} />;
   return <OverviewTab hostelId={hostelId} />;
 }
 
