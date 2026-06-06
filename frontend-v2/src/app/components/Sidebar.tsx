@@ -7,7 +7,7 @@ const navItems = [
   { to: '/admissions', icon: ClipboardList, label: 'Admissions' },
   { to: '/tenants', icon: Users, label: 'Tenants' },
   { to: '/billing', icon: CreditCard, label: 'Billing' },
-  { to: '/alerts', icon: Activity, label: 'Activity Center' },
+  { to: '/alerts', icon: Bell, label: 'Alerts' },
 ];
 
 export function Sidebar() {
@@ -81,6 +81,19 @@ export function Sidebar() {
         >
           <Settings className="w-4 h-4 shrink-0" />
           Settings
+        </NavLink>
+        <NavLink
+          to="/activity"
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
+              isActive
+                ? 'bg-sidebar-primary text-white shadow-sm'
+                : 'text-sidebar-foreground/60 hover:text-white hover:bg-sidebar-accent'
+            }`
+          }
+        >
+          <Activity className="w-4 h-4 shrink-0" />
+          System Logs
         </NavLink>
 
         <button
