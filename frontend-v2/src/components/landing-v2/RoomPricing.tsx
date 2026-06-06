@@ -1,9 +1,17 @@
 import { Check, MessageCircle, Bed } from 'lucide-react';
 import { ScrollReveal } from './ScrollReveal';
 import type { LandingAvailability } from './landingTypes';
+import type { FacilityContent } from '@lib/sanity/landingContent';
 
-export function RoomPricing({ availability }: { availability?: LandingAvailability }) {
-  const included = [
+function rupee(value: number | null | undefined) {
+  if (!value) return 'Ask owner';
+  return `₹${Number(value).toLocaleString('en-IN')}`;
+}
+
+export function RoomPricing({ availability, facilities }: { availability?: LandingAvailability; facilities?: FacilityContent[] }) {
+  const included = facilities?.length
+    ? facilities.slice(0, 8).map((facility) => facility.label)
+    : [
     'Comfortable bed with mattress',
     'Attached bathroom facilities',
     'Daily housekeeping',
@@ -11,8 +19,9 @@ export function RoomPricing({ availability }: { availability?: LandingAvailabili
     'Free WiFi access',
     '24/7 security',
     'Hot water facility',
-    'Common area access'
+    'Common area access',
   ];
+  const startingPriceText = rupee(availability?.startingPrice);
 
   return (
     <section id="rooms" className="py-16 md:py-24 bg-white">
@@ -53,7 +62,7 @@ export function RoomPricing({ availability }: { availability?: LandingAvailabili
                       className="text-4xl font-bold text-[#F07B1D]"
                       style={{ fontFamily: 'var(--font-display)' }}
                     >
-                      ₹8,000
+                      {startingPriceText}
                     </div>
                     <div className="text-sm text-[#2C2C2A]">per month</div>
                   </div>
@@ -72,7 +81,7 @@ export function RoomPricing({ availability }: { availability?: LandingAvailabili
                   <div className="bg-[#FFFDF5] border border-[#F07B1D]/20 rounded-lg p-4 mt-4">
                     <h5 className="font-semibold text-[#1B2D5B] text-sm mb-2">Total Cost Clarity</h5>
                     <p className="text-[#2C2C2A]/80 text-sm">
-                      No electricity charges. No maintenance extra. No hidden fees. <strong className="text-[#F07B1D]">₹8,000</strong> is everything.
+                      No hidden fees. Current rent is confirmed from live HMS room pricing. <strong className="text-[#F07B1D]">{startingPriceText}</strong> is the current starting price.
                     </p>
                   </div>
                 </div>

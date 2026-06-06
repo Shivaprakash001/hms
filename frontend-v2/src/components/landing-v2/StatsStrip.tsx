@@ -1,10 +1,16 @@
 import { ScrollReveal } from './ScrollReveal';
+import type { LandingAvailability } from './landingTypes';
 
-export function StatsStrip() {
+function rupee(value: number | null | undefined) {
+  if (!value) return 'Ask owner';
+  return `₹${Number(value).toLocaleString('en-IN')}`;
+}
+
+export function StatsStrip({ availability }: { availability?: LandingAvailability }) {
   const stats = [
     { number: '2', label: 'Hostel Buildings' },
     { number: '4', label: 'Sharing Rooms' },
-    { number: '₹8,000', label: 'per month' },
+    { number: rupee(availability?.startingPrice), label: 'per month' },
     { number: '9+', label: 'Amenities' }
   ];
 

@@ -2,8 +2,16 @@ import { Link } from 'react-router-dom';
 import { Phone, MapPin, MessageCircle } from 'lucide-react';
 import { ScrollReveal } from './ScrollReveal';
 import hostelLogo from './assets/hostel_icon.jpeg';
+import type { FooterContent, HostelProfileContent } from '@lib/sanity/landingContent';
+import { fallbackLandingContent } from '@lib/sanity/client';
 
-export function Footer() {
+export function Footer({
+  content = fallbackLandingContent.footer,
+  hostelProfile = fallbackLandingContent.hostelProfile,
+}: {
+  content?: FooterContent;
+  hostelProfile?: HostelProfileContent;
+}) {
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
     if (element) {
@@ -30,54 +38,45 @@ export function Footer() {
                   className="text-xl font-semibold"
                   style={{ fontFamily: 'var(--font-display)' }}
                 >
-                  Sri Adithya Hostels
+                  {content.title}
                 </h3>
               </div>
             </div>
             <p className="text-white/80 text-sm">
-              Your home away from home — providing comfortable, safe, and affordable accommodation for students near SNIST.
+              {content.description}
             </p>
           </div>
 
           <div>
             <h4 className="font-semibold mb-4">Quick Links</h4>
             <div className="space-y-2">
-              <button
-                onClick={() => scrollToSection('home')}
-                className="block text-white/80 hover:text-white transition-colors text-sm"
-              >
-                Home
-              </button>
-              <button
-                onClick={() => scrollToSection('facilities')}
-                className="block text-white/80 hover:text-white transition-colors text-sm"
-              >
-                Facilities
-              </button>
-              <button
-                onClick={() => scrollToSection('rooms')}
-                className="block text-white/80 hover:text-white transition-colors text-sm"
-              >
-                Rooms & Pricing
-              </button>
-              <button
-                onClick={() => scrollToSection('location')}
-                className="block text-white/80 hover:text-white transition-colors text-sm"
-              >
-                Location
-              </button>
-              <button
-                onClick={() => scrollToSection('contact')}
-                className="block text-white/80 hover:text-white transition-colors text-sm"
-              >
-                Contact
-              </button>
-              <Link
-                to="/login"
-                className="block text-white/80 hover:text-white transition-colors text-sm"
-              >
-                Tenant / Owner Login
-              </Link>
+              {content.quickLinks.map((link) =>
+                link.href.startsWith('#') ? (
+                  <button
+                    key={link.href}
+                    onClick={() => scrollToSection(link.href.slice(1))}
+                    className="block text-white/80 hover:text-white transition-colors text-sm"
+                  >
+                    {link.label}
+                  </button>
+                ) : link.href.startsWith('/') ? (
+                  <Link
+                    key={link.href}
+                    to={link.href}
+                    className="block text-white/80 hover:text-white transition-colors text-sm"
+                  >
+                    {link.label}
+                  </Link>
+                ) : (
+                  <a
+                    key={link.href}
+                    href={link.href}
+                    className="block text-white/80 hover:text-white transition-colors text-sm"
+                  >
+                    {link.label}
+                  </a>
+                ),
+              )}
             </div>
           </div>
 
@@ -102,14 +101,14 @@ export function Footer() {
               </a>
               <div className="flex items-start gap-2 text-white/80">
                 <MapPin className="w-4 h-4 mt-1 flex-shrink-0" />
-                <span>Yamnampet, Secunderabad, Telangana</span>
+                <span>{hostelProfile.tagline || 'Yamnampet, Secunderabad, Telangana'}</span>
               </div>
             </div>
           </div>
         </div>
 
         <div className="border-t border-white/20 pt-8 text-center text-sm text-white/60">
-          <p>&copy; 2025 Sri Adithya Hostels. All rights reserved.</p>
+          <p>{content.copyright}</p>
         </div>
         </div>
       </ScrollReveal>

@@ -1,30 +1,68 @@
 import { useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { Phone, Mail, MessageCircle, Send } from 'lucide-react';
+import { admissionsPublicService } from '@features/admissions/api';
 import { ScrollReveal, StaggerReveal, StaggerItem } from './ScrollReveal';
 import type { LandingAvailability } from './landingTypes';
+import type { HostelProfileContent } from '@lib/sanity/landingContent';
 
-export function EnquiryForm({ availability }: { availability?: LandingAvailability }) {
+export function EnquiryForm({
+  availability,
+  hostelProfile,
+  visitSlug,
+}: {
+  availability?: LandingAvailability;
+  hostelProfile?: HostelProfileContent;
+  visitSlug?: string;
+}) {
+  const [submitted, setSubmitted] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
+    email: '',
     moveInDate: '',
-    message: ''
+    message: '',
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
+  const openWhatsApp = () => {
     const whatsappMessage = encodeURIComponent(
-      `Hi! I'm interested in Sri Adithya Hostels.\n\nName: ${formData.name}\nPhone: ${formData.phone}\nPreferred Move-in Date: ${formData.moveInDate}\n\nMessage: ${formData.message}`
+      `Hi! I'm interested in Sri Adithya Hostels.\n\nName: ${formData.name}\nPhone: ${formData.phone}\nPreferred Move-in Date: ${formData.moveInDate}\n\nMessage: ${formData.message}`,
     );
 
     window.open(`https://api.whatsapp.com/send?phone=919392433422&text=${whatsappMessage}`, '_blank');
   };
 
+  const submitLead = useMutation({
+    mutationFn: () =>
+      admissionsPublicService.createLead(visitSlug || '', {
+        student_name: formData.name,
+        student_phone: formData.phone,
+        student_email: formData.email,
+        source: 'DIRECT',
+        notes: [
+          formData.moveInDate ? `Preferred move-in date: ${formData.moveInDate}` : '',
+          formData.message ? `Message: ${formData.message}` : '',
+        ]
+          .filter(Boolean)
+          .join('\n'),
+      }),
+    onSuccess: () => setSubmitted(true),
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitted(false);
+    if (visitSlug) {
+      submitLead.mutate();
+      return;
+    }
+    openWhatsApp();
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [e.target.name]: e.target.value,
     });
   };
 
@@ -94,8 +132,8 @@ export function EnquiryForm({ availability }: { availability?: LandingAvailabili
                         <Mail className="w-6 h-6 text-white" />
                       </div>
                       <div>
-                        <div className="text-sm text-[#2C2C2A]">Address</div>
-                        <div className="font-semibold text-[#1B2D5B]">Yamnampet, Secunderabad</div>
+                        <div className="text-sm text-[#2C2C2A]">Hostel</div>
+                        <div className="font-semibold text-[#1B2D5B]">{hostelProfile?.name || 'Sri Adithya Hostels'}</div>
                       </div>
                     </div>
                   </div>
@@ -111,18 +149,18 @@ export function EnquiryForm({ availability }: { availability?: LandingAvailabili
                   <div className="flex items-start gap-4">
                     <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#F07B1D]/20 to-[#1B2D5B]/20 flex items-center justify-center overflow-hidden border-2 border-white shadow-md flex-shrink-0">
                       <div className="w-full h-full flex items-center justify-center text-[#1B2D5B] font-bold text-lg">
-                        SR
+                        {(hostelProfile?.ownerName || 'Srinivasa Rao').split(/\s+/).map((part) => part[0]).join('').slice(0, 2)}
                       </div>
                     </div>
                     <div className="flex-1">
                       <div className="bg-white border border-[#F07B1D]/20 rounded-lg p-3 shadow-sm relative">
                         <div className="absolute -left-2 top-4 w-0 h-0 border-t-8 border-t-transparent border-b-8 border-b-transparent border-r-8 border-r-white" />
                         <p className="text-[#1B2D5B] italic text-sm">
-                          "I personally respond to every enquiry."
+                          &quot;{hostelProfile?.ownerMessage || 'I personally respond to every enquiry.'}&quot;
                         </p>
                       </div>
                       <p className="text-xs text-[#2C2C2A]/60 mt-2 ml-3">
-                        — Srinivasa Rao, Owner
+                        — {hostelProfile?.ownerName || 'Srinivasa Rao'}, Owner
                       </p>
                     </div>
                   </div>
@@ -132,78 +170,108 @@ export function EnquiryForm({ availability }: { availability?: LandingAvailabili
 
             <StaggerItem>
               <div className="bg-[#FFFDF5] p-8 rounded-xl shadow-lg">
-            <h3 className="text-xl font-semibold text-[#1B2D5B] mb-6">Send us a message</h3>
+                <h3 className="text-xl font-semibold text-[#1B2D5B] mb-6">Send us a message</h3>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label htmlFor="name" className="block text-sm font-medium text-[#2C2C2A] mb-2">
-                  Full Name *
-                </label>
-                <input
-                  type="text"
-                  id="name"
-                  name="name"
-                  required
-                  value={formData.name}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 bg-white border border-[#F07B1D]/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F07B1D] text-[#2C2C2A]"
-                  placeholder="Enter your name"
-                />
-              </div>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div>
+                    <label htmlFor="name" className="block text-sm font-medium text-[#2C2C2A] mb-2">
+                      Full Name *
+                    </label>
+                    <input
+                      type="text"
+                      id="name"
+                      name="name"
+                      required
+                      value={formData.name}
+                      onChange={handleChange}
+                      className="w-full px-4 py-3 bg-white border border-[#F07B1D]/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F07B1D] text-[#2C2C2A]"
+                      placeholder="Enter your name"
+                    />
+                  </div>
 
-              <div>
-                <label htmlFor="phone" className="block text-sm font-medium text-[#2C2C2A] mb-2">
-                  Phone Number *
-                </label>
-                <input
-                  type="tel"
-                  id="phone"
-                  name="phone"
-                  required
-                  value={formData.phone}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 bg-white border border-[#F07B1D]/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F07B1D] text-[#2C2C2A]"
-                  placeholder="Enter your phone number"
-                />
-              </div>
+                  <div>
+                    <label htmlFor="phone" className="block text-sm font-medium text-[#2C2C2A] mb-2">
+                      Phone Number *
+                    </label>
+                    <input
+                      type="tel"
+                      id="phone"
+                      name="phone"
+                      required
+                      value={formData.phone}
+                      onChange={handleChange}
+                      className="w-full px-4 py-3 bg-white border border-[#F07B1D]/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F07B1D] text-[#2C2C2A]"
+                      placeholder="Enter your phone number"
+                    />
+                  </div>
 
-              <div>
-                <label htmlFor="moveInDate" className="block text-sm font-medium text-[#2C2C2A] mb-2">
-                  Preferred Move-in Date
-                </label>
-                <input
-                  type="date"
-                  id="moveInDate"
-                  name="moveInDate"
-                  value={formData.moveInDate}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 bg-white border border-[#F07B1D]/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F07B1D] text-[#2C2C2A]"
-                />
-              </div>
+                  <div>
+                    <label htmlFor="email" className="block text-sm font-medium text-[#2C2C2A] mb-2">
+                      Email Address
+                    </label>
+                    <input
+                      type="email"
+                      id="email"
+                      name="email"
+                      value={formData.email}
+                      onChange={handleChange}
+                      className="w-full px-4 py-3 bg-white border border-[#F07B1D]/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F07B1D] text-[#2C2C2A]"
+                      placeholder="Enter your email"
+                    />
+                  </div>
 
-              <div>
-                <label htmlFor="message" className="block text-sm font-medium text-[#2C2C2A] mb-2">
-                  Message
-                </label>
-                <textarea
-                  id="message"
-                  name="message"
-                  rows={4}
-                  value={formData.message}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 bg-white border border-[#F07B1D]/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F07B1D] text-[#2C2C2A] resize-none"
-                  placeholder="Any specific questions or requirements?"
-                />
-              </div>
+                  <div>
+                    <label htmlFor="moveInDate" className="block text-sm font-medium text-[#2C2C2A] mb-2">
+                      Preferred Move-in Date
+                    </label>
+                    <input
+                      type="date"
+                      id="moveInDate"
+                      name="moveInDate"
+                      value={formData.moveInDate}
+                      onChange={handleChange}
+                      className="w-full px-4 py-3 bg-white border border-[#F07B1D]/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F07B1D] text-[#2C2C2A]"
+                    />
+                  </div>
 
-              <button
-                type="submit"
-                className="w-full bg-[#F07B1D] text-white py-4 rounded-lg hover:bg-[#d96e18] transition-colors font-semibold flex items-center justify-center gap-2"
-              >
-                <Send className="w-5 h-5" />
-                <span>Send Enquiry via WhatsApp</span>
-              </button>
-            </form>
+                  <div>
+                    <label htmlFor="message" className="block text-sm font-medium text-[#2C2C2A] mb-2">
+                      Message
+                    </label>
+                    <textarea
+                      id="message"
+                      name="message"
+                      rows={4}
+                      value={formData.message}
+                      onChange={handleChange}
+                      className="w-full px-4 py-3 bg-white border border-[#F07B1D]/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F07B1D] text-[#2C2C2A] resize-none"
+                      placeholder="Any specific questions or requirements?"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={submitLead.isPending}
+                    className="w-full bg-[#F07B1D] text-white py-4 rounded-lg hover:bg-[#d96e18] transition-colors font-semibold flex items-center justify-center gap-2 disabled:opacity-70"
+                  >
+                    <Send className="w-5 h-5" />
+                    <span>{submitLead.isPending ? 'Sending enquiry...' : 'Send Enquiry'}</span>
+                  </button>
+
+                  {submitted && (
+                    <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-700">
+                      Enquiry saved. The hostel owner can now follow up from HMS admissions.
+                    </div>
+                  )}
+                  {submitLead.isError && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                      Could not save enquiry.
+                      <button type="button" onClick={openWhatsApp} className="ml-2 underline">
+                        Contact on WhatsApp
+                      </button>
+                    </div>
+                  )}
+                </form>
               </div>
             </StaggerItem>
           </div>

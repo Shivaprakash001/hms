@@ -1,29 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { UtensilsCrossed, Home, MapPin } from 'lucide-react';
 import { ScrollReveal, StaggerReveal } from './ScrollReveal';
+import type { FeatureContent } from '@lib/sanity/landingContent';
+import { fallbackLandingContent } from '@lib/sanity/client';
+import { getLandingIcon } from './content/icons';
 
-const features = [
-  {
-    icon: UtensilsCrossed,
-    title: 'Homely Food',
-    description: 'Fresh, daily meals included — just like mom\'s cooking',
-    bgImage: 'https://images.unsplash.com/photo-1542367592-8849eb950fd8?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-  },
-  {
-    icon: Home,
-    title: 'Homely Atmosphere',
-    description: 'Warm, safe & comfortable — designed for students',
-    bgImage: 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-  },
-  {
-    icon: MapPin,
-    title: 'Prime Location',
-    description: '400m from SNIST gate — walk in 5 minutes',
-    bgImage: 'https://images.unsplash.com/photo-1779062553813-e2047a686036?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-  },
-];
-
-export function WhyChooseUs() {
+export function WhyChooseUs({ features = fallbackLandingContent.features }: { features?: FeatureContent[] }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -102,13 +83,14 @@ export function WhyChooseUs() {
                 style={{ transform: `translateX(-${currentIndex * 100}%)` }}
               >
                 {features.map((feature, index) => {
-                  const Icon = feature.icon;
+                  const Icon = getLandingIcon(feature.icon);
+                  const fallbackImage = fallbackLandingContent.features[index % fallbackLandingContent.features.length]?.image;
                   return (
                     <div key={feature.title} className="w-full flex-shrink-0">
                       <div className="relative bg-[#FFFDF5] rounded-xl border border-[#F07B1D]/10 overflow-hidden group h-[280px] md:h-[320px]">
                         <img
-                          src={feature.bgImage}
-                          alt={feature.title}
+                          src={feature.image?.url || fallbackImage?.url || ''}
+                          alt={feature.image?.alt || feature.title}
                           loading={index === 0 ? 'eager' : 'lazy'}
                           draggable={false}
                           className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"

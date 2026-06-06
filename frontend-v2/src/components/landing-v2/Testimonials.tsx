@@ -1,31 +1,22 @@
 import { Star, Shield, UtensilsCrossed, Phone } from 'lucide-react';
 import { ScrollReveal, StaggerReveal, StaggerItem } from './ScrollReveal';
+import type { TestimonialContent } from '@lib/sanity/landingContent';
+import { fallbackLandingContent } from '@lib/sanity/client';
 
-export function Testimonials() {
-  const studentTestimonials = [
-    {
-      name: 'Ravi K.',
-      details: '3rd Year · B.Tech CSE · SNIST',
-      initials: 'RK',
-      quote: 'Food is the biggest surprise. I expected mess food — I got home food. My mother actually approved after tasting it.',
-      duration: 'Stayed 18 months'
-    },
-    {
-      name: 'Arjun M.',
-      details: '2nd Year · B.Tech ECE · SNIST',
-      initials: 'AM',
-      quote: '5 minutes to college gate. I sleep until 8:55 for a 9 AM class. No other hostel near SNIST gives you that.',
-      duration: 'Current Resident'
-    },
-    {
-      name: 'Karthik R.',
-      details: '4th Year · B.Tech Mech · SNIST',
-      initials: 'KR',
-      quote: 'The warden knows every student by name. That sounds small but it means a lot when you\'re away from home first time.',
-      duration: 'Current Resident'
-    }
-  ];
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'SA';
+}
 
+export function Testimonials({ testimonials = fallbackLandingContent.testimonials }: { testimonials?: TestimonialContent[] }) {
+  const studentTestimonials = testimonials.filter((testimonial) => testimonial.verificationType !== 'PARENT');
+  const parentTestimonial =
+    testimonials.find((testimonial) => testimonial.verificationType === 'PARENT') ||
+    fallbackLandingContent.testimonials.find((testimonial) => testimonial.verificationType === 'PARENT')!;
   const ratings = [
     { label: 'Food Quality', value: 4.9, percentage: 98 },
     { label: 'Cleanliness', value: 4.7, percentage: 94 },
@@ -95,7 +86,7 @@ export function Testimonials() {
                   <div className="flex items-center gap-3 mb-4">
                     <div className="w-12 h-12 rounded-full bg-[#F07B1D] flex items-center justify-center">
                       <span className="text-[#1B2D5B] font-bold text-sm">
-                        {testimonial.initials}
+                        {initials(testimonial.name)}
                       </span>
                     </div>
                     <div>
@@ -110,12 +101,12 @@ export function Testimonials() {
 
                   <div className="flex gap-1 mb-3">
                     {[...Array(5)].map((_, i) => (
-                      <Star key={i} className="w-4 h-4 text-[#FBB040] fill-[#FBB040]" />
+                      <Star key={i} className={`w-4 h-4 ${i < Math.round(testimonial.rating || 5) ? 'text-[#FBB040] fill-[#FBB040]' : 'text-gray-300'}`} />
                     ))}
                   </div>
 
                   <p className="text-[#1B2D5B] italic leading-relaxed mb-4 flex-1" style={{ fontSize: '15px' }}>
-                    "{testimonial.quote}"
+                    &quot;{testimonial.quote}&quot;
                   </p>
 
                   <div className="inline-flex items-center gap-2 bg-[#F07B1D]/10 border border-[#F07B1D] px-3 py-1.5 rounded-full text-xs font-medium text-[#F07B1D] self-start">
@@ -146,14 +137,14 @@ export function Testimonials() {
 
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-14 h-14 rounded-full bg-[#1B2D5B] flex items-center justify-center">
-                    <span className="text-white font-bold">FK</span>
+                    <span className="text-white font-bold">{initials(parentTestimonial.name)}</span>
                   </div>
                   <div>
                     <div className="font-semibold text-[#1B2D5B]">
-                      Father of Karthik R.
+                      {parentTestimonial.name}
                     </div>
                     <div className="text-sm text-[#2C2C2A]/60">
-                      Vizag
+                      {parentTestimonial.details || 'Verified parent'}
                     </div>
                   </div>
                 </div>
@@ -162,11 +153,11 @@ export function Testimonials() {
                   className="text-[#1B2D5B] italic leading-relaxed text-lg mb-4"
                   style={{ fontFamily: 'var(--font-display)' }}
                 >
-                  My biggest worry was food. Boys don't complain until something is seriously wrong. After visiting once and seeing the kitchen, I stopped worrying. They also WhatsApp me if anything unusual happens — I didn't ask for that. They just do it.
+                  {parentTestimonial.quote}
                 </p>
 
                 <div className="inline-flex items-center gap-2 bg-[#1B2D5B]/10 border border-[#1B2D5B] px-4 py-2 rounded-full text-sm font-medium text-[#1B2D5B]">
-                  Parent of current resident · Verified Stay
+                  {parentTestimonial.duration || 'Parent perspective'} · Verified
                 </div>
               </div>
 

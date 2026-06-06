@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom';
 import hostelLogo from './assets/hostel_icon.jpeg';
+import type { HostelProfileContent } from '@lib/sanity/landingContent';
+import { fallbackLandingContent } from '@lib/sanity/client';
 
-export function Navbar() {
+export function Navbar({ hostelProfile = fallbackLandingContent.hostelProfile }: { hostelProfile?: HostelProfileContent }) {
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
     if (element) {
@@ -21,7 +23,7 @@ export function Navbar() {
             />
             <div>
               <h1 className="text-xl font-semibold text-[#1B2D5B]" style={{ fontFamily: 'var(--font-display)' }}>
-                Sri Adithya Hostels
+                {hostelProfile.name}
               </h1>
             </div>
           </div>

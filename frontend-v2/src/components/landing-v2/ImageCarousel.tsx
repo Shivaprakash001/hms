@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { Building2, UtensilsCrossed, Bed } from 'lucide-react';
+import type { MarketingImage } from '@lib/sanity/landingContent';
 
-const slides = [
+const fallbackSlides = [
   {
     label: 'Room Interior',
     icon: Bed,
@@ -19,7 +20,23 @@ const slides = [
   },
 ];
 
-export function ImageCarousel() {
+function iconForLabel(label: string) {
+  const normalized = label.toLowerCase();
+  if (normalized.includes('food') || normalized.includes('meal')) return UtensilsCrossed;
+  if (normalized.includes('room') || normalized.includes('bed')) return Bed;
+  return Building2;
+}
+
+export function ImageCarousel({ images }: { images?: MarketingImage[] }) {
+  const slides = images?.length
+    ? images.map((image) => ({
+        label: image.caption || image.alt,
+        icon: iconForLabel(image.caption || image.alt),
+        image: image.url,
+        alt: image.alt,
+      }))
+    : fallbackSlides;
+
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -90,7 +107,7 @@ export function ImageCarousel() {
                 <div className="aspect-[4/3] relative overflow-hidden bg-[#FFFDF5]">
                   <img
                     src={slide.image}
-                    alt={slide.label}
+                    alt={'alt' in slide ? slide.alt : slide.label}
                     loading={index === 0 ? 'eager' : 'lazy'}
                     draggable={false}
                     className="absolute inset-0 h-full w-full object-cover"
