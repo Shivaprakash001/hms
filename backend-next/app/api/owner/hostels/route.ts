@@ -55,39 +55,50 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    const result = hostels.map((hostel: any) => {
-      const totalRooms = hostel.rooms.length;
-      const totalCapacity = hostel.rooms.reduce((s: number, r: any) => s + r.capacity, 0);
-      const occupiedBeds = hostel.rooms.reduce((s: number, r: any) => s + r.room_allocations.length, 0);
-      const reservedBeds = hostel.rooms.reduce((s: number, r: any) => s + r.tenant_invitation_reservations.length, 0);
-      const usedBeds = occupiedBeds + reservedBeds;
-      const vacantBeds = Math.max(totalCapacity - usedBeds, 0);
-      const occupancyRate = totalCapacity > 0 ? Math.round((usedBeds / totalCapacity) * 100) : 0;
+    const result = await Promise.all(
+      hostels.map(async (hostel: any) => {
+        let slug = hostel.public_slug;
+        if (!slug) {
+          slug = `${hostel.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 60)}-${String(hostel.id).slice(0, 8)}`;
+          await prisma.hostels.update({
+            where: { id: hostel.id },
+            data: { public_slug: slug },
+          });
+        }
 
-      return {
-        id: hostel.id,
-        name: hostel.name,
-        phone: hostel.phone,
-        address: hostel.address,
-        city: hostel.city,
-        state: hostel.state,
-        pincode: hostel.pincode,
-        upi_id: hostel.upi_id,
-        public_slug: hostel.public_slug,
-        admissions_enabled: hostel.admissions_enabled,
-        is_active: hostel.is_active,
-        created_at: hostel.created_at,
-        stats: {
-          total_rooms: totalRooms,
-          total_capacity: totalCapacity,
-          occupied_beds: occupiedBeds,
-          reserved_beds: reservedBeds,
-          used_beds: usedBeds,
-          vacant_beds: vacantBeds,
-          occupancy_rate: occupancyRate,
-        },
-      };
-    });
+        const totalRooms = hostel.rooms.length;
+        const totalCapacity = hostel.rooms.reduce((s: number, r: any) => s + r.capacity, 0);
+        const occupiedBeds = hostel.rooms.reduce((s: number, r: any) => s + r.room_allocations.length, 0);
+        const reservedBeds = hostel.rooms.reduce((s: number, r: any) => s + r.tenant_invitation_reservations.length, 0);
+        const usedBeds = occupiedBeds + reservedBeds;
+        const vacantBeds = Math.max(totalCapacity - usedBeds, 0);
+        const occupancyRate = totalCapacity > 0 ? Math.round((usedBeds / totalCapacity) * 100) : 0;
+
+        return {
+          id: hostel.id,
+          name: hostel.name,
+          phone: hostel.phone,
+          address: hostel.address,
+          city: hostel.city,
+          state: hostel.state,
+          pincode: hostel.pincode,
+          upi_id: hostel.upi_id,
+          public_slug: slug,
+          admissions_enabled: hostel.admissions_enabled,
+          is_active: hostel.is_active,
+          created_at: hostel.created_at,
+          stats: {
+            total_rooms: totalRooms,
+            total_capacity: totalCapacity,
+            occupied_beds: occupiedBeds,
+            reserved_beds: reservedBeds,
+            used_beds: usedBeds,
+            vacant_beds: vacantBeds,
+            occupancy_rate: occupancyRate,
+          },
+        };
+      })
+    );
 
     return apiResponse({
       hostels: result,

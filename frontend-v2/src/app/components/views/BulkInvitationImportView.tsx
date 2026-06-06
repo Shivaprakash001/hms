@@ -77,7 +77,9 @@ export function BulkInvitationImportView() {
     anchor.href = url;
     anchor.download = 'tenant-invitation-import-template.csv';
     anchor.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 250);
   };
 
   const onFileChange = (event: ChangeEvent<HTMLInputElement>) => {

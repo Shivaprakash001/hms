@@ -21,3 +21,16 @@ export async function GET(req: NextRequest) {
     return ApiResponse.error(error);
   }
 }
+
+export async function POST(req: NextRequest) {
+  const session = await getSession(req);
+  if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
+    return ApiResponse.error(ApiError.forbidden("Only owners can create admissions leads"));
+  }
+  try {
+    const body = await req.json();
+    return ApiResponse.success(await admissionsService.createDirectLead(session.sub, body));
+  } catch (error) {
+    return ApiResponse.error(error);
+  }
+}

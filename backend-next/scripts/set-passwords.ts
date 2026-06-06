@@ -10,7 +10,7 @@ async function main() {
   const { prisma } = await import("../lib/db");
   
   const emails = ["sriadithyahostels@gmail.com", "spchidiri2006@gmail.com"];
-  const newPassword = "Password123!";
+  const newPassword = "password";
   const hash = await bcrypt.hash(newPassword, 10);
   
   console.log(`Setting password to "${newPassword}" for:`, emails);

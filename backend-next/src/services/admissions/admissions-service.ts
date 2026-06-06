@@ -293,6 +293,7 @@ export class AdmissionsService {
             parent_name: cleanString(input.parent_name, 120) || existing.parent_name,
             parent_phone: parentPhone || existing.parent_phone,
             decision_maker_type: decisionMaker,
+            notes: cleanString(input.notes, 1000) || existing.notes,
             last_activity_at: new Date(),
             updated_at: new Date(),
           },
@@ -308,12 +309,81 @@ export class AdmissionsService {
             parent_phone: parentPhone,
             decision_maker_type: decisionMaker,
             source: cleanString(input.source, 20) || "QR",
+            notes: cleanString(input.notes, 1000),
           },
         });
 
     await this.recordActivity(lead.id, "VIEW_HOSTEL", { source: "lead_capture" });
     await invalidateTag(redisKeys.admissions.owner(hostel.owner_id));
     return this.getLeadForOwner(lead.id, hostel.owner_id);
+  }
+
+  async createDirectLead(ownerId: string, input: any) {
+    const studentPhone = normalizeIndianPhone(input.student_phone);
+    if (!studentPhone) throw ApiError.validationError("Student phone is invalid");
+    const parentPhone = normalizeIndianPhone(input.parent_phone) || null;
+
+    const studentName = cleanString(input.student_name, 120);
+    if (!studentName) throw ApiError.validationError("Student name is required");
+    const studentEmail = cleanString(input.student_email, 180)?.toLowerCase() || null;
+    
+    const hostelId = input.hostel_id;
+    if (!hostelId) throw ApiError.validationError("Hostel ID is required");
+
+    // Verify hostel belongs to the owner
+    const hostel = await prisma.hostels.findFirst({
+      where: { id: hostelId, owner_id: ownerId, is_active: true }
+    });
+    if (!hostel) throw ApiError.notFound("Hostel not found or access denied");
+
+    const decisionMaker = ["STUDENT", "PARENT", "BOTH"].includes(input.decision_maker_type)
+      ? input.decision_maker_type
+      : parentPhone ? "BOTH" : "STUDENT";
+
+    const existing = await prisma.visitorLead.findFirst({
+      where: {
+        hostel_id: hostel.id,
+        student_phone: studentPhone,
+        status: { in: ACTIVE_LEAD_STATUSES },
+      },
+      orderBy: { created_at: "desc" },
+    });
+
+    const lead = existing
+      ? await prisma.visitorLead.update({
+          where: { id: existing.id },
+          data: {
+            student_name: studentName,
+            student_email: studentEmail || existing.student_email,
+            parent_name: cleanString(input.parent_name, 120) || existing.parent_name,
+            parent_phone: parentPhone || existing.parent_phone,
+            decision_maker_type: decisionMaker,
+            notes: cleanString(input.notes, 1000) || existing.notes,
+            last_activity_at: new Date(),
+            updated_at: new Date(),
+            status: input.status || existing.status,
+            source: cleanString(input.source, 50) || existing.source || "WALK_IN",
+          },
+        })
+      : await prisma.visitorLead.create({
+          data: {
+            hostel_id: hostel.id,
+            owner_id: ownerId,
+            student_name: studentName,
+            student_phone: studentPhone,
+            student_email: studentEmail,
+            parent_name: cleanString(input.parent_name, 120),
+            parent_phone: parentPhone,
+            decision_maker_type: decisionMaker,
+            source: cleanString(input.source, 50) || "WALK_IN",
+            status: input.status || "NEW",
+            notes: cleanString(input.notes, 1000),
+          },
+        });
+
+    await this.recordActivity(lead.id, "WALK_IN_LEAD_CREATED", { source: "owner_creation" });
+    await invalidateTag(redisKeys.admissions.owner(ownerId));
+    return this.getLeadForOwner(lead.id, ownerId);
   }
 
   async recordActivity(leadId: string, activityType: string, metadata: Record<string, unknown> = {}, hostelSlug?: string) {
@@ -379,7 +449,7 @@ export class AdmissionsService {
         include: {
           hostel: { select: { id: true, name: true } },
           reservations: { where: { status: "ACTIVE" }, include: { room: { select: { id: true, room_no: true } } } },
-          _count: { select: { activities: true, notes_list: true } },
+          _count: { select: { activities: true, lead_notes: true } },
         },
         orderBy: [{ lead_score: "desc" }, { last_activity_at: "desc" }],
         skip,
@@ -400,7 +470,7 @@ export class AdmissionsService {
       include: {
         hostel: { select: { id: true, name: true } },
         activities: { orderBy: { created_at: "desc" }, take: 80 },
-        notes_list: { orderBy: { created_at: "desc" }, take: 50 },
+        lead_notes: { orderBy: { created_at: "desc" }, take: 50 },
         reservations: { include: { room: { select: { id: true, room_no: true, room_type: true } } }, orderBy: { created_at: "desc" } },
       },
     });
@@ -409,10 +479,18 @@ export class AdmissionsService {
   }
 
   shapeLead(lead: any) {
-    return {
+    const shaped = {
       ...lead,
+      notes_list: lead.lead_notes || lead.notes_list || [],
       lead_temperature: leadTemperature(Number(lead.lead_score || 0)),
     };
+    if (shaped._count) {
+      shaped._count = {
+        ...shaped._count,
+        notes_list: shaped._count.lead_notes ?? shaped._count.notes_list,
+      };
+    }
+    return shaped;
   }
 
   async updateStatus(leadId: string, ownerId: string, input: any) {
@@ -572,6 +650,372 @@ export class AdmissionsService {
     return getOrSetJson(key, 120, async () => {
       const where: any = { owner_id: ownerId };
       if (query.hostelId) where.hostel_id = String(query.hostelId);
+
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+
+      // 1. Fetch active rooms & allocations for vacancy
+      const roomsWhere: any = { is_active: true };
+      if (query.hostelId) {
+        roomsWhere.hostel_id = String(query.hostelId);
+      } else {
+        roomsWhere.hostels = { owner_id: ownerId };
+      }
+      const activeRooms = await prisma.rooms.findMany({
+        where: roomsWhere,
+        include: {
+          room_allocations: {
+            where: { is_active: true, end_date: null, tenant: { status: "ACTIVE" } },
+            select: { id: true }
+          },
+          hostels: {
+            select: { name: true }
+          }
+        }
+      });
+
+      // Compute vacant beds, total capacity, occupied beds
+      let vacantBeds = 0;
+      let vacancyCapacity = 0;
+      let totalBeds = 0;
+      let occupiedBeds = 0;
+
+      for (const room of activeRooms) {
+        const occupied = room.room_allocations.length;
+        const vacant = Math.max(0, room.capacity - occupied);
+        const rent = Number(room.base_rent || 8500);
+
+        vacantBeds += vacant;
+        vacancyCapacity += vacant * rent;
+        totalBeds += room.capacity;
+        occupiedBeds += occupied;
+      }
+
+      const averageRent = activeRooms.length > 0
+        ? Math.round(activeRooms.reduce((sum, r) => sum + Number(r.base_rent || 8500), 0) / activeRooms.length)
+        : 8500;
+
+      // 2. Fetch active visitor leads
+      const activeLeads = await prisma.visitorLead.findMany({
+        where: {
+          ...where,
+          status: { in: ["NEW", "INTERESTED", "FOLLOW_UP", "READY_TO_JOIN", "INVITED"] }
+        },
+        include: {
+          hostel: { select: { name: true } },
+          reservations: {
+            where: { status: "ACTIVE" },
+            include: {
+              room: {
+                select: { id: true, room_no: true, base_rent: true }
+              }
+            }
+          }
+        }
+      });
+
+      // Compute potential revenue & confidence counts
+      let potentialRevenue = 0;
+      let likelyFillCount = 0;
+      let mediumConfidenceCount = 0;
+      let lowConfidenceCount = 0;
+
+      for (const lead of activeLeads) {
+        const resRoom = lead.reservations[0]?.room;
+        const rent = resRoom?.base_rent ? Number(resRoom.base_rent) : averageRent;
+        potentialRevenue += rent;
+
+        if (["READY_TO_JOIN", "INVITED"].includes(lead.status)) {
+          likelyFillCount++;
+        } else if (["FOLLOW_UP", "INTERESTED"].includes(lead.status) || lead.reservations.length > 0) {
+          mediumConfidenceCount++;
+        } else {
+          lowConfidenceCount++;
+        }
+      }
+
+      // Compute expected revenue (actual-match where possible)
+      let expectedRevenue = 0;
+      let hasEstimatedRent = false;
+      for (const lead of activeLeads) {
+        const isHigh = ["READY_TO_JOIN", "INVITED"].includes(lead.status);
+        const isMedium = ["FOLLOW_UP", "INTERESTED"].includes(lead.status) || lead.reservations.length > 0;
+        if (isHigh || isMedium) {
+          const resRoom = lead.reservations[0]?.room;
+          if (resRoom?.base_rent) {
+            expectedRevenue += Number(resRoom.base_rent);
+          } else {
+            expectedRevenue += averageRent;
+            hasEstimatedRent = true;
+          }
+        }
+      }
+
+      // 3. Fetch lead activities in the last 30 days for Room-level demand mapping
+      const activeLeadsActivities = await prisma.leadActivity.findMany({
+        where: {
+          activity_type: "VIEW_ROOM",
+          created_at: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
+          lead: where
+        },
+        select: {
+          lead_id: true,
+          metadata: true
+        }
+      });
+
+      const roomInterests = new Map<string, Set<string>>();
+      for (const act of activeLeadsActivities as any[]) {
+        const roomId = act.metadata?.room_id;
+        if (roomId) {
+          if (!roomInterests.has(roomId)) {
+            roomInterests.set(roomId, new Set());
+          }
+          roomInterests.get(roomId)!.add(act.lead_id);
+        }
+      }
+      
+      const activeRoomReservations = await prisma.roomReservation.findMany({
+        where: {
+          status: "ACTIVE",
+          lead: where
+        },
+        select: {
+          room_id: true,
+          lead_id: true
+        }
+      });
+      for (const res of activeRoomReservations) {
+        if (!roomInterests.has(res.room_id)) {
+          roomInterests.set(res.room_id, new Set());
+        }
+        roomInterests.get(res.room_id)!.add(res.lead_id);
+      }
+
+      const vacancyDemandMap = activeRooms.map((room) => {
+        const occupied = room.room_allocations.length;
+        const vacant = Math.max(0, room.capacity - occupied);
+        const interested = roomInterests.get(room.id)?.size || 0;
+        return {
+          room_id: room.id,
+          room_no: room.room_no,
+          vacant_beds: vacant,
+          interested_leads: interested,
+        };
+      })
+      .filter((r) => r.vacant_beds > 0 || r.interested_leads > 0)
+      .sort((a, b) => b.interested_leads - a.interested_leads || b.vacant_beds - a.vacant_beds)
+      .slice(0, 10);
+
+      // 4. Build Today's Admissions tasks (Follow-up queue with priority sorting)
+      const queueWithDetails = activeLeads.map((lead) => {
+        const resRoom = lead.reservations[0]?.room;
+        const rent = resRoom?.base_rent ? Number(resRoom.base_rent) : averageRent;
+        const isEstimated = !resRoom?.base_rent;
+
+        // Priority calculation
+        let priority = 50;
+        if (lead.status === "READY_TO_JOIN") {
+          priority = 100;
+        } else if (lead.status === "INVITED") {
+          priority = 80;
+        } else if (lead.status === "FOLLOW_UP" || lead.parent_follow_up_required) {
+          priority = 70;
+        } else if (lead.status === "INTERESTED") {
+          priority = 60;
+        }
+
+        const lastAct = new Date(lead.last_activity_at || lead.updated_at || lead.created_at);
+        const daysSinceActivity = (Date.now() - lastAct.getTime()) / (24 * 60 * 60 * 1000);
+        if (daysSinceActivity >= 4) {
+          priority = 65;
+        }
+
+        // Action recommendation
+        let action = "Call";
+        if (lead.status === "READY_TO_JOIN") {
+          action = "Convert";
+        } else if (lead.parent_follow_up_required) {
+          action = "Call Parent";
+        } else if (lead.status === "INVITED") {
+          action = "Call";
+        }
+
+        let last_activity_desc = "Form submitted";
+        if (daysSinceActivity >= 4) {
+          last_activity_desc = `No contact for ${Math.floor(daysSinceActivity)} days`;
+        } else if (lead.status === "READY_TO_JOIN") {
+          last_activity_desc = "Ready to join. Convert now!";
+        } else if (lead.parent_follow_up_required) {
+          last_activity_desc = "Follow up with parent required";
+        } else if (lead.status === "FOLLOW_UP") {
+          last_activity_desc = "Room visited. Waiting decision";
+        }
+
+        return {
+          id: lead.id,
+          student_name: lead.student_name,
+          student_phone: lead.student_phone,
+          parent_phone: lead.parent_phone,
+          parent_name: lead.parent_name,
+          status: lead.status,
+          hostel_name: lead.hostel?.name || "Hostel",
+          room_no: resRoom?.room_no || null,
+          potential_rent: rent,
+          is_estimated_rent: isEstimated,
+          last_activity_desc,
+          urgency: priority >= 100 ? 3 : priority >= 70 ? 2 : 1,
+          priority,
+          action
+        };
+      })
+      .sort((a, b) => b.priority - a.priority);
+
+      // SLA Ignored leads (>24h)
+      const ignoredLeadsCount = activeLeads.filter((lead) => {
+        const lastAct = new Date(lead.last_activity_at || lead.created_at);
+        const hours = (Date.now() - lastAct.getTime()) / (60 * 60 * 1000);
+        return hours > 24;
+      }).length;
+
+      // 5. Admissions Today Pulse
+      const [scansToday, newLeadsToday, roomVisitsToday, joinsToday] = await Promise.all([
+        prisma.leadActivity.count({
+          where: {
+            activity_type: "VIEW_HOSTEL",
+            created_at: { gte: startOfToday },
+            lead: where
+          }
+        }),
+        prisma.visitorLead.count({
+          where: {
+            ...where,
+            created_at: { gte: startOfToday }
+          }
+        }),
+        prisma.leadActivity.count({
+          where: {
+            activity_type: "VIEW_ROOM",
+            created_at: { gte: startOfToday },
+            lead: where
+          }
+        }),
+        prisma.visitorLead.count({
+          where: {
+            ...where,
+            status: "JOINED",
+            updated_at: { gte: startOfToday }
+          }
+        })
+      ]);
+
+      // 6. Time-filtered lost reasons
+      const getLostReasonsForDays = async (days: number) => {
+        const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+        const result = await prisma.visitorLead.groupBy({
+          by: ["lost_reason"],
+          where: {
+            ...where,
+            status: "LOST",
+            updated_at: { gte: since }
+          },
+          _count: true
+        });
+        return result.map((r: any) => ({
+          reason: r.lost_reason || "OTHER",
+          count: r._count
+        }));
+      };
+      const [lost30, lost90, lost365] = await Promise.all([
+        getLostReasonsForDays(30),
+        getLostReasonsForDays(90),
+        getLostReasonsForDays(365)
+      ]);
+
+      // 7. QR Scan Performance with Human Outcomes
+      const qrLeadsWhere = { ...where, source: "QR" };
+      const [qrLeadsCount, qrJoinsCount, qrVisitsToday, qrVisitsMonth, qrTotalVisitsMonth] = await Promise.all([
+        prisma.visitorLead.count({ where: qrLeadsWhere }),
+        prisma.visitorLead.count({ where: { ...qrLeadsWhere, status: "JOINED" } }),
+        prisma.leadActivity.count({
+          where: {
+            activity_type: "VIEW_HOSTEL",
+            created_at: { gte: startOfToday },
+            lead: qrLeadsWhere
+          }
+        }),
+        prisma.leadActivity.groupBy({
+          by: ["lead_id"],
+          where: {
+            activity_type: "VIEW_HOSTEL",
+            created_at: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
+            lead: qrLeadsWhere
+          }
+        }).then((rows: any[]) => rows.length),
+        prisma.leadActivity.count({
+          where: {
+            activity_type: "VIEW_HOSTEL",
+            created_at: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
+            lead: qrLeadsWhere
+          }
+        })
+      ]);
+
+      const qrJoinedLeads = await prisma.visitorLead.findMany({
+        where: { ...qrLeadsWhere, status: "JOINED" },
+        include: {
+          reservations: {
+            where: { status: "ACTIVE" },
+            include: { room: { select: { base_rent: true } } }
+          }
+        }
+      });
+      let qrRevenue = 0;
+      for (const jl of qrJoinedLeads) {
+        const rent = jl.reservations[0]?.room?.base_rent || averageRent;
+        qrRevenue += Number(rent);
+      }
+
+      const lastQrLead = await prisma.visitorLead.findFirst({
+        where: qrLeadsWhere,
+        orderBy: { created_at: "desc" },
+        select: { student_name: true, created_at: true }
+      });
+      const lastScanInfo = lastQrLead ? { name: lastQrLead.student_name, timestamp: lastQrLead.created_at } : null;
+
+      // 8. Source performance
+      const allLeadsForSource = await prisma.visitorLead.findMany({
+        where,
+        include: {
+          reservations: {
+            where: { status: "ACTIVE" },
+            include: { room: { select: { base_rent: true } } }
+          }
+        }
+      });
+
+      const sourceMap = new Map<string, { leads: number; joins: number; revenue: number }>();
+      for (const lead of allLeadsForSource) {
+        const src = lead.source || "Other";
+        if (!sourceMap.has(src)) {
+          sourceMap.set(src, { leads: 0, joins: 0, revenue: 0 });
+        }
+        const stats = sourceMap.get(src)!;
+        stats.leads++;
+        if (lead.status === "JOINED") {
+          stats.joins++;
+          const rent = lead.reservations[0]?.room?.base_rent || averageRent;
+          stats.revenue += Number(rent);
+        }
+      }
+      const sourcePerfList = Array.from(sourceMap.entries()).map(([source, stats]) => ({
+        source,
+        leads: stats.leads,
+        joins: stats.joins,
+        revenue: stats.revenue
+      })).sort((a, b) => b.leads - a.leads);
+
+      // Legacy fields for backward compatibility
       const [
         visitors,
         viewedRooms,
@@ -579,9 +1023,6 @@ export class AdmissionsService {
         reserved,
         invited,
         joined,
-        lostReasons,
-        viewedRoomRows,
-        requestedRooms,
       ] = await Promise.all([
         prisma.visitorLead.count({ where }),
         prisma.leadActivity.groupBy({ by: ["lead_id"], where: { activity_type: "VIEW_ROOM", lead: where } }).then((rows: any[]) => rows.length),
@@ -589,21 +1030,95 @@ export class AdmissionsService {
         prisma.roomReservation.count({ where: { lead: where } }),
         prisma.visitorLead.count({ where: { ...where, status: { in: ["INVITED", "JOINED"] } } }),
         prisma.visitorLead.count({ where: { ...where, status: "JOINED" } }),
-        prisma.visitorLead.groupBy({ by: ["lost_reason"], where: { ...where, status: "LOST" }, _count: true }),
-        prisma.leadActivity.findMany({ where: { activity_type: "VIEW_ROOM", lead: where }, select: { metadata: true }, take: 500 }),
-        prisma.roomReservation.groupBy({ by: ["room_id"], where: { lead: where }, _count: true, orderBy: { _count: { room_id: "desc" } }, take: 10 }),
       ]);
-      const viewedCounts = new Map<string, number>();
-      for (const row of viewedRoomRows as any[]) {
-        const roomId = row.metadata?.room_id;
-        if (roomId) viewedCounts.set(roomId, (viewedCounts.get(roomId) || 0) + 1);
-      }
+
       return {
-        funnel: { visitors, viewed_rooms: viewedRooms, interested, reserved, invited, joined },
+        // Funnel & Stats
+        funnel: {
+          visitors,
+          viewed_rooms: viewedRooms,
+          interested,
+          reserved,
+          invited,
+          joined,
+          expectedRevenue,
+          realizedRevenue: qrRevenue,
+          hasEstimatedRent,
+        },
         conversion_rate: visitors > 0 ? Math.round((joined / visitors) * 1000) / 10 : 0,
-        lost_reasons: lostReasons.map((r: any) => ({ reason: r.lost_reason || "OTHER", count: r._count })),
-        most_viewed_rooms: Array.from(viewedCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([room_id, count]) => ({ room_id, count })),
-        most_requested_rooms: requestedRooms.map((row: any) => ({ room_id: row.room_id, count: row._count })),
+
+        // Snapshot (No Real Opportunity, replaced by Potential Revenue)
+        snapshot: {
+          activeLeadsCount: activeLeads.length,
+          potentialRevenue,
+          vacancyCapacity,
+          bedsLikelyToFill: {
+            high: likelyFillCount,
+            medium: mediumConfidenceCount,
+            low: lowConfidenceCount,
+          },
+        },
+
+        // Bed Fill Forecast & Vacancy
+        bedFillForecast: {
+          vacantBeds,
+          likelyFill: likelyFillCount,
+          atRisk: Math.max(0, vacantBeds - likelyFillCount),
+          expectedRevenue,
+          hasEstimatedRent,
+        },
+
+        vacancy: {
+          vacantBeds,
+          lostRevenue: vacancyCapacity,
+          pipelineCoverage: likelyFillCount,
+          remainingRisk: Math.max(0, vacantBeds - likelyFillCount),
+          estimatedFillDate: likelyFillCount > 0 ? `Estimated fill: ${Math.max(5, Math.round(30 / likelyFillCount))} days` : "No recent activity to forecast",
+        },
+
+        // Forecast
+        forecast: {
+          forecastOccupancy: totalBeds > 0 ? Math.round(((occupiedBeds + likelyFillCount) / totalBeds) * 100) : 0,
+          forecastRevenue: (occupiedBeds + likelyFillCount) * averageRent,
+          risk: Math.max(0, vacantBeds - likelyFillCount),
+        },
+
+        // SLA SLA SLA
+        sla: {
+          ignoredCount: ignoredLeadsCount,
+        },
+
+        // Today Pulse
+        todayPulse: {
+          scans: scansToday,
+          enquiries: newLeadsToday,
+          roomVisits: roomVisitsToday,
+          joins: joinsToday,
+        },
+
+        // Lost Reasons
+        lost_reasons: {
+          "30D": lost30,
+          "90D": lost90,
+          "1Y": lost365
+        },
+
+        // QR Performance
+        qrPerf: {
+          uniqueVisitorsToday: qrVisitsToday,
+          uniqueVisitorsMonth: qrVisitsMonth,
+          totalVisitsMonth: qrTotalVisitsMonth,
+          leadsGenerated: qrLeadsCount,
+          joinsGenerated: qrJoinsCount,
+          revenueGenerated: qrRevenue,
+          conversionRate: qrVisitsMonth > 0 ? Math.round((qrLeadsCount / qrVisitsMonth) * 100) : 0,
+          lastScan: lastScanInfo,
+        },
+
+        // Queue & Maps
+        queue: queueWithDetails,
+        sourcePerf: sourcePerfList,
+        vacancyDemandMap,
       };
     }, [redisKeys.admissions.owner(ownerId)]);
   }

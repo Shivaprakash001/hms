@@ -171,7 +171,9 @@ export function TenantFinancialsPage() {
       a.href = url;
       a.download = `Receipt_${paymentId.slice(0, 8)}.pdf`;
       a.click();
-      window.URL.revokeObjectURL(url);
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+      }, 250);
       toast.success('Receipt downloaded');
     } catch {
       toast.error('Could not download receipt');

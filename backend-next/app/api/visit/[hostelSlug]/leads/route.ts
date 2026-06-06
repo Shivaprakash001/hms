@@ -15,6 +15,7 @@ const LeadCaptureSchema = z.object({
   parent_phone: z.string().max(20).optional().or(z.literal("")),
   decision_maker_type: z.enum(["STUDENT", "PARENT", "BOTH"]).optional(),
   source: z.enum(["QR", "DIRECT", "WALKIN"]).optional(),
+  notes: z.string().max(1000).optional().or(z.literal("")),
   website: z.string().max(50).optional(),
 });
 

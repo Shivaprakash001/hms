@@ -208,7 +208,9 @@ function BulkActions({
     a.href = url;
     a.download = 'tenants.csv';
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 250);
     toast.success('Exported tenants');
   };
 

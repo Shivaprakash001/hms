@@ -1,1 +1,1 @@
-export { GET, dynamic, runtime } from "../../leads/route";
+export { GET, POST, dynamic, runtime } from "../../leads/route";

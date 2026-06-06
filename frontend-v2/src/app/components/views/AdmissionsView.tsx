@@ -7,6 +7,8 @@ import {
   Bell,
   Calendar,
   CheckCircle,
+  ChevronDown,
+  ChevronUp,
   ClipboardList,
   Copy,
   Download,
@@ -37,12 +39,12 @@ import { toast } from 'sonner';
 type AdmissionsScreen = 'dashboard' | 'pipeline' | 'qr';
 
 const stages = [
-  { status: 'NEW', label: 'New Leads', shortLabel: 'New', color: 'var(--neutral-gray)' },
-  { status: 'INTERESTED', label: 'Interested', shortLabel: 'Int', color: 'var(--brand-saffron)' },
-  { status: 'FOLLOW_UP', label: 'Follow Up Queue', shortLabel: 'Follow', color: 'var(--alert-amber)' },
-  { status: 'READY_TO_JOIN', label: 'Ready to Join', shortLabel: 'Ready', color: 'var(--success-green)' },
-  { status: 'INVITED', label: 'Invited', shortLabel: 'Inv', color: 'var(--brand-navy)' },
-  { status: 'JOINED', label: 'Joined Tenants', shortLabel: 'Join', color: 'var(--success-green)' },
+  { status: 'NEW', label: 'New Leads', shortLabel: 'New Leads', color: 'var(--neutral-gray)' },
+  { status: 'INTERESTED', label: 'Interested', shortLabel: 'Interested', color: 'var(--brand-saffron)' },
+  { status: 'FOLLOW_UP', label: 'Follow Up Queue', shortLabel: 'Follow Up', color: 'var(--alert-amber)' },
+  { status: 'READY_TO_JOIN', label: 'Ready to Join', shortLabel: 'Ready to Join', color: 'var(--success-green)' },
+  { status: 'INVITED', label: 'Invited', shortLabel: 'Invited', color: 'var(--brand-navy)' },
+  { status: 'JOINED', label: 'Joined Tenants', shortLabel: 'Joined', color: 'var(--success-green)' },
   { status: 'LOST', label: 'Lost Opportunities', shortLabel: 'Lost', color: 'var(--danger-red)' },
 ];
 
@@ -110,7 +112,11 @@ function downloadBlob(blob: Blob, filename: string) {
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  URL.revokeObjectURL(objectUrl);
+  
+  // Delay revocation to ensure the browser has enough time to download the file with the suggested filename.
+  setTimeout(() => {
+    URL.revokeObjectURL(objectUrl);
+  }, 250);
 }
 
 async function downloadAdmissionQr(value: string, hostelName?: string | null) {
@@ -126,9 +132,23 @@ async function downloadAdmissionQr(value: string, hostelName?: string | null) {
 
   try {
     const blob = await admissionsService.downloadQrImage(value);
+    
+    // Check if the returned blob is actually an error in JSON format
+    if (blob.type && blob.type.includes('application/json')) {
+      const text = await blob.text();
+      let detail = 'Could not download QR';
+      try {
+        const parsed = JSON.parse(text);
+        detail = parsed?.error?.message || parsed?.detail || parsed?.error || text;
+      } catch {}
+      toast.error(detail);
+      return;
+    }
+
     downloadBlob(blob, `${safeName}-admission-qr.png`);
     toast.success('Admission QR downloaded');
-  } catch {
+  } catch (error) {
+    console.error('QR download error:', error);
     toast.error('Could not download QR');
   }
 }
@@ -308,7 +328,7 @@ function AddWalkInLeadModal({
     parent_name: '',
     parent_phone: '',
     hostel_id: '',
-    source: 'Walk-in',
+    source: '',
     status: 'NEW',
   });
 
@@ -333,7 +353,7 @@ function AddWalkInLeadModal({
         parent_name: '',
         parent_phone: '',
         hostel_id: hostels.length > 0 ? String(hostels[0].id) : '',
-        source: 'Walk-in',
+        source: '',
         status: 'NEW',
       });
     },
@@ -356,6 +376,10 @@ function AddWalkInLeadModal({
         <form
           onSubmit={(e) => {
             e.preventDefault();
+            if (!formData.source) {
+              toast.error('Please select a Lead Source');
+              return;
+            }
             createLead.mutate(formData);
           }}
           className="p-6 space-y-4 max-h-[80vh] overflow-y-auto"
@@ -438,18 +462,19 @@ function AddWalkInLeadModal({
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-gray-550 mb-1 text-gray-500">Lead Source</label>
+              <label className="block text-xs font-semibold text-gray-550 mb-1 text-gray-500">Lead Source *</label>
               <select
+                required
                 value={formData.source}
                 onChange={(e) => setFormData({ ...formData, source: e.target.value })}
                 className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:border-[var(--brand-saffron)] focus:outline-none"
               >
-                <option value="Walk-in">Walk-in</option>
-                <option value="QR">QR Scan</option>
-                <option value="Google">Google Search</option>
-                <option value="Social Media">Social Media</option>
-                <option value="Reference">Reference</option>
-                <option value="Other">Other</option>
+                <option value="">-- Select Channel --</option>
+                <option value="Walk-In">Walk-In</option>
+                <option value="Google">Google</option>
+                <option value="Referral">Referral</option>
+                <option value="Instagram">Instagram</option>
+                <option value="Offline Banner">Offline Banner</option>
               </select>
             </div>
             <div>
@@ -489,7 +514,19 @@ function AddWalkInLeadModal({
   );
 }
 
-function FollowUpQueue({ queue, onViewLead }: { queue: any[]; onViewLead: (id: string) => void }) {
+function FollowUpQueue({
+  queue,
+  onViewLead,
+  vacantBeds = 0,
+  onAddWalkIn,
+  onGenerateQr,
+}: {
+  queue: any[];
+  onViewLead: (id: string) => void;
+  vacantBeds?: number;
+  onAddWalkIn?: () => void;
+  onGenerateQr?: () => void;
+}) {
   const qc = useQueryClient();
   const [lostLeadId, setLostLeadId] = useState<string | null>(null);
   const [selectedReason, setSelectedReason] = useState('NO_RESPONSE');
@@ -524,8 +561,32 @@ function FollowUpQueue({ queue, onViewLead }: { queue: any[]; onViewLead: (id: s
 
   if (!queue || queue.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-[var(--border)] bg-white p-6 text-center text-sm text-[var(--neutral-gray)]">
-        No active leads in the follow-up queue.
+      <div className="rounded-3xl border border-dashed border-gray-300 bg-white p-8 text-center shadow-sm">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50 text-indigo-600 mb-4">
+          <ClipboardList className="h-6 w-6" />
+        </div>
+        <h4 className="text-base font-bold text-gray-800">No active leads in the queue</h4>
+        <p className="mt-2 text-xs text-gray-500 max-w-sm mx-auto">
+          All tasks are caught up! You have <span className="font-bold text-red-600">{vacantBeds} vacant beds</span> left to fill.
+        </p>
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+          {onAddWalkIn && (
+            <button
+              onClick={onAddWalkIn}
+              className="flex h-9 items-center justify-center rounded-xl bg-[var(--brand-saffron)] px-4 text-xs font-bold text-white hover:opacity-90 transition active:scale-[0.98]"
+            >
+              <UserPlus className="mr-1.5 h-3.5 w-3.5" /> Add Walk-In
+            </button>
+          )}
+          {onGenerateQr && (
+            <button
+              onClick={onGenerateQr}
+              className="flex h-9 items-center justify-center rounded-xl border border-gray-200 bg-white px-4 text-xs font-bold text-gray-700 hover:bg-gray-50 transition active:scale-[0.98]"
+            >
+              <QrCode className="mr-1.5 h-3.5 w-3.5" /> Generate QR
+            </button>
+          )}
+        </div>
       </div>
     );
   }
@@ -534,12 +595,18 @@ function FollowUpQueue({ queue, onViewLead }: { queue: any[]; onViewLead: (id: s
     <div className="space-y-3">
       {queue.map((lead) => {
         const isActionPending = snoozeLead.isPending || markLeadLost.isPending;
+        const priorityBadge = (p: number) => {
+          if (p >= 100) return <span className="rounded-xl bg-red-50 border border-red-200 px-2 py-0.5 text-[10px] font-black text-red-700 shrink-0">🔥 100</span>;
+          if (p >= 70) return <span className="rounded-xl bg-amber-50 border border-amber-200 px-2 py-0.5 text-[10px] font-black text-amber-700 shrink-0">⚠️ {p}</span>;
+          return <span className="rounded-xl bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] font-black text-blue-700 shrink-0">🕒 {p}</span>;
+        };
+
         return (
           <div key={lead.id} className="relative rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5 hover:shadow-md transition duration-200">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <div className="flex items-center gap-2">
-                  <span className={`h-2.5 w-2.5 rounded-full ${lead.urgency === 3 ? 'bg-red-500' : lead.urgency === 2 ? 'bg-amber-500' : 'bg-gray-300'}`} />
+                <div className="flex flex-wrap items-center gap-2">
+                  {priorityBadge(lead.priority)}
                   <h4 className="font-semibold text-gray-800">{lead.student_name}</h4>
                   <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-bold text-gray-600 uppercase">
                     {lead.status.replaceAll('_', ' ')}
@@ -562,6 +629,13 @@ function FollowUpQueue({ queue, onViewLead }: { queue: any[]; onViewLead: (id: s
                   >
                     Convert
                   </button>
+                ) : lead.action === 'Call Parent' ? (
+                  <a
+                    href={phoneHref(lead.parent_phone)}
+                    className="flex h-8 items-center rounded-lg bg-red-600 px-3 text-xs font-bold text-white hover:bg-red-700 transition"
+                  >
+                    <Phone className="mr-1 h-3.5 w-3.5" /> Call Parent
+                  </a>
                 ) : lead.action === 'Call' ? (
                   <a
                     href={phoneHref(lead.student_phone)}
@@ -606,14 +680,14 @@ function FollowUpQueue({ queue, onViewLead }: { queue: any[]; onViewLead: (id: s
                       type="button"
                       disabled={isActionPending}
                       onClick={() => markLeadLost.mutate({ leadId: lead.id, reason: selectedReason })}
-                      className="h-7 rounded bg-red-650 bg-red-600 px-2 text-[11px] font-bold text-white hover:bg-red-700"
+                      className="h-7 rounded bg-red-600 px-2 text-[11px] font-bold text-white hover:bg-red-700"
                     >
                       OK
                     </button>
                     <button
                       type="button"
                       onClick={() => setLostLeadId(null)}
-                      className="h-7 rounded border border-gray-200 bg-white px-2 text-[11px] font-bold text-gray-505 text-gray-500"
+                      className="h-7 rounded border border-gray-200 bg-white px-2 text-[11px] font-bold text-gray-500"
                     >
                       Cancel
                     </button>
@@ -654,19 +728,26 @@ function DashboardOverview({
   onViewLead: (id: string) => void;
   onAddWalkIn: () => void;
 }) {
+  const [lostFilter, setLostFilter] = useState<'30D' | '90D' | '1Y'>('30D');
+  const [funnelExpanded, setFunnelExpanded] = useState(false);
+
   const snapshot = analytics?.snapshot || {};
   const bedsLikelyToFill = snapshot.bedsLikelyToFill || { high: 0, medium: 0, low: 0 };
   const vacancy = analytics?.vacancy || {};
   const forecast = analytics?.forecast || {};
-  const aging = analytics?.aging || {};
   const funnel = analytics?.funnel || {};
   const sourcePerf = analytics?.sourcePerf || [];
   const qrPerf = analytics?.qrPerf || {};
+  const sla = analytics?.sla || { ignoredCount: 0 };
+  const todayPulse = analytics?.todayPulse || { scans: 0, enquiries: 0, roomVisits: 0, joins: 0 };
+  const vacancyDemandMap = analytics?.vacancyDemandMap || [];
+  const lostReasonsData = analytics?.lost_reasons?.[lostFilter] || [];
 
-  const maxCount = Math.max(funnel.visitors || 1, funnel.qualified || 1, funnel.readyToJoin || 1, funnel.joined || 1);
+  const maxCount = Math.max(funnel.visitors || 1, funnel.viewed_rooms || 1, funnel.interested || 1, funnel.reserved || 1, funnel.invited || 1, funnel.joined || 1);
 
   return (
     <div className="min-h-screen bg-[#F5F5F7] pb-12">
+      {/* Header */}
       <div className="bg-[var(--brand-navy)] px-5 py-6 text-white md:px-6 md:py-8">
         <div className="mx-auto max-w-7xl">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -695,13 +776,27 @@ function DashboardOverview({
       </div>
 
       <div className="mx-auto max-w-7xl px-5 py-6 md:px-6 space-y-6">
-        {/* Lead Aging Warning Alert */}
-        {aging.requires_follow_up && (
+        {/* Real-time Today Pulse strip */}
+        <div className="bg-white rounded-2xl p-4 shadow-sm ring-1 ring-black/5 flex flex-wrap gap-4 items-center justify-between border-l-4 border-[var(--brand-saffron)]">
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping shrink-0" />
+            <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">Admissions Today</div>
+          </div>
+          <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs font-semibold text-gray-700">
+            <span className="flex items-center gap-1.5"><QrCode className="h-4 w-4 text-indigo-500" /> {todayPulse.scans} scans</span>
+            <span className="flex items-center gap-1.5"><UserPlus className="h-4 w-4 text-blue-500" /> {todayPulse.enquiries} enquiries</span>
+            <span className="flex items-center gap-1.5"><Eye className="h-4 w-4 text-amber-500" /> {todayPulse.roomVisits} room visits</span>
+            <span className="flex items-center gap-1.5"><UserCheck className="h-4 w-4 text-emerald-500" /> {todayPulse.joins} joins</span>
+          </div>
+        </div>
+
+        {/* SLA Breach Alert */}
+        {sla.ignoredCount > 0 && (
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-2xl bg-red-50 border border-red-200 p-4 text-red-800 shadow-sm animate-in fade-in slide-in-from-top-4 duration-200">
             <div className="flex items-center gap-2.5">
-              <Bell className="h-5 w-5 text-red-655 text-red-600 shrink-0 animate-bounce" />
+              <Flame className="h-5 w-5 text-red-600 shrink-0 animate-bounce" />
               <span className="text-sm font-medium">
-                <b>Action Required:</b> {aging.sevenPlusDays} leads have been inactive for over 7 days.
+                <b>Action Required:</b> {sla.ignoredCount} active leads have been ignored for over 24 hours without follow-up contact.
               </span>
             </div>
             <button
@@ -712,6 +807,29 @@ function DashboardOverview({
             </button>
           </div>
         )}
+
+        {/* Follow-Up Queue (Today's Tasks) elevated to the top */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-[var(--brand-navy)] flex items-center gap-2">
+              Today's Admissions Tasks
+              <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700">{leads.length}</span>
+            </h2>
+            <button
+              onClick={onViewPipeline}
+              className="text-xs font-bold text-[var(--brand-saffron)] hover:underline"
+            >
+              View Pipeline →
+            </button>
+          </div>
+          <FollowUpQueue
+            queue={analytics?.queue}
+            onViewLead={onViewLead}
+            vacantBeds={vacancy.vacantBeds || 0}
+            onAddWalkIn={onAddWalkIn}
+            onGenerateQr={onGenerateQr}
+          />
+        </div>
 
         {/* 3-Column Business Cards */}
         <div className="grid gap-6 md:grid-cols-3">
@@ -727,28 +845,28 @@ function DashboardOverview({
               <div className="space-y-4">
                 <div>
                   <div className="text-3xl font-black text-gray-800" style={{ fontFamily: 'var(--font-mono)' }}>
-                    ₹{(snapshot.realOpportunity ?? 0).toLocaleString('en-IN')}
+                    ₹{(snapshot.potentialRevenue ?? 0).toLocaleString('en-IN')}
                   </div>
-                  <div className="text-xs text-gray-500 mt-0.5">Real Opportunity</div>
+                  <div className="text-xs text-gray-500 mt-0.5">Potential Revenue</div>
                 </div>
                 <div className="grid grid-cols-2 gap-4 border-t border-gray-100 pt-4">
                   <div>
                     <div className="text-lg font-bold text-gray-700" style={{ fontFamily: 'var(--font-mono)' }}>
-                      ₹{(snapshot.pipelineRevenue ?? 0).toLocaleString('en-IN')}
-                    </div>
-                    <div className="text-[11px] text-gray-405 text-gray-400">Pipeline Revenue</div>
-                  </div>
-                  <div>
-                    <div className="text-lg font-bold text-gray-700" style={{ fontFamily: 'var(--font-mono)' }}>
                       ₹{(snapshot.vacancyCapacity ?? 0).toLocaleString('en-IN')}
                     </div>
-                    <div className="text-[11px] text-gray-405 text-gray-400">Vacancy Capacity</div>
+                    <div className="text-[11px] text-gray-400">Vacancy Capacity</div>
+                  </div>
+                  <div>
+                    <div className="text-lg font-bold text-gray-500">
+                      {bedsLikelyToFill.high + bedsLikelyToFill.medium + bedsLikelyToFill.low}
+                    </div>
+                    <div className="text-[11px] text-gray-400">Beds in Pipeline</div>
                   </div>
                 </div>
               </div>
             </div>
             <div className="mt-6 border-t border-gray-100 pt-4 space-y-2">
-              <div className="text-xs font-semibold text-gray-500">Beds Likely to Fill (Confidence):</div>
+              <div className="text-xs font-semibold text-gray-500">Pipeline Confidence levels:</div>
               <div className="grid grid-cols-3 gap-2 text-center text-xs">
                 <div className="bg-emerald-50 rounded-lg p-2 text-emerald-800 border border-emerald-100">
                   <div className="font-bold text-base">{bedsLikelyToFill.high}</div>
@@ -758,7 +876,7 @@ function DashboardOverview({
                   <div className="font-bold text-base">{bedsLikelyToFill.medium}</div>
                   <div className="text-[10px] text-amber-600">Medium</div>
                 </div>
-                <div className="bg-gray-55 bg-gray-50 rounded-lg p-2 text-gray-700 border border-gray-100">
+                <div className="bg-gray-50 rounded-lg p-2 text-gray-700 border border-gray-100">
                   <div className="font-bold text-base">{bedsLikelyToFill.low}</div>
                   <div className="text-[10px] text-gray-500">Low</div>
                 </div>
@@ -766,123 +884,120 @@ function DashboardOverview({
             </div>
           </div>
 
-          {/* Admissions Forecast */}
+          {/* Bed Fill Forecast */}
           <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5 flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Admissions Forecast</h3>
+                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Bed Fill Forecast</h3>
                 <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
-                  Occupancy Prediction
+                  Vacancy Projections
                 </span>
               </div>
               <div className="space-y-4">
                 <div>
                   <div className="text-4xl font-black text-[var(--brand-navy)]" style={{ fontFamily: 'var(--font-mono)' }}>
-                    {forecast.forecastOccupancy ?? 0}%
+                    ₹{(forecast.forecastRevenue ?? 0).toLocaleString('en-IN')}
+                    {forecast.hasEstimatedRent && <span className="text-xs text-gray-400 font-normal ml-1">*est</span>}
                   </div>
-                  <div className="text-xs text-gray-500 mt-0.5">Projected Occupancy</div>
+                  <div className="text-xs text-gray-500 mt-0.5">Projected Revenue</div>
                 </div>
                 <div className="border-t border-gray-100 pt-4 space-y-2">
                   <div className="flex justify-between text-xs text-gray-600">
-                    <span>Forecasted Revenue:</span>
-                    <span className="font-bold text-gray-800" style={{ fontFamily: 'var(--font-mono)' }}>
-                      ₹{(forecast.forecastRevenue ?? 0).toLocaleString('en-IN')}/mo
-                    </span>
+                    <span>Vacant Beds:</span>
+                    <span className="font-bold text-gray-800">{vacancy.vacantBeds ?? 0} beds</span>
                   </div>
                   <div className="flex justify-between text-xs text-gray-600">
-                    <span>Projected Vacant Beds:</span>
-                    <span className="font-bold text-red-600">{forecast.risk ?? 0} beds at risk</span>
+                    <span>High Confidence Fill:</span>
+                    <span className="font-bold text-emerald-700">{bedsLikelyToFill.high} beds</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-600">
+                    <span>Beds Still At Risk:</span>
+                    <span className="font-bold text-red-600">{forecast.risk ?? 0} beds</span>
                   </div>
                 </div>
               </div>
             </div>
             <div className="mt-6 border-t border-gray-100 pt-4">
-              <div className="text-[11px] text-gray-400 leading-normal bg-blue-50/50 p-2.5 rounded-xl border border-blue-50">
-                Confidence-weighted forecast includes high & medium confidence leads likely to join within this cycle.
-              </div>
-            </div>
-          </div>
-
-          {/* Vacancy Recovery */}
-          <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Vacancy Recovery</h3>
-                <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
-                  {vacancy.vacantBeds ?? 0} Beds Vacant
-                </span>
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <div className="text-3xl font-black text-red-655 text-red-600" style={{ fontFamily: 'var(--font-mono)' }}>
-                    ₹{(vacancy.lostRevenue ?? 0).toLocaleString('en-IN')}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-0.5">Lost Rent / Month</div>
-                </div>
-                <div className="border-t border-gray-100 pt-4 space-y-2">
-                  <div className="flex justify-between text-xs text-gray-600">
-                    <span>Pipeline Coverage:</span>
-                    <span className="font-semibold text-emerald-700">{vacancy.pipelineCoverage ?? 0} beds</span>
-                  </div>
-                  <div className="flex justify-between text-xs text-gray-600">
-                    <span>Remaining Risk Beds:</span>
-                    <span className="font-semibold text-red-755 text-red-700">{vacancy.remainingRisk ?? 0} beds</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="mt-6 border-t border-gray-100 pt-4 text-center">
-              <div className="text-xs font-bold text-[var(--brand-navy)] bg-red-50 rounded-xl py-2 px-3">
+              <div className="text-xs font-bold text-[var(--brand-navy)] bg-red-50 rounded-xl py-2 px-3 text-center">
                 {vacancy.estimatedFillDate}
               </div>
             </div>
           </div>
+
+          {/* Room-Level Vacancy Demand Map */}
+          <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Room Demand Map</h3>
+                <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
+                  Top Vacant Rooms
+                </span>
+              </div>
+              <div className="space-y-3">
+                {vacancyDemandMap.length === 0 ? (
+                  <div className="text-xs text-gray-500 py-6 text-center italic">
+                    No active vacant beds or demands found.
+                  </div>
+                ) : (
+                  vacancyDemandMap.map((room: any) => (
+                    <div key={room.room_id} className="flex items-center justify-between border-b border-gray-50 pb-2 text-xs">
+                      <span className="font-bold text-gray-700">Room {room.room_no}</span>
+                      <div className="flex gap-4">
+                        <span className="text-red-600 font-semibold">{room.vacant_beds} vacant</span>
+                        <span className="text-indigo-600 font-semibold">{room.interested_leads} interested</span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+            <div className="mt-4 text-[10px] text-gray-400 leading-tight">
+              Prioritize rooms with high vacancy and active interested leads for targeted filling.
+            </div>
+          </div>
         </div>
 
-        {/* Funnel & Follow-Up Queue Grid */}
-        <div className="grid gap-6 lg:grid-cols-5">
-          {/* Follow-Up Queue (3/5 width) */}
-          <div className="lg:col-span-3 space-y-4">
+        {/* Admissions Health Score & Lost Leads Leakage */}
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* Admissions Health Card */}
+          <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5 space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-[var(--brand-navy)]">Follow-Up Queue</h2>
-              <button
-                onClick={onViewPipeline}
-                className="text-xs font-bold text-[var(--brand-saffron)] hover:underline"
-              >
-                View all leads
-              </button>
-            </div>
-            <FollowUpQueue queue={analytics?.queue} onViewLead={onViewLead} />
-          </div>
-
-          {/* Revenue Funnel (2/5 width) */}
-          <div className="lg:col-span-2 space-y-4">
-            <h2 className="text-lg font-bold text-[var(--brand-navy)]">Revenue Funnel</h2>
-            <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5 space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Conversion Stages</span>
-                <span className="text-xs font-semibold text-gray-600">Stage Metrics</span>
+              <div>
+                <h3 className="text-base font-bold text-[var(--brand-navy)]">Admissions Health</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Top-to-bottom conversion performance</p>
               </div>
-              <div className="space-y-4">
+              <div className="text-right">
+                <div className="text-2xl font-black text-emerald-600">{analytics?.conversion_rate || 0}%</div>
+                <div className="text-[10px] text-gray-400 uppercase tracking-wider font-bold">Conversion Rate</div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setFunnelExpanded(!funnelExpanded)}
+              className="w-full flex items-center justify-between rounded-xl bg-gray-50 hover:bg-gray-100 p-3 text-xs font-bold text-gray-700 transition"
+            >
+              <span>{funnelExpanded ? "Hide Detailed Funnel" : "View Detailed Funnel"}</span>
+              {funnelExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+
+            {funnelExpanded && (
+              <div className="space-y-4 pt-2 border-t border-gray-100 animate-in fade-in duration-200">
                 {[
                   { label: 'Visitors', count: funnel.visitors ?? 0, color: 'bg-slate-400', revenue: null },
-                  { label: 'Qualified', count: funnel.qualified ?? 0, color: 'bg-indigo-400', revenue: null },
-                  { label: 'Ready to Join', count: funnel.readyToJoin ?? 0, color: 'bg-amber-400', revenue: null },
-                  { label: 'Pipeline Expected', count: null, color: 'bg-emerald-400', revenue: funnel.expectedRevenue },
+                  { label: 'Viewed Rooms', count: funnel.viewed_rooms ?? 0, color: 'bg-blue-400', revenue: null },
+                  { label: 'Interested', count: funnel.interested ?? 0, color: 'bg-indigo-400', revenue: null },
+                  { label: 'Reserved', count: funnel.reserved ?? 0, color: 'bg-purple-400', revenue: null },
+                  { label: 'Invited', count: funnel.invited ?? 0, color: 'bg-amber-400', revenue: null },
                   { label: 'Joined / Converted', count: funnel.joined ?? 0, color: 'bg-emerald-500', revenue: null },
-                  { label: 'Realized Revenue', count: null, color: 'bg-emerald-600', revenue: funnel.realizedRevenue },
                 ].map((stage, idx) => {
-                  const hasVal = stage.count !== null;
-                  const width = hasVal
-                    ? Math.max((stage.count / maxCount) * 100, stage.count > 0 ? 8 : 0)
-                    : Math.max((Number(stage.revenue || 0) / (funnel.expectedRevenue || 1)) * 100, stage.revenue ? 8 : 0);
+                  const width = Math.max((stage.count / maxCount) * 100, stage.count > 0 ? 8 : 0);
 
                   return (
                     <div key={idx} className="space-y-1">
                       <div className="flex justify-between text-xs font-medium text-gray-700">
                         <span>{stage.label}</span>
                         <span className="font-bold font-mono">
-                          {hasVal ? `${stage.count} leads` : `₹${(stage.revenue ?? 0).toLocaleString('en-IN')}`}
+                          {stage.count} leads
                         </span>
                       </div>
                       <div className="h-5 w-full bg-gray-100 rounded-lg overflow-hidden flex items-center">
@@ -895,118 +1010,171 @@ function DashboardOverview({
                   );
                 })}
               </div>
-            </div>
+            )}
           </div>
-        </div>
 
-        {/* QR Performance & Traffic timeline */}
-        <div className="grid gap-6 md:grid-cols-2">
-          {/* QR Performance */}
+          {/* Lost Leads (Leakage) Card */}
           <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-[var(--brand-navy)]">QR Scan Performance</h3>
-              <span className="text-xs bg-orange-50 text-orange-600 font-bold px-2 py-1 rounded-lg">QR Source</span>
-            </div>
-            <div className="grid grid-cols-3 gap-4 text-center">
-              <div className="p-3 bg-gray-50 rounded-2xl border border-gray-100">
-                <div className="text-xl font-bold text-gray-800" style={{ fontFamily: 'var(--font-mono)' }}>
-                  {qrPerf.uniqueVisitorsToday ?? 0}
-                </div>
-                <div className="text-[10px] text-gray-400 mt-0.5">Unique Today</div>
+              <div>
+                <h3 className="text-base font-bold text-[var(--brand-navy)]">Lost Leads (Leakage)</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Why are potential tenants dropping out?</p>
               </div>
-              <div className="p-3 bg-gray-50 rounded-2xl border border-gray-100">
-                <div className="text-xl font-bold text-gray-800" style={{ fontFamily: 'var(--font-mono)' }}>
-                  {qrPerf.uniqueVisitorsMonth ?? 0}
-                </div>
-                <div className="text-[10px] text-gray-400 mt-0.5">Unique Month</div>
-              </div>
-              <div className="p-3 bg-gray-50 rounded-2xl border border-gray-100">
-                <div className="text-xl font-bold text-gray-800" style={{ fontFamily: 'var(--font-mono)' }}>
-                  {qrPerf.totalVisitsMonth ?? 0}
-                </div>
-                <div className="text-[10px] text-gray-400 mt-0.5">Total Scans</div>
-              </div>
+              <select
+                value={lostFilter}
+                onChange={(e) => setLostFilter(e.target.value as any)}
+                className="h-9 rounded-xl border border-gray-200 bg-white px-2.5 text-xs font-semibold text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="30D">Last 30 Days</option>
+                <option value="90D">Last 90 Days</option>
+                <option value="1Y">Last Year</option>
+              </select>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 border-t border-gray-100 pt-4 text-center">
-              <div>
-                <div className="text-lg font-bold text-gray-700">{qrPerf.leadsGenerated ?? 0}</div>
-                <div className="text-[10px] text-gray-400">Leads Generated</div>
-              </div>
-              <div>
-                <div className="text-lg font-bold text-emerald-700">{qrPerf.conversionRate ?? 0}%</div>
-                <div className="text-[10px] text-gray-400">Scan Conversion</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Scan-to-Lead latency / timeline */}
-          <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5 space-y-4">
-            <h3 className="text-base font-bold text-[var(--brand-navy)]">Scan-to-Lead Latency</h3>
             <div className="space-y-3">
-              {[
-                { label: 'Last Scan Logged', data: qrPerf.lastScan, color: 'border-blue-400' },
-                { label: 'Last Lead Generated', data: qrPerf.lastLead, color: 'border-indigo-400' },
-                { label: 'Last Converted Tenant', data: qrPerf.lastConversion, color: 'border-emerald-400' },
-              ].map((item, idx) => (
-                <div key={idx} className={`flex justify-between items-center p-2.5 rounded-xl border-l-4 bg-gray-55 bg-gray-50 ${item.color}`}>
-                  <span className="text-xs font-semibold text-gray-600">{item.label}</span>
-                  {item.data ? (
-                    <div className="text-right">
-                      <div className="text-xs font-bold text-gray-800">{item.data.name}</div>
-                      <div className="text-[10px] text-gray-400">{timeAgo(item.data.timestamp)}</div>
-                    </div>
-                  ) : (
-                    <span className="text-xs text-gray-400 italic">No record found</span>
-                  )}
+              {lostReasonsData.length === 0 ? (
+                <div className="text-xs text-gray-500 py-8 text-center italic">
+                  No lost opportunities logged for this period.
                 </div>
-              ))}
+              ) : (
+                lostReasonsData.map((item: any, idx: number) => (
+                  <div key={idx} className="space-y-1">
+                    <div className="flex justify-between text-xs font-medium text-gray-700">
+                      <span>{item.reason.replaceAll('_', ' ')}</span>
+                      <span className="font-bold font-mono">{item.count} leads</span>
+                    </div>
+                    <div className="h-2.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-red-400 rounded-full"
+                        style={{
+                          width: `${Math.max(5, (item.count / Math.max(1, lostReasonsData.reduce((sum: number, r: any) => sum + r.count, 0))) * 100)}%`
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
 
-        {/* Source Performance Table */}
-        <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5 space-y-4">
-          <h3 className="text-base font-bold text-[var(--brand-navy)]">Source Channel Performance</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-gray-600">
-              <thead>
-                <tr className="border-b border-gray-100 text-gray-400 font-bold uppercase tracking-wider">
-                  <th className="pb-3">Source Channel</th>
-                  <th className="pb-3 text-center">Leads Generated</th>
-                  <th className="pb-3 text-center">Conversions</th>
-                  <th className="pb-3 text-center">Conversion Rate</th>
-                  <th className="pb-3 text-right">Revenue Generated</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {sourcePerf.map((row: any, idx: number) => {
-                  const rate = row.leads > 0 ? Math.round((row.joins / row.leads) * 100) : 0;
-                  return (
-                    <tr key={idx} className="hover:bg-gray-50/50 transition">
-                      <td className="py-3 font-semibold text-gray-800">{row.source}</td>
-                      <td className="py-3 text-center font-mono">{row.leads}</td>
-                      <td className="py-3 text-center font-mono">{row.joins}</td>
-                      <td className="py-3 text-center">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${rate > 50 ? 'bg-emerald-50 text-emerald-700' : rate > 20 ? 'bg-indigo-50 text-indigo-700' : 'bg-gray-100 text-gray-600'}`}>
-                          {rate}%
-                        </span>
-                      </td>
-                      <td className="py-3 text-right font-mono font-bold text-gray-800">
-                        ₹{row.revenue.toLocaleString('en-IN')}
+        {/* Marketing Center section */}
+        <div className="border-t border-gray-200 pt-6 space-y-4">
+          <h2 className="text-lg font-bold text-[var(--brand-navy)]">Marketing Center</h2>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            {/* QR Performance */}
+            <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-bold text-[var(--brand-navy)]">QR Scan Performance</h3>
+                <span className="text-xs bg-orange-50 text-orange-600 font-bold px-2 py-1 rounded-lg">QR Source</span>
+              </div>
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div className="p-3 bg-gray-50 rounded-2xl border border-gray-100">
+                  <div className="text-xl font-bold text-gray-800" style={{ fontFamily: 'var(--font-mono)' }}>
+                    {qrPerf.uniqueVisitorsToday ?? 0}
+                  </div>
+                  <div className="text-[10px] text-gray-400 mt-0.5">Unique Today</div>
+                </div>
+                <div className="p-3 bg-gray-50 rounded-2xl border border-gray-100">
+                  <div className="text-xl font-bold text-gray-800" style={{ fontFamily: 'var(--font-mono)' }}>
+                    {qrPerf.uniqueVisitorsMonth ?? 0}
+                  </div>
+                  <div className="text-[10px] text-gray-400 mt-0.5">Unique Month</div>
+                </div>
+                <div className="p-3 bg-gray-50 rounded-2xl border border-gray-100">
+                  <div className="text-xl font-bold text-gray-800" style={{ fontFamily: 'var(--font-mono)' }}>
+                    {qrPerf.totalVisitsMonth ?? 0}
+                  </div>
+                  <div className="text-[10px] text-gray-400 mt-0.5">Total Scans</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4 border-t border-gray-100 pt-4 text-center">
+                <div>
+                  <div className="text-base font-bold text-gray-700">{qrPerf.leadsGenerated ?? 0}</div>
+                  <div className="text-[10px] text-gray-400">Leads Generated</div>
+                </div>
+                <div>
+                  <div className="text-base font-bold text-emerald-700">{qrPerf.joinsGenerated ?? 0}</div>
+                  <div className="text-[10px] text-gray-400">Joins Generated</div>
+                </div>
+                <div>
+                  <div className="text-base font-bold text-indigo-700">
+                    ₹{(qrPerf.revenueGenerated ?? 0).toLocaleString('en-IN')}
+                  </div>
+                  <div className="text-[10px] text-gray-400">Realized Revenue</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Scan-to-Lead latency / timeline */}
+            <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5 space-y-4">
+              <h3 className="text-base font-bold text-[var(--brand-navy)]">Scan-to-Lead Latency</h3>
+              <div className="space-y-3">
+                {[
+                  { label: 'Last Scan Logged', data: qrPerf.lastScan, color: 'border-blue-400' },
+                  { label: 'Last Converted Tenant', data: qrPerf.joinsGenerated > 0 ? qrPerf.lastScan : null, color: 'border-emerald-400' },
+                ].map((item, idx) => (
+                  <div key={idx} className={`flex justify-between items-center p-2.5 rounded-xl border-l-4 bg-gray-50 ${item.color}`}>
+                    <span className="text-xs font-semibold text-gray-600">{item.label}</span>
+                    {item.data ? (
+                      <div className="text-right">
+                        <div className="text-xs font-bold text-gray-800">{item.data.name}</div>
+                        <div className="text-[10px] text-gray-400">{timeAgo(item.data.timestamp)}</div>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-400 italic">No record found</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Source Performance Table */}
+          <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5 space-y-4">
+            <h3 className="text-base font-bold text-[var(--brand-navy)]">Source Channel Performance</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-gray-600">
+                <thead>
+                  <tr className="border-b border-gray-100 text-gray-400 font-bold uppercase tracking-wider">
+                    <th className="pb-3">Source Channel</th>
+                    <th className="pb-3 text-center">Leads Generated</th>
+                    <th className="pb-3 text-center">Conversions</th>
+                    <th className="pb-3 text-center">Conversion Rate</th>
+                    <th className="pb-3 text-right">Revenue Generated</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {sourcePerf.map((row: any, idx: number) => {
+                    const rate = row.leads > 0 ? Math.round((row.joins / row.leads) * 100) : 0;
+                    return (
+                      <tr key={idx} className="hover:bg-gray-50/50 transition">
+                        <td className="py-3 font-semibold text-gray-800">{row.source}</td>
+                        <td className="py-3 text-center font-mono">{row.leads}</td>
+                        <td className="py-3 text-center font-mono">{row.joins}</td>
+                        <td className="py-3 text-center">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${rate > 50 ? 'bg-emerald-50 text-emerald-700' : rate > 20 ? 'bg-indigo-50 text-indigo-700' : 'bg-gray-100 text-gray-600'}`}>
+                            {rate}%
+                          </span>
+                        </td>
+                        <td className="py-3 text-right font-mono font-bold text-gray-800">
+                          ₹{row.revenue.toLocaleString('en-IN')}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {sourcePerf.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="py-4 text-center text-gray-400 italic">
+                        No channels registered yet.
                       </td>
                     </tr>
-                  );
-                })}
-                {sourcePerf.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="py-4 text-center text-gray-400 italic">
-                      No channels registered yet.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
@@ -1315,13 +1483,13 @@ function LeadPipeline({
                   key={stage.status}
                   type="button"
                   onClick={() => setActiveStatus(stage.status)}
-                  className="grid h-14 w-20 shrink-0 place-items-center rounded-2xl text-[10px] font-bold leading-tight"
+                  className="grid h-14 px-4 min-w-[7.5rem] w-auto shrink-0 place-items-center rounded-2xl text-[10px] font-bold leading-tight"
                   style={{
                     backgroundColor: activeStatus === stage.status ? stage.color : '#f3f4f6',
                     color: activeStatus === stage.status ? '#fff' : 'var(--neutral-gray)',
                   }}
                 >
-                  <span className="truncate w-full text-center">{stage.shortLabel}</span>
+                  <span className="whitespace-nowrap w-full text-center px-1">{stage.shortLabel}</span>
                   <span>({count})</span>
                   <span className="text-[9px] opacity-80 font-mono font-normal">
                     ₹{rev >= 100000 ? `${(rev / 100000).toFixed(1)}L` : rev >= 1000 ? `${(rev / 1000).toFixed(0)}k` : rev}
@@ -1340,4 +1508,95 @@ function LeadPipeline({
   );
 }
 
+export function AdmissionsView() {
+  const [screen, setScreen] = useState<AdmissionsScreen>('dashboard');
+  const [activeStatus, setActiveStatus] = useState('');
+  const [search, setSearch] = useState('');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isAddLeadOpen, setIsAddLeadOpen] = useState(false);
+  const qc = useQueryClient();
+  const filters = useMemo(() => ({ status: activeStatus || undefined, search: search || undefined, limit: 50 }), [activeStatus, search]);
 
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: queryKeys.admissions.list(filters),
+    queryFn: () => admissionsService.list(filters),
+    staleTime: 30_000,
+  });
+  const { data: analytics } = useQuery({
+    queryKey: queryKeys.admissions.analytics({}),
+    queryFn: () => admissionsService.analytics({}),
+    staleTime: 120_000,
+  });
+
+  const { data: hostelsData } = useQuery({
+    queryKey: queryKeys.owner.hostels(),
+    queryFn: ownerService.getHostels,
+    staleTime: 5 * 60 * 1000,
+  });
+  const hostels = readHostels(hostelsData);
+
+  const leads = data?.items || [];
+
+  if (selectedId) {
+    return <LeadProfile leadId={selectedId} onBack={() => setSelectedId(null)} />;
+  }
+
+  return (
+    <div>
+      <div className="sticky top-0 z-20 border-b border-[var(--border)] bg-white/95 px-3 py-3 backdrop-blur md:px-6">
+        <div className="mx-auto grid max-w-7xl grid-cols-[1fr_1fr_1fr_auto] items-center gap-2 md:flex md:overflow-x-auto md:scrollbar-hide">
+          {[
+            ['dashboard', 'Dashboard', Users],
+            ['pipeline', 'Pipeline', ClipboardList],
+            ['qr', 'QR Generator', QrCode],
+          ].map(([key, label, Icon]: any) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setScreen(key)}
+              className={`flex h-9 min-w-0 items-center justify-center gap-1 rounded-2xl px-2 text-xs font-semibold md:h-10 md:shrink-0 md:gap-2 md:px-4 md:text-sm ${screen === key ? 'bg-[var(--brand-saffron)] text-white' : 'bg-[var(--warm-ivory)] text-[var(--brand-navy)]'}`}
+            >
+              <Icon className="h-4 w-4 shrink-0" /> <span className="truncate">{key === 'qr' ? 'QR' : label}</span>
+            </button>
+          ))}
+          <button type="button" onClick={() => refetch()} className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl border border-[var(--border)] md:ml-auto md:h-10 md:w-10">
+            <RefreshCw className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      {screen === 'dashboard' && (
+        <DashboardOverview
+          analytics={analytics}
+          leads={leads}
+          onViewPipeline={() => setScreen('pipeline')}
+          onGenerateQr={() => setScreen('qr')}
+          onViewLead={setSelectedId}
+          onAddWalkIn={() => setIsAddLeadOpen(true)}
+        />
+      )}
+      {screen === 'pipeline' && (
+        <LeadPipeline
+          leads={leads}
+          isLoading={isLoading}
+          search={search}
+          setSearch={setSearch}
+          activeStatus={activeStatus}
+          setActiveStatus={setActiveStatus}
+          onViewLead={setSelectedId}
+        />
+      )}
+      {screen === 'qr' && <AdmissionQrPanel />}
+
+      <AddWalkInLeadModal
+        isOpen={isAddLeadOpen}
+        onClose={() => setIsAddLeadOpen(false)}
+        hostels={hostels}
+        onSuccess={() => {
+          refetch();
+          qc.invalidateQueries({ queryKey: queryKeys.admissions.all() });
+        }}
+      />
+    </div>
+  );
+}

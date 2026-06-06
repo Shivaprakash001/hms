@@ -76,6 +76,10 @@ const delegateAliases: Record<string, string> = {
   paymentReconciliationRun: "payment_reconciliation_runs",
   migrationAuditRun: "migration_audit_runs",
   financialInvariantFailure: "financial_invariant_failures",
+  visitorLead: "visitor_leads",
+  leadActivity: "lead_activities",
+  roomReservation: "room_reservations",
+  leadNote: "lead_notes",
 };
 
 for (const [alias, target] of Object.entries(delegateAliases)) {

@@ -230,7 +230,9 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
     a.href = url;
     a.download = `${name.replace(/\s+/g, '-').toLowerCase()}-rules-acceptance.json`;
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 250);
   };
 
   const whatsAppTenant = (phone: string) => {

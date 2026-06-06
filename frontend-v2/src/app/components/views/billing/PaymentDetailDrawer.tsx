@@ -73,7 +73,9 @@ export function PaymentDetailDrawer({ obligationId, hostelId, onClose }: Props) 
       a.href = url;
       a.download = `receipt-${paymentId}.pdf`;
       a.click();
-      URL.revokeObjectURL(url);
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 250);
     } catch {
       // ignore
     }
