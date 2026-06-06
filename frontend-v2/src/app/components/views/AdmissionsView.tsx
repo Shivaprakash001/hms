@@ -37,13 +37,13 @@ import { toast } from 'sonner';
 type AdmissionsScreen = 'dashboard' | 'pipeline' | 'qr';
 
 const stages = [
-  { status: 'NEW', label: 'NEW', shortLabel: 'New', color: 'var(--neutral-gray)' },
-  { status: 'INTERESTED', label: 'INTERESTED', shortLabel: 'Int', color: 'var(--brand-saffron)' },
-  { status: 'FOLLOW_UP', label: 'FOLLOW UP', shortLabel: 'Follow', color: 'var(--alert-amber)' },
-  { status: 'READY_TO_JOIN', label: 'READY TO JOIN', shortLabel: 'Ready', color: 'var(--success-green)' },
-  { status: 'INVITED', label: 'INVITED', shortLabel: 'Inv', color: 'var(--brand-navy)' },
-  { status: 'JOINED', label: 'JOINED', shortLabel: 'Join', color: 'var(--success-green)' },
-  { status: 'LOST', label: 'LOST', shortLabel: 'Lost', color: 'var(--danger-red)' },
+  { status: 'NEW', label: 'New Leads', shortLabel: 'New', color: 'var(--neutral-gray)' },
+  { status: 'INTERESTED', label: 'Interested', shortLabel: 'Int', color: 'var(--brand-saffron)' },
+  { status: 'FOLLOW_UP', label: 'Follow Up Queue', shortLabel: 'Follow', color: 'var(--alert-amber)' },
+  { status: 'READY_TO_JOIN', label: 'Ready to Join', shortLabel: 'Ready', color: 'var(--success-green)' },
+  { status: 'INVITED', label: 'Invited', shortLabel: 'Inv', color: 'var(--brand-navy)' },
+  { status: 'JOINED', label: 'Joined Tenants', shortLabel: 'Join', color: 'var(--success-green)' },
+  { status: 'LOST', label: 'Lost Opportunities', shortLabel: 'Lost', color: 'var(--danger-red)' },
 ];
 
 const lostReasons = [
@@ -290,134 +290,728 @@ function AdmissionQrPanel({ compact = false }: { compact?: boolean }) {
   );
 }
 
+function AddWalkInLeadModal({
+  isOpen,
+  onClose,
+  hostels,
+  onSuccess,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  hostels: any[];
+  onSuccess: () => void;
+}) {
+  const [formData, setFormData] = useState({
+    student_name: '',
+    student_phone: '',
+    student_email: '',
+    parent_name: '',
+    parent_phone: '',
+    hostel_id: '',
+    source: 'Walk-in',
+    status: 'NEW',
+  });
+
+  // Set default hostel id when hostels load
+  useState(() => {
+    if (hostels.length > 0) {
+      setFormData((prev) => ({ ...prev, hostel_id: String(hostels[0].id) }));
+    }
+  });
+
+  const createLead = useMutation({
+    mutationFn: (payload: any) => admissionsService.createDirect(payload),
+    onSuccess: () => {
+      toast.success('Lead created successfully');
+      onSuccess();
+      onClose();
+      // Reset form
+      setFormData({
+        student_name: '',
+        student_phone: '',
+        student_email: '',
+        parent_name: '',
+        parent_phone: '',
+        hostel_id: hostels.length > 0 ? String(hostels[0].id) : '',
+        source: 'Walk-in',
+        status: 'NEW',
+      });
+    },
+    onError: (error: any) => {
+      toast.error(error?.message || 'Failed to create lead');
+    },
+  });
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
+          <h2 className="text-xl font-bold text-[var(--brand-navy)]">Add Walk-In Lead</h2>
+          <button type="button" onClick={onClose} className="rounded-full p-1 text-gray-400 hover:bg-gray-100">
+            <X className="h-6 w-6" />
+          </button>
+        </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            createLead.mutate(formData);
+          }}
+          className="p-6 space-y-4 max-h-[80vh] overflow-y-auto"
+        >
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-550 mb-1 text-gray-500">Student Name *</label>
+              <input
+                required
+                type="text"
+                value={formData.student_name}
+                onChange={(e) => setFormData({ ...formData, student_name: e.target.value })}
+                className="w-full h-11 rounded-xl border border-gray-200 px-3 text-sm focus:border-[var(--brand-saffron)] focus:outline-none"
+                placeholder="Student Name"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-550 mb-1 text-gray-500">Student Phone *</label>
+              <input
+                required
+                type="tel"
+                value={formData.student_phone}
+                onChange={(e) => setFormData({ ...formData, student_phone: e.target.value })}
+                className="w-full h-11 rounded-xl border border-gray-200 px-3 text-sm focus:border-[var(--brand-saffron)] focus:outline-none"
+                placeholder="Phone (e.g. 9876543210)"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-550 mb-1 text-gray-500">Student Email (Optional)</label>
+            <input
+              type="email"
+              value={formData.student_email}
+              onChange={(e) => setFormData({ ...formData, student_email: e.target.value })}
+              className="w-full h-11 rounded-xl border border-gray-200 px-3 text-sm focus:border-[var(--brand-saffron)] focus:outline-none"
+              placeholder="email@example.com"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-550 mb-1 text-gray-500">Parent Name (Optional)</label>
+              <input
+                type="text"
+                value={formData.parent_name}
+                onChange={(e) => setFormData({ ...formData, parent_name: e.target.value })}
+                className="w-full h-11 rounded-xl border border-gray-200 px-3 text-sm focus:border-[var(--brand-saffron)] focus:outline-none"
+                placeholder="Parent Name"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-550 mb-1 text-gray-500">Parent Phone (Optional)</label>
+              <input
+                type="tel"
+                value={formData.parent_phone}
+                onChange={(e) => setFormData({ ...formData, parent_phone: e.target.value })}
+                className="w-full h-11 rounded-xl border border-gray-200 px-3 text-sm focus:border-[var(--brand-saffron)] focus:outline-none"
+                placeholder="Parent Phone"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-550 mb-1 text-gray-500">Select Hostel *</label>
+            <select
+              required
+              value={formData.hostel_id}
+              onChange={(e) => setFormData({ ...formData, hostel_id: e.target.value })}
+              className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:border-[var(--brand-saffron)] focus:outline-none"
+            >
+              <option value="">-- Choose Hostel --</option>
+              {hostels.map((hostel) => (
+                <option key={hostel.id} value={hostel.id}>
+                  {hostel.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-550 mb-1 text-gray-500">Lead Source</label>
+              <select
+                value={formData.source}
+                onChange={(e) => setFormData({ ...formData, source: e.target.value })}
+                className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:border-[var(--brand-saffron)] focus:outline-none"
+              >
+                <option value="Walk-in">Walk-in</option>
+                <option value="QR">QR Scan</option>
+                <option value="Google">Google Search</option>
+                <option value="Social Media">Social Media</option>
+                <option value="Reference">Reference</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-550 mb-1 text-gray-500">Initial Status</label>
+              <select
+                value={formData.status}
+                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:border-[var(--brand-saffron)] focus:outline-none"
+              >
+                <option value="NEW">New</option>
+                <option value="INTERESTED">Interested</option>
+                <option value="FOLLOW_UP">Follow Up</option>
+                <option value="READY_TO_JOIN">Ready to Join</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-4 border-t border-gray-100">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 h-11 rounded-xl border border-gray-200 font-semibold text-gray-600 hover:bg-gray-55"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={createLead.isPending}
+              className="flex-1 h-11 rounded-xl bg-[var(--brand-saffron)] font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {createLead.isPending ? 'Adding...' : 'Add Lead'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function FollowUpQueue({ queue, onViewLead }: { queue: any[]; onViewLead: (id: string) => void }) {
+  const qc = useQueryClient();
+  const [lostLeadId, setLostLeadId] = useState<string | null>(null);
+  const [selectedReason, setSelectedReason] = useState('NO_RESPONSE');
+
+  const snoozeLead = useMutation({
+    mutationFn: async (leadId: string) => {
+      await admissionsService.addNote(leadId, 'Snoozed follow-up for 3 days');
+      await admissionsService.updateStatus(leadId, { parent_follow_up_required: false });
+    },
+    onSuccess: () => {
+      toast.success('Lead follow-up snoozed');
+      qc.invalidateQueries({ queryKey: queryKeys.admissions.all() });
+    },
+    onError: (err: any) => {
+      toast.error(err?.message || 'Failed to snooze lead');
+    }
+  });
+
+  const markLeadLost = useMutation({
+    mutationFn: async ({ leadId, reason }: { leadId: string; reason: string }) => {
+      await admissionsService.updateStatus(leadId, { status: 'LOST', lost_reason: reason });
+    },
+    onSuccess: () => {
+      toast.success('Lead marked as lost');
+      setLostLeadId(null);
+      qc.invalidateQueries({ queryKey: queryKeys.admissions.all() });
+    },
+    onError: (err: any) => {
+      toast.error(err?.message || 'Failed to mark lead lost');
+    }
+  });
+
+  if (!queue || queue.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-[var(--border)] bg-white p-6 text-center text-sm text-[var(--neutral-gray)]">
+        No active leads in the follow-up queue.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {queue.map((lead) => {
+        const isActionPending = snoozeLead.isPending || markLeadLost.isPending;
+        return (
+          <div key={lead.id} className="relative rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5 hover:shadow-md transition duration-200">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className={`h-2.5 w-2.5 rounded-full ${lead.urgency === 3 ? 'bg-red-500' : lead.urgency === 2 ? 'bg-amber-500' : 'bg-gray-300'}`} />
+                  <h4 className="font-semibold text-gray-800">{lead.student_name}</h4>
+                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-bold text-gray-600 uppercase">
+                    {lead.status.replaceAll('_', ' ')}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-gray-500">
+                  {lead.hostel_name} {lead.room_no ? `· Room ${lead.room_no}` : ''}
+                </p>
+                <p className="mt-1.5 text-xs font-medium text-amber-750 text-amber-700">
+                  {lead.last_activity_desc}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {lead.action === 'Convert' ? (
+                  <button
+                    type="button"
+                    onClick={() => onViewLead(lead.id)}
+                    className="h-8 rounded-lg bg-emerald-600 px-3 text-xs font-bold text-white hover:bg-emerald-700 transition"
+                  >
+                    Convert
+                  </button>
+                ) : lead.action === 'Call' ? (
+                  <a
+                    href={phoneHref(lead.student_phone)}
+                    className="flex h-8 items-center rounded-lg bg-blue-600 px-3 text-xs font-bold text-white hover:bg-blue-700 transition"
+                  >
+                    <Phone className="mr-1 h-3.5 w-3.5" /> Call
+                  </a>
+                ) : (
+                  <a
+                    href={whatsAppHref(lead.student_phone)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex h-8 items-center rounded-lg bg-emerald-600 px-3 text-xs font-bold text-white hover:bg-emerald-700 transition"
+                  >
+                    <MessageCircle className="mr-1 h-3.5 w-3.5" /> WhatsApp
+                  </a>
+                )}
+
+                <button
+                  type="button"
+                  disabled={isActionPending}
+                  onClick={() => snoozeLead.mutate(lead.id)}
+                  className="h-8 rounded-lg border border-gray-200 px-2.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition"
+                >
+                  Snooze
+                </button>
+
+                {lostLeadId === lead.id ? (
+                  <div className="flex items-center gap-1.5 bg-gray-50 p-1 rounded-lg border border-gray-200">
+                    <select
+                      value={selectedReason}
+                      onChange={(e) => setSelectedReason(e.target.value)}
+                      className="h-7 rounded border border-gray-200 bg-white px-1.5 text-[11px]"
+                    >
+                      {lostReasons.map((reason) => (
+                        <option key={reason} value={reason}>
+                          {reason.replaceAll('_', ' ')}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      disabled={isActionPending}
+                      onClick={() => markLeadLost.mutate({ leadId: lead.id, reason: selectedReason })}
+                      className="h-7 rounded bg-red-650 bg-red-600 px-2 text-[11px] font-bold text-white hover:bg-red-700"
+                    >
+                      OK
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLostLeadId(null)}
+                      className="h-7 rounded border border-gray-200 bg-white px-2 text-[11px] font-bold text-gray-505 text-gray-500"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLostLeadId(lead.id);
+                      setSelectedReason('NO_RESPONSE');
+                    }}
+                    className="h-8 rounded-lg border border-red-200 px-2.5 text-xs font-medium text-red-600 hover:bg-red-50 transition"
+                  >
+                    Mark Lost
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function DashboardOverview({
   analytics,
   leads,
   onViewPipeline,
   onGenerateQr,
+  onViewLead,
+  onAddWalkIn,
 }: {
   analytics: any;
   leads: any[];
   onViewPipeline: () => void;
   onGenerateQr: () => void;
+  onViewLead: (id: string) => void;
+  onAddWalkIn: () => void;
 }) {
+  const snapshot = analytics?.snapshot || {};
+  const bedsLikelyToFill = snapshot.bedsLikelyToFill || { high: 0, medium: 0, low: 0 };
+  const vacancy = analytics?.vacancy || {};
+  const forecast = analytics?.forecast || {};
+  const aging = analytics?.aging || {};
   const funnel = analytics?.funnel || {};
-  const kpis = [
-    { label: "Today's Visitors", value: funnel.visitors ?? leads.length, color: 'var(--brand-saffron)', icon: Eye },
-    { label: 'Interested Leads', value: funnel.interested ?? leads.filter((lead) => ['INTERESTED', 'FOLLOW_UP', 'READY_TO_JOIN'].includes(lead.status)).length, color: 'var(--brand-saffron)', icon: Heart },
-    { label: 'Ready to Join', value: leads.filter((lead) => lead.status === 'READY_TO_JOIN').length, color: 'var(--success-green)', icon: UserCheck },
-    { label: 'Joined This Month', value: funnel.joined ?? 0, color: 'var(--brand-navy)', icon: Users },
-  ];
-  const funnelStages = [
-    { stage: 'Visitors', count: Number(funnel.visitors || 0), color: 'var(--brand-navy)' },
-    { stage: 'Viewed Rooms', count: Number(funnel.viewed_rooms || 0), color: 'var(--brand-saffron)' },
-    { stage: 'Interested', count: Number(funnel.interested || 0), color: 'var(--brand-saffron)' },
-    { stage: 'Reserved', count: Number(funnel.reserved || 0), color: 'var(--alert-amber)' },
-    { stage: 'Invited', count: Number(funnel.invited || 0), color: 'var(--success-green)' },
-    { stage: 'Joined', count: Number(funnel.joined || 0), color: 'var(--success-green)' },
-  ];
-  const maxCount = Math.max(...funnelStages.map((stage) => stage.count), 1);
-  const recent = leads.slice(0, 6);
+  const sourcePerf = analytics?.sourcePerf || [];
+  const qrPerf = analytics?.qrPerf || {};
+
+  const maxCount = Math.max(funnel.visitors || 1, funnel.qualified || 1, funnel.readyToJoin || 1, funnel.joined || 1);
 
   return (
-    <div className="min-h-screen bg-[#F5F5F7]">
-      <div className="bg-[var(--brand-navy)] px-5 py-5 text-white md:px-6 md:py-6">
+    <div className="min-h-screen bg-[#F5F5F7] pb-12">
+      <div className="bg-[var(--brand-navy)] px-5 py-6 text-white md:px-6 md:py-8">
         <div className="mx-auto max-w-7xl">
-          <div className="flex items-center justify-between gap-4 md:mb-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-2xl font-bold leading-tight">Admissions Dashboard</h1>
-              <p className="mt-1 text-sm text-white/70">Visitor-to-tenant pipeline for Sri Adithya HMS.</p>
+              <h1 className="text-3xl font-bold tracking-tight">Admissions Command Center</h1>
+              <p className="mt-1.5 text-sm text-white/70">Fill beds. Recover revenue. Run your hostel business.</p>
             </div>
-            <button type="button" className="hidden rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white md:flex">
-              <Bell className="mr-2 h-4 w-4" /> Notifications
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={onAddWalkIn}
+                className="flex h-10 items-center justify-center rounded-xl bg-[var(--brand-saffron)] px-4 text-sm font-semibold text-white hover:opacity-90 transition active:scale-[0.98]"
+              >
+                <UserPlus className="mr-2 h-4 w-4" /> Add Walk-In
+              </button>
+              <button
+                type="button"
+                onClick={onGenerateQr}
+                className="flex h-10 items-center justify-center rounded-xl border border-white/20 bg-white/10 px-4 text-sm font-semibold text-white hover:bg-white/20 transition active:scale-[0.98]"
+              >
+                <QrCode className="mr-2 h-4 w-4" /> QR Generator
+              </button>
+            </div>
           </div>
         </div>
       </div>
-      <div className="mx-auto max-w-7xl px-5 py-5 md:px-6 md:py-6">
-        <div className="mb-5 grid grid-cols-2 gap-3 md:mb-6 md:grid-cols-2 md:gap-4 lg:grid-cols-4">
-          {kpis.map((kpi) => {
-            const Icon = kpi.icon;
-            return (
-              <div key={kpi.label} className="aspect-square rounded-2xl border-l-4 bg-white p-3 shadow-sm ring-1 ring-black/5 md:aspect-auto md:p-4" style={{ borderLeftColor: kpi.color }}>
-                <div className="mb-2 flex items-start justify-between gap-2">
-                  <span className="text-xs leading-snug text-[var(--neutral-gray)] md:text-sm">{kpi.label}</span>
-                  <Icon className="h-4 w-4 shrink-0 md:h-5 md:w-5" style={{ color: kpi.color }} />
-                </div>
-                <div className="text-3xl font-bold md:text-3xl" style={{ color: kpi.color, fontFamily: 'var(--font-mono)' }}>{kpi.value}</div>
-              </div>
-            );
-          })}
-        </div>
 
-        <section className="mb-5 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5 md:mb-6 md:p-6">
-          <h2 className="mb-3 text-lg font-semibold text-[var(--brand-navy)] md:mb-4">Admission Funnel</h2>
-          <div className="space-y-2.5 md:space-y-3">
-            {funnelStages.map((stage) => {
-              const width = Math.max((stage.count / maxCount) * 100, stage.count > 0 ? 8 : 0);
-              return (
-                <div key={stage.stage}>
-                  <div className="mb-1 flex items-center justify-between text-sm">
-                    <span className="font-medium text-[var(--deep-charcoal)]">{stage.stage}</span>
-                    <span className="font-mono font-semibold" style={{ color: stage.color }}>{stage.count}</span>
-                  </div>
-                  <div className="h-6 overflow-hidden rounded-lg bg-gray-100 md:h-8">
-                    <div className="flex h-full items-center justify-end pr-3 text-xs font-semibold text-white" style={{ width: `${width}%`, backgroundColor: stage.color }}>
-                      {stage.count > 0 && `${Math.round((stage.count / maxCount) * 100)}%`}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+      <div className="mx-auto max-w-7xl px-5 py-6 md:px-6 space-y-6">
+        {/* Lead Aging Warning Alert */}
+        {aging.requires_follow_up && (
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-2xl bg-red-50 border border-red-200 p-4 text-red-800 shadow-sm animate-in fade-in slide-in-from-top-4 duration-200">
+            <div className="flex items-center gap-2.5">
+              <Bell className="h-5 w-5 text-red-655 text-red-600 shrink-0 animate-bounce" />
+              <span className="text-sm font-medium">
+                <b>Action Required:</b> {aging.sevenPlusDays} leads have been inactive for over 7 days.
+              </span>
+            </div>
+            <button
+              onClick={onViewPipeline}
+              className="rounded-lg bg-red-100 px-3 py-1.5 text-xs font-bold text-red-900 hover:bg-red-200 transition"
+            >
+              Review Pipeline
+            </button>
           </div>
-        </section>
+        )}
 
-        <div className="grid gap-5 lg:grid-cols-2 lg:gap-6">
-          <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5 md:p-6">
-            <h2 className="mb-4 text-lg font-semibold text-[var(--brand-navy)]">Recent Activity</h2>
-            <div className="max-h-96 space-y-3 overflow-y-auto">
-              {recent.map((lead) => (
-                <button key={lead.id} type="button" onClick={onViewPipeline} className="flex w-full items-start gap-3 rounded-lg p-3 text-left hover:bg-[var(--warm-ivory)]">
-                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[var(--brand-saffron)]/20 to-[var(--brand-navy)]/20 text-sm font-semibold text-[var(--brand-navy)]">{initials(lead.student_name)}</div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm text-[var(--deep-charcoal)]"><b>{lead.student_name}</b> is in {lead.status.replaceAll('_', ' ').toLowerCase()}</p>
-                    <p className="mt-1 text-xs text-[var(--neutral-gray)]">{timeAgo(lead.last_activity_at)}</p>
+        {/* 3-Column Business Cards */}
+        <div className="grid gap-6 md:grid-cols-3">
+          {/* Admissions Snapshot */}
+          <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Admissions Snapshot</h3>
+                <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700">
+                  {snapshot.activeLeadsCount ?? 0} Active Leads
+                </span>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <div className="text-3xl font-black text-gray-800" style={{ fontFamily: 'var(--font-mono)' }}>
+                    ₹{(snapshot.realOpportunity ?? 0).toLocaleString('en-IN')}
                   </div>
-                  <Heart className="h-4 w-4 text-[var(--brand-saffron)]" />
-                </button>
-              ))}
-              {recent.length === 0 && <p className="rounded-xl border border-dashed border-[var(--border)] p-4 text-center text-sm text-[var(--neutral-gray)]">No admissions activity yet.</p>}
-            </div>
-          </section>
-          <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5 md:p-6">
-            <h2 className="mb-4 text-lg font-semibold text-[var(--brand-navy)]">Quick Actions</h2>
-            <div className="space-y-3">
-              <button type="button" onClick={onViewPipeline} className="flex h-12 w-full items-center justify-start rounded-xl bg-[var(--brand-saffron)] px-4 font-semibold text-white">
-                <Users className="mr-3 h-5 w-5" /> View All Leads
-              </button>
-              <button type="button" onClick={onGenerateQr} className="flex h-12 w-full items-center justify-start rounded-xl border-2 border-[var(--border)] px-4 font-semibold">
-                <QrCode className="mr-3 h-5 w-5" /> Generate QR Code
-              </button>
-              <button type="button" onClick={onViewPipeline} className="flex h-12 w-full items-center justify-start rounded-xl border-2 border-[var(--border)] px-4 font-semibold">
-                <Phone className="mr-3 h-5 w-5" /> Follow-up Calls
-              </button>
-            </div>
-            <div className="mt-6 border-t border-[var(--border)] pt-6">
-              <div className="grid grid-cols-2 gap-4 text-center">
-                <div>
-                  <div className="text-2xl font-bold text-[var(--success-green)]" style={{ fontFamily: 'var(--font-mono)' }}>{analytics?.conversion_rate ?? 0}%</div>
-                  <div className="mt-1 text-xs text-[var(--neutral-gray)]">Conversion Rate</div>
+                  <div className="text-xs text-gray-500 mt-0.5">Real Opportunity</div>
                 </div>
-                <div>
-                  <div className="text-2xl font-bold text-[var(--brand-saffron)]" style={{ fontFamily: 'var(--font-mono)' }}>{leads.filter((lead) => lead.parent_follow_up_required).length}</div>
-                  <div className="mt-1 text-xs text-[var(--neutral-gray)]">Parent Follow-ups</div>
+                <div className="grid grid-cols-2 gap-4 border-t border-gray-100 pt-4">
+                  <div>
+                    <div className="text-lg font-bold text-gray-700" style={{ fontFamily: 'var(--font-mono)' }}>
+                      ₹{(snapshot.pipelineRevenue ?? 0).toLocaleString('en-IN')}
+                    </div>
+                    <div className="text-[11px] text-gray-405 text-gray-400">Pipeline Revenue</div>
+                  </div>
+                  <div>
+                    <div className="text-lg font-bold text-gray-700" style={{ fontFamily: 'var(--font-mono)' }}>
+                      ₹{(snapshot.vacancyCapacity ?? 0).toLocaleString('en-IN')}
+                    </div>
+                    <div className="text-[11px] text-gray-405 text-gray-400">Vacancy Capacity</div>
+                  </div>
                 </div>
               </div>
             </div>
-          </section>
+            <div className="mt-6 border-t border-gray-100 pt-4 space-y-2">
+              <div className="text-xs font-semibold text-gray-500">Beds Likely to Fill (Confidence):</div>
+              <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                <div className="bg-emerald-50 rounded-lg p-2 text-emerald-800 border border-emerald-100">
+                  <div className="font-bold text-base">{bedsLikelyToFill.high}</div>
+                  <div className="text-[10px] text-emerald-600">High</div>
+                </div>
+                <div className="bg-amber-50 rounded-lg p-2 text-amber-800 border border-amber-100">
+                  <div className="font-bold text-base">{bedsLikelyToFill.medium}</div>
+                  <div className="text-[10px] text-amber-600">Medium</div>
+                </div>
+                <div className="bg-gray-55 bg-gray-50 rounded-lg p-2 text-gray-700 border border-gray-100">
+                  <div className="font-bold text-base">{bedsLikelyToFill.low}</div>
+                  <div className="text-[10px] text-gray-500">Low</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Admissions Forecast */}
+          <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Admissions Forecast</h3>
+                <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                  Occupancy Prediction
+                </span>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <div className="text-4xl font-black text-[var(--brand-navy)]" style={{ fontFamily: 'var(--font-mono)' }}>
+                    {forecast.forecastOccupancy ?? 0}%
+                  </div>
+                  <div className="text-xs text-gray-500 mt-0.5">Projected Occupancy</div>
+                </div>
+                <div className="border-t border-gray-100 pt-4 space-y-2">
+                  <div className="flex justify-between text-xs text-gray-600">
+                    <span>Forecasted Revenue:</span>
+                    <span className="font-bold text-gray-800" style={{ fontFamily: 'var(--font-mono)' }}>
+                      ₹{(forecast.forecastRevenue ?? 0).toLocaleString('en-IN')}/mo
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-600">
+                    <span>Projected Vacant Beds:</span>
+                    <span className="font-bold text-red-600">{forecast.risk ?? 0} beds at risk</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="mt-6 border-t border-gray-100 pt-4">
+              <div className="text-[11px] text-gray-400 leading-normal bg-blue-50/50 p-2.5 rounded-xl border border-blue-50">
+                Confidence-weighted forecast includes high & medium confidence leads likely to join within this cycle.
+              </div>
+            </div>
+          </div>
+
+          {/* Vacancy Recovery */}
+          <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Vacancy Recovery</h3>
+                <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
+                  {vacancy.vacantBeds ?? 0} Beds Vacant
+                </span>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <div className="text-3xl font-black text-red-655 text-red-600" style={{ fontFamily: 'var(--font-mono)' }}>
+                    ₹{(vacancy.lostRevenue ?? 0).toLocaleString('en-IN')}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-0.5">Lost Rent / Month</div>
+                </div>
+                <div className="border-t border-gray-100 pt-4 space-y-2">
+                  <div className="flex justify-between text-xs text-gray-600">
+                    <span>Pipeline Coverage:</span>
+                    <span className="font-semibold text-emerald-700">{vacancy.pipelineCoverage ?? 0} beds</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-600">
+                    <span>Remaining Risk Beds:</span>
+                    <span className="font-semibold text-red-755 text-red-700">{vacancy.remainingRisk ?? 0} beds</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="mt-6 border-t border-gray-100 pt-4 text-center">
+              <div className="text-xs font-bold text-[var(--brand-navy)] bg-red-50 rounded-xl py-2 px-3">
+                {vacancy.estimatedFillDate}
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div className="mt-6">
+        {/* Funnel & Follow-Up Queue Grid */}
+        <div className="grid gap-6 lg:grid-cols-5">
+          {/* Follow-Up Queue (3/5 width) */}
+          <div className="lg:col-span-3 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-[var(--brand-navy)]">Follow-Up Queue</h2>
+              <button
+                onClick={onViewPipeline}
+                className="text-xs font-bold text-[var(--brand-saffron)] hover:underline"
+              >
+                View all leads
+              </button>
+            </div>
+            <FollowUpQueue queue={analytics?.queue} onViewLead={onViewLead} />
+          </div>
+
+          {/* Revenue Funnel (2/5 width) */}
+          <div className="lg:col-span-2 space-y-4">
+            <h2 className="text-lg font-bold text-[var(--brand-navy)]">Revenue Funnel</h2>
+            <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5 space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Conversion Stages</span>
+                <span className="text-xs font-semibold text-gray-600">Stage Metrics</span>
+              </div>
+              <div className="space-y-4">
+                {[
+                  { label: 'Visitors', count: funnel.visitors ?? 0, color: 'bg-slate-400', revenue: null },
+                  { label: 'Qualified', count: funnel.qualified ?? 0, color: 'bg-indigo-400', revenue: null },
+                  { label: 'Ready to Join', count: funnel.readyToJoin ?? 0, color: 'bg-amber-400', revenue: null },
+                  { label: 'Pipeline Expected', count: null, color: 'bg-emerald-400', revenue: funnel.expectedRevenue },
+                  { label: 'Joined / Converted', count: funnel.joined ?? 0, color: 'bg-emerald-500', revenue: null },
+                  { label: 'Realized Revenue', count: null, color: 'bg-emerald-600', revenue: funnel.realizedRevenue },
+                ].map((stage, idx) => {
+                  const hasVal = stage.count !== null;
+                  const width = hasVal
+                    ? Math.max((stage.count / maxCount) * 100, stage.count > 0 ? 8 : 0)
+                    : Math.max((Number(stage.revenue || 0) / (funnel.expectedRevenue || 1)) * 100, stage.revenue ? 8 : 0);
+
+                  return (
+                    <div key={idx} className="space-y-1">
+                      <div className="flex justify-between text-xs font-medium text-gray-700">
+                        <span>{stage.label}</span>
+                        <span className="font-bold font-mono">
+                          {hasVal ? `${stage.count} leads` : `₹${(stage.revenue ?? 0).toLocaleString('en-IN')}`}
+                        </span>
+                      </div>
+                      <div className="h-5 w-full bg-gray-100 rounded-lg overflow-hidden flex items-center">
+                        <div
+                          className={`h-full ${stage.color} transition-all duration-500`}
+                          style={{ width: `${width}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* QR Performance & Traffic timeline */}
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* QR Performance */}
+          <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-[var(--brand-navy)]">QR Scan Performance</h3>
+              <span className="text-xs bg-orange-50 text-orange-600 font-bold px-2 py-1 rounded-lg">QR Source</span>
+            </div>
+            <div className="grid grid-cols-3 gap-4 text-center">
+              <div className="p-3 bg-gray-50 rounded-2xl border border-gray-100">
+                <div className="text-xl font-bold text-gray-800" style={{ fontFamily: 'var(--font-mono)' }}>
+                  {qrPerf.uniqueVisitorsToday ?? 0}
+                </div>
+                <div className="text-[10px] text-gray-400 mt-0.5">Unique Today</div>
+              </div>
+              <div className="p-3 bg-gray-50 rounded-2xl border border-gray-100">
+                <div className="text-xl font-bold text-gray-800" style={{ fontFamily: 'var(--font-mono)' }}>
+                  {qrPerf.uniqueVisitorsMonth ?? 0}
+                </div>
+                <div className="text-[10px] text-gray-400 mt-0.5">Unique Month</div>
+              </div>
+              <div className="p-3 bg-gray-50 rounded-2xl border border-gray-100">
+                <div className="text-xl font-bold text-gray-800" style={{ fontFamily: 'var(--font-mono)' }}>
+                  {qrPerf.totalVisitsMonth ?? 0}
+                </div>
+                <div className="text-[10px] text-gray-400 mt-0.5">Total Scans</div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 border-t border-gray-100 pt-4 text-center">
+              <div>
+                <div className="text-lg font-bold text-gray-700">{qrPerf.leadsGenerated ?? 0}</div>
+                <div className="text-[10px] text-gray-400">Leads Generated</div>
+              </div>
+              <div>
+                <div className="text-lg font-bold text-emerald-700">{qrPerf.conversionRate ?? 0}%</div>
+                <div className="text-[10px] text-gray-400">Scan Conversion</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Scan-to-Lead latency / timeline */}
+          <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5 space-y-4">
+            <h3 className="text-base font-bold text-[var(--brand-navy)]">Scan-to-Lead Latency</h3>
+            <div className="space-y-3">
+              {[
+                { label: 'Last Scan Logged', data: qrPerf.lastScan, color: 'border-blue-400' },
+                { label: 'Last Lead Generated', data: qrPerf.lastLead, color: 'border-indigo-400' },
+                { label: 'Last Converted Tenant', data: qrPerf.lastConversion, color: 'border-emerald-400' },
+              ].map((item, idx) => (
+                <div key={idx} className={`flex justify-between items-center p-2.5 rounded-xl border-l-4 bg-gray-55 bg-gray-50 ${item.color}`}>
+                  <span className="text-xs font-semibold text-gray-600">{item.label}</span>
+                  {item.data ? (
+                    <div className="text-right">
+                      <div className="text-xs font-bold text-gray-800">{item.data.name}</div>
+                      <div className="text-[10px] text-gray-400">{timeAgo(item.data.timestamp)}</div>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-gray-400 italic">No record found</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Source Performance Table */}
+        <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5 space-y-4">
+          <h3 className="text-base font-bold text-[var(--brand-navy)]">Source Channel Performance</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs text-gray-600">
+              <thead>
+                <tr className="border-b border-gray-100 text-gray-400 font-bold uppercase tracking-wider">
+                  <th className="pb-3">Source Channel</th>
+                  <th className="pb-3 text-center">Leads Generated</th>
+                  <th className="pb-3 text-center">Conversions</th>
+                  <th className="pb-3 text-center">Conversion Rate</th>
+                  <th className="pb-3 text-right">Revenue Generated</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {sourcePerf.map((row: any, idx: number) => {
+                  const rate = row.leads > 0 ? Math.round((row.joins / row.leads) * 100) : 0;
+                  return (
+                    <tr key={idx} className="hover:bg-gray-50/50 transition">
+                      <td className="py-3 font-semibold text-gray-800">{row.source}</td>
+                      <td className="py-3 text-center font-mono">{row.leads}</td>
+                      <td className="py-3 text-center font-mono">{row.joins}</td>
+                      <td className="py-3 text-center">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${rate > 50 ? 'bg-emerald-50 text-emerald-700' : rate > 20 ? 'bg-indigo-50 text-indigo-700' : 'bg-gray-100 text-gray-600'}`}>
+                          {rate}%
+                        </span>
+                      </td>
+                      <td className="py-3 text-right font-mono font-bold text-gray-800">
+                        ₹{row.revenue.toLocaleString('en-IN')}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {sourcePerf.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="py-4 text-center text-gray-400 italic">
+                      No channels registered yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Quick QR Links Panel */}
+        <div className="pt-2">
           <AdmissionQrPanel compact />
         </div>
       </div>
@@ -642,6 +1236,27 @@ function LeadPipeline({
     }
     return map;
   }, [leads]);
+
+  const stageRevenues = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const stage of stages) {
+      const items = grouped.get(stage.status) || [];
+      let total = 0;
+      for (const item of items) {
+        let rent = 8500;
+        const activeRes = item.reservations?.[0];
+        if (activeRes?.room?.base_rent) {
+          rent = Number(activeRes.room.base_rent);
+        } else if (item.hostel?.min_rent) {
+          rent = Number(item.hostel.min_rent);
+        }
+        total += rent;
+      }
+      map.set(stage.status, total);
+    }
+    return map;
+  }, [grouped]);
+
   const activeLeads = activeStatus ? grouped.get(activeStatus) || [] : leads;
 
   return (
@@ -666,9 +1281,14 @@ function LeadPipeline({
             const items = grouped.get(stage.status) || [];
             return (
               <div key={stage.status} className="w-80 shrink-0">
-                <div className="mb-3 flex items-center justify-between rounded-t-lg p-3" style={{ backgroundColor: stage.color }}>
-                  <h3 className="text-sm font-semibold text-white">{stage.label}</h3>
-                  <span className="rounded-full bg-white/20 px-2 py-1 text-xs font-bold text-white">{items.length}</span>
+                <div className="mb-3 flex flex-col justify-between rounded-t-lg p-3 text-white" style={{ backgroundColor: stage.color }}>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold">{stage.label}</h3>
+                    <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-bold">{items.length}</span>
+                  </div>
+                  <div className="mt-1 text-[11px] font-semibold opacity-90 font-mono">
+                    Stage Revenue: ₹{(stageRevenues.get(stage.status) || 0).toLocaleString('en-IN')}
+                  </div>
                 </div>
                 <div className="max-h-[calc(100vh-270px)] space-y-3 overflow-y-auto pr-1">
                   {items.map((lead) => <LeadCard key={lead.id} lead={lead} onOpen={() => onViewLead(lead.id)} />)}
@@ -683,16 +1303,29 @@ function LeadPipeline({
       <div className="lg:hidden">
         <div className="sticky top-0 z-10 overflow-x-auto border-b border-[var(--border)] bg-white scrollbar-hide">
           <div className="flex gap-2 px-5 py-3">
-            <button type="button" onClick={() => setActiveStatus('')} className={`grid h-12 w-14 shrink-0 place-items-center rounded-2xl text-[11px] font-bold leading-tight ${!activeStatus ? 'bg-[var(--brand-saffron)] text-white' : 'bg-gray-100 text-[var(--neutral-gray)]'}`}>
+            <button type="button" onClick={() => setActiveStatus('')} className={`grid h-14 w-16 shrink-0 place-items-center rounded-2xl text-[10px] font-bold leading-tight ${!activeStatus ? 'bg-[var(--brand-saffron)] text-white' : 'bg-gray-100 text-[var(--neutral-gray)]'}`}>
               <span>All</span>
               <span>({leads.length})</span>
             </button>
             {stages.map((stage) => {
               const count = grouped.get(stage.status)?.length || 0;
+              const rev = stageRevenues.get(stage.status) || 0;
               return (
-                <button key={stage.status} type="button" onClick={() => setActiveStatus(stage.status)} className="grid h-12 w-16 shrink-0 place-items-center rounded-2xl text-[11px] font-bold leading-tight" style={{ backgroundColor: activeStatus === stage.status ? stage.color : '#f3f4f6', color: activeStatus === stage.status ? '#fff' : 'var(--neutral-gray)' }}>
-                  <span>{stage.shortLabel}</span>
+                <button
+                  key={stage.status}
+                  type="button"
+                  onClick={() => setActiveStatus(stage.status)}
+                  className="grid h-14 w-20 shrink-0 place-items-center rounded-2xl text-[10px] font-bold leading-tight"
+                  style={{
+                    backgroundColor: activeStatus === stage.status ? stage.color : '#f3f4f6',
+                    color: activeStatus === stage.status ? '#fff' : 'var(--neutral-gray)',
+                  }}
+                >
+                  <span className="truncate w-full text-center">{stage.shortLabel}</span>
                   <span>({count})</span>
+                  <span className="text-[9px] opacity-80 font-mono font-normal">
+                    ₹{rev >= 100000 ? `${(rev / 100000).toFixed(1)}L` : rev >= 1000 ? `${(rev / 1000).toFixed(0)}k` : rev}
+                  </span>
                 </button>
               );
             })}
@@ -707,69 +1340,4 @@ function LeadPipeline({
   );
 }
 
-export function AdmissionsView() {
-  const [screen, setScreen] = useState<AdmissionsScreen>('dashboard');
-  const [activeStatus, setActiveStatus] = useState('');
-  const [search, setSearch] = useState('');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const filters = useMemo(() => ({ status: activeStatus || undefined, search: search || undefined, limit: 50 }), [activeStatus, search]);
 
-  const { data, isLoading, refetch } = useQuery({
-    queryKey: queryKeys.admissions.list(filters),
-    queryFn: () => admissionsService.list(filters),
-    staleTime: 30_000,
-  });
-  const { data: analytics } = useQuery({
-    queryKey: queryKeys.admissions.analytics({}),
-    queryFn: () => admissionsService.analytics({}),
-    staleTime: 120_000,
-  });
-
-  const leads = data?.items || [];
-
-  if (selectedId) {
-    return <LeadProfile leadId={selectedId} onBack={() => setSelectedId(null)} />;
-  }
-
-  return (
-    <div>
-      <div className="sticky top-0 z-20 border-b border-[var(--border)] bg-white/95 px-3 py-3 backdrop-blur md:px-6">
-        <div className="mx-auto grid max-w-7xl grid-cols-[1fr_1fr_1fr_auto] items-center gap-2 md:flex md:overflow-x-auto md:scrollbar-hide">
-          {[
-            ['dashboard', 'Dashboard', Users],
-            ['pipeline', 'Pipeline', ClipboardList],
-            ['qr', 'QR Generator', QrCode],
-          ].map(([key, label, Icon]: any) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setScreen(key)}
-              className={`flex h-9 min-w-0 items-center justify-center gap-1 rounded-2xl px-2 text-xs font-semibold md:h-10 md:shrink-0 md:gap-2 md:px-4 md:text-sm ${screen === key ? 'bg-[var(--brand-saffron)] text-white' : 'bg-[var(--warm-ivory)] text-[var(--brand-navy)]'}`}
-            >
-              <Icon className="h-4 w-4 shrink-0" /> <span className="truncate">{key === 'qr' ? 'QR' : label}</span>
-            </button>
-          ))}
-          <button type="button" onClick={() => refetch()} className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl border border-[var(--border)] md:ml-auto md:h-10 md:w-10">
-            <RefreshCw className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-
-      {screen === 'dashboard' && (
-        <DashboardOverview analytics={analytics} leads={leads} onViewPipeline={() => setScreen('pipeline')} onGenerateQr={() => setScreen('qr')} />
-      )}
-      {screen === 'pipeline' && (
-        <LeadPipeline
-          leads={leads}
-          isLoading={isLoading}
-          search={search}
-          setSearch={setSearch}
-          activeStatus={activeStatus}
-          setActiveStatus={setActiveStatus}
-          onViewLead={setSelectedId}
-        />
-      )}
-      {screen === 'qr' && <AdmissionQrPanel />}
-    </div>
-  );
-}
