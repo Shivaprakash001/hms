@@ -1,11 +1,11 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutGrid, Bell, Banknote, Users, ClipboardList } from 'lucide-react';
+import { LayoutGrid, Bell, Coins, Users, ClipboardList } from 'lucide-react';
 
 const navItems = [
   { to: '/dashboard', icon: LayoutGrid, label: 'Home' },
   { to: '/admissions', icon: ClipboardList, label: 'Admissions' },
   { to: '/tenants', icon: Users, label: 'Tenants' },
-  { to: '/billing', icon: Banknote, label: 'Billing' },
+  { to: '/billing', icon: Coins, label: 'Money' },
   { to: '/alerts', icon: Bell, label: 'Alerts' },
 ];
 
