@@ -1,5 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { Navigate, Route } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { ownerService } from '@features/owners/api';
 import { ErrorBoundary } from '@/app/components/ErrorBoundary';
 
 const App = lazy(() => import('@/app/App'));
@@ -9,11 +11,9 @@ const TenantsPortfolioView = lazy(() => import('@/app/components/views/TenantsPo
 const TenantProfileRoute = lazy(() => import('@/app/components/views/TenantProfileRoute').then((m) => ({ default: m.TenantProfileRoute })));
 const BulkInvitationImportView = lazy(() => import('@/app/components/views/BulkInvitationImportView').then((m) => ({ default: m.BulkInvitationImportView })));
 const MoveOutsView = lazy(() => import('@/app/components/views/MoveOutsView').then((m) => ({ default: m.MoveOutsView })));
-const AlertsView = lazy(() => import('@/app/components/views/AlertsView').then((m) => ({ default: m.AlertsView })));
 const BillingView = lazy(() => import('@/app/components/views/BillingView').then((m) => ({ default: m.BillingView })));
 const AdmissionsView = lazy(() => import('@/app/components/views/AdmissionsView').then((m) => ({ default: m.AdmissionsView })));
 const SettingsView = lazy(() => import('@/app/components/views/SettingsView').then((m) => ({ default: m.SettingsView })));
-const ActivityLogsView = lazy(() => import('@/app/components/views/ActivityLogsView').then((m) => ({ default: m.ActivityLogsView })));
 const OwnerProviderShell = lazy(() => import('./OwnerProviderShell').then((m) => ({ default: m.OwnerProviderShell })));
 
 function OwnerRouteFallback() {
@@ -42,6 +42,35 @@ function OwnerBoundary() {
   );
 }
 
+function GlobalActivityRedirect() {
+  const { data: hostelsData, isLoading } = useQuery({
+    queryKey: ['owner', 'hostels'],
+    queryFn: ownerService.getHostels,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-accent border-t-transparent" />
+      </div>
+    );
+  }
+
+  const hostels = Array.isArray(hostelsData)
+    ? hostelsData
+    : Array.isArray((hostelsData as any)?.hostels)
+    ? (hostelsData as any).hostels
+    : [];
+
+  const firstHostelId = hostels[0]?.id;
+  if (!firstHostelId) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <Navigate to={`/hostels/${firstHostelId}/activity`} replace />;
+}
+
 export function OwnerRoutes() {
   return (
     <Route
@@ -57,11 +86,11 @@ export function OwnerRoutes() {
         <Route path="/hostels/:hostelId/tenants/:tenantId" element={<TenantProfileRoute />} />
         <Route path="/hostels/:hostelId/move-outs" element={<MoveOutsView />} />
         <Route path="/move-outs" element={<MoveOutsView />} />
-        <Route path="/alerts" element={<AlertsView />} />
+        <Route path="/alerts" element={<GlobalActivityRedirect />} />
         <Route path="/billing" element={<BillingView />} />
         <Route path="/admissions" element={<AdmissionsView />} />
         <Route path="/settings" element={<SettingsView />} />
-        <Route path="/activity" element={<ActivityLogsView />} />
+        <Route path="/activity" element={<GlobalActivityRedirect />} />
       </Route>
     </Route>
   );
