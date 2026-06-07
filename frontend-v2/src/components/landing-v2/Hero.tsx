@@ -1,6 +1,6 @@
 import { Phone, MessageCircle } from 'lucide-react';
 import { motion } from 'motion/react';
-import { ImageCarousel } from './ImageCarousel';
+import { VideoPlayer } from './VideoPlayer';
 import ownerPhoto from './assets/person__up-removebg-preview__1_.png';
 import type { LandingAvailability } from './landingTypes';
 import type { HeroContent } from '@lib/sanity/landingContent';
@@ -164,8 +164,8 @@ export function Hero({ availability, content }: { availability?: LandingAvailabi
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 1, delay: 0.4, ease: [0.25, 0.4, 0.25, 1] }}
-        >
-            <ImageCarousel images={content.carouselImages} />
+          >
+            <VideoPlayer />
           </motion.div>
         </div>
       </div>
