@@ -1,10 +1,9 @@
 import { NavLink } from 'react-router-dom';
-import { Home, Bell, Coins, Settings, LogOut, Users, ClipboardList, Activity } from 'lucide-react';
+import { Home, Bell, Coins, Settings, LogOut, Users, Activity } from 'lucide-react';
 import { useAuth } from '@context/AuthContext';
 
 const navItems = [
   { to: '/dashboard', icon: Home, label: 'Home' },
-  { to: '/admissions', icon: ClipboardList, label: 'Admissions' },
   { to: '/tenants', icon: Users, label: 'Tenants' },
   { to: '/billing', icon: Coins, label: 'Money' },
   { to: '/alerts', icon: Bell, label: 'Alerts' },
