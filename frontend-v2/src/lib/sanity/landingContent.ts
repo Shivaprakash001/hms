@@ -36,6 +36,13 @@ export type HostelProfileContent = {
   ownerPhoto?: MarketingImage;
 };
 
+export type TourVideoContent = {
+  id: string;
+  label: string;
+  url: string;
+  icon: 'bed' | 'building' | 'utensils' | 'tv' | 'wifi' | 'security';
+};
+
 export type HeroContent = {
   title: string;
   subtitle: string;
@@ -46,6 +53,7 @@ export type HeroContent = {
   secondaryCta?: LandingCta;
   ownerImage?: MarketingImage;
   carouselImages: MarketingImage[];
+  tourVideos?: TourVideoContent[];
 };
 
 export type FeatureContent = {
@@ -155,6 +163,26 @@ export const fallbackLandingContent: LandingMarketingContent = {
       { url: fallbackImages.room, alt: 'Room Interior', caption: 'Room Interior' },
       { url: fallbackImages.food, alt: 'Daily Meals', caption: 'Daily Meals' },
       { url: fallbackImages.building, alt: 'Hostel Building', caption: 'Hostel Building' },
+    ],
+    tourVideos: [
+      {
+        id: 'room',
+        label: 'Room',
+        url: 'https://www.w3schools.com/html/mov_bbb.mp4',
+        icon: 'bed',
+      },
+      {
+        id: 'common',
+        label: 'Common',
+        url: 'https://media.w3.org/2010/05/sintel/trailer_hd.mp4',
+        icon: 'building',
+      },
+      {
+        id: 'dining',
+        label: 'Dining',
+        url: 'https://media.w3.org/2010/05/bunny/trailer.mp4',
+        icon: 'utensils',
+      },
     ],
   },
   announcements: [],

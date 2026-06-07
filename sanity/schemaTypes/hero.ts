@@ -59,6 +59,14 @@ export const hero = defineType({
       of: [{ type: 'marketingImage' }],
       validation: (Rule) => Rule.min(1).max(8),
     }),
+    defineField({
+      name: 'tourVideos',
+      title: 'Hostel & Room Tour Videos',
+      type: 'array',
+      of: [{ type: 'tourVideo' }],
+      description: 'The interactive video tour tabs shown in the Hero section (Room, Common, Dining).',
+      validation: (Rule) => Rule.max(6),
+    }),
   ],
   preview: {
     select: { title: 'title', subtitle: 'subtitle', media: 'ownerImage.image' },

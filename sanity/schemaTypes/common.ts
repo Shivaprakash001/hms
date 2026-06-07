@@ -99,3 +99,62 @@ export const linkItem = defineType({
     select: { title: 'label', subtitle: 'href' },
   },
 });
+
+export const tourVideo = defineType({
+  name: 'tourVideo',
+  title: 'Tour Video',
+  type: 'object',
+  fields: [
+    defineField({
+      name: 'id',
+      title: 'Video ID / Identifier',
+      type: 'slug',
+      description: 'Unique identifier for the video tab (e.g., "room", "common", "dining").',
+      options: { source: 'label', maxLength: 30 },
+      validation: (Rule) => Rule.required(),
+    }),
+    defineField({
+      name: 'label',
+      title: 'Tab Label',
+      type: 'string',
+      description: 'The title shown on the navigation tab (e.g., "Room", "Common", "Dining").',
+      validation: (Rule) => Rule.required().max(20),
+    }),
+    defineField({
+      name: 'videoFile',
+      title: 'Upload Video File',
+      type: 'file',
+      description: 'Upload the tour video file (MP4/WebM).',
+      options: {
+        accept: 'video/*'
+      }
+    }),
+    defineField({
+      name: 'externalUrl',
+      title: 'External Video URL',
+      type: 'url',
+      description: 'Alternative URL to an externally hosted MP4/WebM video file.',
+      validation: (Rule) => Rule.uri({ scheme: ['http', 'https'] }),
+    }),
+    defineField({
+      name: 'icon',
+      title: 'Icon Type',
+      type: 'string',
+      options: {
+        list: [
+          { title: 'Bed (Room)', value: 'bed' },
+          { title: 'Building (Common Area)', value: 'building' },
+          { title: 'Utensils (Dining / Kitchen)', value: 'utensils' },
+          { title: 'TV / Screen', value: 'tv' },
+          { title: 'WiFi', value: 'wifi' },
+          { title: 'Security / Shield', value: 'security' },
+        ],
+      },
+      initialValue: 'bed',
+      validation: (Rule) => Rule.required(),
+    }),
+  ],
+  preview: {
+    select: { title: 'label', subtitle: 'id.current' },
+  },
+});

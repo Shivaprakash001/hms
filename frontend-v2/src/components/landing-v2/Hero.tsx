@@ -165,7 +165,7 @@ export function Hero({ availability, content }: { availability?: LandingAvailabi
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 1, delay: 0.4, ease: [0.25, 0.4, 0.25, 1] }}
           >
-            <VideoPlayer />
+            <VideoPlayer videos={content.tourVideos} />
           </motion.div>
         </div>
       </div>

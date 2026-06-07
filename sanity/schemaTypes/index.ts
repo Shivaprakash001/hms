@@ -1,6 +1,6 @@
 import { admissionStep } from './admissionStep';
 import { announcement } from './announcement';
-import { cta, linkItem, marketingImage } from './common';
+import { cta, linkItem, marketingImage, tourVideo } from './common';
 import { facility } from './facility';
 import { faq } from './faq';
 import { feature } from './feature';
@@ -16,6 +16,7 @@ export const schemaTypes = [
   cta,
   marketingImage,
   linkItem,
+  tourVideo,
   hostelProfile,
   announcement,
   hero,

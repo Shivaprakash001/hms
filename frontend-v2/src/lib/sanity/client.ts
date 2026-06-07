@@ -43,7 +43,13 @@ const landingQuery = `*[_type == "landingPage" && pageKey == "home"] | order(_up
     primaryCta,
     secondaryCta,
     "ownerImage": ownerImage${imageProjection},
-    "carouselImages": carouselImages[]${imageProjection}
+    "carouselImages": carouselImages[]${imageProjection},
+    "tourVideos": tourVideos[]{
+      "id": id.current,
+      label,
+      "url": coalesce(videoFile.asset->url, externalUrl),
+      icon
+    }
   },
   "announcements": *[_type == "announcement" && _id in ^.announcements[]._ref && isActive != false] | order(priority desc){
     title,
@@ -178,6 +184,9 @@ function mergeLandingContent(content: any): LandingMarketingContent {
       ownerImage: hasImage(content?.hero?.ownerImage) ? content.hero.ownerImage : fallbackLandingContent.hero.ownerImage,
       carouselImages: Array.isArray(content?.hero?.carouselImages) ? compactImages(content.hero.carouselImages) : [],
       highlights: Array.isArray(content?.hero?.highlights) ? content.hero.highlights.filter(Boolean) : [],
+      tourVideos: Array.isArray(content?.hero?.tourVideos) && content.hero.tourVideos.length > 0
+        ? content.hero.tourVideos.filter((v: any) => v && v.id && v.label && v.url)
+        : fallbackLandingContent.hero.tourVideos,
     },
     announcements: activeAnnouncements(content?.announcements),
     features: compactFeatures(content?.features),
