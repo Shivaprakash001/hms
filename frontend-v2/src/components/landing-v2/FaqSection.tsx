@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { ScrollReveal, StaggerReveal, StaggerItem } from './ScrollReveal';
 import type { FaqContent } from '@lib/sanity/landingContent';
-import { fallbackLandingContent } from '@lib/sanity/client';
 
-export function FaqSection({ faqs = fallbackLandingContent.faqs }: { faqs?: FaqContent[] }) {
-  const [openQuestion, setOpenQuestion] = useState<string | null>(faqs[0]?.question || null);
+export function FaqSection({ faqs = [] }: { faqs?: FaqContent[] }) {
+  const safeFaqs = faqs.filter((faq) => faq?.question && faq?.answer);
+  const [openQuestion, setOpenQuestion] = useState<string | null>(safeFaqs[0]?.question || null);
+
+  if (!safeFaqs.length) return null;
 
   return (
     <section className="py-16 md:py-24 bg-[#FFFDF5]">
@@ -26,7 +28,7 @@ export function FaqSection({ faqs = fallbackLandingContent.faqs }: { faqs?: FaqC
 
         <StaggerReveal staggerDelay={0.08}>
           <div className="space-y-3">
-            {faqs.map((faq) => {
+            {safeFaqs.map((faq) => {
               const isOpen = openQuestion === faq.question;
               return (
                 <StaggerItem key={faq.question}>
@@ -37,10 +39,7 @@ export function FaqSection({ faqs = fallbackLandingContent.faqs }: { faqs?: FaqC
                       className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
                     >
                       <div>
-                        <span className="text-xs font-bold uppercase tracking-wide text-[#F07B1D]">
-                          {faq.category}
-                        </span>
-                        <h3 className="mt-1 font-semibold text-[#1B2D5B]">{faq.question}</h3>
+                        <h3 className="font-semibold text-[#1B2D5B]">{faq.question}</h3>
                       </div>
                       <ChevronDown className={`h-5 w-5 flex-shrink-0 text-[#F07B1D] transition-transform ${isOpen ? 'rotate-180' : ''}`} />
                     </button>

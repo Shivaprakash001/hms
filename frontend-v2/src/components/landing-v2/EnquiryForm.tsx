@@ -5,6 +5,7 @@ import { admissionsPublicService } from '@features/admissions/api';
 import { ScrollReveal, StaggerReveal, StaggerItem } from './ScrollReveal';
 import type { LandingAvailability } from './landingTypes';
 import type { HostelProfileContent } from '@lib/sanity/landingContent';
+import { fallbackLandingContent } from '@lib/sanity/client';
 
 export function EnquiryForm({
   availability,
@@ -23,13 +24,17 @@ export function EnquiryForm({
     moveInDate: '',
     message: '',
   });
+  const profile = { ...fallbackLandingContent.hostelProfile, ...hostelProfile };
+  const phone = profile.phone || '9392433422';
+  const whatsappNumber = profile.whatsappNumber || '919392433422';
+  const whatsappBaseUrl = `https://api.whatsapp.com/send?phone=${whatsappNumber}`;
 
   const openWhatsApp = () => {
     const whatsappMessage = encodeURIComponent(
       `Hi! I'm interested in Sri Adithya Hostels.\n\nName: ${formData.name}\nPhone: ${formData.phone}\nPreferred Move-in Date: ${formData.moveInDate}\n\nMessage: ${formData.message}`,
     );
 
-    window.open(`https://api.whatsapp.com/send?phone=919392433422&text=${whatsappMessage}`, '_blank');
+    window.open(`${whatsappBaseUrl}&text=${whatsappMessage}`, '_blank');
   };
 
   const submitLead = useMutation({
@@ -100,7 +105,7 @@ export function EnquiryForm({
 
                   <div className="space-y-4">
                     <a
-                      href="tel:9392433422"
+                      href={`tel:${phone}`}
                       className="flex items-center gap-4 p-4 bg-white rounded-lg hover:shadow-md transition-shadow group"
                     >
                       <div className="w-12 h-12 bg-[#F07B1D] rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -108,12 +113,12 @@ export function EnquiryForm({
                       </div>
                       <div>
                         <div className="text-sm text-[#2C2C2A]">Phone</div>
-                        <div className="font-semibold text-[#1B2D5B]">9392433422</div>
+                        <div className="font-semibold text-[#1B2D5B]">{phone}</div>
                       </div>
                     </a>
 
                     <a
-                      href="https://api.whatsapp.com/send?phone=919392433422"
+                      href={whatsappBaseUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-4 p-4 bg-white rounded-lg hover:shadow-md transition-shadow group"
@@ -132,8 +137,8 @@ export function EnquiryForm({
                         <Mail className="w-6 h-6 text-white" />
                       </div>
                       <div>
-                        <div className="text-sm text-[#2C2C2A]">Hostel</div>
-                        <div className="font-semibold text-[#1B2D5B]">{hostelProfile?.name || 'Sri Adithya Hostels'}</div>
+                        <div className="text-sm text-[#2C2C2A]">{profile.email ? 'Email' : 'Hostel'}</div>
+                        <div className="font-semibold text-[#1B2D5B]">{profile.email || profile.name || 'Sri Adithya Hostels'}</div>
                       </div>
                     </div>
                   </div>
@@ -148,19 +153,23 @@ export function EnquiryForm({
                 <div className="bg-white rounded-xl p-6 shadow-lg border-l-4 border-[#F07B1D] relative">
                   <div className="flex items-start gap-4">
                     <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#F07B1D]/20 to-[#1B2D5B]/20 flex items-center justify-center overflow-hidden border-2 border-white shadow-md flex-shrink-0">
-                      <div className="w-full h-full flex items-center justify-center text-[#1B2D5B] font-bold text-lg">
-                        {(hostelProfile?.ownerName || 'Srinivasa Rao').split(/\s+/).map((part) => part[0]).join('').slice(0, 2)}
-                      </div>
+                      {profile.ownerPhoto?.url ? (
+                        <img src={profile.ownerPhoto.url} alt={profile.ownerPhoto.alt || profile.ownerName || 'Hostel owner'} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-[#1B2D5B] font-bold text-lg">
+                          {(profile.ownerName || 'Srinivasa Rao').split(/\s+/).map((part) => part[0]).join('').slice(0, 2)}
+                        </div>
+                      )}
                     </div>
                     <div className="flex-1">
                       <div className="bg-white border border-[#F07B1D]/20 rounded-lg p-3 shadow-sm relative">
                         <div className="absolute -left-2 top-4 w-0 h-0 border-t-8 border-t-transparent border-b-8 border-b-transparent border-r-8 border-r-white" />
                         <p className="text-[#1B2D5B] italic text-sm">
-                          &quot;{hostelProfile?.ownerMessage || 'I personally respond to every enquiry.'}&quot;
+                          &quot;{profile.ownerMessage || 'I personally respond to every enquiry.'}&quot;
                         </p>
                       </div>
                       <p className="text-xs text-[#2C2C2A]/60 mt-2 ml-3">
-                        — {hostelProfile?.ownerName || 'Srinivasa Rao'}, Owner
+                        — {profile.ownerName || 'Srinivasa Rao'}, Owner
                       </p>
                     </div>
                   </div>

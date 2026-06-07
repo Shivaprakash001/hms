@@ -10,14 +10,14 @@ export function StatsStrip({ availability }: { availability?: LandingAvailabilit
   const stats = [
     { number: '2', label: 'Hostel Buildings' },
     { number: '4', label: 'Sharing Rooms' },
-    { number: rupee(availability?.startingPrice), label: 'per month' },
-    { number: '9+', label: 'Amenities' }
+    { number: rupee(availability?.startingPrice), label: 'Starting from / month' },
+    { number: '9+', label: 'Amenities' },
   ];
 
   return (
     <section className="bg-[#F07B1D] py-8">
       <div className="max-w-7xl mx-auto px-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 gap-6 md:grid-cols-4">
           {stats.map((stat, index) => (
             <ScrollReveal key={index} delay={index * 0.1}>
               <div className="text-center text-white">

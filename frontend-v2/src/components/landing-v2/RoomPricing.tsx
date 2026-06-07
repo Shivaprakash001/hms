@@ -9,18 +9,7 @@ function rupee(value: number | null | undefined) {
 }
 
 export function RoomPricing({ availability, facilities }: { availability?: LandingAvailability; facilities?: FacilityContent[] }) {
-  const included = facilities?.length
-    ? facilities.slice(0, 8).map((facility) => facility.label)
-    : [
-    'Comfortable bed with mattress',
-    'Attached bathroom facilities',
-    'Daily housekeeping',
-    '3 meals per day included',
-    'Free WiFi access',
-    '24/7 security',
-    'Hot water facility',
-    'Common area access',
-  ];
+  const included = facilities?.filter((facility) => facility?.title).slice(0, 8).map((facility) => facility.title) || [];
   const startingPriceText = rupee(availability?.startingPrice);
 
   return (
@@ -69,15 +58,19 @@ export function RoomPricing({ availability, facilities }: { availability?: Landi
                 </div>
 
                 <div className="mb-8">
-                  <h4 className="font-semibold text-[#1B2D5B] mb-4">What's Included:</h4>
-                  <div className="grid md:grid-cols-2 gap-3 mb-4">
-                    {included.map((item, index) => (
-                      <div key={index} className="flex items-start gap-2">
-                        <Check className="w-5 h-5 text-[#F07B1D] flex-shrink-0 mt-0.5" />
-                        <span className="text-[#2C2C2A] text-sm">{item}</span>
+                  {included.length > 0 && (
+                    <>
+                      <h4 className="font-semibold text-[#1B2D5B] mb-4">What's Included:</h4>
+                      <div className="grid md:grid-cols-2 gap-3 mb-4">
+                        {included.map((item, index) => (
+                          <div key={index} className="flex items-start gap-2">
+                            <Check className="w-5 h-5 text-[#F07B1D] flex-shrink-0 mt-0.5" />
+                            <span className="text-[#2C2C2A] text-sm">{item}</span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    </>
+                  )}
                   <div className="bg-[#FFFDF5] border border-[#F07B1D]/20 rounded-lg p-4 mt-4">
                     <h5 className="font-semibold text-[#1B2D5B] text-sm mb-2">Total Cost Clarity</h5>
                     <p className="text-[#2C2C2A]/80 text-sm">

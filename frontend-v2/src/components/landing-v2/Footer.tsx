@@ -12,6 +12,11 @@ export function Footer({
   content?: FooterContent;
   hostelProfile?: HostelProfileContent;
 }) {
+  const profile = { ...fallbackLandingContent.hostelProfile, ...hostelProfile };
+  const phone = profile.phone || '9392433422';
+  const whatsappNumber = profile.whatsappNumber || '919392433422';
+  const footerLocation = profile.shortLocation || profile.addressLines?.join(', ') || 'Yamnampet, Secunderabad, Telangana';
+
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
     if (element) {
@@ -84,14 +89,14 @@ export function Footer({
             <h4 className="font-semibold mb-4">Contact Us</h4>
             <div className="space-y-3 text-sm">
               <a
-                href="tel:9392433422"
+                href={`tel:${phone}`}
                 className="flex items-center gap-2 text-white/80 hover:text-white transition-colors"
               >
                 <Phone className="w-4 h-4" />
-                <span>9392433422</span>
+                <span>{phone}</span>
               </a>
               <a
-                href="https://api.whatsapp.com/send?phone=919392433422"
+                href={`https://api.whatsapp.com/send?phone=${whatsappNumber}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 text-white/80 hover:text-white transition-colors"
@@ -101,7 +106,7 @@ export function Footer({
               </a>
               <div className="flex items-start gap-2 text-white/80">
                 <MapPin className="w-4 h-4 mt-1 flex-shrink-0" />
-                <span>{hostelProfile.tagline || 'Yamnampet, Secunderabad, Telangana'}</span>
+                <span>{footerLocation}</span>
               </div>
             </div>
           </div>

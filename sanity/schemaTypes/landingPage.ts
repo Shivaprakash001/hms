@@ -7,10 +7,10 @@ export const landingPage = defineType({
   initialValue: {
     title: 'Home Landing Page',
     pageKey: 'home',
-    hostelProfile: { _type: 'reference', _ref: 'sri-adithya-hostel' },
-    seo: { _type: 'reference', _ref: 'home-seo' },
-    hero: { _type: 'reference', _ref: 'home-hero' },
-    footer: { _type: 'reference', _ref: 'home-footer' },
+    hostelProfile: { _type: 'reference', _ref: 'b13e8301-3155-4932-9224-68f350b0b203' },
+    seo: { _type: 'reference', _ref: '5faae1fe-a8ef-4dc0-a98e-e5bf3d834640' },
+    hero: { _type: 'reference', _ref: 'e9f24321-7675-4486-8441-6b36b146955d' },
+    footer: { _type: 'reference', _ref: 'c7dfa040-0dfd-467e-96a1-de9fd4b298d9' },
   },
   fields: [
     defineField({

@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { ScrollReveal, StaggerReveal } from './ScrollReveal';
 import type { FeatureContent } from '@lib/sanity/landingContent';
-import { fallbackLandingContent } from '@lib/sanity/client';
 import { getLandingIcon } from './content/icons';
 
-export function WhyChooseUs({ features = fallbackLandingContent.features }: { features?: FeatureContent[] }) {
+export function WhyChooseUs({ features = [] }: { features?: FeatureContent[] }) {
+  const safeFeatures = features.filter((feature) => feature?.title && feature?.description && feature?.icon);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -12,17 +12,17 @@ export function WhyChooseUs({ features = fallbackLandingContent.features }: { fe
   const dragDeltaX = useRef(0);
 
   useEffect(() => {
-    if (isHovered || isDragging) return;
+    if (!safeFeatures.length || isHovered || isDragging) return;
 
     const interval = window.setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % features.length);
+      setCurrentIndex((prev) => (prev + 1) % safeFeatures.length);
     }, 3500);
 
     return () => window.clearInterval(interval);
-  }, [isHovered, isDragging]);
+  }, [safeFeatures.length, isHovered, isDragging]);
 
   const goToFeature = (index: number) => {
-    setCurrentIndex((index + features.length) % features.length);
+    setCurrentIndex((index + safeFeatures.length) % safeFeatures.length);
   };
 
   const handleSwipeEnd = () => {
@@ -34,6 +34,8 @@ export function WhyChooseUs({ features = fallbackLandingContent.features }: { fe
     if (Math.abs(delta) < 48) return;
     goToFeature(currentIndex + (delta < 0 ? 1 : -1));
   };
+
+  if (!safeFeatures.length) return null;
 
   return (
     <section className="py-16 md:py-24 bg-white">
@@ -80,16 +82,15 @@ export function WhyChooseUs({ features = fallbackLandingContent.features }: { fe
             >
               <div
                 className={`flex transition-transform ease-in-out ${isDragging ? 'duration-200' : 'duration-500'}`}
-                style={{ transform: `translateX(-${currentIndex * 100}%)` }}
+                style={{ transform: `translateX(-${Math.min(currentIndex, safeFeatures.length - 1) * 100}%)` }}
               >
-                {features.map((feature, index) => {
+                {safeFeatures.map((feature, index) => {
                   const Icon = getLandingIcon(feature.icon);
-                  const fallbackImage = fallbackLandingContent.features[index % fallbackLandingContent.features.length]?.image;
                   return (
                     <div key={feature.title} className="w-full flex-shrink-0">
                       <div className="relative bg-[#FFFDF5] rounded-xl border border-[#F07B1D]/10 overflow-hidden group h-[280px] md:h-[320px]">
                         <img
-                          src={feature.image?.url || fallbackImage?.url || ''}
+                          src={feature.image?.url || ''}
                           alt={feature.image?.alt || feature.title}
                           loading={index === 0 ? 'eager' : 'lazy'}
                           draggable={false}
@@ -116,7 +117,7 @@ export function WhyChooseUs({ features = fallbackLandingContent.features }: { fe
             </div>
 
             <div className="flex justify-center gap-2 mt-4">
-              {features.map((feature, index) => (
+              {safeFeatures.map((feature, index) => (
                 <button
                   key={feature.title}
                   type="button"

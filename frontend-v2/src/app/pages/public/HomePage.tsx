@@ -8,6 +8,7 @@ import { EnquiryForm } from '@/components/landing-v2/EnquiryForm';
 import { Facilities } from '@/components/landing-v2/Facilities';
 import { Footer } from '@/components/landing-v2/Footer';
 import { FaqSection } from '@/components/landing-v2/FaqSection';
+import { GallerySection } from '@/components/landing-v2/GallerySection';
 import { Hero } from '@/components/landing-v2/Hero';
 import { Location } from '@/components/landing-v2/Location';
 import { Navbar } from '@/components/landing-v2/Navbar';
@@ -52,10 +53,8 @@ export function HomePage() {
   const landingAvailability = useMemo<LandingAvailability>(() => {
     const rooms = Array.isArray(availability?.rooms) ? availability.rooms : [];
     const bedsAvailable = rooms.reduce((sum: number, room: any) => sum + availableBeds(room), 0);
-    const startingPrice =
-      availability?.hostel?.starting_price ||
-      rooms.map(roomPrice).filter(Boolean).sort((a: number, b: number) => a - b)[0] ||
-      null;
+    const roomStartingPrice = rooms.map(roomPrice).filter(Boolean).sort((a: number, b: number) => a - b)[0];
+    const startingPrice = roomStartingPrice || availability?.hostel?.starting_price || null;
 
     return {
       bedsAvailable: bedsAvailable > 0 ? bedsAvailable : null,
@@ -84,17 +83,18 @@ export function HomePage() {
 
   return (
     <div className="min-h-screen">
-      <TopBar />
+      <TopBar hostelProfile={content.hostelProfile} />
       <Navbar hostelProfile={content.hostelProfile} />
       <AnnouncementBanner announcements={content.announcements} />
       <Hero availability={landingAvailability} content={content.hero} />
       <StatsStrip availability={landingAvailability} />
       <WhyChooseUs features={content.features} />
       <Facilities facilities={content.facilities} />
+      <GallerySection images={content.gallery} />
       <Testimonials testimonials={content.testimonials} />
       <AdmissionProcess steps={content.admissionSteps} />
       <RoomPricing availability={landingAvailability} facilities={content.facilities} />
-      <Location />
+      <Location hostelProfile={content.hostelProfile} />
       <FaqSection faqs={content.faqs} />
       <EnquiryForm availability={landingAvailability} hostelProfile={content.hostelProfile} visitSlug={PRIMARY_VISIT_SLUG} />
       <Footer content={content.footer} hostelProfile={content.hostelProfile} />

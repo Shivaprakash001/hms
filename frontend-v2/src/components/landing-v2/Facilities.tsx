@@ -1,9 +1,11 @@
 import { ScrollReveal, StaggerReveal, StaggerItem } from './ScrollReveal';
 import type { FacilityContent } from '@lib/sanity/landingContent';
-import { fallbackLandingContent } from '@lib/sanity/client';
 import { getLandingIcon } from './content/icons';
 
-export function Facilities({ facilities = fallbackLandingContent.facilities }: { facilities?: FacilityContent[] }) {
+export function Facilities({ facilities = [] }: { facilities?: FacilityContent[] }) {
+  const safeFacilities = facilities.filter((facility) => facility?.title && facility?.icon);
+  if (!safeFacilities.length) return null;
+
   return (
     <section id="facilities" className="py-16 md:py-24 bg-[#FFFDF5]">
       <div className="max-w-7xl mx-auto px-4">
@@ -23,7 +25,7 @@ export function Facilities({ facilities = fallbackLandingContent.facilities }: {
 
         <StaggerReveal staggerDelay={0.08}>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-            {facilities.map((facility, index) => {
+            {safeFacilities.map((facility, index) => {
               const Icon = getLandingIcon(facility.icon, 'wifi');
               return (
                 <StaggerItem key={index}>
@@ -31,7 +33,10 @@ export function Facilities({ facilities = fallbackLandingContent.facilities }: {
                     <div className="w-14 h-14 bg-[#F07B1D]/10 rounded-full flex items-center justify-center mb-4">
                       <Icon className="w-7 h-7 text-[#F07B1D]" />
                     </div>
-                    <span className="text-[#2C2C2A] font-medium">{facility.label}</span>
+                    <span className="text-[#2C2C2A] font-medium">{facility.title}</span>
+                    {facility.description && (
+                      <p className="mt-2 text-xs leading-5 text-[#2C2C2A]/65">{facility.description}</p>
+                    )}
                   </div>
                 </StaggerItem>
               );

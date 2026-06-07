@@ -20,8 +20,10 @@ export const cta = defineType({
     }),
     defineField({
       name: 'style',
-      title: 'Style',
+      title: 'Style (deprecated)',
       type: 'string',
+      readOnly: true,
+      description: 'Deprecated: button styling is determined by its visible position on the website.',
       options: {
         layout: 'radio',
         list: [
@@ -48,7 +50,14 @@ export const marketingImage = defineType({
       title: 'Image',
       type: 'image',
       options: { hotspot: true },
-      validation: (Rule) => Rule.required(),
+      description: 'Upload an image, or use External image URL below.',
+    }),
+    defineField({
+      name: 'externalUrl',
+      title: 'External image URL',
+      type: 'url',
+      description: 'Optional remote image URL. Use this when seeding draft images before uploading final Sanity assets.',
+      validation: (Rule) => Rule.uri({ scheme: ['http', 'https'] }).warning('Use a valid image URL.'),
     }),
     defineField({
       name: 'alt',

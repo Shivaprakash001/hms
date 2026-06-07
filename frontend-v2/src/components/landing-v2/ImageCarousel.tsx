@@ -2,24 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import { Building2, UtensilsCrossed, Bed } from 'lucide-react';
 import type { MarketingImage } from '@lib/sanity/landingContent';
 
-const fallbackSlides = [
-  {
-    label: 'Room Interior',
-    icon: Bed,
-    image: 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-  },
-  {
-    label: 'Daily Meals',
-    icon: UtensilsCrossed,
-    image: 'https://images.unsplash.com/photo-1542367592-8849eb950fd8?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-  },
-  {
-    label: 'Hostel Building',
-    icon: Building2,
-    image: 'https://images.unsplash.com/photo-1779062553813-e2047a686036?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-  },
-];
-
 function iconForLabel(label: string) {
   const normalized = label.toLowerCase();
   if (normalized.includes('food') || normalized.includes('meal')) return UtensilsCrossed;
@@ -28,14 +10,12 @@ function iconForLabel(label: string) {
 }
 
 export function ImageCarousel({ images }: { images?: MarketingImage[] }) {
-  const slides = images?.length
-    ? images.map((image) => ({
-        label: image.caption || image.alt,
-        icon: iconForLabel(image.caption || image.alt),
-        image: image.url,
-        alt: image.alt,
-      }))
-    : fallbackSlides;
+  const slides = images?.map((image) => ({
+    label: image.caption || image.alt,
+    icon: iconForLabel(image.caption || image.alt),
+    image: image.url,
+    alt: image.alt,
+  })) || [];
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
@@ -44,7 +24,7 @@ export function ImageCarousel({ images }: { images?: MarketingImage[] }) {
   const dragDeltaX = useRef(0);
 
   useEffect(() => {
-    if (isHovered || isDragging) return;
+    if (!slides.length || isHovered || isDragging) return;
 
     const interval = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % slides.length);
@@ -66,6 +46,8 @@ export function ImageCarousel({ images }: { images?: MarketingImage[] }) {
     if (Math.abs(delta) < 48) return;
     goToSlide(currentIndex + (delta < 0 ? 1 : -1));
   };
+
+  if (!slides.length) return null;
 
   return (
     <div

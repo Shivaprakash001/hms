@@ -10,11 +10,11 @@ export const deskStructure: StructureResolver = (S) =>
   S.list()
     .title('Marketing Content')
     .items([
-      singleton(S, 'Home Landing Page', 'landingPage', 'home'),
-      singleton(S, 'Hostel Profile', 'hostelProfile', 'sri-adithya-hostel'),
-      singleton(S, 'Home Hero', 'hero', 'home-hero'),
-      singleton(S, 'Home SEO', 'seo', 'home-seo'),
-      singleton(S, 'Home Footer', 'footer', 'home-footer'),
+      singleton(S, 'Home Landing Page', 'landingPage', '6e322218-b0fe-4524-9157-b1d8f23a09c0'),
+      singleton(S, 'Hostel Profile', 'hostelProfile', 'b13e8301-3155-4932-9224-68f350b0b203'),
+      singleton(S, 'Home Hero', 'hero', 'e9f24321-7675-4486-8441-6b36b146955d'),
+      singleton(S, 'Home SEO', 'seo', '5faae1fe-a8ef-4dc0-a98e-e5bf3d834640'),
+      singleton(S, 'Home Footer', 'footer', 'c7dfa040-0dfd-467e-96a1-de9fd4b298d9'),
       S.divider(),
       S.documentTypeListItem('announcement').title('Announcements'),
       S.documentTypeListItem('feature').title('Features'),

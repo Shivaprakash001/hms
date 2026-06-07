@@ -20,8 +20,10 @@ export const faq = defineType({
     }),
     defineField({
       name: 'category',
-      title: 'Category',
+      title: 'Category (deprecated)',
       type: 'string',
+      readOnly: true,
+      description: 'Deprecated: FAQ categories are no longer rendered on the landing page.',
       options: {
         list: [
           { title: 'Food', value: 'Food' },
@@ -33,7 +35,6 @@ export const faq = defineType({
           { title: 'Parents', value: 'Parents' },
         ],
       },
-      validation: (Rule) => Rule.required(),
     }),
     defineField({
       name: 'displayOrder',
@@ -50,6 +51,6 @@ export const faq = defineType({
     }),
   ],
   preview: {
-    select: { title: 'question', subtitle: 'category' },
+    select: { title: 'question', subtitle: 'displayOrder' },
   },
 });

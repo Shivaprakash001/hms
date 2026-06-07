@@ -29,6 +29,7 @@ export const feature = defineType({
       name: 'image',
       title: 'Image',
       type: 'marketingImage',
+      validation: (Rule) => Rule.required(),
     }),
     defineField({
       name: 'displayOrder',

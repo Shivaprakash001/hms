@@ -7,7 +7,6 @@ export type MarketingImage = {
 export type LandingCta = {
   label: string;
   href: string;
-  style?: 'primary' | 'secondary' | 'text';
 };
 
 export type LandingAnnouncement = {
@@ -21,15 +20,20 @@ export type LandingAnnouncement = {
 
 export type HostelProfileContent = {
   name: string;
-  tagline: string;
-  about: string;
-  mission?: string;
-  foodPhilosophy?: string;
-  houseRules?: string[];
+  phone?: string;
+  whatsappNumber?: string;
+  email?: string;
+  shortLocation?: string;
+  addressLines?: string[];
+  locationTitle?: string;
+  locationDescription?: string;
+  distanceTitle?: string;
+  distanceDescription?: string;
+  googleMapsUrl?: string;
+  googleMapsEmbedUrl?: string;
   ownerName?: string;
   ownerMessage?: string;
   ownerPhoto?: MarketingImage;
-  gallery?: MarketingImage[];
 };
 
 export type HeroContent = {
@@ -52,34 +56,28 @@ export type FeatureContent = {
 };
 
 export type FacilityContent = {
-  label: string;
+  title: string;
   icon: string;
   description?: string;
 };
 
 export type TestimonialContent = {
   name: string;
-  details?: string;
-  quote: string;
+  role?: string;
+  review: string;
   rating: number;
-  duration?: string;
-  verificationType: 'CURRENT_TENANT' | 'FORMER_TENANT' | 'PARENT';
-  photo?: MarketingImage;
+  image?: MarketingImage;
 };
 
 export type FaqContent = {
   question: string;
   answer: string;
-  category: 'Food' | 'Security' | 'Visitors' | 'Fees' | 'Rooms' | 'Move-In' | 'Parents';
 };
 
 export type AdmissionStepContent = {
-  number: number;
+  stepNumber: number;
   title: string;
   description: string;
-  mobileDescription?: string;
-  icon: string;
-  isFinal?: boolean;
 };
 
 export type SeoContent = {
@@ -105,9 +103,14 @@ export type LandingMarketingContent = {
   facilities: FacilityContent[];
   testimonials: TestimonialContent[];
   faqs: FaqContent[];
-  gallery: MarketingImage[];
+  gallery: GalleryImageContent[];
   admissionSteps: AdmissionStepContent[];
   footer: FooterContent;
+};
+
+export type GalleryImageContent = MarketingImage & {
+  title?: string;
+  category?: string;
 };
 
 const fallbackImages = {
@@ -119,9 +122,18 @@ const fallbackImages = {
 export const fallbackLandingContent: LandingMarketingContent = {
   hostelProfile: {
     name: 'Sri Adithya Hostels',
-    tagline: 'Your home away from home',
-    about: 'Comfortable, safe, and affordable accommodation for students near SNIST.',
-    foodPhilosophy: 'Fresh homely meals included daily.',
+    phone: '9392433422',
+    whatsappNumber: '919392433422',
+    email: 'sriadithyahostels@gmail.com',
+    shortLocation: 'Yamnampet, Secunderabad',
+    addressLines: ['Sri Adithya Hostels', 'Yamnampet', 'Secunderabad, Telangana'],
+    locationTitle: 'Prime Location',
+    locationDescription: 'Conveniently located near SNIST — your daily commute is just a 5-minute walk',
+    distanceTitle: 'Just 400m from SNIST',
+    distanceDescription: '5 minute walk to campus gate',
+    googleMapsUrl: 'https://maps.app.goo.gl/tUrcbuFmST7Zyt1c9',
+    googleMapsEmbedUrl:
+      'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d951.5284365512007!2d78.66220596962678!3d17.454269078321268!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3bcb770dd641583b%3A0xde3e95b9afb8c1b1!2sSri%20Adithya%20Boys%20Hostel!5e0!3m2!1sen!2sin!4v1780503771881!5m2!1sen!2sin',
     ownerName: 'Srinivasa Rao',
     ownerMessage: 'I personally respond to every enquiry.',
   },
@@ -137,8 +149,8 @@ export const fallbackLandingContent: LandingMarketingContent = {
     supportingCopy: 'Join 78+ SNIST students, everything included.',
     trustBadge: 'Trusted by SNIST students since 2019',
     highlights: ['Meals Included', 'CCTV + Warden', '400m from SNIST'],
-    primaryCta: { label: 'Book a Room Visit', href: '#contact', style: 'primary' },
-    secondaryCta: { label: 'Check Availability on WhatsApp', href: 'https://api.whatsapp.com/send?phone=919392433422', style: 'secondary' },
+    primaryCta: { label: 'Book a Room Visit', href: '#contact' },
+    secondaryCta: { label: 'Check Availability on WhatsApp', href: 'https://api.whatsapp.com/send?phone=919392433422' },
     carouselImages: [
       { url: fallbackImages.room, alt: 'Room Interior', caption: 'Room Interior' },
       { url: fallbackImages.food, alt: 'Daily Meals', caption: 'Daily Meals' },
@@ -167,55 +179,46 @@ export const fallbackLandingContent: LandingMarketingContent = {
     },
   ],
   facilities: [
-    { icon: 'wifi', label: 'Free WiFi' },
-    { icon: 'water', label: 'Hot Water' },
-    { icon: 'cleaning', label: 'Daily Cleaning' },
-    { icon: 'security', label: 'Warden Security' },
-    { icon: 'cctv', label: '24/7 CCTV' },
-    { icon: 'laundry', label: 'Washing Machine' },
-    { icon: 'storage', label: 'Secure Storage' },
-    { icon: 'power', label: 'Emergency Generator' },
-    { icon: 'food', label: 'Meals Included' },
+    { icon: 'wifi', title: 'Free WiFi' },
+    { icon: 'water', title: 'Hot Water' },
+    { icon: 'cleaning', title: 'Daily Cleaning' },
+    { icon: 'security', title: 'Warden Security' },
+    { icon: 'cctv', title: '24/7 CCTV' },
+    { icon: 'laundry', title: 'Washing Machine' },
+    { icon: 'storage', title: 'Secure Storage' },
+    { icon: 'power', title: 'Emergency Generator' },
+    { icon: 'food', title: 'Meals Included' },
   ],
   testimonials: [
     {
       name: 'Ravi K.',
-      details: '3rd Year · B.Tech CSE · SNIST',
-      quote: 'Food is the biggest surprise. I expected mess food — I got home food. My mother actually approved after tasting it.',
+      role: '3rd Year · B.Tech CSE · SNIST',
+      review: 'Food is the biggest surprise. I expected mess food — I got home food. My mother actually approved after tasting it.',
       rating: 5,
-      duration: 'Stayed 18 months',
-      verificationType: 'FORMER_TENANT',
     },
     {
       name: 'Arjun M.',
-      details: '2nd Year · B.Tech ECE · SNIST',
-      quote: '5 minutes to college gate. I sleep until 8:55 for a 9 AM class. No other hostel near SNIST gives you that.',
+      role: '2nd Year · B.Tech ECE · SNIST',
+      review: '5 minutes to college gate. I sleep until 8:55 for a 9 AM class. No other hostel near SNIST gives you that.',
       rating: 5,
-      duration: 'Current Resident',
-      verificationType: 'CURRENT_TENANT',
     },
     {
       name: 'Father of Karthik R.',
-      details: 'Vizag',
-      quote: "My biggest worry was food. After visiting once and seeing the kitchen, I stopped worrying. They also WhatsApp me if anything unusual happens.",
+      role: 'Parent · Vizag',
+      review: "My biggest worry was food. After visiting once and seeing the kitchen, I stopped worrying. They also WhatsApp me if anything unusual happens.",
       rating: 5,
-      duration: 'Verified Stay',
-      verificationType: 'PARENT',
     },
   ],
   faqs: [
     {
-      category: 'Food',
       question: 'Are meals included in the hostel fee?',
       answer: 'Yes. Daily meals are included, with a focus on homely food for students.',
     },
     {
-      category: 'Security',
       question: 'Is the hostel suitable for parents who want regular safety updates?',
       answer: 'Yes. Parents can speak with the owner and understand rules, safety, and visit process before admission.',
     },
     {
-      category: 'Fees',
       question: 'Are there hidden charges?',
       answer: 'No. Room pricing and inclusions are discussed clearly before admission confirmation.',
     },
@@ -226,11 +229,11 @@ export const fallbackLandingContent: LandingMarketingContent = {
     { url: fallbackImages.building, alt: 'Hostel Building', caption: 'Hostel Building' },
   ],
   admissionSteps: [
-    { number: 1, icon: 'phone', title: 'Reach Out', description: 'Call or WhatsApp Srinivasa Rao — get answers in minutes.', mobileDescription: 'Call or WhatsApp for quick answers.' },
-    { number: 2, icon: 'building', title: 'Visit the Hostel', description: 'Come see the room, food, and facilities in person.', mobileDescription: 'See rooms, food, and facilities.' },
-    { number: 3, icon: 'bed', title: 'Pick Your Room', description: 'Select your preferred block and bed. We show you who your roommates are.', mobileDescription: 'Choose your block and bed.' },
-    { number: 4, icon: 'document', title: 'Pay & Confirm', description: 'Simple deposit to reserve your bed. No hidden charges.', mobileDescription: 'Reserve your bed with a deposit.' },
-    { number: 5, icon: 'key', title: 'Move In', description: 'Bring your things. Your home near SNIST is ready.', mobileDescription: 'Move into your hostel room.', isFinal: true },
+    { stepNumber: 1, title: 'Reach Out', description: 'Call or WhatsApp Srinivasa Rao — get answers in minutes.' },
+    { stepNumber: 2, title: 'Visit the Hostel', description: 'Come see the room, food, and facilities in person.' },
+    { stepNumber: 3, title: 'Pick Your Room', description: 'Select your preferred block and bed. We show you who your roommates are.' },
+    { stepNumber: 4, title: 'Pay & Confirm', description: 'Simple deposit to reserve your bed. No hidden charges.' },
+    { stepNumber: 5, title: 'Move In', description: 'Bring your things. Your home near SNIST is ready.' },
   ],
   footer: {
     title: 'Sri Adithya Hostels',

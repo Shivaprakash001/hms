@@ -6,10 +6,18 @@ export const facility = defineType({
   type: 'document',
   fields: [
     defineField({
-      name: 'label',
-      title: 'Label',
+      name: 'title',
+      title: 'Title',
       type: 'string',
       validation: (Rule) => Rule.required().max(80),
+    }),
+    defineField({
+      name: 'label',
+      title: 'Label (deprecated)',
+      type: 'string',
+      readOnly: true,
+      description: 'Deprecated: use Title. Existing content can still be queried as a fallback.',
+      validation: (Rule) => Rule.max(80),
     }),
     defineField({
       name: 'icon',
@@ -40,6 +48,6 @@ export const facility = defineType({
     }),
   ],
   preview: {
-    select: { title: 'label', subtitle: 'icon' },
+    select: { title: 'title', subtitle: 'icon' },
   },
 });
