@@ -19,7 +19,7 @@ export function TopBar({
             <Phone className="w-3.5 h-3.5 md:w-4 md:h-4" />
             <span>9392433422</span>
           </a>
-          <div className="flex items-center gap-1">
+          <div className="hidden sm:flex items-center gap-1">
             <MapPin className="w-3.5 h-3.5 md:w-4 md:h-4" />
             <span className="truncate max-w-[120px] sm:max-w-none">{shortLocation}</span>
           </div>

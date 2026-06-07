@@ -10,7 +10,7 @@ export function RoomPricing({ availability, facilities }: { availability?: Landi
   const formattedPrice = `₹${Number(cleanPrice).toLocaleString('en-IN')}`;
 
   return (
-    <section id="rooms" className="py-16 md:py-24 bg-white">
+    <section id="rooms" className="py-10 md:py-24 bg-white">
       <div className="max-w-7xl mx-auto px-4">
         <ScrollReveal>
           <h2

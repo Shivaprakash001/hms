@@ -34,7 +34,7 @@ export function WhyChooseUs({ features = [] }: { features?: FeatureContent[] }) 
   if (!safeFeatures.length) return null;
 
   return (
-    <section className="py-16 md:py-24 bg-white">
+    <section className="py-10 md:py-24 bg-white">
       <div className="max-w-7xl mx-auto px-4">
         <ScrollReveal>
           <h2

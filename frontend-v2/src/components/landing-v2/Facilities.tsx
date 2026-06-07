@@ -22,7 +22,7 @@ export function Facilities({ facilities = [] }: { facilities?: FacilityContent[]
   const isOdd = totalCount % 2 !== 0;
 
   return (
-    <section id="facilities" className="py-16 md:py-24 bg-[#FFFDF5]">
+    <section id="facilities" className="py-10 md:py-24 bg-[#FFFDF5]">
       <div className="max-w-7xl mx-auto px-4">
         <ScrollReveal>
           <h2
@@ -45,7 +45,7 @@ export function Facilities({ facilities = [] }: { facilities?: FacilityContent[]
               const isLastItem = index === totalCount - 1;
 
               return (
-                <StaggerItem key={index} className={isLastItem && isOdd ? "hidden md:block" : "block"}>
+                <StaggerItem key={index} className={`block ${isLastItem && isOdd ? "col-span-2 md:col-span-1" : ""}`}>
                   <div className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-all duration-300 flex flex-col items-center text-center border border-[#F07B1D]/10 h-full">
                     <div className="w-14 h-14 bg-[#F07B1D]/10 rounded-full flex items-center justify-center mb-4">
                       <Icon className="w-7 h-7 text-[#F07B1D]" />

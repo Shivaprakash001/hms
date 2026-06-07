@@ -10,7 +10,7 @@ export function AdmissionProcess({ steps = [] }: { steps?: AdmissionStepContent[
   if (!safeSteps.length) return null;
 
   return (
-    <section className="py-12 md:py-24 bg-[#FFFDF5]">
+    <section className="py-10 md:py-24 bg-[#FFFDF5]">
       <div className="max-w-7xl mx-auto px-4">
         <ScrollReveal>
           <h2
@@ -61,7 +61,7 @@ export function AdmissionProcess({ steps = [] }: { steps?: AdmissionStepContent[
 
           <div className="md:hidden">
             <div className="relative overflow-hidden rounded-2xl border border-[#F07B1D]/15 bg-white p-4 shadow-lg">
-              <div className="absolute left-8 top-8 bottom-8 w-px bg-gradient-to-b from-[#F07B1D] via-[#F07B1D]/45 to-[#1B2D5B]" />
+              <div className="absolute left-[46px] top-8 bottom-8 w-px bg-gradient-to-b from-[#F07B1D] via-[#F07B1D]/45 to-[#1B2D5B]" />
               <div className="relative space-y-3">
                 {safeSteps.map((step, index) => {
                   const isFinal = index === safeSteps.length - 1;

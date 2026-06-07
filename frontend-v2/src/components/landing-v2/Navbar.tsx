@@ -19,10 +19,10 @@ export function Navbar({ hostelProfile = fallbackLandingContent.hostelProfile }:
             <img
               src={hostelLogo}
               alt="Sri Adithya Hostels Logo"
-              className="w-10 h-10 md:w-12 md:h-12 object-contain rounded-md"
+              className="w-8 h-8 xs:w-10 xs:h-10 md:w-12 md:h-12 object-contain rounded-md"
             />
             <div>
-              <h1 className="text-sm sm:text-base md:text-xl font-bold text-[#1B2D5B]" style={{ fontFamily: 'var(--font-display)' }}>
+              <h1 className="text-xs xs:text-sm sm:text-base md:text-xl font-bold text-[#1B2D5B] whitespace-nowrap" style={{ fontFamily: 'var(--font-display)' }}>
                 {hostelProfile.name}
               </h1>
             </div>

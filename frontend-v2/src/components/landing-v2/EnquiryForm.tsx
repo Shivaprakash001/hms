@@ -72,7 +72,7 @@ export function EnquiryForm({
   };
 
   return (
-    <section id="contact" className="py-16 md:py-24 bg-white">
+    <section id="contact" className="py-10 md:py-24 bg-white">
       <div className="max-w-7xl mx-auto px-4">
         <ScrollReveal>
           <h2
@@ -248,7 +248,7 @@ export function EnquiryForm({
                   </p>
                 </div>
 
-                <div className="bg-white rounded-xl p-6 shadow-lg border-l-4 border-[#F07B1D] relative border border-slate-150">
+                <div className="bg-white rounded-xl p-6 shadow-lg border-l-4 border-[#F07B1D] relative border border-slate-200">
                   <div className="flex items-start gap-4">
                     <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#F07B1D]/20 to-[#1B2D5B]/20 flex items-center justify-center overflow-hidden border-2 border-white shadow-md flex-shrink-0">
                       {profile.ownerPhoto?.url ? (

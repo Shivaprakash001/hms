@@ -24,7 +24,7 @@ export function Testimonials({ testimonials = [] }: { testimonials?: Testimonial
   ];
 
   return (
-    <section className="bg-white py-16 md:py-24">
+    <section className="bg-white py-10 md:py-24">
       <div className="mx-auto max-w-7xl px-4">
         <ScrollReveal>
           <h2

@@ -13,12 +13,12 @@ export function Location({
   
   // Direct working Google Maps and Search Review URLs
   const directionsUrl = "https://www.google.com/maps/place/Sri+Adithya+Boys+Hostel/@17.4542729,78.6602748,17z/data=!3m1!4b1!4m6!3m5!1s0x3bcb770dd641583b:0xde3e95b9afb8c1b1!8m2!3d17.4542678!4d78.6628497";
-  const readReviewsUrl = "https://www.google.com/search?q=Sri+Adithya+Boys+Hostel+Yamnampet#lrd=0x3bcb770dd641583b:0xde3e95b9afb8c1b1,1";
-  const writeReviewUrl = "https://www.google.com/search?q=Sri+Adithya+Boys+Hostel+Yamnampet#lrd=0x3bcb770dd641583b:0xde3e95b9afb8c1b1,2";
+  const readReviewsUrl = "https://search.google.com/local/reviews?placeid=ChIJW1hB1g13yzsRscG4r7mVPt4";
+  const writeReviewUrl = "https://search.google.com/local/writereview?placeid=ChIJW1hB1g13yzsRscG4r7mVPt4";
   const embedUrl = profile.googleMapsEmbedUrl || fallbackLandingContent.hostelProfile.googleMapsEmbedUrl || '';
 
   return (
-    <section id="location" className="py-16 md:py-24 bg-[#FFFDF5]">
+    <section id="location" className="py-10 md:py-24 bg-[#FFFDF5]">
       <div className="max-w-7xl mx-auto px-4">
         <ScrollReveal>
           <h2
@@ -71,7 +71,7 @@ export function Location({
                     <span className="font-extrabold text-lg text-green-700">4.2</span>
                     <div className="flex gap-0.5">
                       {[...Array(5)].map((_, i) => (
-                        <Star key={i} className={`w-4 h-4 ${i < 4 ? 'fill-amber-400 text-amber-400' : 'text-slate-350'}`} />
+                        <Star key={i} className={`w-4 h-4 ${i < 4 ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`} />
                       ))}
                     </div>
                     <span className="text-xs font-bold text-green-800">Rating on Google</span>

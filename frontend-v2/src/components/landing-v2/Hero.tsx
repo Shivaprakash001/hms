@@ -21,18 +21,20 @@ function highlightIcon(label: string) {
 
 export function Hero({ availability, content }: { availability?: LandingAvailability; content: HeroContent }) {
   const startingPriceText = rupee(availability?.startingPrice || 8000);
-  const supportingCopy = startingPriceText
-    ? `${content.supportingCopy || 'Join SNIST students'} — ${startingPriceText}/month, everything included.`
-    : content.supportingCopy;
+  let supportingCopy = content.supportingCopy || 'Join SNIST students';
+  if (startingPriceText) {
+    const cleanCopy = supportingCopy.replace(/[,.]?\s*everything\s+included\.?/gi, '').trim();
+    supportingCopy = `${cleanCopy} — ${startingPriceText}/month, everything included.`;
+  }
   const primaryHref = availability?.visitUrl || content.primaryCta?.href || '#contact';
   const secondaryHref = content.secondaryCta?.href || 'https://api.whatsapp.com/send?phone=919392433422';
 
   return (
-    <section id="home" className="bg-gradient-to-b from-[#FFFDF5] to-white py-16 md:py-24">
+    <section id="home" className="bg-gradient-to-b from-[#FFFDF5] to-white py-10 md:py-24">
       <div className="max-w-7xl mx-auto px-4">
         <div className="grid md:grid-cols-[55%_45%] gap-12 items-center">
           <div className="space-y-8">
-            <div className="flex flex-wrap items-center gap-4">
+            <div className="flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left w-full justify-center sm:justify-start">
               <motion.div
                 className="relative flex-shrink-0"
                 initial={{ opacity: 0, scale: 0.8 }}
@@ -49,7 +51,7 @@ export function Hero({ availability, content }: { availability?: LandingAvailabi
                 </div>
               </motion.div>
 
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col items-center sm:items-start gap-2">
                 <motion.div
                   className="inline-flex items-center gap-2 bg-[#1B2D5B] text-white px-4 py-2 rounded-full text-sm border-l-4 border-[#F07B1D] font-medium"
                   initial={{ opacity: 0, y: 20 }}
@@ -70,25 +72,25 @@ export function Hero({ availability, content }: { availability?: LandingAvailabi
             </div>
 
             <motion.div
-              className="mt-6"
+              className="mt-6 text-center sm:text-left"
               initial={{ opacity: 0, y: 36 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 1, delay: 0.1, ease: [0.25, 0.4, 0.25, 1] }}
             >
               <h1
-                className="text-4xl md:text-5xl lg:text-6xl font-bold text-[#1B2D5B] leading-tight mb-6"
+                className="text-[28px] sm:text-4xl md:text-5xl lg:text-6xl font-bold text-[#1B2D5B] leading-tight mb-6"
                 style={{ fontFamily: 'var(--font-display)' }}
               >
                 400m from SNIST. Home Food. Everything Included.
               </h1>
-              <p className="text-xl md:text-2xl text-[#2C2C2A] leading-relaxed">
+              <p className="text-lg md:text-2xl text-[#2C2C2A] leading-relaxed">
                 {content.subtitle}
               </p>
             </motion.div>
 
             {supportingCopy && (
               <motion.p
-                className="text-base md:text-lg text-[#2C2C2A]/80 pt-4"
+                className="text-base md:text-lg text-[#2C2C2A]/80 pt-4 text-center sm:text-left"
                 initial={{ opacity: 0, y: 24 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.8, delay: 0.3, ease: [0.25, 0.4, 0.25, 1] }}
@@ -99,14 +101,14 @@ export function Hero({ availability, content }: { availability?: LandingAvailabi
 
             <div>
               <motion.div
-                className="flex flex-wrap gap-4 pt-6"
+                className="flex flex-col sm:flex-row gap-4 pt-6"
                 initial={{ opacity: 0, y: 18 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.8, delay: 0.5, ease: [0.25, 0.4, 0.25, 1] }}
               >
                 <a
                   href={primaryHref}
-                  className="flex items-center gap-2 bg-[#F07B1D] text-white px-8 py-4 rounded-lg hover:bg-[#d96e18] transition-colors shadow-lg font-semibold"
+                  className="flex items-center justify-center gap-2 bg-[#F07B1D] text-white px-8 py-4 rounded-lg hover:bg-[#d96e18] transition-colors shadow-lg font-semibold w-full sm:w-auto text-center"
                 >
                   <Phone className="w-5 h-5" />
                   <span>{content.primaryCta?.label || 'Book a Room Visit'}</span>
@@ -115,14 +117,14 @@ export function Hero({ availability, content }: { availability?: LandingAvailabi
                   href={secondaryHref}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-2 bg-white text-[#1B2D5B] border-l-4 border-green-500 px-8 py-4 rounded-lg hover:shadow-lg transition-all shadow-md font-semibold"
+                  className="flex items-center justify-center gap-2 bg-white text-[#1B2D5B] border-l-4 border-green-500 px-8 py-4 rounded-lg hover:shadow-lg transition-all shadow-md font-semibold w-full sm:w-auto text-center"
                 >
                   <MessageCircle className="w-5 h-5" />
                   <span>{content.secondaryCta?.label || 'Check Availability on WhatsApp'}</span>
                 </a>
               </motion.div>
               <motion.p
-                className="text-sm italic text-red-600 font-semibold mt-3 ml-1"
+                className="text-sm italic text-red-600 font-semibold mt-3 text-center sm:text-left"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.5, delay: 0.6 }}
@@ -132,31 +134,28 @@ export function Hero({ availability, content }: { availability?: LandingAvailabi
             </div>
 
             <motion.div
-              className="flex flex-wrap gap-4 pt-8 border-t border-[#F07B1D]/20 mt-8"
+              className="flex flex-wrap gap-2.5 pt-8 border-t border-[#F07B1D]/20 mt-8 justify-center sm:justify-start"
               initial={{ opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.7, ease: [0.25, 0.4, 0.25, 1] }}
             >
-              {content.highlights.map((highlight, index) => {
+              {content.highlights.map((highlight) => {
                 const Icon = highlightIcon(highlight);
                 return (
-                  <div key={highlight} className="contents">
-                    {index > 0 && <div className="h-4 w-px bg-[#F07B1D]/30" />}
-                    <div className="flex items-center gap-2 text-[#2C2C2A] text-sm">
-                      <Icon className="w-4 h-4 text-[#F07B1D]" />
-                      <span>{highlight}</span>
-                    </div>
+                  <div
+                    key={highlight}
+                    className="flex items-center gap-1.5 text-[#2C2C2A] text-xs bg-[#FFFDF5] border border-[#F07B1D]/15 px-3 py-1.5 rounded-full shadow-sm"
+                  >
+                    <Icon className="w-3.5 h-3.5 text-[#F07B1D]" />
+                    <span className="font-semibold">{highlight}</span>
                   </div>
                 );
               })}
               {availability?.hasLiveAvailability && (
-                <>
-                  <div className="h-4 w-px bg-[#F07B1D]/30" />
-                  <div className="flex items-center gap-2 text-red-600 font-medium text-sm">
-                    <span className="w-2 h-2 bg-red-600 rounded-full animate-pulse" />
-                    <span>{availability.bedsAvailable} beds left for {availability.intakeMonth}</span>
-                  </div>
-                </>
+                <div className="flex items-center gap-1.5 text-red-600 font-semibold text-xs bg-red-50 border border-red-100 px-3 py-1.5 rounded-full shadow-sm">
+                  <span className="w-1.5 h-1.5 bg-red-600 rounded-full animate-pulse" />
+                  <span>{availability.bedsAvailable} beds left for {availability.intakeMonth}</span>
+                </div>
               )}
             </motion.div>
           </div>

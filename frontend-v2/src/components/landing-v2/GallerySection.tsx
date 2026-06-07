@@ -5,7 +5,7 @@ export function GallerySection({ images = [] }: { images?: GalleryImageContent[]
   if (!images.length) return null;
 
   return (
-    <section className="bg-white py-16 md:py-24">
+    <section className="bg-white py-10 md:py-24">
       <div className="mx-auto max-w-7xl px-4">
         <ScrollReveal>
           <h2
@@ -22,7 +22,7 @@ export function GallerySection({ images = [] }: { images?: GalleryImageContent[]
         </ScrollReveal>
 
         <StaggerReveal staggerDelay={0.08}>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {images.map((image, index) => (
               <StaggerItem key={`${image.url}-${index}`}>
                 <article className="relative overflow-hidden rounded-2xl border border-[#F07B1D]/10 bg-[#FFFDF5] shadow-md aspect-[4/3] group">
