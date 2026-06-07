@@ -27,6 +27,51 @@ export interface ActivityLogsViewProps {
 const getSeverity = (log: any) => {
   const entity = log.entity_type;
   const action = log.action_type;
+  const category = String(log.category || '').toLowerCase();
+  const badgeColor = String(log.badgeColor || '').toLowerCase();
+
+  if (category === 'payments' || badgeColor === 'emerald') {
+    return {
+      label: 'Payment',
+      color: 'text-emerald-700 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20',
+      dot: 'bg-emerald-500 ring-emerald-100 dark:ring-emerald-950',
+    };
+  }
+  if (category === 'expenses' || badgeColor === 'rose') {
+    return {
+      label: 'Expense',
+      color: 'text-rose-700 bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/20',
+      dot: 'bg-rose-500 ring-rose-100 dark:ring-rose-950',
+    };
+  }
+  if (category === 'occupancy' || category === 'admissions' || badgeColor === 'blue' || badgeColor === 'sky') {
+    return {
+      label: category === 'admissions' ? 'Admission' : 'Allocation',
+      color: 'text-blue-700 bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20',
+      dot: 'bg-blue-500 ring-blue-100 dark:ring-blue-950',
+    };
+  }
+  if (category === 'move outs' || badgeColor === 'indigo' || badgeColor === 'slate') {
+    return {
+      label: 'Move-out',
+      color: 'text-indigo-700 bg-indigo-50 dark:bg-indigo-500/10 border-indigo-200 dark:border-indigo-500/20',
+      dot: 'bg-indigo-500 ring-indigo-100 dark:ring-indigo-950',
+    };
+  }
+  if (category === 'documents' || badgeColor === 'amber') {
+    return {
+      label: 'Document',
+      color: 'text-amber-700 bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20',
+      dot: 'bg-amber-500 ring-amber-100 dark:ring-amber-950',
+    };
+  }
+  if (category === 'settings' || category === 'billing' || badgeColor === 'purple') {
+    return {
+      label: category === 'billing' ? 'Billing' : 'Settings',
+      color: 'text-purple-700 bg-purple-50 dark:bg-purple-500/10 border-purple-200 dark:border-purple-500/20',
+      dot: 'bg-purple-500 ring-purple-100 dark:ring-purple-950',
+    };
+  }
   
   if (action === 'DELETE') {
     return {
@@ -205,6 +250,9 @@ function ActivityLogItem({ log, getEventMeta }: ActivityLogItemProps) {
   // Generate dynamic subtitle/description for compact row
   const getCompactInfo = () => {
     const meta = log.metadata || {};
+    if (!log.entity_type && log.subtitle) {
+      return String(log.subtitle);
+    }
     if (log.entity_type === 'PAYMENT') {
       return `${formatCurrency(meta.amount || 0)} • ${meta.method || 'Cash'}`;
     }
@@ -246,7 +294,7 @@ function ActivityLogItem({ log, getEventMeta }: ActivityLogItemProps) {
       });
       return `${friendlyDomains.join(', ')}`;
     }
-    return description;
+    return description || String(log.category || 'Activity');
   };
 
   const compactInfo = getCompactInfo();
@@ -448,10 +496,35 @@ export function ActivityLogsView({ embedded = false }: ActivityLogsViewProps) {
     const { action_type, entity_type, metadata } = log;
     const meta = metadata || {};
 
-    let title = `${action_type} ${entity_type}`;
-    let description = '';
+    let title = log.title || [action_type, entity_type].filter(Boolean).join(' ') || 'Activity recorded';
+    let description = log.subtitle || '';
     let IconComponent = Activity;
     let iconColor = 'text-muted-foreground bg-secondary/50';
+
+    if (!action_type && !entity_type) {
+      const category = String(log.category || '').toLowerCase();
+      if (category === 'payments') {
+        IconComponent = IndianRupee;
+        iconColor = 'text-emerald-500 bg-emerald-500/10';
+      } else if (category === 'expenses') {
+        IconComponent = Receipt;
+        iconColor = 'text-rose-500 bg-rose-500/10';
+      } else if (category === 'occupancy' || category === 'admissions') {
+        IconComponent = category === 'admissions' ? User : Building2;
+        iconColor = 'text-blue-500 bg-blue-500/10';
+      } else if (category === 'documents') {
+        IconComponent = Receipt;
+        iconColor = 'text-amber-500 bg-amber-500/10';
+      } else if (category === 'settings') {
+        IconComponent = Settings;
+        iconColor = 'text-purple-500 bg-purple-500/10';
+      } else if (category === 'billing') {
+        IconComponent = IndianRupee;
+        iconColor = 'text-indigo-500 bg-indigo-500/10';
+      }
+
+      return { title, description, IconComponent, iconColor };
+    }
 
     if (entity_type === 'TENANT') {
       IconComponent = User;
