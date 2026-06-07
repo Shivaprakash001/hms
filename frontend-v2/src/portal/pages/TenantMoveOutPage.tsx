@@ -1,37 +1,108 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { CalendarDays, DoorOpen, Loader2 } from 'lucide-react';
+import { CalendarDays, DoorOpen, Loader2, AlertTriangle, CheckCircle2, Clock, CreditCard, ChevronRight, MessageSquare, Star } from 'lucide-react';
 import { moveOutService } from '@features/move-out/api';
 import { useTenantDashboard } from '@features/tenant-portal/hooks/useTenantDashboard';
 import { MoveOutStepper } from '@features/tenants/components/moveout/MoveOutStepper';
+import { Link } from 'react-router-dom';
 
 const fmt = (n: number) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
 
+const REASONS = [
+  { value: 'COURSE_COMPLETED', label: 'Course Completed' },
+  { value: 'PERSONAL_REASONS', label: 'Going Home' },
+  { value: 'MOVING_CLOSER', label: 'Moving Closer To College' },
+  { value: 'BETTER_HOSTEL', label: 'Found Better Hostel' },
+  { value: 'TOO_EXPENSIVE', label: 'Found Cheaper Hostel' },
+  { value: 'FOOD_QUALITY', label: 'Food Issues' },
+  { value: 'POOR_MAINTENANCE', label: 'Facilities Issues' },
+  { value: 'ROOMMATE_ISSUES', label: 'Roommate Issues' },
+  { value: 'OTHER', label: 'Other' },
+];
+
 export function TenantMoveOutPage() {
-  const [plannedDate, setPlannedDate] = useState('');
-  const [reason, setReason] = useState('PERSONAL_REASONS');
-  const [reasonText, setReasonText] = useState('');
-  const { advance, dues } = useTenantDashboard();
+  const { profile, advance, dues, refetchAll } = useTenantDashboard();
+  const prof = profile?.profile as Record<string, unknown> | undefined;
+  const tenant = profile?.tenant as Record<string, unknown> | undefined;
+  
+  // Resolve year of study
+  const yearOfStudy = tenant?.year_of_study || profile?.year_of_study;
+  const is4thYear = yearOfStudy === 4 || yearOfStudy === '4';
 
   const { data: timeline, isLoading, refetch } = useQuery({
     queryKey: ['tenant', 'move-out', 'timeline'],
     queryFn: () => moveOutService.getTimeline(),
   });
 
+  // Wizard state
+  const [wizardStep, setWizardStep] = useState(1);
+  const [dateChoice, setDateChoice] = useState<'TODAY' | 'LATER' | ''>('');
+  const [plannedDate, setPlannedDate] = useState('');
+  const [reason, setReason] = useState(is4thYear ? 'COURSE_COMPLETED' : '');
+  const [reasonText, setReasonText] = useState('');
+
+  // Feedback screen state
+  const [ratings, setRatings] = useState<Record<string, number>>({
+    ratingFood: 0,
+    ratingCleanliness: 0,
+    ratingManagement: 0,
+    ratingWifi: 0,
+    ratingSafety: 0,
+  });
+  const [experienceText, setExperienceText] = useState('');
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+  const [calculatedOverallRating, setCalculatedOverallRating] = useState(5);
+
   const submitMutation = useMutation({
     mutationFn: () =>
       moveOutService.submitRequest({
-        plannedExitDate: plannedDate,
+        plannedExitDate: dateChoice === 'TODAY' 
+          ? new Date().toISOString().slice(0, 10) 
+          : plannedDate,
         reason,
         reasonText,
       }),
     onSuccess: () => {
       toast.success('Move-out request submitted');
       refetch();
+      refetchAll();
     },
     onError: (e: Error & { response?: { data?: { error?: { message?: string } } } }) =>
       toast.error(e?.response?.data?.error?.message ?? 'Failed to submit'),
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: () => moveOutService.cancelRequest(String(request?.id ?? '')),
+    onSuccess: () => {
+      toast.success('Move-out request cancelled');
+      refetch();
+      refetchAll();
+    },
+    onError: (e: Error & { response?: { data?: { error?: { message?: string } } } }) =>
+      toast.error(e?.response?.data?.error?.message ?? 'Failed to cancel'),
+  });
+
+  const disputeMutation = useMutation({
+    mutationFn: (payload: { disputeType: string; description: string; disputedAmount: number }) =>
+      moveOutService.dispute(String(request?.id ?? ''), payload),
+    onSuccess: () => {
+      toast.success('Dispute submitted');
+      setShowDisputeForm(false);
+      refetch();
+    },
+    onError: (e: Error & { response?: { data?: { error?: { message?: string } } } }) =>
+      toast.error(e?.response?.data?.error?.message ?? 'Failed to submit dispute'),
+  });
+
+  const feedbackMutation = useMutation({
+    mutationFn: (payload: any) => moveOutService.feedback(String(request?.id ?? ''), payload),
+    onSuccess: () => {
+      toast.success('Thank you for your feedback!');
+      setFeedbackSubmitted(true);
+    },
+    onError: (e: Error & { response?: { data?: { error?: { message?: string } } } }) =>
+      toast.error(e?.response?.data?.error?.message ?? 'Failed to submit feedback'),
   });
 
   const timelineData = (timeline ?? {}) as Record<string, unknown>;
@@ -44,40 +115,12 @@ export function TenantMoveOutPage() {
         planned_exit_date: timelineData.planned_exit_date,
       }
     : null);
-  const settlement = timelineData.settlement as
-    | Record<string, unknown>
-    | undefined;
-
-  const cancelMutation = useMutation({
-    mutationFn: () => moveOutService.cancelRequest(String(request?.id ?? '')),
-    onSuccess: () => {
-      toast.success('Move-out request cancelled');
-      refetch();
-    },
-    onError: (e: Error & { response?: { data?: { error?: { message?: string } } } }) =>
-      toast.error(e?.response?.data?.error?.message ?? 'Failed to cancel'),
-  });
+  const settlement = timelineData.settlement as Record<string, unknown> | undefined;
 
   const [showDisputeForm, setShowDisputeForm] = useState(false);
   const [disputeType, setDisputeType] = useState('DEDUCTIONS');
   const [disputeDescription, setDisputeDescription] = useState('');
   const [disputedAmount, setDisputedAmount] = useState('');
-
-  const disputeMutation = useMutation({
-    mutationFn: () =>
-      moveOutService.dispute(String(request?.id ?? ''), {
-        disputeType,
-        description: disputeDescription,
-        disputedAmount: Number(disputedAmount) || 0,
-      }),
-    onSuccess: () => {
-      toast.success('Dispute submitted');
-      setShowDisputeForm(false);
-      refetch();
-    },
-    onError: (e: Error & { response?: { data?: { error?: { message?: string } } } }) =>
-      toast.error(e?.response?.data?.error?.message ?? 'Failed to submit dispute'),
-  });
 
   if (isLoading) {
     return (
@@ -87,6 +130,150 @@ export function TenantMoveOutPage() {
     );
   }
 
+  // --- Feedback Flow (when status is COMPLETED) ---
+  if (active && request && String(request.status).toUpperCase() === 'COMPLETED') {
+    if (feedbackSubmitted) {
+      return (
+        <div className="space-y-6 max-w-md mx-auto py-10 px-4 text-center">
+          <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 mb-2">
+            <CheckCircle2 className="h-10 h-10" />
+          </div>
+          <h1 className="text-2xl font-bold text-foreground">Stay Completed</h1>
+          
+          {calculatedOverallRating >= 4 ? (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Thank you for the awesome feedback! We are thrilled you had a great experience staying with us. We would love if you could share your experience on Google.
+              </p>
+              <a
+                href="https://google.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 w-full py-3.5 rounded-xl bg-[#243A72] text-white font-semibold shadow-lg shadow-blue-500/10 hover:bg-[#1B2D5B] transition-colors"
+              >
+                Write a Google Review
+              </a>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Thank you for your feedback! We will use your inputs to improve our services and hostel facilities.
+              </p>
+            </div>
+          )}
+          
+          <button
+            type="button"
+            onClick={() => {
+              refetch();
+              refetchAll();
+            }}
+            className="w-full py-3 rounded-xl border border-border text-foreground bg-card font-semibold text-sm hover:bg-secondary/20 transition-colors mt-2"
+          >
+            Finish
+          </button>
+        </div>
+      );
+    }
+
+    const handleRatingSelect = (category: string, score: number) => {
+      setRatings((prev) => ({ ...prev, [category]: score }));
+    };
+
+    const handleFeedbackSubmit = () => {
+      const incomplete = Object.values(ratings).some((r) => r === 0);
+      if (incomplete) {
+        toast.error('Please rate all categories before submitting.');
+        return;
+      }
+
+      const scores = Object.values(ratings);
+      const overall = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+      setCalculatedOverallRating(overall);
+
+      feedbackMutation.mutate({
+        ratingFood: ratings.ratingFood,
+        ratingCleanliness: ratings.ratingCleanliness,
+        ratingWifi: ratings.ratingWifi,
+        ratingManagement: ratings.ratingManagement,
+        ratingSafety: ratings.ratingSafety,
+        overallRating: overall,
+        experienceText,
+      });
+    };
+
+    const ratingItems = [
+      { key: 'ratingFood', label: 'Food Quality' },
+      { key: 'ratingCleanliness', label: 'Room & Cleanliness' },
+      { key: 'ratingManagement', label: 'Hostel Staff & Management' },
+      { key: 'ratingWifi', label: 'WiFi Speed & Reliability' },
+      { key: 'ratingSafety', label: 'Safety & Security' },
+    ];
+
+    return (
+      <div className="space-y-6 max-w-md mx-auto pb-10">
+        <div className="text-center space-y-1 py-4">
+          <h1 className="text-2xl font-bold text-foreground">Stay Completed</h1>
+          <p className="text-sm text-muted-foreground">Help us improve. Your feedback matters.</p>
+        </div>
+
+        <div className="space-y-4">
+          {ratingItems.map((item) => (
+            <div key={item.key} className="p-4 rounded-xl border border-border bg-card space-y-3">
+              <p className="text-sm font-semibold text-foreground">{item.label}</p>
+              <div className="flex gap-4">
+                {[
+                  { score: 1, label: '🙁 Poor' },
+                  { score: 3, label: '😐 Average' },
+                  { score: 5, label: '🙂 Excellent' },
+                ].map((face) => {
+                  const selected = ratings[item.key] === face.score;
+                  return (
+                    <button
+                      key={face.score}
+                      type="button"
+                      onClick={() => handleRatingSelect(item.key, face.score)}
+                      className={`flex-1 py-2 px-3 rounded-lg border text-xs font-semibold flex items-center justify-center transition-all ${
+                        selected
+                          ? 'border-[#243A72] bg-[#243A72]/5 text-[#243A72]'
+                          : 'border-border bg-background text-muted-foreground hover:bg-secondary/10'
+                      }`}
+                    >
+                      {face.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-sm font-semibold text-foreground">
+            Anything you&apos;d like us to know? <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+          </label>
+          <textarea
+            rows={3}
+            value={experienceText}
+            onChange={(e) => setExperienceText(e.target.value)}
+            placeholder="Share details of your stay..."
+            className="w-full resize-none rounded-xl border border-border bg-background px-3 py-3 text-sm"
+          />
+        </div>
+
+        <button
+          type="button"
+          disabled={feedbackMutation.isPending}
+          onClick={handleFeedbackSubmit}
+          className="w-full py-3.5 rounded-xl bg-[#243A72] text-white font-semibold shadow-lg shadow-blue-500/10 hover:bg-[#1B2D5B] transition-colors"
+        >
+          {feedbackMutation.isPending ? 'Submitting...' : 'Submit Feedback'}
+        </button>
+      </div>
+    );
+  }
+
+  // --- Active Request Flow ---
   if (active && request && typeof request === 'object') {
     const paidDeposit = Number(settlement?.security_deposit_amount ?? advance?.balance ?? 0);
     const extraAdvance = Number(settlement?.advance_balance ?? 0);
@@ -104,14 +291,48 @@ export function TenantMoveOutPage() {
     );
     const direction = String(settlement?.direction ?? settlement?.settlement_direction ?? '');
 
+    const tenantOwesMoney = direction === 'TENANT_OWES_OWNER' || netAmount < 0;
+
     return (
       <div className="space-y-5">
-        <h1 className="text-xl font-bold text-foreground">Move-out</h1>
+        <h1 className="text-xl font-bold text-foreground">Move-out Details</h1>
         <MoveOutStepper request={request as Record<string, unknown>} hostelId="" />
+
+        {/* Conditional Settlement Required Card */}
+        {String(request.status).toUpperCase() === 'SETTLEMENT_PENDING' && (
+          tenantOwesMoney ? (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-4 space-y-3">
+              <div className="flex items-center gap-2 text-red-700 font-bold text-sm">
+                <AlertTriangle className="w-5 h-5" />
+                <span>Settlement Required</span>
+              </div>
+              <p className="text-xs text-red-600">
+                Your final dues have been calculated. Please review the breakdown below and complete the payment to proceed with your move-out approval.
+              </p>
+              <Link
+                to="/tenant/financials?pay=1"
+                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg bg-red-600 text-white font-bold text-xs hover:bg-red-700 transition-colors"
+              >
+                <CreditCard className="w-4 h-4" />
+                Pay {fmt(Math.abs(netAmount))}
+              </Link>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 space-y-2">
+              <div className="flex items-center gap-2 text-blue-700 font-bold text-sm">
+                <Clock className="w-5 h-5" />
+                <span>Refund Processing</span>
+              </div>
+              <p className="text-xs text-blue-600">
+                You are due a refund of {fmt(Math.abs(netAmount))}. The property owner will approve and release this payment to your account.
+              </p>
+            </div>
+          )
+        )}
 
         {(paidDeposit > 0 || extraAdvance > 0 || pendingRent > 0 || lateFees > 0 || otherDues > 0 || settlement) && (
           <section className="rounded-xl border border-border bg-card p-4">
-            <h2 className="text-sm font-semibold text-foreground mb-3">Settlement preview</h2>
+            <h2 className="text-sm font-semibold text-foreground mb-3">Settlement breakdown</h2>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Paid security deposit</span>
@@ -148,12 +369,12 @@ export function TenantMoveOutPage() {
                 </div>
               )}
               <div className="flex justify-between pt-2 border-t border-border font-bold">
-                <span>{direction === 'TENANT_OWES_OWNER' || netAmount < 0 ? 'Amount to pay' : 'Refund amount'}</span>
-                <span className={netAmount < 0 ? 'text-destructive' : 'text-[#243A72]'}>{fmt(Math.abs(netAmount))}</span>
+                <span>{tenantOwesMoney ? 'Amount to pay' : 'Refund amount'}</span>
+                <span className={tenantOwesMoney ? 'text-destructive' : 'text-[#243A72]'}>{fmt(Math.abs(netAmount))}</span>
               </div>
             </div>
             <p className="text-xs text-muted-foreground mt-3">
-              Final amounts are confirmed after inspection. This preview helps avoid disputes.
+              Final amounts are confirmed after inspection. This breakdown helps avoid disputes.
             </p>
           </section>
         )}
@@ -236,7 +457,13 @@ export function TenantMoveOutPage() {
                   <button
                     type="button"
                     disabled={disputeMutation.isPending || !disputeDescription}
-                    onClick={() => disputeMutation.mutate()}
+                    onClick={() =>
+                      disputeMutation.mutate({
+                        disputeType,
+                        description: disputeDescription,
+                        disputedAmount: Number(disputedAmount) || 0,
+                      })
+                    }
                     className="flex-1 py-2 rounded-lg bg-destructive text-destructive-foreground font-semibold text-xs disabled:opacity-50"
                   >
                     {disputeMutation.isPending ? 'Submitting...' : 'Submit Dispute'}
@@ -259,85 +486,240 @@ export function TenantMoveOutPage() {
     );
   }
 
-  return (
-    <div className="space-y-5">
-      <section className="overflow-hidden rounded-2xl border border-blue-500/20 bg-card shadow-sm">
-        <div 
-          className="px-5 py-5 text-white relative overflow-hidden"
-          style={{ background: 'linear-gradient(135deg, #1B2D5B 0%, #243A72 100%)' }}
-        >
-          <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-2xl -mr-16 -mt-16"></div>
-          <div className="relative flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/20">
-              <DoorOpen className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-100/80">Exit workflow</p>
-              <h1 className="text-2xl font-bold leading-tight">Request move-out</h1>
-            </div>
-          </div>
-        </div>
-        <div className="px-5 py-4">
-          <p className="text-sm text-muted-foreground">
-            Submit your planned exit date. Your owner will be notified immediately and can schedule inspection and settlement.
-          </p>
-        </div>
-      </section>
+  // --- Wizard: Screen 1 (Exit Date Choice) ---
+  if (wizardStep === 1) {
+    const isTodayChoice = dateChoice === 'TODAY';
+    const isLaterChoice = dateChoice === 'LATER';
 
-      <section className="rounded-2xl border border-border bg-card p-4 space-y-4">
-        <label className="block text-sm font-medium text-foreground">
-          Planned exit date
-          <div className="relative mt-1">
-            <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="date"
-              value={plannedDate}
-              min={new Date().toISOString().slice(0, 10)}
-              onChange={(e) => setPlannedDate(e.target.value)}
-              className="w-full rounded-xl border border-border bg-background py-3 pl-10 pr-3 text-sm"
-            />
-          </div>
-        </label>
-        <label className="block text-sm font-medium text-foreground">
-          Reason
-          <select
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            className="mt-1 w-full px-3 py-3 rounded-xl border border-border bg-background text-sm"
+    return (
+      <div className="space-y-6">
+        <header className="overflow-hidden rounded-2xl border border-blue-500/20 bg-card shadow-sm">
+          <div 
+            className="px-5 py-5 text-white relative overflow-hidden"
+            style={{ background: 'linear-gradient(135deg, #1B2D5B 0%, #243A72 100%)' }}
           >
-            <option value="PERSONAL_REASONS">Personal reasons</option>
-            <option value="JOB_RELOCATION">Job relocation</option>
-            <option value="COURSE_COMPLETED">Course completed</option>
-            <option value="TOO_EXPENSIVE">Too expensive</option>
-            <option value="POOR_MAINTENANCE">Maintenance concerns</option>
-            <option value="FOOD_QUALITY">Food quality</option>
-            <option value="ROOMMATE_ISSUES">Roommate issues</option>
-            <option value="BETTER_HOSTEL">Moving to another hostel</option>
-            <option value="SAFETY_CONCERNS">Safety concerns</option>
-            <option value="MOVING_CLOSER">Moving closer to college/work</option>
-            <option value="OTHER">Other</option>
-          </select>
-        </label>
-        <label className="block text-sm font-medium text-foreground">
-          Notes for owner <span className="font-normal text-muted-foreground">(optional)</span>
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-2xl -mr-16 -mt-16" />
+            <div className="relative flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/20">
+                <DoorOpen className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-100/80">Exit workflow</p>
+                <h1 className="text-2xl font-bold leading-tight">Move Out Request</h1>
+              </div>
+            </div>
+          </div>
+          <div className="px-5 py-4">
+            <p className="text-sm text-muted-foreground font-semibold">
+              Tell us when you plan to leave.
+            </p>
+          </div>
+        </header>
+
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={() => {
+              setDateChoice('TODAY');
+              setPlannedDate('');
+            }}
+            className={`w-full p-4 rounded-xl border text-left flex items-center justify-between transition-all ${
+              isTodayChoice
+                ? 'border-[#243A72] bg-[#243A72]/5 text-[#243A72]'
+                : 'border-border bg-card text-foreground hover:bg-secondary/10'
+            }`}
+          >
+            <div>
+              <p className="font-semibold text-sm">Leaving Today</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Process your exit immediately</p>
+            </div>
+            <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${
+              isTodayChoice ? 'border-[#243A72] bg-[#243A72]' : 'border-muted-foreground'
+            }`}>
+              {isTodayChoice && <div className="w-2.5 h-2.5 rounded-full bg-white" />}
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setDateChoice('LATER')}
+            className={`w-full p-4 rounded-xl border text-left flex items-center justify-between transition-all ${
+              isLaterChoice
+                ? 'border-[#243A72] bg-[#243A72]/5 text-[#243A72]'
+                : 'border-border bg-card text-foreground hover:bg-secondary/10'
+            }`}
+          >
+            <div>
+              <p className="font-semibold text-sm">Leaving Later</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Select a future date for your exit</p>
+            </div>
+            <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${
+              isLaterChoice ? 'border-[#243A72] bg-[#243A72]' : 'border-muted-foreground'
+            }`}>
+              {isLaterChoice && <div className="w-2.5 h-2.5 rounded-full bg-white" />}
+            </div>
+          </button>
+        </div>
+
+        {isLaterChoice && (
+          <div className="rounded-xl border border-border bg-card p-4 space-y-2">
+            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              Select Date
+            </label>
+            <div className="relative">
+              <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="date"
+                value={plannedDate}
+                min={new Date().toISOString().slice(0, 10)}
+                onChange={(e) => setPlannedDate(e.target.value)}
+                className="w-full rounded-xl border border-border bg-background py-3 pl-10 pr-3 text-sm text-foreground focus:border-[#243A72] focus:ring-1 focus:ring-[#243A72]"
+              />
+            </div>
+          </div>
+        )}
+
+        <button
+          type="button"
+          disabled={!dateChoice || (isLaterChoice && !plannedDate)}
+          onClick={() => setWizardStep(2)}
+          className="w-full py-3.5 rounded-xl bg-[#243A72] text-white font-semibold hover:bg-[#1B2D5B] transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
+        >
+          <span>Continue</span>
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+    );
+  }
+
+  // --- Wizard: Screen 2 (Reason for leaving) ---
+  if (wizardStep === 2) {
+    return (
+      <div className="space-y-6">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold text-foreground">Why Are You Leaving?</h1>
+          <p className="text-sm text-muted-foreground">Select a reason for requesting move-out.</p>
+        </div>
+
+        {is4thYear && (
+          <div className="p-3.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-xs leading-relaxed">
+            ⚠️ <strong>Academic Year Rule</strong>: Since you are a 4th/final-year student, your move-out reason is set to <strong>Course Completed</strong>.
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-2">
+          {REASONS.map((r) => {
+            const selected = reason === r.value;
+            const disabled = is4thYear && r.value !== 'COURSE_COMPLETED';
+
+            return (
+              <button
+                key={r.value}
+                type="button"
+                disabled={disabled}
+                onClick={() => setReason(r.value)}
+                className={`py-2 px-3 rounded-full border text-xs font-semibold transition-all ${
+                  selected
+                    ? 'border-[#243A72] bg-[#243A72] text-white'
+                    : disabled
+                      ? 'border-border bg-secondary/50 text-muted-foreground opacity-40 cursor-not-allowed'
+                      : 'border-border bg-card text-foreground hover:bg-secondary/10'
+                }`}
+              >
+                {r.label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-sm font-semibold text-foreground">
+            Anything you&apos;d like us to know? <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+          </label>
           <textarea
             rows={3}
             value={reasonText}
             onChange={(e) => setReasonText(e.target.value)}
-            placeholder="Share timing, inspection availability, or any special context..."
-            className="mt-1 w-full resize-none rounded-xl border border-border bg-background px-3 py-3 text-sm"
+            placeholder="Share details of your exit..."
+            className="w-full resize-none rounded-xl border border-border bg-background px-3 py-3 text-sm"
           />
-        </label>
-      </section>
+        </div>
 
-      <button
-        type="button"
-        disabled={!plannedDate || submitMutation.isPending}
-        onClick={() => submitMutation.mutate()}
-        className="sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] w-full py-3.5 rounded-xl bg-[#243A72] text-white font-semibold shadow-lg shadow-blue-500/10 hover:bg-[#1B2D5B] transition-colors disabled:opacity-50"
-      >
-        {submitMutation.isPending ? 'Submitting request...' : 'Send move-out request'}
-      </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setWizardStep(1)}
+            className="flex-1 py-3 rounded-xl border border-border bg-card font-semibold text-sm hover:bg-secondary/20 transition-colors text-foreground"
+          >
+            Back
+          </button>
+          <button
+            type="button"
+            disabled={!reason}
+            onClick={() => setWizardStep(3)}
+            className="flex-1 py-3 rounded-xl bg-[#243A72] text-white font-semibold hover:bg-[#1B2D5B] transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
+          >
+            <span>Continue</span>
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // --- Wizard: Screen 3 (Settlement Preview) ---
+  const depositPaid = Number(advance?.security_deposit_paid ?? advance?.balance ?? 0);
+  const duesOutstanding = Number(dues?.total_due ?? 0);
+  const expectedRefund = depositPaid - duesOutstanding;
+  const refundDirection = expectedRefund >= 0;
+
+  return (
+    <div className="space-y-6">
+      <div className="space-y-1">
+        <h1 className="text-2xl font-bold text-foreground">Settlement Preview</h1>
+        <p className="text-sm text-muted-foreground">Full transparency on dues and deposit.</p>
+      </div>
+
+      <div className="rounded-xl border border-border bg-card p-4 space-y-4">
+        <div className="space-y-2 text-sm">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Paid Security Deposit</span>
+            <span className="font-semibold text-foreground">{fmt(depositPaid)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Pending Rent & Dues</span>
+            <span className="font-semibold text-destructive">−{fmt(duesOutstanding)}</span>
+          </div>
+          <div className="flex justify-between pt-2.5 border-t border-border font-extrabold text-base">
+            <span>{refundDirection ? 'Expected Refund' : 'Expected Dues'}</span>
+            <span className={refundDirection ? 'text-[#243A72]' : 'text-destructive'}>
+              {fmt(Math.abs(expectedRefund))}
+            </span>
+          </div>
+        </div>
+
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Final amounts are calculated after inspection. This preview helps avoid disputes.
+        </p>
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => setWizardStep(2)}
+          className="flex-1 py-3 rounded-xl border border-border bg-card font-semibold text-sm hover:bg-secondary/20 transition-colors text-foreground"
+        >
+          Back
+        </button>
+        <button
+          type="button"
+          disabled={submitMutation.isPending}
+          onClick={() => submitMutation.mutate()}
+          className="flex-1 py-3 rounded-xl bg-[#243A72] text-white font-semibold hover:bg-[#1B2D5B] transition-colors disabled:opacity-50"
+        >
+          {submitMutation.isPending ? 'Submitting...' : 'Confirm Request'}
+        </button>
+      </div>
     </div>
   );
 }

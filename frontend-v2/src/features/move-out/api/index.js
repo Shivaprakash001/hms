@@ -60,4 +60,8 @@ export const moveOutService = {
     const response = await api.post(`/move-out/requests/${requestId}/reject`, payload);
     return unwrap(response);
   },
+  getAnalytics: async (hostelId) => {
+    const response = await api.get('/move-out/analytics', { params: { hostelId } });
+    return unwrap(response);
+  },
 };

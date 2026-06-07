@@ -125,6 +125,45 @@ export function TenantDashboardPage() {
         </Link>
       )}
 
+      {/* My Stay Section */}
+      <section className="space-y-3">
+        <h3 className="text-sm font-bold text-foreground">My Stay</h3>
+        <div className="grid grid-cols-2 gap-3">
+          {/* Current Room Card */}
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Current Room</p>
+            <p className="mt-2 text-lg font-extrabold text-foreground">
+              {roomNo ? `Room ${String(roomNo)}` : 'Pending Assignment'}
+            </p>
+            <p className="text-[10px] text-muted-foreground mt-1">Bed Allocation: Active</p>
+          </div>
+
+          {/* Move Out Card */}
+          <Link
+            to="/tenant/move-out"
+            className="rounded-2xl border border-border bg-card p-4 hover:border-accent/40 hover:shadow-sm transition-all flex flex-col justify-between"
+          >
+            <div>
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Move Out</p>
+              <p className="mt-2 text-lg font-extrabold text-foreground truncate">
+                {moveOut && typeof moveOut === 'object' && moveOut.status
+                  ? moveOut.status === 'COMPLETED'
+                    ? 'Stay Completed'
+                    : String(moveOut.status).replace(/_/g, ' ')
+                  : 'Request Exit'}
+              </p>
+            </div>
+            <p className="text-[10px] text-accent mt-2 font-semibold">
+              {moveOut && typeof moveOut === 'object' && moveOut.status
+                ? moveOut.status === 'COMPLETED'
+                  ? 'Share Feedback →'
+                  : 'Track Status →'
+                : 'Plan Departure →'}
+            </p>
+          </Link>
+        </div>
+      </section>
+
       <IdleRender>
         <TenantScorePanel score={score} />
       </IdleRender>

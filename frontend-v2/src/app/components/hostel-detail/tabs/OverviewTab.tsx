@@ -18,6 +18,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { dashboardService } from '@features/dashboard/api';
+import { moveOutService } from '@features/move-out/api';
 import { queryKeys } from '@lib/queryKeys';
 import { type HostelDetailTab as Tab } from '../types';
 import { fmt, fmtExact } from '../shared/format';
@@ -42,6 +43,13 @@ export function OverviewTab({ hostelId }: { hostelId: string }) {
     queryFn: () => dashboardService.getStatsActivity(hostelId),
     enabled: !!hostelId,
     staleTime: 2 * 60 * 1000,
+  });
+
+  // Fetch Move-out data
+  const { data: requestsData } = useQuery({
+    queryKey: queryKeys.tenants.moveOut(hostelId, 'all-requests'),
+    queryFn: () => moveOutService.listRequests(hostelId, {}),
+    enabled: !!hostelId,
   });
 
   if (statsLoading) return <TabSkeleton />;
@@ -73,6 +81,22 @@ export function OverviewTab({ hostelId }: { hostelId: string }) {
 
   // Move outs
   const moveOutRequests = Number(tenantMovement.move_out_requests ?? s.move_out_open ?? 0);
+
+  const requestsList = Array.isArray(requestsData) 
+    ? requestsData 
+    : (requestsData as any)?.requests ?? [];
+
+  const moveOutReqsCount = requestsList.filter(
+    (r: any) => ['REQUESTED', 'SETTLEMENT_PENDING', 'APPROVED', 'VACATED'].includes(r.status)
+  ).length;
+
+  const upcomingVacanciesCount = requestsList.filter(
+    (r: any) => ['REQUESTED', 'SETTLEMENT_PENDING', 'APPROVED'].includes(r.status)
+  ).length;
+
+  const pendingRefundsCount = requestsList.filter(
+    (r: any) => r.settlement?.settlement_direction === 'OWNER_OWES_TENANT' && r.status !== 'COMPLETED'
+  ).length;
 
   // Recent activity timeline
   const activity = activityData?.recent_activity ?? [];
@@ -352,6 +376,42 @@ export function OverviewTab({ hostelId }: { hostelId: string }) {
           className="w-full py-2.5 rounded-xl border border-border bg-card hover:bg-secondary text-xs font-bold text-accent transition-colors"
         >
           Open Admissions
+        </button>
+      </section>
+
+      {/* MOVE OUTS */}
+      <section className="bg-card border border-border rounded-2xl p-4 space-y-4">
+        <h3 className="text-sm font-bold text-foreground">Move Outs</h3>
+
+        <div className="grid grid-cols-3 gap-3">
+          <div 
+            onClick={() => navigate(`/hostels/${hostelId}/move-outs`)}
+            className="bg-secondary/40 rounded-xl p-3 text-center cursor-pointer hover:bg-secondary/60 transition-colors"
+          >
+            <div className="text-[10px] text-muted-foreground font-semibold">Requests</div>
+            <div className="text-sm font-bold text-foreground mt-1">{moveOutReqsCount}</div>
+          </div>
+          <div 
+            onClick={() => navigate(`/hostels/${hostelId}/move-outs`)}
+            className="bg-secondary/40 rounded-xl p-3 text-center cursor-pointer hover:bg-secondary/60 transition-colors"
+          >
+            <div className="text-[10px] text-muted-foreground font-semibold">Upcoming Vacancies</div>
+            <div className="text-sm font-bold text-foreground mt-1">{upcomingVacanciesCount}</div>
+          </div>
+          <div 
+            onClick={() => navigate(`/hostels/${hostelId}/move-outs`)}
+            className="bg-secondary/40 rounded-xl p-3 text-center cursor-pointer hover:bg-secondary/60 transition-colors"
+          >
+            <div className="text-[10px] text-muted-foreground font-semibold">Pending Refunds</div>
+            <div className="text-sm font-bold text-foreground mt-1">{pendingRefundsCount}</div>
+          </div>
+        </div>
+
+        <button 
+          onClick={() => navigate(`/hostels/${hostelId}/move-outs`)}
+          className="w-full py-2.5 rounded-xl border border-border bg-card hover:bg-secondary text-xs font-bold text-accent transition-colors"
+        >
+          Open Move-outs
         </button>
       </section>
 

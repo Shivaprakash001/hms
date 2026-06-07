@@ -422,7 +422,16 @@ export class MoveOutService {
     const tenant = await prisma.tenants.findUnique({ where: { profile_id: profileId }, select: { id: true } });
     if (!tenant) throw new Error("NOT_FOUND");
     return prisma.move_out_requests.findFirst({
-      where: { tenant_id: tenant.id, status: { notIn: ["COMPLETED", "REJECTED"] } },
+      where: {
+        tenant_id: tenant.id,
+        OR: [
+          { status: { notIn: ["COMPLETED", "REJECTED"] } },
+          {
+            status: "COMPLETED",
+            feedback: { is: null },
+          },
+        ],
+      },
       include: { inspection: true, settlement: true, feedback: true, disputes: true },
       orderBy: { created_at: "desc" },
     });

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { BadgeIndianRupee, CalendarDays, CheckCircle2, ClipboardCheck, Loader2, MessageSquare, Phone } from 'lucide-react';
+import { BadgeIndianRupee, CalendarDays, CheckCircle2, ClipboardCheck, Loader2, MessageSquare, Phone, DoorOpen, Plus, Trash2 } from 'lucide-react';
 import { moveOutService } from '@features/move-out/api';
 import { queryKeys } from '@lib/queryKeys';
 import { TenantsLayout } from '@features/tenants/components/layout/TenantsLayout';
@@ -75,6 +75,40 @@ export function MoveOutsView() {
   const [settlementAmount, setSettlementAmount] = useState('0');
   const [physicalExitDate, setPhysicalExitDate] = useState('');
 
+  // Room Inspection Checklist states
+  const [checkedRoom, setCheckedRoom] = useState(false);
+  const [checkedKeys, setCheckedKeys] = useState(false);
+  const [checkedCupboard, setCheckedCupboard] = useState(false);
+  const [checkedBelongings, setCheckedBelongings] = useState(false);
+
+  // Damage items state
+  const [damageItems, setDamageItems] = useState<{ id: string; name: string; amount: number }[]>([]);
+  const [newDamageName, setNewDamageName] = useState('');
+  const [newDamageAmount, setNewDamageAmount] = useState('');
+
+  const handleAddDamageItem = () => {
+    if (!newDamageName.trim() || !newDamageAmount) return;
+    const amount = Number(newDamageAmount) || 0;
+    const newItem = {
+      id: Math.random().toString(36).substring(2, 9),
+      name: newDamageName.trim(),
+      amount,
+    };
+    const updatedList = [...damageItems, newItem];
+    setDamageItems(updatedList);
+    const sum = updatedList.reduce((acc, curr) => acc + curr.amount, 0);
+    setDamagesAmount(String(sum));
+    setNewDamageName('');
+    setNewDamageAmount('');
+  };
+
+  const handleRemoveDamageItem = (id: string, amount: number) => {
+    const updatedList = damageItems.filter((item) => item.id !== id);
+    setDamageItems(updatedList);
+    const sum = updatedList.reduce((acc, curr) => acc + curr.amount, 0);
+    setDamagesAmount(String(sum));
+  };
+
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.moveOut.list(hostelId),
     queryFn: () => moveOutService.listRequests(hostelId),
@@ -102,6 +136,10 @@ export function MoveOutsView() {
   const direction = String(settlement.settlement_direction ?? settlement.direction ?? 'NONE');
   const netAmount = Number(settlement.net_settlement_amount ?? settlement.net_amount ?? 0);
 
+  const depositHeld = Number(settlement.security_deposit_amount ?? 0) + Number(settlement.advance_balance ?? 0);
+  const totalDue = Number(settlement.pending_rent_dues ?? 0) + Number(settlement.pending_late_fees ?? 0) + Number(settlement.pending_utility_dues ?? 0) + Number(settlement.total_deductions ?? 0);
+  const netDiff = depositHeld - totalDue;
+
   useEffect(() => {
     if (!active) return;
     const nextDirection = direction === 'OWNER_OWES_TENANT' || direction === 'TENANT_OWES_OWNER' ? direction : 'SETTLED';
@@ -109,6 +147,13 @@ export function MoveOutsView() {
     setSettlementAmount(String(Math.abs(netAmount || 0)));
     const exitDate = String(active.physical_exit_date ?? active.planned_exit_date ?? '').slice(0, 10);
     setPhysicalExitDate(exitDate);
+    setCheckedRoom(false);
+    setCheckedKeys(false);
+    setCheckedCupboard(false);
+    setCheckedBelongings(false);
+    setDamageItems([]);
+    setNewDamageName('');
+    setNewDamageAmount('');
   }, [active?.id, active?.planned_exit_date, active?.physical_exit_date, direction, netAmount]);
 
   const invalidate = () => {
@@ -279,6 +324,28 @@ export function MoveOutsView() {
                   </div>
                 ) : (
                   <div className="space-y-4 p-4">
+                    {['REQUESTED', 'SETTLEMENT_PENDING', 'APPROVED'].includes(String(active.status)) && (
+                      <div className="rounded-2xl border border-blue-200 bg-blue-50/40 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div className="flex items-center gap-2.5">
+                          <DoorOpen className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0" />
+                          <div>
+                            <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+                              Future Vacancy Alert
+                            </p>
+                            <p className="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
+                              Room <span className="font-bold">{activeTenant?.room || 'N/A'}</span> will become vacant on {fmtDate(active.planned_exit_date)}.
+                            </p>
+                          </div>
+                        </div>
+                        <Link
+                          to="/admissions"
+                          className="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm transition-colors shrink-0"
+                        >
+                          Find Replacement →
+                        </Link>
+                      </div>
+                    )}
+
                     <MoveOutStepper request={active} hostelId={hostelId} />
 
                     <div className="rounded-2xl border border-border bg-background p-4">
@@ -332,25 +399,142 @@ export function MoveOutsView() {
                     )}
 
                     {(active.settlement_preview || active.settlement) && (
-                      <div className="rounded-2xl border border-border bg-background p-4">
-                        <div className="mb-3 flex items-center gap-2">
+                      <div className="rounded-2xl border border-border bg-background p-4 space-y-4">
+                        <div className="flex items-center gap-2">
                           <BadgeIndianRupee className="h-4 w-4 text-accent" />
-                          <h3 className="text-sm font-semibold text-foreground">Payment settlement</h3>
+                          <h3 className="text-sm font-semibold text-foreground">Financial Settlement Ledger</h3>
                         </div>
-                        <div className="space-y-2 text-sm">
-                          <MoneyRow label="Paid security deposit" value={settlement.security_deposit_amount} />
-                          <MoneyRow label="Extra advance balance" value={settlement.advance_balance} />
-                          <MoneyRow label="Pending rent" value={settlement.pending_rent_dues} negative />
-                          <MoneyRow label="Late fees" value={settlement.pending_late_fees} negative />
-                          <MoneyRow label="Maintenance / other dues" value={settlement.pending_utility_dues} negative />
-                          <MoneyRow label="Deductions" value={settlement.total_deductions} negative />
-                          <div className="flex justify-between border-t border-border pt-3 font-bold">
-                            <span>{direction === 'TENANT_OWES_OWNER' ? 'Tenant should pay' : direction === 'OWNER_OWES_TENANT' ? 'Refund to tenant' : 'Net settlement'}</span>
-                            <span className={netAmount < 0 ? 'text-destructive' : 'text-accent'}>{fmt(Math.abs(netAmount))}</span>
+                        
+                        <div className="space-y-3">
+                          {/* Deposit Held */}
+                          <div className="bg-emerald-50/50 dark:bg-emerald-950/10 rounded-xl p-3 space-y-2 border border-emerald-100/30">
+                            <div className="flex justify-between text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                              <span>Deposit Held (A)</span>
+                              <span>{fmt(depositHeld)}</span>
+                            </div>
+                            <div className="space-y-1 pl-2 text-[11px] text-emerald-600 dark:text-emerald-400">
+                              <div className="flex justify-between">
+                                <span>Security Deposit</span>
+                                <span>{fmt(settlement.security_deposit_amount)}</span>
+                              </div>
+                              {Number(settlement.advance_balance) > 0 && (
+                                <div className="flex justify-between">
+                                  <span>Extra Advance Balance</span>
+                                  <span>{fmt(settlement.advance_balance)}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Total Due */}
+                          <div className="bg-red-50/50 dark:bg-red-950/10 rounded-xl p-3 space-y-2 border border-red-100/30">
+                            <div className="flex justify-between text-xs font-bold text-red-800 dark:text-red-300">
+                              <span>Total Dues & Deductions (B)</span>
+                              <span>{fmt(totalDue)}</span>
+                            </div>
+                            <div className="space-y-1 pl-2 text-[11px] text-red-600 dark:text-red-400">
+                              {Number(settlement.pending_rent_dues) > 0 && (
+                                <div className="flex justify-between">
+                                  <span>Pending Rent</span>
+                                  <span>{fmt(settlement.pending_rent_dues)}</span>
+                                </div>
+                              )}
+                              {Number(settlement.pending_late_fees) > 0 && (
+                                <div className="flex justify-between">
+                                  <span>Late Fees</span>
+                                  <span>{fmt(settlement.pending_late_fees)}</span>
+                                </div>
+                              )}
+                              {Number(settlement.pending_utility_dues) > 0 && (
+                                <div className="flex justify-between">
+                                  <span>Utility & Other Dues</span>
+                                  <span>{fmt(settlement.pending_utility_dues)}</span>
+                                </div>
+                              )}
+                              {Number(settlement.total_deductions) > 0 && (
+                                <div className="flex justify-between">
+                                  <span>Inspection Deductions</span>
+                                  <span>{fmt(settlement.total_deductions)}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Net Settlement */}
+                          <div className="flex justify-between items-center border-t border-border pt-3 px-1">
+                            <div className="text-xs font-bold text-foreground">
+                              {netDiff >= 0 ? 'Net Refund to Tenant (A - B)' : 'Net Tenant Owed (B - A)'}
+                            </div>
+                            <div className={`text-sm font-black ${netDiff >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                              {fmt(Math.abs(netDiff))}
+                            </div>
                           </div>
                         </div>
                       </div>
                     )}
+
+                    {/* OPERATIONAL HISTORY TIMELINE */}
+                    <div className="rounded-2xl border border-border bg-background p-4 space-y-4">
+                      <div className="flex items-center gap-2">
+                        <ClipboardCheck className="h-4 w-4 text-accent" />
+                        <h3 className="text-sm font-bold text-foreground">Operational History</h3>
+                      </div>
+                      <div className="space-y-4 relative pl-4 border-l-2 border-secondary/60">
+                        {[
+                          {
+                            label: 'Requested',
+                            description: 'Move-out request submitted',
+                            date: active.created_at,
+                            done: true,
+                          },
+                          {
+                            label: 'Room Inspected',
+                            description: active.inspection 
+                              ? `Room condition is ${active.inspection.room_condition}. Damages: ${fmt(active.inspection.damages_amount)}`
+                              : 'Inspection pending',
+                            date: active.inspection?.inspected_at || active.inspection?.created_at,
+                            done: !!active.inspection,
+                          },
+                          {
+                            label: 'Settlement Confirmed',
+                            description: active.settlement?.settled_at 
+                              ? `Settlement confirmed: ${active.settlement.settlement_direction === 'OWNER_OWES_TENANT' ? 'Refund' : 'Owed'} ${fmt(Math.abs(active.settlement.net_settlement_amount))}`
+                              : 'Settlement confirmation pending',
+                            date: active.settlement?.settled_at,
+                            done: !!active.settlement?.settled_at,
+                          },
+                          {
+                            label: 'Bed Vacated',
+                            description: active.physical_exit_date 
+                              ? `Bed vacated & released on ${fmtDate(active.physical_exit_date)}`
+                              : 'Physical exit pending',
+                            date: active.physical_exit_date,
+                            done: !!active.physical_exit_date,
+                          },
+                          {
+                            label: 'Completed',
+                            description: active.completed_at 
+                              ? 'Move-out process closed'
+                              : 'Final payment processing pending',
+                            date: active.completed_at,
+                            done: !!active.completed_at,
+                          },
+                        ].map((step, idx) => (
+                          <div key={idx} className="relative">
+                            <div className={`absolute -left-[23px] top-1.5 w-3.5 h-3.5 rounded-full border-2 border-background ${step.done ? 'bg-accent' : 'bg-muted'} shrink-0`} />
+                            <div>
+                              <div className="flex justify-between items-start gap-2">
+                                <span className={`text-xs font-bold ${step.done ? 'text-foreground' : 'text-muted-foreground'}`}>{step.label}</span>
+                                {step.date && (
+                                  <span className="text-[10px] text-muted-foreground font-semibold">{fmtDate(step.date)}</span>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-0.5">{step.description}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
 
                     {disputes.length > 0 && (
                       <div className="rounded-2xl border border-border bg-background p-4">
@@ -413,16 +597,34 @@ export function MoveOutsView() {
                             setGeneralNotes={setGeneralNotes}
                             isPending={inspectMutation.isPending}
                             onCancel={() => setShowInspectForm(false)}
-                            onSubmit={() => inspectMutation.mutate({
-                              roomCondition,
-                              cleaningStatus,
-                              damagesAmount: Number(damagesAmount) || 0,
-                              cleaningFee: Number(cleaningFee) || 0,
-                              missingItemsFee: Number(missingItemsFee) || 0,
-                              otherDeductions: Number(otherDeductions) || 0,
-                              deductionNotes: deductionNotes || null,
-                              notes: generalNotes || null,
-                            })}
+                            onSubmit={(overrides?: any) => {
+                              const finalValues = {
+                                roomCondition: overrides?.roomCondition ?? roomCondition,
+                                cleaningStatus: overrides?.cleaningStatus ?? cleaningStatus,
+                                damagesAmount: overrides ? (Number(overrides.damagesAmount) || 0) : (Number(damagesAmount) || 0),
+                                cleaningFee: overrides ? (Number(overrides.cleaningFee) || 0) : (Number(cleaningFee) || 0),
+                                missingItemsFee: overrides ? (Number(overrides.missingItemsFee) || 0) : (Number(missingItemsFee) || 0),
+                                otherDeductions: overrides ? (Number(overrides.otherDeductions) || 0) : (Number(otherDeductions) || 0),
+                                deductionNotes: overrides ? (overrides.deductionNotes || null) : (deductionNotes || null),
+                                notes: overrides ? (overrides.generalNotes || null) : (generalNotes || null),
+                              };
+                              inspectMutation.mutate(finalValues);
+                            }}
+                            checkedRoom={checkedRoom}
+                            setCheckedRoom={setCheckedRoom}
+                            checkedKeys={checkedKeys}
+                            setCheckedKeys={setCheckedKeys}
+                            checkedCupboard={checkedCupboard}
+                            setCheckedCupboard={setCheckedCupboard}
+                            checkedBelongings={checkedBelongings}
+                            setCheckedBelongings={setCheckedBelongings}
+                            damageItems={damageItems}
+                            newDamageName={newDamageName}
+                            setNewDamageName={setNewDamageName}
+                            newDamageAmount={newDamageAmount}
+                            setNewDamageAmount={setNewDamageAmount}
+                            onAddDamageItem={handleAddDamageItem}
+                            onRemoveDamageItem={handleRemoveDamageItem}
                           />
                         )
                       )}
@@ -567,6 +769,116 @@ export function MoveOutsView() {
                   </div>
                 )}
               </div>
+
+              {/* STICKY DECISION BAR */}
+              {['REQUESTED', 'SETTLEMENT_PENDING', 'APPROVED', 'VACATED'].includes(String(active.status)) && (
+                <div className="sticky bottom-0 z-10 bg-background/95 backdrop-blur border border-border p-4 flex flex-col sm:flex-row gap-3 justify-between items-center mt-6 shadow-[0_-8px_30px_rgb(0,0,0,0.12)] rounded-2xl">
+                  <div className="text-left hidden sm:block">
+                    <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Current State</p>
+                    <p className="text-sm font-bold text-foreground capitalize">{String(active.status).toLowerCase().replace(/_/g, ' ')}</p>
+                  </div>
+                  
+                  <div className="flex gap-2 w-full sm:w-auto justify-end">
+                    {String(active.status) === 'REQUESTED' && (
+                      <>
+                        <button
+                          type="button"
+                          disabled={rejectMutation.isPending}
+                          onClick={() => {
+                            if (window.confirm("Are you sure you want to reject this request?")) {
+                              rejectMutation.mutate();
+                            }
+                          }}
+                          className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold transition-colors"
+                        >
+                          Reject Request
+                        </button>
+                        {!showInspectForm ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowInspectForm(true);
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}
+                            className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-accent text-accent-foreground text-xs font-bold hover:opacity-90 transition-all shadow-sm"
+                          >
+                            Start Inspection
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={inspectMutation.isPending}
+                            onClick={() => inspectMutation.mutate({
+                              roomCondition,
+                              cleaningStatus,
+                              damagesAmount: Number(damagesAmount) || 0,
+                              cleaningFee: Number(cleaningFee) || 0,
+                              missingItemsFee: Number(missingItemsFee) || 0,
+                              otherDeductions: Number(otherDeductions) || 0,
+                              deductionNotes: deductionNotes || null,
+                              notes: generalNotes || null,
+                            })}
+                            className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-accent text-accent-foreground text-xs font-bold hover:opacity-90 transition-all shadow-sm"
+                          >
+                            {inspectMutation.isPending ? 'Saving...' : 'Submit & Request Settlement'}
+                          </button>
+                        )}
+                      </>
+                    )}
+
+                    {String(active.status) === 'SETTLEMENT_PENDING' && (
+                      <>
+                        <button
+                          type="button"
+                          disabled={rejectMutation.isPending}
+                          onClick={() => {
+                            if (window.confirm("Are you sure you want to reject this request?")) {
+                              rejectMutation.mutate();
+                            }
+                          }}
+                          className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold transition-colors"
+                        >
+                          Reject Request
+                        </button>
+                        <button
+                          type="button"
+                          disabled={settleMutation.isPending}
+                          onClick={() => settleMutation.mutate()}
+                          className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-accent text-accent-foreground text-xs font-bold hover:opacity-90 transition-all shadow-sm"
+                        >
+                          {settleMutation.isPending ? 'Approving...' : 'Approve Move Out'}
+                        </button>
+                      </>
+                    )}
+
+                    {String(active.status) === 'APPROVED' && (
+                      <button
+                        type="button"
+                        disabled={vacateMutation.isPending}
+                        onClick={() => {
+                          if (window.confirm("Release this bed and mark the tenant as physically exited?")) {
+                            vacateMutation.mutate();
+                          }
+                        }}
+                        className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-accent text-accent-foreground text-xs font-bold hover:opacity-90 transition-all shadow-sm"
+                      >
+                        {vacateMutation.isPending ? 'Vacating...' : 'Vacate Bed & Release'}
+                      </button>
+                    )}
+
+                    {String(active.status) === 'VACATED' && (
+                      <button
+                        type="button"
+                        disabled={completeMutation.isPending}
+                        onClick={() => completeMutation.mutate()}
+                        className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-accent text-accent-foreground text-xs font-bold hover:opacity-90 transition-all shadow-sm"
+                      >
+                        {completeMutation.isPending ? 'Completing...' : 'Confirm Refund & Complete'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </section>
@@ -615,42 +927,262 @@ function InspectionForm(props: {
   setGeneralNotes: (v: string) => void;
   isPending: boolean;
   onCancel: () => void;
-  onSubmit: () => void;
+  onSubmit: (overrides?: any) => void;
+
+  // Checklist props
+  checkedRoom: boolean;
+  setCheckedRoom: (v: boolean) => void;
+  checkedKeys: boolean;
+  setCheckedKeys: (v: boolean) => void;
+  checkedCupboard: boolean;
+  setCheckedCupboard: (v: boolean) => void;
+  checkedBelongings: boolean;
+  setCheckedBelongings: (v: boolean) => void;
+
+  // Damage items props
+  damageItems: { id: string; name: string; amount: number }[];
+  newDamageName: string;
+  setNewDamageName: (v: string) => void;
+  newDamageAmount: string;
+  setNewDamageAmount: (v: string) => void;
+  onAddDamageItem: () => void;
+  onRemoveDamageItem: (id: string, amount: number) => void;
 }) {
+  const [showDeductions, setShowDeductions] = useState(
+    Number(props.cleaningFee) > 0 ||
+    Number(props.missingItemsFee) > 0 ||
+    Number(props.otherDeductions) > 0 ||
+    props.damageItems.length > 0 ||
+    !!props.deductionNotes
+  );
+
   return (
-    <div className="rounded-2xl border border-border bg-background p-4 space-y-3">
-      <h3 className="text-sm font-semibold text-foreground">Record room inspection</h3>
-      <div className="grid grid-cols-2 gap-2 text-xs">
-        <label>
-          Room condition
-          <select value={props.roomCondition} onChange={(e) => props.setRoomCondition(e.target.value)} className="mt-1 w-full rounded-lg border border-border bg-card px-2 py-2">
-            <option value="GOOD">Good</option>
-            <option value="FAIR">Fair</option>
-            <option value="POOR">Poor</option>
-          </select>
-        </label>
-        <label>
-          Cleaning status
-          <select value={props.cleaningStatus} onChange={(e) => props.setCleaningStatus(e.target.value)} className="mt-1 w-full rounded-lg border border-border bg-card px-2 py-2">
-            <option value="CLEAN">Clean</option>
-            <option value="DIRTY">Dirty</option>
-          </select>
+    <div className="rounded-2xl border border-border bg-background p-5 space-y-5 shadow-sm">
+      <div className="flex justify-between items-center border-b border-border pb-3">
+        <h3 className="text-sm font-bold text-foreground">Record Room Inspection</h3>
+      </div>
+
+      {/* Quick Pass Option */}
+      <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30 rounded-xl p-3.5 space-y-2">
+        <p className="text-xs text-emerald-800 dark:text-emerald-300 font-medium">
+          If everything is clean, keys are back, and there are no dues or damages, complete the inspection in a single tap:
+        </p>
+        <button
+          type="button"
+          disabled={props.isPending}
+          onClick={() => {
+            props.setCheckedRoom(true);
+            props.setCheckedKeys(true);
+            props.setCheckedCupboard(true);
+            props.setCheckedBelongings(true);
+            props.setRoomCondition('GOOD');
+            props.setCleaningStatus('CLEAN');
+            props.onSubmit({
+              roomCondition: 'GOOD',
+              cleaningStatus: 'CLEAN',
+              damagesAmount: 0,
+              cleaningFee: 0,
+              missingItemsFee: 0,
+              otherDeductions: 0,
+              deductionNotes: '',
+              generalNotes: 'Quick inspection passed. All checklist items cleared. No damages or deductions.',
+            });
+          }}
+          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
+        >
+          ✨ Quick Pass (No Damages)
+        </button>
+      </div>
+
+      {/* Checklist section */}
+      <div className="bg-secondary/20 rounded-xl p-3.5 space-y-2">
+        <p className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-wider">Inspection Checklist</p>
+        <div className="grid grid-cols-1 gap-1">
+          {[
+            { id: 'roomChecked', label: 'Room Checked (Walls, Ceiling, Fan)', value: props.checkedRoom, onChange: props.setCheckedRoom },
+            { id: 'keysReturned', label: 'Keys & Access Cards Returned', value: props.checkedKeys, onChange: props.setCheckedKeys },
+            { id: 'cupboardEmpty', label: 'Cupboards Empty & Cleaned', value: props.checkedCupboard, onChange: props.setCheckedCupboard },
+            { id: 'belongingsRemoved', label: 'All Personal Belongings Removed', value: props.checkedBelongings, onChange: props.setCheckedBelongings },
+          ].map((item) => (
+            <label key={item.id} className="flex items-center gap-3 cursor-pointer py-2 px-2.5 hover:bg-muted/40 rounded-lg transition-colors select-none">
+              <input
+                type="checkbox"
+                checked={item.value}
+                onChange={(e) => item.onChange(e.target.checked)}
+                className="rounded border-border bg-card text-accent focus:ring-accent w-4 h-4 transition-all"
+              />
+              <span className={`text-xs font-semibold transition-colors ${item.value ? 'text-muted-foreground' : 'text-foreground'}`}>
+                {item.label}
+              </span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Segmented Controls for Condition & Cleaning */}
+      <div className="space-y-4">
+        <div>
+          <span className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-wider">Room Condition</span>
+          <div className="grid grid-cols-3 gap-1 bg-secondary/30 p-1 rounded-xl mt-1">
+            {[
+              { value: 'GOOD', label: 'Good', activeColor: 'bg-emerald-600 text-white dark:bg-emerald-500/20 dark:text-emerald-300' },
+              { value: 'FAIR', label: 'Fair', activeColor: 'bg-amber-600 text-white dark:bg-amber-500/20 dark:text-amber-300' },
+              { value: 'POOR', label: 'Poor', activeColor: 'bg-rose-600 text-white dark:bg-rose-500/20 dark:text-rose-300' },
+            ].map((opt) => {
+              const active = props.roomCondition === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => props.setRoomCondition(opt.value)}
+                  className={`py-2 text-xs font-bold rounded-lg transition-all ${
+                    active ? `${opt.activeColor} shadow-sm scale-[1.02]` : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <span className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-wider">Cleaning Status</span>
+          <div className="grid grid-cols-2 gap-1 bg-secondary/30 p-1 rounded-xl mt-1">
+            {[
+              { value: 'CLEAN', label: 'Clean', activeColor: 'bg-emerald-600 text-white dark:bg-emerald-500/20 dark:text-emerald-300' },
+              { value: 'DIRTY', label: 'Dirty', activeColor: 'bg-rose-600 text-white dark:bg-rose-500/20 dark:text-rose-300' },
+            ].map((opt) => {
+              const active = props.cleaningStatus === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => props.setCleaningStatus(opt.value)}
+                  className={`py-2 text-xs font-bold rounded-lg transition-all ${
+                    active ? `${opt.activeColor} shadow-sm scale-[1.02]` : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Deductions Toggle Checkbox */}
+      <div className="pt-2 border-t border-border">
+        <label className="flex items-center gap-2.5 cursor-pointer py-1 select-none">
+          <input
+            type="checkbox"
+            checked={showDeductions}
+            onChange={(e) => setShowDeductions(e.target.checked)}
+            className="rounded border-border bg-card text-accent focus:ring-accent w-4 h-4 transition-all"
+          />
+          <span className="text-xs font-bold text-foreground">Record Damages, Fees, or Deductions</span>
         </label>
       </div>
-      <div className="grid grid-cols-2 gap-2 text-xs">
-        <NumberField label="Damage charges" value={props.damagesAmount} onChange={props.setDamagesAmount} />
-        <NumberField label="Cleaning fee" value={props.cleaningFee} onChange={props.setCleaningFee} />
-        <NumberField label="Missing items" value={props.missingItemsFee} onChange={props.setMissingItemsFee} />
-        <NumberField label="Other deductions" value={props.otherDeductions} onChange={props.setOtherDeductions} />
+
+      {/* Conditional Deductions Section */}
+      {showDeductions && (
+        <div className="space-y-4 pt-1 animation-fade-in">
+          {/* Itemized Damage Charges */}
+          <div className="border border-border rounded-xl p-3.5 bg-secondary/10 space-y-3">
+            <div className="flex justify-between items-center">
+              <p className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-wider">Itemized Damage Charges</p>
+              <span className="text-xs font-bold text-accent">Total: {fmt(Number(props.damagesAmount))}</span>
+            </div>
+
+            {props.damageItems.length > 0 && (
+              <div className="space-y-1.5">
+                {props.damageItems.map((item) => (
+                  <div key={item.id} className="flex justify-between items-center bg-secondary/40 px-2.5 py-1.5 rounded-lg text-xs">
+                    <span className="text-foreground font-semibold">{item.name}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground font-medium">{fmt(item.amount)}</span>
+                      <button
+                        type="button"
+                        onClick={() => props.onRemoveDamageItem(item.id, item.amount)}
+                        className="text-red-500 hover:text-red-700 transition-colors p-0.5"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Item (e.g. Broken Fan)"
+                value={props.newDamageName}
+                onChange={(e) => props.setNewDamageName(e.target.value)}
+                className="flex-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-accent focus:outline-none"
+              />
+              <input
+                type="number"
+                placeholder="Amount"
+                value={props.newDamageAmount}
+                onChange={(e) => props.setNewDamageAmount(e.target.value)}
+                className="w-20 rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-accent focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={props.onAddDamageItem}
+                className="px-3 py-1.5 rounded-lg bg-accent text-accent-foreground text-xs font-bold hover:opacity-90 active:scale-[0.98] transition-all"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Number Inputs */}
+          <div className="grid grid-cols-3 gap-2">
+            <NumberField label="Cleaning fee" value={props.cleaningFee} onChange={props.setCleaningFee} />
+            <NumberField label="Missing items" value={props.missingItemsFee} onChange={props.setMissingItemsFee} />
+            <NumberField label="Other deductions" value={props.otherDeductions} onChange={props.setOtherDeductions} />
+          </div>
+
+          <input
+            value={props.deductionNotes}
+            onChange={(e) => props.setDeductionNotes(e.target.value)}
+            placeholder="Reason for deductions / details..."
+            className="w-full rounded-lg border border-border bg-card px-3 py-2 text-xs focus:ring-1 focus:ring-accent focus:outline-none"
+          />
+        </div>
+      )}
+
+      {/* General Inspection Notes */}
+      <div className="space-y-1">
+        <span className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-wider">Inspection Notes</span>
+        <textarea
+          value={props.generalNotes}
+          onChange={(e) => props.setGeneralNotes(e.target.value)}
+          rows={2}
+          placeholder="Write any additional notes here..."
+          className="w-full resize-none rounded-lg border border-border bg-card px-3 py-2 text-xs focus:ring-1 focus:ring-accent focus:outline-none"
+        />
       </div>
-      <input value={props.deductionNotes} onChange={(e) => props.setDeductionNotes(e.target.value)} placeholder="Deduction notes" className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm" />
-      <textarea value={props.generalNotes} onChange={(e) => props.setGeneralNotes(e.target.value)} rows={2} placeholder="General inspection notes" className="w-full resize-none rounded-lg border border-border bg-card px-3 py-2 text-sm" />
-      <div className="flex gap-2 pt-1">
-        <button type="button" onClick={props.onCancel} className="flex-1 rounded-lg border border-border py-2 text-xs font-medium text-muted-foreground">
+
+      {/* Action Buttons */}
+      <div className="flex gap-2 pt-2">
+        <button
+          type="button"
+          onClick={props.onCancel}
+          className="flex-1 rounded-xl border border-border py-2.5 text-xs font-bold text-muted-foreground hover:bg-secondary/30 active:scale-[0.98] transition-all"
+        >
           Cancel
         </button>
-        <button type="button" disabled={props.isPending} onClick={props.onSubmit} className="flex-1 rounded-lg bg-accent py-2 text-xs font-semibold text-accent-foreground disabled:opacity-50">
-          {props.isPending ? 'Saving...' : 'Submit inspection'}
+        <button
+          type="button"
+          disabled={props.isPending}
+          onClick={props.onSubmit}
+          className="flex-1 rounded-xl bg-accent py-2.5 text-xs font-bold text-accent-foreground hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50"
+        >
+          {props.isPending ? 'Saving...' : 'Submit Inspection'}
         </button>
       </div>
     </div>
@@ -659,9 +1191,15 @@ function InspectionForm(props: {
 
 function NumberField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
-    <label>
+    <label className="block text-[10px] font-semibold text-muted-foreground">
       {label}
-      <input type="number" min="0" value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded-lg border border-border bg-card px-2 py-2" />
+      <input
+        type="number"
+        min="0"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1 w-full rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs font-bold text-foreground focus:ring-1 focus:ring-accent focus:outline-none"
+      />
     </label>
   );
 }
