@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient, useQueries } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { 
   BarChart3, ChevronDown, Phone, Calendar, DollarSign, Receipt, X, Clock
@@ -200,6 +200,7 @@ function OutstandingDuesDrawer({ hostelId, dues, onClose, onCollect }: Outstandi
 
 export function FinancialControlCenter({ hostelId }: Props) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [selectedObligationId, setSelectedObligationId] = useState<string | null>(null);
   const [showAnalytics, setShowAnalytics] = useState(true);
   
@@ -1098,10 +1099,10 @@ export function FinancialControlCenter({ hostelId }: Props) {
           </button>
           <button
             onClick={() => {
-              setShowAnalytics(true);
-              setTimeout(() => {
-                document.getElementById('expense-intelligence')?.scrollIntoView({ behavior: 'smooth' });
-              }, 100);
+              const targetHostelId = hostelId === 'all' ? hostels[0]?.id : hostelId;
+              if (targetHostelId) {
+                navigate(`/hostels/${targetHostelId}/expenses`);
+              }
             }}
             className="flex-1 py-2 px-3 text-xs font-semibold rounded-lg border border-border text-foreground hover:bg-muted transition-all text-center active:scale-[0.98]"
           >
