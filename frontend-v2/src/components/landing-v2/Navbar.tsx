@@ -22,7 +22,7 @@ export function Navbar({ hostelProfile = fallbackLandingContent.hostelProfile }:
               className="w-10 h-10 md:w-12 md:h-12 object-contain rounded-md"
             />
             <div>
-              <h1 className="text-lg md:text-xl font-semibold text-[#1B2D5B]" style={{ fontFamily: 'var(--font-display)' }}>
+              <h1 className="text-sm sm:text-base md:text-xl font-bold text-[#1B2D5B]" style={{ fontFamily: 'var(--font-display)' }}>
                 {hostelProfile.name}
               </h1>
             </div>
@@ -60,9 +60,15 @@ export function Navbar({ hostelProfile = fallbackLandingContent.hostelProfile }:
           </div>
 
           <div className="md:hidden flex items-center gap-2">
+            <Link
+              to="/login"
+              className="text-[#2C2C2A] hover:text-[#F07B1D] transition-colors border border-[#F07B1D] px-3 py-1.5 rounded-lg text-sm font-semibold"
+            >
+              Login
+            </Link>
             <button
               onClick={() => scrollToSection('contact')}
-              className="bg-[#F07B1D] text-white px-4 py-1.5 rounded-lg hover:bg-[#d96e18] transition-colors text-sm font-medium relative"
+              className="bg-[#F07B1D] text-white px-3 py-1.5 rounded-lg hover:bg-[#d96e18] transition-colors text-sm font-medium relative"
             >
               <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-600 rounded-full animate-pulse" />
               Enquire Now
