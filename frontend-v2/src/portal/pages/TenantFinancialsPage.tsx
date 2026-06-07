@@ -7,6 +7,7 @@ import { useTenantDashboard } from '@features/tenant-portal/hooks/useTenantDashb
 import { tenantPortalApi } from '@features/tenant-portal/api';
 import { TenantPriorityStrip } from '@/portal/components/TenantPriorityStrip';
 import { TenantPaymentModal } from '@/portal/components/TenantPaymentModal';
+import { TenantPaymentDetailModal } from '@/domains/payments/components/TenantPaymentDetailModal';
 import { RentObligationList } from '@features/tenants/components/financial/RentObligationList';
 import { buildPayableObligations } from '@/portal/utils/payableObligations';
 
@@ -37,6 +38,7 @@ export function TenantFinancialsPage() {
   const [selectedProjectedIds, setSelectedProjectedIds] = useState<string[]>([]);
   const [showPayModal, setShowPayModal] = useState(false);
   const [showAdvancePayModal, setShowAdvancePayModal] = useState(false);
+  const [selectedPaymentForDetail, setSelectedPaymentForDetail] = useState<any | null>(null);
   const [requestedFrequency, setRequestedFrequency] = useState('QUARTERLY');
   const [requestReason, setRequestReason] = useState('');
   const billingContext = useQuery({
@@ -99,7 +101,9 @@ export function TenantFinancialsPage() {
       amount: Number(entry.amount ?? 0),
       date: String(entry.created_at ?? ''),
       method: entry.reference_type === 'PAYMENT_ATTEMPT' ? 'PHONEPE' : 'Future rent credit',
-      receipt_payment_id: null,
+      receipt_payment_id: `advance-${entry.id}`,
+      reference_number: String(entry.reference_id || ''),
+      rent_month: '',
     }));
   const recentPayments = [
     ...paymentList.map((p) => ({
@@ -109,6 +113,8 @@ export function TenantFinancialsPage() {
       date: String(p.payment_date ?? p.created_at ?? ''),
       method: String(p.payment_method ?? p.method ?? 'Payment'),
       receipt_payment_id: p.id ? String(p.id) : null,
+      reference_number: String(p.reference_number || p.transaction_id || ''),
+      rent_month: String(p.rent_month || ''),
     })),
     ...advanceCreditHistory,
   ]
@@ -441,7 +447,8 @@ export function TenantFinancialsPage() {
             {recentPayments.map((p) => (
               <li
                 key={String(p.id)}
-                className="flex items-center justify-between p-3 rounded-xl border border-border bg-card text-sm"
+                onClick={() => setSelectedPaymentForDetail(p)}
+                className="flex items-center justify-between p-3 rounded-xl border border-border bg-card text-sm cursor-pointer hover:bg-muted/10 transition-colors"
               >
                 <div>
                   <p className="font-medium">{fmt(Number(p.amount ?? 0))}</p>
@@ -453,8 +460,11 @@ export function TenantFinancialsPage() {
                 {p.receipt_payment_id && (
                   <button
                     type="button"
-                    onClick={() => handleReceipt(String(p.receipt_payment_id))}
-                    className="p-2 rounded-lg text-accent hover:bg-accent/10"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleReceipt(String(p.receipt_payment_id));
+                    }}
+                    className="p-2 rounded-lg text-accent hover:bg-accent/10 transition-colors"
                     aria-label="Download receipt"
                   >
                     <Download className="w-4 h-4" />
@@ -468,7 +478,36 @@ export function TenantFinancialsPage() {
 
       <section>
         <h2 className="text-sm font-semibold text-foreground mb-3">All obligations</h2>
-        <RentObligationList obligations={obligations as never[]} />
+        <RentObligationList
+          obligations={obligations as never[]}
+          onDownloadReceipt={handleReceipt}
+          onSelectObligation={(o) => {
+            if (o.payments && o.payments.length > 0) {
+              const p = o.payments[0];
+              setSelectedPaymentForDetail({
+                id: String(p.id),
+                label: o.installment_label || 'Rent installment',
+                amount: Number(p.amount_paid ?? o.amount ?? 0),
+                date: String(p.payment_date || o.due_date || ''),
+                method: String(p.method || 'Payment'),
+                receipt_payment_id: p.id ? String(p.id) : null,
+                reference_number: String(p.transaction_id || p.reference_number || ''),
+                rent_month: String(o.rent_month || ''),
+              });
+            } else {
+              setSelectedPaymentForDetail({
+                id: String(o.id),
+                label: o.installment_label || 'Rent installment',
+                amount: Number(o.amount ?? 0),
+                date: String(o.due_date || ''),
+                method: 'N/A',
+                receipt_payment_id: null,
+                reference_number: '',
+                rent_month: String(o.rent_month || ''),
+              });
+            }
+          }}
+        />
       </section>
 
       <TenantPaymentModal
@@ -493,6 +532,13 @@ export function TenantFinancialsPage() {
           queryClient.invalidateQueries({ queryKey: ['tenant'] });
           toast.success('Advance payment recorded successfully!');
         }}
+      />
+
+      <TenantPaymentDetailModal
+        open={!!selectedPaymentForDetail}
+        onClose={() => setSelectedPaymentForDetail(null)}
+        payment={selectedPaymentForDetail}
+        onDownloadReceipt={handleReceipt}
       />
     </div>
   );

@@ -11,6 +11,8 @@ import { useAppPreferences } from '../../context/AppPreferencesContext';
 import { formatCurrency, formatDate } from '../../utils/format';
 import { queryKeys } from '../../lib/query/queryKeys';
 import { useHostelContext } from '../../context/HostelContext';
+import TenantScoreCard from '../../components/tenant/TenantScoreCard';
+import { tenantService } from '../../api/services';
 
 // --- Local Service Helper ---
 const fetchTenantFull = async (id) => {
@@ -57,6 +59,14 @@ export default function TenantProfilePage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.tenants.detail(hostelId, id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.tenants.all(hostelId) });
     }
+  });
+
+  const { data: tenantScore, isLoading: scoreLoading } = useQuery({
+    queryKey: ['tenant-score', id],
+    queryFn: () => tenantService.getTenantScore(id),
+    enabled: !!id,
+    staleTime: 10 * 60 * 1000,
+    retry: false,
   });
 
   if (isLoading) {
@@ -153,6 +163,11 @@ export default function TenantProfilePage() {
               </div>
             </div>
           </div>
+        </section>
+
+        {/* 1.5 BEHAVIOR SCORE */}
+        <section className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
+          <TenantScoreCard scoreData={tenantScore} loading={scoreLoading} />
         </section>
 
         {/* 2. PERSONAL INFO */}

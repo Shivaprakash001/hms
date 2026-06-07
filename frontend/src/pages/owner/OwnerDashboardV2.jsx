@@ -70,7 +70,7 @@ export default function OwnerDashboardV2() {
   const { data: ti, isLoading: tiLoading } = useTenantAnalytics(
     hostelId,
     undefined,
-    tab === 'tenants',
+    true,
   );
   const { data: fn, isLoading: fnLoading } = useFunnelAnalytics(
     hostelId,
@@ -158,6 +158,8 @@ export default function OwnerDashboardV2() {
                 navigate={navigate}
                 opPath={opPath}
                 onOpenTestPayment={() => setShowTestPayment(true)}
+                riskyTenantCount={ti?.data?.distribution?.risky ?? 0}
+                onViewRisky={() => setTab('tenants')}
               />
             </motion.div>
           )}

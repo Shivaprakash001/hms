@@ -199,7 +199,7 @@ function OutstandingDuesDrawer({ hostelId, dues, onClose, onCollect }: Outstandi
 export function FinancialControlCenter({ hostelId }: Props) {
   const queryClient = useQueryClient();
   const [selectedObligationId, setSelectedObligationId] = useState<string | null>(null);
-  const [showAnalytics, setShowAnalytics] = useState(false);
+  const [showAnalytics, setShowAnalytics] = useState(true);
   
   // Modals & Drawers states
   const [showDuesDrawer, setShowDuesDrawer] = useState(false);
@@ -218,7 +218,7 @@ export function FinancialControlCenter({ hostelId }: Props) {
     queryKey: queryKeys.dashboard.statsAnalytics(hostelId),
     queryFn: () => import('@features/dashboard/api').then((m) => m.dashboardService.getStatsAnalytics(hostelId)),
     staleTime: 3 * 60 * 1000,
-    enabled: !!hostelId && showAnalytics,
+    enabled: !!hostelId,
   });
 
   const { data: statsActivity } = useQuery({
@@ -232,14 +232,14 @@ export function FinancialControlCenter({ hostelId }: Props) {
     queryKey: queryKeys.dashboard.cashflow(hostelId),
     queryFn: () => import('@features/dashboard/api').then((m) => m.dashboardService.getCashflow(hostelId)),
     staleTime: 3 * 60 * 1000,
-    enabled: !!hostelId && showAnalytics,
+    enabled: !!hostelId,
   });
 
   const { data: funnel } = useQuery({
     queryKey: queryKeys.dashboard.funnel(hostelId),
     queryFn: () => import('@features/dashboard/api').then((m) => m.dashboardService.getFunnel(hostelId)),
     staleTime: 5 * 60 * 1000,
-    enabled: !!hostelId && showAnalytics,
+    enabled: !!hostelId,
   });
 
   const { data: paymentsData, refetch: refetchPayments } = useQuery({
@@ -319,6 +319,16 @@ export function FinancialControlCenter({ hostelId }: Props) {
   const outstandingVal = stats?.pending_dues ?? 0;
   const expensesVal = stats?.monthly_expenses ?? stats?.expenses ?? 0;
   const collectionRate = stats?.collection_rate ?? 0;
+  const netCashFlow = collectedVal - expensesVal;
+  const activeTenants = stats?.active_tenants ?? stats?.total_tenants ?? 0;
+  const perTenantYield = activeTenants > 0 ? Math.round(collectedVal / activeTenants) : 0;
+
+  // Revenue Health metrics from analytics
+  const paymentBehavior = statsAnalytics?.payment_behavior ?? intel?.dues?.payment_behavior ?? {};
+  const onTimeRate = paymentBehavior?.on_time_percentage ?? 0;
+  const avgDelay = paymentBehavior?.avg_delay_days ?? 0;
+  const reminderDependency = paymentBehavior?.reminder_dependency_rate ?? 0;
+  const expenseRatio = stats?.expense_revenue_ratio ?? (expectedVal > 0 ? Math.round((expensesVal / expectedVal) * 100) : 0);
 
   // Compute Cash vs UPI Split (MTD)
   const collectionsSplit = useMemo(() => {
@@ -427,8 +437,28 @@ export function FinancialControlCenter({ hostelId }: Props) {
         hostelId={hostelId}
       />
 
-      {/* 1. Financial Snapshot */}
+      {/* 1. Financial Command Card */}
       <div className="bg-card border border-border rounded-xl p-4 space-y-3 shadow-sm">
+        {/* Hero: Net Cash Flow */}
+        <div className="flex items-start justify-between gap-3 pb-3 border-b border-border/50">
+          <div>
+            <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">Net Cash Flow</p>
+            <p className={`text-2xl font-black ${netCashFlow >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+              {netCashFlow >= 0 ? '+' : ''}{fmtK(netCashFlow)}
+            </p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Collected minus expenses this month</p>
+          </div>
+          <div className="text-right space-y-1">
+            {activeTenants > 0 && (
+              <div>
+                <p className="text-[10px] text-muted-foreground font-medium">Per Tenant</p>
+                <p className="text-sm font-bold text-foreground">{fmtK(perTenantYield)}</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* KPI Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="space-y-1">
             <span className="text-xs text-muted-foreground font-medium">Expected</span>
@@ -448,25 +478,20 @@ export function FinancialControlCenter({ hostelId }: Props) {
           </div>
         </div>
         
+        {/* Collection Rate */}
         <div className="space-y-1 pt-2 border-t border-border/50">
           <div className="flex items-center justify-between text-xs font-semibold">
             <span className="text-muted-foreground">Collection Rate</span>
-            <span className="text-emerald-600 dark:text-emerald-400">{collectionRate}%</span>
+            <span className={collectionRate >= 80 ? 'text-emerald-600 dark:text-emerald-400' : collectionRate >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}>{collectionRate}%</span>
           </div>
           <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
-            <div className="h-full bg-emerald-500 rounded-full transition-all duration-300" style={{ width: `${collectionRate}%` }} />
+            <div className={`h-full rounded-full transition-all duration-300 ${collectionRate >= 80 ? 'bg-emerald-500' : collectionRate >= 50 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${Math.min(collectionRate, 100)}%` }} />
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px] text-muted-foreground pt-1.5">
             <div className="flex items-center gap-1">
               <span>Receipts:</span>
               <span className="font-semibold text-foreground">
                 Cash: {fmtK(collectionsSplit.cash)} · UPI: {fmtK(collectionsSplit.upi)}
-              </span>
-            </div>
-            <div className="flex items-center gap-1">
-              <span>Net Cash Flow:</span>
-              <span className={`font-semibold ${collectedVal - expensesVal >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                {collectedVal - expensesVal >= 0 ? '+' : ''}{fmtK(collectedVal - expensesVal)}
               </span>
             </div>
           </div>
@@ -583,6 +608,36 @@ export function FinancialControlCenter({ hostelId }: Props) {
             View All Dues ({overdueList.length}) →
           </button>
         )}
+      </div>
+
+      {/* 2.5 Revenue Health — Always Visible */}
+      <div className="bg-card border border-border rounded-xl p-4 shadow-sm">
+        <div className="flex items-center gap-2 mb-3">
+          <BarChart3 className="h-4 w-4 text-accent" />
+          <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Revenue Health</h3>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-center">
+            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">On-Time</p>
+            <p className={`text-lg font-black mt-0.5 ${onTimeRate >= 80 ? 'text-emerald-600 dark:text-emerald-400' : onTimeRate >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>{onTimeRate}%</p>
+            <p className="text-[10px] text-muted-foreground">payments</p>
+          </div>
+          <div className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-center">
+            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Avg Delay</p>
+            <p className={`text-lg font-black mt-0.5 ${avgDelay <= 2 ? 'text-emerald-600 dark:text-emerald-400' : avgDelay <= 7 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>{avgDelay}</p>
+            <p className="text-[10px] text-muted-foreground">days late</p>
+          </div>
+          <div className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-center">
+            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Need Nudge</p>
+            <p className={`text-lg font-black mt-0.5 ${reminderDependency <= 20 ? 'text-emerald-600 dark:text-emerald-400' : reminderDependency <= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>{reminderDependency}%</p>
+            <p className="text-[10px] text-muted-foreground">reminders</p>
+          </div>
+          <div className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-center">
+            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Expense Ratio</p>
+            <p className={`text-lg font-black mt-0.5 ${expenseRatio <= 35 ? 'text-emerald-600 dark:text-emerald-400' : expenseRatio <= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>{expenseRatio}%</p>
+            <p className="text-[10px] text-muted-foreground">of revenue</p>
+          </div>
+        </div>
       </div>
 
       {(upcomingCount > 0 || pendingPaymentsCount > 0) && (
@@ -739,7 +794,7 @@ export function FinancialControlCenter({ hostelId }: Props) {
         refetch={refetchPayments}
       />
 
-      {/* 8. Analytics & Forecast */}
+      {/* 8. Detailed Charts */}
       <section className="rounded-xl border border-border bg-card p-4">
         <button
           type="button"
@@ -748,10 +803,10 @@ export function FinancialControlCenter({ hostelId }: Props) {
         >
           <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
             <BarChart3 className="h-4 w-4 text-accent" />
-            Analytics & Forecast
+            Cashflow, Expenses & Collection Charts
           </span>
           <span className="flex items-center gap-2 text-xs text-muted-foreground">
-            {showAnalytics ? 'Hide details' : 'View details'}
+            {showAnalytics ? 'Collapse' : 'Expand'}
             <ChevronDown className={`h-4 w-4 transition-transform ${showAnalytics ? 'rotate-180' : ''}`} />
           </span>
         </button>

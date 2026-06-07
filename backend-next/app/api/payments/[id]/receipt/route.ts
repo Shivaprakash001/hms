@@ -18,6 +18,55 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     }
 
     const { id: paymentId } = params;
+
+    if (paymentId.startsWith("advance-")) {
+      const ledgerId = paymentId.replace("advance-", "");
+      const ledgerEntry = await prisma.tenant_advance_ledger.findUnique({
+        where: { id: ledgerId },
+        select: {
+          id: true,
+          owner_id: true,
+          tenant_id: true,
+          hostel_id: true,
+          tenants: { select: { profile_id: true, owner_id: true, id: true } },
+        },
+      });
+      if (!ledgerEntry) {
+        return ApiResponse.error(ApiError.notFound("Advance payment record not found"));
+      }
+
+      if (session.role === "TENANT") {
+        const tenantRecord = await prisma.tenants.findFirst({
+          where: { profile_id: session.sub },
+          select: { id: true },
+        });
+        if (!tenantRecord || tenantRecord.id !== ledgerEntry.tenant_id) {
+          return ApiResponse.error(ApiError.forbidden("Forbidden"));
+        }
+      } else if (session.role === "OWNER") {
+        if (ledgerEntry.owner_id !== session.sub && ledgerEntry.tenants?.owner_id !== session.sub) {
+          return ApiResponse.error(ApiError.forbidden("Forbidden"));
+        }
+        const hostel = await prisma.hostels.findUnique({ where: { id: ledgerEntry.hostel_id }, select: { owner_id: true } });
+        if (!hostel || hostel.owner_id !== session.sub) {
+          return ApiResponse.error(ApiError.forbidden("Forbidden"));
+        }
+      } else if (session.role !== "ADMIN") {
+        return ApiResponse.error(ApiError.forbidden("Forbidden"));
+      }
+
+      const pdfBuffer = await receiptService.generateLedgerPdfBuffer(ledgerId);
+
+      return new NextResponse(pdfBuffer as any, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `inline; filename="receipt_${paymentId.substring(0, 16)}.pdf"`,
+          "Cache-Control": "private, max-age=300",
+        },
+      });
+    }
+
     const payment = await prisma.payments.findUnique({
       where: { id: paymentId },
       select: {

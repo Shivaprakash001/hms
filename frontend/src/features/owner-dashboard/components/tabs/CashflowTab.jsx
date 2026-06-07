@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   AlertTriangle, ArrowRight, ArrowUpRight, Bell, CheckCircle2, Clock,
-  CreditCard, ShieldAlert, Target, Wallet,
+  CreditCard, ShieldAlert, Target, Users, Wallet,
 } from 'lucide-react';
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import SmartDashboardGuidance from '@components/SmartDashboardGuidance';
@@ -22,6 +22,8 @@ export function CashflowTab({
   navigate,
   opPath,
   onOpenTestPayment,
+  riskyTenantCount = 0,
+  onViewRisky,
 }) {
   const isNewOwner = cfStats.expected === 0 && cfStats.topDefaulters.length === 0;
   if (isNewOwner) return <SmartDashboardGuidance />;
@@ -114,6 +116,32 @@ export function CashflowTab({
           onClick={() => navigate(opPath('financials'))}
         />
       </div>
+
+      {riskyTenantCount > 0 && (
+        <DashboardCard className="p-4 border-l-4 border-l-ops-danger">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center shrink-0">
+              <Users size={18} className="text-ops-danger" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-foreground">
+                {riskyTenantCount} high-risk tenant{riskyTenantCount !== 1 ? 's' : ''}
+              </p>
+              <p className="text-xs text-muted-foreground">Behavior score below 50 — review recommended</p>
+            </div>
+            {onViewRisky && (
+              <button
+                type="button"
+                onClick={onViewRisky}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-ops-danger/30 bg-red-50 text-xs font-medium text-ops-danger hover:bg-red-100 transition-colors active:scale-[0.98]"
+              >
+                Review
+                <ArrowRight size={14} />
+              </button>
+            )}
+          </div>
+        </DashboardCard>
+      )}
 
       {cfStats.topDefaulters.length > 0 && (
         <DashboardSection

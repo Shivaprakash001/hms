@@ -402,7 +402,7 @@ export class AnalyticsService {
         _sum: { amount_paid: true },
       }),
       prisma.expenses.aggregate({
-        where: { owner_id: ownerId, hostel_id: hostelId, date: { gte: start, lte: end } },
+        where: { owner_id: ownerId, OR: [{ hostel_id: hostelId }, { hostel_id: null }], date: { gte: start, lte: end } },
         _sum: { amount: true },
       }),
       prisma.$queryRaw<{ pending: bigint; resolved: bigint; avg_hours: number }[]>`

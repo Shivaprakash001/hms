@@ -82,7 +82,7 @@ export function TenantMoveOutPage() {
   if (isLoading) {
     return (
       <div className="flex justify-center py-20">
-        <Loader2 className="w-8 h-8 animate-spin text-accent" />
+        <Loader2 className="w-8 h-8 animate-spin text-[#243A72]" />
       </div>
     );
   }
@@ -149,7 +149,7 @@ export function TenantMoveOutPage() {
               )}
               <div className="flex justify-between pt-2 border-t border-border font-bold">
                 <span>{direction === 'TENANT_OWES_OWNER' || netAmount < 0 ? 'Amount to pay' : 'Refund amount'}</span>
-                <span className={netAmount < 0 ? 'text-destructive' : 'text-accent'}>{fmt(Math.abs(netAmount))}</span>
+                <span className={netAmount < 0 ? 'text-destructive' : 'text-[#243A72]'}>{fmt(Math.abs(netAmount))}</span>
               </div>
             </div>
             <p className="text-xs text-muted-foreground mt-3">
@@ -261,14 +261,18 @@ export function TenantMoveOutPage() {
 
   return (
     <div className="space-y-5">
-      <section className="overflow-hidden rounded-2xl border border-accent/20 bg-card shadow-sm">
-        <div className="bg-accent px-5 py-5 text-accent-foreground">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/25">
+      <section className="overflow-hidden rounded-2xl border border-blue-500/20 bg-card shadow-sm">
+        <div 
+          className="px-5 py-5 text-white relative overflow-hidden"
+          style={{ background: 'linear-gradient(135deg, #1B2D5B 0%, #243A72 100%)' }}
+        >
+          <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-2xl -mr-16 -mt-16"></div>
+          <div className="relative flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/20">
               <DoorOpen className="h-6 w-6" />
             </div>
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] opacity-80">Exit workflow</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-100/80">Exit workflow</p>
               <h1 className="text-2xl font-bold leading-tight">Request move-out</h1>
             </div>
           </div>
@@ -330,7 +334,7 @@ export function TenantMoveOutPage() {
         type="button"
         disabled={!plannedDate || submitMutation.isPending}
         onClick={() => submitMutation.mutate()}
-        className="sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] w-full py-3.5 rounded-xl bg-accent text-accent-foreground font-semibold shadow-lg shadow-accent/20 disabled:opacity-50"
+        className="sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] w-full py-3.5 rounded-xl bg-[#243A72] text-white font-semibold shadow-lg shadow-blue-500/10 hover:bg-[#1B2D5B] transition-colors disabled:opacity-50"
       >
         {submitMutation.isPending ? 'Submitting request...' : 'Send move-out request'}
       </button>

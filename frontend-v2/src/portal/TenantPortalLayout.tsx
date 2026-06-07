@@ -26,11 +26,11 @@ export function TenantPortalLayout() {
               {({ isActive }) => (
                 <div
                   className={`relative flex flex-col items-center justify-center h-full gap-0.5 touch-manipulation ${
-                    isActive ? 'text-accent' : 'text-muted-foreground'
+                    isActive ? 'text-[#243A72]' : 'text-muted-foreground'
                   }`}
                 >
                   {isActive && (
-                    <span className="absolute top-0 left-1/2 -translate-x-1/2 w-7 h-0.5 rounded-full bg-accent" />
+                    <span className="absolute top-0 left-1/2 -translate-x-1/2 w-7 h-0.5 rounded-full bg-[#243A72]" />
                   )}
                   <Icon className="w-5 h-5" />
                   <span className={`text-[10px] ${isActive ? 'font-semibold' : 'font-medium'}`}>{label}</span>

@@ -41,7 +41,7 @@ export function MoveOutStepper({ request }: Props) {
               key={step}
               className={`flex items-center gap-3 p-3 rounded-lg border text-sm ${
                 active
-                  ? 'border-accent bg-accent/5'
+                  ? 'border-[#243A72] bg-[#243A72]/5'
                   : done
                     ? 'border-border bg-card'
                     : 'border-border opacity-50'
@@ -49,7 +49,7 @@ export function MoveOutStepper({ request }: Props) {
             >
               <span
                 className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                  done ? 'bg-accent text-accent-foreground' : 'bg-secondary'
+                  done ? 'bg-[#243A72] text-white' : 'bg-secondary'
                 }`}
               >
                 {i + 1}

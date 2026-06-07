@@ -1,5 +1,6 @@
 import { useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { Download } from 'lucide-react';
 
 const fmt = (n: number) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
 const fmtMonth = (value?: string) => {
@@ -33,15 +34,24 @@ interface Obligation {
   outstanding?: number;
   status?: string;
   due_date?: string;
+  payments?: { id: string; amount_paid: number; payment_date: string; method: string; transaction_id: string }[];
 }
 
 interface Props {
   obligations: Obligation[];
   onRecordPayment?: (obligationId: string) => void;
   onSetupBilling?: () => void;
+  onDownloadReceipt?: (paymentId: string) => void;
+  onSelectObligation?: (obligation: Obligation) => void;
 }
 
-export function RentObligationList({ obligations, onRecordPayment, onSetupBilling }: Props) {
+export function RentObligationList({
+  obligations,
+  onRecordPayment,
+  onSetupBilling,
+  onDownloadReceipt,
+  onSelectObligation,
+}: Props) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const { months, rows } = useMemo(() => {
     const byMonth = obligations.reduce<Record<string, { label: string; sort: number; obligations: Obligation[] }>>((acc, o) => {
@@ -121,36 +131,57 @@ export function RentObligationList({ obligations, onRecordPayment, onSetupBillin
           return (
             <div
               key={id}
-              className="absolute left-0 right-0 flex items-center justify-between gap-3 p-3 rounded-xl border border-border bg-card"
+              onClick={() => onSelectObligation?.(o)}
+              className={`absolute left-0 right-0 flex items-center justify-between gap-3 p-3 rounded-xl border border-border bg-card ${
+                onSelectObligation ? 'cursor-pointer hover:bg-muted/10 transition-colors' : ''
+              }`}
               style={{ transform: `translateY(${virtualRow.start}px)` }}
             >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground">
-                      {fmt(displayAmount)}
-                      {Number(o.late_fee ?? 0) > 0 && (
-                        <span className="text-muted-foreground"> + {fmt(Number(o.late_fee))} late</span>
-                      )}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Due {o.due_date ? new Date(o.due_date).toLocaleDateString('en-IN') : '—'} · Paid{' '}
-                      {fmt(paidAmount)}
-                      {o.type ? ` · ${String(o.type).replaceAll('_', ' ')}` : ''}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className={`text-xs font-semibold ${STATUS_COLORS[status] ?? ''}`}>
-                      {status}
-                    </span>
-                    {onRecordPayment && ['PENDING', 'PARTIAL'].includes(status) && id && (
-                      <button
-                        type="button"
-                        onClick={() => onRecordPayment(id)}
-                        className="text-xs font-medium text-accent px-2 py-1 rounded-lg bg-accent/10"
-                      >
-                        Pay
-                      </button>
-                    )}
-                  </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">
+                  {fmt(displayAmount)}
+                  {Number(o.late_fee ?? 0) > 0 && (
+                    <span className="text-muted-foreground"> + {fmt(Number(o.late_fee))} late</span>
+                  )}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Due {o.due_date ? new Date(o.due_date).toLocaleDateString('en-IN') : '—'} · Paid{' '}
+                  {fmt(paidAmount)}
+                  {o.type ? ` · ${String(o.type).replaceAll('_', ' ')}` : ''}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className={`text-xs font-semibold ${STATUS_COLORS[status] ?? ''}`}>
+                  {status}
+                </span>
+                {onRecordPayment && ['PENDING', 'PARTIAL'].includes(status) && id && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRecordPayment(id);
+                    }}
+                    className="text-xs font-medium text-accent px-2 py-1 rounded-lg bg-accent/10"
+                  >
+                    Pay
+                  </button>
+                )}
+                {status === 'PAID' && o.payments && o.payments.length > 0 && onDownloadReceipt && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const pId = o.payments?.[0]?.id;
+                      if (pId) onDownloadReceipt(pId);
+                    }}
+                    className="p-1.5 rounded-lg text-accent hover:bg-accent/10 transition-colors"
+                    aria-label="Download receipt"
+                    title="Download receipt"
+                  >
+                    <Download className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             </div>
           );
         })}

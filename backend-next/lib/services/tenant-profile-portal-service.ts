@@ -65,6 +65,11 @@ export async function getTenantPortalProfile(profileId: string) {
               wifi_name: true,
               wifi_password: true,
               notes: true,
+              floor_ref: {
+                select: {
+                  name: true,
+                },
+              },
             },
           },
         },
@@ -207,7 +212,7 @@ export async function getTenantPortalProfile(profileId: string) {
     room: room
       ? {
           room_no: room.room_no,
-          floor: room.floor,
+          floor: room.floor_ref?.name ?? (room.floor != null ? `${room.floor} Floor` : null),
           room_type: room.room_type,
           capacity: room.capacity,
           current_occupancy: roommateCount + 1,

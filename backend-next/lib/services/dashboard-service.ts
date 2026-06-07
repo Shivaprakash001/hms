@@ -167,7 +167,7 @@ export class DashboardService {
           COALESCE(SUM(amount) FILTER (WHERE date >= ${previousMonthStart}::date AND date < ${monthStart}::date), 0)::float AS previous_expenses
         FROM expenses
         WHERE owner_id = ${userId}::uuid
-          AND hostel_id = ${hostelId}::uuid
+          AND (hostel_id = ${hostelId}::uuid OR hostel_id IS NULL)
           AND date >= ${previousMonthStart}::date
           AND date < ${nextMonthStart}::date
       ),
@@ -230,7 +230,7 @@ export class DashboardService {
         SELECT category, COALESCE(SUM(amount), 0)::float AS amount
         FROM expenses
         WHERE owner_id = ${userId}::uuid
-          AND hostel_id = ${hostelId}::uuid
+          AND (hostel_id = ${hostelId}::uuid OR hostel_id IS NULL)
           AND date >= ${monthStart}::date
           AND date < ${nextMonthStart}::date
         GROUP BY category
@@ -239,7 +239,7 @@ export class DashboardService {
         SELECT category, COALESCE(SUM(amount), 0)::float AS amount
         FROM expenses
         WHERE owner_id = ${userId}::uuid
-          AND hostel_id = ${hostelId}::uuid
+          AND (hostel_id = ${hostelId}::uuid OR hostel_id IS NULL)
           AND date >= ${previousMonthStart}::date
           AND date < ${monthStart}::date
         GROUP BY category
@@ -713,7 +713,7 @@ export class DashboardService {
         SELECT date_trunc('month', date)::date AS month_start, COALESCE(SUM(amount), 0)::float AS amount
         FROM expenses
         WHERE owner_id = ${userId}::uuid
-          AND hostel_id = ${hostelId}::uuid
+          AND (hostel_id = ${hostelId}::uuid OR hostel_id IS NULL)
           AND date >= ${sixMonthStart}::date
         GROUP BY 1
       ),

@@ -126,6 +126,10 @@ export const tenantService = {
         const response = await api.get('/tenants/me/score');
         return response.data.success !== undefined ? (response.data.data !== undefined ? response.data.data : response.data) : response.data;
     },
+    getTenantScore: async (tenantId) => {
+        const response = await api.get(`/tenants/${tenantId}/score`);
+        return response.data.success !== undefined ? (response.data.data !== undefined ? response.data.data : response.data) : response.data;
+    },
     getMyAdvance: async () => {
         const response = await api.get('/tenants/me/advance');
         return response.data.success !== undefined ? (response.data.data !== undefined ? response.data.data : response.data) : response.data;

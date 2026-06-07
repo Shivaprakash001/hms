@@ -189,9 +189,6 @@ export function TenantProfilePortalPage() {
     { label: 'Emergency phone', value: t.phone_3 || p.emergency_contact },
     { label: 'Profile type', value: t.profile_type },
     { label: 'Permanent address', value: t.permanent_address },
-    { label: 'City', value: p.city },
-    { label: 'State', value: p.state },
-    { label: 'Pincode', value: p.pincode },
     { label: 'Documents', value: docs.length > 0 ? 'uploaded' : '' },
   ];
 
@@ -242,15 +239,11 @@ export function TenantProfilePortalPage() {
       course: course,
       branch: String(t.branch ?? ''),
       year_of_study: t.year_of_study != null ? String(t.year_of_study) : '',
-      section: String(t.section ?? ''),
       roll_number: String(t.roll_number ?? ''),
       office_name: String(t.office_name ?? ''),
       office_location: String(t.office_location ?? ''),
       job_role: String(t.job_role ?? ''),
       permanent_address: String(t.permanent_address ?? ''),
-      city: String(p.city ?? ''),
-      state: String(p.state ?? ''),
-      pincode: String(p.pincode ?? ''),
     });
     setEditing(true);
   };
@@ -544,7 +537,6 @@ export function TenantProfilePortalPage() {
               </label>
 
               <Field label="Branch" value={form.branch} onChange={(v) => setForm({ ...form, branch: v })} />
-              <Field label="Section" value={form.section} onChange={(v) => setForm({ ...form, section: v })} />
               <Field label="Roll number" value={form.roll_number} onChange={(v) => setForm({ ...form, roll_number: v })} />
             </>
           ) : (
@@ -553,7 +545,6 @@ export function TenantProfilePortalPage() {
               <ProfileRow label="Course" value={t.course} />
               <ProfileRow label="Branch" value={t.branch} />
               <ProfileRow label="Year" value={t.year_of_study} />
-              <ProfileRow label="Section" value={t.section} />
               <ProfileRow label="Roll no." value={t.roll_number} />
             </>
           )
@@ -576,17 +567,11 @@ export function TenantProfilePortalPage() {
       <ProfileSection title="Address">
         {editing ? (
           <>
-            <Field label="Permanent address (Address, City, State, Pincode)" value={form.permanent_address} onChange={(v) => setForm({ ...form, permanent_address: v })} />
-            <Field label="City" value={form.city} onChange={(v) => setForm({ ...form, city: v })} />
-            <Field label="State" value={form.state} onChange={(v) => setForm({ ...form, state: v })} />
-            <Field label="Pincode" value={form.pincode} onChange={(v) => setForm({ ...form, pincode: v })} />
+            <Field label="Permanent address" value={form.permanent_address} onChange={(v) => setForm({ ...form, permanent_address: v })} />
           </>
         ) : (
           <>
             <ProfileRow label="Permanent address" value={t.permanent_address} />
-            <ProfileRow label="City" value={p.city} />
-            <ProfileRow label="State" value={p.state} />
-            <ProfileRow label="Pincode" value={p.pincode} />
           </>
         )}
       </ProfileSection>
@@ -597,7 +582,7 @@ export function TenantProfilePortalPage() {
           <>
             <ProfileRow label="Hostel" value={hostel.name} />
             <ProfileRow label="Room" value={room?.room_no ?? 'Assignment pending'} />
-            <ProfileRow label="Floor" value={room?.floor} />
+            <ProfileRow label="Floor" value={room ? (room.floor ?? '—') : 'Assignment pending'} />
             <ProfileRow label="Joined" value={fmtDate(t.joined_on)} />
             <ProfileRow label="Billing start" value={fmtDate(t.billing_start_date)} />
             <ProfileRow label="Monthly rent" value={fmt(Number(t.monthly_rent ?? 0))} />

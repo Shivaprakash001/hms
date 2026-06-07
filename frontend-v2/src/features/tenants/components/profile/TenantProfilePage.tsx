@@ -8,6 +8,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { tenantService } from '@features/tenants/api';
+import { TenantScoreCard } from '@features/tenants/components/score/TenantScoreCard';
 import { ownerService } from '@features/owners/api';
 import { useTenantProfile } from '@features/tenants/hooks/useTenantProfile';
 import { useTenantActions } from '@features/tenants/hooks/useTenantActions';
@@ -129,6 +130,14 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
     onError: (error: any) => {
       toast.error(error?.response?.data?.error?.message || 'Could not update billing request');
     },
+  });
+
+  const { data: tenantScore, isLoading: scoreLoading } = useQuery({
+    queryKey: ['tenant-score', tenantId],
+    queryFn: () => tenantService.getTenantScore(tenantId),
+    enabled: Boolean(tenantId) && section === 'overview',
+    staleTime: 10 * 60 * 1000,
+    retry: false,
   });
 
   const profile = (overview?.profile ?? overview?.profiles ?? full?.profiles ?? {}) as Record<string, unknown>;
@@ -361,6 +370,9 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
 
       {section === 'overview' && (
         <div className="space-y-4">
+          {/* Behavior Score */}
+          <TenantScoreCard scoreData={tenantScore} loading={scoreLoading} />
+
           {/* Emergency / Guardian Contact Info Card */}
           <div className="p-4 rounded-xl border border-border bg-card space-y-3 shadow-sm">
             <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">

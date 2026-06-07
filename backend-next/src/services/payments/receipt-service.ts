@@ -355,6 +355,89 @@ export class ReceiptService {
 }
 
   /**
+   * Generate a PDF buffer for an advance ledger entry.
+   */
+  async generateLedgerPdfBuffer(ledgerId: string): Promise<Buffer> {
+    const ledgerEntry = await prisma.tenant_advance_ledger.findUnique({
+      where: { id: ledgerId },
+      include: {
+        tenants: { include: { profiles: true } },
+      },
+    });
+
+    if (!ledgerEntry) {
+      throw new Error("NOT_FOUND: Ledger entry not found");
+    }
+
+    const hostel = await prisma.hostels.findUnique({
+      where: { id: ledgerEntry.hostel_id },
+    });
+    if (!hostel) throw new Error("HOSTEL_NOT_FOUND: Hostel not found");
+    const prefs = resolvePreferences(hostel);
+
+    const allocation = await prisma.roomAllocation.findFirst({
+      where: { tenant_id: ledgerEntry.tenant_id, hostel_id: ledgerEntry.hostel_id, is_active: true },
+      include: { room: true },
+      orderBy: { start_date: "desc" },
+    });
+
+    const fallbackAllocation = allocation || await prisma.roomAllocation.findFirst({
+      where: { tenant_id: ledgerEntry.tenant_id, hostel_id: ledgerEntry.hostel_id },
+      include: { room: true },
+      orderBy: { start_date: "desc" },
+    });
+
+    const year = new Date(ledgerEntry.created_at).getFullYear();
+    const receiptNumber = `ADV-${prefs.receipt_prefix || "HMS"}-${year}-${ledgerEntry.id.substring(0, 8).toUpperCase()}`;
+
+    const renderData: ReceiptRenderData = {
+      // Hostel
+      hostel_name: hostel.name || "HMS Hostel",
+      hostel_address: hostel.address || "",
+      hostel_city: hostel.city || null,
+      hostel_state: hostel.state || null,
+      hostel_pincode: hostel.pincode || null,
+      hostel_phone: hostel.phone || null,
+      hostel_gst: hostel.gst_number || null,
+      hostel_logo_url: hostel.logo_url || null,
+
+      // Receipt
+      receipt_number: receiptNumber,
+      issued_at: ledgerEntry.created_at,
+
+      // Tenant
+      tenant_name: ledgerEntry.tenants?.profiles?.name || "Tenant",
+      tenant_phone: ledgerEntry.tenants?.profiles?.phone || null,
+      tenant_email: ledgerEntry.tenants?.profiles?.email || null,
+      room_no: fallbackAllocation?.room?.room_no || null,
+      room_floor: fallbackAllocation?.room?.floor != null
+        ? String(fallbackAllocation.room.floor)
+        : null,
+
+      // Payment
+      amount: Number(ledgerEntry.amount),
+      payment_method: ledgerEntry.reference_type === "PAYMENT_ATTEMPT" ? "ONLINE" : "Future rent credit",
+      transaction_id: ledgerEntry.reference_id || null,
+      reference_number: ledgerEntry.reference_id || null,
+      payment_date: ledgerEntry.created_at,
+
+      // Obligation
+      rent_month: null,
+      due_date: null,
+      obligation_amount: null,
+      obligation_status: "PAID",
+
+      // Preferences
+      prefs,
+      footer: prefs.receipt_footer || null,
+    };
+
+    const pdfUint8Array = await generateReceiptPdf(renderData);
+    return Buffer.from(pdfUint8Array);
+  }
+
+
+  /**
    * Render receipt PDF directly from a receipt record with context.
    * Used by the payment-service email flow for backward compatibility.
    */

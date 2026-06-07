@@ -29,7 +29,6 @@ type OnboardingForm = {
   roll_number: string;
   course: string;
   year_of_study: string;
-  section: string;
   branch: string;
   office_name: string;
   office_location: string;
@@ -62,7 +61,6 @@ const initialForm: OnboardingForm = {
   roll_number: '',
   course: '',
   year_of_study: '',
-  section: '',
   branch: '',
   office_name: '',
   office_location: '',
@@ -229,7 +227,6 @@ export function CompleteProfilePage() {
           roll_number: prev.roll_number || defaults.roll_number || '',
           course: prev.course || course,
           year_of_study: prev.year_of_study || String(defaults.year_of_study || ''),
-          section: prev.section || defaults.section || '',
           branch: prev.branch || defaults.branch || '',
           office_name: prev.office_name || defaults.office_name || '',
           office_location: prev.office_location || defaults.office_location || '',
@@ -350,7 +347,6 @@ export function CompleteProfilePage() {
             form.profile_type === 'STUDENT' && form.year_of_study
               ? Number(form.year_of_study)
               : null,
-          section: form.profile_type === 'STUDENT' ? form.section.trim() || null : null,
           branch: form.profile_type === 'STUDENT' ? form.branch.trim() || null : null,
           office_name:
             form.profile_type === 'WORKING_PROFESSIONAL' ? form.office_name.trim() : null,
@@ -699,11 +695,6 @@ export function CompleteProfilePage() {
                     label="Branch"
                     value={form.branch}
                     onChange={(value) => update('branch', value)}
-                  />
-                  <Field
-                    label="Section"
-                    value={form.section}
-                    onChange={(value) => update('section', value)}
                   />
                 </div>
               )}
