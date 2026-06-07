@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   Search, SlidersHorizontal, Building2, ArrowRight,
   CheckCircle, IndianRupee, TrendingUp, Users, Phone, Bell,
-  LogOut, UserCheck, Settings, X, ChevronRight, Activity,
+  LogOut, UserCheck, Settings, X, ChevronRight, Activity, Plus,
 } from 'lucide-react';
 import { useAuth } from '@context/AuthContext';
 import { portfolioService } from '@features/dashboard/api';
@@ -427,7 +427,13 @@ export function PortfolioView() {
           <section>
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-bold text-foreground">Properties</h2>
-              <span className="text-xs text-muted-foreground">Tap to manage</span>
+              <button
+                type="button"
+                onClick={() => setShowAddHostel(true)}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-accent hover:underline active:scale-95 transition-transform"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add hostel
+              </button>
             </div>
             {filteredRankings.length === 0 ? (
               <div className="text-center py-16 space-y-4 border border-dashed border-border rounded-xl">

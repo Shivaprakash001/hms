@@ -1,7 +1,7 @@
 import { lazy, Suspense, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { IndianRupee, Plus, Receipt, Search, UserPlus, X } from 'lucide-react';
+import { IndianRupee, Plus, Receipt, Search, UserPlus, X, Building2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ownerService } from '@features/owners/api';
 import { queryKeys } from '@lib/queryKeys';
@@ -9,8 +9,9 @@ import { queryKeys } from '@lib/queryKeys';
 const AddTenantModal = lazy(() => import('./modals/AddTenantModal').then((m) => ({ default: m.AddTenantModal })));
 const RecordPaymentModal = lazy(() => import('./modals/RecordPaymentModal').then((m) => ({ default: m.RecordPaymentModal })));
 const AddExpenseModal = lazy(() => import('./hostel-detail/tabs/expenses/AddExpenseModal').then((m) => ({ default: m.AddExpenseModal })));
+const AddHostelModal = lazy(() => import('./modals/AddHostelModal').then((m) => ({ default: m.AddHostelModal })));
 
-type Action = 'menu' | 'payment' | 'tenant' | 'expense' | null;
+type Action = 'menu' | 'payment' | 'tenant' | 'expense' | 'hostel' | null;
 
 const EXPENSE_CATEGORIES = [
   'Food & Groceries',
@@ -128,6 +129,14 @@ export function OwnerQuickActions() {
               </button>
               <button
                 type="button"
+                onClick={() => setActive('hostel')}
+                className="flex items-center gap-3 rounded-xl border border-border px-3 py-3 text-left text-sm font-medium"
+              >
+                <Building2 className="h-4 w-4 text-accent" />
+                Add hostel
+              </button>
+              <button
+                type="button"
                 onClick={() => {
                   setActive(null);
                   navigate('/tenants');
@@ -168,6 +177,17 @@ export function OwnerQuickActions() {
             loading={createExpenseMutation.isPending}
             onClose={() => setActive(null)}
             onSubmit={(body) => createExpenseMutation.mutate(body)}
+          />
+        </Suspense>
+      )}
+      {active === 'hostel' && (
+        <Suspense fallback={null}>
+          <AddHostelModal
+            onClose={() => {
+              setActive(null);
+              queryClient.invalidateQueries({ queryKey: queryKeys.owner.hostels() });
+              queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.all() });
+            }}
           />
         </Suspense>
       )}
