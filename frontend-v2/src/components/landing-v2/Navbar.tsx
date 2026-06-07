@@ -12,17 +12,17 @@ export function Navbar({ hostelProfile = fallbackLandingContent.hostelProfile }:
   };
 
   return (
-    <nav className="bg-white shadow-sm sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 py-4">
+    <nav className="bg-white shadow-md sticky top-0 z-[100] h-[56px] md:h-auto flex items-center">
+      <div className="max-w-7xl mx-auto px-4 py-1.5 md:py-4 w-full">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img
               src={hostelLogo}
               alt="Sri Adithya Hostels Logo"
-              className="w-12 h-12 object-contain"
+              className="w-10 h-10 md:w-12 md:h-12 object-contain rounded-md"
             />
             <div>
-              <h1 className="text-xl font-semibold text-[#1B2D5B]" style={{ fontFamily: 'var(--font-display)' }}>
+              <h1 className="text-lg md:text-xl font-semibold text-[#1B2D5B]" style={{ fontFamily: 'var(--font-display)' }}>
                 {hostelProfile.name}
               </h1>
             </div>
@@ -60,15 +60,9 @@ export function Navbar({ hostelProfile = fallbackLandingContent.hostelProfile }:
           </div>
 
           <div className="md:hidden flex items-center gap-2">
-            <Link
-              to="/login"
-              className="text-[#2C2C2A] border border-[#F07B1D] px-3 py-2 rounded-lg text-sm"
-            >
-              Login
-            </Link>
             <button
               onClick={() => scrollToSection('contact')}
-              className="bg-[#F07B1D] text-white px-4 py-2 rounded-lg hover:bg-[#d96e18] transition-colors text-sm relative"
+              className="bg-[#F07B1D] text-white px-4 py-1.5 rounded-lg hover:bg-[#d96e18] transition-colors text-sm font-medium relative"
             >
               <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-600 rounded-full animate-pulse" />
               Enquire Now

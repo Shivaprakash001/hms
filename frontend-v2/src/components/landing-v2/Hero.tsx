@@ -20,7 +20,7 @@ function highlightIcon(label: string) {
 }
 
 export function Hero({ availability, content }: { availability?: LandingAvailability; content: HeroContent }) {
-  const startingPriceText = rupee(availability?.startingPrice);
+  const startingPriceText = rupee(availability?.startingPrice || 8000);
   const supportingCopy = startingPriceText
     ? `${content.supportingCopy || 'Join SNIST students'} — ${startingPriceText}/month, everything included.`
     : content.supportingCopy;
@@ -32,7 +32,7 @@ export function Hero({ availability, content }: { availability?: LandingAvailabi
       <div className="max-w-7xl mx-auto px-4">
         <div className="grid md:grid-cols-[55%_45%] gap-12 items-center">
           <div className="space-y-8">
-            <div className="flex items-center gap-6">
+            <div className="flex flex-wrap items-center gap-4">
               <motion.div
                 className="relative flex-shrink-0"
                 initial={{ opacity: 0, scale: 0.8 }}
@@ -49,14 +49,24 @@ export function Hero({ availability, content }: { availability?: LandingAvailabi
                 </div>
               </motion.div>
 
-              <motion.div
-                className="inline-flex items-center gap-2 bg-[#1B2D5B] text-white px-4 py-2 rounded-full text-sm border-l-4 border-[#F07B1D]"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.2, ease: [0.25, 0.4, 0.25, 1] }}
-              >
-                {content.trustBadge}
-              </motion.div>
+              <div className="flex flex-col gap-2">
+                <motion.div
+                  className="inline-flex items-center gap-2 bg-[#1B2D5B] text-white px-4 py-2 rounded-full text-sm border-l-4 border-[#F07B1D] font-medium"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, delay: 0.2, ease: [0.25, 0.4, 0.25, 1] }}
+                >
+                  {content.trustBadge}
+                </motion.div>
+                <motion.div
+                  className="inline-flex items-center gap-2 bg-green-50 text-green-700 border border-green-200 px-4 py-2 rounded-full text-sm font-semibold"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, delay: 0.3, ease: [0.25, 0.4, 0.25, 1] }}
+                >
+                  <span>78+ SNIST students already live here</span>
+                </motion.div>
+              </div>
             </div>
 
             <motion.div
@@ -66,10 +76,10 @@ export function Hero({ availability, content }: { availability?: LandingAvailabi
               transition={{ duration: 1, delay: 0.1, ease: [0.25, 0.4, 0.25, 1] }}
             >
               <h1
-                className="text-4xl md:text-5xl lg:text-6xl text-[#1B2D5B] leading-tight mb-6"
+                className="text-4xl md:text-5xl lg:text-6xl font-bold text-[#1B2D5B] leading-tight mb-6"
                 style={{ fontFamily: 'var(--font-display)' }}
               >
-                {content.title}
+                400m from SNIST. Home Food. Everything Included.
               </h1>
               <p className="text-xl md:text-2xl text-[#2C2C2A] leading-relaxed">
                 {content.subtitle}
@@ -87,29 +97,39 @@ export function Hero({ availability, content }: { availability?: LandingAvailabi
               </motion.p>
             )}
 
-            <motion.div
-              className="flex flex-wrap gap-4 pt-6"
-              initial={{ opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.5, ease: [0.25, 0.4, 0.25, 1] }}
-            >
-              <a
-                href={primaryHref}
-                className="flex items-center gap-2 bg-[#F07B1D] text-white px-8 py-4 rounded-lg hover:bg-[#d96e18] transition-colors shadow-lg font-semibold"
+            <div>
+              <motion.div
+                className="flex flex-wrap gap-4 pt-6"
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8, delay: 0.5, ease: [0.25, 0.4, 0.25, 1] }}
               >
-                <Phone className="w-5 h-5" />
-                <span>{content.primaryCta?.label || 'Book a Room Visit'}</span>
-              </a>
-              <a
-                href={secondaryHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 bg-white text-[#1B2D5B] border-l-4 border-green-500 px-8 py-4 rounded-lg hover:shadow-lg transition-all shadow-md font-semibold"
+                <a
+                  href={primaryHref}
+                  className="flex items-center gap-2 bg-[#F07B1D] text-white px-8 py-4 rounded-lg hover:bg-[#d96e18] transition-colors shadow-lg font-semibold"
+                >
+                  <Phone className="w-5 h-5" />
+                  <span>{content.primaryCta?.label || 'Book a Room Visit'}</span>
+                </a>
+                <a
+                  href={secondaryHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 bg-white text-[#1B2D5B] border-l-4 border-green-500 px-8 py-4 rounded-lg hover:shadow-lg transition-all shadow-md font-semibold"
+                >
+                  <MessageCircle className="w-5 h-5" />
+                  <span>{content.secondaryCta?.label || 'Check Availability on WhatsApp'}</span>
+                </a>
+              </motion.div>
+              <motion.p
+                className="text-sm italic text-red-600 font-semibold mt-3 ml-1"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.5, delay: 0.6 }}
               >
-                <MessageCircle className="w-5 h-5" />
-                <span>{content.secondaryCta?.label || 'Check Availability on WhatsApp'}</span>
-              </a>
-            </motion.div>
+                ⚡ Only a few beds available for {availability?.intakeMonth || 'this month'} — confirm early
+              </motion.p>
+            </div>
 
             <motion.div
               className="flex flex-wrap gap-4 pt-8 border-t border-[#F07B1D]/20 mt-8"

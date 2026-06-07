@@ -138,7 +138,7 @@ export const fallbackLandingContent: LandingMarketingContent = {
     ownerMessage: 'I personally respond to every enquiry.',
   },
   seo: {
-    title: 'Sri Adithya Boys Hostel | Student Accommodation Near SNIST',
+    title: 'Best Boys Hostel in Yamnampet, Secunderabad | Sri Adithya Hostels',
     description:
       'Sri Adithya Boys Hostel offers safe student accommodation near SNIST with homely meals, transparent pricing, parent-friendly admissions, and easy room visit booking.',
     canonicalUrl: 'https://sriadithyahostels.in/',
@@ -216,11 +216,31 @@ export const fallbackLandingContent: LandingMarketingContent = {
     },
     {
       question: 'Is the hostel suitable for parents who want regular safety updates?',
-      answer: 'Yes. Parents can speak with the owner and understand rules, safety, and visit process before admission.',
+      answer: 'Yes. Parents can speak with the owner and understand rules, safety, and visit process before admission. We provide regular updates to parents.',
     },
     {
       question: 'Are there hidden charges?',
       answer: 'No. Room pricing and inclusions are discussed clearly before admission confirmation.',
+    },
+    {
+      question: 'What is the internet speed at the hostel?',
+      answer: 'The hostel has high-speed fiber broadband WiFi. Students use it for online classes, assignments, and streaming without interruption. Separate network access points are available per room.',
+    },
+    {
+      question: 'Can we visit the hostel before confirming admission?',
+      answer: 'Absolutely. We encourage all students and parents to visit in person. Call or WhatsApp Srinivasa Rao at 9392433422 to schedule a visit — most visits happen within 24 hours of enquiry.',
+    },
+    {
+      question: 'What is the deposit amount and refund policy?',
+      answer: 'A simple security deposit is required to confirm your bed. The deposit is fully refundable when you move out, subject to room condition. No hidden booking fees.',
+    },
+    {
+      question: 'Is there a study room or quiet area for students?',
+      answer: 'Yes. Students have access to a dedicated study area within the hostel. The environment is designed to support academic focus, especially during exam season.',
+    },
+    {
+      question: 'What happens during semester breaks and summer vacation?',
+      answer: 'Students may choose to keep their room during semester breaks. We offer flexible semester and annual packages. WhatsApp us for details based on your academic calendar.',
     },
   ],
   gallery: [

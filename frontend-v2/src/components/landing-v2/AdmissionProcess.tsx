@@ -1,6 +1,7 @@
 import { ScrollReveal, StaggerReveal, StaggerItem } from './ScrollReveal';
 import type { AdmissionStepContent } from '@lib/sanity/landingContent';
 import { getLandingIcon } from './content/icons';
+import { MessageCircle } from 'lucide-react';
 
 const derivedIcons = ['phone', 'building', 'bed', 'document', 'key'];
 
@@ -90,11 +91,23 @@ export function AdmissionProcess({ steps = [] }: { steps?: AdmissionStepContent[
         </StaggerReveal>
 
         <ScrollReveal delay={0.5}>
-          <div className="mt-6 md:mt-12 max-w-2xl mx-auto">
+          <div className="mt-6 md:mt-12 max-w-2xl mx-auto space-y-6">
             <div className="bg-[#F07B1D]/10 border-l-4 border-[#F07B1D] rounded-lg p-3 md:p-4 text-center">
-              <p className="text-[#1B2D5B] font-medium">
+              <p className="text-[#1B2D5B] font-semibold text-sm md:text-base">
                 Most students complete admission in under 48 hours.
               </p>
+            </div>
+            
+            <div className="flex justify-center">
+              <a
+                href="https://api.whatsapp.com/send?phone=919392433422&text=Hi%2C%20I%27m%20interested%20in%20seeking%20admission%20at%20Sri%20Adithya%20Hostel"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 bg-[#F07B1D] text-white px-8 py-3.5 rounded-lg hover:bg-[#d96e18] transition-colors font-bold shadow-md w-full sm:w-auto justify-center text-center text-sm md:text-base"
+              >
+                <MessageCircle className="w-5 h-5" />
+                <span>WhatsApp to Start Admission</span>
+              </a>
             </div>
           </div>
         </ScrollReveal>

@@ -1,23 +1,20 @@
-import { Check, MessageCircle, Bed } from 'lucide-react';
+import { Check, MessageCircle } from 'lucide-react';
 import { ScrollReveal } from './ScrollReveal';
 import type { LandingAvailability } from './landingTypes';
 import type { FacilityContent } from '@lib/sanity/landingContent';
 
-function rupee(value: number | null | undefined) {
-  if (!value) return 'Ask owner';
-  return `₹${Number(value).toLocaleString('en-IN')}`;
-}
-
 export function RoomPricing({ availability, facilities }: { availability?: LandingAvailability; facilities?: FacilityContent[] }) {
   const included = facilities?.filter((facility) => facility?.title).slice(0, 8).map((facility) => facility.title) || [];
-  const startingPriceText = rupee(availability?.startingPrice);
+  
+  const cleanPrice = availability?.startingPrice || 8000;
+  const formattedPrice = `₹${Number(cleanPrice).toLocaleString('en-IN')}`;
 
   return (
     <section id="rooms" className="py-16 md:py-24 bg-white">
       <div className="max-w-7xl mx-auto px-4">
         <ScrollReveal>
           <h2
-            className="text-3xl md:text-4xl text-center text-[#1B2D5B] mb-4"
+            className="text-3xl md:text-4xl text-center text-[#1B2D5B] mb-4 font-bold"
             style={{ fontFamily: 'var(--font-display)' }}
           >
             Rooms & Pricing
@@ -37,23 +34,28 @@ export function RoomPricing({ availability, facilities }: { availability?: Landi
                   Only {availability.bedsAvailable} beds available this month
                 </div>
               )}
-              <div className={`aspect-[16/9] bg-gradient-to-br from-[#F07B1D]/20 to-[#1B2D5B]/20 relative overflow-hidden ${availability?.hasLiveAvailability ? 'mt-10' : ''}`}>
-                <div className="absolute inset-0 flex items-center justify-center text-[#1B2D5B]/20">
-                  <Bed className="w-32 h-32" />
-                </div>
+              <div className={`aspect-[16/9] relative overflow-hidden ${availability?.hasLiveAvailability ? 'mt-10' : ''}`}>
+                <img
+                  src="/hostel_room.png"
+                  alt="Modern boys student hostel room"
+                  className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
               </div>
 
               <div className="p-8">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-2xl font-semibold text-[#1B2D5B]">4-Sharing Room</h3>
+                  <h3 className="text-2xl font-bold text-[#1B2D5B]">4-Sharing Room</h3>
                   <div className="text-right">
                     <div
-                      className="text-4xl font-bold text-[#F07B1D]"
+                      className="text-4xl font-extrabold text-[#F07B1D]"
                       style={{ fontFamily: 'var(--font-display)' }}
                     >
-                      {startingPriceText}
+                      {formattedPrice}
                     </div>
-                    <div className="text-sm text-[#2C2C2A]">per month</div>
+                    <div className="text-xs font-semibold text-[#2C2C2A]/70 mt-1">
+                      Rent starts at {formattedPrice}/mo
+                    </div>
                   </div>
                 </div>
 
@@ -65,7 +67,7 @@ export function RoomPricing({ availability, facilities }: { availability?: Landi
                         {included.map((item, index) => (
                           <div key={index} className="flex items-start gap-2">
                             <Check className="w-5 h-5 text-[#F07B1D] flex-shrink-0 mt-0.5" />
-                            <span className="text-[#2C2C2A] text-sm">{item}</span>
+                            <span className="text-[#2C2C2A] text-sm font-medium">{item}</span>
                           </div>
                         ))}
                       </div>
@@ -73,8 +75,8 @@ export function RoomPricing({ availability, facilities }: { availability?: Landi
                   )}
                   <div className="bg-[#FFFDF5] border border-[#F07B1D]/20 rounded-lg p-4 mt-4">
                     <h5 className="font-semibold text-[#1B2D5B] text-sm mb-2">Total Cost Clarity</h5>
-                    <p className="text-[#2C2C2A]/80 text-sm">
-                      No hidden fees. Current rent is confirmed from live HMS room pricing. <strong className="text-[#F07B1D]">{startingPriceText}</strong> is the current starting price.
+                    <p className="text-[#2C2C2A]/85 text-sm">
+                      No hidden fees. Current rent is confirmed from live HMS room pricing. <strong className="text-[#F07B1D]">{formattedPrice}</strong> is the current starting price.
                     </p>
                   </div>
                 </div>
@@ -83,12 +85,12 @@ export function RoomPricing({ availability, facilities }: { availability?: Landi
                   href="https://api.whatsapp.com/send?phone=919392433422&text=Hi%2C%20I%27m%20interested%20in%20booking%20a%204-sharing%20room"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 w-full bg-[#F07B1D] text-white py-4 rounded-lg hover:bg-[#d96e18] transition-colors font-semibold"
+                  className="flex items-center justify-center gap-2 w-full bg-[#F07B1D] text-white py-4 rounded-lg hover:bg-[#d96e18] transition-colors font-semibold shadow-lg"
                 >
                   <MessageCircle className="w-5 h-5" />
                   <span>WhatsApp to Book</span>
                 </a>
-                <p className="text-sm text-[#2C2C2A]/60 italic text-center mt-3">
+                <p className="text-sm text-[#2C2C2A]/60 italic text-center mt-3 font-medium">
                   {availability?.hasLiveAvailability ? 'Availability updates from live admissions data' : 'Contact us to check current availability'}
                 </p>
               </div>

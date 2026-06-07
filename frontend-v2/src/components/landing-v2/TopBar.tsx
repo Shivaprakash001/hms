@@ -12,25 +12,25 @@ export function TopBar({
   const shortLocation = hostelProfile.shortLocation || fallbackLandingContent.hostelProfile.shortLocation || 'Yamnampet, Secunderabad';
 
   return (
-    <div className="bg-[#1B2D5B] text-white py-2 px-4">
-      <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-center md:justify-between gap-4 text-sm">
-        <div className="flex items-center gap-6">
-          <a href={`tel:${phone}`} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-            <Phone className="w-4 h-4" />
-            <span>{phone}</span>
+    <div className="bg-[#1B2D5B] text-white h-[44px] md:h-auto flex items-center px-4 py-1">
+      <div className="max-w-7xl mx-auto flex w-full items-center justify-between gap-2 text-xs md:text-sm">
+        <div className="flex items-center gap-3 md:gap-6">
+          <a href="tel:9392433422" className="flex items-center gap-1 hover:opacity-80 transition-opacity">
+            <Phone className="w-3.5 h-3.5 md:w-4 md:h-4" />
+            <span>9392433422</span>
           </a>
-          <div className="flex items-center gap-2">
-            <MapPin className="w-4 h-4" />
-            <span>{shortLocation}</span>
+          <div className="flex items-center gap-1">
+            <MapPin className="w-3.5 h-3.5 md:w-4 md:h-4" />
+            <span className="truncate max-w-[120px] sm:max-w-none">{shortLocation}</span>
           </div>
         </div>
         <a
-          href={`https://api.whatsapp.com/send?phone=${whatsappNumber}`}
+          href="https://wa.me/919392433422?text=Hi%20Srinivasa%20Rao%2C%20I%27m%20interested%20in%20a%20hostel%20room"
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+          className="flex items-center gap-1 hover:opacity-80 transition-opacity whitespace-nowrap bg-[#F07B1D] px-2.5 py-1 rounded text-white font-semibold text-[10px] md:text-xs"
         >
-          <MessageCircle className="w-4 h-4" />
+          <MessageCircle className="w-3 h-3 md:w-3.5 md:h-3.5" />
           <span>WhatsApp Us</span>
         </a>
       </div>

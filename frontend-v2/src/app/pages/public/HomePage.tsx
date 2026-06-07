@@ -17,6 +17,8 @@ import { StatsStrip } from '@/components/landing-v2/StatsStrip';
 import { Testimonials } from '@/components/landing-v2/Testimonials';
 import { TopBar } from '@/components/landing-v2/TopBar';
 import { WhyChooseUs } from '@/components/landing-v2/WhyChooseUs';
+import { GoogleTrustBar } from '@/components/landing-v2/GoogleTrustBar';
+import { WhatsAppFAB } from '@/components/landing-v2/WhatsAppFAB';
 import type { LandingAvailability } from '@/components/landing-v2/landingTypes';
 import { fallbackLandingContent, getLandingMarketingContent } from '@lib/sanity/client';
 
@@ -85,6 +87,7 @@ export function HomePage() {
     <div className="min-h-screen">
       <TopBar hostelProfile={content.hostelProfile} />
       <Navbar hostelProfile={content.hostelProfile} />
+      <GoogleTrustBar />
       <AnnouncementBanner announcements={content.announcements} />
       <Hero availability={landingAvailability} content={content.hero} />
       <StatsStrip availability={landingAvailability} />
@@ -98,6 +101,7 @@ export function HomePage() {
       <FaqSection faqs={content.faqs} />
       <EnquiryForm availability={landingAvailability} hostelProfile={content.hostelProfile} visitSlug={PRIMARY_VISIT_SLUG} />
       <Footer content={content.footer} hostelProfile={content.hostelProfile} />
+      <WhatsAppFAB />
     </div>
   );
 }

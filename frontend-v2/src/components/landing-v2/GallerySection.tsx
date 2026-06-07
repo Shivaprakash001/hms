@@ -25,19 +25,24 @@ export function GallerySection({ images = [] }: { images?: GalleryImageContent[]
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {images.map((image, index) => (
               <StaggerItem key={`${image.url}-${index}`}>
-                <article className="overflow-hidden rounded-2xl border border-[#F07B1D]/10 bg-[#FFFDF5] shadow-md">
-                  <div className="aspect-[4/3] overflow-hidden">
-                    <img
-                      src={image.url}
-                      alt={image.alt}
-                      loading={index < 2 ? 'eager' : 'lazy'}
-                      className="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
-                    />
-                  </div>
+                <article className="relative overflow-hidden rounded-2xl border border-[#F07B1D]/10 bg-[#FFFDF5] shadow-md aspect-[4/3] group">
+                  <img
+                    src={image.url}
+                    alt={image.alt}
+                    loading={index < 2 ? 'eager' : 'lazy'}
+                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
                   {(image.caption || image.title || image.category) && (
-                    <div className="p-4">
-                      <p className="font-semibold text-[#1B2D5B]">{image.caption || image.title}</p>
-                      {image.category && <p className="mt-1 text-xs uppercase tracking-wide text-[#F07B1D]">{image.category}</p>}
+                    <div className="absolute bottom-3 left-3 right-3 flex flex-col items-start gap-1">
+                      {image.category && (
+                        <span className="bg-[#F07B1D] text-white text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-full font-bold">
+                          {image.category}
+                        </span>
+                      )}
+                      <div className="bg-black/50 backdrop-blur-sm px-3 py-1.5 rounded-lg text-xs font-semibold text-white max-w-[95%] truncate border border-white/10">
+                        {image.caption || image.title}
+                      </div>
                     </div>
                   )}
                 </article>

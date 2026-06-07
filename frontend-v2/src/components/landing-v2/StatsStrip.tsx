@@ -2,15 +2,15 @@ import { ScrollReveal } from './ScrollReveal';
 import type { LandingAvailability } from './landingTypes';
 
 function rupee(value: number | null | undefined) {
-  if (!value) return 'Ask owner';
-  return `₹${Number(value).toLocaleString('en-IN')}`;
+  const price = value || 8000;
+  return `₹${Number(price).toLocaleString('en-IN')}+`;
 }
 
 export function StatsStrip({ availability }: { availability?: LandingAvailability }) {
   const stats = [
     { number: '2', label: 'Hostel Buildings' },
     { number: '4', label: 'Sharing Rooms' },
-    { number: rupee(availability?.startingPrice), label: 'Starting from / month' },
+    { number: rupee(availability?.startingPrice), label: 'Starting Price' },
     { number: '9+', label: 'Amenities' },
   ];
 
