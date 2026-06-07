@@ -17,33 +17,25 @@ const TENANT_MESSAGES: Record<string, { title: string; message: string }> = {
     title: "Move-out request received",
     message: "We've received your move-out request. The hostel team will review it shortly.",
   },
-  INSPECTION_PENDING: {
-    title: "Room inspection scheduled",
-    message: "Your room inspection has been scheduled. Please keep your belongings organized.",
-  },
-  INSPECTION_DONE: {
+  SETTLEMENT_PENDING: {
     title: "Room inspection completed",
     message: "Your room inspection is done. The settlement is being calculated.",
   },
-  SETTLEMENT_APPROVED: {
+  APPROVED: {
     title: "Settlement ready for review",
     message: "Your final settlement has been calculated. Open the Move-Out section to review it.",
   },
-  PAYMENT_PENDING: {
-    title: "Refund is being processed",
-    message: "Your refund is being processed. This usually takes 2–3 business days.",
-  },
-  DISPUTED: {
-    title: "Concern received",
-    message: "We've received your concern about the settlement. The team will review it shortly.",
+  VACATED: {
+    title: "Bed vacated",
+    message: "You have vacated the bed. Your status has been set to Former Tenant.",
   },
   COMPLETED: {
     title: "Move-out complete",
     message: "Your move-out is complete. Thank you for staying with us — we wish you all the best!",
   },
-  CANCELLED: {
-    title: "Move-out cancelled",
-    message: "Your move-out request has been cancelled. Your tenancy continues as normal.",
+  REJECTED: {
+    title: "Move-out request rejected",
+    message: "Your move-out request was rejected/cancelled. Your tenancy continues as normal.",
   },
 };
 
@@ -53,17 +45,25 @@ const OWNER_MESSAGES: Record<string, { title: string; message: (name: string) =>
     title: "New move-out request",
     message: (n) => `${n} has submitted a move-out request. Schedule an inspection.`,
   },
-  INSPECTION_DONE: {
+  SETTLEMENT_PENDING: {
     title: "Inspection completed",
     message: (n) => `Room inspection for ${n} is done. Review the settlement.`,
   },
-  DISPUTED: {
-    title: "Settlement concern raised",
-    message: (n) => `${n} has raised a concern about their settlement. Please review.`,
+  APPROVED: {
+    title: "Settlement approved",
+    message: (n) => `Settlement approved for ${n}. Ready for them to vacate.`,
+  },
+  VACATED: {
+    title: "Tenant vacated",
+    message: (n) => `${n} has vacated the bed. Room is now available.`,
   },
   COMPLETED: {
     title: "Move-out completed",
-    message: (n) => `${n}'s move-out is complete. Room is now available.`,
+    message: (n) => `${n}'s move-out is complete.`,
+  },
+  REJECTED: {
+    title: "Move-out request rejected",
+    message: (n) => `Move-out request for ${n} was rejected/cancelled.`,
   },
 };
 

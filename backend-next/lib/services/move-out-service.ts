@@ -46,13 +46,16 @@ export class MoveOutService {
   // ── Create Request ───────────────────────────────────────────
   async createRequest(params: CreateMoveOutParams) {
     const { tenantId, hostelId, ownerId, initiatedBy, initiatedByRole, reason, reasonText, plannedExitDate, isEviction, evictionReason } = params;
-    const tenant = await prisma.tenants.findUnique({ where: { id: tenantId }, select: { id: true, status: true, owner_id: true } });
+    const tenant = await prisma.tenants.findUnique({ where: { id: tenantId }, select: { id: true, status: true, owner_id: true, year_of_study: true } });
     if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
     if (tenant.owner_id !== ownerId) throw new Error("FORBIDDEN: Tenant does not belong to this owner");
     if (tenant.status !== "ACTIVE") throw new Error(`VALIDATION: Only ACTIVE tenants can request move-out. Current: ${tenant.status}`);
+    if (tenant.year_of_study === 4 && reason !== "COURSE_COMPLETED") {
+      throw new Error("VALIDATION: 4th-year tenants must select COURSE_COMPLETED as their move-out reason.");
+    }
 
     const existing = await prisma.move_out_requests.findFirst({
-      where: { tenant_id: tenantId, status: { notIn: ["COMPLETED", "CANCELLED", "REJECTED"] } },
+      where: { tenant_id: tenantId, status: { notIn: ["COMPLETED", "REJECTED"] } },
     });
     if (existing) throw new Error(`VALIDATION: Active move-out request already exists (${existing.id})`);
 
@@ -74,7 +77,7 @@ export class MoveOutService {
           eviction_reason: evictionReason || null,
         },
       });
-      await tx.tenants.update({ where: { id: tenantId }, data: { status: "MOVE_OUT_REQUESTED", updated_at: new Date() } });
+      await tx.tenants.update({ where: { id: tenantId }, data: { updated_at: new Date() } });
       return req;
     });
     logger.info("move_out.created", { id: request.id, tenant_id: tenantId, eviction: isEviction });
@@ -86,14 +89,30 @@ export class MoveOutService {
   async cancelRequest(requestId: string, cancelledBy: string, reason?: string) {
     const req = await prisma.move_out_requests.findUnique({ where: { id: requestId } });
     if (!req) throw new Error("NOT_FOUND: Move-out request not found");
-    assertTransition(req.status as MoveOutStatus, "CANCELLED");
+    assertTransition(req.status as MoveOutStatus, "REJECTED");
     return prisma.$transaction(async (tx: Tx) => {
       const updated = await tx.move_out_requests.update({
         where: { id: requestId },
-        data: { status: "CANCELLED", cancelled_at: new Date(), cancelled_by: cancelledBy, cancellation_reason: reason || null, updated_at: new Date() },
+        data: { status: "REJECTED", cancelled_at: new Date(), cancelled_by: cancelledBy, cancellation_reason: reason || null, updated_at: new Date() },
       });
-      await tx.tenants.update({ where: { id: req.tenant_id }, data: { status: "ACTIVE", updated_at: new Date() } });
-      notifyMoveOutTransition(requestId, "CANCELLED");
+      await tx.tenants.update({ where: { id: req.tenant_id }, data: { updated_at: new Date() } });
+      notifyMoveOutTransition(requestId, "REJECTED");
+      return updated;
+    });
+  }
+
+  // ── Reject Request ───────────────────────────────────────────
+  async rejectRequest(requestId: string, rejectedBy: string, reason?: string) {
+    const req = await prisma.move_out_requests.findUnique({ where: { id: requestId } });
+    if (!req) throw new Error("NOT_FOUND: Move-out request not found");
+    assertTransition(req.status as MoveOutStatus, "REJECTED");
+    return prisma.$transaction(async (tx: Tx) => {
+      const updated = await tx.move_out_requests.update({
+        where: { id: requestId },
+        data: { status: "REJECTED", cancelled_at: new Date(), cancelled_by: rejectedBy, cancellation_reason: reason || null, updated_at: new Date() },
+      });
+      await tx.tenants.update({ where: { id: req.tenant_id }, data: { updated_at: new Date() } });
+      notifyMoveOutTransition(requestId, "REJECTED");
       return updated;
     });
   }
@@ -102,7 +121,7 @@ export class MoveOutService {
   async submitInspection(params: InspectionParams) {
     const req = await prisma.move_out_requests.findUnique({ where: { id: params.requestId } });
     if (!req) throw new Error("NOT_FOUND: Move-out request not found");
-    assertTransition(req.status as MoveOutStatus, "INSPECTION_DONE");
+    assertTransition(req.status as MoveOutStatus, "SETTLEMENT_PENDING");
     const totalDeductions = (params.damagesAmount || 0) + (params.cleaningFee || 0) + (params.missingItemsFee || 0) + (params.otherDeductions || 0);
 
     return prisma.$transaction(async (tx: Tx) => {
@@ -136,8 +155,8 @@ export class MoveOutService {
           })),
         });
       }
-      await tx.move_out_requests.update({ where: { id: params.requestId }, data: { status: "INSPECTION_DONE", updated_at: new Date() } });
-      notifyMoveOutTransition(params.requestId, "INSPECTION_DONE");
+      await tx.move_out_requests.update({ where: { id: params.requestId }, data: { status: "SETTLEMENT_PENDING", updated_at: new Date() } });
+      notifyMoveOutTransition(params.requestId, "SETTLEMENT_PENDING");
       return inspection;
     });
   }
@@ -206,7 +225,7 @@ export class MoveOutService {
     };
   }
 
-  // ── Approve Settlement → PAYMENT_PENDING ────────────────────
+  // ── Approve Settlement → APPROVED ────────────────────
   async approveSettlement(
     requestId: string,
     approvedBy: string,
@@ -219,8 +238,7 @@ export class MoveOutService {
       await this.calculateSettlementPreview(requestId),
       confirmedSettlement,
     );
-    const nextStatus: MoveOutStatus = preview.settlement_direction === "SETTLED" ? "COMPLETED" : "PAYMENT_PENDING";
-    assertTransition(req.status as MoveOutStatus, nextStatus);
+    assertTransition(req.status as MoveOutStatus, "APPROVED");
 
     return prisma.$transaction(async (tx: Tx) => {
       await tx.exit_settlement_transactions.upsert({
@@ -228,35 +246,70 @@ export class MoveOutService {
         create: { request_id: requestId, tenant_id: req.tenant_id, owner_id: req.owner_id, hostel_id: req.hostel_id, ...snapshotFromPreview(preview) },
         update: { ...snapshotFromPreview(preview), updated_at: new Date() },
       });
-      const nextStatus: MoveOutStatus = preview.settlement_direction === "SETTLED" ? "COMPLETED" : "PAYMENT_PENDING";
       await tx.move_out_requests.update({
         where: { id: requestId },
         data: {
-          status: nextStatus, reviewed_by: approvedBy, reviewed_at: new Date(),
+          status: "APPROVED", reviewed_by: approvedBy, reviewed_at: new Date(),
           review_notes: reviewNotes || null, updated_at: new Date(),
-          ...(nextStatus === "COMPLETED" ? { financial_completion_date: new Date(), physical_exit_date: req.planned_exit_date, completed_at: new Date() } : {}),
         },
       });
 
-      if (nextStatus === "COMPLETED") {
-        const settlement = await tx.exit_settlement_transactions.findUnique({ where: { request_id: requestId }, select: { id: true } });
-        if (settlement) {
-          await applyAdvanceSettlementInTx(tx, settlement.id, approvedBy, new Date());
-        }
-        await this.executeCompletionSideEffects(tx, req.tenant_id, requestId, req.planned_exit_date, req.reason, req.reason_text, new Date());
-      }
-      notifyMoveOutTransition(requestId, nextStatus);
-      return { ...preview, status: nextStatus };
+      notifyMoveOutTransition(requestId, "APPROVED");
+      return { ...preview, status: "APPROVED" as MoveOutStatus };
+    });
+  }
+
+  // ── Vacate Bed → VACATED ─────────────────────────────────────
+  async vacate(requestId: string, settledBy: string, physicalExitDate?: string) {
+    const req = await prisma.move_out_requests.findUnique({ where: { id: requestId } });
+    if (!req) throw new Error("NOT_FOUND: Move-out request not found");
+    assertTransition(req.status as MoveOutStatus, "VACATED");
+
+    const now = new Date();
+    const exitDate = physicalExitDate ? new Date(physicalExitDate) : req.planned_exit_date;
+
+    return prisma.$transaction(async (tx: Tx) => {
+      await tx.move_out_requests.update({
+        where: { id: requestId },
+        data: {
+          status: "VACATED",
+          physical_exit_date: exitDate,
+          actual_exit_date: exitDate,
+          room_release_date: exitDate,
+          updated_at: now,
+        },
+      });
+
+      // Terminate the room allocation
+      await tx.roomAllocation.updateMany({
+        where: { tenant_id: req.tenant_id, is_active: true, end_date: null },
+        data: { is_active: false, end_date: exitDate },
+      });
+
+      // Update tenant status to FORMER_TENANT
+      await tx.tenants.update({
+        where: { id: req.tenant_id },
+        data: {
+          status: "FORMER_TENANT",
+          exit_date: exitDate,
+          exit_reason: req.reason,
+          exit_notes: req.reason_text,
+          updated_at: now,
+        },
+      });
+
+      logger.info("move_out.vacated", { id: requestId, tenant_id: req.tenant_id });
+      notifyMoveOutTransition(requestId, "VACATED");
+      return { success: true, request_id: requestId, status: "VACATED" };
     });
   }
 
   // ── Confirm Payment → COMPLETED ─────────────────────────────
-  async confirmPaymentAndComplete(params: { requestId: string; settledBy: string; paymentMethod?: string; paymentReference?: string; paymentNotes?: string; physicalExitDate?: string }) {
+  async confirmPaymentAndComplete(params: { requestId: string; settledBy: string; paymentMethod?: string; paymentReference?: string; paymentNotes?: string }) {
     const req = await prisma.move_out_requests.findUnique({ where: { id: params.requestId }, include: { settlement: true } });
     if (!req) throw new Error("NOT_FOUND");
     assertTransition(req.status as MoveOutStatus, "COMPLETED");
     const now = new Date();
-    const physicalDate = params.physicalExitDate ? new Date(params.physicalExitDate) : req.planned_exit_date;
 
     return prisma.$transaction(async (tx: Tx) => {
       if (req.settlement) {
@@ -269,14 +322,20 @@ export class MoveOutService {
       // Resolve any open disputes
       await tx.exit_disputes.updateMany({ where: { request_id: params.requestId, status: "OPEN" }, data: { status: "RESOLVED", resolved_at: now, updated_at: now } });
 
+      // Waive outstanding rent obligations
+      await tx.rent_obligations.updateMany({
+        where: { tenant_id: req.tenant_id, status: { in: ["PENDING", "PARTIAL"] } },
+        data: { status: "WAIVED", updated_at: now }
+      });
+
       await tx.move_out_requests.update({
         where: { id: params.requestId },
-        data: { status: "COMPLETED", financial_completion_date: now, physical_exit_date: physicalDate, actual_exit_date: physicalDate, completed_at: now, updated_at: now },
+        data: { status: "COMPLETED", financial_completion_date: now, completed_at: now, updated_at: now },
       });
-      // Room release and tenant update
-      await this.executeCompletionSideEffects(tx, req.tenant_id, params.requestId, physicalDate, req.reason, req.reason_text, now);
+
+      logger.info("move_out.completed", { id: params.requestId, tenant_id: req.tenant_id });
       notifyMoveOutTransition(params.requestId, "COMPLETED");
-      return { success: true, request_id: params.requestId, physical_exit_date: physicalDate };
+      return { success: true, request_id: params.requestId };
     });
   }
 
@@ -284,34 +343,13 @@ export class MoveOutService {
   async raiseDispute(params: DisputeParams) {
     const req = await prisma.move_out_requests.findUnique({ where: { id: params.requestId } });
     if (!req) throw new Error("NOT_FOUND");
-    assertTransition(req.status as MoveOutStatus, "DISPUTED");
     return prisma.$transaction(async (tx: Tx) => {
       const dispute = await tx.exit_disputes.create({
         data: { request_id: params.requestId, raised_by: params.raisedBy, raised_by_role: params.raisedByRole, dispute_type: params.disputeType, description: params.description, disputed_amount: params.disputedAmount || null, evidence_urls: params.evidenceUrls || [] },
       });
-      await tx.move_out_requests.update({ where: { id: params.requestId }, data: { status: "DISPUTED", updated_at: new Date() } });
-      notifyMoveOutTransition(params.requestId, "DISPUTED");
+      notifyMoveOutTransition(params.requestId, req.status as MoveOutStatus);
       return dispute;
     });
-  }
-
-  async executeCompletionSideEffects(tx: Tx, tenantId: string, requestId: string, exitDate: Date, reason: string, reasonText: string | null, now: Date) {
-    if (exitDate <= now) {
-      await tx.roomAllocation.updateMany({ where: { tenant_id: tenantId, is_active: true, end_date: null }, data: { is_active: false, end_date: exitDate } });
-      await tx.move_out_requests.update({ where: { id: requestId }, data: { room_release_date: exitDate } });
-      await tx.tenants.update({
-        where: { id: tenantId },
-        data: {
-          status: "LEFT", exit_date: exitDate, exit_reason: reason, exit_notes: reasonText,
-          updated_at: now
-        }
-      });
-      // Optionally waive all pending obligations so they don't appear in historical debt unless explicitly wanted
-      await tx.rent_obligations.updateMany({
-        where: { tenant_id: tenantId, status: { in: ["PENDING", "PARTIAL"] } },
-        data: { status: "WAIVED", updated_at: now }
-      });
-    }
   }
 
   // ── Resolve Dispute ──────────────────────────────────────────
@@ -321,10 +359,6 @@ export class MoveOutService {
     return prisma.$transaction(async (tx: Tx) => {
       await tx.exit_disputes.update({ where: { id: disputeId }, data: { status: "RESOLVED", resolved_by: resolvedBy, resolution_notes: resolutionNotes, resolved_at: new Date(), updated_at: new Date() } });
       const openCount = await tx.exit_disputes.count({ where: { request_id: dispute.request_id, status: "OPEN", id: { not: disputeId } } });
-      if (openCount === 0) {
-        await tx.move_out_requests.update({ where: { id: dispute.request_id }, data: { status: "PAYMENT_PENDING", updated_at: new Date() } });
-        notifyMoveOutTransition(dispute.request_id, "PAYMENT_PENDING");
-      }
       return { resolved: true, remaining_disputes: openCount };
     });
   }
@@ -399,7 +433,7 @@ export class MoveOutService {
     return prisma.move_out_requests.findMany({
       where: {
         owner_id: ownerId, hostel_id: hostelId,
-        status: { in: ["REQUESTED", "INSPECTION_PENDING", "INSPECTION_DONE", "SETTLEMENT_APPROVED", "PAYMENT_PENDING"] },
+        status: { in: ["REQUESTED", "SETTLEMENT_PENDING", "APPROVED"] },
         planned_exit_date: { lte: new Date(Date.now() + daysAhead * 86400000) },
       },
       include: { tenant: { include: { profiles: { select: { name: true } }, room_allocations: { where: { is_active: true }, include: { room: { select: { room_no: true, floor: true } } }, take: 1 } } } },

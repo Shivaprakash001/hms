@@ -74,18 +74,28 @@ export async function GET(req: NextRequest) {
             data: {
               physical_exit_date: req.physical_exit_date || exitDate,
               actual_exit_date: req.actual_exit_date || exitDate,
+              room_release_date: exitDate,
               updated_at: now,
             },
           });
-          await moveOutService.executeCompletionSideEffects(
-            tx,
-            req.tenant_id,
-            req.id,
-            exitDate,
-            req.reason,
-            req.reason_text || null,
-            now
-          );
+          await tx.roomAllocation.updateMany({
+            where: { tenant_id: req.tenant_id, is_active: true, end_date: null },
+            data: { is_active: false, end_date: exitDate },
+          });
+          await tx.tenants.update({
+            where: { id: req.tenant_id },
+            data: {
+              status: "FORMER_TENANT",
+              exit_date: exitDate,
+              exit_reason: req.reason,
+              exit_notes: req.reason_text,
+              updated_at: now,
+            },
+          });
+          await tx.rent_obligations.updateMany({
+            where: { tenant_id: req.tenant_id, status: { in: ["PENDING", "PARTIAL"] } },
+            data: { status: "WAIVED", updated_at: now },
+          });
         });
 
         released++;

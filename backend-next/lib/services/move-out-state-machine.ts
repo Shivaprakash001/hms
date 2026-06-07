@@ -17,14 +17,11 @@ import { prisma } from "../db";
 // ─── Transition Graph ──────────────────────────────────────────
 
 const TRANSITIONS: Record<MoveOutStatus, MoveOutStatus[]> = {
-  REQUESTED:           ["INSPECTION_PENDING", "INSPECTION_DONE", "SETTLEMENT_APPROVED", "PAYMENT_PENDING", "CANCELLED"],
-  INSPECTION_PENDING:  ["INSPECTION_DONE", "CANCELLED"],
-  INSPECTION_DONE:     ["SETTLEMENT_APPROVED", "PAYMENT_PENDING", "COMPLETED", "CANCELLED"],
-  SETTLEMENT_APPROVED: ["PAYMENT_PENDING", "COMPLETED", "DISPUTED"],
-  PAYMENT_PENDING:     ["COMPLETED", "DISPUTED"],
-  DISPUTED:            ["PAYMENT_PENDING", "COMPLETED"],
+  REQUESTED:           ["SETTLEMENT_PENDING", "REJECTED"],
+  SETTLEMENT_PENDING:  ["APPROVED", "REJECTED"],
+  APPROVED:            ["VACATED"],
+  VACATED:             ["COMPLETED"],
   COMPLETED:           [],
-  CANCELLED:           [],
   REJECTED:            [],
 };
 
@@ -65,14 +62,11 @@ type Capability =
   | "CANCEL_REQUEST";
 
 const BLOCKED_CAPABILITIES: Record<MoveOutStatus, Capability[]> = {
-  REQUESTED:           ["TRANSFER_ROOM", "GENERATE_RENT"],
-  INSPECTION_PENDING:  ["TRANSFER_ROOM", "GENERATE_RENT", "MODIFY_RENT_AMOUNT"],
-  INSPECTION_DONE:     ["TRANSFER_ROOM", "GENERATE_RENT", "MODIFY_RENT_AMOUNT"],
-  SETTLEMENT_APPROVED: ["TRANSFER_ROOM", "GENERATE_RENT", "MODIFY_RENT_AMOUNT", "CHANGE_ROOMMATE", "EDIT_PROFILE"],
-  PAYMENT_PENDING:     ["TRANSFER_ROOM", "GENERATE_RENT", "MODIFY_RENT_AMOUNT", "CHANGE_ROOMMATE", "EDIT_PROFILE"],
-  DISPUTED:            ["TRANSFER_ROOM", "GENERATE_RENT", "MODIFY_RENT_AMOUNT", "CHANGE_ROOMMATE", "EDIT_PROFILE"],
+  REQUESTED:           ["TRANSFER_ROOM", "MODIFY_RENT_AMOUNT", "CHANGE_ROOMMATE", "EDIT_PROFILE"],
+  SETTLEMENT_PENDING:  ["TRANSFER_ROOM", "MODIFY_RENT_AMOUNT", "CHANGE_ROOMMATE", "EDIT_PROFILE"],
+  APPROVED:            ["TRANSFER_ROOM", "MODIFY_RENT_AMOUNT", "CHANGE_ROOMMATE", "EDIT_PROFILE"],
+  VACATED:             ["TRANSFER_ROOM", "GENERATE_RENT", "MODIFY_RENT_AMOUNT", "CHANGE_ROOMMATE", "EDIT_PROFILE"],
   COMPLETED:           ["TRANSFER_ROOM", "GENERATE_RENT", "MODIFY_RENT_AMOUNT", "CHANGE_ROOMMATE", "EDIT_PROFILE", "CANCEL_REQUEST"],
-  CANCELLED:           [],
   REJECTED:            [],
 };
 
@@ -88,7 +82,7 @@ export async function checkCapability(
   const active = await prisma.move_out_requests.findFirst({
     where: {
       tenant_id: tenantId,
-      status: { notIn: ["COMPLETED", "CANCELLED", "REJECTED"] },
+      status: { notIn: ["COMPLETED", "REJECTED"] },
     },
     select: { id: true, status: true },
     orderBy: { created_at: "desc" },
@@ -135,21 +129,18 @@ export interface TenantStep {
 
 const TENANT_STEPS = [
   { label: "Request Submitted",     icon: "📋", description: "Your move-out request has been received." },
-  { label: "Room Inspection",       icon: "🔍", description: "The room will be inspected for damages." },
-  { label: "Settlement Ready",      icon: "💰", description: "Your final settlement has been calculated." },
-  { label: "Payment Processing",    icon: "💳", description: "Refund or payment is being processed." },
-  { label: "Move-Out Complete",     icon: "🏁", description: "Your move-out is complete. Thank you!" },
+  { label: "Settlement Pending",    icon: "💰", description: "Reviewing dues and calculating final settlement." },
+  { label: "Move-Out Approved",     icon: "✅", description: "Move-out approved. Awaiting physical vacate." },
+  { label: "Bed Vacated",           icon: "🚪", description: "Bed vacated. Awaiting final deposit settlement." },
+  { label: "Exit Completed",        icon: "🏁", description: "Your move-out is complete. Thank you!" },
 ];
 
 const STATUS_TO_STEP: Record<string, number> = {
   REQUESTED: 0,
-  INSPECTION_PENDING: 1,
-  INSPECTION_DONE: 1,
-  SETTLEMENT_APPROVED: 2,
-  PAYMENT_PENDING: 3,
-  DISPUTED: 3,     // tenant sees "payment" step, not "disputed"
+  SETTLEMENT_PENDING: 1,
+  APPROVED: 2,
+  VACATED: 3,
   COMPLETED: 4,
-  CANCELLED: -1,
   REJECTED: -1,
 };
 
@@ -168,7 +159,7 @@ export function getTenantSteps(currentStatus: MoveOutStatus): TenantStep[] {
 // ─── Terminal States ───────────────────────────────────────────
 
 export function isTerminal(status: MoveOutStatus): boolean {
-  return ["COMPLETED", "CANCELLED", "REJECTED"].includes(status);
+  return ["COMPLETED", "REJECTED"].includes(status);
 }
 
 export function isActive(status: MoveOutStatus): boolean {

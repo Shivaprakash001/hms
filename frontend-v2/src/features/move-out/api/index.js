@@ -52,4 +52,12 @@ export const moveOutService = {
     const response = await api.post(`/move-out/requests/${requestId}/feedback`, payload);
     return unwrap(response);
   },
+  vacate: async (requestId, payload = {}) => {
+    const response = await api.post(`/move-out/requests/${requestId}/vacate`, payload);
+    return unwrap(response);
+  },
+  reject: async (requestId, payload = {}) => {
+    const response = await api.post(`/move-out/requests/${requestId}/reject`, payload);
+    return unwrap(response);
+  },
 };
