@@ -1033,6 +1033,8 @@ model visitor_leads {
   converted_tenant_id       String?             @db.Uuid
   lost_reason               String?
   lost_note                 String?
+  next_action_at            DateTime?           @db.Timestamptz(6)
+  assigned_to               String              @default("Reception Desk")
   created_at                DateTime            @default(now()) @db.Timestamptz(6)
   updated_at                DateTime?           @db.Timestamptz(6)
   hostel                    hostels             @relation(fields: [hostel_id], references: [id])

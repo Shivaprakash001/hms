@@ -5,6 +5,9 @@ import {
   ArrowRight,
   Bed,
   Bell,
+  BellOff,
+  Inbox,
+  AlertTriangle,
   Calendar,
   CheckCircle,
   ChevronDown,
@@ -41,7 +44,8 @@ type AdmissionsScreen = 'dashboard' | 'pipeline' | 'qr';
 const stages = [
   { status: 'NEW', label: 'New Leads', shortLabel: 'New Leads', color: 'var(--neutral-gray)' },
   { status: 'INTERESTED', label: 'Interested', shortLabel: 'Interested', color: 'var(--brand-saffron)' },
-  { status: 'FOLLOW_UP', label: 'Follow Up Queue', shortLabel: 'Follow Up', color: 'var(--alert-amber)' },
+  { status: 'ROOM_VISITED', label: 'Room Visited', shortLabel: 'Room Visited', color: '#8B5CF6' },
+  { status: 'DECISION_PENDING', label: 'Decision Pending', shortLabel: 'Decision Pending', color: 'var(--alert-amber)' },
   { status: 'READY_TO_JOIN', label: 'Ready to Join', shortLabel: 'Ready to Join', color: 'var(--success-green)' },
   { status: 'INVITED', label: 'Invited', shortLabel: 'Invited', color: 'var(--brand-navy)' },
   { status: 'JOINED', label: 'Joined Tenants', shortLabel: 'Joined', color: 'var(--success-green)' },
@@ -49,14 +53,12 @@ const stages = [
 ];
 
 const lostReasons = [
-  'TOO_EXPENSIVE',
-  'NO_VACANCY',
-  'FOOD_CONCERN',
-  'LOCATION',
+  'PRICE_HIGH',
+  'LOCATION_UNSUITABLE',
+  'FOOD_QUALITY',
   'PARENT_REJECTED',
-  'JOINED_OTHER_HOSTEL',
+  'JOINED_COMPETITOR',
   'NO_RESPONSE',
-  'COLLEGE_CHANGED',
   'OTHER',
 ];
 
@@ -153,6 +155,28 @@ async function downloadAdmissionQr(value: string, hostelName?: string | null) {
   }
 }
 
+function formatNextAction(nextActionAt: string | null | undefined) {
+  if (!nextActionAt) return null;
+  const date = new Date(nextActionAt);
+  const now = new Date();
+  const diffTime = date.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffTime < 0) {
+    const overdueDays = Math.floor(Math.abs(diffTime) / (1000 * 60 * 60 * 24));
+    if (overdueDays === 0) return { text: 'Follow-up overdue today', isOverdue: true };
+    return { text: `Follow-up overdue by ${overdueDays} ${overdueDays === 1 ? 'day' : 'days'}`, isOverdue: true };
+  }
+  
+  if (diffDays === 0) {
+    return { text: `Next action: Today at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, isOverdue: false };
+  }
+  if (diffDays === 1) {
+    return { text: `Next action: Tomorrow at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, isOverdue: false };
+  }
+  return { text: `Next action: ${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, isOverdue: false };
+}
+
 function LeadCard({ lead, onOpen }: { lead: any; onOpen: () => void }) {
   const interestedRooms = (lead.reservations || []).map((reservation: any) => reservation.room?.room_no).filter(Boolean);
   return (
@@ -165,6 +189,21 @@ function LeadCard({ lead, onOpen }: { lead: any; onOpen: () => void }) {
           </span>
         </div>
         <p className="mt-1 font-mono text-xs text-[var(--neutral-gray)]">{lead.student_phone}</p>
+        {lead.assigned_to && (
+          <div className="mt-1 flex items-center gap-1 text-[10px] font-medium text-gray-500">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-indigo-500"></span>
+            <span>Assigned: {lead.assigned_to}</span>
+          </div>
+        )}
+        {(() => {
+          const nextAct = formatNextAction(lead.next_action_at);
+          if (!nextAct) return null;
+          return (
+            <div className={`mt-1 text-[10px] font-semibold ${nextAct.isOverdue ? 'text-red-600' : 'text-amber-600'}`}>
+              {nextAct.text}
+            </div>
+          );
+        })()}
       </div>
 
       <div className="mb-2 grid grid-cols-2 gap-2 text-xs md:mb-3 md:block md:space-y-1">
@@ -530,18 +569,21 @@ function FollowUpQueue({
   const qc = useQueryClient();
   const [lostLeadId, setLostLeadId] = useState<string | null>(null);
   const [selectedReason, setSelectedReason] = useState('NO_RESPONSE');
+  const [snoozeLeadId, setSnoozeLeadId] = useState<string | null>(null);
+  const [selectedSnoozeInterval, setSelectedSnoozeInterval] = useState('3d');
 
   const snoozeLead = useMutation({
-    mutationFn: async (leadId: string) => {
-      await admissionsService.addNote(leadId, 'Snoozed follow-up for 3 days');
-      await admissionsService.updateStatus(leadId, { parent_follow_up_required: false });
+    mutationFn: async ({ leadId, nextActionAt, note }: { leadId: string; nextActionAt: string; note: string }) => {
+      await admissionsService.addNote(leadId, note);
+      await admissionsService.updateStatus(leadId, { next_action_at: nextActionAt });
     },
     onSuccess: () => {
-      toast.success('Lead follow-up snoozed');
+      toast.success('Reminder set successfully');
+      setSnoozeLeadId(null);
       qc.invalidateQueries({ queryKey: queryKeys.admissions.all() });
     },
     onError: (err: any) => {
-      toast.error(err?.message || 'Failed to snooze lead');
+      toast.error(err?.message || 'Failed to set reminder');
     }
   });
 
@@ -654,14 +696,69 @@ function FollowUpQueue({
                   </a>
                 )}
 
-                <button
-                  type="button"
-                  disabled={isActionPending}
-                  onClick={() => snoozeLead.mutate(lead.id)}
-                  className="h-8 rounded-lg border border-gray-200 px-2.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition"
-                >
-                  Snooze
-                </button>
+                {snoozeLeadId === lead.id ? (
+                  <div className="flex items-center gap-1.5 bg-gray-50 p-1 rounded-lg border border-gray-200">
+                    <select
+                      value={selectedSnoozeInterval}
+                      onChange={(e) => setSelectedSnoozeInterval(e.target.value)}
+                      className="h-7 rounded border border-gray-200 bg-white px-1.5 text-[11px]"
+                    >
+                      <option value="3h">In 3 Hours</option>
+                      <option value="24h">Tomorrow (24h)</option>
+                      <option value="3d">In 3 Days</option>
+                      <option value="7d">In 1 Week</option>
+                    </select>
+                    <button
+                      type="button"
+                      disabled={isActionPending}
+                      onClick={() => {
+                        const now = new Date();
+                        const targetDate = new Date();
+                        let note = '';
+                        if (selectedSnoozeInterval === '3h') {
+                          targetDate.setHours(now.getHours() + 3);
+                          note = 'Remind me: scheduled callback in 3 hours';
+                        } else if (selectedSnoozeInterval === '24h') {
+                          targetDate.setDate(now.getDate() + 1);
+                          note = 'Remind me: scheduled callback in 24 hours';
+                        } else if (selectedSnoozeInterval === '3d') {
+                          targetDate.setDate(now.getDate() + 3);
+                          note = 'Remind me: scheduled callback in 3 days';
+                        } else if (selectedSnoozeInterval === '7d') {
+                          targetDate.setDate(now.getDate() + 7);
+                          note = 'Remind me: scheduled callback in 1 week';
+                        }
+                        snoozeLead.mutate({
+                          leadId: lead.id,
+                          nextActionAt: targetDate.toISOString(),
+                          note,
+                        });
+                      }}
+                      className="h-7 rounded bg-indigo-600 px-2 text-[11px] font-bold text-white hover:bg-indigo-700"
+                    >
+                      OK
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSnoozeLeadId(null)}
+                      className="h-7 rounded border border-gray-200 bg-white px-2 text-[11px] font-bold text-gray-500"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={isActionPending}
+                    onClick={() => {
+                      setSnoozeLeadId(lead.id);
+                      setSelectedSnoozeInterval('3d');
+                    }}
+                    className="h-8 rounded-lg border border-gray-200 px-2.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition"
+                  >
+                    Snooze
+                  </button>
+                )}
 
                 {lostLeadId === lead.id ? (
                   <div className="flex items-center gap-1.5 bg-gray-50 p-1 rounded-lg border border-gray-200">
@@ -709,6 +806,98 @@ function FollowUpQueue({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function AdmissionsInbox({
+  alerts = [],
+  onViewLead,
+}: {
+  alerts: any[];
+  onViewLead: (id: string) => void;
+}) {
+  if (!alerts || alerts.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-4 text-center shadow-sm">
+        <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+          <BellOff className="h-4 w-4 text-emerald-500" />
+          <span className="font-semibold text-gray-700">Inbox Clear</span>
+          <span>· No urgent action items today!</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-3xl p-5 shadow-sm ring-1 ring-black/5 space-y-4">
+      <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+        <div className="flex items-center gap-2">
+          <Inbox className="h-5 w-5 text-indigo-600 animate-pulse" />
+          <h2 className="text-base font-bold text-gray-800">Admissions Inbox</h2>
+        </div>
+        <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-bold text-indigo-700 animate-bounce">
+          {alerts.length} Urgent {alerts.length === 1 ? 'Alert' : 'Alerts'}
+        </span>
+      </div>
+      <div className="grid gap-3 max-h-96 overflow-y-auto pr-1">
+        {alerts.map((alert, i) => {
+          const isHigh = alert.severity === 'HIGH';
+          const isMedium = alert.severity === 'MEDIUM';
+          
+          let alertColor = 'bg-gray-50 border-gray-200 text-gray-700';
+          let iconColor = 'text-gray-500';
+          let IconComp = Bell;
+          
+          if (alert.type === 'PENDING_CALLBACK') {
+            alertColor = 'bg-red-50/70 border-red-100 text-red-900';
+            iconColor = 'text-red-600';
+            IconComp = Clock;
+          } else if (alert.type === 'EXPIRING_INVITATION') {
+            alertColor = 'bg-amber-50/70 border-amber-100 text-amber-900';
+            iconColor = 'text-amber-600';
+            IconComp = Calendar;
+          } else if (alert.type === 'INACTIVE_LEAD') {
+            alertColor = 'bg-blue-50/70 border-blue-100 text-blue-900';
+            iconColor = 'text-blue-600';
+            IconComp = AlertTriangle;
+          }
+
+          return (
+            <div
+              key={i}
+              className={`flex items-start gap-3 rounded-2xl border p-3.5 transition duration-150 hover:bg-white/45 ${alertColor}`}
+            >
+              <div className="mt-0.5">
+                <IconComp className={`h-4.5 w-4.5 ${iconColor}`} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="text-xs font-bold truncate">{alert.title}</h4>
+                  <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.25 rounded-md ${
+                    isHigh ? 'bg-red-200 text-red-800' : isMedium ? 'bg-amber-200 text-amber-800' : 'bg-blue-200 text-blue-800'
+                  }`}>
+                    {alert.severity}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-gray-600 font-medium">
+                  {alert.student_name} ({alert.student_phone})
+                </p>
+                <p className="mt-0.5 text-[11px] text-gray-500 italic">
+                  {alert.description}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => onViewLead(alert.lead_id)}
+                className="self-center rounded-xl bg-white px-3 py-1.5 text-xs font-bold text-gray-700 shadow-sm border border-gray-200/80 hover:bg-gray-50 transition active:scale-[0.97]"
+              >
+                Resolve
+              </button>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -808,6 +997,9 @@ function DashboardOverview({
           </div>
         )}
 
+        {/* Admissions Inbox Alert Center */}
+        <AdmissionsInbox alerts={analytics?.inboxAlerts} onViewLead={onViewLead} />
+
         {/* Follow-Up Queue (Today's Tasks) elevated to the top */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -833,54 +1025,38 @@ function DashboardOverview({
 
         {/* 3-Column Business Cards */}
         <div className="grid gap-6 md:grid-cols-3">
-          {/* Admissions Snapshot */}
+          {/* Admissions Opportunities */}
           <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5 flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Admissions Snapshot</h3>
+                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Admissions Opportunities</h3>
                 <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700">
                   {snapshot.activeLeadsCount ?? 0} Active Leads
                 </span>
               </div>
-              <div className="space-y-4">
-                <div>
-                  <div className="text-3xl font-black text-gray-800" style={{ fontFamily: 'var(--font-mono)' }}>
-                    ₹{(snapshot.potentialRevenue ?? 0).toLocaleString('en-IN')}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-0.5">Potential Revenue</div>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center text-xs border-b border-gray-50 pb-2">
+                  <span className="text-gray-500 font-medium">Ready To Join:</span>
+                  <span className="font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">{analytics?.stageCounts?.readyToJoin ?? 0}</span>
                 </div>
-                <div className="grid grid-cols-2 gap-4 border-t border-gray-100 pt-4">
-                  <div>
-                    <div className="text-lg font-bold text-gray-700" style={{ fontFamily: 'var(--font-mono)' }}>
-                      ₹{(snapshot.vacancyCapacity ?? 0).toLocaleString('en-IN')}
-                    </div>
-                    <div className="text-[11px] text-gray-400">Vacancy Capacity</div>
-                  </div>
-                  <div>
-                    <div className="text-lg font-bold text-gray-500">
-                      {bedsLikelyToFill.high + bedsLikelyToFill.medium + bedsLikelyToFill.low}
-                    </div>
-                    <div className="text-[11px] text-gray-400">Beds in Pipeline</div>
-                  </div>
+                <div className="flex justify-between items-center text-xs border-b border-gray-50 pb-2">
+                  <span className="text-gray-500 font-medium">Parent Follow-up:</span>
+                  <span className="font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded">{analytics?.stageCounts?.parentDiscussion ?? 0}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs border-b border-gray-50 pb-2">
+                  <span className="text-gray-500 font-medium">Room Visited:</span>
+                  <span className="font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{analytics?.stageCounts?.roomVisited ?? 0}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs pb-1">
+                  <span className="text-gray-500 font-medium">New Enquiries & Interested:</span>
+                  <span className="font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">
+                    {(analytics?.stageCounts?.newEnquiries ?? 0) + (analytics?.stageCounts?.interested ?? 0)}
+                  </span>
                 </div>
               </div>
             </div>
-            <div className="mt-6 border-t border-gray-100 pt-4 space-y-2">
-              <div className="text-xs font-semibold text-gray-500">Pipeline Confidence levels:</div>
-              <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                <div className="bg-emerald-50 rounded-lg p-2 text-emerald-800 border border-emerald-100">
-                  <div className="font-bold text-base">{bedsLikelyToFill.high}</div>
-                  <div className="text-[10px] text-emerald-600">High</div>
-                </div>
-                <div className="bg-amber-50 rounded-lg p-2 text-amber-800 border border-amber-100">
-                  <div className="font-bold text-base">{bedsLikelyToFill.medium}</div>
-                  <div className="text-[10px] text-amber-600">Medium</div>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-2 text-gray-700 border border-gray-100">
-                  <div className="font-bold text-base">{bedsLikelyToFill.low}</div>
-                  <div className="text-[10px] text-gray-500">Low</div>
-                </div>
-              </div>
+            <div className="mt-4 border-t border-gray-100 pt-4 text-[10px] text-gray-400 leading-tight">
+              Focus efforts on high-intent leads to maximize occupancy.
             </div>
           </div>
 
@@ -1277,7 +1453,9 @@ function LeadProfile({ leadId, onBack }: { leadId: string; onBack: () => void })
               <InfoLine icon={Mail} label="Student Email" value={lead.student_email || 'Needed before invitation'} />
               {lead.parent_phone && <InfoLine icon={Phone} label="Parent Phone" value={`${lead.parent_name || 'Parent'} · ${lead.parent_phone}`} />}
               <InfoLine icon={MapPin} label="Source" value={`${lead.source || 'QR'} · ${lead.hostel?.name || 'Hostel'}`} />
+              <InfoLine icon={Users} label="Assigned Staff" value={lead.assigned_to || 'Reception Desk'} />
               <InfoLine icon={Calendar} label="Created At" value={new Date(lead.created_at).toLocaleString()} />
+              {lead.next_action_at && <InfoLine icon={Calendar} label="Next Action Scheduled" value={new Date(lead.next_action_at).toLocaleString()} />}
               <span className="inline-flex rounded-full px-3 py-1 text-xs font-bold text-white" style={{ backgroundColor: statusColor(lead.status) }}>{lead.status.replaceAll('_', ' ')}</span>
             </div>
           </section>
@@ -1341,22 +1519,76 @@ function LeadProfile({ leadId, onBack }: { leadId: string; onBack: () => void })
           </section>
 
           <section className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
-              <h3 className="mb-3 font-semibold text-[var(--brand-navy)]">Follow-up note</h3>
-              <textarea className="min-h-24 w-full rounded-xl border border-[var(--border)] p-3 text-sm" value={note} onChange={(event) => setNote(event.target.value)} placeholder="Parent callback, pricing concern, visit context..." />
-              <button type="button" disabled={!note.trim() || addNote.isPending} onClick={() => addNote.mutate()} className="mt-3 h-10 rounded-xl border border-[var(--border)] px-4 text-sm font-semibold disabled:opacity-50">Add note</button>
-            </div>
-            <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
-              <h3 className="mb-3 font-semibold text-[var(--brand-navy)]">Status</h3>
-              <div className="grid grid-cols-2 gap-2">
-                <button type="button" onClick={() => updateStatus.mutate({ status: 'FOLLOW_UP', parent_follow_up_required: true })} className="h-10 rounded-xl border border-[var(--border)] text-sm font-semibold">Parent follow-up</button>
-                <button type="button" onClick={() => updateStatus.mutate({ status: 'INTERESTED' })} className="h-10 rounded-xl border border-[var(--border)] text-sm font-semibold">Interested</button>
+            <div className="space-y-4">
+              <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+                <h3 className="mb-3 font-semibold text-[var(--brand-navy)]">Follow-up note</h3>
+                <textarea className="min-h-24 w-full rounded-xl border border-[var(--border)] p-3 text-sm" value={note} onChange={(event) => setNote(event.target.value)} placeholder="Parent callback, pricing concern, visit context..." />
+                <button type="button" disabled={!note.trim() || addNote.isPending} onClick={() => addNote.mutate()} className="mt-3 h-10 rounded-xl border border-[var(--border)] px-4 text-sm font-semibold disabled:opacity-50">Add note</button>
               </div>
-              <div className="mt-2 flex gap-2">
-                <select className="h-10 min-w-0 flex-1 rounded-xl border border-[var(--border)] px-2 text-xs" value={lostReason} onChange={(event) => setLostReason(event.target.value)}>
-                  {lostReasons.map((reason) => <option key={reason} value={reason}>{reason.replaceAll('_', ' ')}</option>)}
+
+              <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+                <h3 className="mb-3 font-semibold text-[var(--brand-navy)]">Assigned Staff</h3>
+                <select
+                  value={lead.assigned_to || 'Reception Desk'}
+                  onChange={(e) => updateStatus.mutate({ assigned_to: e.target.value })}
+                  className="h-10 w-full rounded-xl border border-[var(--border)] px-3 text-sm"
+                >
+                  <option value="Reception Desk">Reception Desk</option>
+                  <option value="Warden">Warden</option>
+                  <option value="Manager">Manager</option>
+                  <option value="Owner">Owner</option>
                 </select>
-                <button type="button" onClick={() => updateStatus.mutate({ status: 'LOST', lost_reason: lostReason })} className="h-10 rounded-xl border border-[var(--border)] px-3 text-sm font-semibold">Lost</button>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+                <h3 className="mb-3 font-semibold text-[var(--brand-navy)]">Change Status</h3>
+                <select
+                  className="mb-3 h-10 w-full rounded-xl border border-[var(--border)] px-3 text-sm font-semibold"
+                  value={lead.status}
+                  onChange={(e) => {
+                    const targetStatus = e.target.value;
+                    if (targetStatus !== 'LOST') {
+                      updateStatus.mutate({ status: targetStatus });
+                    }
+                  }}
+                >
+                  {stages.filter(s => s.status !== 'LOST' && s.status !== 'JOINED').map((s) => (
+                    <option key={s.status} value={s.status}>{s.label}</option>
+                  ))}
+                </select>
+                <div className="border-t border-gray-150 pt-3 mt-3">
+                  <label className="mb-1 block text-xs font-semibold text-red-700">Mark as Lost</label>
+                  <div className="flex gap-2">
+                    <select className="h-10 min-w-0 flex-1 rounded-xl border border-[var(--border)] px-2 text-xs" value={lostReason} onChange={(event) => setLostReason(event.target.value)}>
+                      {lostReasons.map((reason) => <option key={reason} value={reason}>{reason.replaceAll('_', ' ')}</option>)}
+                    </select>
+                    <button type="button" onClick={() => updateStatus.mutate({ status: 'LOST', lost_reason: lostReason })} className="h-10 rounded-xl bg-red-50 text-red-700 border border-red-200 px-3 text-sm font-semibold hover:bg-red-100 transition">Lost</button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+                <h3 className="mb-3 font-semibold text-[var(--brand-navy)]">Schedule Next Action / Reminder</h3>
+                <input
+                  type="datetime-local"
+                  value={lead.next_action_at ? new Date(new Date(lead.next_action_at).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ''}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    updateStatus.mutate({ next_action_at: val ? new Date(val).toISOString() : null });
+                  }}
+                  className="h-10 w-full rounded-xl border border-[var(--border)] px-3 text-sm mb-3"
+                />
+                {lead.next_action_at && (
+                  <button
+                    type="button"
+                    onClick={() => updateStatus.mutate({ next_action_at: null })}
+                    className="w-full text-center text-xs font-bold text-red-650 hover:underline"
+                  >
+                    Clear Scheduled Action
+                  </button>
+                )}
               </div>
             </div>
           </section>
