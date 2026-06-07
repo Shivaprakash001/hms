@@ -81,7 +81,7 @@ export function Hero({ availability, content }: { availability?: LandingAvailabi
                 className="text-[28px] sm:text-4xl md:text-5xl lg:text-6xl font-bold text-[#1B2D5B] leading-tight mb-6"
                 style={{ fontFamily: 'var(--font-display)' }}
               >
-                400m from SNIST. Home Food. Everything Included.
+                {content.title || '400m from SNIST. Home Food. Everything Included.'}
               </h1>
               <p className="text-lg md:text-2xl text-[#2C2C2A] leading-relaxed">
                 {content.subtitle}
