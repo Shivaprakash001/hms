@@ -1,6 +1,6 @@
 import { lazy, Suspense, memo, useDeferredValue, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CalendarDays, Copy, Edit3, Eye, Paperclip, Plus, Repeat2, Search, Sparkles, X, Zap } from 'lucide-react';
+import { CalendarDays, Copy, Edit3, Eye, Paperclip, Plus, Repeat2, Search, Sparkles, Trash2, X, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { queryKeys } from '@lib/queryKeys';
 import { fmt } from '../shared/format';
@@ -35,20 +35,28 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
     [customEnd, customStart, range, selectedCategories, sort, status],
   );
 
+  const targetHostelId = hostelId === 'all' ? undefined : hostelId;
+  const queryHostelKey = hostelId || 'business';
+
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: [...queryKeys.expenses.list('business'), params],
+    queryKey: [...queryKeys.expenses.list(queryHostelKey), params],
     queryFn: () =>
-      import('@features/expenses/api').then((m) => m.expenseService.getAll(undefined, params)),
+      import('@features/expenses/api').then((m) => m.expenseService.getAll(targetHostelId, params)),
     staleTime: 2 * 60 * 1000,
   });
 
   const createMutation = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
-      import('@features/expenses/api').then((m) => m.expenseService.create(undefined, body)),
+      import('@features/expenses/api').then((m) => m.expenseService.create(targetHostelId, body)),
     onSuccess: () => {
       toast.success('Expense added');
-      queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all('business') });
-      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all(queryHostelKey) });
+      if (hostelId !== 'all') {
+        queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all('all') });
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
+      } else {
+        queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all('business') });
+      }
       queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.all() });
       setShowAddExpense(false);
       setDraftExpense(null);
@@ -63,12 +71,20 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
       import('@features/expenses/api').then((m) => m.expenseService.update(id, body)),
     onSuccess: () => {
       toast.success('Expense updated');
-      queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all('business') });
-      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all(queryHostelKey) });
+      if (hostelId !== 'all') {
+        queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all('all') });
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
+      } else {
+        queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all('business') });
+      }
       queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.all() });
       setEditingExpense(null);
       setDraftExpense(null);
       setShowAddExpense(false);
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.error?.message || error?.message || 'Could not update expense');
     },
   });
 
@@ -76,9 +92,17 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
     mutationFn: (id: string) => import('@features/expenses/api').then((m) => m.expenseService.delete(id)),
     onSuccess: () => {
       toast.success('Expense deleted');
-      queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all('business') });
-      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all(queryHostelKey) });
+      if (hostelId !== 'all') {
+        queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all('all') });
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
+      } else {
+        queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all('business') });
+      }
       queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.all() });
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.error?.message || error?.message || 'Could not delete expense');
     },
   });
 
@@ -648,6 +672,7 @@ const RecentExpensesSection = memo(function RecentExpensesSection({
               onView={() => onSelectExpense(expense)}
               onEdit={() => onEditExpense(expense)}
               onDuplicate={() => onDuplicateExpense(expense)}
+              onDelete={() => deleteMutation.mutate(String(expense.id))}
             />
           ))}
         </div>
@@ -661,12 +686,15 @@ function ExpenseCard({
   onView,
   onEdit,
   onDuplicate,
+  onDelete,
 }: {
   expense: Record<string, any>;
   onView: () => void;
   onEdit: () => void;
   onDuplicate: () => void;
+  onDelete: () => void;
 }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const tone = categoryTone(String(expense.category || 'Miscellaneous'));
   const status = String(expense.status || 'paid').toUpperCase();
   const date = expense.date
@@ -707,20 +735,47 @@ function ExpenseCard({
           {date}
         </span>
       </div>
-      <div className="mt-3 grid grid-cols-3 gap-2">
-        <button type="button" onClick={onView} className="inline-flex items-center justify-center gap-1 rounded-xl border border-border px-2 py-2 text-xs font-semibold">
-          <Eye className="h-3.5 w-3.5" />
-          View
-        </button>
-        <button type="button" onClick={onEdit} className="inline-flex items-center justify-center gap-1 rounded-xl border border-border px-2 py-2 text-xs font-semibold">
-          <Edit3 className="h-3.5 w-3.5" />
-          Edit
-        </button>
-        <button type="button" onClick={onDuplicate} className="inline-flex items-center justify-center gap-1 rounded-xl border border-border px-2 py-2 text-xs font-semibold">
-          <Copy className="h-3.5 w-3.5" />
-          Duplicate
-        </button>
-      </div>
+
+      {!confirmDelete ? (
+        <div className="mt-3 grid grid-cols-4 gap-1.5">
+          <button type="button" onClick={onView} className="inline-flex items-center justify-center gap-1 rounded-xl border border-border px-1 py-2 text-[11px] font-semibold hover:bg-muted active:scale-[0.98] transition-all">
+            <Eye className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            View
+          </button>
+          <button type="button" onClick={onEdit} className="inline-flex items-center justify-center gap-1 rounded-xl border border-border px-1 py-2 text-[11px] font-semibold hover:bg-muted active:scale-[0.98] transition-all">
+            <Edit3 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            Edit
+          </button>
+          <button type="button" onClick={onDuplicate} className="inline-flex items-center justify-center gap-1 rounded-xl border border-border px-1 py-2 text-[11px] font-semibold hover:bg-muted active:scale-[0.98] transition-all">
+            <Copy className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            Copy
+          </button>
+          <button type="button" onClick={() => setConfirmDelete(true)} className="inline-flex items-center justify-center gap-1 rounded-xl border border-destructive/20 bg-destructive/[0.02] px-1 py-2 text-[11px] font-semibold text-destructive hover:bg-destructive/5 active:scale-[0.98] transition-all">
+            <Trash2 className="h-3.5 w-3.5 shrink-0" />
+            Delete
+          </button>
+        </div>
+      ) : (
+        <div className="mt-3 flex items-center justify-between gap-3 bg-destructive/5 rounded-xl border border-destructive/20 p-2 text-[11px]">
+          <span className="font-semibold text-destructive pl-1">Delete expense?</span>
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(false)}
+              className="px-2.5 py-1 font-bold rounded-lg border border-border bg-card text-foreground active:scale-[0.98]"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onDelete}
+              className="px-2.5 py-1 font-bold rounded-lg bg-destructive text-destructive-foreground active:scale-[0.98]"
+            >
+              Confirm
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -740,74 +795,117 @@ function ExpenseDetailsModal({
   onMarkPending: () => void;
   onDelete: () => void;
 }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const tone = categoryTone(String(expense.category || 'Miscellaneous'));
+  const status = String(expense.status || 'paid').toUpperCase();
   return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 sm:items-center">
-      <div className="w-full max-w-md rounded-t-2xl border border-border bg-card p-4 shadow-xl sm:rounded-2xl">
-        <div className="flex items-start justify-between gap-3">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:p-4 sm:items-center">
+      {/* Background click-away backdrop */}
+      <div className="absolute inset-0" onClick={onClose} />
+      
+      <div className="relative w-full max-w-md rounded-t-3xl sm:rounded-2xl border border-border bg-card shadow-2xl flex flex-col max-h-[92dvh] overflow-hidden">
+        {/* Drag handle line for mobile bottom sheet feeling */}
+        <div className="w-12 h-1 bg-border/80 rounded-full mx-auto mt-3 sm:hidden shrink-0" />
+        
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-3 border-b border-border/50 shrink-0">
           <div className="min-w-0">
-            <p className="text-lg font-bold text-foreground">{String(expense.title || 'Expense')}</p>
-            <p className="mt-1 text-sm text-muted-foreground">{fmt(expense.amount)}</p>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Expense Details</span>
+            <p className="text-lg font-extrabold text-foreground truncate mt-0.5">{String(expense.title || 'Expense')}</p>
+            <p className="text-xl font-black text-accent mt-0.5">{fmt(expense.amount)}</p>
           </div>
-          <button type="button" onClick={onClose} className="rounded-lg p-2 hover:bg-muted">
+          <button type="button" onClick={onClose} className="rounded-xl p-2 hover:bg-muted text-muted-foreground active:scale-95 transition-transform mt-1">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-          <DetailItem label="Category" value={String(expense.category || 'Miscellaneous')} chipClass={tone.chip} />
-          <DetailItem label="Status" value={String(expense.status || 'paid').toUpperCase()} />
-          <DetailItem label="Payment" value={expense.payment_method ? `Paid via ${expense.payment_method}` : 'Not set'} />
-          <DetailItem label="Date" value={expense.date ? new Date(String(expense.date)).toLocaleDateString('en-IN') : 'No date'} />
-          <DetailItem label="Vendor" value={String(expense.vendor_name || 'Not set')} />
-          <DetailItem label="Recorded by" value={String(expense.added_by || 'Owner')} />
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {/* Details Table */}
+          <div className="divide-y divide-border/60 rounded-2xl border border-border bg-background/50 overflow-hidden">
+            <DetailRow label="Category" value={String(expense.category || 'Miscellaneous')} rightElement={<span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${tone.chip}`}>{String(expense.category || 'Misc')}</span>} />
+            <DetailRow label="Status" value={status} rightElement={<span className={`text-xs font-bold ${status === 'PAID' ? 'text-success' : status === 'CANCELLED' ? 'text-destructive' : 'text-warning'}`}>{status}</span>} />
+            <DetailRow label="Payment" value={expense.payment_method ? `Paid via ${expense.payment_method}` : 'Not set'} />
+            <DetailRow label="Date" value={expense.date ? new Date(String(expense.date)).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'No date'} />
+            <DetailRow label="Vendor" value={String(expense.vendor_name || 'Not set')} />
+            <DetailRow label="Recorded by" value={String(expense.added_by || 'Owner')} />
+          </div>
+
+          {expense.notes && (
+            <div className="rounded-2xl border border-border bg-background/50 p-4">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Notes</p>
+              <p className="mt-1.5 text-xs text-foreground leading-relaxed whitespace-pre-wrap">{String(expense.notes)}</p>
+            </div>
+          )}
+
+          {expense.receipt_url && (
+            <a
+              href={String(expense.receipt_url)}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-background px-4 py-3 text-xs font-bold hover:bg-muted active:scale-[0.98] transition-all"
+            >
+              <Paperclip className="h-4 w-4 text-muted-foreground" />
+              Open attached bill
+            </a>
+          )}
         </div>
 
-        {expense.notes && (
-          <div className="mt-3 rounded-xl border border-border bg-background p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Notes</p>
-            <p className="mt-1 text-sm text-foreground">{String(expense.notes)}</p>
-          </div>
-        )}
-
-        {expense.receipt_url && (
-          <a
-            href={String(expense.receipt_url)}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-border bg-background px-3 py-2.5 text-sm font-semibold"
-          >
-            <Paperclip className="h-4 w-4" />
-            Open attached bill
-          </a>
-        )}
-
-        <div className="mt-4 grid grid-cols-2 gap-2">
-          <button type="button" onClick={onEdit} className="rounded-xl border border-border py-2.5 text-xs font-semibold">
-            Edit
-          </button>
-          <button type="button" onClick={onDuplicate} className="rounded-xl border border-border py-2.5 text-xs font-semibold">
-            Duplicate
-          </button>
-          <button type="button" onClick={onMarkPending} className="rounded-xl border border-border py-2.5 text-xs font-semibold">
-            Mark Pending
-          </button>
-          <button type="button" onClick={onDelete} className="rounded-xl border border-destructive/30 py-2.5 text-xs font-semibold text-destructive">
-            Delete
-          </button>
+        {/* Sticky Actions Footer */}
+        <div className="border-t border-border/50 bg-muted/20 p-4 shrink-0 pb-[calc(1.2rem+env(safe-area-inset-bottom,0px))] sm:pb-4">
+          {!confirmDelete ? (
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={onEdit} className="rounded-xl border border-border bg-card py-2.5 text-xs font-bold active:scale-[0.98] transition-all">
+                Edit
+              </button>
+              <button type="button" onClick={onDuplicate} className="rounded-xl border border-border bg-card py-2.5 text-xs font-bold active:scale-[0.98] transition-all">
+                Duplicate
+              </button>
+              <button type="button" onClick={onMarkPending} className="rounded-xl border border-border bg-card py-2.5 text-xs font-bold active:scale-[0.98] transition-all">
+                Mark Pending
+              </button>
+              <button type="button" onClick={() => setConfirmDelete(true)} className="rounded-xl border border-destructive/30 bg-destructive/5 py-2.5 text-xs font-bold text-destructive active:scale-[0.98] transition-all">
+                Delete
+              </button>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-3 space-y-3">
+              <p className="text-xs text-destructive font-semibold text-center">
+                Are you sure you want to delete this expense? This action cannot be undone.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(false)}
+                  className="flex-1 py-2.5 text-xs font-bold rounded-xl border border-border bg-card text-foreground active:scale-[0.98]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={onDelete}
+                  className="flex-1 py-2.5 text-xs font-bold rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/95 text-center active:scale-[0.98]"
+                >
+                  Confirm Delete
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function DetailItem({ label, value, chipClass }: { label: string; value: string; chipClass?: string }) {
+function DetailRow({ label, value, rightElement }: { label: string; value: string; rightElement?: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-border bg-background p-3">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className={`mt-1 text-sm font-semibold ${chipClass ? `inline-block rounded-full px-2 py-1 ${chipClass}` : 'text-foreground'}`}>
-        {value}
-      </p>
+    <div className="flex items-center justify-between p-3.5 text-xs">
+      <span className="font-semibold text-muted-foreground">{label}</span>
+      {rightElement ? (
+        rightElement
+      ) : (
+        <span className="font-bold text-foreground truncate max-w-[200px]">{value}</span>
+      )}
     </div>
   );
 }

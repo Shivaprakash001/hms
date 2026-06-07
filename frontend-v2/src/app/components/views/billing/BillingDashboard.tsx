@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { ChevronDown, Building2 } from 'lucide-react';
 import { FinancialControlCenter } from './FinancialControlCenter';
+import { ExpensesTab } from '../../hostel-detail/tabs/ExpensesTab';
 
 export function BillingDashboard() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -43,6 +44,19 @@ export function BillingDashboard() {
     });
   };
 
+  const activeTab = searchParams.get('tab') || 'overview';
+
+  const handleTabChange = (tab: string) => {
+    setSearchParams((prev) => {
+      if (tab === 'overview') {
+        prev.delete('tab');
+      } else {
+        prev.set('tab', tab);
+      }
+      return prev;
+    });
+  };
+
   const activeHostelId = selectedHostelId || 'all';
   const activeHostel = hostels.find((h) => h.id === activeHostelId);
 
@@ -76,6 +90,30 @@ export function BillingDashboard() {
         )}
       </div>
 
+      {/* Tabs */}
+      <div className="flex gap-1 overflow-x-auto scrollbar-hide border-b border-border/60 pb-px mb-6">
+        <button
+          onClick={() => handleTabChange('overview')}
+          className={`shrink-0 px-4 py-2 text-sm font-semibold border-b-2 transition-all duration-200 -mb-px ${
+            activeTab === 'overview'
+              ? 'border-primary text-primary font-bold'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Overview
+        </button>
+        <button
+          onClick={() => handleTabChange('expenses')}
+          className={`shrink-0 px-4 py-2 text-sm font-semibold border-b-2 transition-all duration-200 -mb-px ${
+            activeTab === 'expenses'
+              ? 'border-primary text-primary font-bold'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Expenses Workspace
+        </button>
+      </div>
+
       {isLoading && (
         <div className="space-y-4">
           {[1, 2, 3].map((i) => (
@@ -93,9 +131,13 @@ export function BillingDashboard() {
       )}
 
       {!isLoading && activeHostelId && (
-        <FinancialControlCenter
-          hostelId={activeHostelId}
-        />
+        activeTab === 'expenses' ? (
+          <ExpensesTab hostelId={activeHostelId} />
+        ) : (
+          <FinancialControlCenter
+            hostelId={activeHostelId}
+          />
+        )
       )}
     </div>
   );
