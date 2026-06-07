@@ -36,6 +36,9 @@ function dueBalance(due: Record<string, unknown>): number {
 
 export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initialAmount = '' }: RecordPaymentModalProps) {
   const queryClient = useQueryClient();
+  const [selectedHostelId, setSelectedHostelId] = useState<string>(() => {
+    return hostelId === 'all' ? '' : hostelId;
+  });
   const [selectedTenantId, setSelectedTenantId] = useState('');
   const [selectedDueId, setSelectedDueId] = useState(initialDueId);
   const [isAdvancePayment, setIsAdvancePayment] = useState(false);
@@ -50,16 +53,34 @@ export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initi
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [successSummary, setSuccessSummary] = useState<Record<string, unknown> | null>(null);
 
+  const { data: hostelsData } = useQuery({
+    queryKey: ['owner', 'hostels'],
+    queryFn: () => import('@features/owners/api').then((m) => m.ownerService.getHostels()),
+    staleTime: 10 * 60 * 1000,
+    enabled: hostelId === 'all',
+  });
+
+  const hostelsList = useMemo(() => {
+    return Array.isArray(hostelsData)
+      ? hostelsData
+      : Array.isArray((hostelsData as any)?.data?.hostels)
+        ? (hostelsData as any).data.hostels
+        : Array.isArray((hostelsData as any)?.hostels)
+          ? (hostelsData as any).hostels
+          : [];
+  }, [hostelsData]);
+
   const { data: duesData, isLoading: duesLoading } = useQuery({
-    queryKey: queryKeys.payments.dues(hostelId),
-    queryFn: () => paymentService.getAllDues(hostelId),
+    queryKey: queryKeys.payments.dues(selectedHostelId),
+    queryFn: () => paymentService.getAllDues(selectedHostelId),
     staleTime: 60 * 1000,
+    enabled: Boolean(selectedHostelId),
   });
 
   const { data: tenantsData, isLoading: tenantsLoading } = useQuery({
-    queryKey: ['tenants', 'active-list', hostelId],
-    queryFn: () => tenantService.getAll(hostelId, { status: 'ACTIVE', limit: 1000 }),
-    enabled: Boolean(hostelId),
+    queryKey: ['tenants', 'active-list', selectedHostelId],
+    queryFn: () => tenantService.getAll(selectedHostelId, { status: 'ACTIVE', limit: 1000 }),
+    enabled: Boolean(selectedHostelId),
     staleTime: 60 * 1000,
   });
 
@@ -181,20 +202,20 @@ export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initi
           referenceNumber: payload.referenceNumber,
           paymentDate: payload.paymentDate,
           note: payload.note,
-          hostelId,
+          hostelId: selectedHostelId,
         });
       }
     },
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.payments.all(hostelId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.payments.dues(hostelId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.tenants.all(hostelId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.payments.all(selectedHostelId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.payments.dues(selectedHostelId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all(selectedHostelId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tenants.all(selectedHostelId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.all() });
       if (selectedTenantId) {
-        queryClient.invalidateQueries({ queryKey: queryKeys.tenants.advance(hostelId, selectedTenantId) });
-        queryClient.invalidateQueries({ queryKey: queryKeys.tenants.full(hostelId, selectedTenantId) });
-        queryClient.invalidateQueries({ queryKey: queryKeys.tenants.overview(hostelId, selectedTenantId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.tenants.advance(selectedHostelId, selectedTenantId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.tenants.full(selectedHostelId, selectedTenantId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.tenants.overview(selectedHostelId, selectedTenantId) });
       }
       const recorded = result?.payment ?? result;
       hmsToast.paymentSuccess(Number(recorded?.amount_paid ?? amount));
@@ -260,10 +281,41 @@ export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initi
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 space-y-5">
-          {/* Tenant / Search */}
-          <div>
-            <label className="block text-xs text-muted-foreground mb-1.5">Select Tenant *</label>
-            {tenantsLoading ? (
+          {/* Hostel Selector (if opened from 'all' view) */}
+          {hostelId === 'all' && (
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1.5">Select Hostel *</label>
+              <select
+                value={selectedHostelId}
+                onChange={(e) => {
+                  setSelectedHostelId(e.target.value);
+                  setSelectedTenantId('');
+                  setSelectedDueId('');
+                  setIsAdvancePayment(false);
+                  setAmount('');
+                }}
+                className="w-full px-4 py-3 bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent text-sm"
+              >
+                <option value="">-- Choose Hostel --</option>
+                {hostelsList.map((h: any) => (
+                  <option key={h.id} value={h.id}>
+                    {h.name ?? h.hostel_name ?? h.id}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {!selectedHostelId ? (
+            <div className="text-center py-8 border border-dashed border-border rounded-xl">
+              <p className="text-sm text-muted-foreground font-medium">Please select a hostel to proceed.</p>
+            </div>
+          ) : (
+            <>
+              {/* Tenant / Search */}
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1.5">Select Tenant *</label>
+                {tenantsLoading ? (
               <div className="flex items-center gap-2 py-3 text-sm text-muted-foreground">
                 <Loader2 className="w-4 h-4 animate-spin" /> Loading tenants...
               </div>
@@ -534,6 +586,8 @@ export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initi
             >
               Done
             </button>
+          )}
+            </>
           )}
         </form>
       </div>

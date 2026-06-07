@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, Upload, X } from 'lucide-react';
 
 const QUICK_CATEGORIES = [
@@ -58,19 +59,39 @@ export function AddExpenseModal({
   onClose: () => void;
   onSubmit: (body: Record<string, unknown>) => void;
 }) {
-  const [form, setForm] = useState(() => expenseToForm(initialExpense));
+  const [form, setForm] = useState(() => expenseToForm(initialExpense, defaultHostelId));
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [showMore, setShowMore] = useState(false);
+
+  const { data: hostelsData } = useQuery({
+    queryKey: ['owner', 'hostels'],
+    queryFn: () => import('@features/owners/api').then((m) => m.ownerService.getHostels()),
+    staleTime: 10 * 60 * 1000,
+    enabled: defaultHostelId === 'all' || !defaultHostelId,
+  });
+
+  const hostels: any[] = useMemo(() => {
+    return Array.isArray(hostelsData)
+      ? hostelsData
+      : Array.isArray((hostelsData as any)?.data?.hostels)
+        ? (hostelsData as any).data.hostels
+        : Array.isArray((hostelsData as any)?.hostels)
+          ? (hostelsData as any).hostels
+          : [];
+  }, [hostelsData]);
+
   const suggestion = form.title ? suggestExpenseCategory(form.title) : '';
   const categoryOptions = Array.from(new Set([...QUICK_CATEGORIES, ...categories, ...BUSINESS_CATEGORIES]));
   const amountValue = Number(form.amount);
+  const isHostelSelected = defaultHostelId !== 'all' || Boolean(form.hostelId);
   const canSave =
     Number.isFinite(amountValue) &&
     amountValue > 0 &&
     Boolean(form.title.trim()) &&
     Boolean(form.category) &&
     Boolean(form.payment_method) &&
-    Boolean(form.date);
+    Boolean(form.date) &&
+    isHostelSelected;
 
   const submit = () => {
     if (!canSave) return;
@@ -130,6 +151,26 @@ export function AddExpenseModal({
               ))}
             </div>
           </div>
+
+          {(defaultHostelId === 'all' || !defaultHostelId) && (
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Hostel *
+              </label>
+              <select
+                value={form.hostelId}
+                onChange={(e) => setForm((f) => ({ ...f, hostelId: e.target.value }))}
+                className="w-full px-3 py-3 rounded-xl border border-border bg-background text-sm"
+              >
+                <option value="">-- Select Hostel --</option>
+                {hostels.map((h) => (
+                  <option key={h.id} value={h.id}>
+                    {h.name ?? h.hostel_name ?? h.id}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <input
             value={form.title}
@@ -337,7 +378,7 @@ export function AddExpenseModal({
   );
 }
 
-function expenseToForm(expense?: Record<string, any> | null) {
+function expenseToForm(expense?: Record<string, any> | null, defaultHostelId?: string) {
   return {
     title: String(expense?.title || ''),
     amount: expense?.amount ? String(expense.amount) : '',
@@ -349,7 +390,7 @@ function expenseToForm(expense?: Record<string, any> | null) {
     vendor_name: String(expense?.vendor_name || ''),
     is_recurring: Boolean(expense?.is_recurring),
     recurring_frequency: String(expense?.recurring_frequency || 'monthly'),
-    hostelId: String(expense?.hostel_id || ''),
+    hostelId: String(expense?.hostel_id || (defaultHostelId !== 'all' ? defaultHostelId : '') || ''),
   };
 }
 

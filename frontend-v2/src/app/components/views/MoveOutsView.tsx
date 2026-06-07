@@ -146,13 +146,23 @@ export function MoveOutsView() {
     onError: () => toast.error('Could not approve settlement'),
   });
 
+  const vacateMutation = useMutation({
+    mutationFn: () => moveOutService.vacate(effectiveSelectedId!, {
+      physicalExitDate,
+    }),
+    onSuccess: () => {
+      toast.success('Tenant vacated and bed released');
+      invalidate();
+    },
+    onError: () => toast.error('Could not record vacate action'),
+  });
+
   const completeMutation = useMutation({
     mutationFn: () =>
       moveOutService.complete(effectiveSelectedId!, {
         paymentMethod,
         paymentReference,
         paymentNotes,
-        physicalExitDate,
       }),
     onSuccess: () => {
       toast.success('Move-out completed');
@@ -161,6 +171,15 @@ export function MoveOutsView() {
       invalidate();
     },
     onError: () => toast.error('Could not complete move-out'),
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: () => moveOutService.reject(effectiveSelectedId!),
+    onSuccess: () => {
+      toast.success('Move-out request rejected');
+      invalidate();
+    },
+    onError: () => toast.error('Could not reject request'),
   });
 
   return (
@@ -274,19 +293,23 @@ export function MoveOutsView() {
                           <p className="mt-1 text-sm text-muted-foreground">
                             {String(active.status) === 'REQUESTED'
                               ? `${activeTenant?.name} is waiting for room inspection.`
-                              : String(active.status) === 'INSPECTION_DONE'
-                                ? 'Inspection is complete. Review the settlement and approve it.'
-                                : String(active.status) === 'PAYMENT_PENDING'
-                                  ? 'Settlement is approved. Record the refund or collection to complete move-out.'
-                                  : String(active.status) === 'COMPLETED'
-                                    ? 'Move-out is complete and the room release process has finished.'
-                                    : 'Continue the next operational step below.'}
+                              : String(active.status) === 'SETTLEMENT_PENDING'
+                                ? 'Inspection is complete. Review and approve the final settlement.'
+                                : String(active.status) === 'APPROVED'
+                                  ? 'Settlement is approved. Release the bed and vacate the tenant.'
+                                  : String(active.status) === 'VACATED'
+                                    ? 'Tenant has physically vacated. Record the final refund or payment collection to complete the move-out.'
+                                    : String(active.status) === 'COMPLETED'
+                                      ? 'Move-out is complete and the room has been released.'
+                                      : String(active.status) === 'REJECTED'
+                                        ? 'This move-out request was rejected.'
+                                        : 'Continue the next operational step below.'}
                           </p>
                         </div>
                       </div>
                     </div>
 
-                    {(active.inspection || String(active.status) === 'INSPECTION_DONE' || String(active.status) === 'PAYMENT_PENDING' || String(active.status) === 'COMPLETED') && (
+                    {(active.inspection || ['SETTLEMENT_PENDING', 'APPROVED', 'VACATED', 'COMPLETED'].includes(String(active.status))) && (
                       <div className="rounded-2xl border border-border bg-background p-4">
                         <div className="mb-3 flex items-center gap-2">
                           <ClipboardCheck className="h-4 w-4 text-accent" />
@@ -349,13 +372,27 @@ export function MoveOutsView() {
                     <div className="space-y-3">
                       {String(active.status) === 'REQUESTED' && (
                         !showInspectForm ? (
-                          <button
-                            type="button"
-                            onClick={() => setShowInspectForm(true)}
-                            className="w-full rounded-xl bg-accent py-3 text-sm font-semibold text-accent-foreground"
-                          >
-                            Start room inspection
-                          </button>
+                          <div className="space-y-2">
+                            <button
+                              type="button"
+                              onClick={() => setShowInspectForm(true)}
+                              className="w-full rounded-xl bg-accent py-3 text-sm font-semibold text-accent-foreground"
+                            >
+                              Start room inspection
+                            </button>
+                            <button
+                              type="button"
+                              disabled={rejectMutation.isPending}
+                              onClick={() => {
+                                if (window.confirm("Are you sure you want to reject this move-out request?")) {
+                                  rejectMutation.mutate();
+                                }
+                              }}
+                              className="w-full rounded-xl border border-red-200 bg-red-50 py-3 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
+                            >
+                              {rejectMutation.isPending ? 'Rejecting...' : 'Reject request'}
+                            </button>
+                          </div>
                         ) : (
                           <InspectionForm
                             roomCondition={roomCondition}
@@ -390,7 +427,7 @@ export function MoveOutsView() {
                         )
                       )}
 
-                      {String(active.status) === 'INSPECTION_DONE' && (
+                      {String(active.status) === 'SETTLEMENT_PENDING' && (
                         <div className="rounded-2xl border border-border bg-background p-4 space-y-3">
                           <div className="flex items-center gap-2">
                             <BadgeIndianRupee className="h-4 w-4 text-accent" />
@@ -424,18 +461,63 @@ export function MoveOutsView() {
                               />
                             </label>
                           </div>
-                          <button
-                            type="button"
-                            disabled={settleMutation.isPending}
-                            onClick={() => settleMutation.mutate()}
-                            className="w-full rounded-xl bg-accent py-3 text-sm font-semibold text-accent-foreground disabled:opacity-50"
-                          >
-                            {settleMutation.isPending ? 'Confirming settlement...' : 'Confirm settlement amount'}
-                          </button>
+                          <div className="flex flex-col gap-2">
+                            <button
+                              type="button"
+                              disabled={settleMutation.isPending}
+                              onClick={() => settleMutation.mutate()}
+                              className="w-full rounded-xl bg-accent py-3 text-sm font-semibold text-accent-foreground disabled:opacity-50"
+                            >
+                              {settleMutation.isPending ? 'Confirming settlement...' : 'Confirm settlement amount'}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={rejectMutation.isPending}
+                              onClick={() => {
+                                if (window.confirm("Are you sure you want to reject this request?")) {
+                                  rejectMutation.mutate();
+                                }
+                              }}
+                              className="w-full rounded-xl border border-red-200 bg-red-50 py-3 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
+                            >
+                              {rejectMutation.isPending ? 'Rejecting...' : 'Reject request'}
+                            </button>
+                          </div>
                         </div>
                       )}
 
-                      {String(active.status) === 'PAYMENT_PENDING' && (
+                      {String(active.status) === 'APPROVED' && (
+                        <div className="rounded-2xl border border-border bg-background p-4 space-y-3">
+                          <div className="flex items-center gap-2">
+                            <CalendarDays className="h-4 w-4 text-accent" />
+                            <h3 className="text-sm font-semibold text-foreground">Release bed & vacate tenant</h3>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Specify the physical exit date. Confirming this action terminates the room allocation, releases the bed, and transitions the tenant to former tenant.
+                          </p>
+                          <div className="space-y-3">
+                            <label className="block text-xs text-muted-foreground">
+                              Physical exit date
+                              <input
+                                type="date"
+                                value={physicalExitDate}
+                                onChange={(e) => setPhysicalExitDate(e.target.value)}
+                                className="mt-1 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground"
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              disabled={vacateMutation.isPending || !physicalExitDate}
+                              onClick={() => vacateMutation.mutate()}
+                              className="w-full rounded-xl bg-[#243A72] py-3 text-sm font-semibold text-white hover:bg-[#1a2d5c] disabled:opacity-50"
+                            >
+                              {vacateMutation.isPending ? 'Vacating tenant...' : 'Vacate & release bed'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {String(active.status) === 'VACATED' && (
                         <div className="rounded-2xl border border-border bg-background p-4 space-y-3">
                           <div className="flex items-center gap-2">
                             <CheckCircle2 className="h-4 w-4 text-accent" />
@@ -460,15 +542,6 @@ export function MoveOutsView() {
                                 value={paymentReference}
                                 onChange={(e) => setPaymentReference(e.target.value)}
                                 placeholder="Txn/ref no."
-                                className="mt-1 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground"
-                              />
-                            </label>
-                            <label className="text-xs text-muted-foreground">
-                              Move-out date
-                              <input
-                                type="date"
-                                value={physicalExitDate}
-                                onChange={(e) => setPhysicalExitDate(e.target.value)}
                                 className="mt-1 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground"
                               />
                             </label>

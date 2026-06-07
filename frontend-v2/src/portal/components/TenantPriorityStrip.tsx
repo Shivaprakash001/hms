@@ -60,7 +60,7 @@ export function TenantPriorityStrip({ dues, payments, moveOut }: Props) {
   }
 
   const moveOutActive =
-    moveOut?.status && !['COMPLETED', 'CANCELLED'].includes(String(moveOut.status).toUpperCase());
+    moveOut?.status && !['COMPLETED', 'CANCELLED', 'REJECTED'].includes(String(moveOut.status).toUpperCase());
 
   return (
     <div className={`rounded-xl border p-4 ${statusTone}`} role="region" aria-label="Rent status">

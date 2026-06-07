@@ -170,8 +170,19 @@ export class TenantService {
     const where: any = {
       ...(ownerId && { owner_id: ownerId }),
       ...(hostelId && { hostel_id: hostelId }),
-      ...(status && { status: status as any }),
     };
+
+    if (status) {
+      if (status === "MOVE_OUT_REQUESTED") {
+        where.move_out_requests = {
+          some: {
+            status: { in: ["REQUESTED", "APPROVED", "SETTLEMENT_PENDING", "VACATED"] }
+          }
+        };
+      } else {
+        where.status = status as any;
+      }
+    }
 
     if (search) {
       where.OR = [
@@ -844,13 +855,13 @@ export class TenantService {
       return this.cancelInvitation(id, ownerId);
     }
 
-    if (data.status === "LEFT") {
-      // ── GUARD: Direct LEFT transitions are no longer allowed. ──
+    if (data.status === "FORMER_TENANT") {
+      // ── GUARD: Direct FORMER_TENANT transitions are no longer allowed. ──
       // The owner MUST use the move-out workflow which enforces:
-      //   inspection → settlement → payment → completion → LEFT
-      // This prevents tenants being marked LEFT without owner review.
+      //   inspection → settlement → payment → completion → FORMER_TENANT
+      // This prevents tenants being marked FORMER_TENANT without owner review.
       throw new Error(
-        "VALIDATION: Cannot set status to LEFT directly. " +
+        "VALIDATION: Cannot set status to FORMER_TENANT directly. " +
         "Please use the Move-Out workflow (POST /api/move-out/requests) " +
         "which ensures proper inspection, settlement, and approval."
       );
@@ -892,16 +903,16 @@ export class TenantService {
       return this.cancelInvitation(id, ownerId);
     }
 
-    // ACTIVE / MOVE_OUT_REQUESTED => must use move-out workflow
-    if (tenant.status === "ACTIVE" || tenant.status === "MOVE_OUT_REQUESTED") {
+    // ACTIVE => must use move-out workflow
+    if (tenant.status === "ACTIVE") {
       throw new Error(
         "VALIDATION: Cannot remove an active tenant directly. " +
         "Please use the Move-Out workflow which ensures proper " +
-        "inspection, settlement calculation, and owner approval before marking as LEFT."
+        "inspection, settlement calculation, and owner approval before marking as FORMER_TENANT."
       );
     }
 
-    // LEFT / CANCELLED — already terminal, no-op
+    // FORMER_TENANT / CANCELLED — already terminal, no-op
     throw new Error(`VALIDATION: Tenant is already in terminal status: ${tenant.status}`);
   }
 
@@ -912,7 +923,7 @@ export class TenantService {
     });
     if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
     if (tenant.owner_id !== ownerId) throw new Error("FORBIDDEN: You can only reactivate your own tenants");
-    if (tenant.status !== "LEFT") throw new Error("VALIDATION: Only tenants with LEFT status can be reactivated");
+    if (tenant.status !== "FORMER_TENANT") throw new Error("VALIDATION: Only tenants with FORMER_TENANT status can be reactivated");
 
     const updated = await tenantRepository.update({
       where: { id },

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState, useCallback, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, useQueries } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { 
@@ -142,7 +142,9 @@ function OutstandingDuesDrawer({ hostelId, dues, onClose, onCollect }: Outstandi
                 <div className="flex justify-between items-start">
                   <div>
                     <h4 className="font-semibold text-foreground text-sm">{tenantName}</h4>
-                    <p className="text-xs text-muted-foreground mt-0.5">Room {roomNo}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Room {roomNo} {due.hostelName ? `• ${due.hostelName}` : ''}
+                    </p>
                     {isOverdue && daysLate > 0 ? (
                       <span className="text-[10px] font-semibold text-red-600 bg-red-50 dark:bg-red-950/30 px-1.5 py-0.5 rounded mt-1.5 inline-block">
                         {daysLate} days late
@@ -207,61 +209,163 @@ export function FinancialControlCenter({ hostelId }: Props) {
   const [recordPayment, setRecordPayment] = useState<{ hostelId: string; dueId?: string; amount?: string } | null>(null);
 
   // Queries
-  const { data: statsShell, isLoading: statsLoading } = useQuery({
-    queryKey: queryKeys.dashboard.statsShell(hostelId),
-    queryFn: () => import('@features/dashboard/api').then((m) => m.dashboardService.getStatsShell(hostelId)),
-    staleTime: 2 * 60 * 1000,
-    enabled: !!hostelId,
+  // Queries
+  const { data: hostelsData } = useQuery({
+    queryKey: ['owner', 'hostels'],
+    queryFn: () => import('@features/owners/api').then((m) => m.ownerService.getHostels()),
+    staleTime: 10 * 60 * 1000,
   });
 
-  const { data: statsAnalytics } = useQuery({
-    queryKey: queryKeys.dashboard.statsAnalytics(hostelId),
-    queryFn: () => import('@features/dashboard/api').then((m) => m.dashboardService.getStatsAnalytics(hostelId)),
-    staleTime: 3 * 60 * 1000,
-    enabled: !!hostelId,
+  const hostels = useMemo(() => {
+    return Array.isArray(hostelsData)
+      ? hostelsData
+      : Array.isArray((hostelsData as any)?.data?.hostels)
+      ? (hostelsData as any).data.hostels
+      : Array.isArray((hostelsData as any)?.hostels)
+      ? (hostelsData as any).hostels
+      : [];
+  }, [hostelsData]);
+
+  const hostelIdsToQuery = useMemo(() => {
+    if (hostelId === 'all') {
+      return hostels.map((h: any) => h.id).filter(Boolean);
+    }
+    return hostelId ? [hostelId] : [];
+  }, [hostelId, hostels]);
+
+  const queryConfigs = useMemo(() => {
+    const configs: any[] = [];
+    hostelIdsToQuery.forEach((id) => {
+      configs.push({
+        queryKey: queryKeys.dashboard.statsShell(id),
+        queryFn: () => import('@features/dashboard/api').then((m) => m.dashboardService.getStatsShell(id)),
+        staleTime: 2 * 60 * 1000,
+        enabled: !!id,
+        meta: { type: 'statsShell', hostelId: id }
+      });
+      configs.push({
+        queryKey: queryKeys.dashboard.statsAnalytics(id),
+        queryFn: () => import('@features/dashboard/api').then((m) => m.dashboardService.getStatsAnalytics(id)),
+        staleTime: 3 * 60 * 1000,
+        enabled: !!id,
+        meta: { type: 'statsAnalytics', hostelId: id }
+      });
+      configs.push({
+        queryKey: queryKeys.dashboard.statsActivity(id),
+        queryFn: () => import('@features/dashboard/api').then((m) => m.dashboardService.getStatsActivity(id)),
+        staleTime: 60 * 1000,
+        enabled: !!id,
+        meta: { type: 'statsActivity', hostelId: id }
+      });
+      configs.push({
+        queryKey: queryKeys.dashboard.cashflow(id),
+        queryFn: () => import('@features/dashboard/api').then((m) => m.dashboardService.getCashflow(id)),
+        staleTime: 3 * 60 * 1000,
+        enabled: !!id,
+        meta: { type: 'cashflow', hostelId: id }
+      });
+      configs.push({
+        queryKey: queryKeys.dashboard.funnel(id),
+        queryFn: () => import('@features/dashboard/api').then((m) => m.dashboardService.getFunnel(id)),
+        staleTime: 5 * 60 * 1000,
+        enabled: !!id,
+        meta: { type: 'funnel', hostelId: id }
+      });
+      configs.push({
+        queryKey: queryKeys.payments.ledger(id, { limit: 40 }),
+        queryFn: () => import('@features/payments/api').then((m) => m.paymentService.getAll(id, { limit: 40 })),
+        staleTime: 2 * 60 * 1000,
+        enabled: !!id,
+        meta: { type: 'paymentsData', hostelId: id }
+      });
+      configs.push({
+        queryKey: queryKeys.payments.dues(id),
+        queryFn: () => import('@features/payments/api').then((m) => m.paymentService.getAllDues(id)),
+        staleTime: 60 * 1000,
+        enabled: !!id,
+        meta: { type: 'duesData', hostelId: id }
+      });
+      configs.push({
+        queryKey: ['payments', 'pending-verification', id],
+        queryFn: () => import('@features/payments/api').then((m) => m.paymentService.getPendingVerifications(id)),
+        staleTime: 60 * 1000,
+        enabled: !!id,
+        meta: { type: 'pendingPaymentsData', hostelId: id }
+      });
+    });
+    return configs;
+  }, [hostelIdsToQuery]);
+
+  const queryResults = useQueries({
+    queries: queryConfigs,
   });
 
-  const { data: statsActivity } = useQuery({
-    queryKey: queryKeys.dashboard.statsActivity(hostelId),
-    queryFn: () => import('@features/dashboard/api').then((m) => m.dashboardService.getStatsActivity(hostelId)),
-    staleTime: 60 * 1000,
-    enabled: !!hostelId,
-  });
+  const statsLoading = queryResults.some((res) => res.isLoading);
 
-  const { data: cashflow } = useQuery({
-    queryKey: queryKeys.dashboard.cashflow(hostelId),
-    queryFn: () => import('@features/dashboard/api').then((m) => m.dashboardService.getCashflow(hostelId)),
-    staleTime: 3 * 60 * 1000,
-    enabled: !!hostelId,
-  });
+  const statsShells = useMemo(() => {
+    return queryResults
+      .filter((_, idx) => queryConfigs[idx]?.meta?.type === 'statsShell')
+      .map((res) => res.data)
+      .filter(Boolean);
+  }, [queryResults, queryConfigs]);
 
-  const { data: funnel } = useQuery({
-    queryKey: queryKeys.dashboard.funnel(hostelId),
-    queryFn: () => import('@features/dashboard/api').then((m) => m.dashboardService.getFunnel(hostelId)),
-    staleTime: 5 * 60 * 1000,
-    enabled: !!hostelId,
-  });
+  const statsAnalyticsList = useMemo(() => {
+    return queryResults
+      .filter((_, idx) => queryConfigs[idx]?.meta?.type === 'statsAnalytics')
+      .map((res) => res.data)
+      .filter(Boolean);
+  }, [queryResults, queryConfigs]);
 
-  const { data: paymentsData, refetch: refetchPayments } = useQuery({
-    queryKey: queryKeys.payments.ledger(hostelId, { limit: 40 }),
-    queryFn: () => import('@features/payments/api').then((m) => m.paymentService.getAll(hostelId, { limit: 40 })),
-    staleTime: 2 * 60 * 1000,
-    enabled: !!hostelId,
-  });
+  const cashflows = useMemo(() => {
+    return queryResults
+      .filter((_, idx) => queryConfigs[idx]?.meta?.type === 'cashflow')
+      .map((res) => res.data)
+      .filter(Boolean);
+  }, [queryResults, queryConfigs]);
 
-  const { data: duesData, refetch: refetchDues } = useQuery({
-    queryKey: queryKeys.payments.dues(hostelId),
-    queryFn: () => import('@features/payments/api').then((m) => m.paymentService.getAllDues(hostelId)),
-    enabled: !!hostelId,
-    staleTime: 60 * 1000,
-  });
+  const funnels = useMemo(() => {
+    return queryResults
+      .filter((_, idx) => queryConfigs[idx]?.meta?.type === 'funnel')
+      .map((res) => res.data)
+      .filter(Boolean);
+  }, [queryResults, queryConfigs]);
 
-  const { data: pendingPaymentsData } = useQuery({
-    queryKey: ['payments', 'pending-verification', hostelId],
-    queryFn: () => import('@features/payments/api').then((m) => m.paymentService.getPendingVerifications(hostelId)),
-    enabled: !!hostelId,
-    staleTime: 60 * 1000,
-  });
+  const paymentsDataList = useMemo(() => {
+    return queryResults
+      .filter((_, idx) => queryConfigs[idx]?.meta?.type === 'paymentsData')
+      .map((res) => res.data)
+      .filter(Boolean);
+  }, [queryResults, queryConfigs]);
+
+  const duesDataList = useMemo(() => {
+    return queryResults
+      .filter((_, idx) => queryConfigs[idx]?.meta?.type === 'duesData')
+      .map((res) => res.data)
+      .filter(Boolean);
+  }, [queryResults, queryConfigs]);
+
+  const pendingPaymentsDataList = useMemo(() => {
+    return queryResults
+      .filter((_, idx) => queryConfigs[idx]?.meta?.type === 'pendingPaymentsData')
+      .map((res) => res.data)
+      .filter(Boolean);
+  }, [queryResults, queryConfigs]);
+
+  const refetchPayments = useCallback(() => {
+    queryResults.forEach((res, idx) => {
+      if (queryConfigs[idx]?.meta?.type === 'paymentsData') {
+        res.refetch();
+      }
+    });
+  }, [queryResults, queryConfigs]);
+
+  const refetchDues = useCallback(() => {
+    queryResults.forEach((res, idx) => {
+      if (queryConfigs[idx]?.meta?.type === 'duesData') {
+        res.refetch();
+      }
+    });
+  }, [queryResults, queryConfigs]);
 
   // Expense Create mutation
   const createExpenseMutation = useMutation({
@@ -270,7 +374,14 @@ export function FinancialControlCenter({ hostelId }: Props) {
     onSuccess: () => {
       toast.success('Expense added');
       queryClient.invalidateQueries({ queryKey: queryKeys.expenses.all('business') });
-      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
+      if (hostelId === 'all') {
+        queryClient.invalidateQueries({ queryKey: ['hostel'] });
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+        queryClient.invalidateQueries({ queryKey: ['payments'] });
+      } else {
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all(hostelId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.payments.all(hostelId) });
+      }
       queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.all() });
       setShowAddExpense(false);
     },
@@ -282,36 +393,195 @@ export function FinancialControlCenter({ hostelId }: Props) {
   const handleRowClick = useCallback((id: string) => setSelectedObligationId(id), []);
 
   const stats = useMemo(() => {
-    if (!statsShell) return statsShell;
-    const shellIntel = statsShell.intelligence ?? {};
-    const analytics = statsAnalytics ?? {};
-    const activity = statsActivity ?? {};
+    let expected_revenue = 0;
+    let revenue = 0;
+    let pending_dues = 0;
+    let monthly_expenses = 0;
+    let active_tenants = 0;
+    let total_tenants = 0;
+
+    statsShells.forEach((shell: any) => {
+      expected_revenue += Number(shell?.expected_revenue ?? 0);
+      revenue += Number(shell?.revenue ?? 0);
+      pending_dues += Number(shell?.pending_dues ?? 0);
+      monthly_expenses += Number(shell?.monthly_expenses ?? shell?.expenses ?? 0);
+      active_tenants += Number(shell?.active_tenants ?? 0);
+      total_tenants += Number(shell?.total_tenants ?? 0);
+    });
+
+    const collection_rate = (expected_revenue > 0)
+      ? Math.round((revenue / expected_revenue) * 100)
+      : 0;
+
+    const expense_revenue_ratio = (expected_revenue > 0)
+      ? Math.round((monthly_expenses / expected_revenue) * 100)
+      : 0;
+
+    const recentActivity: any[] = [];
+    statsShells.forEach((shell: any) => {
+      // Find matching query config to get hostelId
+      const shellConfig = queryConfigs.find((c, cidx) => queryResults[cidx]?.data === shell && c.meta?.type === 'statsShell');
+      const hId = shellConfig?.meta?.hostelId;
+      const hostelName = hostels.find((h: any) => h.id === hId)?.name ?? 'Hostel';
+      const shellIntel = shell?.intelligence ?? {};
+      const activityList = shellIntel.recent_activity ?? [];
+      activityList.forEach((act: any) => {
+        recentActivity.push({
+          ...act,
+          hostelName,
+          hostelId: hId,
+        });
+      });
+    });
+
+    recentActivity.sort((a, b) => new Date(b.created_at ?? b.date ?? 0).getTime() - new Date(a.created_at ?? a.date ?? 0).getTime());
+
+    let totalOnTimeCount = 0;
+    let totalPaymentsCount = 0;
+    let totalDelayDays = 0;
+    let totalDelayPayments = 0;
+    let totalReminderPaid = 0;
+    let totalReminderCount = 0;
+
+    statsAnalyticsList.forEach((analytics: any) => {
+      const behavior = analytics?.payment_behavior ?? {};
+      const count = Number(behavior.total_payments ?? 0);
+      const onTimePct = Number(behavior.on_time_percentage ?? 0);
+      totalOnTimeCount += (onTimePct / 100) * count;
+      totalPaymentsCount += count;
+
+      const avgDelay = Number(behavior.avg_delay_days ?? 0);
+      if (avgDelay > 0) {
+        totalDelayDays += avgDelay * count;
+        totalDelayPayments += count;
+      }
+
+      const dependencyRate = Number(behavior.reminder_dependency_rate ?? 0);
+      totalReminderPaid += (dependencyRate / 100) * count;
+      totalReminderCount += count;
+    });
+
+    const on_time_percentage = totalPaymentsCount > 0
+      ? Math.round((totalOnTimeCount / totalPaymentsCount) * 100)
+      : 0;
+
+    const avg_delay_days = totalDelayPayments > 0
+      ? Math.round(totalDelayDays / totalDelayPayments)
+      : 0;
+
+    const reminder_dependency_rate = totalReminderCount > 0
+      ? Math.round((totalReminderPaid / totalReminderCount) * 100)
+      : 0;
+
+    // Aggregate expense categories
+    const expenseCategoriesMap = new Map<string, { amount: number; trendTotal: number; trendCount: number }>();
+    const anomalies: any[] = [];
+    let totalExpensePerTenant = 0;
+    let countExpensePerTenant = 0;
+
+    statsShells.forEach((shell: any) => {
+      const shellIntel = shell?.intelligence ?? {};
+      const exp = shellIntel.expenses ?? {};
+      
+      const cats = Array.isArray(exp.categories) ? exp.categories : [];
+      cats.forEach((cat: any) => {
+        if (!cat.category) return;
+        const prev = expenseCategoriesMap.get(cat.category) || { amount: 0, trendTotal: 0, trendCount: 0 };
+        expenseCategoriesMap.set(cat.category, {
+          amount: prev.amount + Number(cat.amount ?? 0),
+          trendTotal: prev.trendTotal + Number(cat.trend ?? cat.mom_change ?? 0),
+          trendCount: prev.trendCount + 1,
+        });
+      });
+
+      const anoms = Array.isArray(exp.anomalies) ? exp.anomalies : [];
+      anoms.forEach((anom: any) => {
+        anomalies.push(anom);
+      });
+
+      if (typeof exp.expense_per_tenant === 'number' && exp.expense_per_tenant > 0) {
+        totalExpensePerTenant += exp.expense_per_tenant;
+        countExpensePerTenant++;
+      }
+    });
+
+    const categories = Array.from(expenseCategoriesMap.entries())
+      .map(([category, val]) => ({
+        category,
+        amount: val.amount,
+        trend: val.trendCount > 0 ? Math.round(val.trendTotal / val.trendCount) : 0,
+      }))
+      .sort((a, b) => b.amount - a.amount);
+
+    const expense_per_tenant = countExpensePerTenant > 0
+      ? Math.round(totalExpensePerTenant / countExpensePerTenant)
+      : 0;
 
     return {
-      ...statsShell,
+      expected_revenue,
+      revenue,
+      pending_dues,
+      monthly_expenses,
+      active_tenants,
+      total_tenants,
+      collection_rate,
+      expense_revenue_ratio,
       intelligence: {
-        ...shellIntel,
-        revenue: {
-          ...(shellIntel.revenue ?? {}),
-          ...(analytics.revenue ?? {}),
-        },
-        occupancy: {
-          ...(shellIntel.occupancy ?? {}),
-          ...(analytics.occupancy ?? {}),
+        revenue: {},
+        occupancy: {},
+        expenses: {
+          categories,
+          anomalies: anomalies.slice(0, 5),
+          expense_per_tenant,
         },
         dues: {
-          ...(shellIntel.dues ?? {}),
-          ...(analytics.dues ?? {}),
-          reminder_conversion: analytics.dues?.reminder_conversion ?? shellIntel.dues?.reminder_conversion,
+          payment_behavior: {
+            on_time_percentage,
+            avg_delay_days,
+            reminder_dependency_rate,
+          }
         },
-        payment_attempts: analytics.payment_attempts ?? shellIntel.payment_attempts,
-        recent_activity: activity.recent_activity ?? shellIntel.recent_activity ?? [],
-      },
+        recent_activity: recentActivity.slice(0, 15),
+      }
     };
-  }, [statsShell, statsAnalytics, statsActivity]);
+  }, [statsShells, statsAnalyticsList, queryConfigs, queryResults, hostels]);
 
   const intel = stats?.intelligence;
-  const payments: any[] = Array.isArray(paymentsData?.payments) ? paymentsData.payments : Array.isArray(paymentsData) ? paymentsData : [];
+  
+  const payments: any[] = useMemo(() => {
+    const allPayments: any[] = [];
+    paymentsDataList.forEach((data: any) => {
+      const list = Array.isArray(data?.payments) ? data.payments : Array.isArray(data) ? data : [];
+      const pConfig = queryConfigs.find((c, cidx) => queryResults[cidx]?.data === data && c.meta?.type === 'paymentsData');
+      const hId = pConfig?.meta?.hostelId;
+      const hostelName = hostels.find((h: any) => h.id === hId)?.name ?? 'Hostel';
+      list.forEach((p: any) => {
+        allPayments.push({
+          ...p,
+          hostelName,
+          hostelId: hId,
+        });
+      });
+    });
+    allPayments.sort((a, b) => new Date(b.payment_date ?? b.paymentDate ?? 0).getTime() - new Date(a.payment_date ?? a.paymentDate ?? 0).getTime());
+    return allPayments.slice(0, 40);
+  }, [paymentsDataList, queryConfigs, queryResults, hostels]);
+
+  const paymentsData = useMemo(() => {
+    let total_collected = 0;
+    let pending_dues = 0;
+    paymentsDataList.forEach((pd: any) => {
+      const pdStats = pd?.stats ?? {};
+      total_collected += Number(pdStats.total_collected ?? 0);
+      pending_dues += Number(pdStats.pending_dues ?? 0);
+    });
+    return {
+      stats: {
+        total_collected,
+        pending_dues,
+      }
+    };
+  }, [paymentsDataList]);
 
   // Calculate Expected/Collected/Outstanding/Expenses MTD
   const expectedVal = stats?.expected_revenue ?? 0;
@@ -324,7 +594,7 @@ export function FinancialControlCenter({ hostelId }: Props) {
   const perTenantYield = activeTenants > 0 ? Math.round(collectedVal / activeTenants) : 0;
 
   // Revenue Health metrics from analytics
-  const paymentBehavior = statsAnalytics?.payment_behavior ?? intel?.dues?.payment_behavior ?? {};
+  const paymentBehavior = stats?.intelligence?.dues?.payment_behavior ?? {};
   const onTimeRate = paymentBehavior?.on_time_percentage ?? 0;
   const avgDelay = paymentBehavior?.avg_delay_days ?? 0;
   const reminderDependency = paymentBehavior?.reminder_dependency_rate ?? 0;
@@ -368,12 +638,27 @@ export function FinancialControlCenter({ hostelId }: Props) {
   }, [payments, stats?.revenue]);
 
   // Process Dues (Overdue & Upcoming Lists)
-  const rawDues: any[] = Array.isArray(duesData)
-    ? duesData
-    : Array.isArray(duesData?.dues)
-    ? duesData.dues
-    : [];
-  const dues = rawDues.filter((due) => dueBalance(due) > 0);
+  const dues = useMemo(() => {
+    const allDues: any[] = [];
+    duesDataList.forEach((data: any) => {
+      const list = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.dues)
+        ? data.dues
+        : [];
+      const dConfig = queryConfigs.find((c, cidx) => queryResults[cidx]?.data === data && c.meta?.type === 'duesData');
+      const hId = dConfig?.meta?.hostelId;
+      const hostelName = hostels.find((h: any) => h.id === hId)?.name ?? 'Hostel';
+      list.forEach((d: any) => {
+        allDues.push({
+          ...d,
+          hostelName,
+          hostelId: hId,
+        });
+      });
+    });
+    return allDues.filter((due) => dueBalance(due) > 0);
+  }, [duesDataList, queryConfigs, queryResults, hostels]);
 
   const nowTime = Date.now();
   const sortedDues = useMemo(() => {
@@ -406,7 +691,24 @@ export function FinancialControlCenter({ hostelId }: Props) {
   const upcomingCount = upcomingList.length;
 
   // Pending Verification (Unconfirmed Payments)
-  const pendingPayments = Array.isArray(pendingPaymentsData?.items) ? pendingPaymentsData.items : [];
+  const pendingPayments = useMemo(() => {
+    const allPending: any[] = [];
+    pendingPaymentsDataList.forEach((data: any) => {
+      const list = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
+      const pConfig = queryConfigs.find((c, cidx) => queryResults[cidx]?.data === data && c.meta?.type === 'pendingPaymentsData');
+      const hId = pConfig?.meta?.hostelId;
+      const hostelName = hostels.find((h: any) => h.id === hId)?.name ?? 'Hostel';
+      list.forEach((p: any) => {
+        allPending.push({
+          ...p,
+          hostelName,
+          hostelId: hId,
+        });
+      });
+    });
+    return allPending;
+  }, [pendingPaymentsDataList, queryConfigs, queryResults, hostels]);
+
   const pendingPaymentsTotal = pendingPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
   const pendingPaymentsCount = pendingPayments.length;
 
@@ -415,19 +717,104 @@ export function FinancialControlCenter({ hostelId }: Props) {
 
   // Finance-only Recent Activity Feed
   const financeActivity = useMemo(() => {
-    return (statsActivity?.recent_activity ?? intel?.recent_activity ?? []).filter(
+    return (stats?.intelligence?.recent_activity ?? []).filter(
       (item: any) => item.type === 'payment' || item.type === 'expense'
     );
-  }, [statsActivity?.recent_activity, intel?.recent_activity]);
+  }, [stats]);
 
   // Handle Quick Collect modal launch
   const handleCollect = (due?: any) => {
     setRecordPayment({
-      hostelId,
+      hostelId: due?.hostelId ?? hostelId,
       dueId: due ? String(due.obligation_id ?? due.id) : undefined,
       amount: due ? String(dueBalance(due)) : undefined
     });
   };
+
+  const cashflow = useMemo(() => {
+    let due_today = 0;
+    let due_this_week = 0;
+    let overdue_amount = 0;
+    let predicted_collection = 0;
+    const dailyMap = new Map<string, { collected: number; expected: number }>();
+    
+    cashflows.forEach((cf: any) => {
+      due_today += Number(cf?.due_today ?? 0);
+      due_this_week += Number(cf?.due_this_week ?? 0);
+      overdue_amount += Number(cf?.overdue_amount ?? 0);
+      predicted_collection += Number(cf?.predicted_collection ?? cf?.expected_rent ?? 0);
+      
+      const list = Array.isArray(cf?.daily_collection) ? cf.daily_collection : [];
+      list.forEach((entry: any) => {
+        const dStr = entry.date ?? entry.day;
+        if (!dStr) return;
+        const dateKey = new Date(dStr).toISOString().split('T')[0];
+        const prev = dailyMap.get(dateKey) || { collected: 0, expected: 0 };
+        dailyMap.set(dateKey, {
+          collected: prev.collected + Number(entry.amount ?? entry.collected ?? 0),
+          expected: prev.expected + Number(entry.expected ?? 0),
+        });
+      });
+    });
+    
+    const daily_collection = Array.from(dailyMap.entries())
+      .map(([date, val]) => ({
+        date,
+        day: date,
+        amount: val.collected,
+        collected: val.collected,
+        expected: val.expected,
+      }))
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      
+    return {
+      due_today,
+      due_this_week,
+      overdue_amount,
+      predicted_collection,
+      daily_collection,
+    };
+  }, [cashflows]);
+
+  const funnel = useMemo(() => {
+    let reminders_sent = 0;
+    let total_conversion = 0;
+    let count_conversion = 0;
+    const channelMap = new Map<string, { totalRate: number; count: number }>();
+    
+    funnels.forEach((fn: any) => {
+      reminders_sent += Number(fn?.reminders_sent ?? 0);
+      if (typeof fn?.conversion_rate === 'number') {
+        total_conversion += fn.conversion_rate;
+        count_conversion++;
+      }
+      
+      const channels = Array.isArray(fn?.channel_performance) ? fn.channel_performance : [];
+      channels.forEach((ch: any) => {
+        if (!ch.channel) return;
+        const prev = channelMap.get(ch.channel) || { totalRate: 0, count: 0 };
+        channelMap.set(ch.channel, {
+          totalRate: prev.totalRate + Number(ch.conversion_rate ?? 0),
+          count: prev.count + 1,
+        });
+      });
+    });
+    
+    const conversion_rate = count_conversion > 0
+      ? Math.round(total_conversion / count_conversion)
+      : 0;
+      
+    const channel_performance = Array.from(channelMap.entries()).map(([channel, val]) => ({
+      channel,
+      conversion_rate: val.count > 0 ? Math.round(val.totalRate / val.count) : 0,
+    }));
+    
+    return {
+      reminders_sent,
+      conversion_rate,
+      channel_performance,
+    };
+  }, [funnels]);
 
   return (
     <div className="space-y-5 pb-20">
@@ -557,7 +944,9 @@ export function FinancialControlCenter({ hostelId }: Props) {
                         <span className="text-red-500">🔴</span>
                         {tenantName}
                       </h4>
-                      <p className="text-xs text-muted-foreground mt-0.5">Room {roomNo}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Room {roomNo} {due.hostelName ? `• ${due.hostelName}` : ''}
+                      </p>
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-bold text-red-600 dark:text-red-400">{fmtK(balance)} overdue</p>

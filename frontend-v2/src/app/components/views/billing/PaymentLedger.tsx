@@ -163,7 +163,9 @@ export function PaymentLedger({ payments, paymentsData, onRowClick }: Props) {
                 >
                   <div className="space-y-1">
                     <div className="font-semibold text-sm text-foreground">{name}</div>
-                    <div className="text-xs text-muted-foreground">Room {room} · {month}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {p.hostelName ? `${p.hostelName} · ` : ''}Room {room} · {month}
+                    </div>
                     {method && (
                       <div className="text-xs text-muted-foreground">Paid via {methodShort(method)}</div>
                     )}
@@ -226,9 +228,11 @@ export function PaymentLedger({ payments, paymentsData, onRowClick }: Props) {
                       >
                         <div className="px-4 py-3">
                           <div className="font-medium text-foreground truncate max-w-[120px]">{name}</div>
-                          {method && (
-                            <div className="text-xs text-muted-foreground">{methodShort(method)}</div>
-                          )}
+                          <div className="text-xs text-muted-foreground truncate max-w-[120px]">
+                            {p.hostelName ? `${p.hostelName}` : ''}
+                            {p.hostelName && method ? ' · ' : ''}
+                            {method ? methodShort(method) : ''}
+                          </div>
                         </div>
                         <div className="px-2 py-3 text-xs text-muted-foreground">{room}</div>
                         <div className="px-2 py-3 text-xs text-muted-foreground">{month}</div>

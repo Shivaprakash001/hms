@@ -14,15 +14,15 @@ export function ExitWorkflowSection({ hostelId, tenantId, status }: Props) {
   const { data: requests } = useQuery({
     queryKey: queryKeys.tenants.moveOut(hostelId, tenantId),
     queryFn: () => moveOutService.listRequests(hostelId, {}),
-    enabled: status === 'MOVE_OUT_REQUESTED' || status === 'ACTIVE',
+    enabled: status === 'ACTIVE' || status === 'FORMER_TENANT' || status === 'LEFT',
   });
 
   const list = Array.isArray(requests) ? requests : (requests as Record<string, unknown>)?.requests ?? [];
   const active = (list as Record<string, unknown>[]).find(
-    (r) => String(r.tenant_id) === tenantId && !['COMPLETED', 'CANCELLED'].includes(String(r.status))
+    (r) => String(r.tenant_id) === tenantId && !['COMPLETED', 'CANCELLED', 'REJECTED'].includes(String(r.status))
   );
 
-  if (status === 'LEFT') {
+  if (status === 'FORMER_TENANT' || status === 'LEFT') {
     return <p className="text-sm text-muted-foreground">This tenant has completed their exit.</p>;
   }
 

@@ -79,7 +79,7 @@ export async function getTenantPortalProfile(profileId: string) {
         orderBy: { created_at: "desc" },
       },
       move_out_requests: {
-        where: { status: { notIn: ["CANCELLED"] } },
+        where: { status: { notIn: ["REJECTED"] } },
         orderBy: { created_at: "desc" },
         take: 1,
       },

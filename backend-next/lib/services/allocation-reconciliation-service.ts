@@ -185,10 +185,10 @@ export class AllocationReconciliationService {
 
   /**
    * Expire stale invitations and release room reservations.
-   * Rule: tenant INVITED + invitation expired => status EXPIRED (not LEFT).
+   * Rule: tenant INVITED + invitation expired => status EXPIRED (not FORMER_TENANT).
    *
-   * IMPORTANT: LEFT is reserved for previously-ACTIVE tenants who departed.
-   * A tenant who was never activated goes to EXPIRED, not LEFT.
+   * IMPORTANT: FORMER_TENANT is reserved for previously-ACTIVE tenants who departed.
+   * A tenant who was never activated goes to EXPIRED, not FORMER_TENANT.
    */
   async expireStaleInvitations(now: Date = new Date()) {
     const staleInvitations = await prisma.tenant_invitations.findMany({

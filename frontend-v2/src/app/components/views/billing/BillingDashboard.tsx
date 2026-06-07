@@ -1,11 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { ChevronDown, Building2 } from 'lucide-react';
 import { FinancialControlCenter } from './FinancialControlCenter';
 
 export function BillingDashboard() {
-  const [selectedHostelId, setSelectedHostelId] = useState<string>('');
-  const [showRecordPayment, setShowRecordPayment] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const paramHostelId = searchParams.get('hostelId') || 'all';
+
+  const [selectedHostelId, setSelectedHostelId] = useState<string>(() => paramHostelId);
 
   const { data: hostelsData, isLoading } = useQuery({
     queryKey: ['owner', 'hostels'],
@@ -21,7 +24,26 @@ export function BillingDashboard() {
         ? (hostelsData as any).hostels
         : [];
 
-  const activeHostelId = selectedHostelId || hostels[0]?.id || '';
+  useEffect(() => {
+    const currentParam = searchParams.get('hostelId') || 'all';
+    if (selectedHostelId !== currentParam) {
+      setSelectedHostelId(currentParam);
+    }
+  }, [searchParams]);
+
+  const handleHostelChange = (id: string) => {
+    setSelectedHostelId(id);
+    setSearchParams((prev) => {
+      if (id === 'all') {
+        prev.delete('hostelId');
+      } else {
+        prev.set('hostelId', id);
+      }
+      return prev;
+    });
+  };
+
+  const activeHostelId = selectedHostelId || 'all';
   const activeHostel = hostels.find((h) => h.id === activeHostelId);
 
   return (
@@ -34,13 +56,14 @@ export function BillingDashboard() {
           </p>
         </div>
 
-        {hostels.length > 1 && (
+        {hostels.length > 0 && (
           <div className="relative">
             <select
               value={activeHostelId}
-              onChange={(e) => setSelectedHostelId(e.target.value)}
+              onChange={(e) => handleHostelChange(e.target.value)}
               className="h-9 pl-9 pr-8 text-sm rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring appearance-none cursor-pointer"
             >
+              <option value="all">All Hostels</option>
               {hostels.map((h: any) => (
                 <option key={h.id} value={h.id}>
                   {h.name ?? h.hostel_name ?? h.id}
@@ -49,13 +72,6 @@ export function BillingDashboard() {
             </select>
             <Building2 className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
             <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-          </div>
-        )}
-
-        {hostels.length === 1 && activeHostel && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Building2 className="h-4 w-4" />
-            {activeHostel.name ?? activeHostel.hostel_name}
           </div>
         )}
       </div>
@@ -79,25 +95,7 @@ export function BillingDashboard() {
       {!isLoading && activeHostelId && (
         <FinancialControlCenter
           hostelId={activeHostelId}
-          onRecordPayment={() => setShowRecordPayment(true)}
         />
-      )}
-
-      {showRecordPayment && activeHostelId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-          <div className="bg-card rounded-xl border border-border p-6 w-full max-w-md">
-            <p className="text-sm text-muted-foreground">
-              Use the Record Payment button in the hostel detail view for full tenant context.
-            </p>
-            <button
-              type="button"
-              onClick={() => setShowRecordPayment(false)}
-              className="mt-4 w-full py-2 rounded-lg border border-border text-sm hover:bg-muted transition-colors"
-            >
-              Close
-            </button>
-          </div>
-        </div>
       )}
     </div>
   );

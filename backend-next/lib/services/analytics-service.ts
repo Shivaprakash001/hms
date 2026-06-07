@@ -194,13 +194,13 @@ export class AnalyticsService {
         prisma.$queryRaw<{ reason: string; count: bigint }[]>`
           SELECT COALESCE(exit_reason,'Not specified') AS reason, COUNT(*) AS count
           FROM tenants
-          WHERE owner_id = ${ownerId}::uuid AND status = 'LEFT'
+          WHERE owner_id = ${ownerId}::uuid AND status = 'FORMER_TENANT'
             AND exit_date >= ${start}::date AND exit_date <= ${end}::date
             AND hostel_id = ${hostelId}::uuid
           GROUP BY exit_reason ORDER BY count DESC LIMIT 5
         `,
         prisma.tenants.count({
-          where: { owner_id: ownerId, hostel_id: hostelId, status: "LEFT", exit_date: { gte: start, lte: end } },
+          where: { owner_id: ownerId, hostel_id: hostelId, status: "FORMER_TENANT", exit_date: { gte: start, lte: end } },
         }),
         // ─ was sequential after the block; now fully parallel ─
         prisma.tenants.count({ where: { owner_id: ownerId, hostel_id: hostelId, status: "ACTIVE" } }),

@@ -77,7 +77,15 @@ export function OverviewTab({ hostelId }: { hostelId: string }) {
   // Recent activity timeline
   const activity = activityData?.recent_activity ?? [];
 
-  const action = (tab: Tab) => navigate(`/hostels/${hostelId}/${tab}`);
+  const action = (tab: Tab) => {
+    if (tab === 'financials') {
+      navigate(`/billing?hostelId=${hostelId}`);
+    } else if (tab === 'expenses') {
+      navigate(`/billing?hostelId=${hostelId}&action=expense`);
+    } else {
+      navigate(`/hostels/${hostelId}/${tab}`);
+    }
+  };
 
   // 1. Today's Focus Card
   const focusItems: string[] = [];
@@ -400,9 +408,9 @@ export function OverviewTab({ hostelId }: { hostelId: string }) {
           <div className="mb-2 bg-card border border-border rounded-2xl shadow-lg overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150">
             {[
               { label: 'Add Tenant', icon: UserPlus, onClick: () => action('tenants') },
-              { label: 'Add Expense', icon: Receipt, onClick: () => action('expenses') },
-              { label: 'Record Payment', icon: CreditCard, onClick: () => action('financials') },
-              { label: 'Create Reminder', icon: Megaphone, onClick: () => action('financials') },
+              { label: 'Add Expense', icon: Receipt, onClick: () => navigate(`/billing?hostelId=${hostelId}&action=expense`) },
+              { label: 'Record Payment', icon: CreditCard, onClick: () => navigate(`/billing?hostelId=${hostelId}&action=payment`) },
+              { label: 'Create Reminder', icon: Megaphone, onClick: () => navigate(`/billing?hostelId=${hostelId}&action=reminder`) },
               { label: 'Allocate Room', icon: Home, onClick: () => action('rooms') },
             ].map((item) => (
               <button 

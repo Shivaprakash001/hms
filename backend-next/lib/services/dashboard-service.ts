@@ -99,7 +99,7 @@ export class DashboardService {
           COUNT(*) FILTER (WHERE status = 'INVITED')::int AS pending_invites,
           COUNT(*) FILTER (WHERE status IN ('EXPIRED', 'CANCELLED'))::int AS inactive_invites,
           COUNT(*) FILTER (WHERE status = 'ACTIVE' AND joined_on >= ${monthStart}::date AND joined_on < ${nextMonthStart}::date)::int AS joins_this_month,
-          COUNT(*) FILTER (WHERE status = 'LEFT' AND exit_date >= ${monthStart}::date AND exit_date < ${nextMonthStart}::date)::int AS exits_this_month
+          COUNT(*) FILTER (WHERE status = 'FORMER_TENANT' AND exit_date >= ${monthStart}::date AND exit_date < ${nextMonthStart}::date)::int AS exits_this_month
         FROM tenants
         WHERE owner_id = ${userId}::uuid
           AND hostel_id = ${hostelId}::uuid
@@ -224,7 +224,7 @@ export class DashboardService {
         FROM move_out_requests
         WHERE owner_id = ${userId}::uuid
           AND hostel_id = ${hostelId}::uuid
-          AND status NOT IN ('COMPLETED', 'CANCELLED')
+          AND status NOT IN ('COMPLETED', 'REJECTED')
       ),
       category_current AS (
         SELECT category, COALESCE(SUM(amount), 0)::float AS amount
@@ -1036,13 +1036,13 @@ export class DashboardService {
         _sum: { total_amount: true },
       }),
       prisma.move_out_requests.count({
-        where: { owner_id: userId, hostel_id: hostelId, status: { notIn: ["COMPLETED", "CANCELLED"] } },
+        where: { owner_id: userId, hostel_id: hostelId, status: { notIn: ["COMPLETED", "REJECTED"] } },
       }),
       prisma.tenants.count({
         where: { owner_id: userId, hostel_id: hostelId, status: "ACTIVE", joined_on: { gte: monthStart, lt: nextMonthStart } },
       }),
       prisma.tenants.count({
-        where: { owner_id: userId, hostel_id: hostelId, status: "LEFT", exit_date: { gte: monthStart, lt: nextMonthStart } },
+        where: { owner_id: userId, hostel_id: hostelId, status: "FORMER_TENANT", exit_date: { gte: monthStart, lt: nextMonthStart } },
       }),
       prisma.tenants.count({ where: { owner_id: userId, hostel_id: hostelId, status: "INVITED" } }),
       prisma.tenants.count({ where: { owner_id: userId, hostel_id: hostelId, status: { in: ["EXPIRED", "CANCELLED"] } } }),

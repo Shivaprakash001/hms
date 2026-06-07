@@ -1,9 +1,8 @@
 const STEPS = [
   'REQUESTED',
-  'INSPECTION_PENDING',
-  'INSPECTION_DONE',
-  'SETTLEMENT_APPROVED',
-  'PAYMENT_PENDING',
+  'SETTLEMENT_PENDING',
+  'APPROVED',
+  'VACATED',
   'COMPLETED',
 ] as const;
 
@@ -14,7 +13,8 @@ interface Props {
 
 export function MoveOutStepper({ request }: Props) {
   const current = String(request.status ?? 'REQUESTED').toUpperCase();
-  const currentIdx = STEPS.indexOf(current as (typeof STEPS)[number]);
+  const isRejected = current === 'REJECTED';
+  const currentIdx = isRejected ? -1 : STEPS.indexOf(current as (typeof STEPS)[number]);
 
   return (
     <div className="space-y-4">
@@ -31,6 +31,12 @@ export function MoveOutStepper({ request }: Props) {
           </p>
         )}
       </div>
+
+      {isRejected && (
+        <div className="p-4 rounded-xl border border-red-200 bg-red-50 text-red-700 text-sm font-semibold">
+          This move-out request has been rejected.
+        </div>
+      )}
 
       <ol className="space-y-2">
         {STEPS.map((step, i) => {

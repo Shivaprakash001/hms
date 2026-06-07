@@ -111,7 +111,7 @@ export class TenantAnalyticsService {
       await tx.tenants.update({
         where: { id: tenantId },
         data: {
-          status: "LEFT",
+          status: "FORMER_TENANT",
           exit_reason: reason,
           exit_notes: notes || null,
           exit_date: new Date(),

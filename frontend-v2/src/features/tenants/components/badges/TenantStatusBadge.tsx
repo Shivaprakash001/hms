@@ -7,6 +7,14 @@ const STATUS_STYLES: Record<string, string> = {
   LEFT: 'bg-muted text-muted-foreground border-border',
   EXPIRED: 'bg-muted text-muted-foreground border-border',
   CANCELLED: 'bg-muted text-muted-foreground border-border',
+  FORMER_TENANT: 'bg-muted text-muted-foreground border-border',
+  // Move-out request statuses
+  REQUESTED: 'bg-blue-500/15 text-blue-600 border-blue-500/30',
+  SETTLEMENT_PENDING: 'bg-amber-500/15 text-amber-600 border-amber-500/30',
+  APPROVED: 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30',
+  VACATED: 'bg-indigo-500/15 text-indigo-600 border-indigo-500/30',
+  COMPLETED: 'bg-muted text-muted-foreground border-border',
+  REJECTED: 'bg-rose-500/15 text-rose-600 border-rose-500/30',
 };
 
 const LABELS: Record<string, string> = {
@@ -16,6 +24,14 @@ const LABELS: Record<string, string> = {
   LEFT: 'Left',
   EXPIRED: 'Expired',
   CANCELLED: 'Cancelled',
+  FORMER_TENANT: 'Former Tenant',
+  // Move-out request statuses
+  REQUESTED: 'Requested',
+  SETTLEMENT_PENDING: 'Settlement Pending',
+  APPROVED: 'Approved',
+  VACATED: 'Vacated',
+  COMPLETED: 'Completed',
+  REJECTED: 'Rejected',
 };
 
 interface Props {

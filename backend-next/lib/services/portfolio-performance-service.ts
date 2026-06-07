@@ -194,7 +194,7 @@ export class PortfolioPerformanceService {
         SELECT COUNT(*)::int AS move_out_open
         FROM move_out_requests
         WHERE owner_id = ${ownerId}::uuid
-          AND status NOT IN ('COMPLETED', 'CANCELLED')
+          AND status NOT IN ('COMPLETED', 'REJECTED')
       `,
       prisma.$queryRaw<Array<{ pending_invites: number }>>`
         SELECT COUNT(*)::int AS pending_invites

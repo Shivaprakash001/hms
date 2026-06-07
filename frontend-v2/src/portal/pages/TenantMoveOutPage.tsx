@@ -160,7 +160,7 @@ export function TenantMoveOutPage() {
 
         {/* Actions section */}
         <div className="space-y-3">
-          {['REQUESTED', 'INSPECTION_PENDING', 'INSPECTION_DONE'].includes(String(request.status).toUpperCase()) && (
+          {['REQUESTED', 'SETTLEMENT_PENDING'].includes(String(request.status).toUpperCase()) && (
             <button
               type="button"
               disabled={cancelMutation.isPending}
@@ -175,7 +175,7 @@ export function TenantMoveOutPage() {
             </button>
           )}
 
-          {['SETTLEMENT_APPROVED', 'PAYMENT_PENDING'].includes(String(request.status).toUpperCase()) && (
+          {['SETTLEMENT_PENDING', 'APPROVED', 'VACATED'].includes(String(request.status).toUpperCase()) && (
             !showDisputeForm ? (
               <button
                 type="button"

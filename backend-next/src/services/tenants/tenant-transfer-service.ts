@@ -96,7 +96,7 @@ export class TenantTransferService {
     const activeMoveOut = await prisma.move_out_requests.findFirst({
       where: {
         tenant_id: tenantId,
-        status: { notIn: ["COMPLETED", "CANCELLED", "REJECTED"] },
+        status: { notIn: ["COMPLETED", "REJECTED"] },
       },
       include: {
         settlement: true,
