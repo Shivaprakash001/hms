@@ -16,6 +16,7 @@ import {
   Lock,
   Receipt,
   ShieldCheck,
+  Unlock,
   UserRound,
   Users,
   Wifi,
@@ -56,6 +57,16 @@ type ActivationContext = {
     signed_at?: string | null;
     pdf_url?: string | null;
     content_snapshot: Record<string, any>;
+    tenant_signature_url?: string | null;
+    tenant_signature_name?: string | null;
+    tenant_signed_at?: string | null;
+    guardian_signature_url?: string | null;
+    guardian_signature_name?: string | null;
+    guardian_relation?: string | null;
+    guardian_signed_at?: string | null;
+    owner_signature_url?: string | null;
+    owner_signature_name?: string | null;
+    owner_signed_at?: string | null;
   } | null;
   documents: { uploaded_count?: number; verification_status?: string };
   missing_fields?: { tier_1_required?: string[] };
@@ -257,6 +268,7 @@ function Field({
   required = false,
   helperText,
   inputMode,
+  disabled = false,
 }: {
   label: string;
   value: string;
@@ -265,6 +277,7 @@ function Field({
   required?: boolean;
   helperText?: string;
   inputMode?: InputHTMLAttributes<HTMLInputElement>['inputMode'];
+  disabled?: boolean;
 }) {
   return (
     <label className="block">
@@ -272,7 +285,7 @@ function Field({
         {label}
         {required ? ' *' : ''}
       </span>
-      <input type={type} inputMode={inputMode} value={value} onChange={(e) => onChange(e.target.value)} className={fieldClass} />
+      <input type={type} inputMode={inputMode} value={value} onChange={(e) => onChange(e.target.value)} className={`${fieldClass} disabled:bg-muted/40 disabled:text-muted-foreground`} disabled={disabled} />
       {helperText ? <span className="mt-1 block text-xs text-muted-foreground">{helperText}</span> : null}
     </label>
   );
@@ -398,8 +411,7 @@ export function ActivateAccountPage() {
   const [tenantSigBlob, setTenantSigBlob] = useState<Blob | null>(null);
   const [tenantSigName, setTenantSigName] = useState('');
   const [guardianSigBlob, setGuardianSigBlob] = useState<Blob | null>(null);
-  const [guardianSigName, setGuardianSigName] = useState('');
-  const [guardianRelation, setGuardianRelation] = useState('');
+  const [isGuardianLocked, setIsGuardianLocked] = useState(true);
 
   const [acks, setAcks] = useState<Record<string, boolean>>({});
   const [profile, setProfile] = useState<Record<string, string>>({
@@ -486,16 +498,29 @@ export function ActivateAccountPage() {
         office_name: String(data.tenant?.office_name || ''),
         office_location: String(data.tenant?.office_location || ''),
         job_role: String(data.tenant?.job_role || ''),
-        guardian_name: String(data.tenant?.guardian_name || ''),
+        guardian_name: String(data.tenant?.guardian_name || data.agreement?.guardian_signature_name || ''),
         guardian_phone: phoneDigits(data.tenant?.guardian_phone || data.tenant?.phone_2),
-        guardian_relation: String(data.tenant?.guardian_relation || ''),
+        guardian_relation: String(data.tenant?.guardian_relation || data.agreement?.guardian_relation || ''),
         emergency_phone: phoneDigits(data.tenant?.phone_3),
       };
 
-      setProfile({
+      const mergedProfile = {
         ...backendProfile,
         ...(data.activation_state?.profile_completed ? {} : draft?.profile || {}),
-      });
+      };
+
+      setProfile(mergedProfile);
+      
+      if (data.agreement) {
+        setTenantSigName(String(data.agreement.tenant_signature_name || ''));
+      }
+      
+      const hasGuardianDetails = Boolean(
+        mergedProfile.guardian_name ||
+        mergedProfile.guardian_relation
+      );
+      setIsGuardianLocked(hasGuardianDetails);
+
       if (data.activation_state?.profile_completed) {
         clearProfileDraft(token);
       }
@@ -676,26 +701,29 @@ export function ActivateAccountPage() {
 
     const profileType = String(ctx.tenant.profile_type || 'STUDENT').toUpperCase();
     const isStudent = profileType === 'STUDENT';
+    const existingTenantSigUrl = ctx.agreement?.tenant_signature_url || '';
+    const existingGuardianSigUrl = ctx.agreement?.guardian_signature_url || '';
 
     if (!tenantSigName.trim()) {
       setError('Your typed full name signature is required');
       return;
     }
-    if (!tenantSigBlob) {
+    if (!tenantSigBlob && !existingTenantSigUrl) {
       setError('Please draw your signature');
       return;
     }
-
     if (isStudent) {
-      if (!guardianSigName.trim()) {
+      const gName = (profile.guardian_name || '').trim();
+      const gRelation = profile.guardian_relation || '';
+      if (!gName) {
         setError("Parent/Guardian typed full name signature is required");
         return;
       }
-      if (!guardianSigBlob) {
+      if (!guardianSigBlob && !existingGuardianSigUrl) {
         setError("Please draw parent/guardian signature");
         return;
       }
-      if (!guardianRelation) {
+      if (!gRelation) {
         setError("Please select parent/guardian relationship");
         return;
       }
@@ -704,12 +732,15 @@ export function ActivateAccountPage() {
     setSubmitting(true);
     try {
       // 1. Upload Tenant Signature
-      const tenantFile = new File([tenantSigBlob], 'tenant_signature.png', { type: 'image/png' });
-      const tenantUpload = await tenantService.uploadActivationSignature(token, tenantFile, 'tenant');
-      const tenantSigUrl = tenantUpload.url;
+      let tenantSigUrl = existingTenantSigUrl;
+      if (tenantSigBlob) {
+        const tenantFile = new File([tenantSigBlob], 'tenant_signature.png', { type: 'image/png' });
+        const tenantUpload = await tenantService.uploadActivationSignature(token, tenantFile, 'tenant');
+        tenantSigUrl = tenantUpload.url;
+      }
 
       // 2. Upload Guardian Signature if student
-      let guardianSigUrl = '';
+      let guardianSigUrl = existingGuardianSigUrl;
       if (isStudent && guardianSigBlob) {
         const guardianFile = new File([guardianSigBlob], 'guardian_signature.png', { type: 'image/png' });
         const guardianUpload = await tenantService.uploadActivationSignature(token, guardianFile, 'guardian');
@@ -721,17 +752,14 @@ export function ActivateAccountPage() {
         tenant_signature_url: tenantSigUrl,
         tenant_signature_name: tenantSigName.trim(),
         guardian_signature_url: isStudent ? guardianSigUrl : null,
-        guardian_signature_name: isStudent ? guardianSigName.trim() : null,
-        guardian_relation: isStudent ? guardianRelation : null,
+        guardian_signature_name: isStudent ? (profile.guardian_name || '').trim() : null,
+        guardian_relation: isStudent ? profile.guardian_relation : null,
       });
 
       if (saved) {
-        // Clear local state
+        // Clear local drawing state
         setTenantSigBlob(null);
-        setTenantSigName('');
         setGuardianSigBlob(null);
-        setGuardianSigName('');
-        setGuardianRelation('');
       }
     } catch (err: any) {
       setError(err?.message || 'Failed to submit agreement signature');
@@ -1252,7 +1280,11 @@ export function ActivateAccountPage() {
                       <label className="block text-xs font-semibold text-muted-foreground mb-1">
                         Draw Signature <span className="text-destructive">*</span>
                       </label>
-                      <SignaturePad onSave={setTenantSigBlob} placeholder="Draw tenant signature here" />
+                      <SignaturePad
+                        onSave={setTenantSigBlob}
+                        placeholder="Draw tenant signature here"
+                        existingSignatureUrl={ctx.agreement?.tenant_signature_url}
+                      />
                     </div>
                   </div>
                 </div>
@@ -1260,10 +1292,38 @@ export function ActivateAccountPage() {
                 {/* Guardian Signature (conditional for STUDENT profiles) */}
                 {String(ctx.tenant.profile_type || 'STUDENT').toUpperCase() === 'STUDENT' && (
                   <div className="rounded-xl border border-border bg-background p-4 space-y-3">
-                    <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
-                      <span className="flex h-5 w-5 items-center justify-center rounded bg-accent/10 text-accent text-xs font-semibold">2</span>
-                      Parent/Guardian Co-Signature
-                    </h3>
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                        <span className="flex h-5 w-5 items-center justify-center rounded bg-accent/10 text-accent text-xs font-semibold">2</span>
+                        Parent/Guardian Co-Signature
+                      </h3>
+                    </div>
+
+                    {profile.guardian_name && profile.guardian_relation && (
+                      <div className="flex items-center justify-between rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+                        <span className="flex items-center gap-1.5 font-medium">
+                          {isGuardianLocked ? (
+                            <>
+                              <Lock className="w-3.5 h-3.5 text-amber-600" />
+                              Guardian details are synced and locked.
+                            </>
+                          ) : (
+                            <>
+                              <Unlock className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
+                              Editing details updates all stages.
+                            </>
+                          )}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setIsGuardianLocked(!isGuardianLocked)}
+                          className="font-bold underline hover:text-amber-900 transition-colors"
+                        >
+                          {isGuardianLocked ? 'Modify' : 'Lock'}
+                        </button>
+                      </div>
+                    )}
+
                     <div className="grid gap-3">
                       <div>
                         <label className="block text-xs font-semibold text-muted-foreground mb-1">
@@ -1271,9 +1331,10 @@ export function ActivateAccountPage() {
                         </label>
                         <select
                           required
-                          value={guardianRelation}
-                          onChange={(e) => setGuardianRelation(e.target.value)}
-                          className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-accent focus:outline-none bg-white"
+                          disabled={isGuardianLocked && !!profile.guardian_relation}
+                          value={profile.guardian_relation || ''}
+                          onChange={(e) => setProfile(prev => ({ ...prev, guardian_relation: e.target.value }))}
+                          className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-accent focus:outline-none bg-white disabled:bg-slate-50 disabled:text-slate-500"
                         >
                           <option value="">Select relationship</option>
                           <option value="Father">Father</option>
@@ -1288,17 +1349,22 @@ export function ActivateAccountPage() {
                         <input
                           type="text"
                           required
-                          value={guardianSigName}
-                          onChange={(e) => setGuardianSigName(e.target.value)}
+                          disabled={isGuardianLocked && !!profile.guardian_name}
+                          value={profile.guardian_name || ''}
+                          onChange={(e) => setProfile(prev => ({ ...prev, guardian_name: e.target.value }))}
                           placeholder="Type parent/guardian full name"
-                          className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                          className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-accent focus:outline-none disabled:bg-slate-50 disabled:text-slate-500"
                         />
                       </div>
                       <div>
                         <label className="block text-xs font-semibold text-muted-foreground mb-1">
                           Draw Signature <span className="text-destructive">*</span>
                         </label>
-                        <SignaturePad onSave={setGuardianSigBlob} placeholder="Draw parent/guardian signature here" />
+                        <SignaturePad
+                          onSave={setGuardianSigBlob}
+                          placeholder="Draw parent/guardian signature here"
+                          existingSignatureUrl={ctx.agreement?.guardian_signature_url}
+                        />
                       </div>
                     </div>
                   </div>
@@ -1378,13 +1444,43 @@ export function ActivateAccountPage() {
                 </label>
               </div>
               </FormGroup>
-
+              
               <FormGroup title="Guardian details">
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Guardian name" value={profile.guardian_name} onChange={(v) => setProfile({ ...profile, guardian_name: v })} />
+                {profile.guardian_name && profile.guardian_relation && (
+                  <div className="col-span-2 flex items-center justify-between rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+                    <span className="flex items-center gap-1.5 font-medium">
+                      {isGuardianLocked ? (
+                        <>
+                          <Lock className="w-3.5 h-3.5 text-amber-600" />
+                          Guardian details are synced and locked.
+                        </>
+                      ) : (
+                        <>
+                          <Unlock className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
+                          Editing details updates all stages.
+                        </>
+                      )}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsGuardianLocked(!isGuardianLocked)}
+                      className="font-bold underline hover:text-amber-900 transition-colors"
+                    >
+                      {isGuardianLocked ? 'Modify' : 'Lock'}
+                    </button>
+                  </div>
+                )}
+                <Field
+                  label="Guardian name"
+                  disabled={isGuardianLocked && !!profile.guardian_name}
+                  value={profile.guardian_name || ''}
+                  onChange={(v) => setProfile({ ...profile, guardian_name: v })}
+                />
                 <Field
                   label="Guardian phone"
-                  value={profile.guardian_phone}
+                  disabled={isGuardianLocked && !!profile.guardian_phone}
+                  value={profile.guardian_phone || ''}
                   onChange={(v) => setProfile({ ...profile, guardian_phone: phoneDigits(v) })}
                   inputMode="tel"
                   helperText="Use a valid 10-digit mobile number if provided."
@@ -1392,14 +1488,19 @@ export function ActivateAccountPage() {
                 <Field
                   label="Emergency contact (Mobile)"
                   required
-                  value={profile.emergency_phone}
+                  value={profile.emergency_phone || ''}
                   onChange={(v) => setProfile({ ...profile, emergency_phone: phoneDigits(v) })}
                   inputMode="tel"
                   helperText="Must be valid and different from primary and guardian numbers."
                 />
                 <label className="block">
                   <span className="text-xs font-semibold text-muted-foreground">Guardian relation</span>
-                  <select value={profile.guardian_relation} onChange={(e) => setProfile({ ...profile, guardian_relation: e.target.value })} className={fieldClass}>
+                  <select
+                    disabled={isGuardianLocked && !!profile.guardian_relation}
+                    value={profile.guardian_relation || ''}
+                    onChange={(e) => setProfile({ ...profile, guardian_relation: e.target.value })}
+                    className={`${fieldClass} disabled:bg-muted/40 disabled:text-muted-foreground`}
+                  >
                     <option value="">Select relation</option>
                     {guardianRelations.map((relation) => (
                       <option key={relation} value={relation}>{relation}</option>
@@ -1408,7 +1509,6 @@ export function ActivateAccountPage() {
                 </label>
               </div>
               </FormGroup>
-
               <FormGroup title="Address">
               <div className="grid gap-4">
                 <TextArea label="Permanent address (Address, City, State, Pincode) *" required value={profile.permanent_address} onChange={(v) => setProfile({ ...profile, permanent_address: v })} />
@@ -1595,6 +1695,47 @@ export function ActivateAccountPage() {
                 <Metric icon={<FileText className="w-4 h-4" />} label="Documents" value={documentPending ? 'Pending after activation' : 'Uploaded'} />
                 <Metric icon={<Receipt className="w-4 h-4" />} label="Next rent cycle" value={fmtDate(ctx.room_summary.next_rent_generation_date)} />
               </div>
+
+              {/* Signed Agreement Summary */}
+              {ctx.agreement && (
+                <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
+                  <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5 border-b border-slate-100 pb-2">
+                    <FileText className="w-4 h-4 text-accent" />
+                    <span>Signed Agreement Details</span>
+                  </h3>
+                  
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {/* Tenant Signature Preview */}
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
+                      <p className="text-xs font-semibold text-muted-foreground">Tenant Signature</p>
+                      <p className="text-sm font-medium text-slate-800">{ctx.agreement.tenant_signature_name}</p>
+                      {ctx.agreement.tenant_signature_url ? (
+                        <div className="h-20 bg-white rounded-lg border border-slate-200 p-2 flex items-center justify-center">
+                          <img src={ctx.agreement.tenant_signature_url} alt="Tenant Signature" className="h-full object-contain" />
+                        </div>
+                      ) : (
+                        <p className="text-xs text-amber-600 italic">No drawing saved</p>
+                      )}
+                    </div>
+
+                    {/* Guardian Signature Preview (if student) */}
+                    {String(ctx.tenant?.profile_type || 'STUDENT').toUpperCase() === 'STUDENT' && (
+                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
+                        <p className="text-xs font-semibold text-muted-foreground">Guardian Signature ({ctx.agreement.guardian_relation || 'Parent'})</p>
+                        <p className="text-sm font-medium text-slate-800">{ctx.agreement.guardian_signature_name}</p>
+                        {ctx.agreement.guardian_signature_url ? (
+                          <div className="h-20 bg-white rounded-lg border border-slate-200 p-2 flex items-center justify-center">
+                            <img src={ctx.agreement.guardian_signature_url} alt="Guardian Signature" className="h-full object-contain" />
+                          </div>
+                        ) : (
+                          <p className="text-xs text-amber-600 italic">No drawing saved</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div className="rounded-2xl border border-border bg-card p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <div className="w-7 h-7 rounded-xl bg-accent/10 flex items-center justify-center text-accent shrink-0">

@@ -5,31 +5,46 @@ import { Maximize2, X, RotateCcw, Check } from "lucide-react";
 interface SignaturePadProps {
   onSave: (blob: Blob | null) => void;
   placeholder?: string;
+  existingSignatureUrl?: string | null;
 }
 
-export function SignaturePad({ onSave, placeholder = "Draw your signature here" }: SignaturePadProps) {
+export function SignaturePad({ onSave, placeholder = "Draw your signature here", existingSignatureUrl }: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const largeCanvasRef = useRef<HTMLCanvasElement>(null);
   
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasDrawn, setHasDrawn] = useState(false);
+  const [showExisting, setShowExisting] = useState(Boolean(existingSignatureUrl));
   
   const [isExpanded, setIsExpanded] = useState(false);
   const [isLargeDrawing, setIsLargeDrawing] = useState(false);
   const [largeHasDrawn, setLargeHasDrawn] = useState(false);
 
+  // Sync showExisting with prop changes
+  useEffect(() => {
+    if (existingSignatureUrl) {
+      setShowExisting(true);
+    }
+  }, [existingSignatureUrl]);
+
   // Clear signature and canvas
   const handleClear = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    // Fill white background to ensure no transparency issues
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    setHasDrawn(false);
+    setShowExisting(false);
+    // Notify parent that signature has been cleared (set blob to null)
+    // If the parent needs to know that it is cleared/null so it doesn't try to send old signature url
     onSave(null);
+    setHasDrawn(false);
+    
+    // We delay slightly to let the canvas mount, then clear it
+    setTimeout(() => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }, 50);
   };
 
   // Convert canvas to blob and notify parent
@@ -43,6 +58,8 @@ export function SignaturePad({ onSave, placeholder = "Draw your signature here" 
 
   // Initialize small inline canvas
   useEffect(() => {
+    if (showExisting) return;
+    
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -62,7 +79,7 @@ export function SignaturePad({ onSave, placeholder = "Draw your signature here" 
     // Fill white background by default
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, rect.width, rect.height);
-  }, []);
+  }, [showExisting]);
 
   // Initialize large full-screen canvas when modal opens
   useEffect(() => {
@@ -239,42 +256,54 @@ export function SignaturePad({ onSave, placeholder = "Draw your signature here" 
   return (
     <div className="space-y-2">
       <div className="relative rounded-xl border border-border overflow-hidden bg-white shadow-inner group">
-        <canvas
-          ref={canvasRef}
-          onMouseDown={startDrawing}
-          onMouseMove={draw}
-          onMouseUp={stopDrawing}
-          onMouseLeave={stopDrawing}
-          onTouchStart={startDrawing}
-          onTouchMove={draw}
-          onTouchEnd={stopDrawing}
-          className="w-full h-40 bg-white block touch-none cursor-crosshair"
-        />
-        {!hasDrawn && (
+        {showExisting && existingSignatureUrl ? (
+          <div className="w-full h-40 bg-white flex items-center justify-center p-2">
+            <img src={existingSignatureUrl} alt="Existing Signature" className="max-h-full object-contain select-none" />
+          </div>
+        ) : (
+          <canvas
+            ref={canvasRef}
+            onMouseDown={startDrawing}
+            onMouseMove={draw}
+            onMouseUp={stopDrawing}
+            onMouseLeave={stopDrawing}
+            onTouchStart={startDrawing}
+            onTouchMove={draw}
+            onTouchEnd={stopDrawing}
+            className="w-full h-40 bg-white block touch-none cursor-crosshair"
+          />
+        )}
+        {!hasDrawn && !showExisting && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-muted-foreground text-xs select-none">
             {placeholder}
           </div>
         )}
-        {/* Fullscreen Expand Button */}
-        <button
-          type="button"
-          onClick={() => setIsExpanded(true)}
-          className="absolute top-2 right-2 px-2.5 py-1.5 rounded-lg bg-slate-900/10 hover:bg-slate-900/20 text-slate-700 active:scale-95 transition-all flex items-center gap-1 font-semibold text-[11px] shadow-sm backdrop-blur-sm"
-          title="Sign in Full Screen"
-        >
-          <Maximize2 className="w-3.5 h-3.5" />
-          <span>Fullscreen</span>
-        </button>
+        {/* Fullscreen Expand Button - only show if not showing existing preview */}
+        {!showExisting && (
+          <button
+            type="button"
+            onClick={() => setIsExpanded(true)}
+            className="absolute top-2 right-2 px-2.5 py-1.5 rounded-lg bg-slate-900/10 hover:bg-slate-900/20 text-slate-700 active:scale-95 transition-all flex items-center gap-1 font-semibold text-[11px] shadow-sm backdrop-blur-sm"
+            title="Sign in Full Screen"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+            <span>Fullscreen</span>
+          </button>
+        )}
       </div>
       <div className="flex justify-between items-center">
-        <span className="text-[10px] text-muted-foreground">Sign inside the box or expand to fullscreen</span>
-        <button
-          type="button"
-          onClick={handleClear}
-          className="text-xs font-semibold text-destructive hover:underline active:scale-95 transition-transform"
-        >
-          Clear signature
-        </button>
+        <span className="text-[10px] text-muted-foreground">
+          {showExisting ? "Showing saved signature" : "Sign inside the box or expand to fullscreen"}
+        </span>
+        {(hasDrawn || showExisting) && (
+          <button
+            type="button"
+            onClick={handleClear}
+            className="text-xs font-semibold text-destructive hover:underline active:scale-95 transition-transform"
+          >
+            {showExisting ? "Redraw signature" : "Clear signature"}
+          </button>
+        )}
       </div>
 
       {isExpanded && typeof document !== "undefined" && createPortal(

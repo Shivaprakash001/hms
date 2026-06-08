@@ -672,6 +672,16 @@ export class ActivationWorkflowService {
       },
     });
 
+    if (guardianSigName || guardianRelation) {
+      await prisma.tenants.update({
+        where: { id: tenant.id },
+        data: compactObject({
+          guardian_name: guardianSigName || undefined,
+          guardian_relation: guardianRelation || undefined,
+        }),
+      });
+    }
+
     try {
       const pdfUrl = await AgreementGenerationService.generateAndUploadPdf(signedAgreement.id);
       console.log(`Generated agreement PDF: ${pdfUrl}`);
@@ -778,6 +788,13 @@ export class ActivationWorkflowService {
           job_role: profileType === "WORKING_PROFESSIONAL" ? data?.job_role || undefined : null,
           photo_url: data?.photo_url || undefined,
           onboarding_last_activity_at: new Date(),
+        }),
+      });
+      await tx.agreement.updateMany({
+        where: { tenant_id: tenant.id },
+        data: compactObject({
+          guardian_signature_name: data?.guardian_name || undefined,
+          guardian_relation: data?.guardian_relation || undefined,
         }),
       });
     });
