@@ -640,10 +640,16 @@ export class ActivationWorkflowService {
     });
     if (!template) throw new Error("INTERNAL_ERROR: No active agreement template found");
 
-    const draft = await prisma.agreement.findFirst({
+    let draft = await prisma.agreement.findFirst({
       where: { tenant_id: tenant.id, status: "DRAFT" },
       orderBy: { generated_at: "desc" },
     });
+    if (!draft) {
+      draft = await prisma.agreement.findFirst({
+        where: { tenant_id: tenant.id, status: "SIGNED" },
+        orderBy: { generated_at: "desc" },
+      });
+    }
     if (!draft) throw new Error("INTERNAL_ERROR: Draft agreement not found");
 
     const now = new Date();
