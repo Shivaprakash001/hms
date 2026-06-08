@@ -165,7 +165,8 @@ function sanitizeText(str: string | null | undefined): string {
 }
 
 function wrapText(text: string, width: number, font: any, fontSize: number): string[] {
-  const words = text.split(/\s+/);
+  const sanitized = sanitizeText(text);
+  const words = sanitized.split(/\s+/);
   const lines: string[] = [];
   let currentLine = "";
 
