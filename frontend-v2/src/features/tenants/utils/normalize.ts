@@ -4,7 +4,8 @@ export type TenantStatus =
   | 'MOVE_OUT_REQUESTED'
   | 'LEFT'
   | 'EXPIRED'
-  | 'CANCELLED';
+  | 'CANCELLED'
+  | 'FORMER_TENANT';
 
 export interface NormalizedTenant {
   id: string;
@@ -95,4 +96,4 @@ export function getInitials(name: string): string {
     : '??';
 }
 
-export const INACTIVE_STATUSES = ['LEFT', 'CANCELLED', 'EXPIRED'] as const;
+export const INACTIVE_STATUSES = ['LEFT', 'CANCELLED', 'EXPIRED', 'FORMER_TENANT'] as const;

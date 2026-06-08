@@ -8,6 +8,7 @@ import { MoveOutStepper } from '@features/tenants/components/moveout/MoveOutStep
 import { Link } from 'react-router-dom';
 
 const fmt = (n: number) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
+const GOOGLE_REVIEW_URL = 'https://search.google.com/local/writereview?placeid=ChIJW1hB1g13yzsRscG4r7mVPt4';
 
 const REASONS = [
   { value: 'COURSE_COMPLETED', label: 'Course Completed' },
@@ -22,7 +23,7 @@ const REASONS = [
 ];
 
 export function TenantMoveOutPage() {
-  const { profile, advance, dues, refetchAll } = useTenantDashboard();
+  const { profile, advance, dues, refetchAll, isLoading: isDashboardLoading } = useTenantDashboard();
   const prof = profile?.profile as Record<string, unknown> | undefined;
   const tenant = profile?.tenant as Record<string, unknown> | undefined;
   
@@ -122,10 +123,34 @@ export function TenantMoveOutPage() {
   const [disputeDescription, setDisputeDescription] = useState('');
   const [disputedAmount, setDisputedAmount] = useState('');
 
-  if (isLoading) {
+  if (isLoading || isDashboardLoading) {
     return (
       <div className="flex justify-center py-20">
         <Loader2 className="w-8 h-8 animate-spin text-[#243A72]" />
+      </div>
+    );
+  }
+
+  const isTenantActive = tenant && String(tenant.status).toUpperCase() === 'ACTIVE';
+
+  if (!active && tenant && !isTenantActive) {
+    return (
+      <div className="space-y-6 max-w-md mx-auto py-12 px-4 text-center">
+        <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-amber-600 mb-2">
+          <AlertTriangle className="h-8 w-8" />
+        </div>
+        <h1 className="text-2xl font-bold text-foreground">Stay Inactive</h1>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          Your tenancy is currently inactive (status: <strong>{tenant.status ? String(tenant.status).replace('_', ' ') : 'inactive'}</strong>).
+          Move-out requests can only be initiated by active tenants. 
+          If you believe this is an error, please contact the hostel management.
+        </p>
+        <Link
+          to="/tenant"
+          className="inline-flex items-center justify-center gap-2 w-full py-3.5 rounded-xl bg-[#243A72] text-white font-semibold hover:bg-[#1B2D5B] transition-colors"
+        >
+          Back to Dashboard
+        </Link>
       </div>
     );
   }
@@ -146,7 +171,7 @@ export function TenantMoveOutPage() {
                 Thank you for the awesome feedback! We are thrilled you had a great experience staying with us. We would love if you could share your experience on Google.
               </p>
               <a
-                href="https://google.com"
+                href={GOOGLE_REVIEW_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center justify-center gap-2 w-full py-3.5 rounded-xl bg-[#243A72] text-white font-semibold shadow-lg shadow-blue-500/10 hover:bg-[#1B2D5B] transition-colors"

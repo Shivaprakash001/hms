@@ -20,8 +20,11 @@ export class TenantService {
     const fallbackProfile = tenant.profile ?? tenant.profiles ?? (invitation
       ? { id: null, name: invitation.name, email: invitation.email, phone: invitation.phone }
       : null);
+    const hasActiveMoveOut = tenant.move_out_requests && tenant.move_out_requests.length > 0;
+    const computedStatus = hasActiveMoveOut ? "MOVE_OUT_REQUESTED" : tenant.status;
     return {
       ...tenant,
+      status: computedStatus,
       profile: fallbackProfile,
       profiles: tenant.profiles ?? fallbackProfile,
       allocations: tenant.allocations ?? tenant.room_allocations ?? [],
@@ -71,6 +74,12 @@ export class TenantService {
           orderBy: { start_date: "desc" },
           take: 1,
           include: { room: true },
+        },
+        move_out_requests: {
+          where: { status: { notIn: ["COMPLETED", "REJECTED"] } },
+          orderBy: { created_at: "desc" },
+          take: 1,
+          select: { id: true, status: true }
         },
       }
     });
@@ -135,6 +144,12 @@ export class TenantService {
           orderBy: { start_date: "desc" },
           take: 1,
           include: { room: true },
+        },
+        move_out_requests: {
+          where: { status: { notIn: ["COMPLETED", "REJECTED"] } },
+          orderBy: { created_at: "desc" },
+          take: 1,
+          select: { id: true, status: true }
         },
       }
     });
@@ -211,6 +226,12 @@ export class TenantService {
           rent_obligations: {
             where: { status: { in: ["PENDING", "PARTIAL"] } },
             include: { payments: { select: { amount_paid: true, payment_date: true } } }
+          },
+          move_out_requests: {
+            where: { status: { notIn: ["COMPLETED", "REJECTED"] } },
+            orderBy: { created_at: "desc" },
+            take: 1,
+            select: { id: true, status: true }
           }
         },
         take: limit,

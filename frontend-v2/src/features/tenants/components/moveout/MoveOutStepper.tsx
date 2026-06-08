@@ -1,10 +1,14 @@
-const STEPS = [
-  'REQUESTED',
-  'SETTLEMENT_PENDING',
-  'APPROVED',
-  'VACATED',
-  'COMPLETED',
+import { AlertCircle } from 'lucide-react';
+
+const STEP_LABELS = [
+  { key: 'REQUESTED', label: 'Request', icon: '📋', desc: 'Request submitted for review' },
+  { key: 'SETTLEMENT_PENDING', label: 'Settlement', icon: '💰', desc: 'Dues and refund calculation' },
+  { key: 'APPROVED', label: 'Approved', icon: '✅', desc: 'Exit and refund approved' },
+  { key: 'VACATED', label: 'Vacated', icon: '🚪', desc: 'Room inspected & bed vacated' },
+  { key: 'COMPLETED', label: 'Completed', icon: '🏁', desc: 'Security deposit settled' },
 ] as const;
+
+const STEPS = ['REQUESTED', 'SETTLEMENT_PENDING', 'APPROVED', 'VACATED', 'COMPLETED'] as const;
 
 interface Props {
   request: Record<string, unknown>;
@@ -17,59 +21,162 @@ export function MoveOutStepper({ request }: Props) {
   const currentIdx = isRejected ? -1 : STEPS.indexOf(current as (typeof STEPS)[number]);
 
   return (
-    <div className="space-y-4">
-      <div className="p-4 rounded-xl border border-border bg-card">
-        <p className="text-sm text-muted-foreground">Planned exit</p>
-        <p className="font-semibold">
-          {request.planned_exit_date
-            ? new Date(String(request.planned_exit_date)).toLocaleDateString('en-IN')
-            : '—'}
-        </p>
-        {request.refund_amount != null && (
-          <p className="text-sm mt-2">
-            Refund: ₹{Number(request.refund_amount).toLocaleString('en-IN')}
+    <div className="space-y-6">
+      {/* Horizontal Progress Bar */}
+      {!isRejected && (
+        <div className="p-5 rounded-2xl border border-border bg-card shadow-sm space-y-6 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1.5 bg-[#243A72]/5" />
+          <div className="relative pt-2">
+            {/* Background Line */}
+            <div className="absolute top-[18px] left-[10%] right-[10%] h-1 bg-secondary rounded-full -translate-y-1/2" />
+            
+            {/* Active Progress Line */}
+            <div 
+              className="absolute top-[18px] left-[10%] h-1 bg-[#243A72] rounded-full -translate-y-1/2 transition-all duration-500 ease-out"
+              style={{ width: `${(currentIdx / (STEPS.length - 1)) * 80}%` }}
+            />
+
+            {/* Steps Container */}
+            <div className="relative flex justify-between z-10">
+              {STEP_LABELS.map((step, idx) => {
+                const isCompleted = currentIdx > idx || current === 'COMPLETED';
+                const isActive = current === step.key;
+
+                return (
+                  <div key={step.key} className="flex flex-col items-center flex-1">
+                    {/* Circle Indicator */}
+                    <div 
+                      className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold transition-all duration-300 relative ${
+                        isCompleted 
+                          ? 'bg-[#243A72] text-white' 
+                          : isActive 
+                            ? 'bg-white border-2 border-[#243A72] text-[#243A72] shadow-md ring-4 ring-[#243A72]/10' 
+                            : 'bg-secondary border-2 border-transparent text-muted-foreground'
+                      }`}
+                    >
+                      {isActive && (
+                        <span className="absolute inset-0 rounded-full animate-ping bg-[#243A72]/10 opacity-75" />
+                      )}
+                      
+                      <span className="relative z-10">
+                        {isCompleted ? '✓' : step.icon}
+                      </span>
+                    </div>
+
+                    {/* Step Labels */}
+                    <div className="mt-3.5 text-center px-1">
+                      <p className={`text-[11px] font-bold tracking-tight transition-colors duration-300 ${
+                        isActive ? 'text-[#243A72] font-extrabold' : isCompleted ? 'text-foreground font-semibold' : 'text-muted-foreground'
+                      }`}>
+                        {step.label}
+                      </p>
+                      <p className="hidden md:block text-[9px] text-muted-foreground mt-0.5 max-w-[85px] mx-auto leading-normal">
+                        {step.desc}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Planned exit banner */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="p-4 rounded-xl border border-border bg-card shadow-sm">
+          <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Planned Exit Date</p>
+          <p className="font-bold text-sm text-foreground mt-1">
+            {request.planned_exit_date
+              ? new Date(String(request.planned_exit_date)).toLocaleDateString('en-IN', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                })
+              : '—'}
           </p>
+        </div>
+        
+        {request.refund_amount != null && (
+          <div className="p-4 rounded-xl border border-border bg-card shadow-sm">
+            <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Estimated Refund</p>
+            <p className="font-bold text-sm text-emerald-600 mt-1">
+              ₹{Number(request.refund_amount).toLocaleString('en-IN')}
+            </p>
+          </div>
         )}
       </div>
 
       {isRejected && (
-        <div className="p-4 rounded-xl border border-red-200 bg-red-50 text-red-700 text-sm font-semibold">
-          This move-out request has been rejected.
+        <div className="p-4 rounded-xl border border-red-200 bg-red-50 text-red-700 text-sm font-semibold flex items-center gap-2">
+          <AlertCircle className="w-5 h-5 shrink-0" />
+          <span>This move-out request has been rejected by management.</span>
         </div>
       )}
 
-      <ol className="space-y-2">
-        {STEPS.map((step, i) => {
-          const done = currentIdx >= 0 && i <= currentIdx;
-          const active = step === current;
-          return (
-            <li
-              key={step}
-              className={`flex items-center gap-3 p-3 rounded-lg border text-sm ${
-                active
-                  ? 'border-[#243A72] bg-[#243A72]/5'
-                  : done
-                    ? 'border-border bg-card'
-                    : 'border-border opacity-50'
-              }`}
-            >
-              <span
-                className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                  done ? 'bg-[#243A72] text-white' : 'bg-secondary'
+      {/* Detailed Status Pipeline */}
+      <div className="space-y-3">
+        <h3 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          Detailed Status Timeline
+        </h3>
+        <div className="space-y-2.5">
+          {STEP_LABELS.map((step, idx) => {
+            const isCompleted = currentIdx > idx || current === 'COMPLETED';
+            const isActive = current === step.key;
+
+            return (
+              <div
+                key={step.key}
+                className={`flex items-start gap-4 p-3.5 rounded-xl border transition-all duration-300 ${
+                  isActive
+                    ? 'border-[#243A72]/20 bg-[#243A72]/5 shadow-sm'
+                    : isCompleted
+                      ? 'border-border bg-card/50'
+                      : 'border-border/60 opacity-60 bg-card/10'
                 }`}
               >
-                {i + 1}
-              </span>
-              <span className="font-medium">{step.replace(/_/g, ' ')}</span>
-            </li>
-          );
-        })}
-      </ol>
+                <div 
+                  className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-all duration-300 ${
+                    isCompleted 
+                      ? 'bg-emerald-500/10 text-emerald-600' 
+                      : isActive 
+                        ? 'bg-[#243A72] text-white shadow-sm shadow-[#243A72]/20' 
+                        : 'bg-secondary text-muted-foreground'
+                  }`}
+                >
+                  {isCompleted ? '✓' : idx + 1}
+                </div>
+                
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <p className={`text-sm font-semibold ${
+                      isActive ? 'text-[#243A72]' : 'text-foreground'
+                    }`}>
+                      {step.label}
+                    </p>
+                    {isActive && (
+                      <span className="inline-flex items-center rounded-full bg-[#243A72]/15 px-1.5 py-0.5 text-[9px] font-bold text-[#243A72] uppercase animate-pulse">
+                        Active
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    {step.desc}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       {request.deduction_notes && (
-        <p className="text-xs text-muted-foreground p-3 rounded-lg bg-secondary">
-          {String(request.deduction_notes)}
-        </p>
+        <div className="p-4 rounded-xl bg-secondary/40 border border-border/80">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Deduction Notes</p>
+          <p className="text-xs text-foreground leading-relaxed">
+            {String(request.deduction_notes)}
+          </p>
+        </div>
       )}
     </div>
   );
