@@ -120,8 +120,8 @@ export function VerificationPanel({ hostelId, tenantId, documents = [], profileT
     },
     {
       key: 'agreement',
-      label: 'Rental Agreement',
-      description: 'Signed digital or physical lease agreement',
+      label: 'Hostel Residency Agreement',
+      description: 'Signed digital hostel residency agreement',
       doc: agreementDoc,
     }
   ];

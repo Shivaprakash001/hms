@@ -49,6 +49,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
           where: { is_active: true },
           orderBy: { created_at: "desc" },
         },
+        agreements: {
+          where: { status: "SIGNED" },
+          orderBy: { generated_at: "desc" },
+        },
       },
     });
 
@@ -61,19 +65,40 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const profile = tenant.profiles || (invitation
       ? { id: null, name: invitation.name, email: invitation.email, phone: invitation.phone }
       : null);
+
+    const signedAgreement = tenant.agreements?.[0] || null;
+    const agreementVirtualDoc = signedAgreement ? {
+      id: signedAgreement.id,
+      tenant_id: tenant.id,
+      doc_type: "RENTAL_AGREEMENT",
+      doc_number: null,
+      mime_type: "application/pdf",
+      file_size: 0,
+      document_status: "APPROVED",
+      is_verified: true,
+      is_active: true,
+      download_url: backendUrl(`/api/tenants/${tenant.id}/documents/${signedAgreement.id}/download`),
+    } : null;
+
+    const mappedDocs = (tenant.identification_documents || [])
+      .filter((doc: any) => requiredDocuments.includes(doc.doc_type))
+      .map((doc: any) => {
+        const { file_url, file_path, file_id, ...safeDoc } = doc;
+        return {
+          ...safeDoc,
+          download_url: backendUrl(`/api/tenants/${tenant.id}/documents/${doc.id}/download`),
+        };
+      });
+
+    if (agreementVirtualDoc) {
+      mappedDocs.push(agreementVirtualDoc);
+    }
+
     return NextResponse.json({
       ...tenant,
       profiles: profile,
       profile,
-      identification_documents: (tenant.identification_documents || [])
-        .filter((doc: any) => requiredDocuments.includes(doc.doc_type))
-        .map((doc: any) => {
-          const { file_url, file_path, file_id, ...safeDoc } = doc;
-          return {
-            ...safeDoc,
-            download_url: backendUrl(`/api/tenants/${tenant.id}/documents/${doc.id}/download`),
-          };
-        }),
+      identification_documents: mappedDocs,
       required_document_types: requiredDocuments,
     });
   } catch (error) {

@@ -71,10 +71,34 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       },
     });
 
+    const agreements = await prisma.agreement.findMany({
+      where: { tenant_id: id, status: "SIGNED" },
+      orderBy: { generated_at: "desc" },
+    });
+
+    const signedAgreement = agreements[0] || null;
+    const agreementVirtualDoc = signedAgreement ? {
+      id: signedAgreement.id,
+      tenant_id: id,
+      doc_type: "RENTAL_AGREEMENT",
+      doc_number: null,
+      mime_type: "application/pdf",
+      file_size: 0,
+      document_status: "APPROVED",
+      is_verified: true,
+      is_active: true,
+      download_url: backendUrl(`/api/tenants/${id}/documents/${signedAgreement.id}/download`),
+    } : null;
+
+    const mappedDocs = documents.map((doc) => publicDocument(doc, id));
+    if (agreementVirtualDoc) {
+      mappedDocs.push(agreementVirtualDoc);
+    }
+
     return NextResponse.json({
       success: true,
       data: {
-        documents: documents.map((doc) => publicDocument(doc, id)),
+        documents: mappedDocs,
         required_documents: requiredDocuments,
       },
     });
