@@ -78,6 +78,10 @@ export async function getTenantPortalProfile(profileId: string) {
         where: { is_active: true },
         orderBy: { created_at: "desc" },
       },
+      agreements: {
+        where: { status: "SIGNED" },
+        orderBy: { generated_at: "desc" },
+      },
       move_out_requests: {
         where: { status: { notIn: ["REJECTED"] } },
         orderBy: { created_at: "desc" },
@@ -129,6 +133,22 @@ export async function getTenantPortalProfile(profileId: string) {
     rejection_reason: d.rejection_reason,
     uploaded_at: d.created_at,
   }));
+
+  const signedAgreement = tenant.agreements?.[0] || null;
+  if (signedAgreement) {
+    documents.push({
+      id: signedAgreement.id,
+      doc_type: "RENTAL_AGREEMENT",
+      doc_type_label: "Hostel Residency Agreement",
+      doc_number: null,
+      download_url: backendUrl(`/api/tenants/${tenant.id}/documents/${signedAgreement.id}/download`),
+      mime_type: "application/pdf",
+      document_status: "APPROVED",
+      is_verified: true,
+      rejection_reason: null,
+      uploaded_at: signedAgreement.tenant_signed_at || signedAgreement.generated_at,
+    });
+  }
 
   const verification = {
     document_verified: tenant.document_verified,

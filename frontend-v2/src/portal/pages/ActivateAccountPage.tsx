@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   ClipboardCheck,
   DoorOpen,
+  Download,
   Eye,
   EyeOff,
   FileText,
@@ -1780,10 +1781,23 @@ export function ActivateAccountPage() {
               {/* Signed Agreement Summary */}
               {ctx.agreement && (
                 <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
-                  <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5 border-b border-slate-100 pb-2">
-                    <FileText className="w-4 h-4 text-accent" />
-                    <span>Signed Agreement Details</span>
-                  </h3>
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2 flex-wrap gap-2">
+                    <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                      <FileText className="w-4 h-4 text-accent" />
+                      <span>Signed Agreement Details</span>
+                    </h3>
+                    {ctx.agreement.pdf_url && (
+                      <a
+                        href={ctx.agreement.pdf_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-accent hover:bg-accent/90 rounded-lg shadow-sm transition-all"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Download PDF</span>
+                      </a>
+                    )}
+                  </div>
                   
                   <div className="grid gap-4 md:grid-cols-2">
                     {/* Tenant Signature Preview */}

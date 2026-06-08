@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Maximize2, X, RotateCcw, Check } from "lucide-react";
+import { Maximize2, X, RotateCcw, RotateCw, Check } from "lucide-react";
 
 interface SignaturePadProps {
   onSave: (blob: Blob | null) => void;
@@ -206,6 +206,71 @@ export function SignaturePad({ onSave, placeholder = "Draw your signature here",
     }
   };
 
+  const handleRotate = () => {
+    const canvas = canvasRef.current;
+    if (!canvas || !hasDrawn) return;
+    
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Save current content to temp canvas
+    const tempCanvas = document.createElement("canvas");
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+    const tempCtx = tempCanvas.getContext("2d");
+    if (!tempCtx) return;
+    tempCtx.drawImage(canvas, 0, 0);
+
+    // Clear and fill white
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Rotate and scale
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate((90 * Math.PI) / 180);
+    const scale = Math.min(canvas.width / tempCanvas.height, canvas.height / tempCanvas.width);
+    ctx.scale(scale, scale);
+    ctx.drawImage(tempCanvas, -tempCanvas.width / 2, -tempCanvas.height / 2);
+    ctx.restore();
+
+    // Trigger save
+    saveSignature();
+  };
+
+  const handleRotateLarge = () => {
+    const canvas = largeCanvasRef.current;
+    if (!canvas || !largeHasDrawn) return;
+    
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Save current content to temp canvas
+    const tempCanvas = document.createElement("canvas");
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+    const tempCtx = tempCanvas.getContext("2d");
+    if (!tempCtx) return;
+    tempCtx.drawImage(canvas, 0, 0);
+
+    // Clear and fill white
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Rotate and scale
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate((90 * Math.PI) / 180);
+    const scale = Math.min(canvas.width / tempCanvas.height, canvas.height / tempCanvas.width);
+    ctx.scale(scale, scale);
+    ctx.drawImage(tempCanvas, -tempCanvas.width / 2, -tempCanvas.height / 2);
+    ctx.restore();
+  };
+
   const handleClearLarge = () => {
     const canvas = largeCanvasRef.current;
     if (!canvas) return;
@@ -295,15 +360,27 @@ export function SignaturePad({ onSave, placeholder = "Draw your signature here",
         <span className="text-[10px] text-muted-foreground">
           {showExisting ? "Showing saved signature" : "Sign inside the box or expand to fullscreen"}
         </span>
-        {(hasDrawn || showExisting) && (
-          <button
-            type="button"
-            onClick={handleClear}
-            className="text-xs font-semibold text-destructive hover:underline active:scale-95 transition-transform"
-          >
-            {showExisting ? "Redraw signature" : "Clear signature"}
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {hasDrawn && !showExisting && (
+            <button
+              type="button"
+              onClick={handleRotate}
+              className="text-xs font-semibold text-accent hover:underline active:scale-95 transition-transform flex items-center gap-1"
+            >
+              <RotateCw className="w-3.5 h-3.5" />
+              <span>Rotate 90°</span>
+            </button>
+          )}
+          {(hasDrawn || showExisting) && (
+            <button
+              type="button"
+              onClick={handleClear}
+              className="text-xs font-semibold text-destructive hover:underline active:scale-95 transition-transform"
+            >
+              {showExisting ? "Redraw signature" : "Clear signature"}
+            </button>
+          )}
+        </div>
       </div>
 
       {isExpanded && typeof document !== "undefined" && createPortal(
@@ -346,14 +423,26 @@ export function SignaturePad({ onSave, placeholder = "Draw your signature here",
 
             {/* Modal Footer */}
             <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex justify-between items-center gap-3">
-              <button
-                type="button"
-                onClick={handleClearLarge}
-                className="flex items-center gap-1 px-4 py-2 text-sm font-semibold text-destructive hover:bg-destructive/5 rounded-xl transition-colors active:scale-95"
-              >
-                <RotateCcw className="w-4 h-4" />
-                <span>Clear</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleClearLarge}
+                  className="flex items-center gap-1 px-4 py-2 text-sm font-semibold text-destructive hover:bg-destructive/5 rounded-xl transition-colors active:scale-95 flex items-center"
+                >
+                  <RotateCcw className="w-4 h-4 mr-1" />
+                  <span>Clear</span>
+                </button>
+                {largeHasDrawn && (
+                  <button
+                    type="button"
+                    onClick={handleRotateLarge}
+                    className="flex items-center gap-1 px-4 py-2 text-sm font-semibold text-accent hover:bg-accent/5 rounded-xl transition-colors active:scale-95 flex items-center"
+                  >
+                    <RotateCw className="w-4 h-4 mr-1" />
+                    <span>Rotate 90°</span>
+                  </button>
+                )}
+              </div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"

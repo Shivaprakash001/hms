@@ -27,6 +27,100 @@ function formatAgreementDateTime(dateInput: Date | string | null | undefined): s
 }
 
 
+const DEFAULT_RULE_CONTENT = {
+  categories: [
+    {
+      id: "payments",
+      title: "1. Fee Structure & Payment Policy",
+      severity: "important",
+      icon: "receipt",
+      highlights: [
+        "Hostel fee is applicable only for the academic year period of 12 months.",
+        "Hostel fees once paid are strictly non-refundable and non-adjustable under any circumstances.",
+        "If GST becomes applicable as per government regulations, additional GST charges will be added to the hostel fee."
+      ],
+      rules: [
+        "Students are required to pay 3 months hostel fee in advance at the time of joining.",
+        "Any delay in fee payment will attract a late fee of ₹50 per day."
+      ],
+    },
+    {
+      id: "facilities",
+      title: "2. Accommodation & Hostel Facilities",
+      severity: "standard",
+      icon: "wifi",
+      highlights: [
+        "The hostel management is responsible only for providing Accommodation, Breakfast, Lunch, and Dinner.",
+        "Facilities such as Internet/Wi-Fi, Washing machines, and Hot water are provided free of cost and may face occasional interruptions or maintenance delays.",
+        "Hostel premises will remain closed during major college holidays and festival vacations (Semester Holidays, Dussehra, Sankranthi, etc.). Students must vacate during these periods."
+      ],
+      rules: [
+        "Complaints regarding internet or washing machine issues may take up to 10 days for resolution.",
+        "Hostel rooms may be reshuffled under unavoidable or operational circumstances. Allocation of the same room throughout the year is not guaranteed.",
+        "Visitors who wish to stay in the hostel must pay ₹500 per day, subject to management approval."
+      ],
+    },
+    {
+      id: "discipline",
+      title: "3. Discipline & Conduct",
+      severity: "critical",
+      icon: "shield",
+      highlights: [
+        "Smoking, alcohol consumption, illegal activities, violence, or misconduct inside the hostel premises are strictly prohibited.",
+        "Ragging in any form is strictly prohibited. Involved students will be immediately removed without any fee refund."
+      ],
+      rules: [
+        "Students must maintain proper discipline and respectful behavior inside the hostel premises at all times.",
+        "Outsiders, friends, parents, or visitors are not allowed inside hostel rooms. Visitors may wait only in the office area or front lobby.",
+        "Hostel gate closes strictly at 9:30 PM every day.",
+        "Students leaving the hostel premises must inform the management through WhatsApp message as proof and record.",
+        "Food is not allowed inside hostel rooms. Students must use the dining hall for meals."
+      ],
+    },
+    {
+      id: "safety",
+      title: "4. Safety & Responsibility",
+      severity: "important",
+      icon: "lock",
+      highlights: [
+        "Students are fully responsible for their personal belongings (Mobile phones, Laptops, Gold, Cash, Certificates, etc.).",
+        "Use of electrical appliances such as iron boxes, water heaters, micro-ovens, or inflammable items is strictly prohibited inside rooms."
+      ],
+      rules: [
+        "The hostel management is not responsible for theft, loss, damage, injuries, accidents, personal disputes, or matters occurring outside hostel responsibility.",
+        "Students found using prohibited appliances will be charged a fine of ₹1000.",
+        "Any damage caused to hostel property (beds, mattresses, lockers, furniture, fittings, etc.) must be repaired or compensated by the student(s) responsible."
+      ],
+    },
+    {
+      id: "vacating",
+      title: "5. Vacating & Maintenance Charges",
+      severity: "important",
+      icon: "door-open",
+      highlights: [
+        "No refund will be provided for early vacating under any circumstances."
+      ],
+      rules: [
+        "If a student vacates the hostel during the academic year, hostel charges will be recalculated at ₹12,000 per month for the occupied duration.",
+        "Students vacating the hostel during the academic year must additionally pay ₹1400 as maintenance charges."
+      ],
+    },
+    {
+      id: "rights",
+      title: "6. Management Rights",
+      severity: "standard",
+      icon: "shield",
+      highlights: [
+        "Decisions made by hostel management regarding hostel administration, discipline, and accommodation shall be final and binding."
+      ],
+      rules: [
+        "The hostel management reserves the full right to discontinue hostel accommodation for any student involved in misconduct, indiscipline, rule violations, or behavior affecting hostel operations."
+      ],
+    }
+  ]
+};
+
+
 export interface AgreementData {
   hostelName: string;
   hostelAddress: string;
@@ -44,6 +138,7 @@ export interface AgreementData {
   joiningDate: Date | string;
   paymentFrequency: string;
   customRules?: string | null;
+  hostelRules?: any;
   
   tenantSignatureUrl?: string | null;
   tenantSignatureName?: string | null;
@@ -145,6 +240,17 @@ export class AgreementGenerationService {
     const joiningDate = snapshot.joining_date || tenant.joined_on || new Date();
     const formattedJoiningDate = formatAgreementDate(joiningDate);
 
+    const ruleVersion = await prisma.ruleVersion.findFirst({
+      where: {
+        hostel_id: agreement.hostel_id,
+        OR: [{ is_active: true }, { active: true }],
+      },
+      orderBy: { created_at: "desc" },
+    });
+    const hostelRules = ruleVersion
+      ? (ruleVersion.content as any || ruleVersion.content_snapshot as any || DEFAULT_RULE_CONTENT)
+      : DEFAULT_RULE_CONTENT;
+
     return {
       hostelName: snapshot.hostel_name || hostel.name,
       hostelAddress: [hostel.address, hostel.city, hostel.state, hostel.pincode].filter(Boolean).join(", "),
@@ -162,6 +268,7 @@ export class AgreementGenerationService {
       joiningDate: formattedJoiningDate,
       paymentFrequency: snapshot.payment_frequency || tenant.payment_frequency || "MONTHLY",
       customRules: snapshot.custom_rules || template.custom_rules,
+      hostelRules,
       
       tenantSignatureUrl: agreement.tenant_signature_url,
       tenantSignatureName: agreement.tenant_signature_name,
@@ -412,7 +519,78 @@ export class AgreementGenerationService {
       currentY -= 4;
     });
 
-    // 4. Custom Hostel Rules Section
+    // 4. Hostel Rules & Regulations Section
+    if (data.hostelRules && data.hostelRules.categories) {
+      checkPageBreak(60);
+      currentY -= 10;
+      page.drawText(sanitizeText("HOSTEL RULES & REGULATIONS"), {
+        x: margin,
+        y: currentY,
+        size: 11,
+        font: fontBold,
+        color: COLORS.textPrimary,
+      });
+      currentY -= 20;
+
+      data.hostelRules.categories.forEach((cat: any) => {
+        // Category Title
+        const catTitleWrapped = wrapText(cat.title || "", contentWidth, fontBold, 10);
+        checkPageBreak(catTitleWrapped.length * 14 + 10);
+        catTitleWrapped.forEach((line) => {
+          page.drawText(sanitizeText(line), {
+            x: margin,
+            y: currentY,
+            size: 10,
+            font: fontBold,
+            color: COLORS.textPrimary,
+          });
+          currentY -= 14;
+        });
+        currentY -= 4;
+
+        // Highlights
+        if (Array.isArray(cat.highlights) && cat.highlights.length > 0) {
+          cat.highlights.forEach((hl: string) => {
+            const hlWrapped = wrapText(`• ${hl}`, contentWidth - 15, fontItalic, 9);
+            checkPageBreak(hlWrapped.length * 12 + 6);
+            hlWrapped.forEach((line, lineIdx) => {
+              page.drawText(sanitizeText(lineIdx === 0 ? line : "  " + line), {
+                x: margin + 10,
+                y: currentY,
+                size: 9,
+                font: fontItalic,
+                color: COLORS.textMuted,
+              });
+              currentY -= 12;
+            });
+            currentY -= 2;
+          });
+        }
+
+        // Rules
+        if (Array.isArray(cat.rules) && cat.rules.length > 0) {
+          cat.rules.forEach((rule: string) => {
+            const ruleWrapped = wrapText(`- ${rule}`, contentWidth - 15, fontRegular, 9);
+            checkPageBreak(ruleWrapped.length * 12 + 6);
+            ruleWrapped.forEach((line, lineIdx) => {
+              page.drawText(sanitizeText(lineIdx === 0 ? line : "  " + line), {
+                x: margin + 10,
+                y: currentY,
+                size: 9,
+                font: fontRegular,
+                color: COLORS.textPrimary,
+              });
+              currentY -= 12;
+            });
+            currentY -= 2;
+          });
+        }
+
+        currentY -= 10;
+      });
+    }
+
+    // 4.5 Custom Hostel Rules Section
     if (data.customRules && data.customRules.trim()) {
       checkPageBreak(60);
       currentY -= 10;
