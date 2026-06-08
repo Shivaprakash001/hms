@@ -393,7 +393,7 @@ export class AgreementGenerationService {
       "Monthly rent is payable in advance as per the agreed rent cycle. Late payments may attract fees or lead to suspension of access.",
       "The security deposit is refundable upon vacating the premises, subject to clearance of all pending dues and room inspection for damages.",
       "Notice Period: Either party must provide at least 30 days written notice prior to terminating this agreement.",
-      "Lessee agrees to maintain peace, hygiene, and follow all safety and security rules of the hostel. Loud noise, unauthorized guests, and illegal activities are prohibited.",
+      "Hostel Rules Compliance: The Lessee explicitly agrees to comply fully with, follow, and be bound by each and every rule, policy, and regulation of the hostel (including fee refund rules, discipline policies, late fee obligations, and property damage liabilities). Any breach of these rules constitutes a violation of this residency agreement and may result in immediate termination of stay.",
     ];
 
     standardRules.forEach((rule, idx) => {

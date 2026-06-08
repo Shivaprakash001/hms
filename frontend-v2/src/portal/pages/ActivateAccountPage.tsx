@@ -1309,12 +1309,14 @@ export function ActivateAccountPage() {
                 </div>
 
                 <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 mt-4 mb-1">
-                  2. Terms of Residency
+                  2. Terms of Residency & Rules Compliance
                 </h4>
-                <ul className="list-disc pl-5 space-y-1 text-xs text-muted-foreground">
+                <ul className="list-disc pl-5 space-y-2 text-xs text-muted-foreground">
                   <li>The Tenant agrees to pay the monthly rent of ₹{ctx.agreement.content_snapshot.monthly_rent} on or before the due date as defined by the hostel policy.</li>
                   <li>A refundable security deposit of ₹{ctx.agreement.content_snapshot.advance_deposit} is deposited with the management, which will be settled/refunded upon successful move-out compliance checks.</li>
-                  <li>The Tenant agrees to comply fully with all the rules & regulations of the hostel accepted in the previous step.</li>
+                  <li className="text-foreground font-medium bg-secondary/20 p-2 rounded border border-border/50">
+                    <strong>Hostel Rules Binding Clause:</strong> The Tenant explicitly agrees to follow, comply with, and be legally bound by each and every rule, policy, and regulation of the hostel (as reviewed and accepted under the Rules section). This includes all guidelines concerning fee refunds, hostel discipline, guest policies, late fee obligations, and property damage liabilities.
+                  </li>
                 </ul>
 
                 {ctx.agreement.content_snapshot.custom_rules && (
