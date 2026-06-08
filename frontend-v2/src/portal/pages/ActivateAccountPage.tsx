@@ -109,6 +109,13 @@ const activationSteps: { id: ActivationStep; label: string; helper: string }[] =
   { id: 'ACTIVATE', label: 'Activate', helper: 'Enter portal' },
 ];
 
+const visualSteps: { id: 'ACCOUNT' | 'AGREEMENT' | 'PROFILE' | 'ACTIVATE'; label: string; helper: string }[] = [
+  { id: 'ACCOUNT', label: 'Account', helper: 'Password and mobile' },
+  { id: 'AGREEMENT', label: 'Agreement', helper: 'Read & sign' },
+  { id: 'PROFILE', label: 'Profile', helper: 'Personal details' },
+  { id: 'ACTIVATE', label: 'Activate', helper: 'Enter portal' },
+];
+
 const guardianRelations = ['Father', 'Mother', 'Brother', 'Sister', 'Uncle', 'Aunt', 'Grandparent', 'Spouse', 'Other'];
 
 const activationMessages = [
@@ -329,38 +336,73 @@ function Progress({
 }) {
   const completed = new Set(ctx.completed_steps ?? ctx.activation_state.completed_steps ?? []);
   const current = ctx.current_step ?? ctx.activation_state.current_step;
-  const currentIndex = activationSteps.findIndex((step) => step.id === current);
+  
+  const getVisualCurrentIndex = (stepId: ActivationStep) => {
+    if (stepId === 'ACCOUNT') return 0;
+    if (stepId === 'RULES' || stepId === 'AGREEMENT') return 1;
+    if (stepId === 'PROFILE') return 2;
+    if (stepId === 'ACTIVATE') return 3;
+    return 0;
+  };
+
+  const currentIndex = getVisualCurrentIndex(current);
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3 text-xs">
-        <span className="font-bold text-accent">Step {Math.max(1, currentIndex + 1)} of {activationSteps.length}</span>
+        <span className="font-bold text-accent">Step {Math.max(1, currentIndex + 1)} of {visualSteps.length}</span>
         <span className="text-muted-foreground">Complete setup in under 3 minutes</span>
       </div>
       <div className="flex items-center gap-0">
-        {activationSteps.map((step, i) => {
-          const done = completed.has(step.id);
-          const active = activeStep === step.id;
+        {visualSteps.map((step, i) => {
+          const done = step.id === 'AGREEMENT' 
+            ? completed.has('AGREEMENT') 
+            : completed.has(step.id);
+            
+          const active = step.id === 'AGREEMENT'
+            ? (activeStep === 'RULES' || activeStep === 'AGREEMENT')
+            : activeStep === step.id;
+
           return (
             <div key={step.id} className="flex-1 flex items-center">
               <div className={`h-1.5 rounded-full flex-1 transition-colors duration-300 ${
                 done || active ? 'bg-accent' : 'bg-muted'
               }`} />
-              {i < activationSteps.length - 1 && <div className="w-1" />}
+              {i < visualSteps.length - 1 && <div className="w-1" />}
             </div>
           );
         })}
       </div>
       <div className="grid grid-cols-4">
-        {activationSteps.map((step, i) => {
-          const done = completed.has(step.id);
-          const active = activeStep === step.id;
-          const clickable = done || current === step.id;
+        {visualSteps.map((step, i) => {
+          const done = step.id === 'AGREEMENT' 
+            ? completed.has('AGREEMENT') 
+            : completed.has(step.id);
+
+          const active = step.id === 'AGREEMENT'
+            ? (activeStep === 'RULES' || activeStep === 'AGREEMENT')
+            : activeStep === step.id;
+
+          const clickable = step.id === 'AGREEMENT'
+            ? (completed.has('AGREEMENT') || current === 'RULES' || current === 'AGREEMENT' || completed.has('RULES'))
+            : (completed.has(step.id) || current === step.id);
+
           return (
             <button
               key={step.id}
               type="button"
               disabled={!clickable}
-              onClick={() => onStepClick(step.id)}
+              onClick={() => {
+                if (step.id === 'AGREEMENT') {
+                  if (current === 'RULES' || current === 'AGREEMENT') {
+                    onStepClick(current);
+                  } else {
+                    onStepClick('AGREEMENT');
+                  }
+                } else {
+                  onStepClick(step.id);
+                }
+              }}
               className="min-w-0 flex flex-col items-center gap-1 rounded-xl px-1 py-1 text-center disabled:cursor-not-allowed disabled:opacity-60"
             >
               <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
@@ -953,12 +995,12 @@ export function ActivateAccountPage() {
           {showWelcome && activeStep === 'ACCOUNT' && !ctx.activation_state.account_setup_completed ? (
             <div className="space-y-5">
               <div>
-                <p className="text-sm font-semibold text-accent">Step 1 of {activationSteps.length}</p>
+                <p className="text-sm font-semibold text-accent">Step 1 of {visualSteps.length}</p>
                 <h2 className="mt-1 text-2xl font-bold text-foreground">
                   {ctx.activation_state.completed_steps.length > 0 ? 'Resume setup' : `Welcome to ${ctx.hostel.name}`}
                 </h2>
                 <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-                  Complete setup in under 3 minutes. Your room is already reserved, and only five simple steps are left before you enter the tenant portal.
+                  Complete setup in under 3 minutes. Your room is already reserved, and only four simple steps are left before you enter the tenant portal.
                 </p>
               </div>
               <div className="grid gap-3 sm:grid-cols-3">
