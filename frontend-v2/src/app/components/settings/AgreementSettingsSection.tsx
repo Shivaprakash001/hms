@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from "react";
-import { Upload, X, ShieldAlert, FileText, CheckCircle2 } from "lucide-react";
+import { Upload, X, ShieldAlert, FileText, CheckCircle2, PenTool, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { ownerService } from "@features/owners/api";
+import { SignaturePad } from "@shared/ui/inputs";
 import { SectionShell, Field, inp, SkeletonSection } from "./shared";
+
 
 interface Props {
   hostelId: string;
@@ -27,6 +29,8 @@ export function AgreementSettingsSection({ hostelId }: Props) {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sigMethod, setSigMethod] = useState<"upload" | "draw">("upload");
+  const [drawnBlob, setDrawnBlob] = useState<Blob | null>(null);
 
   // Load template on mount or hostelId change
   useEffect(() => {
@@ -130,6 +134,28 @@ export function AgreementSettingsSection({ hostelId }: Props) {
     }
   };
 
+  const handleSaveDrawnSignature = async () => {
+    if (!drawnBlob) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const file = new File([drawnBlob], "owner_signature.png", { type: "image/png" });
+      const res = await ownerService.uploadOwnerSignatureStamp(hostelId, file);
+      const data = res?.data ?? res;
+      setLocal((prev) => ({
+        ...prev,
+        owner_signature_url: data?.owner_signature_url || prev.owner_signature_url,
+      }));
+      setDrawnBlob(null);
+      toast.success("Signature stamp drawn and saved successfully");
+    } catch (err: any) {
+      setError(err?.response?.data?.error?.message || "Failed to save drawn signature");
+      toast.error("Failed to save drawn signature");
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const upd = (k: keyof TemplateData, v: string | null) => {
     setLocal((prev) => ({ ...prev, [k]: v }));
   };
@@ -194,18 +220,46 @@ export function AgreementSettingsSection({ hostelId }: Props) {
           />
         </Field>
 
-        {/* Signature Stamp Upload */}
-        <div className="border-t border-border pt-5 space-y-3">
+        {/* Signature Section */}
+        <div className="border-t border-border pt-5 space-y-4">
           <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-            Owner Signature Stamp
+            Owner Signature / Stamp
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Upload a high-quality signature stamp or digital signature. This image will be automatically placed in the landlord signature block of all signed tenant agreements. A transparent PNG format is highly recommended.
+            Configure how your landlord signature is placed on agreements. You can either upload a signature stamp/image file, or draw your signature directly on a canvas. A transparent background is highly recommended.
           </p>
 
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 pt-2">
+          {/* Toggle Tab */}
+          <div className="flex gap-2 p-1 bg-secondary/50 border border-border/80 rounded-xl w-fit">
+            <button
+              type="button"
+              onClick={() => setSigMethod("upload")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                sigMethod === "upload"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <ImageIcon className="w-3.5 h-3.5" />
+              Upload Image
+            </button>
+            <button
+              type="button"
+              onClick={() => setSigMethod("draw")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                sigMethod === "draw"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <PenTool className="w-3.5 h-3.5" />
+              Draw Signature
+            </button>
+          </div>
+
+          <div className="flex flex-col md:flex-row items-start gap-6 pt-2">
             {/* Stamp preview */}
-            <div className="w-48 h-24 border border-dashed border-border rounded-xl bg-slate-50 overflow-hidden flex items-center justify-center relative group shadow-sm shrink-0">
+            <div className="w-48 h-24 border border-dashed border-border rounded-xl bg-white overflow-hidden flex items-center justify-center relative group shadow-inner shrink-0">
               {local.owner_signature_url ? (
                 <img
                   src={local.owner_signature_url}
@@ -213,39 +267,164 @@ export function AgreementSettingsSection({ hostelId }: Props) {
                   className="max-w-full max-h-full object-contain p-2"
                 />
               ) : (
-                <div className="text-center p-3">
+                <div className="text-center p-3 select-none">
                   <ShieldAlert className="w-6 h-6 text-muted-foreground/60 mx-auto mb-1" />
-                  <span className="text-[10px] text-muted-foreground block">No signature stamp uploaded</span>
+                  <span className="text-[10px] text-muted-foreground block">No signature uploaded</span>
                 </div>
               )}
             </div>
 
-            {/* Stamp Upload controls */}
-            <div className="space-y-2">
-              <label className="inline-flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/80 text-foreground border border-border text-xs font-semibold rounded-lg cursor-pointer active:scale-95 transition-all">
-                <Upload className="w-3.5 h-3.5" />
-                {uploading ? "Uploading stamp..." : "Upload Signature Stamp"}
-                <input
-                  type="file"
-                  accept="image/png, image/jpeg, image/webp"
-                  className="sr-only"
-                  onChange={handleFileUpload}
-                  disabled={uploading}
-                />
-              </label>
+            {/* Signature Controls */}
+            <div className="flex-1 w-full space-y-4">
+              {sigMethod === "upload" ? (
+                <div className="space-y-2">
+                  <label className="inline-flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/80 text-foreground border border-border text-xs font-semibold rounded-lg cursor-pointer active:scale-95 transition-all shadow-sm">
+                    <Upload className="w-3.5 h-3.5" />
+                    {uploading ? "Uploading stamp..." : "Upload Signature Stamp"}
+                    <input
+                      type="file"
+                      accept="image/png, image/jpeg, image/webp"
+                      className="sr-only"
+                      onChange={handleFileUpload}
+                      disabled={uploading}
+                    />
+                  </label>
 
-              {local.owner_signature_url && (
-                <button
-                  type="button"
-                  onClick={() => upd("owner_signature_url", null)}
-                  className="flex items-center gap-1.5 text-xs text-destructive hover:underline font-medium ml-1"
-                >
-                  <X className="w-3.5 h-3.5" /> Clear stamp
-                </button>
+                  {local.owner_signature_url && (
+                    <button
+                      type="button"
+                      onClick={() => upd("owner_signature_url", null)}
+                      className="flex items-center gap-1.5 text-xs text-destructive hover:underline font-medium ml-1"
+                    >
+                      <X className="w-3.5 h-3.5" /> Clear stamp
+                    </button>
+                  )}
+
+                  <p className="text-[10px] text-muted-foreground">PNG, JPG or WEBP formats. Maximum size: 2MB.</p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-w-lg">
+                  <SignaturePad
+                    onSave={(blob) => setDrawnBlob(blob)}
+                    placeholder="Draw your landlord signature here"
+                    existingSignatureUrl={local.owner_signature_url}
+                  />
+                  {drawnBlob && (
+                    <button
+                      type="button"
+                      onClick={handleSaveDrawnSignature}
+                      disabled={uploading}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-all active:scale-95 disabled:opacity-50"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      {uploading ? "Saving signature..." : "Save Drawn Signature"}
+                    </button>
+                  )}
+                </div>
               )}
-
-              <p className="text-[10px] text-muted-foreground">PNG, JPG or WEBP formats. Maximum size: 2MB.</p>
             </div>
+          </div>
+        </div>
+
+        {/* Live Agreement Document Preview */}
+        <div className="border-t border-border pt-5 space-y-3">
+          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            Live Agreement Template Preview
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            This is a real-time preview of the residency agreement document that tenants will review and sign during onboarding.
+          </p>
+
+          <div className="rounded-xl border border-border bg-slate-50/50 p-5 space-y-4 max-h-[400px] overflow-y-auto text-xs leading-relaxed text-slate-700 select-none shadow-inner">
+            <div className="text-center border-b border-border/80 pb-3 mb-3">
+              <h4 className="font-bold text-sm tracking-tight text-slate-800 uppercase">
+                {local.title || "Standard Tenant Agreement"}
+              </h4>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                Hostel: (Hostel Name)
+              </p>
+            </div>
+
+            <p>
+              This agreement is made and entered into by and between the Hostel Management of <strong>(Hostel Name)</strong> (represented by Authorized Signatory <strong>{local.owner_name || "(Signatory Name)"}</strong>) and the Tenant <strong>(Tenant Name)</strong>.
+            </p>
+
+            <h5 className="font-bold text-[11px] uppercase tracking-wider text-slate-800 mt-3 mb-1">
+              1. Room & Financial Summary
+            </h5>
+            <div className="bg-white rounded-lg p-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] border border-border">
+              <div>
+                <span className="text-muted-foreground">Assigned Room:</span>{" "}
+                <strong className="text-slate-800">(Room No.)</strong>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Joining Date:</span>{" "}
+                <strong className="text-slate-800">(Joining Date)</strong>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Monthly Rent:</span>{" "}
+                <strong className="text-slate-800">₹(Monthly Rent)</strong>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Security Deposit:</span>{" "}
+                <strong className="text-slate-800">₹(Deposit)</strong>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Payment Cycle:</span>{" "}
+                <strong className="text-slate-800">(Payment Frequency)</strong>
+              </div>
+            </div>
+
+            <h5 className="font-bold text-[11px] uppercase tracking-wider text-slate-800 mt-4 mb-1">
+              2. Terms of Residency & Rules Compliance
+            </h5>
+            <ul className="list-disc pl-4 space-y-1.5 text-muted-foreground">
+              <li>The Tenant agrees to pay the monthly rent on or before the due date as defined by the hostel policy.</li>
+              <li>A refundable security deposit is deposited with the management, which will be settled/refunded upon successful move-out compliance checks.</li>
+              <li className="text-slate-800 font-medium bg-amber-500/5 p-2 rounded border border-amber-500/10">
+                <strong>Hostel Rules Binding Clause:</strong> The Tenant explicitly agrees to follow, comply with, and be legally bound by each and every rule, policy, and regulation of the hostel. This includes all guidelines concerning fee refunds, hostel discipline, guest policies, late fee obligations, and property damage liabilities.
+              </li>
+            </ul>
+
+            {local.custom_rules && (
+              <>
+                <h5 className="font-bold text-[11px] uppercase tracking-wider text-slate-800 mt-4 mb-1">
+                  3. Additional Custom Rules
+                </h5>
+                <p className="whitespace-pre-line text-muted-foreground bg-amber-50/20 border border-amber-500/10 rounded-lg p-3 italic">
+                  {local.custom_rules}
+                </p>
+              </>
+            )}
+
+            <div className="pt-4 border-t border-dashed border-border/80 flex items-center justify-between gap-4">
+              <div className="space-y-1">
+                <span className="text-[10px] text-muted-foreground block uppercase font-medium">Tenant Signature</span>
+                <div className="w-32 h-12 border border-dashed border-border rounded-lg bg-white flex items-center justify-center text-[10px] text-muted-foreground">
+                  (Tenant to sign)
+                </div>
+              </div>
+
+              <div className="space-y-1 text-right flex flex-col items-end">
+                <span className="text-[10px] text-muted-foreground block uppercase font-medium">Landlord Signature</span>
+                <div className="w-32 h-12 border border-dashed border-border rounded-lg bg-white overflow-hidden flex items-center justify-center relative">
+                  {local.owner_signature_url ? (
+                    <img
+                      src={local.owner_signature_url}
+                      alt="Owner Signature"
+                      className="max-w-full max-h-full object-contain p-1"
+                    />
+                  ) : (
+                    <span className="text-[9px] text-destructive font-medium">Pending signature</span>
+                  )}
+                </div>
+                <span className="text-[10px] font-semibold text-slate-700 mt-1">{local.owner_name || "(Signatory Name)"}</span>
+              </div>
+            </div>
+
+            <p className="text-[9px] text-muted-foreground mt-4 pt-3 border-t border-border/60">
+              This electronic document is valid under the Information Technology Act. Digital signatures and IP details collected during onboarding are legally binding.
+            </p>
           </div>
         </div>
       </div>
