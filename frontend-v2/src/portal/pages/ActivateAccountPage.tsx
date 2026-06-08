@@ -23,8 +23,9 @@ import {
 } from 'lucide-react';
 import { tenantService } from '@features/tenants/api';
 import { useAuth } from '@context/AuthContext';
+import { SignaturePad } from '@shared/ui/inputs';
 
-type ActivationStep = 'ACCOUNT' | 'RULES' | 'PROFILE' | 'ACTIVATE';
+type ActivationStep = 'ACCOUNT' | 'RULES' | 'AGREEMENT' | 'PROFILE' | 'ACTIVATE';
 
 type ActivationContext = {
   activation_state: {
@@ -33,6 +34,7 @@ type ActivationContext = {
     blocked_steps: ActivationStep[];
     account_setup_completed: boolean;
     rules_accepted: boolean;
+    agreement_signed: boolean;
     profile_completed: boolean;
     documents_uploaded: boolean;
     activation_completed: boolean;
@@ -48,6 +50,13 @@ type ActivationContext = {
     content?: { categories?: RuleCategory[] };
     required_acknowledgements?: string[];
   };
+  agreement: {
+    id: string;
+    status: string;
+    signed_at?: string | null;
+    pdf_url?: string | null;
+    content_snapshot: Record<string, any>;
+  } | null;
   documents: { uploaded_count?: number; verification_status?: string };
   missing_fields?: { tier_1_required?: string[] };
 };
@@ -84,6 +93,7 @@ const phoneDigits = (value: unknown) => String(value || '').replace(/\D/g, '').s
 const activationSteps: { id: ActivationStep; label: string; helper: string }[] = [
   { id: 'ACCOUNT', label: 'Account', helper: 'Password and mobile' },
   { id: 'RULES', label: 'Rules', helper: 'Read and accept' },
+  { id: 'AGREEMENT', label: 'Agreement', helper: 'Sign contract' },
   { id: 'PROFILE', label: 'Profile', helper: 'Personal details' },
   { id: 'ACTIVATE', label: 'Activate', helper: 'Enter portal' },
 ];
@@ -310,7 +320,7 @@ function Progress({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3 text-xs">
-        <span className="font-bold text-accent">Step {Math.max(1, currentIndex + 1)} of 4</span>
+        <span className="font-bold text-accent">Step {Math.max(1, currentIndex + 1)} of {activationSteps.length}</span>
         <span className="text-muted-foreground">Complete setup in under 3 minutes</span>
       </div>
       <div className="flex items-center gap-0">
@@ -383,6 +393,14 @@ export function ActivateAccountPage() {
   const [paymentFrequency, setPaymentFrequency] = useState('MONTHLY');
 
   const [account, setAccount] = useState({ password: '', confirm_password: '', phone: '' });
+
+  // Agreement Signature State
+  const [tenantSigBlob, setTenantSigBlob] = useState<Blob | null>(null);
+  const [tenantSigName, setTenantSigName] = useState('');
+  const [guardianSigBlob, setGuardianSigBlob] = useState<Blob | null>(null);
+  const [guardianSigName, setGuardianSigName] = useState('');
+  const [guardianRelation, setGuardianRelation] = useState('');
+
   const [acks, setAcks] = useState<Record<string, boolean>>({});
   const [profile, setProfile] = useState<Record<string, string>>({
     phone: '',
@@ -651,6 +669,77 @@ export function ActivateAccountPage() {
     }
   };
 
+  const agreementSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!ctx) return;
+    setError('');
+
+    const profileType = String(ctx.tenant.profile_type || 'STUDENT').toUpperCase();
+    const isStudent = profileType === 'STUDENT';
+
+    if (!tenantSigName.trim()) {
+      setError('Your typed full name signature is required');
+      return;
+    }
+    if (!tenantSigBlob) {
+      setError('Please draw your signature');
+      return;
+    }
+
+    if (isStudent) {
+      if (!guardianSigName.trim()) {
+        setError("Parent/Guardian typed full name signature is required");
+        return;
+      }
+      if (!guardianSigBlob) {
+        setError("Please draw parent/guardian signature");
+        return;
+      }
+      if (!guardianRelation) {
+        setError("Please select parent/guardian relationship");
+        return;
+      }
+    }
+
+    setSubmitting(true);
+    try {
+      // 1. Upload Tenant Signature
+      const tenantFile = new File([tenantSigBlob], 'tenant_signature.png', { type: 'image/png' });
+      const tenantUpload = await tenantService.uploadActivationSignature(token, tenantFile, 'tenant');
+      const tenantSigUrl = tenantUpload.url;
+
+      // 2. Upload Guardian Signature if student
+      let guardianSigUrl = '';
+      if (isStudent && guardianSigBlob) {
+        const guardianFile = new File([guardianSigBlob], 'guardian_signature.png', { type: 'image/png' });
+        const guardianUpload = await tenantService.uploadActivationSignature(token, guardianFile, 'guardian');
+        guardianSigUrl = guardianUpload.url;
+      }
+
+      // 3. Submit step to Activation State Machine
+      const saved = await submitStep('AGREEMENT', {
+        tenant_signature_url: tenantSigUrl,
+        tenant_signature_name: tenantSigName.trim(),
+        guardian_signature_url: isStudent ? guardianSigUrl : null,
+        guardian_signature_name: isStudent ? guardianSigName.trim() : null,
+        guardian_relation: isStudent ? guardianRelation : null,
+      });
+
+      if (saved) {
+        // Clear local state
+        setTenantSigBlob(null);
+        setTenantSigName('');
+        setGuardianSigBlob(null);
+        setGuardianSigName('');
+        setGuardianRelation('');
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Failed to submit agreement signature');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const profileSubmit = async (e: FormEvent) => {
     e.preventDefault();
     const invalidMessage = invalidPhoneMessage({
@@ -836,12 +925,12 @@ export function ActivateAccountPage() {
           {showWelcome && activeStep === 'ACCOUNT' && !ctx.activation_state.account_setup_completed ? (
             <div className="space-y-5">
               <div>
-                <p className="text-sm font-semibold text-accent">Step 1 of 4</p>
+                <p className="text-sm font-semibold text-accent">Step 1 of {activationSteps.length}</p>
                 <h2 className="mt-1 text-2xl font-bold text-foreground">
                   {ctx.activation_state.completed_steps.length > 0 ? 'Resume setup' : `Welcome to ${ctx.hostel.name}`}
                 </h2>
                 <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-                  Complete setup in under 3 minutes. Your room is already reserved, and only four simple steps are left before you enter the tenant portal.
+                  Complete setup in under 3 minutes. Your room is already reserved, and only five simple steps are left before you enter the tenant portal.
                 </p>
               </div>
               <div className="grid gap-3 sm:grid-cols-3">
@@ -1053,6 +1142,190 @@ export function ActivateAccountPage() {
                 </button>
               </div>
             </div>
+          )}
+
+          {activeStep === 'AGREEMENT' && ctx?.agreement && (
+            <form onSubmit={agreementSubmit} className="space-y-5 pb-24">
+              <SectionHeading
+                icon={<FileText className="w-5 h-5" />}
+                title="Review & Sign Agreement"
+                text="Please review the terms of your hostel stay and sign electronically below to proceed."
+              />
+
+              {/* Immutable Lease Snapshot Box */}
+              <div className="rounded-xl border border-border bg-background p-5 shadow-sm space-y-4 max-h-[350px] overflow-y-auto text-sm leading-relaxed text-foreground select-none">
+                <div className="text-center border-b pb-4 mb-4">
+                  <h3 className="font-extrabold text-base tracking-tight text-slate-800">
+                    HOSTEL RESIDENCY AGREEMENT
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Hostel: {ctx.agreement.content_snapshot.hostel_name}
+                  </p>
+                </div>
+
+                <p>
+                  This agreement is made and entered into by and between the Hostel Management of <strong>{ctx.agreement.content_snapshot.hostel_name}</strong> (represented by <strong>{ctx.agreement.content_snapshot.owner_name}</strong>) and the Tenant <strong>{ctx.agreement.content_snapshot.tenant_name}</strong>.
+                </p>
+
+                <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 mt-3 mb-1">
+                  1. Room & Financial Summary
+                </h4>
+                <div className="bg-muted/40 rounded-lg p-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs border border-border/50">
+                  <div>
+                    <span className="text-muted-foreground">Assigned Room:</span>{" "}
+                    <strong className="text-foreground">{ctx.agreement.content_snapshot.room_number}</strong>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Joining Date:</span>{" "}
+                    <strong className="text-foreground">{ctx.agreement.content_snapshot.joining_date}</strong>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Monthly Rent:</span>{" "}
+                    <strong className="text-foreground">₹{ctx.agreement.content_snapshot.monthly_rent}</strong>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Security Deposit:</span>{" "}
+                    <strong className="text-foreground">₹{ctx.agreement.content_snapshot.advance_deposit}</strong>
+                  </div>
+                  {ctx.agreement.content_snapshot.maintenance_charge > 0 && (
+                    <div className="col-span-2">
+                      <span className="text-muted-foreground">Maintenance Charge:</span>{" "}
+                      <strong className="text-foreground">
+                        ₹{ctx.agreement.content_snapshot.maintenance_charge} ({ctx.agreement.content_snapshot.maintenance_type})
+                      </strong>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-muted-foreground">Payment Cycle:</span>{" "}
+                    <strong className="text-foreground">{ctx.agreement.content_snapshot.payment_frequency}</strong>
+                  </div>
+                </div>
+
+                <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 mt-4 mb-1">
+                  2. Terms of Residency
+                </h4>
+                <ul className="list-disc pl-5 space-y-1 text-xs text-muted-foreground">
+                  <li>The Tenant agrees to pay the monthly rent of ₹{ctx.agreement.content_snapshot.monthly_rent} on or before the due date as defined by the hostel policy.</li>
+                  <li>A refundable security deposit of ₹{ctx.agreement.content_snapshot.advance_deposit} is deposited with the management, which will be settled/refunded upon successful move-out compliance checks.</li>
+                  <li>The Tenant agrees to comply fully with all the rules & regulations of the hostel accepted in the previous step.</li>
+                </ul>
+
+                {ctx.agreement.content_snapshot.custom_rules && (
+                  <>
+                    <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 mt-4 mb-1">
+                      3. Additional Custom Rules
+                    </h4>
+                    <p className="text-xs whitespace-pre-line text-muted-foreground bg-amber-50/20 border border-amber-500/10 rounded-lg p-3 italic">
+                      {ctx.agreement.content_snapshot.custom_rules}
+                    </p>
+                  </>
+                )}
+
+                <p className="text-[10px] text-muted-foreground mt-4 pt-4 border-t border-dashed">
+                  This electronic document is valid under the Information Technology Act. Digital signatures and IP details collected during onboarding are legally binding.
+                </p>
+              </div>
+
+              {/* Signature Section */}
+              <div className="grid gap-6">
+                {/* Tenant Signature */}
+                <div className="rounded-xl border border-border bg-background p-4 space-y-3">
+                  <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                    <span className="flex h-5 w-5 items-center justify-center rounded bg-accent/10 text-accent text-xs font-semibold">1</span>
+                    Tenant Signature
+                  </h3>
+                  <div className="grid gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                        Full Name (Type to sign) <span className="text-destructive">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={tenantSigName}
+                        onChange={(e) => setTenantSigName(e.target.value)}
+                        placeholder="Type your official full name"
+                        className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                        Draw Signature <span className="text-destructive">*</span>
+                      </label>
+                      <SignaturePad onSave={setTenantSigBlob} placeholder="Draw tenant signature here" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Guardian Signature (conditional for STUDENT profiles) */}
+                {String(ctx.tenant.profile_type || 'STUDENT').toUpperCase() === 'STUDENT' && (
+                  <div className="rounded-xl border border-border bg-background p-4 space-y-3">
+                    <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                      <span className="flex h-5 w-5 items-center justify-center rounded bg-accent/10 text-accent text-xs font-semibold">2</span>
+                      Parent/Guardian Co-Signature
+                    </h3>
+                    <div className="grid gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                          Relationship to Tenant <span className="text-destructive">*</span>
+                        </label>
+                        <select
+                          required
+                          value={guardianRelation}
+                          onChange={(e) => setGuardianRelation(e.target.value)}
+                          className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-accent focus:outline-none bg-white"
+                        >
+                          <option value="">Select relationship</option>
+                          <option value="Father">Father</option>
+                          <option value="Mother">Mother</option>
+                          <option value="Guardian">Guardian</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                          Parent/Guardian Full Name <span className="text-destructive">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={guardianSigName}
+                          onChange={(e) => setGuardianSigName(e.target.value)}
+                          placeholder="Type parent/guardian full name"
+                          className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                          Draw Signature <span className="text-destructive">*</span>
+                        </label>
+                        <SignaturePad onSave={setGuardianSigBlob} placeholder="Draw parent/guardian signature here" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Submit Button Bar */}
+              <div className="sticky bottom-3 z-20 rounded-2xl border border-border bg-card/95 p-3 shadow-xl backdrop-blur">
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-accent px-5 py-3.5 text-sm font-semibold text-accent-foreground disabled:opacity-50 active:scale-[0.98] transition-transform shadow-sm cursor-pointer"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Uploading & signing agreement...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      Submit & sign contract
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           )}
 
           {activeStep === 'PROFILE' && (

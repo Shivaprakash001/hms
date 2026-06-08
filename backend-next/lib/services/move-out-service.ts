@@ -267,6 +267,7 @@ export class MoveOutService {
 
     const now = new Date();
     const exitDate = physicalExitDate ? new Date(physicalExitDate) : req.planned_exit_date;
+    const isFutureExit = exitDate.getTime() > now.getTime();
 
     return prisma.$transaction(async (tx: Tx) => {
       await tx.move_out_requests.update({
@@ -275,28 +276,42 @@ export class MoveOutService {
           status: "VACATED",
           physical_exit_date: exitDate,
           actual_exit_date: exitDate,
-          room_release_date: exitDate,
+          room_release_date: isFutureExit ? null : exitDate,
           updated_at: now,
         },
       });
 
-      // Terminate the room allocation
-      await tx.roomAllocation.updateMany({
-        where: { tenant_id: req.tenant_id, is_active: true, end_date: null },
-        data: { is_active: false, end_date: exitDate },
-      });
+      if (!isFutureExit) {
+        // Terminate the room allocation
+        await tx.roomAllocation.updateMany({
+          where: { tenant_id: req.tenant_id, is_active: true, end_date: null },
+          data: { is_active: false, end_date: exitDate },
+        });
 
-      // Update tenant status to FORMER_TENANT
-      await tx.tenants.update({
-        where: { id: req.tenant_id },
-        data: {
-          status: "FORMER_TENANT",
-          exit_date: exitDate,
-          exit_reason: req.reason,
-          exit_notes: req.reason_text,
-          updated_at: now,
-        },
-      });
+        // Update tenant status to FORMER_TENANT
+        await tx.tenants.update({
+          where: { id: req.tenant_id },
+          data: {
+            status: "FORMER_TENANT",
+            exit_date: exitDate,
+            exit_reason: req.reason,
+            exit_notes: req.reason_text,
+            updated_at: now,
+          },
+        });
+      } else {
+        // Future exit: do NOT terminate allocation and do NOT mark as FORMER_TENANT yet.
+        // Save the exit date and reasons for occupancy tracking.
+        await tx.tenants.update({
+          where: { id: req.tenant_id },
+          data: {
+            exit_date: exitDate,
+            exit_reason: req.reason,
+            exit_notes: req.reason_text,
+            updated_at: now,
+          },
+        });
+      }
 
       logger.info("move_out.vacated", { id: requestId, tenant_id: req.tenant_id });
       notifyMoveOutTransition(requestId, "VACATED");

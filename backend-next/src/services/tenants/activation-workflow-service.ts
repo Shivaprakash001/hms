@@ -5,8 +5,9 @@ import { getTenantOperationalContext } from "../../../lib/hostel-context";
 import { allocationReconciliationService } from "../../../lib/services/allocation-reconciliation-service";
 import { eventLog } from "../../../lib/services/event-log-service";
 import { tenantInvitationLifecycleService } from "./tenant-invitation-lifecycle-service";
+import { AgreementGenerationService } from "./agreement-generation-service";
 
-type ActivationStep = "ACCOUNT" | "RULES" | "PROFILE" | "ACTIVATE";
+type ActivationStep = "ACCOUNT" | "RULES" | "AGREEMENT" | "PROFILE" | "ACTIVATE";
 type ResolvedInvitation = { profile: any | null; tenant: any; invitation?: any | null; token: string; source?: string };
 
 const REQUIRED_ACKNOWLEDGEMENTS = [
@@ -278,6 +279,7 @@ export class ActivationWorkflowService {
 
     const profileCompleted = missingTier1.length === 0;
     const rulesAccepted = Boolean(latestAcceptance);
+    const agreementSigned = (tenant.agreements || []).some((a: any) => a.status === "SIGNED");
     const requiredDocumentTypes = this.requiredDocumentTypes(tenant.profile_type);
     const requiredDocuments = (tenant.identification_documents || []).filter((doc: any) =>
       requiredDocumentTypes.includes(doc.doc_type)
@@ -293,23 +295,26 @@ export class ActivationWorkflowService {
     const completedSteps: ActivationStep[] = [];
     if (accountSetupCompleted) completedSteps.push("ACCOUNT");
     if (rulesAccepted) completedSteps.push("RULES");
+    if (agreementSigned) completedSteps.push("AGREEMENT");
     if (profileCompleted) completedSteps.push("PROFILE");
     if (activationCompleted) completedSteps.push("ACTIVATE");
 
     let currentStep: ActivationStep = "ACCOUNT";
     if (accountSetupCompleted && !rulesAccepted) currentStep = "RULES";
-    else if (accountSetupCompleted && rulesAccepted && !profileCompleted) currentStep = "PROFILE";
-    else if (accountSetupCompleted && rulesAccepted && profileCompleted) currentStep = "ACTIVATE";
+    else if (accountSetupCompleted && rulesAccepted && !agreementSigned) currentStep = "AGREEMENT";
+    else if (accountSetupCompleted && rulesAccepted && agreementSigned && !profileCompleted) currentStep = "PROFILE";
+    else if (accountSetupCompleted && rulesAccepted && agreementSigned && profileCompleted) currentStep = "ACTIVATE";
 
     return {
       account_setup_completed: accountSetupCompleted,
       rules_accepted: rulesAccepted,
+      agreement_signed: agreementSigned,
       profile_completed: profileCompleted,
       documents_uploaded: documentsUploaded,
       activation_completed: activationCompleted,
       current_step: currentStep,
       completed_steps: completedSteps,
-      blocked_steps: this.blockedSteps({ accountSetupCompleted, rulesAccepted, profileCompleted }),
+      blocked_steps: this.blockedSteps({ accountSetupCompleted, rulesAccepted, agreementSigned, profileCompleted }),
       missing_fields: {
         tier_1_required: missingTier1,
         tier_2_recommended: this.recommendedMissingFields(tenant),
@@ -322,7 +327,7 @@ export class ActivationWorkflowService {
             rule_version_id: latestAcceptance.rule_version_id,
           }
         : null,
-      progress_percent: Math.round((completedSteps.length / 4) * 100),
+      progress_percent: Math.round((completedSteps.length / 5) * 100),
       activation_started_at: startedAt,
       activation_completed_at: completedAt,
       onboarding_last_activity_at: tenant.onboarding_last_activity_at || null,
@@ -330,11 +335,12 @@ export class ActivationWorkflowService {
     };
   }
 
-  private blockedSteps(flags: { accountSetupCompleted: boolean; rulesAccepted: boolean; profileCompleted: boolean }) {
+  private blockedSteps(flags: { accountSetupCompleted: boolean; rulesAccepted: boolean; agreementSigned: boolean; profileCompleted: boolean }) {
     const blocked: ActivationStep[] = [];
-    if (!flags.accountSetupCompleted) blocked.push("RULES", "PROFILE", "ACTIVATE");
-    else if (!flags.rulesAccepted) blocked.push("ACTIVATE");
-    if (!flags.profileCompleted) blocked.push("ACTIVATE");
+    if (!flags.accountSetupCompleted) blocked.push("RULES", "AGREEMENT", "PROFILE", "ACTIVATE");
+    else if (!flags.rulesAccepted) blocked.push("AGREEMENT", "PROFILE", "ACTIVATE");
+    else if (!flags.agreementSigned) blocked.push("PROFILE", "ACTIVATE");
+    else if (!flags.profileCompleted) blocked.push("ACTIVATE");
     return Array.from(new Set(blocked));
   }
 
@@ -385,6 +391,55 @@ export class ActivationWorkflowService {
           where: { room_id: room.id, is_active: true, end_date: null, tenant_id: { not: tenant.id } },
         })
       : 0;
+
+    // Ensure we have an active template for this hostel.
+    // If not, create a default template.
+    let activeTemplate = await prisma.agreementTemplate.findFirst({
+      where: { hostel_id: tenant.hostel_id, is_active: true },
+      orderBy: { created_at: "desc" },
+    });
+    if (!activeTemplate) {
+      activeTemplate = await prisma.agreementTemplate.create({
+        data: {
+          id: crypto.randomUUID(),
+          hostel_id: tenant.hostel_id,
+          version: "v1-default",
+          title: "Standard Tenant Agreement",
+          owner_name: hostel.profiles?.name || "Hostel Owner",
+          custom_rules: "",
+          is_active: true,
+        }
+      });
+    }
+
+    // Ensure we have an active agreement (either DRAFT or SIGNED)
+    let activeAgreement = (tenant.agreements || []).find((a: any) => a.status === "SIGNED" || a.status === "DRAFT");
+    if (!activeAgreement) {
+      activeAgreement = await prisma.agreement.create({
+        data: {
+          id: crypto.randomUUID(),
+          tenant_id: tenant.id,
+          hostel_id: tenant.hostel_id,
+          template_id: activeTemplate.id,
+          status: "DRAFT",
+          content_snapshot: {
+            hostel_name: hostel.name,
+            room_number: room?.room_no ?? "N/A",
+            monthly_rent: Number(tenant.monthly_rent ?? room?.base_rent ?? 0),
+            advance_deposit: Number(tenant.advance_deposit ?? 0),
+            maintenance_charge: Number(tenant.maintenance_charge ?? 0),
+            maintenance_type: tenant.maintenance_type || "MONTHLY",
+            joining_date: dateOnly(tenant.joined_on || new Date()),
+            payment_frequency: tenant.payment_frequency || "MONTHLY",
+            tenant_name: profile?.name || invitation?.name || "Tenant",
+            owner_name: activeTemplate.owner_name,
+            custom_rules: activeTemplate.custom_rules || "",
+          }
+        },
+      });
+      // Inject the newly created draft agreement so computeState reads it correctly
+      tenant.agreements = [activeAgreement, ...(tenant.agreements || [])];
+    }
 
     const state = this.computeState(profile, tenant, ruleVersion);
     const requiredDocumentTypes = this.requiredDocumentTypes(tenant.profile_type);
@@ -461,6 +516,29 @@ export class ActivationWorkflowService {
         verification_status: tenant.document_verified ? "VERIFIED" : "PENDING",
         required_after_activation: requiredDocumentTypes,
       },
+      agreement: activeAgreement ? {
+        id: activeAgreement.id,
+        status: activeAgreement.status,
+        pdf_url: activeAgreement.pdf_url,
+        content_snapshot: activeAgreement.content_snapshot,
+        tenant_signature_url: activeAgreement.tenant_signature_url,
+        tenant_signature_name: activeAgreement.tenant_signature_name,
+        tenant_signed_at: activeAgreement.tenant_signed_at,
+        guardian_signature_url: activeAgreement.guardian_signature_url,
+        guardian_signature_name: activeAgreement.guardian_signature_name,
+        guardian_relation: activeAgreement.guardian_relation,
+        guardian_signed_at: activeAgreement.guardian_signed_at,
+        owner_signature_url: activeAgreement.owner_signature_url,
+        owner_signature_name: activeAgreement.owner_signature_name,
+        owner_signed_at: activeAgreement.owner_signed_at,
+      } : null,
+      template: {
+        id: activeTemplate.id,
+        title: activeTemplate.title,
+        custom_rules: activeTemplate.custom_rules,
+        owner_name: activeTemplate.owner_name,
+        owner_signature_url: activeTemplate.owner_signature_url,
+      },
     };
   }
 
@@ -471,7 +549,7 @@ export class ActivationWorkflowService {
   }
 
   async mutate(token: string, step: ActivationStep, data: any, context: { ip: string; userAgent: string }) {
-    if (!["ACCOUNT", "RULES", "PROFILE", "ACTIVATE"].includes(step)) {
+    if (!["ACCOUNT", "RULES", "AGREEMENT", "PROFILE", "ACTIVATE"].includes(step)) {
       throw new Error("VALIDATION_ERROR: Unsupported activation step");
     }
     const { profile, tenant, invitation } = await this.resolveInvitation(token);
@@ -486,6 +564,9 @@ export class ActivationWorkflowService {
     if (step === "RULES") {
       await this.acceptRules(profile, tenant, data, context);
     }
+    if (step === "AGREEMENT") {
+      await this.signAgreement(profile, tenant, data, context);
+    }
     if (step === "PROFILE") {
       await this.saveProfile(profile, tenant, data);
     }
@@ -496,6 +577,7 @@ export class ActivationWorkflowService {
         activation_state: {
           account_setup_completed: true,
           rules_accepted: true,
+          agreement_signed: true,
           profile_completed: true,
           documents_uploaded: (tenant.identification_documents || []).some((doc: any) =>
             requiredDocumentTypes.includes(doc.doc_type)
@@ -513,17 +595,94 @@ export class ActivationWorkflowService {
     if (step === "RULES" && !state.account_setup_completed) {
       throw new Error("INVALID_TRANSITION: Complete account setup before accepting rules");
     }
+    if (step === "AGREEMENT" && !state.rules_accepted) {
+      throw new Error("INVALID_TRANSITION: Accept rules before signing agreement");
+    }
     if (step === "PROFILE" && !state.account_setup_completed) {
       throw new Error("INVALID_TRANSITION: Complete account setup before profile completion");
     }
     if (step === "PROFILE" && !state.rules_accepted) {
       throw new Error("INVALID_TRANSITION: Accept hostel rules before profile completion");
     }
+    if (step === "PROFILE" && !state.agreement_signed) {
+      throw new Error("INVALID_TRANSITION: Sign agreement before profile completion");
+    }
     if (step === "ACTIVATE") {
       if (!state.account_setup_completed) throw new Error("INVALID_TRANSITION: Account setup is incomplete");
       if (!state.rules_accepted) throw new Error("INVALID_TRANSITION: Rules must be accepted before activation");
+      if (!state.agreement_signed) throw new Error("INVALID_TRANSITION: Agreement must be signed before activation");
       if (!state.profile_completed) throw new Error("INVALID_TRANSITION: Required profile fields are incomplete");
     }
+  }
+
+  private async signAgreement(profile: any, tenant: any, data: any, context: { ip: string; userAgent: string }) {
+    const tenantSigUrl = String(data?.tenant_signature_url || "").trim();
+    const tenantSigName = String(data?.tenant_signature_name || "").trim();
+    if (!tenantSigUrl) throw new Error("VALIDATION_ERROR: Tenant signature is required");
+    if (!tenantSigName) throw new Error("VALIDATION_ERROR: Tenant typed signature name is required");
+
+    const profileType = String(tenant.profile_type || "STUDENT").toUpperCase();
+    const isStudent = profileType === "STUDENT";
+
+    const guardianSigUrl = data?.guardian_signature_url ? String(data.guardian_signature_url).trim() : null;
+    const guardianSigName = data?.guardian_signature_name ? String(data.guardian_signature_name).trim() : null;
+    const guardianRelation = data?.guardian_relation ? String(data.guardian_relation).trim() : null;
+
+    if (isStudent) {
+      if (!guardianSigUrl) throw new Error("VALIDATION_ERROR: Parent/Guardian signature is required");
+      if (!guardianSigName) throw new Error("VALIDATION_ERROR: Parent/Guardian typed signature name is required");
+      if (!guardianRelation) throw new Error("VALIDATION_ERROR: Parent/Guardian relationship is required");
+    }
+
+    const template = await prisma.agreementTemplate.findFirst({
+      where: { hostel_id: tenant.hostel_id, is_active: true },
+      orderBy: { created_at: "desc" },
+    });
+    if (!template) throw new Error("INTERNAL_ERROR: No active agreement template found");
+
+    const draft = await prisma.agreement.findFirst({
+      where: { tenant_id: tenant.id, status: "DRAFT" },
+      orderBy: { generated_at: "desc" },
+    });
+    if (!draft) throw new Error("INTERNAL_ERROR: Draft agreement not found");
+
+    const now = new Date();
+
+    const signedAgreement = await prisma.agreement.update({
+      where: { id: draft.id },
+      data: {
+        status: "SIGNED",
+        signed_at: now,
+        tenant_signature_url: tenantSigUrl,
+        tenant_signature_name: tenantSigName,
+        tenant_signed_at: now,
+        tenant_ip: context.ip,
+        tenant_user_agent: context.userAgent,
+
+        guardian_signature_url: guardianSigUrl,
+        guardian_signature_name: guardianSigName,
+        guardian_relation: guardianRelation,
+        guardian_signed_at: isStudent ? now : null,
+        guardian_ip: isStudent ? context.ip : null,
+        guardian_user_agent: isStudent ? context.userAgent : null,
+
+        owner_signature_url: template.owner_signature_url,
+        owner_signature_name: template.owner_name,
+        owner_signed_at: now,
+      },
+    });
+
+    try {
+      const pdfUrl = await AgreementGenerationService.generateAndUploadPdf(signedAgreement.id);
+      console.log(`Generated agreement PDF: ${pdfUrl}`);
+    } catch (pdfError) {
+      console.error("Failed to generate and upload agreement PDF:", pdfError);
+    }
+
+    await this.markActivity(tenant, "agreement_signed", {
+      agreement_id: signedAgreement.id,
+      pdf_url: signedAgreement.pdf_url,
+    });
   }
 
   private async saveAccount(profile: any | null, tenant: any, data: any, token: string, invitation?: any | null) {

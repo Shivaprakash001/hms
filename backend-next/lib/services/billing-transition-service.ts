@@ -85,7 +85,7 @@ export class BillingTransitionService {
     });
   }
 
-  async listForOwner(ownerId: string, filters: { hostelId?: string; tenantId?: string; status?: string }) {
+  async listForOwner(ownerId: string, filters: { hostelId: string | undefined; tenantId?: string; status?: string }) {
     return prisma.payment_frequency_change_requests.findMany({
       where: {
         owner_id: ownerId,

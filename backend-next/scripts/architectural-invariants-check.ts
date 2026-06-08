@@ -94,6 +94,7 @@ const checks: Array<{
       /useNotifications\.js$/,
       /usePortfolio\.js$/,
       /useHostels\.js$/,
+      /useBilling\.js$/,
     ],
   },
 ];

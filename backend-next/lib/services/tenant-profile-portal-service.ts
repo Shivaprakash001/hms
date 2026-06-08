@@ -145,7 +145,7 @@ export async function getTenantPortalProfile(profileId: string) {
   return {
     tenant: {
       id: tenant.id,
-      status: tenant.status,
+      status: ((moveOut && moveOut.status !== "COMPLETED") || (tenant.exit_date && new Date(tenant.exit_date).getTime() > new Date().getTime())) ? "MOVE_OUT_REQUESTED" : tenant.status,
       profile_type: tenant.profile_type,
       joined_on: tenant.joined_on,
       billing_start_date: tenant.billing_start_date,
@@ -170,6 +170,9 @@ export async function getTenantPortalProfile(profileId: string) {
       job_role: tenant.job_role,
       permanent_address: tenant.permanent_address,
       temporary_address: tenant.temporary_address,
+      exit_date: tenant.exit_date,
+      exit_reason: tenant.exit_reason,
+      exit_notes: tenant.exit_notes,
     },
     profile: {
       id: profile.id,

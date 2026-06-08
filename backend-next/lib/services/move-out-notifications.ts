@@ -8,6 +8,7 @@
 import { notificationService } from "./notification-service";
 import { prisma } from "../db";
 import { getLogger } from "../logger";
+import { invalidateHostelDashboardCache, invalidateOwnerDashboardCache } from "../cache/dashboard-cache";
 
 const logger = getLogger("move-out-notify");
 
@@ -81,19 +82,68 @@ export async function notifyMoveOutTransition(
       select: {
         tenant_id: true,
         owner_id: true,
+        hostel_id: true,
+        physical_exit_date: true,
+        planned_exit_date: true,
         tenant: { select: { profile_id: true, profiles: { select: { name: true } } } },
       },
     });
     if (!req) return;
 
+    // Invalidate dashboard caches on any status transition
+    if (req.hostel_id) {
+      try {
+        invalidateHostelDashboardCache(req.hostel_id);
+      } catch (err: any) {
+        logger.error("move_out.invalidate_hostel_cache_failed", { hostel_id: req.hostel_id, error: err.message });
+      }
+    }
+    if (req.owner_id) {
+      try {
+        invalidateOwnerDashboardCache(req.owner_id);
+      } catch (err: any) {
+        logger.error("move_out.invalidate_owner_cache_failed", { owner_id: req.owner_id, error: err.message });
+      }
+    }
+
     const tenantProfileId = req.tenant?.profile_id;
     const tenantName = req.tenant?.profiles?.name || "Tenant";
 
+    const exitDate = req.physical_exit_date || req.planned_exit_date;
+    const isFuture = exitDate && new Date(exitDate).getTime() > new Date().getTime();
+    const dateStr = exitDate ? new Date(exitDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+
     // Notify tenant
-    const tenantMsg = TENANT_MESSAGES[newStatus];
-    if (tenantMsg && tenantProfileId) {
+    let tenantTitle = "";
+    let tenantMessage = "";
+
+    if (newStatus === "VACATED") {
+      if (isFuture) {
+        tenantTitle = "Move-out Approved & Vacate Registered";
+        tenantMessage = `Your bed vacate has been registered. You remain an active resident until your scheduled exit date: ${dateStr}.`;
+      } else {
+        tenantTitle = TENANT_MESSAGES.VACATED.title;
+        tenantMessage = TENANT_MESSAGES.VACATED.message;
+      }
+    } else if (newStatus === "COMPLETED") {
+      if (isFuture) {
+        tenantTitle = "Settlement Completed";
+        tenantMessage = `Your final payment/settlement is completed. Your move-out is fully processed and scheduled for ${dateStr}.`;
+      } else {
+        tenantTitle = TENANT_MESSAGES.COMPLETED.title;
+        tenantMessage = TENANT_MESSAGES.COMPLETED.message;
+      }
+    } else {
+      const tenantMsg = TENANT_MESSAGES[newStatus];
+      if (tenantMsg) {
+        tenantTitle = tenantMsg.title;
+        tenantMessage = tenantMsg.message;
+      }
+    }
+
+    if (tenantTitle && tenantMessage && tenantProfileId) {
       await notificationService.createNotification(
-        tenantProfileId, tenantMsg.title, tenantMsg.message, "move_out"
+        tenantProfileId, tenantTitle, tenantMessage, "move_out"
       );
     }
 

@@ -113,6 +113,10 @@ export function ActivityTimeline({
   timelineItems.forEach((item, idx) => {
     const dueDate = new Date(item.due_date);
     if (!isNaN(dueDate.getTime())) {
+      // Do not display future dues (due date in the future)
+      if (dueDate.getTime() > Date.now()) {
+        return;
+      }
       const amt = item.amount ?? item.pending_amount ?? 0;
       events.push({
         id: `bill-${idx}-${dueDate.getTime()}`,

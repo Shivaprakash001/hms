@@ -28,8 +28,10 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
   const [roomId, setRoomId]           = useState(preselectedRoomId ?? '');
   const [joiningDate, setJoiningDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [paymentFrequency, setPaymentFrequency] = useState('MONTHLY');
-  const [overrides, setOverrides]     = useState<Overrides>({});
-  const [showAdv, setShowAdv]         = useState(false);
+  const [monthlyRent, setMonthlyRent] = useState('');
+  const [advanceDeposit, setAdvanceDeposit] = useState('');
+  const [maintenanceCharge, setMaintenanceCharge] = useState('');
+  const [maintenanceType, setMaintenanceType] = useState<MtType>('MONTHLY');
   const [error, setError]             = useState<string | null>(null);
   const [success, setSuccess]         = useState(false);
   const [link, setLink]               = useState('');
@@ -92,9 +94,6 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
     staleTime: 2 * 60 * 1000,
   });
 
-  // Reset overrides whenever room changes
-  useEffect(() => { setOverrides({}); }, [roomId]);
-
   const rv: any = defaultsRaw?.data?.resolved_values ?? defaultsRaw?.resolved_values ?? null;
   const defaults = rv ? {
     monthly_rent:       Number(rv.monthly_rent ?? 0),
@@ -103,17 +102,41 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
     maintenance_type:   (rv.maintenance_type ?? 'MONTHLY') as MtType,
   } : null;
 
-  const display = {
-    monthly_rent:       overrides.monthly_rent      ?? defaults?.monthly_rent      ?? 0,
-    advance_deposit:    overrides.advance_deposit   ?? defaults?.advance_deposit   ?? 0,
-    maintenance_charge: overrides.maintenance_charge ?? defaults?.maintenance_charge ?? 0,
-    maintenance_type:   defaults?.maintenance_type ?? 'MONTHLY' as MtType,
-  };
+  // Auto-fill when defaults change
+  useEffect(() => {
+    if (defaults) {
+      setMonthlyRent(String(defaults.monthly_rent));
+      setAdvanceDeposit(String(defaults.advance_deposit));
+      setMaintenanceCharge(String(defaults.maintenance_charge));
+      setMaintenanceType(defaults.maintenance_type);
+    } else {
+      setMonthlyRent('');
+      setAdvanceDeposit('');
+      setMaintenanceCharge('');
+      setMaintenanceType('MONTHLY');
+    }
+  }, [defaultsRaw, roomId]);
 
-  const totalDueAtMoveIn =
-    display.monthly_rent +
-    display.advance_deposit +
-    (display.maintenance_type === 'ONE_TIME' ? display.maintenance_charge : 0);
+  const rentVal = Number(monthlyRent || 0);
+  const depVal = Number(advanceDeposit || 0);
+  const maintVal = Number(maintenanceCharge || 0);
+  const totalDueAtMoveIn = rentVal + depVal + (maintenanceType === 'ONE_TIME' ? maintVal : 0);
+
+  const isDirty = defaults && (
+    Number(monthlyRent) !== defaults.monthly_rent ||
+    Number(advanceDeposit) !== defaults.advance_deposit ||
+    Number(maintenanceCharge) !== defaults.maintenance_charge ||
+    maintenanceType !== defaults.maintenance_type
+  );
+
+  const handleReset = () => {
+    if (defaults) {
+      setMonthlyRent(String(defaults.monthly_rent));
+      setAdvanceDeposit(String(defaults.advance_deposit));
+      setMaintenanceCharge(String(defaults.maintenance_charge));
+      setMaintenanceType(defaults.maintenance_type);
+    }
+  };
 
   // ── Invite mutation ───────────────────────────────────────────────────────
   const inviteMutation = useMutation({
@@ -147,10 +170,10 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
       room_id:            roomId,
       joining_date:       joiningDate,
       payment_frequency:  paymentFrequency,
-      monthly_rent:       display.monthly_rent || undefined,
-      advance_amount:     display.advance_deposit,
-      maintenance_amount: display.maintenance_charge,
-      maintenance_type:   display.maintenance_type,
+      monthly_rent:       monthlyRent ? Number(monthlyRent) : undefined,
+      advance_amount:     advanceDeposit ? Number(advanceDeposit) : undefined,
+      maintenance_amount: maintenanceCharge ? Number(maintenanceCharge) : undefined,
+      maintenance_type:   maintenanceType,
     });
   };
 
@@ -254,7 +277,6 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
                   onChange={(e) => {
                     setSelectedHostelId(e.target.value);
                     setRoomId('');
-                    setOverrides({});
                   }}
                   required
                   className={inp}
@@ -310,71 +332,91 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
             </div>
           </div>
 
-          {/* ── Section 3: Pricing preview (auto-fills on room select) ── */}
+          {/* ── Section 3: Pricing & Financials ────────────────────── */}
           {roomId && (
-            <div className={`rounded-xl border border-border bg-secondary/40 p-3.5 transition-opacity ${pricingLoading ? 'opacity-60' : ''}`}>
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <IndianRupee className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Pricing</span>
-                  {Object.keys(overrides).length > 0 && (
-                    <span className="text-[10px] bg-amber-500/10 text-amber-600 px-1.5 py-0.5 rounded-full font-medium">overridden</span>
-                  )}
-                </div>
-                {pricingLoading && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+            <div className={`space-y-4 transition-opacity ${pricingLoading ? 'opacity-60' : ''}`}>
+              <div className="flex items-center justify-between">
+                <SectionHeader icon={<IndianRupee className="w-3.5 h-3.5" />} label="Pricing & Financials" />
+                {isDirty && (
+                  <button type="button" onClick={handleReset}
+                    className="flex items-center gap-1 text-[10px] text-accent active:scale-95 font-medium mb-3">
+                    <RotateCcw className="w-2.5 h-2.5" /> Reset to defaults
+                  </button>
+                )}
               </div>
-              <div className="space-y-2">
-                <PricingRow label="Monthly Rent" value={display.monthly_rent} />
-                <PricingRow
-                  label="Maintenance"
-                  value={display.maintenance_charge}
-                  sub={
-                    display.maintenance_type === 'MONTHLY' ? '/mo'
-                    : display.maintenance_type === 'ONE_TIME' ? ' one-time'
-                    : ' (waived)'
-                  }
-                />
-                <PricingRow label="Security Deposit" value={display.advance_deposit} />
-                <div className="border-t border-border/60 pt-2 mt-1">
-                  <PricingRow label="Total due at move-in" value={totalDueAtMoveIn} bold />
-                </div>
-              </div>
-            </div>
-          )}
 
-          {/* ── Section 4: Advanced overrides (collapsed) ───────────── */}
-          {roomId && defaults && (
-            <div>
-              <button type="button" onClick={() => setShowAdv((v) => !v)}
-                className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium active:text-foreground transition-colors">
-                {showAdv ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                Override pricing
-              </button>
-              {showAdv && (
-                <div className="mt-3 space-y-3">
-                  <OverrideInput
-                    label="Monthly Rent (₹)"
-                    value={overrides.monthly_rent ?? defaults.monthly_rent}
-                    isDirty={overrides.monthly_rent !== undefined}
-                    onChange={(v) => setOverrides((o) => ({ ...o, monthly_rent: v }))}
-                    onReset={() => setOverrides((o) => { const n = { ...o }; delete n.monthly_rent; return n; })}
-                  />
-                  <OverrideInput
-                    label="Security Deposit (₹)"
-                    value={overrides.advance_deposit ?? defaults.advance_deposit}
-                    isDirty={overrides.advance_deposit !== undefined}
-                    onChange={(v) => setOverrides((o) => ({ ...o, advance_deposit: v }))}
-                    onReset={() => setOverrides((o) => { const n = { ...o }; delete n.advance_deposit; return n; })}
-                  />
-                  <OverrideInput
-                    label="Maintenance (₹)"
-                    value={overrides.maintenance_charge ?? defaults.maintenance_charge}
-                    isDirty={overrides.maintenance_charge !== undefined}
-                    onChange={(v) => setOverrides((o) => ({ ...o, maintenance_charge: v }))}
-                    onReset={() => setOverrides((o) => { const n = { ...o }; delete n.maintenance_charge; return n; })}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Monthly Rent (₹) *</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={monthlyRent}
+                    onChange={(e) => setMonthlyRent(e.target.value)}
+                    required
+                    placeholder="0"
+                    className={inp}
                   />
                 </div>
-              )}
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Security Deposit (₹) *</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={advanceDeposit}
+                    onChange={(e) => setAdvanceDeposit(e.target.value)}
+                    required
+                    placeholder="0"
+                    className={inp}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Maintenance (₹)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={maintenanceCharge}
+                    onChange={(e) => setMaintenanceCharge(e.target.value)}
+                    placeholder="0"
+                    className={inp}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Maintenance Type</label>
+                  <select
+                    value={maintenanceType}
+                    onChange={(e) => setMaintenanceType(e.target.value as MtType)}
+                    className={inp}
+                  >
+                    <option value="MONTHLY">Monthly</option>
+                    <option value="ONE_TIME">One Time</option>
+                    <option value="NONE">Waived (None)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Summary card */}
+              <div className="rounded-xl border border-border bg-secondary/40 p-3.5">
+                <div className="space-y-2">
+                  <PricingRow label="Monthly Rent" value={rentVal} />
+                  <PricingRow
+                    label="Maintenance"
+                    value={maintVal}
+                    sub={
+                      maintenanceType === 'MONTHLY' ? '/mo'
+                      : maintenanceType === 'ONE_TIME' ? ' one-time'
+                      : ' (waived)'
+                    }
+                  />
+                  <PricingRow label="Security Deposit" value={depVal} />
+                  <div className="border-t border-border/60 pt-2 mt-1">
+                    <PricingRow label="Total due at move-in" value={totalDueAtMoveIn} bold />
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -416,31 +458,4 @@ function PricingRow({ label, value, sub = '', bold = false }: { label: string; v
   );
 }
 
-function OverrideInput({
-  label, value, isDirty, onChange, onReset,
-}: {
-  label: string;
-  value: number;
-  isDirty: boolean;
-  onChange: (v: number) => void;
-  onReset: () => void;
-}) {
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-1">
-        <label className="text-xs text-muted-foreground">{label}</label>
-        {isDirty && (
-          <button type="button" onClick={onReset}
-            className="flex items-center gap-1 text-[10px] text-accent active:scale-90">
-            <RotateCcw className="w-2.5 h-2.5" /> Reset
-          </button>
-        )}
-      </div>
-      <input
-        type="number" min={0} value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className={`w-full px-3 py-2 rounded-lg border ${isDirty ? 'border-accent' : 'border-border'} bg-background text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-accent`}
-      />
-    </div>
-  );
-}
+// OverrideInput removed since pricing overrides are now primary input fields.

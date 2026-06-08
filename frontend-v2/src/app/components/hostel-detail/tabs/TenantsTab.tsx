@@ -108,26 +108,26 @@ export function TenantsTab({ hostelId }: { hostelId: string }) {
       </div>
 
       {activeTenants.length > 0 && (
-        <div className="space-y-2">
+        <div className="flex flex-col gap-2">
           <label className="relative block">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search name, phone, email, room..."
-              className="h-11 w-full rounded-xl border border-border bg-card pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-accent"
+              placeholder="Search name, phone, room..."
+              className="h-9 w-full rounded-xl border border-border bg-card pl-9 pr-3 text-xs outline-none transition-colors placeholder:text-muted-foreground focus:border-accent"
             />
           </label>
-          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+          <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 no-scrollbar">
             {tenantFilters.map((item) => (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => setFilter(item.id)}
-                className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                className={`shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors ${
                   filter === item.id
                     ? 'bg-accent text-accent-foreground'
-                    : 'bg-secondary text-muted-foreground'
+                    : 'bg-secondary text-muted-foreground hover:text-foreground'
                 }`}
               >
                 {item.label}
@@ -140,8 +140,8 @@ export function TenantsTab({ hostelId }: { hostelId: string }) {
       {invitedTenants.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <h4 className="text-sm font-medium text-foreground">Pending Invitations</h4>
-            <span className="text-xs text-muted-foreground">{invitedTenants.length} waiting</span>
+            <h4 className="text-xs font-semibold text-foreground">Pending Invitations</h4>
+            <span className="text-[10px] text-muted-foreground">{invitedTenants.length} waiting</span>
           </div>
           {invitedTenants.map((tenant) => {
             const invitedTenantId = String(tenant.id ?? tenant.tenant_id ?? '');
@@ -154,39 +154,42 @@ export function TenantsTab({ hostelId }: { hostelId: string }) {
                 tabIndex={0}
                 onClick={() => openTenantProfile(invitedTenantId)}
                 onKeyDown={(event) => handleCardKeyDown(event, invitedTenantId)}
-                className="bg-card border border-amber-500/20 rounded-xl p-4 cursor-pointer transition-colors hover:border-accent/40 focus:outline-none focus:ring-2 focus:ring-accent/30"
+                className="bg-card border border-amber-500/20 rounded-xl p-3 cursor-pointer transition-colors hover:border-accent/40 focus:outline-none focus:ring-2 focus:ring-accent/30"
               >
-                <div className="flex items-start gap-3">
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-xs font-bold bg-amber-500/10 text-amber-700">
-                    {String(tenant.name ?? tenant.tenant_name ?? 'T').charAt(0).toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-foreground truncate">
-                        {String(tenant.name ?? tenant.tenant_name ?? 'Invited tenant')}
-                      </span>
-                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-700">
-                        Invited
-                      </span>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-xs font-bold bg-amber-500/10 text-amber-700">
+                      {String(tenant.name ?? tenant.tenant_name ?? 'T').charAt(0).toUpperCase()}
                     </div>
-                    <div className="text-xs text-muted-foreground mt-0.5 truncate">
-                      {email || 'No email available'}
-                      {room ? ` · Room ${String(room)}` : ''}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-sm text-foreground truncate">
+                          {String(tenant.name ?? tenant.tenant_name ?? 'Invited tenant')}
+                        </span>
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-700">
+                          Invited
+                        </span>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                        {email || 'No email available'}
+                        {room ? ` · Room ${String(room)}` : ''}
+                      </div>
                     </div>
                   </div>
+                  <button
+                    type="button"
+                    disabled={!email || resending}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (email) resendInvite(email);
+                    }}
+                    className="flex items-center justify-center gap-1 px-3 py-2 bg-amber-50 text-amber-700 rounded-xl text-xs font-semibold active:scale-[0.98] transition-transform touch-manipulation disabled:opacity-50 shrink-0"
+                    title="Resend Invitation"
+                  >
+                    <Send className="w-3.5 h-3.5 shrink-0" />
+                    <span className="hidden sm:inline">Resend</span>
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  disabled={!email || resending}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    if (email) resendInvite(email);
-                  }}
-                  className="mt-3 w-full flex items-center justify-center gap-1.5 py-2.5 bg-amber-50 text-amber-700 rounded-lg text-xs font-semibold active:scale-[0.98] transition-transform touch-manipulation disabled:opacity-50"
-                >
-                  <Send className="w-3.5 h-3.5 shrink-0" />
-                  {resending ? 'Sending...' : 'Resend Invitation'}
-                </button>
               </div>
             );
           })}
@@ -236,69 +239,74 @@ export function TenantsTab({ hostelId }: { hostelId: string }) {
             tabIndex={0}
             onClick={() => openTenantProfile(tenantId)}
             onKeyDown={(event) => handleCardKeyDown(event, tenantId)}
-            className={`bg-card border rounded-xl p-4 min-w-0 cursor-pointer transition-colors hover:border-accent/40 focus:outline-none focus:ring-2 focus:ring-accent/30 ${
-            isOverdue ? 'border-[#EF4444]/20' : 'border-border'
+            className={`bg-card border rounded-xl p-3 min-w-0 cursor-pointer transition-colors hover:border-accent/40 focus:outline-none focus:ring-2 focus:ring-accent/30 ${
+            isOverdue ? 'border-red-500/20 bg-red-500/[0.01]' : 'border-border'
           }`}>
-            <div className="flex items-start gap-3">
-              <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-xs font-bold ${
-                isOverdue ? 'bg-[#EF4444]/10 text-[#EF4444]'
-                : isPaid ? 'bg-[#10B981]/10 text-[#10B981]'
-                : 'bg-accent/10 text-accent'
-              }`}>
-                {tenant.photoUrl ? (
-                  <img src={tenant.photoUrl} alt="" className="h-full w-full rounded-full object-cover" loading="lazy" />
-                ) : (
-                  getInitials(tenant.name)
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-semibold text-foreground truncate">{tenant.name}</span>
-                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${
-                    isPaid ? 'bg-[#10B981]/10 text-[#10B981]'
-                    : isOverdue ? 'bg-[#EF4444]/10 text-[#EF4444]'
-                    : 'bg-[#F59E0B]/10 text-[#F59E0B]'
-                  }`}>
-                    {isPaid ? 'Paid' : isOverdue ? (overdueDays > 0 ? `${overdueDays}d overdue` : 'Overdue') : 'Pending'}
-                  </span>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-xs font-bold ${
+                  isOverdue ? 'bg-red-500/10 text-red-500'
+                  : isPaid ? 'bg-emerald-500/10 text-emerald-600'
+                  : 'bg-amber-500/10 text-amber-600'
+                }`}>
+                  {tenant.photoUrl ? (
+                    <img src={tenant.photoUrl} alt="" className="h-full w-full rounded-full object-cover" loading="lazy" />
+                  ) : (
+                    getInitials(tenant.name)
+                  )}
                 </div>
-                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                  <span className="text-xs text-muted-foreground">{hasRoom ? `Room ${tenant.room}` : 'Room not assigned'}</span>
-                  <span className="text-muted-foreground text-xs">·</span>
-                  <span className="text-xs text-muted-foreground">{fmtExact(tenant.rent)}/mo</span>
-                </div>
-                {!isPaid && dueAmt > 0 && (
-                  <div className={`text-xs font-medium mt-1 ${
-                    isOverdue ? 'text-[#EF4444]' : 'text-[#F59E0B]'
-                  }`}>
-                    {fmtExact(dueAmt)} outstanding
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-sm text-foreground truncate">{tenant.name}</span>
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${
+                      isPaid ? 'bg-emerald-500/10 text-emerald-600'
+                      : isOverdue ? 'bg-red-500/10 text-red-500'
+                      : 'bg-amber-500/10 text-amber-600'
+                    }`}>
+                      {isPaid ? 'Paid' : isOverdue ? (overdueDays > 0 ? `${overdueDays}d overdue` : 'Overdue') : 'Pending'}
+                    </span>
                   </div>
-                )}
+                  <div className="flex items-center gap-1.5 mt-0.5 text-xs text-muted-foreground flex-wrap">
+                    <span>{hasRoom ? `Room ${tenant.room}` : 'No Room'}</span>
+                    <span>·</span>
+                    <span>{fmtExact(tenant.rent)}/mo</span>
+                    {!isPaid && dueAmt > 0 && (
+                      <>
+                        <span>·</span>
+                        <span className={`font-semibold ${isOverdue ? 'text-red-500' : 'text-amber-600'}`}>
+                          {fmtExact(dueAmt)} due
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div className="flex flex-col items-end gap-1.5 shrink-0">
+              <div className="flex items-center gap-1.5 shrink-0">
                 {tenant.phone && tenant.phone !== 'N/A' && (
                   <a
                     href={`tel:${tenant.phone}`}
                     onClick={(e) => e.stopPropagation()}
-                    className="p-1.5 text-muted-foreground active:scale-95 transition-transform"
+                    className="p-2 text-muted-foreground hover:bg-secondary rounded-xl active:scale-95 transition-transform"
+                    title="Call Tenant"
                   >
-                    <Phone className="w-3.5 h-3.5" />
+                    <Phone className="w-4 h-4" />
                   </a>
+                )}
+                {!isPaid && (
+                  <button
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setShowPayment(paymentTargetId);
+                    }}
+                    className="flex items-center gap-1 px-3 py-2 rounded-xl bg-accent text-accent-foreground text-xs font-semibold hover:bg-accent/90 active:scale-95 transition-transform"
+                    title="Record Payment"
+                  >
+                    <CreditCard className="w-3.5 h-3.5 shrink-0" />
+                    <span className="hidden sm:inline">Pay</span>
+                  </button>
                 )}
               </div>
             </div>
-            {!isPaid && (
-              <button
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setShowPayment(paymentTargetId);
-                }}
-                className="mt-3 w-full flex items-center justify-center gap-1.5 py-2.5 bg-accent text-accent-foreground rounded-lg text-xs font-semibold active:scale-[0.98] transition-transform touch-manipulation"
-              >
-                <CreditCard className="w-3.5 h-3.5 shrink-0" />
-                Record Payment
-              </button>
-            )}
           </div>
         );
       })}

@@ -324,6 +324,12 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
             Room: <strong className="text-foreground">{displayedRoomNo ?? 'Not assigned'}</strong>
             {' · '}
             Joined: <strong className="text-foreground">{date(tenant.joined_on ?? overview.joined_at)}</strong>
+            {(tenant.exit_date ?? overview?.exit_date) && (
+              <>
+                {' · '}
+                Move-out: <strong className="text-foreground">{date(tenant.exit_date ?? overview.exit_date)}</strong>
+              </>
+            )}
             {' · '}
             Dues: <strong className={isOverdue ? 'text-rose-600' : 'text-foreground'}>{money(paymentSummary?.pending_amount ?? overview.outstanding ?? 0)}</strong>
           </p>

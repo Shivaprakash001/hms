@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { notifyMoveOutTransition } from "@/lib/services/move-out-notifications";
 import { moveOutService } from "@/lib/services/move-out-service";
+import { notificationService } from "@/lib/services/notification-service";
 
 /**
  * 🕐 CRON — Daily Move-Out Room Releases
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest) {
     // actual_exit_date and planned_exit_date.
     const pending = await prisma.move_out_requests.findMany({
       where: {
-        status: "COMPLETED",
+        status: { in: ["COMPLETED", "VACATED"] },
         room_release_date: null,
         OR: [
           { physical_exit_date: { lte: now } },
@@ -58,6 +59,11 @@ export async function GET(req: NextRequest) {
         planned_exit_date: true,
         reason: true,
         reason_text: true,
+        tenant: {
+          select: {
+            profile_id: true,
+          },
+        },
       },
     });
 
@@ -97,6 +103,18 @@ export async function GET(req: NextRequest) {
             data: { status: "WAIVED", updated_at: now },
           });
         });
+
+        // Send final farewell notification
+        if (req.tenant?.profile_id) {
+          await notificationService.createNotification(
+            req.tenant.profile_id,
+            "Thank you for staying",
+            "Your move-out is complete. Thank you for staying with us — we wish you all the best!",
+            "move_out"
+          ).catch((e: any) => {
+            console.error(`[CRON] Notification failed for tenant profile ${req.tenant?.profile_id}:`, e.message);
+          });
+        }
 
         released++;
       } catch (err: any) {

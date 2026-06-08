@@ -34,7 +34,7 @@ export function ExitWorkflowSection({ hostelId, tenantId, status }: Props) {
 
   const list = Array.isArray(requests) ? requests : (requests as Record<string, unknown>)?.requests ?? [];
   const active = (list as Record<string, unknown>[]).find(
-    (r) => String(r.tenant_id) === tenantId && !['COMPLETED', 'CANCELLED', 'REJECTED'].includes(String(r.status))
+    (r) => String(r.tenant_id) === tenantId && !['CANCELLED', 'REJECTED'].includes(String(r.status))
   );
 
   const { data: activeDetail, refetch: refetchDetail } = useQuery({
@@ -166,7 +166,9 @@ export function ExitWorkflowSection({ hostelId, tenantId, status }: Props) {
   });
 
   if (status === 'FORMER_TENANT' || status === 'LEFT') {
-    return <p className="text-sm text-muted-foreground">This tenant has completed their exit.</p>;
+    if (!active) {
+      return <p className="text-sm text-muted-foreground">This tenant has completed their exit.</p>;
+    }
   }
 
   // --- Render Initiation Form if no active request ---
@@ -272,7 +274,141 @@ export function ExitWorkflowSection({ hostelId, tenantId, status }: Props) {
       </div>
 
       <div className="space-y-4">
-        <h3 className="text-sm font-bold text-foreground">Workflow Action Controls</h3>
+        <h3 className="text-sm font-bold text-foreground">
+          {currentStatus === 'COMPLETED' ? 'Settlement & Closeout Summary' : 'Workflow Action Controls'}
+        </h3>
+
+        {/* 0. Completed State: Show details */}
+        {currentStatus === 'COMPLETED' && (
+          <div className="p-5 rounded-2xl border border-emerald-100 bg-emerald-50/30 space-y-4 shadow-sm text-xs">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600 animate-bounce" />
+              <span className="text-sm font-bold text-emerald-950">Move-out Completed Successfully</span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Timing info */}
+              <div className="p-3.5 rounded-xl bg-white border border-emerald-100/65 space-y-2">
+                <p className="font-bold text-emerald-950 uppercase tracking-wider text-[10px]">Move-out Timeline</p>
+                <div className="space-y-1.5 text-slate-700">
+                  <div className="flex justify-between">
+                    <span>Planned Exit:</span>
+                    <span className="font-semibold text-slate-900">
+                      {activeDetail?.planned_exit_date ? new Date(activeDetail.planned_exit_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Physical Exit:</span>
+                    <span className="font-semibold text-slate-900">
+                      {activeDetail?.physical_exit_date ? new Date(activeDetail.physical_exit_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Completed On:</span>
+                    <span className="font-semibold text-slate-900">
+                      {activeDetail?.completed_at ? new Date(activeDetail.completed_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Settlement info */}
+              {activeDetail?.settlement && (
+                <div className="p-3.5 rounded-xl bg-white border border-emerald-100/65 space-y-2">
+                  <p className="font-bold text-emerald-950 uppercase tracking-wider text-[10px]">Settlement & Payment</p>
+                  <div className="space-y-1.5 text-slate-700">
+                    <div className="flex justify-between">
+                      <span>Direction:</span>
+                      <span className="font-semibold text-slate-900">
+                        {activeDetail.settlement.settlement_direction === 'OWNER_OWES_TENANT' 
+                          ? 'Refund to Tenant' 
+                          : activeDetail.settlement.settlement_direction === 'TENANT_OWES_OWNER' 
+                            ? 'Paid by Tenant' 
+                            : 'No payment needed'}
+                      </span>
+                    </div>
+                    {activeDetail.settlement.settlement_direction !== 'SETTLED' && (
+                      <div className="flex justify-between">
+                        <span>Amount:</span>
+                        <span className="font-bold text-emerald-600">
+                          ₹{Number(activeDetail.settlement.confirmed_settlement_amount ?? 0).toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <span>Payment Method:</span>
+                      <span className="font-semibold text-slate-900">{activeDetail.settlement.payment_method || '—'}</span>
+                    </div>
+                    {activeDetail.settlement.payment_reference && (
+                      <div className="flex justify-between">
+                        <span>Reference:</span>
+                        <span className="font-semibold text-slate-900 font-mono">{activeDetail.settlement.payment_reference}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Inspection summary if present */}
+            {activeDetail?.inspection && (
+              <div className="p-4 rounded-xl bg-white border border-emerald-100/65 space-y-3">
+                <p className="font-bold text-emerald-950 uppercase tracking-wider text-[10px]">Room Inspection Report</p>
+                <div className="grid grid-cols-2 gap-3 text-slate-700">
+                  <div>
+                    <span className="block text-slate-500 text-[10px]">Room Condition</span>
+                    <span className="font-semibold text-slate-900">{activeDetail.inspection.room_condition}</span>
+                  </div>
+                  <div>
+                    <span className="block text-slate-500 text-[10px]">Cleaning Status</span>
+                    <span className="font-semibold text-slate-900">{activeDetail.inspection.cleaning_status}</span>
+                  </div>
+                </div>
+
+                {/* Deductions if any */}
+                {(Number(activeDetail.inspection.damages_amount) > 0 ||
+                  Number(activeDetail.inspection.cleaning_fee) > 0 ||
+                  Number(activeDetail.inspection.missing_items_fee) > 0 ||
+                  Number(activeDetail.inspection.other_deductions) > 0) && (
+                  <div className="pt-2 border-t border-slate-100 space-y-1 text-slate-700">
+                    <span className="block text-slate-500 text-[10px] font-bold uppercase tracking-wider">Deductions</span>
+                    {Number(activeDetail.inspection.damages_amount) > 0 && (
+                      <div className="flex justify-between">
+                        <span>Damage Charges:</span>
+                        <span className="font-semibold text-red-600">₹{Number(activeDetail.inspection.damages_amount).toLocaleString('en-IN')}</span>
+                      </div>
+                    )}
+                    {Number(activeDetail.inspection.cleaning_fee) > 0 && (
+                      <div className="flex justify-between">
+                        <span>Cleaning Fee:</span>
+                        <span className="font-semibold text-red-600">₹{Number(activeDetail.inspection.cleaning_fee).toLocaleString('en-IN')}</span>
+                      </div>
+                    )}
+                    {Number(activeDetail.inspection.missing_items_fee) > 0 && (
+                      <div className="flex justify-between">
+                        <span>Missing Items Fee:</span>
+                        <span className="font-semibold text-red-600">₹{Number(activeDetail.inspection.missing_items_fee).toLocaleString('en-IN')}</span>
+                      </div>
+                    )}
+                    {Number(activeDetail.inspection.other_deductions) > 0 && (
+                      <div className="flex justify-between">
+                        <span>Other Deductions:</span>
+                        <span className="font-semibold text-red-600">₹{Number(activeDetail.inspection.other_deductions).toLocaleString('en-IN')}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {activeDetail.inspection.notes && (
+                  <div className="pt-2 border-t border-slate-100 text-slate-600">
+                    <span className="block text-slate-500 text-[10px]">Inspection Notes</span>
+                    <p className="mt-0.5 leading-relaxed">{activeDetail.inspection.notes}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* 1. Requested State: Record Inspection */}
         {currentStatus === 'REQUESTED' && (

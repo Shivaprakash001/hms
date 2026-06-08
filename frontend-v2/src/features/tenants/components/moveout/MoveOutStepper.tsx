@@ -1,11 +1,18 @@
-import { AlertCircle } from 'lucide-react';
+import { 
+  AlertCircle, 
+  FileText, 
+  Coins, 
+  BadgeCheck, 
+  DoorOpen, 
+  Flag 
+} from 'lucide-react';
 
 const STEP_LABELS = [
-  { key: 'REQUESTED', label: 'Request', icon: '📋', desc: 'Request submitted for review' },
-  { key: 'SETTLEMENT_PENDING', label: 'Settlement', icon: '💰', desc: 'Dues and refund calculation' },
-  { key: 'APPROVED', label: 'Approved', icon: '✅', desc: 'Exit and refund approved' },
-  { key: 'VACATED', label: 'Vacated', icon: '🚪', desc: 'Room inspected & bed vacated' },
-  { key: 'COMPLETED', label: 'Completed', icon: '🏁', desc: 'Security deposit settled' },
+  { key: 'REQUESTED', label: 'Request', icon: FileText, desc: 'Request submitted for review' },
+  { key: 'SETTLEMENT_PENDING', label: 'Settlement', icon: Coins, desc: 'Dues and refund calculation' },
+  { key: 'APPROVED', label: 'Approved', icon: BadgeCheck, desc: 'Exit and refund approved' },
+  { key: 'VACATED', label: 'Vacated', icon: DoorOpen, desc: 'Room inspected & bed vacated' },
+  { key: 'COMPLETED', label: 'Completed', icon: Flag, desc: 'Security deposit settled' },
 ] as const;
 
 const STEPS = ['REQUESTED', 'SETTLEMENT_PENDING', 'APPROVED', 'VACATED', 'COMPLETED'] as const;
@@ -41,26 +48,33 @@ export function MoveOutStepper({ request }: Props) {
               {STEP_LABELS.map((step, idx) => {
                 const isCompleted = currentIdx > idx || current === 'COMPLETED';
                 const isActive = current === step.key;
+                const Icon = step.icon;
 
                 return (
                   <div key={step.key} className="flex flex-col items-center flex-1">
                     {/* Circle Indicator */}
                     <div 
-                      className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold transition-all duration-300 relative ${
+                      className={`w-9 h-9 rounded-full flex items-center justify-center transition-all duration-300 relative ${
                         isCompleted 
-                          ? 'bg-[#243A72] text-white' 
+                          ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/20' 
                           : isActive 
-                            ? 'bg-white border-2 border-[#243A72] text-[#243A72] shadow-md ring-4 ring-[#243A72]/10' 
-                            : 'bg-secondary border-2 border-transparent text-muted-foreground'
+                            ? 'bg-[#243A72] text-white shadow-md shadow-[#243A72]/20 ring-4 ring-[#243A72]/15' 
+                            : 'bg-secondary border border-transparent text-muted-foreground'
                       }`}
                     >
                       {isActive && (
-                        <span className="absolute inset-0 rounded-full animate-ping bg-[#243A72]/10 opacity-75" />
+                        <span className="absolute inset-0 rounded-full animate-ping bg-[#243A72]/20 opacity-75" />
                       )}
                       
                       <span className="relative z-10">
-                        {isCompleted ? '✓' : step.icon}
+                        <Icon className="w-4 h-4" />
                       </span>
+
+                      {isCompleted && (
+                        <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-600 text-white border border-white flex items-center justify-center text-[9px] font-black">
+                          ✓
+                        </span>
+                      )}
                     </div>
 
                     {/* Step Labels */}
@@ -123,6 +137,7 @@ export function MoveOutStepper({ request }: Props) {
           {STEP_LABELS.map((step, idx) => {
             const isCompleted = currentIdx > idx || current === 'COMPLETED';
             const isActive = current === step.key;
+            const Icon = step.icon;
 
             return (
               <div
@@ -136,15 +151,20 @@ export function MoveOutStepper({ request }: Props) {
                 }`}
               >
                 <div 
-                  className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-all duration-300 ${
+                  className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-all duration-300 relative ${
                     isCompleted 
-                      ? 'bg-emerald-500/10 text-emerald-600' 
+                      ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' 
                       : isActive 
                         ? 'bg-[#243A72] text-white shadow-sm shadow-[#243A72]/20' 
                         : 'bg-secondary text-muted-foreground'
                   }`}
                 >
-                  {isCompleted ? '✓' : idx + 1}
+                  <Icon className="w-4 h-4" />
+                  {isCompleted && (
+                    <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 text-white border border-white flex items-center justify-center text-[7px] font-bold">
+                      ✓
+                    </span>
+                  )}
                 </div>
                 
                 <div className="space-y-0.5">

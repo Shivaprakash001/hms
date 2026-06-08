@@ -347,37 +347,6 @@ export function OverviewTab({ hostelId }: { hostelId: string }) {
         </button>
       </section>
 
-      {/* ADMISSIONS PIPELINE */}
-      <section className="bg-card border border-border rounded-2xl p-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold text-foreground">Admissions Pipeline</h3>
-          <div className={`px-2.5 py-0.5 rounded-full border text-[10px] font-bold ${occupancyRiskColor}`}>
-            Occupancy Risk: {occupancyRisk}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-3 gap-3">
-          <div className="bg-secondary/40 rounded-xl p-3 text-center">
-            <div className="text-[10px] text-muted-foreground font-semibold">Invited</div>
-            <div className="text-sm font-bold text-foreground mt-1">{pendingInvites}</div>
-          </div>
-          <div className="bg-secondary/40 rounded-xl p-3 text-center">
-            <div className="text-[10px] text-muted-foreground font-semibold">Activation Pending</div>
-            <div className="text-sm font-bold text-foreground mt-1">{activationPending}</div>
-          </div>
-          <div className="bg-secondary/40 rounded-xl p-3 text-center">
-            <div className="text-[10px] text-muted-foreground font-semibold">Vacant Beds</div>
-            <div className="text-sm font-bold text-foreground mt-1">{vacantBeds}</div>
-          </div>
-        </div>
-
-        <button 
-          onClick={() => navigate('/admissions')}
-          className="w-full py-2.5 rounded-xl border border-border bg-card hover:bg-secondary text-xs font-bold text-accent transition-colors"
-        >
-          Open Admissions
-        </button>
-      </section>
 
       {/* MOVE OUTS */}
       <section className="bg-card border border-border rounded-2xl p-4 space-y-4">

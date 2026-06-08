@@ -202,4 +202,14 @@ export const tenantService = {
         const response = await api.get('/tenants/pending-documents', { params: { hostelId } });
         return unwrap(response);
     },
+    uploadActivationSignature: async (token, file, type = 'tenant') => {
+        const formData = new FormData();
+        formData.append('token', token);
+        formData.append('file', file);
+        formData.append('type', type);
+        const response = await api.post('/tenants/activate/signature', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        return unwrap(response);
+    },
 };

@@ -7,7 +7,7 @@ import { useHostelPolicy } from '@features/settings/settingsHooks';
 import { queryKeys } from '@lib/queryKeys';
 import {
   User, Receipt, UserCheck, CreditCard, Building2,
-  Bell, Zap, Shield, LogOut, ChevronDown, ChevronRight, Activity,
+  Bell, Zap, Shield, LogOut, ChevronDown, ChevronRight, Activity, FileText,
 } from 'lucide-react';
 import { ProfileSection } from '../settings/ProfileSection';
 import { BillingSection } from '../settings/BillingSection';
@@ -16,9 +16,10 @@ import { HostelIdentitySection } from '../settings/HostelIdentitySection';
 import { NotificationsSection } from '../settings/NotificationsSection';
 import { AutomationSection } from '../settings/AutomationSection';
 import { AccessDocsSection } from '../settings/AccessDocsSection';
+import { AgreementSettingsSection } from '../settings/AgreementSettingsSection';
 import { SkeletonSection } from '../settings/shared';
 
-type SectionId = 'profile' | 'hostel' | 'billing' | 'tenant-defaults' | 'notifications' | 'automation' | 'access';
+type SectionId = 'profile' | 'hostel' | 'billing' | 'tenant-defaults' | 'notifications' | 'automation' | 'access' | 'agreement';
 
 const SECTIONS: { id: SectionId; label: string; icon: React.ElementType; description: string; hostelScoped: boolean }[] = [
   { id: 'profile', label: 'My Profile', icon: User, description: 'Name, phone, password', hostelScoped: false },
@@ -28,6 +29,7 @@ const SECTIONS: { id: SectionId; label: string; icon: React.ElementType; descrip
   { id: 'notifications', label: 'Notifications', icon: Bell, description: 'Channels, schedule, alerts', hostelScoped: true },
   { id: 'automation', label: 'Automation', icon: Zap, description: 'Auto rent, late fees, reminders', hostelScoped: true },
   { id: 'access', label: 'Access & Receipts', icon: Shield, description: 'Permissions, receipts, regional', hostelScoped: true },
+  { id: 'agreement', label: 'Residency Agreement', icon: FileText, description: 'Rules template, signature stamp', hostelScoped: true },
 ];
 
 const SECTION_BY_ID = Object.fromEntries(SECTIONS.map((section) => [section.id, section])) as Record<SectionId, (typeof SECTIONS)[number]>;
@@ -36,7 +38,7 @@ const SETTINGS_GROUPS: { title: string; hint: string; sections: SectionId[] }[] 
   {
     title: 'Set up your hostel',
     hint: 'Identity, tenant defaults, and rent cycles in the order owners usually configure them.',
-    sections: ['hostel', 'tenant-defaults', 'billing'],
+    sections: ['hostel', 'tenant-defaults', 'billing', 'agreement'],
   },
   {
     title: 'Configure payments',
@@ -67,7 +69,7 @@ export function SettingsView({ embedded = false }: SettingsViewProps = {}) {
   useEffect(() => {
     if (tabParam === 'activity') {
       navigate('/activity', { replace: true });
-    } else if (tabParam && ['profile', 'hostel', 'billing', 'tenant-defaults', 'notifications', 'automation', 'access'].includes(tabParam)) {
+    } else if (tabParam && ['profile', 'hostel', 'billing', 'tenant-defaults', 'notifications', 'automation', 'access', 'agreement'].includes(tabParam)) {
       setActiveSection(tabParam);
       setMobileOpenSection(tabParam);
     }
@@ -121,6 +123,7 @@ export function SettingsView({ embedded = false }: SettingsViewProps = {}) {
       case 'notifications': return <NotificationsSection {...sectionProps} />;
       case 'automation': return <AutomationSection {...sectionProps} />;
       case 'access': return <AccessDocsSection {...sectionProps} />;
+      case 'agreement': return <AgreementSettingsSection hostelId={selectedHostelId!} />;
     }
   };
 

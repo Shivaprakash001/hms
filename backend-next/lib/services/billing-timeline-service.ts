@@ -16,8 +16,8 @@ function daysUntil(date: Date) {
 
 export class BillingTimelineService {
   async getTenantTimeline(tenantId: string, ownerId?: string) {
-    const tenant = await prisma.tenants.findFirst({
-      where: { id: tenantId, ...(ownerId ? { owner_id: ownerId } : {}) },
+    const tenant = await prisma.tenants.findUnique({
+      where: { id: tenantId },
       select: {
         id: true,
         owner_id: true,
@@ -39,6 +39,7 @@ export class BillingTimelineService {
       },
     });
     if (!tenant) throw new Error("TENANT_NOT_FOUND");
+    if (ownerId && tenant.owner_id !== ownerId) throw new Error("TENANT_NOT_FOUND");
 
     const [policyResponse, advanceSummary] = await Promise.all([
       hostelPolicyService.getHostelPolicy(tenant.hostel_id).catch(() => null),

@@ -258,6 +258,8 @@ model hostels {
   room_reservations   room_reservations[]
   tenant_invitations  tenant_invitations[]
   tenant_invitation_reservations tenant_invitation_reservations[]
+  agreements          Agreement[]
+  agreement_templates AgreementTemplate[]
 }
 
 model identity_tokens {
@@ -1199,6 +1201,7 @@ model tenants {
   tenant_invitation_reservations tenant_invitation_reservations[]
   bulk_import_rows         bulk_import_rows[]
   visitor_leads            visitor_leads[]
+  agreements               Agreement[]
 
   @@index([hostel_id])
   @@index([owner_id])
@@ -1776,3 +1779,71 @@ model TenantPolicyAcceptance {
   @@index([tenant_id])
   @@index([hostel_id])
 }
+
+enum AgreementStatus {
+  DRAFT
+  SIGNED
+  VOID
+}
+
+model AgreementTemplate {
+  id                  String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  hostel_id           String      @db.Uuid
+  version             String      // e.g. "2026-v1"
+  title               String      @default("Standard Tenant Agreement")
+  custom_rules        String?     // Optional custom rules or additions
+  owner_name          String      // Owner/Authorized Signatory Name
+  owner_signature_url String?     // URL to signature stamp image (Supabase Storage)
+  is_active           Boolean     @default(true)
+  created_at          DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime?   @db.Timestamptz(6)
+
+  hostel              hostels     @relation(fields: [hostel_id], references: [id], onDelete: Cascade)
+  agreements          Agreement[]
+
+  @@unique([hostel_id, version])
+  @@index([hostel_id])
+}
+
+model Agreement {
+  id                      String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id               String          @db.Uuid
+  hostel_id               String          @db.Uuid
+  template_id             String          @db.Uuid
+  status                  AgreementStatus @default(DRAFT)
+  content_snapshot        Json            // Resolved snapshot of everything (hostel, rent, deposit, joining date, tenant info, custom rules)
+  pdf_url                 String?         // URL to stored PDF document in Supabase
+  
+  generated_at            DateTime        @default(now()) @db.Timestamptz(6)
+  signed_at               DateTime?       @db.Timestamptz(6)
+  voided_at               DateTime?       @db.Timestamptz(6)
+
+  // Tenant / Student signature info
+  tenant_signature_url    String?         // Signature image PNG URL
+  tenant_signature_name   String?
+  tenant_signed_at        DateTime?       @db.Timestamptz(6)
+  tenant_ip               String?
+  tenant_user_agent       String?
+
+  // Parent / Guardian signature info
+  guardian_signature_url  String?         // Signature image PNG URL
+  guardian_signature_name String?
+  guardian_relation       String?         // Relationship (Father, Mother, Guardian, Other)
+  guardian_signed_at      DateTime?       @db.Timestamptz(6)
+  guardian_ip             String?
+  guardian_user_agent     String?
+
+  // Owner signature info (copied from template at time of signing)
+  owner_signature_url     String?
+  owner_signature_name    String?
+  owner_signed_at         DateTime?       @db.Timestamptz(6)
+
+  tenant                  tenants           @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  hostel                  hostels           @relation(fields: [hostel_id], references: [id], onDelete: Cascade)
+  template                AgreementTemplate @relation(fields: [template_id], references: [id])
+
+  @@index([tenant_id])
+  @@index([hostel_id])
+  @@index([status])
+}
+

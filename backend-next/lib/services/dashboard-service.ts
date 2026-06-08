@@ -187,7 +187,6 @@ export class DashboardService {
         WHERE o.owner_id = ${userId}::uuid
           AND o.hostel_id = ${hostelId}::uuid
           AND o.status <> 'WAIVED'
-          AND t.status = 'ACTIVE'
           AND o.rent_month >= ${previousMonthStart}::date
           AND o.rent_month < ${nextMonthStart}::date
       ),
@@ -203,7 +202,6 @@ export class DashboardService {
         WHERE o.owner_id = ${userId}::uuid
           AND o.hostel_id = ${hostelId}::uuid
           AND o.status IN ('PENDING', 'PARTIAL')
-          AND t.status = 'ACTIVE'
           AND GREATEST(o.amount::float - COALESCE(pbo.total_paid, 0), 0) > 0
       ),
       dues_summary AS (
@@ -697,7 +695,6 @@ export class DashboardService {
         WHERE o.owner_id = ${userId}::uuid
           AND o.hostel_id = ${hostelId}::uuid
           AND o.status <> 'WAIVED'
-          AND t.status = 'ACTIVE'
           AND o.rent_month >= ${sixMonthStart}::date
         GROUP BY 1
       ),
@@ -940,8 +937,15 @@ export class DashboardService {
       ? dues.unpaid_tenant_count
       : 0;
 
+    const oldestUnpaidWhere = { owner_id: userId, hostel_id: hostelId, status: { in: ["PENDING", "PARTIAL"] } };
+    const oldestUnpaidPromise = prisma.rent_obligations.findFirst({
+      where: oldestUnpaidWhere,
+      orderBy: { due_date: "asc" },
+      select: { due_date: true },
+    });
+
     const [
-      hostel,
+      hostelRaw,
       previousPayments,
       currentExpected,
       previousExpected,
@@ -970,9 +974,9 @@ export class DashboardService {
       recentAllocations,
       paymentAttemptStats,
     ] = await Promise.all([
-      prisma.hostels.findFirst({
-        where: { id: hostelId, owner_id: userId, is_active: true },
-        select: { id: true, name: true, city: true, state: true, address: true, phone: true, is_active: true },
+      prisma.hostels.findUnique({
+        where: { id: hostelId },
+        select: { id: true, name: true, city: true, state: true, address: true, phone: true, is_active: true, owner_id: true },
       }),
       prisma.payments.aggregate({
         where: { owner_id: userId, hostel_id: hostelId, payment_date: { gte: previousMonthStart, lt: monthStart } },
@@ -1022,11 +1026,7 @@ export class DashboardService {
         orderBy: [{ due_date: "asc" }, { total_amount: "desc" }],
         take: 8,
       }),
-      prisma.rent_obligations.findFirst({
-        where: { owner_id: userId, hostel_id: hostelId, status: { in: ["PENDING", "PARTIAL"] } },
-        orderBy: { due_date: "asc" },
-        select: { due_date: true },
-      }),
+      oldestUnpaidPromise,
       prisma.rent_obligations.aggregate({
         where: { owner_id: userId, hostel_id: hostelId, due_date: today, status: { in: ["PENDING", "PARTIAL"] } },
         _sum: { total_amount: true },
@@ -1131,6 +1131,8 @@ export class DashboardService {
         _count: { id: true },
       }),
     ]);
+
+    const hostel = (hostelRaw && hostelRaw.owner_id === userId && hostelRaw.is_active) ? hostelRaw : null;
 
     const expectedRevenue = Number(currentExpected._sum.total_amount || 0);
     const previousRevenue = Number(previousPayments._sum.amount_paid || 0);

@@ -1,5 +1,10 @@
 import { Link } from 'react-router-dom';
-import { Building2, MapPin } from 'lucide-react';
+import {
+  ArrowLeft, Phone, Mail, Loader2, Bell, Download, FileCheck2, Send, CalendarDays,
+  CheckCircle2, XCircle, ShieldAlert, Smartphone, MessageSquare, BedDouble, User,
+  Building2, Settings, IndianRupee, LogOut, CheckCircle, AlertTriangle, AlertCircle,
+  Heart, Sparkles, MapPin
+} from 'lucide-react';
 import { useTenantDashboard } from '@features/tenant-portal/hooks/useTenantDashboard';
 import { TenantPriorityStrip } from '@/portal/components/TenantPriorityStrip';
 import { TenantScorePanel } from '@/portal/components/TenantScorePanel';
@@ -27,6 +32,7 @@ export function TenantDashboardPage() {
   const prof = profile?.profile as Record<string, unknown> | undefined;
   const tenant = profile?.tenant as Record<string, unknown> | undefined;
   const hostel = profile?.hostel as Record<string, unknown> | undefined;
+  const ownerContact = profile?.owner_contact as Record<string, unknown> | undefined;
   const name = String(prof?.name ?? 'Tenant');
   const status = String(tenant?.status ?? profile?.status ?? 'ACTIVE');
   const roomNo = profile?.room?.room_no ?? profile?.room_no ?? null;
@@ -103,6 +109,54 @@ export function TenantDashboardPage() {
           </div>
         </div>
       </header>
+
+
+      {status === 'FORMER_TENANT' && (
+        <div className="rounded-2xl border border-rose-100 bg-rose-50/50 p-6 relative overflow-hidden shadow-sm">
+          <div className="absolute top-0 right-0 p-4 opacity-10">
+            <Heart className="h-24 w-24 text-rose-500" />
+          </div>
+          <div className="relative space-y-3">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/10 text-rose-600 text-xs font-semibold">
+              <Sparkles className="h-3.5 w-3.5" />
+              Farewell, Friend!
+            </div>
+            <h2 className="text-xl font-bold text-foreground leading-tight">
+              Thank you for staying with us!
+            </h2>
+            <p className="text-sm text-muted-foreground leading-relaxed max-w-xl">
+              You are no longer an active resident of <strong className="text-foreground">{hostelName}</strong>. 
+              We are truly grateful for the time you spent with us and wish you the absolute best in all your future endeavors. 
+              Your presence made our community warmer, and you will always be a part of our history!
+            </p>
+            {(tenant?.exit_date || profile?.tenant?.exit_date) && (
+              <p className="text-xs text-muted-foreground">
+                Departure Date: <strong className="text-foreground">{new Date(String(tenant?.exit_date || profile?.tenant?.exit_date)).toLocaleDateString('en-IN')}</strong>
+              </p>
+            )}
+            <div className="pt-2 flex items-center gap-3">
+              {ownerContact?.owner_email && (
+                <a
+                  href={`mailto:${ownerContact.owner_email}`}
+                  className="inline-flex items-center gap-1.5 text-xs text-accent font-semibold hover:underline"
+                >
+                  <Mail className="h-3.5 w-3.5" />
+                  Contact Office
+                </a>
+              )}
+              {ownerContact?.owner_phone && (
+                <a
+                  href={`tel:${ownerContact.owner_phone}`}
+                  className="inline-flex items-center gap-1.5 text-xs text-accent font-semibold hover:underline"
+                >
+                  <Phone className="h-3.5 w-3.5" />
+                  Call Support
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {dues ? (
         <TenantPriorityStrip dues={dues} payments={payments} moveOut={moveOut} />

@@ -307,8 +307,8 @@ export class PropertyService {
   }
 
   async createFloor(ownerId: string, hostelId: string, data: { name: string; sort_order?: number }) {
-    const hostel = await prisma.hostels.findFirst({ where: { id: hostelId, owner_id: ownerId } });
-    if (!hostel) throw new Error("NOT_FOUND: Hostel not found");
+    const hostel = await prisma.hostels.findUnique({ where: { id: hostelId } });
+    if (!hostel || hostel.owner_id !== ownerId) throw new Error("NOT_FOUND: Hostel not found");
 
     return await prisma.floors.create({
       data: {
@@ -321,10 +321,11 @@ export class PropertyService {
   }
 
   async updateFloor(floorId: string, ownerId: string, data: { name?: string; sort_order?: number }) {
-    const floor = await prisma.floors.findFirst({
-      where: { id: floorId, hostel: { owner_id: ownerId } },
+    const floor = await prisma.floors.findUnique({
+      where: { id: floorId },
+      include: { hostel: { select: { owner_id: true } } },
     });
-    if (!floor) throw new Error("NOT_FOUND: Floor not found");
+    if (!floor || floor.hostel.owner_id !== ownerId) throw new Error("NOT_FOUND: Floor not found");
 
     const updateData: any = {};
     if (data.name !== undefined) updateData.name = data.name.trim();
@@ -335,11 +336,14 @@ export class PropertyService {
   }
 
   async deleteFloor(floorId: string, ownerId: string) {
-    const floor = await prisma.floors.findFirst({
-      where: { id: floorId, hostel: { owner_id: ownerId } },
-      include: { rooms: { where: { is_active: true }, select: { id: true } } },
+    const floor = await prisma.floors.findUnique({
+      where: { id: floorId },
+      include: {
+        hostel: { select: { owner_id: true } },
+        rooms: { where: { is_active: true }, select: { id: true } },
+      },
     });
-    if (!floor) throw new Error("NOT_FOUND: Floor not found");
+    if (!floor || floor.hostel.owner_id !== ownerId) throw new Error("NOT_FOUND: Floor not found");
     if (floor.rooms.length > 0) throw new Error("VALIDATION: Cannot delete floor with active rooms");
 
     await prisma.floors.delete({ where: { id: floorId } });
@@ -433,9 +437,10 @@ export class PropertyService {
   }
 
   async getRoomOverview(roomId: string, ownerId: string) {
-    const room = await prisma.rooms.findFirst({
-      where: { id: roomId, hostels: { owner_id: ownerId } },
+    const room = await prisma.rooms.findUnique({
+      where: { id: roomId },
       include: {
+        hostels: { select: { owner_id: true } },
         room_allocations: {
           where: { is_active: true, end_date: null },
           include: {
@@ -458,7 +463,7 @@ export class PropertyService {
       }
     });
 
-    if (!room) throw new Error("NOT_FOUND: Room not found");
+    if (!room || room.hostels.owner_id !== ownerId) throw new Error("NOT_FOUND: Room not found");
 
     const tenants = room.room_allocations.map((a: any) => {
 	      const tenant = a.tenant;
@@ -531,14 +536,12 @@ export class PropertyService {
   }
   
   async updateRoom(roomId: string, data: any, ownerId: string) {
-    const room = await prisma.rooms.findFirst({
-      where: {
-        id: roomId,
-        hostels: { owner_id: ownerId }
-      }
+    const room = await prisma.rooms.findUnique({
+      where: { id: roomId },
+      include: { hostels: { select: { owner_id: true } } },
     });
 
-    if (!room) throw new Error("NOT_FOUND: Room not found");
+    if (!room || room.hostels.owner_id !== ownerId) throw new Error("NOT_FOUND: Room not found");
 
     const capacitySnapshot = await roomCapacityService.getRoomCapacitySnapshot(roomId, { ownerId });
 

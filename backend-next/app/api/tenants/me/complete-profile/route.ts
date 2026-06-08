@@ -78,11 +78,11 @@ export async function POST(req: NextRequest) {
       payload.profile_type !== "WORKING_PROFESSIONAL" && payload.roll_number
         ? String(payload.roll_number).trim().toUpperCase()
         : null;
-    if (tenantOwner && normalizedRollNumber) {
+    if (tenantOwner && tenantOwner.owner_id && normalizedRollNumber) {
       const duplicateRollNumberTenant = await prisma.tenants.findFirst({
         where: {
           id: { not: tenantOwner.id },
-          ...(tenantOwner.owner_id ? { owner_id: tenantOwner.owner_id } : { hostel_id: tenantOwner.hostel_id }),
+          owner_id: tenantOwner.owner_id,
           roll_number: { equals: normalizedRollNumber, mode: "insensitive" },
           status: { not: "CANCELLED" },
         },

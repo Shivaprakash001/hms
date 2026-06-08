@@ -89,6 +89,22 @@ export const ownerService = {
     decideFrequencyChangeRequest: async (requestId, action, rejection_reason = '') => {
         const response = await api.post(`/owner/billing/frequency-requests/${requestId}/decision`, { action, rejection_reason });
         return response.data?.data ?? response.data;
+    },
+    getAgreementTemplate: async (hostelId) => {
+        const response = await api.get(`/owner/hostels/${hostelId}/agreement-template`);
+        return response.data;
+    },
+    updateAgreementTemplate: async (hostelId, data) => {
+        const response = await api.post(`/owner/hostels/${hostelId}/agreement-template`, data);
+        return response.data;
+    },
+    uploadOwnerSignatureStamp: async (hostelId, file) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        const response = await api.post(`/owner/hostels/${hostelId}/agreement-template/signature`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        return response.data;
     }
 };
 

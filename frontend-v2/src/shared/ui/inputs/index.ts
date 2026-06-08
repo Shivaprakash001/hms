@@ -7,3 +7,5 @@ export * from '@/app/components/ui/select';
 export * from '@/app/components/ui/slider';
 export * from '@/app/components/ui/switch';
 export * from '@/app/components/ui/textarea';
+export * from './SignaturePad';
+

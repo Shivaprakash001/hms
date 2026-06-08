@@ -26,7 +26,6 @@ export class BillingRepository {
           GROUP BY obligation_id
         ) pay_agg ON pay_agg.obligation_id = o.id
         WHERE o.owner_id = ${ownerId}::uuid
-          AND t.status = 'ACTIVE'
           AND o.status <> 'WAIVED'
           AND o.rent_month >= ${start}::date
           AND o.rent_month <= ${end}::date
@@ -68,7 +67,6 @@ export class BillingRepository {
       WHERE o.owner_id = ${ownerId}::uuid
         AND o.tenant_id = ANY(${tenantIds}::uuid[])
         AND o.hostel_id = ${hostelId}::uuid
-        AND t.status = 'ACTIVE'
         AND o.status IN ('PENDING', 'PARTIAL')
       GROUP BY o.tenant_id
     `;
@@ -108,7 +106,6 @@ export class BillingRepository {
       ) pay_agg ON pay_agg.obligation_id = o.id
       WHERE o.owner_id    = ${ownerId}::uuid
         AND o.status      IN ('PENDING', 'PARTIAL')
-        AND t.status      = 'ACTIVE'
         AND o.amount - COALESCE(pay_agg.total_paid, 0) > 0
         ${hostelFilter}
     `;
@@ -138,7 +135,6 @@ export class BillingRepository {
         ) pay_agg ON pay_agg.obligation_id = o.id
         WHERE o.owner_id = ${ownerId}::uuid
           AND o.status IN ('PENDING', 'PARTIAL')
-          AND t.status = 'ACTIVE'
           AND o.due_date < CURRENT_DATE
           AND o.amount - COALESCE(pay_agg.total_paid, 0) > 0
           ${hostelFilter}
@@ -209,7 +205,6 @@ export class BillingRepository {
         AND o.obligation_type = 'RENT'
         AND o.due_date < ${cutoff}::date
         AND o.is_superseded = false
-        AND t.status = 'ACTIVE'
         AND o.amount - COALESCE(pay_agg.total_paid, 0) > 0
         AND o.owner_id = ${ownerId}::uuid
         AND o.hostel_id = ${hostelId}::uuid

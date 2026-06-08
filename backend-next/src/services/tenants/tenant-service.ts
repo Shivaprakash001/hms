@@ -20,8 +20,10 @@ export class TenantService {
     const fallbackProfile = tenant.profile ?? tenant.profiles ?? (invitation
       ? { id: null, name: invitation.name, email: invitation.email, phone: invitation.phone }
       : null);
-    const hasActiveMoveOut = tenant.move_out_requests && tenant.move_out_requests.length > 0;
-    const computedStatus = hasActiveMoveOut ? "MOVE_OUT_REQUESTED" : tenant.status;
+    const activeMoveOut = tenant.move_out_requests?.find((r: any) => r.status !== "COMPLETED" && r.status !== "REJECTED");
+    const hasActiveMoveOut = !!activeMoveOut;
+    const hasFutureExit = tenant.exit_date && new Date(tenant.exit_date).getTime() > new Date().getTime();
+    const computedStatus = (hasActiveMoveOut || hasFutureExit) ? "MOVE_OUT_REQUESTED" : tenant.status;
     return {
       ...tenant,
       status: computedStatus,

@@ -28,7 +28,7 @@ async function parseExpenseCreateBody(req: NextRequest) {
   };
 }
 
-async function uploadReceiptImage(file: File, ownerId: string, hostelId?: string) {
+async function uploadReceiptImage(file: File, ownerId: string, hostelId: string | undefined) {
   if (!ALLOWED_RECEIPT_MIME.includes(file.type)) {
     throw new Error("VALIDATION: Receipt must be a JPG, PNG, or WEBP image");
   }

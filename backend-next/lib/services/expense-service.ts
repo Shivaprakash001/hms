@@ -25,7 +25,7 @@ type ExpenseFilters = {
   range?: string;
   startDate?: string;
   endDate?: string;
-  hostelId?: string;
+  hostelId: string | undefined;
   categories?: string[];
   status?: string;
   sort?: string;
