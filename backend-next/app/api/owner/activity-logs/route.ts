@@ -340,7 +340,7 @@ export async function GET(req: NextRequest) {
       }
 
       // Cancelled event
-      if (m.status === 'CANCELLED' && m.cancelled_at) {
+      if (m.status === 'REJECTED' && m.cancelled_at) {
         events.push({
           id: `moveout-cancelled-${m.id}`,
           category: 'Move Outs',
@@ -659,7 +659,7 @@ export async function GET(req: NextRequest) {
     const pendingMoveOuts = await prisma.move_out_requests.findMany({
       where: {
         hostel_id: activeHostelId,
-        status: { notIn: ['COMPLETED', 'CANCELLED'] }
+        status: { notIn: ['COMPLETED', 'REJECTED'] }
       },
       include: {
         tenant: {

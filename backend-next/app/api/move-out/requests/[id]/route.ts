@@ -28,7 +28,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
     // Include settlement preview if not yet settled
     let preview = null;
-    if (!["COMPLETED", "CANCELLED", "REJECTED"].includes(request.status)) {
+    if (!["COMPLETED", "REJECTED"].includes(request.status)) {
       try {
         preview = await moveOutService.calculateSettlementPreview(params.id);
       } catch { /* preview may fail if data missing — ok */ }
