@@ -498,9 +498,9 @@ export class TenantService {
         created_at: req.created_at,
         processed_at: req.processed_at,
         processed_by: req.processed_by,
-        tenant_name: profile.name,
-        tenant_email: profile.email,
-        tenant_phone: profile.phone,
+        tenant_name: profile?.name ?? tenant.name ?? "Tenant",
+        tenant_email: profile?.email ?? "",
+        tenant_phone: profile?.phone ?? tenant.phone_1 ?? "",
         room_no: room?.room_no || null
       };
     });
@@ -542,6 +542,15 @@ export class TenantService {
       where: { id: tenantId, owner_id: ownerId },
       include: {
         profiles: true,
+        tenant_invitations: {
+          orderBy: { created_at: "desc" },
+          take: 1,
+        },
+        move_out_requests: {
+          where: { status: { notIn: ["COMPLETED", "REJECTED"] } },
+          orderBy: { created_at: "desc" },
+          take: 1,
+        },
         room_allocations: {
           where: { is_active: true, end_date: null },
           include: { room: true },
@@ -623,13 +632,13 @@ export class TenantService {
 
     return {
       id: legacyTenant.id,
-      name: legacyTenant.profile.name,
+      name: legacyTenant.profile?.name ?? legacyTenant.name ?? "Tenant",
       photo_url: legacyTenant.photo_url,
-      phone: legacyTenant.phone_1 || legacyTenant.profile.phone,
+      phone: legacyTenant.phone_1 || legacyTenant.profile?.phone || "",
       guardian_name: legacyTenant.guardian_name,
-      guardian_phone: legacyTenant.phone_2 || legacyTenant.profile.emergency_contact,
+      guardian_phone: legacyTenant.phone_2 || legacyTenant.profile?.emergency_contact || "",
       guardian_relation: legacyTenant.guardian_relation,
-      email: legacyTenant.profile.email,
+      email: legacyTenant.profile?.email || "",
       profile_type: legacyTenant.profile_type,
       roll_number: legacyTenant.roll_number,
       course: legacyTenant.course,
@@ -683,15 +692,17 @@ export class TenantService {
         overdue_amount: overdueAmount,
         deposit_balance: advanceBalance,
       },
-      profile: {
-        id: legacyTenant.profile.id,
-        name: legacyTenant.profile.name,
-        email: legacyTenant.profile.email,
-        phone: legacyTenant.profile.phone,
-        emergency_contact: legacyTenant.profile.emergency_contact,
-        is_profile_completed: legacyTenant.profile.is_profile_completed,
-        phone_verified: legacyTenant.profile.phone_verified ?? legacyTenant.profile.mobile_verified ?? false,
-      },
+      profile: legacyTenant.profile
+        ? {
+            id: legacyTenant.profile.id,
+            name: legacyTenant.profile.name,
+            email: legacyTenant.profile.email,
+            phone: legacyTenant.profile.phone,
+            emergency_contact: legacyTenant.profile.emergency_contact,
+            is_profile_completed: legacyTenant.profile.is_profile_completed,
+            phone_verified: legacyTenant.profile.phone_verified ?? legacyTenant.profile.mobile_verified ?? false,
+          }
+        : null,
       tenant: {
         id: legacyTenant.id,
         profile_id: legacyTenant.profile_id,
@@ -709,7 +720,7 @@ export class TenantService {
         phone_2: legacyTenant.phone_2,
         phone_3: legacyTenant.phone_3,
         guardian_name: legacyTenant.guardian_name,
-        guardian_phone: legacyTenant.phone_2 || legacyTenant.profile.emergency_contact,
+        guardian_phone: legacyTenant.phone_2 || legacyTenant.profile?.emergency_contact || "",
         guardian_relation: legacyTenant.guardian_relation,
         gender: legacyTenant.gender,
         date_of_birth: legacyTenant.date_of_birth,

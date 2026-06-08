@@ -29,7 +29,7 @@ export function ExitWorkflowSection({ hostelId, tenantId, status }: Props) {
   const { data: requests, refetch } = useQuery({
     queryKey: queryKeys.tenants.moveOut(hostelId, tenantId),
     queryFn: () => moveOutService.listRequests(hostelId, {}),
-    enabled: status === 'ACTIVE' || status === 'FORMER_TENANT' || status === 'LEFT',
+    enabled: status === 'ACTIVE' || status === 'MOVE_OUT_REQUESTED' || status === 'FORMER_TENANT' || status === 'LEFT',
   });
 
   const list = Array.isArray(requests) ? requests : (requests as Record<string, unknown>)?.requests ?? [];
