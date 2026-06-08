@@ -456,6 +456,22 @@ export function ActivateAccountPage() {
   const [isGuardianLocked, setIsGuardianLocked] = useState(true);
 
   const [acks, setAcks] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (ctx) {
+      const completed = new Set(ctx.completed_steps ?? ctx.activation_state.completed_steps ?? []);
+      if (completed.has('RULES') || ctx.activation_state.rules_accepted) {
+        setAcks({
+          fee_refund_rules: true,
+          discipline_policies: true,
+          late_fee_obligations: true,
+          damage_liabilities: true,
+          hostel_rules: true,
+        });
+      }
+    }
+  }, [ctx]);
+
   const [profile, setProfile] = useState<Record<string, string>>({
     phone: '',
     gender: '',
@@ -588,6 +604,7 @@ export function ActivateAccountPage() {
   }, [token]);
 
   const currentStep = ctx?.current_step ?? ctx?.activation_state.current_step;
+  const completed = new Set(ctx?.completed_steps ?? ctx?.activation_state.completed_steps ?? []);
   const activeStep = visibleStep || currentStep;
   const ruleCategories = ctx?.rules?.content?.categories ?? [];
   const requiredAcks = ctx?.rules?.required_acknowledgements ?? [];
@@ -1201,26 +1218,46 @@ export function ActivateAccountPage() {
                 ))}
               </div>
               <div className="sticky bottom-3 z-20 rounded-2xl border border-border bg-card/95 p-3 shadow-xl backdrop-blur">
-                <button
-                  type="button"
-                  disabled={!allAcksChecked || submitting}
-                  onClick={() => submitStep('RULES', { acknowledgements: acks, typed_signature_name: ctx.profile.name })}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-accent px-5 py-3.5 text-sm font-semibold text-accent-foreground disabled:opacity-50 active:scale-[0.98] transition-transform shadow-sm"
-                >
-                  {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                  Accept rules
-                </button>
+                {completed.has('RULES') ? (
+                  <button
+                    type="button"
+                    onClick={() => goToStep('AGREEMENT')}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-accent px-5 py-3.5 text-sm font-semibold text-accent-foreground active:scale-[0.98] transition-transform shadow-sm cursor-pointer"
+                  >
+                    Proceed to Agreement
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={!allAcksChecked || submitting}
+                    onClick={() => submitStep('RULES', { acknowledgements: acks, typed_signature_name: ctx.profile.name })}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-accent px-5 py-3.5 text-sm font-semibold text-accent-foreground disabled:opacity-50 active:scale-[0.98] transition-transform shadow-sm"
+                  >
+                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                    Accept rules
+                  </button>
+                )}
               </div>
             </div>
           )}
 
           {activeStep === 'AGREEMENT' && ctx?.agreement && (
             <form onSubmit={agreementSubmit} className="space-y-5 pb-24">
-              <SectionHeading
-                icon={<FileText className="w-5 h-5" />}
-                title="Review & Sign Agreement"
-                text="Please review the terms of your hostel stay and sign electronically below to proceed."
-              />
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <SectionHeading
+                  icon={<FileText className="w-5 h-5" />}
+                  title="Review & Sign Agreement"
+                  text="Please review the terms of your hostel stay and sign electronically below to proceed."
+                />
+                <button
+                  type="button"
+                  onClick={() => goToStep('RULES')}
+                  className="self-start sm:self-center shrink-0 text-xs font-semibold text-accent hover:underline flex items-center gap-1 px-3 py-1.5 rounded-xl border border-border bg-background hover:bg-secondary/40 transition cursor-pointer"
+                >
+                  ← Read Rules Again
+                </button>
+              </div>
 
               {/* Immutable Lease Snapshot Box */}
               <div className="rounded-xl border border-border bg-background p-5 shadow-sm space-y-4 max-h-[350px] overflow-y-auto text-sm leading-relaxed text-foreground select-none">
