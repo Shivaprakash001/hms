@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { eventSystem } from "@/lib/events";
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession(req);
@@ -84,6 +85,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         is_active: true,
       },
     });
+
+    await eventSystem.trigger("agreement_template_updated", {
+      owner_id: session.sub,
+      hostel_id: hostelId,
+      actionType: "UPDATE",
+      version: newTemplate.version,
+      title: newTemplate.title,
+      owner_signature_url: newTemplate.owner_signature_url,
+    }).catch((err: any) => console.error("Event trigger failed:", err));
 
     return apiResponse(newTemplate);
   } catch (error: any) {

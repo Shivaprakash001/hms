@@ -594,6 +594,14 @@ export class RentGenerationService {
         console.error("[RENT] Failed to write generation log:", logErr);
       });
 
+      const totalAmountGenerated = rentRows.reduce((sum, r) => sum + Number(r.amount), 0) +
+                                   maintRows.reduce((sum, r) => sum + Number(r.amount), 0);
+      const tenantCount = Array.from(
+        new Set([
+          ...rentRows.map((r: any) => r.tenant_id),
+          ...maintRows.map((r: any) => r.tenant_id),
+        ])
+      ).length;
 
       // Broadcast structured SSE events
       if (created > 0) {
@@ -602,6 +610,8 @@ export class RentGenerationService {
           count: created,
           owner_id: ownerId || "all",
           hostel_id: hostelId || null,
+          tenant_count: tenantCount,
+          total_amount: totalAmountGenerated,
         });
         await eventSystem.trigger("dashboard_updated", {
           reason: "rent_generated",

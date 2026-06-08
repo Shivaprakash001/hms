@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Upload, X, ShieldAlert, FileText, CheckCircle2, PenTool, Image as ImageIcon } from "lucide-react";
+import { Upload, X, ShieldAlert, FileText, CheckCircle2, PenTool, Image as ImageIcon, RotateCw } from "lucide-react";
 import { toast } from "sonner";
 import { ownerService } from "@features/owners/api";
 import { SignaturePad } from "@shared/ui/inputs";
@@ -156,6 +156,55 @@ export function AgreementSettingsSection({ hostelId }: Props) {
     }
   };
 
+  const handleRotateExistingSignature = async () => {
+    if (!local.owner_signature_url) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = () => reject(new Error("Failed to load signature image for rotation. Check CORS policy."));
+        const separator = local.owner_signature_url!.includes("?") ? "&" : "?";
+        img.src = local.owner_signature_url! + separator + "t=" + Date.now();
+      });
+
+      const canvas = document.createElement("canvas");
+      canvas.width = img.height;
+      canvas.height = img.width;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Could not get 2D context");
+
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate((90 * Math.PI) / 180);
+      ctx.drawImage(img, -img.width / 2, -img.height / 2);
+
+      const blob = await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob((b) => resolve(b), "image/png");
+      });
+
+      if (!blob) throw new Error("Failed to generate rotated image blob");
+
+      const file = new File([blob], "owner_signature_rotated.png", { type: "image/png" });
+      const res = await ownerService.uploadOwnerSignatureStamp(hostelId, file);
+      const data = res?.data ?? res;
+      
+      setLocal((prev) => ({
+        ...prev,
+        owner_signature_url: data?.owner_signature_url || prev.owner_signature_url,
+      }));
+      toast.success("Signature stamp rotated successfully");
+    } catch (err: any) {
+      console.error("Failed to rotate signature:", err);
+      setError(err?.message || "Failed to rotate signature stamp. Make sure the image is fully loaded.");
+      toast.error("Failed to rotate signature stamp");
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const upd = (k: keyof TemplateData, v: string | null) => {
     setLocal((prev) => ({ ...prev, [k]: v }));
   };
@@ -291,13 +340,23 @@ export function AgreementSettingsSection({ hostelId }: Props) {
                   </label>
 
                   {local.owner_signature_url && (
-                    <button
-                      type="button"
-                      onClick={() => upd("owner_signature_url", null)}
-                      className="flex items-center gap-1.5 text-xs text-destructive hover:underline font-medium ml-1"
-                    >
-                      <X className="w-3.5 h-3.5" /> Clear stamp
-                    </button>
+                    <div className="flex items-center gap-3 ml-1">
+                      <button
+                        type="button"
+                        onClick={handleRotateExistingSignature}
+                        disabled={uploading}
+                        className="flex items-center gap-1.5 text-xs text-accent hover:underline font-medium disabled:opacity-50"
+                      >
+                        <RotateCw className="w-3.5 h-3.5" /> Rotate 90°
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => upd("owner_signature_url", null)}
+                        className="flex items-center gap-1.5 text-xs text-destructive hover:underline font-medium"
+                      >
+                        <X className="w-3.5 h-3.5" /> Clear stamp
+                      </button>
+                    </div>
                   )}
 
                   <p className="text-[10px] text-muted-foreground">PNG, JPG or WEBP formats. Maximum size: 2MB.</p>

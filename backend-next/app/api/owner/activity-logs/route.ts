@@ -479,6 +479,24 @@ export async function GET(req: NextRequest) {
             billing_month: meta.billing_month || 'N/A'
           }
         });
+      } else if (log.entity_type === 'AGREEMENT_TEMPLATE') {
+        const actionLabel = log.action_type === 'UPDATE_SIGNATURE' ? 'Signature Stamp Updated' : 'Agreement Template Updated';
+        events.push({
+          id: `template-${log.id}`,
+          category: 'Settings',
+          title: actionLabel,
+          subtitle: `Version: ${meta.version || 'v1'}`,
+          timestamp: log.timestamp,
+          badgeColor: 'purple',
+          actor: { name: 'Owner', email: '' },
+          metadata: {
+            log_id: log.id,
+            version: meta.version || 'N/A',
+            title: meta.title || 'N/A',
+            owner_signature_url: meta.owner_signature_url || 'N/A',
+            hostel_id: meta.hostel_id || 'N/A'
+          }
+        });
       }
     });
 

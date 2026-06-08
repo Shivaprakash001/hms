@@ -5,6 +5,7 @@ import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { imagekit } from "@/lib/imagekit";
+import { eventSystem } from "@/lib/events";
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession(req);
@@ -51,6 +52,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         where: { id: template.id },
         data: { owner_signature_url: upload.url },
       });
+
+      await eventSystem.trigger("agreement_template_updated", {
+        owner_id: session.sub,
+        hostel_id: hostelId,
+        actionType: "UPDATE_SIGNATURE",
+        version: updatedTemplate.version,
+        title: updatedTemplate.title,
+        owner_signature_url: upload.url,
+      }).catch((err: any) => console.error("Event trigger failed:", err));
+
       return apiResponse(updatedTemplate);
     } else {
       // If no template exists yet, create one
@@ -66,6 +77,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           is_active: true,
         },
       });
+
+      await eventSystem.trigger("agreement_template_updated", {
+        owner_id: session.sub,
+        hostel_id: hostelId,
+        actionType: "UPDATE_SIGNATURE",
+        version: newTemplate.version,
+        title: newTemplate.title,
+        owner_signature_url: upload.url,
+      }).catch((err: any) => console.error("Event trigger failed:", err));
+
       return apiResponse(newTemplate);
     }
   } catch (error: any) {

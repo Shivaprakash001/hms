@@ -141,8 +141,13 @@ eventSystem.on("rent_generated", async (data) => {
     ownerId: data.owner_id,
     actionType: "GENERATE",
     entityType: "RENT",
-    entityId: data.obligationId,
-    metadata: { tenant_id: data.tenant_id, amount: data.amount, hostel_id: data.hostel_id }
+    entityId: data.hostel_id,
+    metadata: {
+      tenant_count: data.tenant_count || data.count || 0,
+      total_amount: data.total_amount || 0,
+      billing_month: data.month,
+      hostel_id: data.hostel_id
+    }
   });
 });
 
@@ -220,6 +225,22 @@ eventSystem.on("hostel_policy_updated", async (data) => {
     entityType: "HOSTEL_POLICY",
     entityId: data.hostel_id,
     metadata: { changed_domains: data.changed_domains, policy_version: data.policy_version, hostel_id: data.hostel_id }
+  });
+});
+
+eventSystem.on("agreement_template_updated", async (data) => {
+  await activityService.log({
+    userId: data.userId || data.owner_id,
+    ownerId: data.owner_id,
+    actionType: data.actionType || "UPDATE",
+    entityType: "AGREEMENT_TEMPLATE",
+    entityId: data.hostel_id,
+    metadata: {
+      hostel_id: data.hostel_id,
+      version: data.version,
+      title: data.title,
+      owner_signature_url: data.owner_signature_url
+    }
   });
 });
 
