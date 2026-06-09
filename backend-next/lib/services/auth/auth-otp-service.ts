@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { getLogger } from "@/lib/logger";
 import { incrementOtpMetric } from "@/lib/metrics";
 import { maskWhatsAppPhone } from "@/lib/services/notifications/providers/whatsapp";
-import { WhatsAppAuthProvider } from "./whatsapp-auth-provider";
+import { notificationService } from "@/lib/services/notification-service";
 import { redisKeys } from "@/lib/redis/keys";
 import { checkFixedWindowLimit, setOneTimeLock } from "@/lib/redis/rate-limit";
 
@@ -43,7 +43,7 @@ type VerifyOtpInput = {
 };
 
 export class AuthOtpService {
-  constructor(private readonly provider = new WhatsAppAuthProvider()) {}
+  constructor(private readonly provider = notificationService) {}
 
   async sendPhoneOtp(input: SendOtpInput) {
     const phone = input.phone;
@@ -77,7 +77,7 @@ export class AuthOtpService {
     incrementOtpMetric("requests_total");
 
     try {
-      const sendResult = await this.provider.sendOtp({ to: phone, otp });
+      const sendResult = await this.provider.sendOtp({ phone, otp, purpose });
       await (prisma as any).phoneVerificationOtp.update({
         where: { id: record.id },
         data: {

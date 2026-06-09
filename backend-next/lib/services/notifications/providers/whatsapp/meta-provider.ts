@@ -18,10 +18,10 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_MAX_RETRIES = 2;
 
 function configFromEnv(): WhatsAppProviderConfig {
-  const accessToken = process.env.WHATSAPP_TOKEN;
-  const phoneNumberId = process.env.PHONE_NUMBER_ID;
-  if (!accessToken) throw new WhatsAppConfigError("WHATSAPP_TOKEN is not configured");
-  if (!phoneNumberId) throw new WhatsAppConfigError("PHONE_NUMBER_ID is not configured");
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
+  if (!accessToken) throw new WhatsAppConfigError("WHATSAPP_ACCESS_TOKEN or WHATSAPP_TOKEN is not configured");
+  if (!phoneNumberId) throw new WhatsAppConfigError("WHATSAPP_PHONE_NUMBER_ID or PHONE_NUMBER_ID is not configured");
 
   return {
     accessToken,
@@ -32,9 +32,37 @@ function configFromEnv(): WhatsAppProviderConfig {
   };
 }
 
+export function validateWhatsAppConfiguration() {
+  if (process.env.OTP_PROVIDER !== "whatsapp") {
+    return;
+  }
+
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
+  const businessAccountId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
+  const otpTemplate = process.env.WHATSAPP_OTP_TEMPLATE;
+
+  const missing = [];
+  if (!accessToken) missing.push("WHATSAPP_ACCESS_TOKEN/WHATSAPP_TOKEN");
+  if (!phoneNumberId) missing.push("WHATSAPP_PHONE_NUMBER_ID/PHONE_NUMBER_ID");
+  if (!businessAccountId) missing.push("WHATSAPP_BUSINESS_ACCOUNT_ID");
+  if (!otpTemplate) missing.push("WHATSAPP_OTP_TEMPLATE");
+
+  if (missing.length > 0) {
+    throw new Error(
+      `CRITICAL CONFIGURATION ERROR: OTP_PROVIDER is set to 'whatsapp' but the following required environment variable(s) are missing: ${missing.join(", ")}`
+    );
+  }
+}
+
 export function normalizeWhatsAppPhone(raw: string): string {
-  const digits = String(raw || "").replace(/\D/g, "");
+  let digits = String(raw || "").replace(/\D/g, "");
   if (!digits) throw new WhatsAppValidationError("Recipient phone number is empty");
+
+  if (digits.startsWith("0")) {
+    digits = digits.slice(1);
+  }
+
   if (digits.startsWith("91") && digits.length === 12) return digits;
   if (digits.length === 10) return `91${digits}`;
   if (digits.length < 8 || digits.length > 15) {
@@ -124,6 +152,90 @@ export class MetaWhatsAppProvider {
     });
   }
 
+  async sendOtp(input: { to: string; otp: string; purpose: string }): Promise<WhatsAppSendResult> {
+    const phone = normalizeWhatsAppPhone(input.to);
+    const templateName = process.env.WHATSAPP_OTP_TEMPLATE;
+    if (!templateName) {
+      throw new WhatsAppConfigError("WHATSAPP_OTP_TEMPLATE is not configured");
+    }
+
+    const url = `${this.config.baseUrl}/${this.config.phoneNumberId}/messages`;
+    const body = {
+      messaging_product: "whatsapp",
+      to: phone,
+      type: "template",
+      template: {
+        name: templateName,
+        language: { code: "en_US" },
+        components: [
+          {
+            type: "body",
+            parameters: [
+              { type: "text", text: String(input.otp) },
+              { type: "text", text: String(input.purpose) },
+            ],
+          },
+        ],
+      },
+    };
+
+    logger.info("whatsapp.otp.send_started", {
+      phone: maskWhatsAppPhone(phone),
+      templateName,
+      purpose: input.purpose,
+    });
+
+    let lastError: WhatsAppProviderError | null = null;
+    for (let attempt = 1; attempt <= this.config.maxRetries + 1; attempt += 1) {
+      try {
+        const result = await this.post(url, body, attempt);
+        const providerMessageId = Array.isArray((result as any)?.messages)
+          ? String((result as any).messages[0]?.id || "")
+          : "";
+
+        logger.info("whatsapp.otp.send_success", {
+          phone: maskWhatsAppPhone(phone),
+          attempts: attempt,
+          providerMessageId,
+        });
+
+        return {
+          providerMessageId: providerMessageId || null,
+          raw: result,
+          attempts: attempt,
+        };
+      } catch (error: any) {
+        if (error instanceof WhatsAppProviderError) {
+          lastError = error;
+          if (!error.retryable || attempt > this.config.maxRetries) {
+            logger.error("whatsapp.otp.send_failed", {
+              phone: maskWhatsAppPhone(phone),
+              attempts: attempt,
+              error_code: error.providerCode || error.code || "WHATSAPP_SEND_FAILED",
+              error: error.message,
+            });
+            throw error;
+          }
+          await sleep(Math.min(1000 * 2 ** (attempt - 1), 5000));
+          continue;
+        }
+        logger.error("whatsapp.otp.send_failed", {
+          phone: maskWhatsAppPhone(phone),
+          attempts: attempt,
+          error: String(error?.message || error),
+        });
+        throw error;
+      }
+    }
+
+    throw lastError || new WhatsAppProviderError({
+      message: "WhatsApp OTP send failed",
+      code: "WHATSAPP_OTP_SEND_FAILED",
+      retryable: false,
+      attempts: this.config.maxRetries + 1,
+    });
+  }
+
   private async post(url: string, body: unknown, attempt: number): Promise<unknown> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
@@ -181,4 +293,8 @@ function safeJson(raw: string): unknown {
   } catch {
     return { raw };
   }
+}
+
+if (process.env.OTP_PROVIDER === "whatsapp") {
+  validateWhatsAppConfiguration();
 }
