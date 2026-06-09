@@ -27,7 +27,7 @@ function formatAgreementDateTime(dateInput: Date | string | null | undefined): s
 }
 
 
-const DEFAULT_RULE_CONTENT = {
+export const DEFAULT_RULE_CONTENT = {
   categories: [
     {
       id: "payments",
@@ -248,9 +248,9 @@ export class AgreementGenerationService {
       },
       orderBy: { created_at: "desc" },
     });
-    const hostelRules = ruleVersion
+    const hostelRules = snapshot.hostel_rules || (ruleVersion
       ? (ruleVersion.content as any || ruleVersion.content_snapshot as any || DEFAULT_RULE_CONTENT)
-      : DEFAULT_RULE_CONTENT;
+      : DEFAULT_RULE_CONTENT);
 
     return {
       hostelName: snapshot.hostel_name || hostel.name,

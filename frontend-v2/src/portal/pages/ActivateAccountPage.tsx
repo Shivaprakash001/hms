@@ -607,7 +607,7 @@ export function ActivateAccountPage() {
   const currentStep = ctx?.current_step ?? ctx?.activation_state.current_step;
   const completed = new Set(ctx?.completed_steps ?? ctx?.activation_state.completed_steps ?? []);
   const activeStep = visibleStep || currentStep;
-  const ruleCategories = ctx?.rules?.content?.categories ?? [];
+  const ruleCategories = ctx?.agreement?.content_snapshot?.hostel_rules?.categories ?? ctx?.rules?.content?.categories ?? [];
   const requiredAcks = ctx?.rules?.required_acknowledgements ?? [];
   const allAcksChecked = requiredAcks.length > 0 && requiredAcks.every((key) => acks[key] === true);
   const strength = passwordStrength(account.password);
@@ -1313,17 +1313,46 @@ export function ActivateAccountPage() {
                   2. Terms of Residency & Rules Compliance
                 </h4>
                 <ul className="list-disc pl-5 space-y-2 text-xs text-muted-foreground">
-                  <li>The Tenant agrees to pay the monthly rent of ₹{ctx.agreement.content_snapshot.monthly_rent} on or before the due date as defined by the hostel policy.</li>
-                  <li>A refundable security deposit of ₹{ctx.agreement.content_snapshot.advance_deposit} is deposited with the management, which will be settled/refunded upon successful move-out compliance checks.</li>
+                  <li>The Tenant shall use the allocated room solely for residential purposes. Sub-letting or transferring the room to any other person is strictly prohibited.</li>
+                  <li>The Tenant agrees to pay the monthly rent of ₹{ctx.agreement.content_snapshot.monthly_rent} on or before the due date as defined by the hostel policy. Late payments may attract fees or lead to suspension of access.</li>
+                  <li>A refundable security deposit of ₹{ctx.agreement.content_snapshot.advance_deposit} is deposited with the management, which will be settled/refunded upon successful move-out compliance checks, subject to clearance of all pending dues and room inspection for damages.</li>
+                  <li>Either party must provide at least 30 days written notice prior to terminating this residency agreement.</li>
                   <li className="text-foreground font-medium bg-secondary/20 p-2 rounded border border-border/50">
-                    <strong>Hostel Rules Binding Clause:</strong> The Tenant explicitly agrees to follow, comply with, and be legally bound by each and every rule, policy, and regulation of the hostel (as reviewed and accepted under the Rules section). This includes all guidelines concerning fee refunds, hostel discipline, guest policies, late fee obligations, and property damage liabilities.
+                    <strong>Hostel Rules Binding Clause:</strong> The Tenant explicitly agrees to follow, comply with, and be legally bound by each and every rule, policy, and regulation of the hostel (as reviewed and accepted under the Rules section). This includes all guidelines concerning fee refunds, hostel discipline, guest policies, late fee obligations, and property damage liabilities. Any breach of these rules constitutes a violation of this residency agreement and may result in immediate termination of stay.
                   </li>
                 </ul>
+
+                {ruleCategories.length > 0 && (
+                  <>
+                    <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 mt-4 mb-1">
+                      3. Hostel Rules & Regulations
+                    </h4>
+                    <div className="space-y-4 pl-2 text-xs text-muted-foreground border-l-2 border-slate-100 ml-1">
+                      {ruleCategories.map((category: any) => (
+                        <div key={category.id} className="space-y-1">
+                          <h5 className="font-bold text-slate-800">{category.title}</h5>
+                          <ul className="list-disc pl-5 space-y-1">
+                            {(category.highlights || []).map((hl: string, idx: number) => (
+                              <li key={`hl-${idx}`} className="italic text-foreground font-medium">
+                                {hl}
+                              </li>
+                            ))}
+                            {(category.rules || []).map((rule: string, idx: number) => (
+                              <li key={`rule-${idx}`}>
+                                {rule}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
 
                 {ctx.agreement.content_snapshot.custom_rules && (
                   <>
                     <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 mt-4 mb-1">
-                      3. Additional Custom Rules
+                      4. Additional Custom Rules
                     </h4>
                     <p className="text-xs whitespace-pre-line text-muted-foreground bg-amber-50/20 border border-amber-500/10 rounded-lg p-3 italic">
                       {ctx.agreement.content_snapshot.custom_rules}

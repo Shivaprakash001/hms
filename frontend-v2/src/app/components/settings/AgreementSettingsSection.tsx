@@ -15,6 +15,7 @@ interface TemplateData {
   owner_name: string;
   owner_signature_url: string | null;
   custom_rules: string;
+  hostel_rules?: any;
 }
 
 export function AgreementSettingsSection({ hostelId }: Props) {
@@ -23,6 +24,7 @@ export function AgreementSettingsSection({ hostelId }: Props) {
     owner_name: "",
     owner_signature_url: null,
     custom_rules: "",
+    hostel_rules: null,
   });
   const snap = useRef<TemplateData>(local);
   const [loading, setLoading] = useState(true);
@@ -46,6 +48,7 @@ export function AgreementSettingsSection({ hostelId }: Props) {
           owner_name: data?.owner_name || "",
           owner_signature_url: data?.owner_signature_url || null,
           custom_rules: data?.custom_rules || "",
+          hostel_rules: data?.hostel_rules || null,
         };
         if (active) {
           setLocal(mapped);
@@ -95,6 +98,7 @@ export function AgreementSettingsSection({ hostelId }: Props) {
         owner_name: data?.owner_name || local.owner_name,
         owner_signature_url: data?.owner_signature_url || local.owner_signature_url,
         custom_rules: data?.custom_rules || local.custom_rules,
+        hostel_rules: data?.hostel_rules || local.hostel_rules,
       };
       setLocal(updated);
       snap.current = updated;
@@ -438,17 +442,46 @@ export function AgreementSettingsSection({ hostelId }: Props) {
               2. Terms of Residency & Rules Compliance
             </h5>
             <ul className="list-disc pl-4 space-y-1.5 text-muted-foreground">
-              <li>The Tenant agrees to pay the monthly rent on or before the due date as defined by the hostel policy.</li>
-              <li>A refundable security deposit is deposited with the management, which will be settled/refunded upon successful move-out compliance checks.</li>
+              <li>The Tenant shall use the allocated room solely for residential purposes. Sub-letting or transferring the room to any other person is strictly prohibited.</li>
+              <li>The Tenant agrees to pay the monthly rent on or before the due date as defined by the hostel policy. Late payments may attract fees or lead to suspension of access.</li>
+              <li>A refundable security deposit is deposited with the management, which will be settled/refunded upon successful move-out compliance checks, subject to clearance of all pending dues and room inspection for damages.</li>
+              <li>Either party must provide at least 30 days written notice prior to terminating this residency agreement.</li>
               <li className="text-slate-800 font-medium bg-amber-500/5 p-2 rounded border border-amber-500/10">
-                <strong>Hostel Rules Binding Clause:</strong> The Tenant explicitly agrees to follow, comply with, and be legally bound by each and every rule, policy, and regulation of the hostel. This includes all guidelines concerning fee refunds, hostel discipline, guest policies, late fee obligations, and property damage liabilities.
+                <strong>Hostel Rules Binding Clause:</strong> The Tenant explicitly agrees to follow, comply with, and be legally bound by each and every rule, policy, and regulation of the hostel. This includes all guidelines concerning fee refunds, hostel discipline, guest policies, late fee obligations, and property damage liabilities. Any breach of these rules constitutes a violation of this residency agreement and may result in immediate termination of stay.
               </li>
             </ul>
+
+            {local.hostel_rules?.categories && (
+              <>
+                <h5 className="font-bold text-[11px] uppercase tracking-wider text-slate-800 mt-4 mb-1">
+                  3. Hostel Rules & Regulations
+                </h5>
+                <div className="space-y-4 pl-2 text-[11px] text-muted-foreground border-l-2 border-slate-100 ml-1">
+                  {local.hostel_rules.categories.map((category: any) => (
+                    <div key={category.id} className="space-y-1">
+                      <h6 className="font-bold text-slate-800">{category.title}</h6>
+                      <ul className="list-disc pl-4 space-y-1">
+                        {(category.highlights || []).map((hl: string, idx: number) => (
+                          <li key={`hl-${idx}`} className="italic text-foreground font-medium">
+                            {hl}
+                          </li>
+                        ))}
+                        {(category.rules || []).map((rule: string, idx: number) => (
+                          <li key={`rule-${idx}`}>
+                            {rule}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
 
             {local.custom_rules && (
               <>
                 <h5 className="font-bold text-[11px] uppercase tracking-wider text-slate-800 mt-4 mb-1">
-                  3. Additional Custom Rules
+                  4. Additional Custom Rules
                 </h5>
                 <p className="whitespace-pre-line text-muted-foreground bg-amber-50/20 border border-amber-500/10 rounded-lg p-3 italic">
                   {local.custom_rules}

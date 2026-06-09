@@ -434,6 +434,7 @@ export class ActivationWorkflowService {
             tenant_name: profile?.name || invitation?.name || "Tenant",
             owner_name: activeTemplate.owner_name,
             custom_rules: activeTemplate.custom_rules || "",
+            hostel_rules: ruleVersion ? (ruleVersion.content || ruleVersion.content_snapshot || DEFAULT_RULE_CONTENT) : DEFAULT_RULE_CONTENT,
           }
         },
       });
@@ -652,6 +653,7 @@ export class ActivationWorkflowService {
     }
     if (!draft) throw new Error("INTERNAL_ERROR: Draft agreement not found");
 
+    const ruleVersion = await this.getActiveRuleVersion(tenant.hostel_id);
     const now = new Date();
 
     const signedAgreement = await prisma.agreement.update({
@@ -675,6 +677,13 @@ export class ActivationWorkflowService {
         owner_signature_url: template.owner_signature_url,
         owner_signature_name: template.owner_name,
         owner_signed_at: now,
+
+        content_snapshot: {
+          ...(draft.content_snapshot as any || {}),
+          owner_name: template.owner_name,
+          custom_rules: template.custom_rules || "",
+          hostel_rules: ruleVersion ? (ruleVersion.content || ruleVersion.content_snapshot || DEFAULT_RULE_CONTENT) : DEFAULT_RULE_CONTENT,
+        },
       },
     });
 

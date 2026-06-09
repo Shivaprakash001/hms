@@ -6,6 +6,8 @@ import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { eventSystem } from "@/lib/events";
 
+import { DEFAULT_RULE_CONTENT } from "@/src/services/tenants/agreement-generation-service";
+
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession(req);
   if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
@@ -39,7 +41,22 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       });
     }
 
-    return apiResponse(template);
+    const ruleVersion = await prisma.ruleVersion.findFirst({
+      where: {
+        hostel_id: hostelId,
+        OR: [{ is_active: true }, { active: true }],
+      },
+      orderBy: { created_at: "desc" },
+    });
+
+    const hostelRules = ruleVersion
+      ? (ruleVersion.content as any || ruleVersion.content_snapshot as any || DEFAULT_RULE_CONTENT)
+      : DEFAULT_RULE_CONTENT;
+
+    return apiResponse({
+      ...template,
+      hostel_rules: hostelRules,
+    });
   } catch (error: any) {
     return apiError(error.message || "Failed to fetch agreement template");
   }
