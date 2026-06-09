@@ -4,6 +4,10 @@
   "installCommand": "npm install",
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "https://api.sriadithyahostels.in/api/:path*"
+    },
+    {
       "source": "/((?!.*\\.[a-zA-Z0-9]{1,5}$).*)",
       "destination": "/index.html"
     }

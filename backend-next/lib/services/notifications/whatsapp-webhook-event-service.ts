@@ -283,16 +283,10 @@ export class WhatsAppWebhookEventService {
           provider_response = COALESCE(provider_response, '{}'::jsonb) || ${providerResponse}::jsonb
       WHERE provider_message_id = ${event.providerMessageId}
         AND (
-          CASE delivery_status
-            WHEN 'READ' THEN 3
-            WHEN 'DELIVERED' THEN 2
-            WHEN 'SENT' THEN 1
-            WHEN 'FAILED' THEN 4
-            WHEN 'FAILED_RETRYABLE' THEN 4
-            WHEN 'FAILED_FINAL' THEN 4
-            ELSE 0
-          END
-        ) <= ${incomingRank}
+          delivery_status = 'PENDING'
+          OR (delivery_status = 'SENT' AND ${event.status} IN ('SENT', 'DELIVERED', 'READ', 'FAILED'))
+          OR (delivery_status = 'DELIVERED' AND ${event.status} = 'READ')
+        )
     `;
 
     if (count === 0) {

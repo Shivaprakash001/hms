@@ -268,11 +268,6 @@ export class ReminderService {
           }
         }
       } catch (err: any) {
-        if (err?.code === "NO_REMINDERS_LEFT") {
-          // No credits left for this owner — stop processing all their obligations
-          console.warn(`[REMINDER] Credits exhausted for owner ${ownerId}. Stopping obligation loop.`);
-          break;
-        }
         console.error(`[REMINDER] Error processing obligation ${ob.obligation_id}:`, err?.message);
       }
     }

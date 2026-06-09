@@ -69,13 +69,6 @@ export async function POST(req: NextRequest) {
     if (error?.httpStatus === 404) {
       return apiError(error.message, "NOT_FOUND", 404);
     }
-    if (error?.code === "NO_REMINDERS_LEFT") {
-      return apiError(
-        "No reminder credits left. Buy a pack to continue sending reminders.",
-        "NO_REMINDERS_LEFT",
-        402
-      );
-    }
     logger.error("send_reminder.failed", {
       error: error?.message || String(error),
       code: error?.code,
