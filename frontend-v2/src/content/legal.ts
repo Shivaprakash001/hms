@@ -235,4 +235,60 @@ export const legalSections = [
       },
     ],
   },
+  {
+    id: "data-deletion",
+    title: "Data Deletion Instructions",
+    subtitle: "How to request the deletion of your account and personal data.",
+    lastUpdated: "June 2026",
+    content: [
+      {
+        type: "paragraph",
+        text: "Sri Adithya Hostels is committed to protecting your privacy and ensuring transparency regarding your personal data. If you have used our platform, registered an account, or logged in using Meta (Facebook/WhatsApp) services, you have the right to request the deletion of your data in accordance with applicable policies.",
+      },
+      {
+        type: "subheading",
+        text: "How to Request Data Deletion",
+      },
+      {
+        type: "paragraph",
+        text: "You can request the deletion of your account and all associated personal information (including name, phone number, email, and billing records) through either of the following methods:",
+      },
+      {
+        type: "paragraph",
+        text: "1. Self-Service Deletion: Log in to your Sri Adithya Hostels account, go to Profile/Settings, and click on 'Delete Account'. Please note that this action is permanent and cannot be undone.",
+      },
+      {
+        type: "paragraph",
+        text: "2. Contact Support: Send a formal email request to our Data Officer at spchidiri2006@gmail.com with the subject line 'Personal Data Deletion Request'. Please include your registered mobile number and full name to help us identify your account.",
+      },
+      {
+        type: "subheading",
+        text: "Processing Timeframe",
+      },
+      {
+        type: "paragraph",
+        text: "Upon receiving your request, we will verify your identity and delete your personal data within 30 business days. Once deleted, you will lose access to all associated portals and services, and a confirmation email will be dispatched to your registered address.",
+      },
+      {
+        type: "subheading",
+        text: "Data Retention Exceptions",
+      },
+      {
+        type: "paragraph",
+        text: "Please note that we may retain certain records (such as transaction receipts and legally binding residency agreements) where we are required to do so by law, to resolve pending payment disputes, or to comply with active audit requirements under Indian laws.",
+      },
+      {
+        type: "subheading",
+        text: "Contact for Data Deletion Inquiries",
+      },
+      {
+        type: "contact_list",
+        items: [
+          { label: "Data Officer", value: "Chidiri Shiva Prakash" },
+          { label: "Email", value: "spchidiri2006@gmail.com" },
+          { label: "Phone", value: "+91 8008046952" },
+        ],
+      },
+    ],
+  },
 ]
