@@ -285,7 +285,7 @@ describe("MetaWhatsAppProvider sendInvitation", () => {
       hostelName: "Hostel Name",
       roomNumber: "101",
       roomRent: 5000,
-      activationLink: "http://localhost/activate",
+      activationLink: "http://localhost/activate/invite-token-123",
     });
 
     expect(result.providerMessageId).toBe("wamid.invitation_test");
@@ -295,6 +295,18 @@ describe("MetaWhatsAppProvider sendInvitation", () => {
     const body = JSON.parse(init?.body as string);
     expect(body.to).toBe("917901070333");
     expect(body.type).toBe("template");
-    expect(body.template.name).toBe("hms_tenant_invite_v2");
+    expect(body.template.name).toBe("tenant_account_activation_v2");
+    expect(body.template.language.code).toBe("en");
+    expect(body.template.components[0].parameters).toEqual([
+      { type: "text", text: "John Doe" },
+      { type: "text", text: "101" },
+      { type: "text", text: "5000" },
+    ]);
+    expect(body.template.components[1]).toEqual({
+      type: "button",
+      sub_type: "url",
+      index: "0",
+      parameters: [{ type: "text", text: "invite-token-123" }],
+    });
   });
 });

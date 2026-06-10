@@ -16,6 +16,8 @@ const logger = getLogger("whatsapp.meta-provider");
 const DEFAULT_BASE_URL = "https://graph.facebook.com/v19.0";
 const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_MAX_RETRIES = 2;
+const DEFAULT_INVITATION_TEMPLATE = "tenant_account_activation_v2";
+const LEGACY_MISSING_INVITATION_TEMPLATE = "hms_tenant_invite_v2";
 
 function configFromEnv(): WhatsAppProviderConfig {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_TOKEN;
@@ -91,6 +93,32 @@ function providerCode(body: MetaWhatsAppErrorBody): string | undefined {
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function extractActivationToken(activationLink: string): string {
+  try {
+    const url = new URL(activationLink);
+    const token = url.pathname.split("/").filter(Boolean).pop();
+    return token ? decodeURIComponent(token) : activationLink;
+  } catch {
+    const token = String(activationLink || "").split("/").filter(Boolean).pop();
+    return token || activationLink;
+  }
+}
+
+function invitationTemplateName(): string {
+  const configured = String(process.env.WHATSAPP_INVITATION_TEMPLATE || "").trim();
+  if (!configured || configured === LEGACY_MISSING_INVITATION_TEMPLATE) {
+    return DEFAULT_INVITATION_TEMPLATE;
+  }
+  return configured;
+}
+
+function invitationTemplateLanguage(templateName: string): string {
+  const configured = String(process.env.WHATSAPP_INVITATION_LANGUAGE || "").trim();
+  if (configured) return configured;
+  if (templateName === "tenant_account_activation_v2") return "en";
+  return "en_IN";
 }
 
 export class MetaWhatsAppProvider {
@@ -265,9 +293,11 @@ export class MetaWhatsAppProvider {
     activationLink: string;
   }): Promise<WhatsAppSendResult> {
     const phone = normalizeWhatsAppPhone(input.to);
-    const templateName = process.env.WHATSAPP_INVITATION_TEMPLATE || "hms_tenant_invite_v2";
+    const templateName = invitationTemplateName();
+    const languageCode = invitationTemplateLanguage(templateName);
+    const activationToken = extractActivationToken(input.activationLink);
     const url = `${this.config.baseUrl}/${this.config.phoneNumberId}/messages`;
-    const useText = process.env.WHATSAPP_OTP_TEMPLATE === "text";
+    const useText = templateName.toLowerCase() === "text";
     const body = useText
       ? {
           messaging_product: "whatsapp",
@@ -283,19 +313,24 @@ export class MetaWhatsAppProvider {
           type: "template",
           template: {
             name: templateName,
-            language: { code: "en_US" },
+            language: { code: languageCode },
             components: [
               {
                 type: "body",
                 parameters: [
                   { type: "text", text: String(input.tenantName) },
-                  { type: "text", text: String(input.ownerName) },
-                  { type: "text", text: String(input.hostelName) },
                   { type: "text", text: String(input.roomNumber) },
-                  { type: "text", text: String(input.roomRent) },
-                  { type: "text", text: String(input.activationLink) }
+                  { type: "text", text: String(input.roomRent) }
                 ],
-              }
+              },
+              {
+                type: "button",
+                sub_type: "url",
+                index: "0",
+                parameters: [
+                  { type: "text", text: activationToken },
+                ],
+              },
             ]
           }
         };
@@ -303,6 +338,7 @@ export class MetaWhatsAppProvider {
     logger.info("whatsapp.invitation.send_started", {
       phone: maskWhatsAppPhone(phone),
       templateName,
+      languageCode,
       useText
     });
 
