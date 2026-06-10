@@ -38,13 +38,83 @@ export class TenantInvitationLifecycleService {
     return roomCapacityService.getRoomCapacitySnapshot(roomId, { tx });
   }
 
+  private async dispatchInvitationNotification(
+    invitation: any,
+    tenant: any,
+    room: any,
+    owner: any,
+    activationLink: string
+  ) {
+    let whatsappSent = false;
+    let whatsappError: string | undefined = undefined;
+    let providerMessageId: string | null = null;
+
+    // 1. Primary: WhatsApp
+    if (invitation.phone) {
+      try {
+        const { MetaWhatsAppProvider } = await import("../../../lib/services/notifications/providers/whatsapp/meta-provider");
+        const whatsappProvider = new MetaWhatsAppProvider();
+        const result = await whatsappProvider.sendInvitation({
+          to: invitation.phone,
+          tenantName: invitation.name,
+          ownerName: owner.name || "The Owner",
+          hostelName: room.hostels.name,
+          roomNumber: room.room_no,
+          roomRent: Number(tenant.monthly_rent),
+          activationLink,
+        });
+        whatsappSent = true;
+        providerMessageId = result.providerMessageId;
+      } catch (err: any) {
+        whatsappError = err?.message || String(err);
+      }
+    }
+
+    // 2. Fallback: Email (only if WhatsApp failed/not sent AND email exists)
+    let emailSent = false;
+    let emailError: string | undefined = undefined;
+    if (!whatsappSent && invitation.email) {
+      try {
+        const roommates = await this.getRoommateNames(room.id);
+        const emailResult = await EmailService.sendInvitation({
+          toEmail: invitation.email,
+          tenantName: invitation.name,
+          ownerName: owner.name || "The Owner",
+          hostelName: room.hostels.name,
+          roomNumber: room.room_no,
+          roomRent: Number(tenant.monthly_rent),
+          activationLink,
+          advanceDeposit: Number(tenant.advance_deposit),
+          maintenanceCharge: Number(tenant.maintenance_charge),
+          maintenanceType: tenant.maintenance_type,
+          joiningDate: tenant.joined_on || undefined,
+          roommates,
+        });
+        emailSent = Boolean(emailResult.sent);
+        if (!emailResult.sent) {
+          emailError = String(emailResult.error || "unknown");
+        }
+      } catch (err: any) {
+        emailError = err?.message || String(err);
+      }
+    }
+
+    return {
+      whatsapp_sent: whatsappSent,
+      whatsapp_error: whatsappError,
+      provider_message_id: providerMessageId,
+      email_sent: emailSent,
+      email_error: emailError,
+      needs_email: !whatsappSent && !invitation.email,
+    };
+  }
+
   async createInvitation(data: any, ownerId: string) {
-    const normalizedEmail = normalizeEmail(data.email);
+    const normalizedEmail = data.email ? normalizeEmail(data.email) : null;
     const normalizedPhone = normalizeIndianPhone(data.phone);
     const name = String(data.name || "").trim();
     const roomId = String(data.room_id || data.roomId || "").trim();
     if (!name) throw new Error("VALIDATION_ERROR: Tenant name is required");
-    if (!normalizedEmail) throw new Error("VALIDATION_ERROR: Email is required");
     if (!normalizedPhone) throw new Error("VALIDATION_ERROR: Valid phone is required");
     if (!roomId) throw new Error("VALIDATION_ERROR: Room is required");
 
@@ -62,8 +132,11 @@ export class TenantInvitationLifecycleService {
     const activeExisting = await prisma.tenant_invitations.findFirst({
       where: {
         owner_id: ownerId,
-        email: normalizedEmail,
         status: { in: ACTIVE_INVITE_STATUSES },
+        OR: [
+          ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
+          ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
+        ],
       },
       include: { tenant: true },
     });
@@ -71,12 +144,14 @@ export class TenantInvitationLifecycleService {
       return this.resendInvitation(activeExisting.id, { id: ownerId, role: "OWNER" }, data);
     }
 
-    const existingProfile = await prisma.profile.findUnique({
-      where: { email: normalizedEmail },
-      include: { tenants: true },
-    });
-    if (existingProfile?.tenants && existingProfile.tenants.status !== "EXPIRED" && existingProfile.tenants.status !== "CANCELLED") {
-      throw new Error("ALREADY_EXISTS: User with this email already exists");
+    if (normalizedEmail) {
+      const existingProfile = await prisma.profile.findUnique({
+        where: { email: normalizedEmail },
+        include: { tenants: true },
+      });
+      if (existingProfile?.tenants && existingProfile.tenants.status !== "EXPIRED" && existingProfile.tenants.status !== "CANCELLED") {
+        throw new Error("ALREADY_EXISTS: User with this email already exists");
+      }
     }
 
     const inviteDefaults = await hostelBillingPreferencesService.resolveTenantInviteDefaults(roomId, ownerId);
@@ -158,22 +233,13 @@ export class TenantInvitationLifecycleService {
     });
 
     const activationLink = frontendUrl(`/activate/${created.invitation.token}`);
-    const roommates = await this.getRoommateNames(created.room.id);
-    const emailResult = await EmailService.sendInvitation({
-      toEmail: normalizedEmail,
-      tenantName: name,
-      ownerName: owner.name || "The Owner",
-      hostelName: created.room.hostels.name,
-      roomNumber: created.room.room_no,
-      roomRent: monthlyRent,
-      activationLink,
-      advanceDeposit,
-      maintenanceCharge,
-      maintenanceType,
-      joiningDate,
-      roommates,
-      prefs: { ...inviteDefaults.billing_defaults, maintenance_type: maintenanceType },
-    });
+    const delivery = await this.dispatchInvitationNotification(
+      created.invitation,
+      created.tenant,
+      created.room,
+      owner,
+      activationLink
+    );
 
     await eventLog.log("tenant_invited", ownerId, {
       tenant_id: created.tenant.id,
@@ -181,8 +247,11 @@ export class TenantInvitationLifecycleService {
       reservation_id: created.reservation.id,
       hostel_id: created.room.hostel_id,
       room_id: created.room.id,
-      email_sent: Boolean(emailResult.sent),
-      email_error: emailResult.sent ? undefined : String(emailResult.error || "unknown"),
+      whatsapp_sent: delivery.whatsapp_sent,
+      whatsapp_error: delivery.whatsapp_error,
+      email_sent: delivery.email_sent,
+      email_error: delivery.email_error,
+      needs_email: delivery.needs_email,
     }, created.tenant.id);
 
     return {
@@ -190,11 +259,11 @@ export class TenantInvitationLifecycleService {
       invitation_id: created.invitation.id,
       reservation_id: created.reservation.id,
       email: normalizedEmail,
+      phone: normalizedPhone,
       activation_link: activationLink,
       action: "INVITED",
       obligations: [],
-      email_sent: Boolean(emailResult.sent),
-      ...(emailResult.sent ? {} : { email_error: String(emailResult.error || "unknown") }),
+      ...delivery,
     };
   }
 
@@ -252,6 +321,7 @@ export class TenantInvitationLifecycleService {
           status: "INVITED",
           ...(typeof overrides?.monthly_rent !== "undefined" ? { monthly_rent: Number(overrides.monthly_rent) } : {}),
           ...(typeof overrides?.phone !== "undefined" ? { phone_1: normalizeIndianPhone(overrides.phone) || invitation.phone } : {}),
+          ...(overrides?.email ? { personal_email: normalizeEmail(overrides.email) } : {}),
           ...(overrides?.payment_frequency ? { payment_frequency: overrides.payment_frequency } : {}),
         },
       });
@@ -268,6 +338,7 @@ export class TenantInvitationLifecycleService {
           cancelled_at: null,
           ...(overrides?.name ? { name: String(overrides.name).trim() } : {}),
           ...(typeof overrides?.phone !== "undefined" ? { phone: normalizeIndianPhone(overrides.phone) || invitation.phone } : {}),
+          ...(overrides?.email ? { email: normalizeEmail(overrides.email) } : {}),
           updated_at: new Date(),
         },
       });
@@ -275,42 +346,51 @@ export class TenantInvitationLifecycleService {
 
     const owner = await prisma.profile.findUnique({ where: { id: invitation.owner_id }, select: { name: true } });
     const activationLink = frontendUrl(`/activate/${token}`);
-    const emailResult = await EmailService.sendInvitation({
-      toEmail: updated.email,
-      tenantName: updated.name,
-      ownerName: owner?.name || "The Owner",
-      hostelName: invitation.room.hostels.name,
-      roomNumber: invitation.room.room_no,
-      roomRent: Number(invitation.tenant.monthly_rent),
-      activationLink,
-      advanceDeposit: Number(invitation.tenant.advance_deposit),
-      maintenanceCharge: Number(invitation.tenant.maintenance_charge),
-      maintenanceType: invitation.tenant.maintenance_type,
-      joiningDate: invitation.tenant.joined_on || undefined,
-      roommates: await this.getRoommateNames(invitation.room_id),
-    });
+    
+    const delivery = await this.dispatchInvitationNotification(
+      updated,
+      invitation.tenant,
+      invitation.room,
+      owner || { name: "The Owner" },
+      activationLink
+    );
 
     await eventLog.log("tenant_invitation_resent", invitation.owner_id, {
       tenant_id: invitation.tenant_id,
       invitation_id: invitation.id,
-      email_sent: Boolean(emailResult.sent),
+      whatsapp_sent: delivery.whatsapp_sent,
+      whatsapp_error: delivery.whatsapp_error,
+      email_sent: delivery.email_sent,
+      email_error: delivery.email_error,
+      needs_email: delivery.needs_email,
     }, invitation.tenant_id);
 
     return {
-      message: emailResult.sent ? "Invitation resent successfully" : "Invitation updated, but email delivery failed",
+      message: delivery.whatsapp_sent
+        ? "Invitation resent via WhatsApp"
+        : delivery.email_sent
+        ? "Invitation resent via Email"
+        : delivery.needs_email
+        ? "WhatsApp delivery failed. Email is required for fallback."
+        : "Failed to resend invitation",
       action: "RESENT",
       email: updated.email,
+      phone: updated.phone,
       activation_link: activationLink,
-      email_sent: Boolean(emailResult.sent),
-      ...(emailResult.sent ? {} : { email_error: String(emailResult.error || "unknown") }),
+      ...delivery,
     };
   }
 
-  async resendInvitationByEmail(email: string, actor?: { id: string; role: string }, overrides?: any) {
-    const normalizedEmail = normalizeEmail(email);
+  async resendInvitationByEmail(identifier: string, actor?: { id: string; role: string }, overrides?: any) {
+    const isEmail = String(identifier || "").includes("@");
+    const isUuid = String(identifier || "").length === 36;
     const invitation = await prisma.tenant_invitations.findFirst({
       where: {
-        email: normalizedEmail,
+        OR: [
+          ...(isEmail ? [{ email: normalizeEmail(identifier) }] : []),
+          ...(!isEmail && !isUuid ? [{ phone: normalizeIndianPhone(identifier) }] : []),
+          ...(isUuid ? [{ id: identifier }] : [])
+        ],
         ...(actor?.role === "OWNER" ? { owner_id: actor.id } : {}),
         status: { in: ["PENDING", "OPENED", "ACTIVATION_STARTED", "EXPIRED"] },
       },
@@ -402,6 +482,23 @@ export class TenantInvitationLifecycleService {
       if (password !== confirmPassword) throw new Error("VALIDATION_ERROR: Passwords do not match");
     }
 
+    const rawEmail = String(data?.email || invitation.email || "").trim().toLowerCase();
+    if (!rawEmail) {
+      throw new Error("VALIDATION_ERROR: Personal email address is required");
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(rawEmail)) {
+      throw new Error("VALIDATION_ERROR: Enter a valid email address");
+    }
+    const normalizedEmail = normalizeEmail(rawEmail);
+
+    const existingWithEmail = await prisma.profile.findUnique({
+      where: { email: normalizedEmail },
+    });
+    if (existingWithEmail && (!resolved.profile || existingWithEmail.id !== resolved.profile.id)) {
+      throw new Error("VALIDATION_ERROR: An account with this email address already exists. Please use a different email address.");
+    }
+
     const passwordHash = password ? await hashPassword(password) : undefined;
     const now = new Date();
     const profile = await prisma.$transaction(async (tx: any) => {
@@ -411,7 +508,7 @@ export class TenantInvitationLifecycleService {
         profileRecord = await tx.profile.create({
           data: {
             id: crypto.randomUUID(),
-            email: invitation.email,
+            email: normalizedEmail,
             name: invitation.name,
             phone: primaryPhone,
             role: "TENANT",
@@ -424,6 +521,7 @@ export class TenantInvitationLifecycleService {
         profileRecord = await tx.profile.update({
           where: { id: existingProfile.id },
           data: {
+            email: normalizedEmail,
             phone: primaryPhone,
             ...(passwordHash ? { password_hash: passwordHash } : {}),
           },
@@ -435,6 +533,7 @@ export class TenantInvitationLifecycleService {
         data: {
           profile_id: profileRecord.id,
           phone_1: primaryPhone,
+          personal_email: normalizedEmail,
           activation_started_at: tenant.activation_started_at || now,
           onboarding_last_activity_at: now,
           ...(data?.photo_url ? { photo_url: String(data.photo_url) } : {}),
@@ -443,6 +542,7 @@ export class TenantInvitationLifecycleService {
       await tx.tenant_invitations.update({
         where: { id: invitation.id },
         data: {
+          email: normalizedEmail,
           status: "ACTIVATION_STARTED",
           activation_started_at: invitation.activation_started_at || now,
           updated_at: now,

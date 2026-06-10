@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
 
     const result = await invitationService.inviteTenant(validatedData.data, session.sub);
     
-    return apiResponse(result, result?.email_sent === false ? 202 : 201);
+    return apiResponse(result, (result?.whatsapp_sent || result?.email_sent) ? 201 : 202);
   } catch (error: any) {
     const rawMessage = String(error?.message || "Failed to send invitation");
     const [maybeCode, ...rest] = rawMessage.split(":");

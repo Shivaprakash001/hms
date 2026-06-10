@@ -87,6 +87,8 @@ type ProfileDraft = {
   selectedCollege: string;
   selectedCourse: string;
   photoUrl: string;
+  guardianOtpVerified?: boolean;
+  guardianVerifiedPhone?: string;
   savedAt: number;
 };
 
@@ -240,6 +242,8 @@ function readProfileDraft(token: string): ProfileDraft | null {
       selectedCollege: String(parsed.selectedCollege || ''),
       selectedCourse: String(parsed.selectedCourse || ''),
       photoUrl: String(parsed.photoUrl || ''),
+      guardianOtpVerified: Boolean(parsed.guardianOtpVerified),
+      guardianVerifiedPhone: String(parsed.guardianVerifiedPhone || ''),
       savedAt: Number(parsed.savedAt || Date.now()),
     };
   } catch {
@@ -448,7 +452,137 @@ export function ActivateAccountPage() {
   const [photoUploading, setPhotoUploading] = useState(false);
   const [paymentFrequency, setPaymentFrequency] = useState('MONTHLY');
 
-  const [account, setAccount] = useState({ password: '', confirm_password: '', phone: '' });
+  const [account, setAccount] = useState({ password: '', confirm_password: '', phone: '', otp: '', email: '' });
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpCountdown, setOtpCountdown] = useState(0);
+
+  // Guardian OTP Verification state
+  const [guardianOtpSent, setGuardianOtpSent] = useState(false);
+  const [guardianOtpSending, setGuardianOtpSending] = useState(false);
+  const [guardianOtpCountdown, setGuardianOtpCountdown] = useState(0);
+  const [guardianOtp, setGuardianOtp] = useState('');
+  const [guardianOtpVerified, setGuardianOtpVerified] = useState(false);
+  const [guardianVerifiedPhone, setGuardianVerifiedPhone] = useState('');
+  const [guardianOtpVerifying, setGuardianOtpVerifying] = useState(false);
+
+  useEffect(() => {
+    if (guardianOtpCountdown <= 0) return;
+    const timer = window.setTimeout(() => {
+      setGuardianOtpCountdown((c) => c - 1);
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [guardianOtpCountdown]);
+
+  const handleSendGuardianOtp = async () => {
+    const phone = (profile.guardian_phone || '').trim();
+    if (!phone) {
+      setError('Please enter a parent/guardian mobile number first.');
+      return;
+    }
+    const invalidMessage = invalidPhoneMessage({
+      primary: profile.phone,
+      emergency: profile.emergency_phone,
+      guardian: phone,
+    });
+    if (invalidMessage) {
+      setError(invalidMessage);
+      return;
+    }
+    const duplicateMessage = duplicatePhoneMessage({
+      primary: profile.phone,
+      emergency: profile.emergency_phone,
+      guardian: phone,
+    });
+    if (duplicateMessage) {
+      setError(duplicateMessage);
+      return;
+    }
+
+    setGuardianOtpSending(true);
+    setError('');
+    try {
+      await tenantService.sendPhoneOtp({
+        phone,
+        purpose: 'GuardianVerification',
+      });
+      setGuardianOtpSent(true);
+      setGuardianOtpCountdown(60);
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.error?.message ||
+        err?.message ||
+        'Could not send verification code to guardian';
+      setError(message);
+    } finally {
+      setGuardianOtpSending(false);
+    }
+  };
+
+  const handleVerifyGuardianOtp = async () => {
+    const phone = (profile.guardian_phone || '').trim();
+    if (!phone) {
+      setError('Please enter a parent/guardian mobile number.');
+      return;
+    }
+    if (guardianOtp.length < 6) {
+      setError('Please enter the 6-digit verification code.');
+      return;
+    }
+    setGuardianOtpVerifying(true);
+    setError('');
+    try {
+      await tenantService.verifyPhoneOtp({
+        phone,
+        otp: guardianOtp,
+        purpose: 'GuardianVerification',
+      });
+      setGuardianOtpVerified(true);
+      setGuardianVerifiedPhone(phone);
+      setError('');
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.error?.message ||
+        err?.message ||
+        'Verification failed. Invalid or expired code.';
+      setError(message);
+    } finally {
+      setGuardianOtpVerifying(false);
+    }
+  };
+
+  const isGuardianPhoneVerified =
+    (ctx?.tenant?.guardian_phone && profile.guardian_phone === phoneDigits(ctx?.tenant?.guardian_phone)) ||
+    (ctx?.tenant?.phone_2 && profile.guardian_phone === phoneDigits(ctx?.tenant?.phone_2)) ||
+    (guardianOtpVerified && profile.guardian_phone === guardianVerifiedPhone);
+
+  const isStudent = String(profile.profile_type || ctx?.tenant?.profile_type || 'STUDENT').toUpperCase() === 'STUDENT';
+
+  const handleSendOtp = async () => {
+    const phone = account.phone.trim();
+    if (!phone) {
+      setError('Please enter your primary mobile number first.');
+      return;
+    }
+    setOtpSending(true);
+    setError('');
+    try {
+      await tenantService.sendPhoneOtp({
+        phone,
+        purpose: 'Registration',
+      });
+      setOtpSent(true);
+      setOtpCountdown(60);
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.error?.message ||
+        err?.message ||
+        'Could not send verification code';
+      setError(message);
+    } finally {
+      setOtpSending(false);
+    }
+  };
 
   // Agreement Signature State
   const [tenantSigBlob, setTenantSigBlob] = useState<Blob | null>(null);
@@ -519,6 +653,7 @@ export function ActivateAccountPage() {
       setAccount((prev) => ({
         ...prev,
         phone: prev.phone || phoneDigits(data.tenant?.phone_1 || data.profile?.phone),
+        email: prev.email || data.profile?.email || data.tenant?.personal_email || '',
       }));
 
       const college = String(data.tenant?.college_name || '');
@@ -570,6 +705,15 @@ export function ActivateAccountPage() {
 
       setProfile(mergedProfile);
       
+      const backendGuardianPhone = phoneDigits(data.tenant?.guardian_phone || data.tenant?.phone_2 || '');
+      if (backendGuardianPhone) {
+        setGuardianOtpVerified(true);
+        setGuardianVerifiedPhone(backendGuardianPhone);
+      } else if (draft?.guardianOtpVerified) {
+        setGuardianOtpVerified(true);
+        setGuardianVerifiedPhone(draft.guardianVerifiedPhone || '');
+      }
+
       if (data.agreement) {
         setTenantSigName(String(data.agreement.tenant_signature_name || ''));
       }
@@ -651,6 +795,8 @@ export function ActivateAccountPage() {
         selectedCollege,
         selectedCourse,
         photoUrl: /^https?:\/\//.test(profilePhotoPreview) ? profilePhotoPreview : '',
+        guardianOtpVerified,
+        guardianVerifiedPhone,
       });
       setProfileDraftStatus('saved');
     }, 700);
@@ -665,6 +811,8 @@ export function ActivateAccountPage() {
     selectedCollege,
     selectedCourse,
     token,
+    guardianOtpVerified,
+    guardianVerifiedPhone,
   ]);
 
   const goToStep = (step: ActivationStep) => {
@@ -740,6 +888,8 @@ export function ActivateAccountPage() {
           selectedCollege,
           selectedCourse,
           photoUrl: uploadRes.photo_url,
+          guardianOtpVerified,
+          guardianVerifiedPhone,
         });
         setProfileDraftStatus('saved');
       }
@@ -830,6 +980,21 @@ export function ActivateAccountPage() {
 
   const profileSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (isStudent) {
+      if (!profile.guardian_name?.trim()) {
+        setError('Parent/Guardian name is required.');
+        return;
+      }
+      if (!profile.guardian_relation) {
+        setError('Parent/Guardian relation is required.');
+        return;
+      }
+      if (!profile.guardian_phone) {
+        setError('Parent/Guardian phone number is required.');
+        return;
+      }
+    }
+
     const invalidMessage = invalidPhoneMessage({
       primary: profile.phone,
       emergency: profile.emergency_phone,
@@ -848,6 +1013,14 @@ export function ActivateAccountPage() {
       setError(duplicateMessage);
       return;
     }
+
+    if (profile.guardian_phone) {
+      if (!isGuardianPhoneVerified) {
+        setError('Please verify the parent/guardian phone number first.');
+        return;
+      }
+    }
+
     if (!profilePhotoFile && !profilePhotoPreview) {
       setError('Profile photo is required');
       return;
@@ -864,7 +1037,7 @@ export function ActivateAccountPage() {
           photoUrl = uploadRes.photo_url;
         }
       }
-      const saved = await submitStep('PROFILE', { ...profile, photo_url: photoUrl });
+      const saved = await submitStep('PROFILE', { ...profile, photo_url: photoUrl, guardian_otp: guardianOtp });
       if (saved) {
         clearProfileDraft(token);
         setProfileDraftStatus('idle');
@@ -1081,8 +1254,20 @@ export function ActivateAccountPage() {
 
           {activeStep === 'ACCOUNT' && !ctx.activation_state.account_setup_completed && !showWelcome && (
             <form onSubmit={accountSubmit} className="space-y-5">
-              <SectionHeading icon={<UserRound className="w-5 h-5" />} title="Set up your account" text="Choose your password and confirm your primary mobile number. No OTP is required." />
+              <SectionHeading icon={<UserRound className="w-5 h-5" />} title="Set up your account" text="Choose your password and verify your primary mobile number using the verification code sent to your WhatsApp." />
               <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block sm:col-span-2">
+                  <span className="text-xs font-semibold text-muted-foreground">Personal Email *</span>
+                  <input
+                    type="email"
+                    required
+                    value={account.email}
+                    onChange={(e) => setAccount({ ...account, email: e.target.value })}
+                    placeholder="e.g. tenant@example.com"
+                    className={`${fieldClass} mt-1.5`}
+                  />
+                </label>
+
                 <label className="block">
                   <span className="text-xs font-semibold text-muted-foreground">Password *</span>
                   <div className="relative mt-1.5">
@@ -1130,9 +1315,53 @@ export function ActivateAccountPage() {
                     </button>
                   </div>
                 </label>
-                <Field label="Primary mobile" required value={account.phone} onChange={(v) => setAccount({ ...account, phone: phoneDigits(v) })} />
+                <div className="block">
+                  <span className="text-xs font-semibold text-muted-foreground">Primary mobile *</span>
+                  <div className="flex gap-2 mt-1.5">
+                    <input
+                      type="tel"
+                      value={account.phone}
+                      onChange={(e) => setAccount({ ...account, phone: phoneDigits(e.target.value) })}
+                      placeholder="e.g. +91 98765 43210"
+                      className={`${fieldClass} mt-0 flex-1`}
+                      disabled={otpSent && otpCountdown > 0}
+                    />
+                    <button
+                      type="button"
+                      disabled={otpSending || (otpCountdown > 0) || !account.phone}
+                      onClick={handleSendOtp}
+                      className="px-4 py-2 text-xs font-bold bg-accent text-accent-foreground rounded-xl active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent/90 transition-all shadow-sm shrink-0 whitespace-nowrap"
+                    >
+                      {otpSending ? 'Sending...' : otpCountdown > 0 ? `Resend in ${otpCountdown}s` : otpSent ? 'Resend code' : 'Send Code'}
+                    </button>
+                  </div>
+                </div>
+
+                {otpSent && (
+                  <div className="block sm:col-span-2 max-w-sm">
+                    <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-accent" />
+                      Verification Code *
+                    </span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={account.otp}
+                      onChange={(e) => setAccount({ ...account, otp: phoneDigits(e.target.value) })}
+                      placeholder="Enter 6-digit code"
+                      className={`${fieldClass} tracking-widest text-center font-bold text-lg mt-1.5`}
+                      autoFocus
+                    />
+                    <p className="mt-1.5 text-xs text-muted-foreground">
+                      We sent a verification code to your WhatsApp.
+                    </p>
+                  </div>
+                )}
               </div>
-              <PrimaryButton loading={submitting}>Save account setup</PrimaryButton>
+              <PrimaryButton loading={submitting} disabled={!otpSent || account.otp.length < 6 || !account.email}>
+                Verify & Save account setup
+              </PrimaryButton>
             </form>
           )}
 
@@ -1588,14 +1817,70 @@ export function ActivateAccountPage() {
                   value={profile.guardian_name || ''}
                   onChange={(v) => setProfile({ ...profile, guardian_name: v })}
                 />
-                <Field
-                  label="Guardian phone"
-                  disabled={isGuardianLocked && !!profile.guardian_phone}
-                  value={profile.guardian_phone || ''}
-                  onChange={(v) => setProfile({ ...profile, guardian_phone: phoneDigits(v) })}
-                  inputMode="tel"
-                  helperText="Use a valid 10-digit mobile number if provided."
-                />
+                <div className="block">
+                  <span className="text-xs font-semibold text-muted-foreground flex items-center justify-between">
+                    <span>Guardian phone {isStudent && <span className="text-destructive">*</span>}</span>
+                    {isGuardianPhoneVerified && (
+                      <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                        <CheckCircle2 className="w-3 h-3" /> Verified
+                      </span>
+                    )}
+                  </span>
+                  <div className="flex gap-2 mt-1.5">
+                    <input
+                      type="tel"
+                      disabled={isGuardianLocked && !!profile.guardian_phone}
+                      value={profile.guardian_phone || ''}
+                      onChange={(e) => setProfile({ ...profile, guardian_phone: phoneDigits(e.target.value) })}
+                      placeholder="e.g. +91 98765 43210"
+                      className={`${fieldClass} mt-0 flex-1`}
+                    />
+                    {!isGuardianPhoneVerified && profile.guardian_phone && profile.guardian_phone.length === 10 && (
+                      <button
+                        type="button"
+                        disabled={guardianOtpSending || (guardianOtpCountdown > 0)}
+                        onClick={handleSendGuardianOtp}
+                        className="px-4 py-2 text-xs font-bold bg-accent text-accent-foreground rounded-xl active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent/90 transition-all shadow-sm shrink-0 whitespace-nowrap"
+                      >
+                        {guardianOtpSending ? 'Sending...' : guardianOtpCountdown > 0 ? `Resend in ${guardianOtpCountdown}s` : guardianOtpSent ? 'Resend code' : 'Send Code'}
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    {isStudent ? 'Mandatory mobile number for parent/guardian.' : 'Use a valid 10-digit mobile number if provided.'}
+                  </p>
+                </div>
+
+                {!isGuardianPhoneVerified && guardianOtpSent && (
+                  <div className="block max-w-sm mt-3">
+                    <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-accent" />
+                      Guardian Verification Code *
+                    </span>
+                    <div className="flex gap-2 mt-1.5">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        value={guardianOtp}
+                        onChange={(e) => setGuardianOtp(phoneDigits(e.target.value))}
+                        placeholder="Enter 6-digit code"
+                        className={`${fieldClass} mt-0 flex-1 tracking-widest text-center font-bold text-lg`}
+                      />
+                      <button
+                        type="button"
+                        disabled={guardianOtpVerifying || guardianOtp.length < 6}
+                        onClick={handleVerifyGuardianOtp}
+                        className="px-4 py-2 text-xs font-bold bg-emerald-600 text-white rounded-xl active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-700 transition-all shadow-sm shrink-0 whitespace-nowrap"
+                      >
+                        {guardianOtpVerifying ? 'Verifying...' : 'Verify Code'}
+                      </button>
+                    </div>
+                    <p className="mt-1.5 text-xs text-muted-foreground">
+                      We sent a verification code to the guardian's mobile number.
+                    </p>
+                  </div>
+                )}
                 <Field
                   label="Emergency contact (Mobile)"
                   required

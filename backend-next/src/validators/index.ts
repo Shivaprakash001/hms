@@ -151,9 +151,9 @@ export const ExpenseCreateSchema = z.object({
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const InvitationSchema = z.object({
-  email: z.string().trim().email().max(SHORT_TEXT),
+  email: z.string().trim().email().max(SHORT_TEXT).optional().or(z.literal("")).nullable(),
   name: z.string().min(2).max(SHORT_TEXT).trim(),
-  phone: z.string().max(20).optional(),
+  phone: z.string().min(1).max(20),
   room_id: z.string().uuid(),
   monthly_rent: z.number().positive().max(MAX_AMOUNT_INR).optional(),
   advance_amount: z.number().min(0).max(MAX_AMOUNT_INR).optional(),
@@ -163,9 +163,9 @@ export const InvitationSchema = z.object({
 });
 
 export const InvitationUpdateSchema = z.object({
-  email: z.string().trim().email().max(SHORT_TEXT),
+  email: z.string().trim().email().max(SHORT_TEXT).optional().or(z.literal("")).nullable(),
   name: z.string().min(2).max(SHORT_TEXT).trim(),
-  phone: z.string().max(20).optional(),
+  phone: z.string().min(1).max(20),
   room_id: z.string().uuid(),
   monthly_rent: z.coerce.number().positive().max(MAX_AMOUNT_INR),
   joining_date: z.string().max(30).optional(),

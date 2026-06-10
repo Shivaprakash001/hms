@@ -443,7 +443,7 @@ export function TenantsPortfolioView() {
                   onSelect={handleSelectTenant}
                   onReminder={(t) => reminderMutation.mutate(t.id)}
                   onCall={actions.callTenant}
-                  onResend={(t) => t.email && actions.resendInvite.mutate(t.email)}
+                  onResend={(t) => (t.email || t.phone) && actions.resendInvite.mutate(t.email || t.phone)}
                 />
 
                 {/* Desktop table — lazy loaded, hidden on mobile */}
@@ -453,7 +453,7 @@ export function TenantsPortfolioView() {
                     hostelId={activeHostelId}
                     onReminder={(t) => reminderMutation.mutate(t.id)}
                     onMoveOut={() => navigate(`/hostels/${activeHostelId}/move-outs`)}
-                    onResend={(t) => t.email && actions.resendInvite.mutate(t.email)}
+                    onResend={(t) => (t.email || t.phone) && actions.resendInvite.mutate(t.email || t.phone)}
                   />
                 </Suspense>
 

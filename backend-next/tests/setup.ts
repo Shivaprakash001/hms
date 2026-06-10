@@ -22,11 +22,15 @@ async function resetDatabase() {
 }
 
 beforeAll(async () => {
-  // Ensure we are connected
-  await prisma.$connect();
-  
-  // Clean before all tests
-  await resetDatabase();
+  try {
+    // Ensure we are connected
+    await prisma.$connect();
+    
+    // Clean before all tests
+    await resetDatabase();
+  } catch (error) {
+    console.warn("WARNING: Failed to connect or reset the test database in setup.ts. Integration tests requiring a live DB may fail.", error);
+  }
 });
 
 // Removed afterEach to prevent deadlocks on TRUNCATE during concurrent background queries

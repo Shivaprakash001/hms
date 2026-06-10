@@ -32,12 +32,42 @@ export function useTenantActions(hostelId: string) {
   });
 
   const resendInvite = useMutation({
-    mutationFn: (email: string) => tenantService.resendInvitation(email),
+    mutationFn: async (identifier: string) => {
+      const res = await tenantService.resendInvitation(identifier);
+      if (res?.error) {
+        const err = new Error(res.error.message || 'Failed to resend');
+        (err as any).code = res.error.code;
+        (err as any).identifier = identifier;
+        throw err;
+      }
+      return res;
+    },
     onSuccess: () => {
       toast.success('Invitation resent');
       invalidate();
     },
-    onError: (e: unknown) => hmsToast.error(e, 'Resend invitation'),
+    onError: async (e: any) => {
+      if (e?.code === 'EMAIL_FALLBACK_REQUIRED' || e?.response?.data?.error?.code === 'EMAIL_FALLBACK_REQUIRED') {
+        const email = window.prompt(
+          "WhatsApp delivery failed. Please enter the tenant's email address to resend via Email fallback:"
+        );
+        if (email && email.trim()) {
+          try {
+            const res = await tenantService.resendInvitation(e.identifier || '', { email: email.trim().toLowerCase() });
+            if (res?.error) {
+              toast.error(res.error.message || 'Failed to send fallback email');
+            } else {
+              toast.success('Invitation resent via Email');
+              invalidate();
+            }
+          } catch (err: any) {
+            hmsToast.error(err, 'Resend invitation fallback');
+          }
+        }
+      } else {
+        hmsToast.error(e, 'Resend invitation');
+      }
+    },
   });
 
   const reactivate = useMutation({

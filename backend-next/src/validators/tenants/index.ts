@@ -36,9 +36,9 @@ export const ReactivationRequestSchema = z.object({
 });
 
 export const InvitationSchema = z.object({
-  email: z.string().email(),
+  email: z.string().email().optional().or(z.literal("")).nullable(),
   name: z.string().min(2),
-  phone: z.string().optional(),
+  phone: z.string().min(1),
   room_id: z.string().uuid(),
   monthly_rent: z.number().positive().optional(),
   advance_amount: z.number().min(0).optional(),
@@ -49,9 +49,9 @@ export const InvitationSchema = z.object({
 });
 
 export const InvitationUpdateSchema = z.object({
-  email: z.string().email(),
+  email: z.string().email().optional().or(z.literal("")).nullable(),
   name: z.string().min(2),
-  phone: z.string().optional(),
+  phone: z.string().min(1),
   room_id: z.string().uuid(),
   monthly_rent: z.coerce.number().positive(),
   joining_date: z.string().optional(),

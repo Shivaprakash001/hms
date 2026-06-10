@@ -1,5 +1,5 @@
 import { memo, useLayoutEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useWindowVirtualizer } from '@tanstack/react-virtual';
 import { ChevronRight, Bell, Phone, Send } from 'lucide-react';
 import { TenantStatusBadge } from '@features/tenants/components/badges/TenantStatusBadge';
@@ -99,7 +99,27 @@ const TenantMobileRow = memo(function TenantMobileRow({
   onResend?: (t: NormalizedTenant) => void;
   onToggleSelect?: (tenantId: string) => void;
 }) {
+  const navigate = useNavigate();
   const overdue = t.outstandingAmount > 0;
+
+  const handleClick = () => {
+    if (onSelect) {
+      onSelect(t);
+    } else {
+      navigate(`/hostels/${hostelId}/tenants/${t.id}`);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      if (onSelect) {
+        onSelect(t);
+      } else {
+        navigate(`/hostels/${hostelId}/tenants/${t.id}`);
+      }
+    }
+  };
   const inner = (
     <>
       <div className="flex items-start gap-3">
@@ -176,24 +196,15 @@ const TenantMobileRow = memo(function TenantMobileRow({
     </>
   );
 
-  if (onSelect) {
-    return (
-      <button
-        type="button"
-        onClick={() => onSelect(t)}
-        className="w-full text-left bg-card border border-border rounded-xl p-4 active:scale-[0.99] transition-transform touch-manipulation"
-      >
-        {inner}
-      </button>
-    );
-  }
-
   return (
-    <Link
-      to={`/hostels/${hostelId}/tenants/${t.id}`}
-      className="block bg-card border border-border rounded-xl p-4 active:scale-[0.99] transition-transform touch-manipulation"
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
+      className="block w-full text-left bg-card border border-border rounded-xl p-4 active:scale-[0.99] transition-transform touch-manipulation cursor-pointer"
     >
       {inner}
-    </Link>
+    </div>
   );
 });

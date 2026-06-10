@@ -67,12 +67,20 @@ function HostelPerformanceCardComponent({ hostel, rank, onEdit }: Props) {
   };
 
   return (
-    <button
-      type="button"
-      onClick={openDetail}
-      disabled={!detailHostelId}
+    <div
+      role="button"
+      tabIndex={detailHostelId ? 0 : -1}
+      onClick={detailHostelId ? openDetail : undefined}
+      onKeyDown={(e) => {
+        if (detailHostelId && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          openDetail();
+        }
+      }}
       aria-label={`Manage ${hostel.hostel_name}`}
-      className="w-full text-left bg-card border border-border rounded-xl p-4 active:scale-[0.99] transition-transform group hover:border-accent/40"
+      className={`w-full text-left bg-card border border-border rounded-xl p-4 transition-transform group hover:border-accent/40 ${
+        detailHostelId ? 'cursor-pointer active:scale-[0.99]' : 'opacity-60 cursor-not-allowed'
+      }`}
     >
       {/* Row 1: name + trophy + alert icon + chevron */}
       <div className="flex items-start gap-3">
@@ -136,7 +144,7 @@ function HostelPerformanceCardComponent({ hostel, rank, onEdit }: Props) {
           </button>
         </div>
       )}
-    </button>
+    </div>
   );
 }
 

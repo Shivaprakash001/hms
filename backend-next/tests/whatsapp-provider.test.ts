@@ -125,10 +125,22 @@ describe("MetaWhatsAppProvider OTP Send & HTTP Mocking", () => {
     expect(body.to).toBe("917901070333");
     expect(body.type).toBe("template");
     expect(body.template.name).toBe("otp_phone");
-    expect(body.template.components[0].parameters).toEqual([
-      { type: "text", text: "123456" },
-      { type: "text", text: "Login" }
-    ]);
+    expect(body.template.components).toHaveLength(2);
+    expect(body.template.components[0]).toEqual({
+      type: "body",
+      parameters: [
+        { type: "text", text: "123456" },
+        { type: "text", text: "Login" },
+      ],
+    });
+    expect(body.template.components[1]).toEqual({
+      type: "button",
+      sub_type: "url",
+      index: "0",
+      parameters: [
+        { type: "text", text: "123456" },
+      ],
+    });
   });
 
   it("retries on retryable status codes (e.g., 429) and eventually fails or succeeds", async () => {
@@ -233,5 +245,56 @@ describe("NotificationService Routing", () => {
     ).rejects.toThrow("CRITICAL CONFIGURATION ERROR");
 
     process.env.OTP_PROVIDER = originalProvider;
+  });
+});
+
+describe("MetaWhatsAppProvider sendInvitation", () => {
+  let fetchSpy: any;
+
+  beforeEach(() => {
+    fetchSpy = vi.spyOn(global, "fetch");
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("submits the correct invitation template parameters to Meta API and returns success", async () => {
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      text: async () => JSON.stringify({
+        messaging_product: "whatsapp",
+        contacts: [{ input: "917901070333", wa_id: "917901070333" }],
+        messages: [{ id: "wamid.invitation_test" }]
+      }),
+      status: 200,
+    } as Response);
+
+    const provider = new MetaWhatsAppProvider({
+      accessToken: "mock_token",
+      phoneNumberId: "mock_phone_id",
+      baseUrl: "https://graph.facebook.com/v19.0",
+      timeoutMs: 1000,
+      maxRetries: 0,
+    });
+
+    const result = await provider.sendInvitation({
+      to: "7901070333",
+      tenantName: "John Doe",
+      ownerName: "Owner Name",
+      hostelName: "Hostel Name",
+      roomNumber: "101",
+      roomRent: 5000,
+      activationLink: "http://localhost/activate",
+    });
+
+    expect(result.providerMessageId).toBe("wamid.invitation_test");
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    const [url, init] = fetchSpy.mock.calls[0];
+    const body = JSON.parse(init?.body as string);
+    expect(body.to).toBe("917901070333");
+    expect(body.type).toBe("template");
+    expect(body.template.name).toBe("hms_tenant_invite_v2");
   });
 });

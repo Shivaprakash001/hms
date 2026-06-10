@@ -37,6 +37,14 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
   const [link, setLink]               = useState('');
   const [copied, setCopied]           = useState(false);
 
+  // New WhatsApp/Email fallback states
+  const [whatsappSent, setWhatsappSent] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
+  const [needsEmail, setNeedsEmail] = useState(false);
+  const [invitedTenantId, setInvitedTenantId] = useState('');
+  const [fallbackEmail, setFallbackEmail] = useState('');
+  const [fallbackSubmitting, setFallbackSubmitting] = useState(false);
+
   const { data: hostelsRaw = [] } = useQuery({
     queryKey: queryKeys.owner.hostels(),
     queryFn: () => ownerService.getHostels(),
@@ -147,6 +155,10 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
       qc.invalidateQueries({ queryKey: queryKeys.dashboard.all(selectedHostelId) });
       qc.invalidateQueries({ queryKey: queryKeys.portfolio.performance(6) });
       setLink(res?.activation_link ?? '');
+      setWhatsappSent(res?.whatsapp_sent ?? false);
+      setEmailSent(res?.email_sent ?? false);
+      setNeedsEmail(res?.needs_email ?? false);
+      setInvitedTenantId(res?.tenant_id ?? '');
       setSuccess(true);
     },
     onError: (e: any) => {
@@ -165,7 +177,7 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
     inviteMutation.mutate({
       name:               name.trim(),
       phone:              phone.trim() || undefined,
-      email:              email.trim().toLowerCase(),
+      email:              email.trim().toLowerCase() || undefined,
       hostel_id:          selectedHostelId,
       room_id:            roomId,
       joining_date:       joiningDate,
@@ -177,6 +189,33 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
     });
   };
 
+  const handleFallbackSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setFallbackSubmitting(true);
+    try {
+      const res = await tenantService.resendInvitation(phone.trim(), {
+        email: fallbackEmail.trim().toLowerCase()
+      });
+      if (res?.email_sent) {
+        setEmailSent(true);
+        setNeedsEmail(false);
+        setLink(res?.activation_link ?? link);
+      } else {
+        setError(res?.email_error || res?.message || 'Email delivery failed');
+      }
+    } catch (e: any) {
+      const msg =
+        e?.response?.data?.error?.message ??
+        e?.response?.data?.message ??
+        e?.message ??
+        'Failed to send email fallback';
+      setError(msg);
+    } finally {
+      setFallbackSubmitting(false);
+    }
+  };
+
   const copyLink = () => {
     navigator.clipboard.writeText(link).then(() => {
       setCopied(true);
@@ -184,8 +223,69 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
     });
   };
 
-  // ── Success state ─────────────────────────────────────────────────────────
+  // ── Success / Fallback state ──────────────────────────────────────────────
   if (success) {
+    if (needsEmail) {
+      return (
+        <div className="fixed inset-0 z-50 flex items-end" onClick={onClose}>
+          <div className="w-full bg-card rounded-t-2xl border-t border-border p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex flex-col gap-4 py-4">
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-amber-500/10 flex items-center justify-center">
+                  <X className="w-6 h-6 text-amber-500" />
+                </div>
+                <h3 className="font-semibold text-foreground text-center">WhatsApp Delivery Failed</h3>
+                <p className="text-xs text-muted-foreground text-center max-w-[280px]">
+                  WhatsApp delivery failed. Please enter the tenant's email address to send the invitation via email fallback.
+                </p>
+              </div>
+
+              {error && (
+                <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-xl">
+                  <p className="text-xs text-destructive">{error}</p>
+                </div>
+              )}
+
+              <form onSubmit={handleFallbackSubmit} className="space-y-4">
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Email Address *</label>
+                  <input
+                    type="email"
+                    value={fallbackEmail}
+                    onChange={(e) => setFallbackEmail(e.target.value)}
+                    required
+                    placeholder="tenant@email.com"
+                    className={inp}
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="flex-1 py-3 border border-border text-foreground rounded-xl text-sm font-semibold active:scale-[0.98]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={fallbackSubmitting || !fallbackEmail.trim()}
+                    className="flex-1 py-3 bg-accent text-accent-foreground rounded-xl text-sm font-semibold active:scale-[0.98] flex items-center justify-center gap-2"
+                  >
+                    {fallbackSubmitting ? (
+                      <><Loader2 className="w-4 h-4 animate-spin" /> Sending fallback…</>
+                    ) : (
+                      'Send via Email'
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="fixed inset-0 z-50 flex items-end" onClick={onClose}>
         <div className="w-full bg-card rounded-t-2xl border-t border-border p-5" onClick={(e) => e.stopPropagation()}>
@@ -193,9 +293,19 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
             <div className="w-12 h-12 rounded-full bg-[#10B981]/10 flex items-center justify-center">
               <Check className="w-6 h-6 text-[#10B981]" />
             </div>
-            <h3 className="font-semibold text-foreground">Invitation sent!</h3>
-            <p className="text-xs text-muted-foreground text-center">
-              Email sent to <span className="text-foreground font-medium">{email}</span>. Share the activation link for WhatsApp or manual share.
+            <h3 className="font-semibold text-foreground">
+              {whatsappSent
+                ? 'Sent via WhatsApp!'
+                : emailSent
+                ? 'Sent via Email!'
+                : 'Invitation Created!'}
+            </h3>
+            <p className="text-xs text-muted-foreground text-center max-w-[280px]">
+              {whatsappSent
+                ? `Invitation successfully sent to tenant's WhatsApp number (+91 ${phone}).`
+                : emailSent
+                ? `Invitation successfully sent to tenant's email address (${email || fallbackEmail}).`
+                : 'The invitation was created but delivery failed. You can copy the activation link below to share it manually.'}
             </p>
             {link && (
               <div className="w-full flex items-center gap-2 px-3 py-2.5 bg-secondary rounded-xl mt-1">
@@ -251,13 +361,13 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Phone</label>
-                  <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
+                  <label className="text-xs text-muted-foreground mb-1 block">Phone *</label>
+                  <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} required
                     placeholder="+91 98765…" className={inp} />
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Email *</label>
-                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required
+                  <label className="text-xs text-muted-foreground mb-1 block">Email (optional)</label>
+                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                     placeholder="tenant@email.com" className={inp} />
                 </div>
               </div>
@@ -423,7 +533,7 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
           {/* Submit */}
           <button
             type="submit"
-            disabled={inviteMutation.isPending || !selectedHostelId || !roomId || !name.trim() || !email.trim()}
+            disabled={inviteMutation.isPending || !selectedHostelId || !roomId || !name.trim() || !phone.trim()}
             className="w-full py-3 bg-accent text-accent-foreground rounded-xl text-sm font-semibold active:scale-[0.98] transition-transform disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {inviteMutation.isPending

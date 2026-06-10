@@ -7,6 +7,7 @@ import { queryKeys } from '@lib/queryKeys';
 import { fmtExact } from '../shared/format';
 import { TabError, TabSkeleton } from '../shared/TabStates';
 import { getInitials, normalizeTenants } from '@features/tenants/utils/normalize';
+import { useTenantActions } from '@features/tenants/hooks/useTenantActions';
 
 const AddTenantModal = lazy(() => import('../../modals/AddTenantModal').then((m) => ({ default: m.AddTenantModal })));
 const RecordPaymentModal = lazy(() => import('../../modals/RecordPaymentModal').then((m) => ({ default: m.RecordPaymentModal })));
@@ -27,23 +28,18 @@ export function TenantsTab({ hostelId }: { hostelId: string }) {
   const [showPayment, setShowPayment] = useState<string>('');
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<TenantFilter>('all');
+  const actions = useTenantActions(hostelId);
+
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.tenants.list(hostelId),
     queryFn: () => import('@features/tenants/api').then((m) => m.tenantService.getAll(hostelId, { status: 'ACTIVE' })),
     staleTime: 2 * 60 * 1000,
   });
 
-  const { data: invitedData, refetch: refetchInvited } = useQuery({
+  const { data: invitedData } = useQuery({
     queryKey: queryKeys.tenants.list(hostelId, { status: 'INVITED' }),
     queryFn: () => import('@features/tenants/api').then((m) => m.tenantService.getAll(hostelId, { status: 'INVITED' })),
     staleTime: 2 * 60 * 1000,
-  });
-
-  const { mutate: resendInvite, isPending: resending } = useMutation({
-    mutationFn: (email: string) => import('@features/tenants/api').then((m) => m.tenantService.resendInvitation(email)),
-    onSuccess: () => { toast.success('Invitation resent'); refetchInvited(); },
-    onError: (e: Error & { response?: { data?: { error?: { message?: string } } } }) =>
-      toast.error(e?.response?.data?.error?.message ?? 'Failed to resend'),
   });
 
   const tenants: Record<string, unknown>[] = Array.isArray(data)
@@ -146,6 +142,8 @@ export function TenantsTab({ hostelId }: { hostelId: string }) {
           {invitedTenants.map((tenant) => {
             const invitedTenantId = String(tenant.id ?? tenant.tenant_id ?? '');
             const email = String(tenant.email ?? tenant.tenant_email ?? '');
+            const phone = String(tenant.phone ?? tenant.tenant_phone ?? '');
+            const identifier = email || phone;
             const room = tenant.room_no ?? tenant.room_number ?? tenant.room;
             return (
               <div
@@ -171,17 +169,17 @@ export function TenantsTab({ hostelId }: { hostelId: string }) {
                         </span>
                       </div>
                       <div className="text-xs text-muted-foreground mt-0.5 truncate">
-                        {email || 'No email available'}
+                        {email || phone || 'No identifier available'}
                         {room ? ` · Room ${String(room)}` : ''}
                       </div>
                     </div>
                   </div>
                   <button
                     type="button"
-                    disabled={!email || resending}
+                    disabled={!identifier || actions.resendInvite.isPending}
                     onClick={(event) => {
                       event.stopPropagation();
-                      if (email) resendInvite(email);
+                      if (identifier) actions.resendInvite.mutate(identifier);
                     }}
                     className="flex items-center justify-center gap-1 px-3 py-2 bg-amber-50 text-amber-700 rounded-xl text-xs font-semibold active:scale-[0.98] transition-transform touch-manipulation disabled:opacity-50 shrink-0"
                     title="Resend Invitation"

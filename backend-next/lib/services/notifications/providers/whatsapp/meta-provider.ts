@@ -160,29 +160,48 @@ export class MetaWhatsAppProvider {
     }
 
     const url = `${this.config.baseUrl}/${this.config.phoneNumberId}/messages`;
-    const body = {
-      messaging_product: "whatsapp",
-      to: phone,
-      type: "template",
-      template: {
-        name: templateName,
-        language: { code: "en_US" },
-        components: [
-          {
-            type: "body",
-            parameters: [
-              { type: "text", text: String(input.otp) },
-              { type: "text", text: String(input.purpose) },
+    const isTextMessage = templateName.toLowerCase() === "text";
+    const body = isTextMessage
+      ? {
+          messaging_product: "whatsapp",
+          to: phone,
+          type: "text",
+          text: {
+            body: `Your HMS verification code is: ${input.otp}. This code is for ${input.purpose}. Valid for 5 minutes.`
+          }
+        }
+      : {
+          messaging_product: "whatsapp",
+          to: phone,
+          type: "template",
+          template: {
+            name: templateName,
+            language: { code: "en_US" },
+            components: [
+              {
+                type: "body",
+                parameters: [
+                  { type: "text", text: String(input.otp) },
+                  { type: "text", text: String(input.purpose) },
+                ],
+              },
+              {
+                type: "button",
+                sub_type: "url",
+                index: "0",
+                parameters: [
+                  { type: "text", text: String(input.otp) },
+                ],
+              },
             ],
           },
-        ],
-      },
-    };
+        };
 
     logger.info("whatsapp.otp.send_started", {
       phone: maskWhatsAppPhone(phone),
       templateName,
       purpose: input.purpose,
+      isTextMessage,
     });
 
     let lastError: WhatsAppProviderError | null = null;
@@ -231,6 +250,108 @@ export class MetaWhatsAppProvider {
     throw lastError || new WhatsAppProviderError({
       message: "WhatsApp OTP send failed",
       code: "WHATSAPP_OTP_SEND_FAILED",
+      retryable: false,
+      attempts: this.config.maxRetries + 1,
+    });
+  }
+
+  async sendInvitation(input: {
+    to: string;
+    tenantName: string;
+    ownerName: string;
+    hostelName: string;
+    roomNumber: string;
+    roomRent: number;
+    activationLink: string;
+  }): Promise<WhatsAppSendResult> {
+    const phone = normalizeWhatsAppPhone(input.to);
+    const templateName = process.env.WHATSAPP_INVITATION_TEMPLATE || "hms_tenant_invite_v2";
+    const url = `${this.config.baseUrl}/${this.config.phoneNumberId}/messages`;
+    const useText = process.env.WHATSAPP_OTP_TEMPLATE === "text";
+    const body = useText
+      ? {
+          messaging_product: "whatsapp",
+          to: phone,
+          type: "text",
+          text: {
+            body: `Hello ${input.tenantName}, you have been invited by ${input.ownerName} to join ${input.hostelName}, Room ${input.roomNumber}. Rent: ₹${input.roomRent}. Complete your onboarding here: ${input.activationLink}`
+          }
+        }
+      : {
+          messaging_product: "whatsapp",
+          to: phone,
+          type: "template",
+          template: {
+            name: templateName,
+            language: { code: "en_US" },
+            components: [
+              {
+                type: "body",
+                parameters: [
+                  { type: "text", text: String(input.tenantName) },
+                  { type: "text", text: String(input.ownerName) },
+                  { type: "text", text: String(input.hostelName) },
+                  { type: "text", text: String(input.roomNumber) },
+                  { type: "text", text: String(input.roomRent) },
+                  { type: "text", text: String(input.activationLink) }
+                ],
+              }
+            ]
+          }
+        };
+
+    logger.info("whatsapp.invitation.send_started", {
+      phone: maskWhatsAppPhone(phone),
+      templateName,
+      useText
+    });
+
+    let lastError: WhatsAppProviderError | null = null;
+    for (let attempt = 1; attempt <= this.config.maxRetries + 1; attempt += 1) {
+      try {
+        const result = await this.post(url, body, attempt);
+        const providerMessageId = Array.isArray((result as any)?.messages)
+          ? String((result as any).messages[0]?.id || "")
+          : "";
+
+        logger.info("whatsapp.invitation.send_success", {
+          phone: maskWhatsAppPhone(phone),
+          attempts: attempt,
+          providerMessageId,
+        });
+
+        return {
+          providerMessageId: providerMessageId || null,
+          raw: result,
+          attempts: attempt,
+        };
+      } catch (error: any) {
+        if (error instanceof WhatsAppProviderError) {
+          lastError = error;
+          if (!error.retryable || attempt > this.config.maxRetries) {
+            logger.error("whatsapp.invitation.send_failed", {
+              phone: maskWhatsAppPhone(phone),
+              attempts: attempt,
+              error_code: error.providerCode || error.code || "WHATSAPP_SEND_FAILED",
+              error: error.message,
+            });
+            throw error;
+          }
+          await sleep(Math.min(1000 * 2 ** (attempt - 1), 5000));
+          continue;
+        }
+        logger.error("whatsapp.invitation.send_failed", {
+          phone: maskWhatsAppPhone(phone),
+          attempts: attempt,
+          error: String(error?.message || error),
+        });
+        throw error;
+      }
+    }
+
+    throw lastError || new WhatsAppProviderError({
+      message: "WhatsApp invitation send failed",
+      code: "WHATSAPP_INVITATION_SEND_FAILED",
       retryable: false,
       attempts: this.config.maxRetries + 1,
     });

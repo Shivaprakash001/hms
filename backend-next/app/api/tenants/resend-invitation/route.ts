@@ -18,25 +18,26 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    if (!body.email) {
-      return apiError("Email is required", "VALIDATION_ERROR", 400);
+    const identifier = body.identifier || body.email || body.phone;
+    if (!identifier) {
+      return apiError("Email or Phone number is required", "VALIDATION_ERROR", 400);
     }
 
-    // Call invitation service to resend
-    const result = await invitationService.resendInvitation(body.email, {
+    // Call invitation service to resend with overrides
+    const result = await invitationService.resendInvitation(identifier, {
       id: session.sub,
       role: session.role,
-    });
+    }, body);
 
-    if (result?.email_sent === false) {
+    if (result?.whatsapp_sent === false && result?.email_sent === false) {
       return NextResponse.json(
         {
           error: {
-            message: result.email_error || result.message || "Email delivery failed",
-            code: "EMAIL_DELIVERY_FAILED",
+            message: result.whatsapp_error || result.email_error || result.message || "Delivery failed",
+            code: result.needs_email ? "EMAIL_FALLBACK_REQUIRED" : "DELIVERY_FAILED",
           },
         },
-        { status: 502 }
+        { status: result.needs_email ? 202 : 502 }
       );
     }
     

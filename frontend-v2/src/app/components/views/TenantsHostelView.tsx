@@ -121,7 +121,7 @@ export function TenantsHostelView() {
               hostelId={hostelId}
               onReminder={(t) => reminderMutation.mutate(t.id)}
               onMoveOut={() => navigate(`/hostels/${hostelId}/move-outs`)}
-              onResend={(t) => t.email && actions.resendInvite.mutate(t.email)}
+              onResend={(t) => (t.email || t.phone) && actions.resendInvite.mutate(t.email || t.phone)}
               selectedIds={selectedTenantIds}
               onToggleSelect={toggleTenantSelection}
             />
@@ -131,7 +131,7 @@ export function TenantsHostelView() {
               onSelect={handleView}
               onReminder={(t) => reminderMutation.mutate(t.id)}
               onCall={actions.callTenant}
-              onResend={(t) => t.email && actions.resendInvite.mutate(t.email)}
+              onResend={(t) => (t.email || t.phone) && actions.resendInvite.mutate(t.email || t.phone)}
               selectedIds={selectedTenantIds}
               onToggleSelect={toggleTenantSelection}
             />

@@ -6,6 +6,7 @@ import { allocationReconciliationService } from "../../../lib/services/allocatio
 import { eventLog } from "../../../lib/services/event-log-service";
 import { tenantInvitationLifecycleService } from "./tenant-invitation-lifecycle-service";
 import { AgreementGenerationService } from "./agreement-generation-service";
+import { authOtpService } from "../../../lib/services/auth/auth-otp-service";
 
 type ActivationStep = "ACCOUNT" | "RULES" | "AGREEMENT" | "PROFILE" | "ACTIVATE";
 type ResolvedInvitation = { profile: any | null; tenant: any; invitation?: any | null; token: string; source?: string };
@@ -713,15 +714,61 @@ export class ActivationWorkflowService {
   private async saveAccount(profile: any | null, tenant: any, data: any, token: string, invitation?: any | null) {
     const password = String(data?.password || "");
     const confirmPassword = String(data?.confirm_password || data?.confirmPassword || "");
+
+    const primaryPhone = normalizeIndianPhone(
+      data?.phone || 
+      data?.primary_phone || 
+      tenant?.phone_1 || 
+      profile?.phone || 
+      invitation?.phone
+    );
+    if (!primaryPhone) throw new Error("VALIDATION_ERROR: Valid primary phone is required");
+
+    const otp = String(data?.otp || "").trim();
+    if (!otp) {
+      throw new Error("VALIDATION_ERROR: Verification code is required to verify your mobile number");
+    }
+
+    try {
+      await authOtpService.verifyPhoneOtp({
+        phone: primaryPhone,
+        otp,
+        purpose: "Registration",
+        requestIp: null,
+      });
+    } catch (otpErr: any) {
+      throw new Error(`VALIDATION_ERROR: Mobile verification failed: ${otpErr.message || "Invalid or expired code"}`);
+    }
+
     if (!profile && invitation) {
-      await tenantInvitationLifecycleService.startActivation(token, data);
+      await tenantInvitationLifecycleService.startActivation(token, {
+        ...data,
+        phone: primaryPhone,
+      });
       return;
     }
     if (!profile) throw new Error("INVALID_TRANSITION: Complete account setup from a valid invitation");
-    const primaryPhone = normalizeIndianPhone(data?.phone || data?.primary_phone || tenant.phone_1 || profile.phone);
-    if (!primaryPhone) throw new Error("VALIDATION_ERROR: Valid primary phone is required");
 
-    const profileUpdate: any = { phone: primaryPhone };
+    const rawEmail = String(
+      (data && typeof data.email === "string") ? data.email : (profile?.email || invitation?.email || "")
+    ).trim().toLowerCase();
+    if (!rawEmail) {
+      throw new Error("VALIDATION_ERROR: Personal email address is required");
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(rawEmail)) {
+      throw new Error("VALIDATION_ERROR: Enter a valid email address");
+    }
+    const normalizedEmail = rawEmail;
+
+    const existingWithEmail = await prisma.profile.findUnique({
+      where: { email: normalizedEmail },
+    });
+    if (existingWithEmail && existingWithEmail.id !== profile.id) {
+      throw new Error("VALIDATION_ERROR: An account with this email address already exists. Please use a different email address.");
+    }
+
+    const profileUpdate: any = { phone: primaryPhone, email: normalizedEmail };
     if (password || confirmPassword) {
       if (password.length < 8) throw new Error("VALIDATION_ERROR: Password must be at least 8 characters");
       if (password !== confirmPassword) throw new Error("VALIDATION_ERROR: Passwords do not match");
@@ -736,11 +783,20 @@ export class ActivationWorkflowService {
         where: { id: tenant.id },
         data: {
           phone_1: primaryPhone,
+          personal_email: normalizedEmail,
           onboarding_last_activity_at: new Date(),
           ...(tenant.activation_started_at ? {} : { activation_started_at: new Date() }),
           ...(data?.photo_url ? { photo_url: String(data.photo_url) } : {}),
         },
       });
+      if (invitation) {
+        await tx.tenant_invitations.update({
+          where: { id: invitation.id },
+          data: {
+            email: normalizedEmail,
+          },
+        });
+      }
     });
     await eventLog.log("account_setup_completed", tenant.owner_id || null, { tenant_id: tenant.id, hostel_id: tenant.hostel_id }, tenant.id);
   }
@@ -765,6 +821,31 @@ export class ActivationWorkflowService {
     if (!tenant.photo_url && !data?.photo_url) throw new Error("VALIDATION_ERROR: Profile photo is required");
 
     const profileType = data?.profile_type ? String(data.profile_type).toUpperCase() : tenant.profile_type || "STUDENT";
+    
+    if (profileType === "STUDENT") {
+      if (!data?.guardian_name?.trim()) throw new Error("VALIDATION_ERROR: Parent/Guardian name is required for students");
+      if (!data?.guardian_relation) throw new Error("VALIDATION_ERROR: Parent/Guardian relationship is required for students");
+      if (!guardianPhone) throw new Error("VALIDATION_ERROR: Parent/Guardian phone number is required for students");
+    }
+
+    const currentGuardianPhone = tenant.phone_2 || tenant.guardian_phone;
+    if (guardianPhone && guardianPhone !== currentGuardianPhone) {
+      const guardianOtp = data?.guardian_otp ? String(data.guardian_otp).trim() : "";
+      if (!guardianOtp) {
+        throw new Error("VALIDATION_ERROR: Verification code is required to verify the parent/guardian mobile number");
+      }
+      try {
+        await authOtpService.verifyPhoneOtp({
+          phone: guardianPhone,
+          otp: guardianOtp,
+          purpose: "GuardianVerification",
+          requestIp: null,
+        });
+      } catch (otpErr: any) {
+        throw new Error(`VALIDATION_ERROR: Parent/Guardian mobile verification failed: ${otpErr.message || "Invalid or expired code"}`);
+      }
+    }
+
     const rollNumber = profileType === "STUDENT" ? String(data?.roll_number || "").trim().toUpperCase() : "";
     const yearOfStudy = data?.year_of_study ? Number(data.year_of_study) : undefined;
     if (yearOfStudy !== undefined && (!Number.isInteger(yearOfStudy) || yearOfStudy < 1 || yearOfStudy > 6)) {

@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
       phone: validated.data.phone,
       otp: validated.data.otp,
       purpose: validated.data.purpose,
+      requestIp: getRequestIp(req),
     });
 
     return apiResponse(result);
@@ -34,4 +35,10 @@ export async function POST(req: NextRequest) {
     });
     return apiError("Failed to verify OTP", "OTP_VERIFY_FAILED", 500);
   }
+}
+
+function getRequestIp(req: NextRequest) {
+  const forwardedFor = req.headers.get("x-forwarded-for");
+  if (forwardedFor) return forwardedFor.split(",")[0]?.trim() || null;
+  return req.headers.get("x-real-ip") || null;
 }

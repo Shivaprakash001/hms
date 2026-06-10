@@ -62,6 +62,14 @@ export const tenantService = {
         const response = await api.patch('/tenants/activate', { token, step, data });
         return unwrap(response);
     },
+    sendPhoneOtp: async ({ phone, purpose }) => {
+        const response = await api.post('/auth/send-phone-otp', { phone, purpose });
+        return unwrap(response);
+    },
+    verifyPhoneOtp: async ({ phone, otp, purpose }) => {
+        const response = await api.post('/auth/verify-phone-otp', { phone, otp, purpose });
+        return unwrap(response);
+    },
     uploadActivationPhoto: async (token, file) => {
         const formData = new FormData();
         formData.append('token', token);
@@ -182,8 +190,13 @@ export const tenantService = {
         const response = await api.post('/owners/invitations', data);
         return response.data.success !== undefined ? (response.data.data !== undefined ? response.data.data : response.data) : response.data;
     },
-    resendInvitation: async (email) => {
-        const response = await api.post('/tenants/resend-invitation', { email });
+    resendInvitation: async (identifier, overrides = {}) => {
+        const isEmail = String(identifier || "").includes("@");
+        const body = {
+            ...(isEmail ? { email: identifier } : { phone: identifier }),
+            ...overrides
+        };
+        const response = await api.post('/tenants/resend-invitation', body);
         return response.data.success !== undefined ? (response.data.data !== undefined ? response.data.data : response.data) : response.data;
     },
     cancelInvitation: async (id) => {
