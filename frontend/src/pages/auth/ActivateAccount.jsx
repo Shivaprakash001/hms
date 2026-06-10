@@ -1,12 +1,30 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { KeyRound, Lock, Eye, EyeOff, Loader2, CheckCircle2, ShieldCheck, Mail, User } from 'lucide-react';
 import api from '../../api/axios';
 
+function normalizeActivationToken(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+
+    let decoded = raw;
+    try {
+        decoded = decodeURIComponent(raw);
+    } catch {
+        decoded = raw;
+    }
+
+    return decoded
+        .replace(/^\/?(activate|invite)\//i, '')
+        .replace(/^(\{\{4\}\}|\{\{1\}\}|%7B%7B4%7D%7D|%7B%7B1%7D%7D|\{1\}|%7B1%7D)+/i, '')
+        .trim();
+}
+
 const ActivateAccount = () => {
+    const { token: pathToken } = useParams();
     const [searchParams] = useSearchParams();
-    const token = searchParams.get('token');
+    const token = normalizeActivationToken(pathToken || searchParams.get('token'));
     const navigate = useNavigate();
 
     const [password, setPassword] = useState('');

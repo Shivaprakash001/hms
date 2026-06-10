@@ -64,6 +64,8 @@ function App() {
             <Route path="/legal" element={<Legal />} />
             <Route path="/register" element={<Navigate to="/login" replace />} />
             <Route path="/activate" element={<ActivateAccount />} />
+            <Route path="/activate/:token" element={<ActivateAccount />} />
+            <Route path="/invite/:token" element={<ActivateAccount />} />
             <Route path="/complete-profile" element={<CompleteProfile />} />
             <Route path="/tenant/complete-profile" element={<Navigate to="/complete-profile" replace />} />
             <Route path="/callback" element={<GoogleCallback />} />
