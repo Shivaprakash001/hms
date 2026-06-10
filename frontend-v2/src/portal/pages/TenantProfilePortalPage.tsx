@@ -5,6 +5,8 @@ import { toast } from 'sonner';
 import {
   AlertTriangle,
   Copy,
+  Download,
+  FileText,
   Loader2,
   LogOut,
   MessageCircle,
@@ -940,6 +942,43 @@ export function TenantProfilePortalPage() {
           {docs.length === 0 && (
             <li className="text-sm text-muted-foreground">No documents uploaded yet.</li>
           )}
+
+          {/* Hostel Residency Agreement — Prominent Card */}
+          {(() => {
+            const agreement = docs.find((d) => String(d.doc_type).toUpperCase() === 'RENTAL_AGREEMENT');
+            if (!agreement) return null;
+            return (
+              <li className="p-4 rounded-2xl border-2 border-accent/25 bg-gradient-to-br from-accent/5 via-card to-card text-sm space-y-3 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center shrink-0">
+                    <FileText className="w-5 h-5 text-accent" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-center gap-2">
+                      <span className="font-bold text-foreground">Hostel Residency Agreement</span>
+                      <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                        <CheckCircle2 className="w-3 h-3" /> Signed
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Signed on {fmtDate(String(agreement.uploaded_at || agreement.created_at))}
+                    </p>
+                  </div>
+                </div>
+                {agreement.download_url && (
+                  <a
+                    href={String(agreement.download_url)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-accent text-accent-foreground font-semibold text-sm hover:bg-accent/90 active:scale-[0.98] transition-all shadow-sm"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download Agreement PDF
+                  </a>
+                )}
+              </li>
+            );
+          })()}
           {docs.map((d) => {
             const docId = String(d.id);
             const status = String(d.document_status ?? 'PENDING').toUpperCase();
@@ -977,6 +1016,17 @@ export function TenantProfilePortalPage() {
                 <p className="text-xs text-muted-foreground">Uploaded {fmtDate(String(d.uploaded_at || d.created_at))}</p>
                 {d.doc_number && (
                   <p className="text-xs text-muted-foreground">Document no. {String(d.doc_number)}</p>
+                )}
+                {d.download_url && (
+                  <a
+                    href={String(d.download_url)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-accent hover:underline"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    {String(d.doc_type).toUpperCase() === 'RENTAL_AGREEMENT' ? 'View Agreement' : 'Download'}
+                  </a>
                 )}
                 
                 {/* Chat section for Document queries */}

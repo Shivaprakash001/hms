@@ -251,6 +251,38 @@ export function TenantDashboardPage() {
 
         <TenantDocumentStatus documents={profileDocs as never[]} profileType={profileType} />
 
+        {/* Quick-access Hostel Agreement download */}
+        {(() => {
+          const agreement = Array.isArray(profileDocs)
+            ? (profileDocs as Record<string, unknown>[]).find(
+                (d) => String(d.doc_type ?? '').toUpperCase() === 'RENTAL_AGREEMENT'
+              )
+            : null;
+          if (!agreement?.download_url) return null;
+          return (
+            <a
+              href={String(agreement.download_url)}
+              target="_blank"
+              rel="noreferrer"
+              className="block rounded-2xl border border-accent/20 bg-gradient-to-r from-accent/5 to-card p-4 hover:border-accent/40 hover:shadow-sm transition-all"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center shrink-0">
+                  <FileCheck2 className="w-5 h-5 text-accent" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-foreground">Hostel Residency Agreement</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Signed &amp; ready for download</p>
+                </div>
+                <div className="flex items-center gap-1.5 text-accent font-semibold text-xs shrink-0">
+                  <Download className="w-4 h-4" />
+                  PDF
+                </div>
+              </div>
+            </a>
+          );
+        })()}
+
         <TenantAnnouncements
           items={
             Array.isArray(notifications)

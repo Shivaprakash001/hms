@@ -927,9 +927,15 @@ export function ActivateAccountPage() {
     }
   };
 
-  const accountSubmit = (e: FormEvent) => {
+  const accountSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    submitStep('ACCOUNT', account);
+    const success = await submitStep('ACCOUNT', account);
+    if (success) {
+      setShowSuccessModal({
+        title: 'Mobile Number Verified',
+        message: `Your primary mobile number (+91 ${account.phone.slice(-10)}) has been successfully verified!`,
+      });
+    }
   };
 
   const handlePhotoChange = async (file?: File) => {
@@ -1326,6 +1332,21 @@ export function ActivateAccountPage() {
                     </p>
                   </div>
                 )}
+
+                {/* Email Collection */}
+                <div className="block">
+                  <span className="text-xs font-semibold text-muted-foreground">Email Address</span>
+                  <input
+                    type="email"
+                    value={account.email}
+                    onChange={(e) => setAccount({ ...account, email: e.target.value.trim() })}
+                    placeholder="e.g. yourname@example.com"
+                    className={`${fieldClass} mt-1.5`}
+                  />
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Used for account notifications and hostel communications.
+                  </p>
+                </div>
 
                 <PrimaryButton loading={submitting} disabled={!otpSent || account.otp.length < 6}>
                   Verify & Continue
